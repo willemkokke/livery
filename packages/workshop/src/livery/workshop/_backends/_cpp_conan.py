@@ -15,13 +15,16 @@ the machine's own, and the store never installs it.
 
 from __future__ import annotations
 
+import functools
 import os
 import platform
 import re
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
+from xml.etree import ElementTree
 
 import livery.footman as footman
 from livery.footman import fail
@@ -43,9 +46,26 @@ GATE_BUILD_DIR = "build/gate"
 #: measurer beside the compiler can read the run.
 COVERAGE_CMAKE = Path(__file__).with_name("coverage.cmake")
 
-#: Where an llvm-instrumented test run leaves its raw profiles, under
-#: the gate build.
+#: Where an instrumented test run leaves its profiles and reports,
+#: under the gate build.
 PROFILE_DIR = "coverage"
+
+#: The shell that reads the batch file MSVC's environment comes from:
+#: a Windows component, never a tool of the store.
+SHELL = "cmd.exe"
+
+#: Where the Visual Studio installer keeps vswhere, under the 32-bit
+#: program files directory: the one path Microsoft documents as stable
+#: across versions and editions.
+VSWHERE = ("Microsoft Visual Studio", "Installer", "vswhere.exe")
+
+#: Per host architecture, the Visual Studio component that is the C++
+#: build tools for it and the batch file that enters their
+#: environment; the x64 pair serves every architecture not named.
+MSVC_TOOLS = {
+    "ARM64": ("Microsoft.VisualStudio.Component.VC.Tools.ARM64", "vcvarsarm64.bat"),
+}
+MSVC_TOOLS_X64 = ("Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "vcvars64.bat")
 
 
 def conan_requirements(conanfile: Path) -> dict[str, str]:
@@ -663,18 +683,147 @@ TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
 SOURCE_SUFFIXES = (*TEST_SOURCES, ".hpp", ".h", ".hxx")
 
 
+def toolchain_env() -> dict[str, str]:
+    """The environment the gate's build tools run in.
+
+    This process's environment, entered into MSVC's on Windows: with
+    no ``CXX`` set and no ``cl`` on PATH, vswhere names the newest
+    Visual Studio that has the C++ build tools for this architecture,
+    and the environment its vcvars batch file leaves is read back
+    through ``set``. ``CC`` and ``CXX`` then name ``cl``, so CMake
+    takes MSVC over a MinGW gcc that is also on PATH: on Windows the
+    gate builds with MSVC unless ``CXX`` says otherwise, and a person
+    who sets it chooses. Read once per process; a copy each call.
+
+    Raises:
+        Failed: on Windows with no compiler chosen and no Visual
+            Studio installation with the C++ build tools to enter.
+    """
+    return dict(_entered())
+
+
+@functools.cache
+def _entered() -> dict[str, str]:
+    """The environment `toolchain_env` copies, read once per process."""
+    env = dict(os.environ)
+    if not _on_windows() or env.get("CXX"):
+        return env
+    if not shutil.which("cl", path=env.get("PATH", "")):
+        env = _msvc_environment(env)
+    return {**env, "CC": env.get("CC") or "cl", "CXX": "cl"}
+
+
+def _on_windows() -> bool:
+    """Whether this is Windows, where the gate enters MSVC's environment itself."""
+    return sys.platform == "win32"
+
+
+def vswhere_path(env: dict[str, str] | None = None) -> Path:
+    """Where this machine keeps vswhere, present or not.
+
+    Under the 32-bit program files directory *env* names, this
+    process's when *env* is None; the key is read in both spellings,
+    since Windows upper-cases the ones a process inherits.
+    """
+    variables = dict(os.environ) if env is None else env
+    program_files = (
+        variables.get("PROGRAMFILES(X86)")
+        or variables.get("ProgramFiles(x86)")
+        or r"C:\Program Files (x86)"
+    )
+    return Path(program_files).joinpath(*VSWHERE)
+
+
+def _msvc_environment(env: dict[str, str]) -> dict[str, str]:
+    """*env* entered into the newest Visual Studio's C++ build tools.
+
+    Raises:
+        Failed: when vswhere is not installed, names no installation
+            with the C++ build tools for this architecture, or the
+            tools' batch file leaves no toolset in the environment.
+    """
+    vswhere = vswhere_path(env)
+    if not vswhere.is_file():
+        fail(
+            "no C++ compiler is on PATH and Visual Studio's installer is not at"
+            f" {vswhere}; install the Build Tools with the C++ workload, or set"
+            " CXX to the compiler to build with"
+        )
+    component, batch = MSVC_TOOLS.get(platform.machine().upper(), MSVC_TOOLS_X64)
+    installation = _asked(
+        [
+            str(vswhere),
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            component,
+            "-property",
+            "installationPath",
+        ]
+    )
+    if not installation:
+        fail(
+            "no C++ compiler is on PATH and no Visual Studio installation has the"
+            f" C++ build tools ({component}); install the workload, or set CXX to"
+            " the compiler to build with"
+        )
+    script = Path(installation) / "VC" / "Auxiliary" / "Build" / batch
+    entered = _from_set_output(_shell_set(f'@call "{script}" >nul\n@set\n'))
+    if "VCTOOLSINSTALLDIR" not in entered:
+        fail(
+            f"{script} left no VCToolsInstallDir in the environment, so the C++"
+            f" build tools of {installation} cannot be entered; repair the"
+            " installation, or set CXX to the compiler to build with"
+        )
+    return entered
+
+
+def _shell_set(script: str) -> str:
+    """What ``set`` prints after *script* ran in cmd.exe; empty when it will not run."""
+    with tempfile.TemporaryDirectory(prefix="workshop-msvc-") as home:
+        batch = Path(home) / "enter.cmd"
+        batch.write_text(script, encoding="utf-8")
+        try:
+            answer = footman.run(
+                [SHELL, "/d", "/c", str(batch)],
+                nofail=True,
+                recorded=False,
+                timeout=120,
+            )
+        except (OSError, footman.TimedOut):
+            return ""
+    return (answer.stdout or "") if answer.code == 0 else ""
+
+
+def _from_set_output(text: str) -> dict[str, str]:
+    """The environment ``set`` printed, keys upper-cased as Windows compares them.
+
+    cmd's hidden variables print with an empty key and are dropped,
+    as is any line without ``=``.
+    """
+    parsed: dict[str, str] = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key:
+            parsed[key.upper()] = value
+    return parsed
+
+
 def configure(package: Package) -> None:
     """Configure *package* into the gate's build directory.
 
     The dependency-free library needs no conan at gate time: cmake
     configures against the host toolchain with the Ninja generator
-    and exports the compile commands clang-tidy reads. A package
-    that declares conan requirements gains a conan install step when
-    the cross-kind dependency lands; today a missing generator file
-    fails the configure with cmake's own message.
+    and exports the compile commands clang-tidy reads, in the
+    environment [livery.workshop._backends._cpp_conan.toolchain_env][]
+    enters. A package that declares conan requirements gains a conan
+    install step when the cross-kind dependency lands; today a
+    missing generator file fails the configure with cmake's own
+    message.
     """
     build_dir = package.directory / GATE_BUILD_DIR
-    tools.cmake.opts(cwd=package.directory)(
+    tools.cmake.opts(cwd=package.directory, env=toolchain_env())(
         "-S",
         ".",
         "-B",
@@ -689,7 +838,9 @@ def configure(package: Package) -> None:
 def compile(package: Package) -> None:
     """Build the configured *package*; incremental, so one edit costs that edit."""
     build_dir = package.directory / GATE_BUILD_DIR
-    tools.cmake.opts(cwd=package.directory)("--build", str(build_dir))
+    tools.cmake.opts(cwd=package.directory, env=toolchain_env())(
+        "--build", str(build_dir)
+    )
 
 
 def gate_build(package: Package, root: Path) -> None:
@@ -711,56 +862,85 @@ def test(
     selection: tuple[str, ...] = (),
     pages: tuple[str, ...] = (),
 ) -> None:
-    """Run ctest over the gate build: every test, or *selection*'s alone.
+    """Run ctest over the gate build, measured: every test, or *selection*'s alone.
 
     A selected test file maps to the ctest named after its stem
     (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
     template registers tests; a selection no ctest answers to is a
-    refusal naming the rule. A green run is then measured: the
-    lines it reached land as the package's part at the workspace
-    root, read by [livery.workshop._backends._cpp_conan.measure][].
+    refusal naming the rule. The run is measured by the family of
+    the compiler CMake configured the gate build with: gcov and
+    llvm-cov read the counters a green run left, and Microsoft's
+    engine collects around the run itself. The lines reached land as
+    the package's part at the workspace *root*; a red run leaves
+    none, and a family without a measurer refuses by name, since a
+    suite that ran unmeasured never passes as measured.
     """
     del pages  # no docs examples harness answers to a C++ kind
+    from livery.workshop import _coverage_lines as lines_
+
     build_dir = package.directory / GATE_BUILD_DIR
-    env = {**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1", **_fresh_profiles(package)}
-    if not selection:
-        # The Ninja generator's `test` target runs ctest with the
-        # verdict in the exit code; CTEST_OUTPUT_ON_FAILURE makes a red
-        # test print its output instead of a bare summary line. The env
-        # rides whole: standalone toolroom passes `env=` as the child's
-        # entire environment, never a merge over the parent's.
-        result = tools.cmake.opts(cwd=package.directory, env=env, nofail=True)(
-            "--build", str(build_dir), "--target", "test"
-        )
-        if result.code != 0:
-            fail(
-                f"{package.name}: ctest failed (exit {result.code}):\n"
-                f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
-            )
-        measure(package, root)
-        return
+    env = {
+        **toolchain_env(),
+        "CTEST_OUTPUT_ON_FAILURE": "1",
+        **_fresh_profiles(package),
+    }
     names = [Path(path).stem for path in selection]
-    pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
-    # ctest is an entry point of the cmake record, so the store
-    # deploys the two together and one handle each reaches them.
+    arguments = ["--test-dir", str(build_dir), "--output-on-failure"]
+    if names:
+        pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
+        arguments += ["-R", pattern]
+    compiler_id, compiler = compiler_of(package)
+    family = lines_.measurer_for(compiler_id)
+    if family == "msvc":
+        measured = _measure_msvc(package, arguments, env, names)
+    else:
+        _run_ctest(package, arguments, env, names)
+        if not family:
+            fail(
+                f"{package.name}: the gate build's compiler"
+                f" {compiler_id or 'is unknown'} has no coverage measurer; the"
+                f" families are {', '.join(sorted(lines_.FAMILIES))}"
+            )
+        measured = (
+            _measure_gcov(package, compiler)
+            if family == "gcov"
+            else _measure_llvm(package, compiler)
+        )
+    kept = lines_.within(lines_.relativise(measured, root), package)
+    lines_.write_part(root, package.path, kept)
+    print(f"  {package.name}: coverage: {len(kept)} file(s) measured by {family}")
+
+
+def _run_ctest(
+    package: Package, arguments: list[str], env: dict[str, str], names: list[str]
+) -> None:
+    """Run ctest with *arguments*; a red run or an unanswered selection refuses.
+
+    ctest is an entry point of the cmake record, so the store deploys
+    the two together and one handle each reaches them.
+    """
     try:
         ran = tools.ctest.opts(
             cwd=package.directory, env=env, nofail=True, recorded=False
-        )("--test-dir", str(build_dir), "-R", pattern, "--output-on-failure")
+        )(*arguments)
     except OSError:
         _undeployed("ctest")
-    if "No tests were found" in ran.stdout + ran.stderr:
-        fail(
-            f"{package.name}: no ctest is named {', '.join(names)}; the cpp-conan"
-            " kind maps a test file to the ctest of its stem"
-            " (add_test(NAME <stem> ...)), so register it or run the suite"
-        )
+    if names and "No tests were found" in ran.stdout + ran.stderr:
+        _no_ctest_named(package, names)
     if ran.code != 0:
         fail(
             f"{package.name}: ctest failed (exit {ran.code}):\n"
             f"{ran.stdout[-4000:]}{ran.stderr[-2000:]}"
         )
-    measure(package, root)
+
+
+def _no_ctest_named(package: Package, names: list[str]) -> NoReturn:
+    """Refuse a selection no ctest answers to, naming the rule that maps them."""
+    fail(
+        f"{package.name}: no ctest is named {', '.join(names)}; the cpp-conan"
+        " kind maps a test file to the ctest of its stem"
+        " (add_test(NAME <stem> ...)), so register it or run the suite"
+    )
 
 
 def _fresh_profiles(package: Package) -> dict[str, str]:
@@ -798,44 +978,6 @@ def compiler_of(package: Package) -> tuple[str, str]:
         identity.group(1) if identity else "",
         compiler.group(1) if compiler else "",
     )
-
-
-def measure(package: Package, root: Path) -> None:
-    """Read the lines the gate build's tests reached; the package's part at *root*.
-
-    The measurer follows the compiler CMake configured the gate build
-    with, and is found beside that compiler, then on PATH, then in
-    the SDK xcrun names: gcov for GNU, llvm-profdata and llvm-cov for
-    clang and apple-clang. A family without a measurer, or a measurer
-    that is not there, refuses by name, since a suite that ran
-    unmeasured never passes as measured. MSVC's measurer lands with
-    the dotnet kind; until then an MSVC run says it is not measured
-    and leaves no part, which the union refuses.
-    """
-    from livery.workshop import _coverage_lines as lines_
-
-    compiler_id, compiler = compiler_of(package)
-    family = lines_.measurer_for(compiler_id)
-    if not family:
-        fail(
-            f"{package.name}: the gate build's compiler"
-            f" {compiler_id or 'is unknown'} has no coverage measurer; the"
-            f" families are {', '.join(sorted(lines_.FAMILIES))}"
-        )
-    if family == "msvc":
-        print(
-            f"  {package.name}: coverage: MSVC's measurer is not wired yet; this"
-            " run is not measured"
-        )
-        return
-    measured = (
-        _measure_gcov(package, compiler)
-        if family == "gcov"
-        else _measure_llvm(package, compiler)
-    )
-    kept = lines_.within(lines_.relativise(measured, root), package)
-    lines_.write_part(root, package.path, kept)
-    print(f"  {package.name}: coverage: {len(kept)} file(s) measured by {family}")
 
 
 def _beside(compiler: str, *names: str) -> str:
@@ -951,6 +1093,212 @@ def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
             f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
         )
     return lines_.from_lcov(result.stdout)
+
+
+def _measure_msvc(
+    package: Package, arguments: list[str], env: dict[str, str], names: list[str]
+) -> dict[str, dict[int, int]]:
+    """The lines Microsoft's engine reads from the ctest run it collects around.
+
+    Each executable ctest names, and every shared library the build
+    made, is instrumented statically into a copy that takes the
+    original's place for the run and gives it back after, so the
+    build's own output is never instrumented twice. ctest runs under
+    ``dotnet-coverage collect`` with child processes included, and
+    its verdict is read from the JUnit report it writes, never from
+    the collector's exit code, which is the collector's own.
+
+    Raises:
+        Failed: when ctest names no executable, an instrumentation
+            or the collection fails, a test fails, or no report
+            comes out; each names what happened.
+    """
+    from livery.workshop import _coverage_lines as lines_
+
+    profiles = package.directory / GATE_BUILD_DIR / PROFILE_DIR
+    objects = _test_objects(package)
+    if not objects:
+        fail(f"{package.name}: ctest names no test executable to instrument")
+    ctest = _ctest_program()
+    settings = profiles / "coverage.config"
+    settings.write_text(_msvc_settings(objects), encoding="utf-8")
+    report = profiles / "coverage.cobertura.xml"
+    verdict = profiles / "ctest.xml"
+    for stale in (report, verdict):
+        stale.unlink(missing_ok=True)
+    run_env = {
+        **env,
+        "DOTNET_COVERAGE_TELEMETRY_OPTOUT": "1",
+        "DOTNET_COVERAGE_NOLOGO": "1",
+    }
+    swapped: list[tuple[Path, Path]] = []
+    try:
+        for name in objects:
+            original = Path(name)
+            instrumented = original.with_name(
+                f"{original.stem}.instrumented{original.suffix}"
+            )
+            result = _dotnet_coverage(
+                package,
+                run_env,
+                "instrument",
+                "--nologo",
+                "-s",
+                str(settings),
+                "-o",
+                str(instrumented),
+                str(original),
+            )
+            if result.code != 0 or not instrumented.is_file():
+                fail(
+                    f"{package.name}: dotnet-coverage could not instrument"
+                    f" {original.name} (exit {result.code}):\n"
+                    f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+                )
+            kept = original.with_name(f"{original.name}.uninstrumented")
+            os.replace(original, kept)
+            os.replace(instrumented, original)
+            swapped.append((original, kept))
+        result = _dotnet_coverage(
+            package,
+            run_env,
+            "collect",
+            "--nologo",
+            "-s",
+            str(settings),
+            "-f",
+            "cobertura",
+            "-o",
+            str(report),
+            "--",
+            ctest,
+            *arguments,
+            "--output-junit",
+            str(verdict),
+        )
+    finally:
+        for original, kept in swapped:
+            os.replace(kept, original)
+    output = result.stdout + result.stderr
+    _ctest_verdict(package, names, verdict, output)
+    if result.code != 0:
+        fail(
+            f"{package.name}: dotnet-coverage exited {result.code} collecting the"
+            f" run:\n{output[-4000:]}"
+        )
+    if not report.is_file():
+        fail(
+            f"{package.name}: dotnet-coverage wrote no report at {report}:\n"
+            f"{output[-4000:]}"
+        )
+    return lines_.from_cobertura(report.read_text(encoding="utf-8"))
+
+
+def _ctest_program() -> str:
+    """Where ctest is, for a collector that spawns it by path.
+
+    Raises:
+        Failed: when ctest is not deployed, naming the sync that
+            supplies it.
+    """
+    found = shutil.which("ctest")
+    if not found:
+        _undeployed("ctest")
+    return found
+
+
+def _dotnet_coverage(package: Package, env: dict[str, str], *args: str) -> Result:
+    """One dotnet-coverage invocation through the store's handle.
+
+    Raises:
+        Failed: when the tool is not deployed: a workspace measured
+            with MSVC requires it, and the refusal names the line.
+    """
+    try:
+        return tools.dotnet_coverage.opts(
+            cwd=package.directory, env=env, nofail=True, recorded=False
+        )(*args)
+    except OSError:
+        fail(
+            "dotnet-coverage is not on PATH: a cpp-conan package built with MSVC"
+            ' is measured by it, so add "dotnet_coverage" to [tools] requires'
+            f" in workshop.toml, run `{footman.prog()} tools.lock`, then"
+            f" `{footman.prog()} sync` and the printed env.emit line"
+        )
+
+
+def _msvc_settings(objects: list[str]) -> str:
+    """The engine's settings: native instrumentation on, the build's own modules alone.
+
+    A module path is matched by its file name in any letter case,
+    since the loader reports a path in the case it has, and the
+    pattern stays inside the regular expression syntax every engine
+    version reads: no inline flags.
+    """
+    names = "|".join(_any_case(Path(name).name) for name in objects)
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<Configuration>\n"
+        "  <CodeCoverage>\n"
+        "    <EnableStaticNativeInstrumentation>True"
+        "</EnableStaticNativeInstrumentation>\n"
+        "    <EnableDynamicNativeInstrumentation>True"
+        "</EnableDynamicNativeInstrumentation>\n"
+        "    <EnableStaticManagedInstrumentation>False"
+        "</EnableStaticManagedInstrumentation>\n"
+        "    <EnableDynamicManagedInstrumentation>False"
+        "</EnableDynamicManagedInstrumentation>\n"
+        "    <UseVerifiableInstrumentation>False</UseVerifiableInstrumentation>\n"
+        "    <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>\n"
+        "    <CollectFromChildProcesses>True</CollectFromChildProcesses>\n"
+        "    <ModulePaths>\n"
+        "      <Include>\n"
+        f"        <ModulePath>.*[\\\\/]({names})$</ModulePath>\n"
+        "      </Include>\n"
+        "    </ModulePaths>\n"
+        "  </CodeCoverage>\n"
+        "</Configuration>\n"
+    )
+
+
+def _any_case(text: str) -> str:
+    """A regular expression matching *text* in any letter case, every flavour."""
+    return "".join(
+        f"[{char.lower()}{char.upper()}]" if char.isalpha() else re.escape(char)
+        for char in text
+    )
+
+
+def _ctest_verdict(
+    package: Package, names: list[str], report: Path, output: str
+) -> None:
+    """Refuse unless the JUnit report ctest wrote says every test ran and passed.
+
+    A missing report means ctest never ran to its end, a count of
+    zero means no test ran (a selection no ctest answers to, or a
+    suite with none registered), and a failure fails the run with
+    ctest's *output*.
+    """
+    if not report.is_file():
+        fail(
+            f"{package.name}: ctest left no report at {report.name}; its"
+            f" output:\n{output[-4000:]}"
+        )
+    try:
+        suite = ElementTree.parse(report).getroot()
+    except ElementTree.ParseError as error:
+        fail(f"{package.name}: ctest's report is not XML ({error})")
+    tests = int(suite.get("tests", "0"))
+    failures = int(suite.get("failures", "0"))
+    if tests == 0:
+        if names:
+            _no_ctest_named(package, names)
+        fail(f"{package.name}: ctest ran no test; register one with add_test")
+    if failures:
+        fail(
+            f"{package.name}: ctest failed ({failures} of {tests} test(s)):\n"
+            f"{output[-4000:]}"
+        )
 
 
 def _test_objects(package: Package) -> list[str]:
