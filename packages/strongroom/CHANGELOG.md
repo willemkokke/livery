@@ -9,6 +9,26 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.2.0] - 2026-09-29
+
+### Added
+
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+- Cmake and ninja come from their own releases, and the asset picker learns universal and arch-less builds by @willemkokke
+- The sidebar's machine sections are marker blocks the author may place, and land in a fixed order otherwise by @willemkokke
+- The store owns download, unpack and the host table; the bench reads through it and runs a release binary in its own tree by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+
+### Fixed
+
+- The test HTTP servers stop on a short poll by @willemkokke
+- Fetch_url follows a bounded redirect chain, so a release asset lands by @willemkokke
+- A landing refused by its twin on Windows settles on the twin's file, for the object and for its mark by @willemkokke
+
+### Changed
+
+- The contract key type becomes kind by @willemkokke
+
 ## [0.1.0] - 2026-09-12
 
 ### Added

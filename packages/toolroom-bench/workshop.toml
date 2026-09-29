@@ -10,7 +10,7 @@ name = "livery-toolroom-bench"
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.7.0"
+floor = "0.8.0"
 
 [[depends]]
 path = "packages/footman"
