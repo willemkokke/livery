@@ -21,7 +21,7 @@ Everything else is padding.
 
 Short sentences. Simple words. Split a long sentence into two.
 
-The plain-language rules in `documentation-standards.md` apply here
+The plain-language rules in `standards.documentation.md` apply here
 too: say what a thing does, no idioms or metaphors, the plainest verb,
 conditions stated positively, timing made explicit.
 

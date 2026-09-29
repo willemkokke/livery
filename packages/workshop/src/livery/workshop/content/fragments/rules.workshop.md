@@ -11,9 +11,9 @@ loads last and wins.
 
 ## The gate
 
-`fm check` runs format, lint, the four type checkers, the
-type-completeness verdict, and tests in parallel. Run it before every
-commit; CI runs the same command. On a machine it gates what the
+`fm check` runs every check the mounted layers register, in parallel;
+the gate section below names them for this workspace. Run it before
+every commit; CI runs the same command. On a machine it gates what the
 working tree changed since the nearest tree its record proves, and
 records the tree, so a proved tree runs nothing; `--full` runs
 everything. Nothing on the merge path may wait on a person; a

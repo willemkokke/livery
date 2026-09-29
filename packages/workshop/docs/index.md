@@ -123,6 +123,21 @@ the lint check's category-shaped per-file ignores render from the
 claims over the present kinds' tables, so the docstring rules stop at
 the tests of every kind without a table typed by hand.
 
+A layer's prose, its voice, its standards, its rules, is a set of
+fragments in sections the base orders: identity, voice, standards,
+rules, workflow, gate, verbs, kinds, tools. A fragment is a file in the
+layer's `content/fragments/` named
+`<section>.[<kind>.]<topic>[.<audience>].md`, or a registration with a
+render that answers each audience from the registries; a kind in the
+name delivers it only while a package of that kind, or one deriving
+from it, is present, and two fragments of one name refuse at sync
+naming both files. `fm sync` delivers the agent's set flat under
+`.workshop/fragments/`, a shipped file byte for byte and an edited copy
+kept and named, and writes the entry file from it in section order,
+the repository's own `fragments/` last. The gate, verbs, kinds and
+tools sections render from the registries, so no fragment names a
+checker by hand.
+
 The layering check parses every python source once per gate and
 memoises the parse by the file's bytes, and a kind or a layer may
 register a rule over that parse beside the builtin three (the

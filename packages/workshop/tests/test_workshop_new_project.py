@@ -69,7 +69,9 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
 
     def _locked(root: Path) -> None:
         locked.append(root)
-        (root / "tools.lock").write_text('{"schema": 1, "tools": {}}\n')
+        # A lock of the schema with nothing in it: the sync's renders read
+        # it, and a file that is not a lock would refuse there.
+        (root / "tools.lock").write_text('{"schema": 1, "hosts": [], "tools": {}}\n')
 
     monkeypatch.setattr("livery.workshop._new_project._sync_tools", _locked)
     monkeypatch.setattr(
@@ -228,7 +230,7 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
         member / "src" / "acme_tools" / "brand" / "templates" / "overlay.toml"
     ).is_file()
     fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
-    assert (fragment / "CLAUDE.brand.md").is_file()
+    assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
     assert 'layers = ["livery.workshop", "acme_tools.brand"]' in contract
     pyproject = (member / "pyproject.toml").read_text()

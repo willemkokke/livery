@@ -59,14 +59,23 @@ def test_a_moved_checkout_hands_the_sync_to_a_fresh_process(
     assert ran == [tmp_path]
 
 
-def test_the_stub_imports_guidance_first_then_the_instance(tmp_path: Path) -> None:
+def test_the_stub_imports_the_sections_in_order_then_the_instance(
+    tmp_path: Path,
+) -> None:
     root = _workspace(tmp_path)
     sync_workspace(root)
     lines = (root / "CLAUDE.md").read_text().splitlines()
     imports = [line for line in lines if line.startswith("@")]
-    assert imports[0] == "@.workshop/fragments/interaction-voice.md"
-    assert imports[1] == "@.workshop/fragments/documentation-standards.md"
-    assert imports[-1] == "@CLAUDE.project.md"
+    # The voice and the standards before any rules, the gate's render
+    # after them; a workspace with no package, no tasks file and no
+    # lock has no verbs, kinds or tools to say.
+    assert imports == [
+        "@.workshop/fragments/voice.interaction.md",
+        "@.workshop/fragments/standards.documentation.md",
+        "@.workshop/fragments/rules.workshop.md",
+        "@.workshop/fragments/gate.checks.md",
+        "@CLAUDE.project.md",
+    ]
     for line in imports[:-1]:
         assert (root / line[1:]).is_file()
 

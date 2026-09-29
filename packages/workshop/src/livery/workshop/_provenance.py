@@ -168,8 +168,10 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
         if parts[1:2] == ("fragments",):
             return Provenance(
                 "layer fragment",
-                f"a mounted layer's content/fragments/{relative.name}",
-                f"edit the layer's copy; `{prog} sync` rewrites this one wholesale",
+                f"a mounted layer's content/fragments/{relative.name}, or a"
+                " render from its registries",
+                f"edit the layer's copy; an edit here is a local override"
+                f" `{prog} sync` keeps and names",
             )
         # Everything else under .workshop is this checkout's own: the
         # tool receipts, the stub receipt, the linked binaries, a layer
