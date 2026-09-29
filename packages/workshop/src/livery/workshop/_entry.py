@@ -56,10 +56,11 @@ def installer_url(pin: str) -> str:
 # full of shell braces.
 _SCRIPT = """\
 # The entry contract: uv at the lock's pin -> the venv synced against
-# the lock -> the tool stubs written -> the environment emitted. Source
-# it to enter this shell; `setup.sh github` persists the emission
-# (GITHUB_ENV/GITHUB_PATH)
-# for the CI steps after it, which then call __PROG__ bare.
+# the lock, its native members left for later -> the tools installed
+# and the stubs written -> the environment entered here -> the native
+# members built against it. Source it to enter this shell; `setup.sh
+# github` persists the emission (GITHUB_ENV/GITHUB_PATH) for the CI
+# steps after it, which then call __PROG__ bare.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf __INSTALLER__ | sh >&2
@@ -92,8 +93,14 @@ fi
 # as one argument. Arrays expand the same under bash and zsh.
 _sync_args=()
 [ -f "$_root/uv.lock" ] && _sync_args+=(--locked)
-uv sync --project "$_root" "${_sync_args[@]}" >&2 \\
-    || { sleep 10; uv sync --project "$_root" "${_sync_args[@]}" >&2; } \\
+# A native member builds its extension at install against the tools
+# the store supplies below (the compiler's helpers, the conan
+# provider), so the first sync leaves it out and the second, after
+# the environment is entered here, builds it.
+_native=(__NATIVE_SKIP__)
+_sync() { uv sync --project "$_root" "${_sync_args[@]}" "$@" >&2; }
+_sync "${_native[@]}" \\
+    || { sleep 10; _sync "${_native[@]}"; } \\
     || { echo "setup: uv sync failed" >&2; return 1 2>/dev/null || exit 1; }
 # The sync receipt: the lock as this venv last saw it. The runner's
 # per-command reconcile compares the two and re-syncs on drift.
@@ -108,8 +115,15 @@ _run() { uv run --project "$_root" --no-sync __PROG__ "$@"; }
 # is named, and the gate says which check that cost.
 _run tools.sync --frozen >&2 \\
     || echo "setup: the tools were not materialised; the gate names what is missing" >&2
-if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null
-elif (return 0 2>/dev/null); then eval "$(_run env.emit posix)"; fi
+# Entered here, whether sourced or run: the native members build in
+# this shell, and a sourcing shell keeps it.
+eval "$(_run env.emit posix)"
+if [ ${#_native[@]} -gt 0 ]; then
+    _sync || { sleep 10; _sync; } \\
+        || { echo "setup: a native member did not build against the tools" >&2; \\
+             return 1 2>/dev/null || exit 1; }
+fi
+if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null; fi
 """
 
 
@@ -118,8 +132,30 @@ def entry_script(root: Path) -> str:
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     pin = locked_uv_version(root)
+    skipped = " ".join(f"--no-install-package {name}" for name in native_members(root))
     return (
         _SCRIPT.replace("__PROG__", footman.prog())
         .replace("__INSTALLER__", installer_url(pin))
         .replace("__DATA_DIR_VAR__", _paths.env_var("DATA_DIR"))
+        .replace("__NATIVE_SKIP__", skipped)
+    )
+
+
+def native_members(root: Path) -> tuple[str, ...]:
+    """The distribution names of the members whose install builds an extension.
+
+    A kind whose wheel is a platform wheel builds at install against
+    the store's tools, so the entry installs it after the tools are
+    in the environment; every other member installs in the first
+    sync.
+    """
+    from livery.workshop._kinds import kind_for
+    from livery.workshop._packages import discover_packages
+
+    if not (root / "packages").is_dir():
+        return ()
+    return tuple(
+        package.name
+        for package in discover_packages(root)
+        if kind_for(package.kind).wheel_identity == "platform"
     )

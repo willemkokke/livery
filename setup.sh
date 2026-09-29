@@ -2,10 +2,11 @@
 # it matching. Edit the contract (or the emitters) and run
 # `fm template.apply`; an edit here is drift.
 # The entry contract: uv at the lock's pin -> the venv synced against
-# the lock -> the tool stubs written -> the environment emitted. Source
-# it to enter this shell; `setup.sh github` persists the emission
-# (GITHUB_ENV/GITHUB_PATH)
-# for the CI steps after it, which then call fm bare.
+# the lock, its native members left for later -> the tools installed
+# and the stubs written -> the environment entered here -> the native
+# members built against it. Source it to enter this shell; `setup.sh
+# github` persists the emission (GITHUB_ENV/GITHUB_PATH) for the CI
+# steps after it, which then call fm bare.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/0.12.7/install.sh | sh >&2
@@ -38,8 +39,14 @@ fi
 # as one argument. Arrays expand the same under bash and zsh.
 _sync_args=()
 [ -f "$_root/uv.lock" ] && _sync_args+=(--locked)
-uv sync --project "$_root" "${_sync_args[@]}" >&2 \
-    || { sleep 10; uv sync --project "$_root" "${_sync_args[@]}" >&2; } \
+# A native member builds its extension at install against the tools
+# the store supplies below (the compiler's helpers, the conan
+# provider), so the first sync leaves it out and the second, after
+# the environment is entered here, builds it.
+_native=()
+_sync() { uv sync --project "$_root" "${_sync_args[@]}" "$@" >&2; }
+_sync "${_native[@]}" \
+    || { sleep 10; _sync "${_native[@]}"; } \
     || { echo "setup: uv sync failed" >&2; return 1 2>/dev/null || exit 1; }
 # The sync receipt: the lock as this venv last saw it. The runner's
 # per-command reconcile compares the two and re-syncs on drift.
@@ -54,5 +61,12 @@ _run() { uv run --project "$_root" --no-sync fm "$@"; }
 # is named, and the gate says which check that cost.
 _run tools.sync --frozen >&2 \
     || echo "setup: the tools were not materialised; the gate names what is missing" >&2
-if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null
-elif (return 0 2>/dev/null); then eval "$(_run env.emit posix)"; fi
+# Entered here, whether sourced or run: the native members build in
+# this shell, and a sourcing shell keeps it.
+eval "$(_run env.emit posix)"
+if [ ${#_native[@]} -gt 0 ]; then
+    _sync || { sleep 10; _sync; } \
+        || { echo "setup: a native member did not build against the tools" >&2; \
+             return 1 2>/dev/null || exit 1; }
+fi
+if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null; fi

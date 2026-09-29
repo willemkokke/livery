@@ -290,6 +290,29 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
+def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
+    """A signer that waits for a person fails an unattended pass; the setting rides."""
+    assert _e2e.unsigned_environment({}) == {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "commit.gpgsign",
+        "GIT_CONFIG_VALUE_0": "false",
+    }
+    # An entry the outer environment carries keeps its index; this one follows.
+    outer = {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "a.b",
+        "GIT_CONFIG_KEY_1": "c.d",
+    }
+    assert _e2e.unsigned_environment(outer) == {
+        "GIT_CONFIG_COUNT": "3",
+        "GIT_CONFIG_KEY_2": "commit.gpgsign",
+        "GIT_CONFIG_VALUE_2": "false",
+    }
+    assert (
+        _e2e.unsigned_environment({"GIT_CONFIG_COUNT": "x"})["GIT_CONFIG_COUNT"] == "1"
+    )
+
+
 def test_the_tree_reset_keeps_what_sync_materialises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

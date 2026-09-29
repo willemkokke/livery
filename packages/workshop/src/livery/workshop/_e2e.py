@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,6 +50,29 @@ DEV_MEMBER = "packages/workshop"
 #: What a reset of the loop's tree keeps: the directories `fm sync`
 #: materialises, gitignored and read by the gate on the desk.
 KEPT_BY_SYNC = (".venv", "typings", ".workshop")
+
+
+def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """The variables that turn commit signing off for every git a pass runs.
+
+    The loop's commits are scratch on a local forge and prove nothing
+    by their signature, while a developer's signer (1Password's
+    `op-ssh-sign` waits for a person) fails every commit of an
+    unattended pass. git reads `GIT_CONFIG_COUNT` with a key and a
+    value per index, so the setting rides the environment into the
+    driver's own git, the birth's, and the loop's fm; an entry the
+    outer environment already carries keeps its index and this one
+    follows it.
+    """
+    count = 0
+    raw = environ.get("GIT_CONFIG_COUNT", "")
+    if raw.isdigit():
+        count = int(raw)
+    return {
+        "GIT_CONFIG_COUNT": str(count + 1),
+        f"GIT_CONFIG_KEY_{count}": "commit.gpgsign",
+        f"GIT_CONFIG_VALUE_{count}": "false",
+    }
 
 
 def dev_members(root: Path) -> tuple[str, ...]:
@@ -704,25 +727,40 @@ def _birth(kind: str, url: str) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: render, git, repository,
-    protection, and the setup pull request. Re-running resumes, so
-    this is the recovery procedure too. The templates are this
-    package's own tree: the loop tests the source being edited.
+    protection, and the setup pull request. It runs as a child of the
+    pass, this interpreter's own footman with the pass's environment:
+    a task run in-process starts from the run's pinned environment,
+    and the pass's own settings, its unsigned commits, would never
+    reach the birth's git. Re-running resumes, so this is the recovery
+    procedure too. The templates are this package's own tree: the
+    loop tests the source being edited.
     """
-    import contextlib
-
-    from livery.workshop._new_project import new_project
+    import sys
 
     home = _loop_home(kind)
     home.mkdir(parents=True, exist_ok=True)
-    with contextlib.chdir(home):
-        new_project(
+    result = footman.run(
+        [
+            sys.executable,
+            "-m",
+            "livery.footman",
+            "--yes",
+            "new.project",
             E2E_REPO,
-            forge=kind,
-            owner=E2E_OWNER,
-            url=_lane(kind).alias,
-            templates=str(_TEMPLATES),
-            description="The workshop's local CI loop. Scratch; recreated freely.",
-        )
+            f"--forge={kind}",
+            f"--owner={E2E_OWNER}",
+            f"--url={_lane(kind).alias}",
+            f"--templates={_TEMPLATES}",
+            "--description=The workshop's local CI loop. Scratch; recreated freely.",
+        ],
+        cwd=home,
+        env={**os.environ, **unsigned_environment(os.environ)},
+        nofail=True,
+        timeout=900.0,
+    )
+    print(result.stdout.rstrip("\n"))
+    if result.code != 0:
+        fail(f"the loop's birth exited {result.code}:\n{result.stderr}")
     return home / E2E_REPO
 
 
@@ -2267,6 +2305,10 @@ if _WORKSHOP_TESTS.is_dir():
         """
         import os
 
+        # Every commit the pass makes, the driver's, the birth's and
+        # the loop's own fm's, is unsigned: the setting rides the
+        # task's environment into each child.
+        os.environ.update(unsigned_environment(os.environ))
         url = os.environ.get(_lane(forge).url_var, "")
         _require_host_alias(forge)
         _require_runner_docker(forge)
