@@ -1134,22 +1134,48 @@ root with the same names and come last.
 The test role joins the registry, and measurement becomes the
 kind's answer: a backend returns per-package path-to-percent for
 its run. Python answers through coverage.py, unchanged.
-`cpp-conan` runs ctest under llvm-cov and reduces to the same
-mapping; its `[qa] coverage_floor` is enforced by the same core
-floors, grace, and prose. The CI union step merges per-measurer
-(coverage.py combines its files, llvm merges profdata), then one
-enforcement over the combined answers. Windows MSVC coverage has
-no gcov-shaped answer; it is deferred and the deferral is an open
-line here, not a silent gap.
+`cpp-conan` runs ctest instrumented and reduces, on the leg that
+measured, to one answer per source file: the lines the tests
+executed and the lines that could have been executed. The
+measurer follows the compiler the conan profile names, never the
+operating system (ruled 2026-09-29): gcc to gcov (`--coverage`,
+`gcov --json-format`), clang and apple-clang to llvm-cov
+(`-fprofile-instr-generate -fcoverage-mapping`, `llvm-profdata
+merge`, `llvm-cov export -format=lcov`), msvc to a PDB-driven
+engine the Windows spike chooses. clang on Windows, `clang-cl` on
+the MSVC ABI or MinGW clang, is the llvm family, and MinGW gcc the
+gcov family. The measurer's tools are host tools beside the
+compiler that built, verified on the host and never downloaded; a
+host with the compiler and without its measurer refuses on that
+leg by name. The union is a set union of lines per file across the
+legs that measured, so two compilers never merge raw profiles; a
+file both measured has the union of what either could reach as its
+denominator. C++ floors are line coverage, Python's stay statements
+and branches: a floor is the kind's own measurement, ratcheted
+against itself. The `[qa] coverage-floor` is enforced by the same
+core floors, grace, and prose, and a package no leg measured refuses
+in the union, never passing vacuously. Windows is tier 1, so every
+leg measures; the store's unit row carries its measurer, and a row
+the reader cannot take falls out and re-measures, no migration. A
+cpp-conan member joins the conformance loop, the runner image
+gaining gcc and gcov if it lacks them.
 
 **Acceptance**
 
+- The Windows spike (branch `chore/coverage-spike-windows`, the
+  contributed point `coverage-spike`) shows per-line data for one
+  program from MSVC under Microsoft's Code Coverage engine and from
+  `clang-cl` under llvm-cov, its log quoted in the decision record
+  and the MSVC tool chosen there, before the measurer table is
+  written.
 - A C++ package below its floor fails `fm coverage.enforce` with
   the same prose Python gets, proven by a forced fixture.
-- The CI union job merges both measurers' data and enforces
-  once, proven by the conformance chain.
+- The CI union job unions the three legs' line sets, gcc's, clang's
+  and MSVC's, and enforces once, proven by the conformance chain
+  with its cpp-conan member.
 - A kind without a measurer skips coverage by name, never
-  vacuously passes.
+  vacuously passes; a host with the compiler and without its
+  measurer refuses on that leg by name, proven by forced tests.
 
 ### Phase 6: the docs layer
 
@@ -2229,6 +2255,27 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   site, the docs layer's (phase 6), and the entry file's move to the
   agent layer (phase 9). The birth test's fake lock became a lock of
   the schema, since the tools render reads it.
+- 2026-09-29, phase 5's measurers (Willem's ruling): the compiler
+  family is the package's own, and coverage never prescribes it. Each
+  leg reduces its own data to executed lines over instrumentable
+  lines per file, measurer chosen by the conan profile's compiler,
+  gcc to gcov, clang and apple-clang to llvm-cov, msvc to a
+  PDB-driven engine; the union is a set union of lines across the
+  legs that measured; C++ floors are line coverage while Python's
+  stay statements and branches; the measurer's tools are host tools
+  beside the compiler, never downloaded. Windows is tier 1, so it
+  measures rather than defers: MSVC has no compile-time line
+  instrumentation (`/fsanitize-coverage` counts edges for fuzzing,
+  `/GENPROFILE` is optimisation data), and the answer is at the
+  binary level over the PDBs, Microsoft's Code Coverage engine
+  (`CodeCoverage.exe collect` and `analyze`, shipped in Visual
+  Studio and in the `Microsoft.CodeCoverage` package on nuget.org)
+  or OpenCppCoverage (GPL v3, breakpoint-based, Cobertura). clang on
+  Windows is the llvm family on either ABI. A cpp-conan member joins
+  the conformance loop in phase 5. The spike runs first, on
+  `chore/coverage-spike-windows`, and its result decides the MSVC
+  tool; this closes open item 3 and replaces the phase's earlier
+  wording, under which llvm merged profdata in the union.
 
 ## Open
 
@@ -2238,9 +2285,10 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 2. Resolved 2026-09-28: `typecomplete` is a package-settable option on the python
    layer's basedpyright check family, on by default; the wave
    follows the gate. Decision record.
-3. The Windows MSVC coverage answer (phase 5 deferral): llvm-cov
-   via clang-cl, or documented absence? Owner: Willem, when a
-   consumer exists.
+3. Resolved 2026-09-29: Windows is tier 1 and measures; MSVC through
+   a PDB-driven engine the spike chooses (Microsoft's Code Coverage
+   engine first, OpenCppCoverage the fallback), clang on Windows as
+   the llvm family. Decision record.
 4. Where the graduated design page lives:
    `packages/workshop/docs/` under what name, and whether the
    facts-versus-policy boundary also enters the hse-imported
