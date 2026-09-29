@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892) and phase 4c (#894) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894) and phase 5's first change (#905) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2312,6 +2312,45 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   the gate's check job through a `[[ci.schedule]]` entry, and a
   spike step without a timeout hung a Windows leg for forty minutes
   behind an installer's window.
+- 2026-09-29, phase 5's first change built (issue #905): the
+  measurement seam and the gcc and clang measurers.
+  `livery.workshop._coverage_lines` is the shape every native
+  measurer reduces to, per file the line number to hit count with
+  every instrumentable line present, and its parsers read gcov's
+  JSON, lcov and Cobertura; a run leaves one part per package at
+  the workspace root beside coverage.py's own. The store's unit row
+  carries its `measurer`, `arcs` or `lines`, and a row without one
+  reads as arcs, so no record migrates. The cpp-conan gate configure
+  hands CMake `coverage.cmake` through `CMAKE_PROJECT_INCLUDE`,
+  which instruments by the compiler family CMake detected: gcc with
+  `--coverage`, clang and apple-clang with
+  `-fprofile-instr-generate -fcoverage-mapping`, and clang-cl linked
+  by lld through `CMAKE_LINKER_TYPE`; MSVC links with `/PROFILE`.
+  The test run clears the last run's counters, names where llvm's
+  profiles land, and after a green ctest reads the lines with the
+  measurer beside the compiler CMake recorded: gcov, or
+  llvm-profdata and llvm-cov over the executables ctest names, xcrun
+  answering on macOS. A family without a measurer or a measurer that
+  is not there refuses by name; an MSVC run says it is not measured
+  and leaves no part until the dotnet kind lands. The leg puts a
+  lines unit per native suite beside the python arcs, a suite that
+  ran without a part is named and not put, the union merges lines
+  units per package across the legs and the records and writes them
+  as parts, and the floors read a native package's line coverage
+  over its `source` category; a native package with a floor that no
+  leg measured refuses by name, never passing vacuously, and below
+  its floor it fails with the sentence a python package gets. Proven
+  by fixtures for every parser and refusal, by the leg and union
+  harness with lines units, and by a real gate build on the host's
+  toolchain, apple-clang through xcrun's llvm-cov on the desk and gcc
+  through gcov on the Linux leg. Ruled while building: no single
+  report format serves every compiler without converters (gcov has
+  only its JSON, llvm-cov no Cobertura, dotnet-coverage Cobertura or
+  its own XML), so each measurer's plainest line-level format is
+  read directly and the standard is the reduced shape. Not built
+  here: the MSVC measurer through `dotnet-coverage` and the `dotnet`
+  kind (the second change), and the conformance loop's cpp-conan
+  member (the third).
 
 ## Open
 
