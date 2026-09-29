@@ -69,6 +69,32 @@ root's site files, so a pull request that changes only `notes/` skips
 the docs job with a line saying so, and `fm explain` prints
 `claimed by: site` on a file the build reads.
 
+A check record also carries what its tool needs of the workspace. Its
+`tools` reach the tool profile for every kind the check judges, each
+requirement naming `check <name>` as its site, so unregistering a
+check removes its tool. Its `contributions` fill **slots**, the holes
+the base template leaves for the records: the `dev` dependency
+group's tool lines and pytest's `addopts` are the first two, declared
+with `register_slot` and filled with `contribute` in
+`livery.workshop._slots`, a list composing as the union in
+contribution order and a scalar taking the nearest contribution. A
+check a layer withdraws takes its lines with it. And its `options`
+are what a package may set under `[checks.<name>]` in its own
+contract, each with a type and a default; every check carries
+`enabled`, and the python test check carries `parallel`:
+
+```toml
+[checks.typecomplete]
+enabled = false        # skipped by name in the gate's output
+
+[checks.test]
+parallel = false       # this package's suite runs under -n 0, in a run of its own
+```
+
+An option a check does not declare, a check that does not exist, and
+a value of the wrong type each refuse in the layering check, naming
+the vocabulary.
+
 The layering check parses every python source once per gate and
 memoises the parse by the file's bytes, and a kind or a layer may
 register a rule over that parse beside the builtin three (the
@@ -102,10 +128,11 @@ comments keeps your lines as a tail after the lines the render owns.
 
 ## The tools a workspace requires
 
-Four sites declare tool requirements, each a name with a floor,
-`ruff` or `ruff>=0.16`: a package kind, in its record, for the tools
-its checks run, which is how the python kind requires uv, ruff, pytest
-and the checkers; a listed layer, as `WORKSHOP_TOOLS` on its plugin
+Five sites declare tool requirements, each a name with a floor,
+`ruff` or `ruff>=0.16`: a package kind, in its record, for what
+operates it, uv for the python kind; the checks that judge a kind,
+each naming its tools, which is how ruff, pytest and the checkers
+reach a python workspace; a listed layer, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
 `workshop.toml` under `[tools] requires`, for what its kind cannot
 know; and the project, in the root contract's `[tools] requires`, for

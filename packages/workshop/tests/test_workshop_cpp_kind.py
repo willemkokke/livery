@@ -58,12 +58,11 @@ def restored_registry():
     from livery.workshop import _checks, _kinds
 
     before = dict(_kinds._KINDS)
-    checks = dict(_checks._CHECKS)
+    checks = _checks.snapshot()
     yield
     _kinds._KINDS.clear()
     _kinds._KINDS.update(before)
-    _checks._CHECKS.clear()
-    _checks._CHECKS.update(checks)
+    _checks.restore(checks)
 
 
 def _package(directory: Path, name: str, kind_name: str) -> Package:
@@ -377,13 +376,15 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-python-layer") is None
-    assert kind_for("cpp-conan").tools == (
-        "cmake",
-        "conan",
-        "ninja",
+    # The build tools are the kind's; clang-format and clang-tidy ride
+    # their check records, which is where the profile reads them.
+    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
+    from livery.workshop._checks import tools_for_kind
+
+    assert {tool for tool, _ in tools_for_kind("cpp-conan")} == {
         "clang_format",
         "clang_tidy",
-    )
+    }
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:

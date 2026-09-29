@@ -122,10 +122,12 @@ def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
 
 
 def requirements(root: Path) -> tuple[Requirement, ...]:
-    """Every requirement the four sites declare: kinds, layers, packages, the project.
+    """Every requirement the five sites declare, in site order.
 
     A workspace with no package types requires what the python kind
-    does: its own `tasks.py` runs on python. A layer's site is
+    does: its own `tasks.py` runs on python. A kind's checks bring the
+    tools they run, each requirement naming `check <name>` as its
+    site. A layer's site is
     `layer <import path>`, read from its plugin module's
     `WORKSHOP_TOOLS`; an unlisted layer declares nothing here, since
     listing is the only activation channel.
@@ -139,6 +141,13 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         for record in kind_chain(kind_name):
             for text in record.tools:
                 found.append(Requirement.parse(text, site=f"kind {record.name}"))
+    # The checks that judge each present kind bring their tools, each
+    # naming its check: unregistering a check removes its tool.
+    from livery.workshop._checks import tools_for_kind
+
+    for kind_name in sorted(kinds):
+        for tool, check in tools_for_kind(kind_name):
+            found.append(Requirement.parse(tool, site=f"check {check}"))
     try:
         declared_by_layer = layer_tools(root)
     except RuntimeError as error:

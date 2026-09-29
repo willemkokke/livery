@@ -75,6 +75,15 @@ regions:
     name; injected at render time from the files themselves, so the
     render writes each back in place
 
+slots:
+  type: yaml
+  default: {}
+  when: false
+  help: >-
+    the composed slot values the check records fill, by slot name;
+    injected at render time from the registry, so a withdrawn check
+    takes its lines with it
+
 layer_imports:
   type: yaml
   default: [livery.workshop]

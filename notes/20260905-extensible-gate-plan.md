@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), and phase 4's first change too (#888) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -751,12 +751,15 @@ category rule is a pattern table, since nothing a category needs
 reads state, and the table renders into the documentation:
 
 ```python
-register_categories("python", [
-    ("src/**", "source"),
-    ("tests/**/test_*.py", "test"),
-    ("tests/**", "test-support"),
-    ("**", "configuration"),
-])
+register_categories(
+    "python",
+    [
+        ("src/**", "source"),
+        ("tests/**/test_*.py", "test"),
+        ("tests/**", "test-support"),
+        ("**", "configuration"),
+    ],
+)
 ```
 
 A channel rule is a callable, since it reads the delivery manifest,
@@ -2103,6 +2106,32 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   has no notes-only pull request scenario yet, so the skip is proven
   by unit tests over the decision and the claim, and the chain's
   proof waits for that scenario (open item 24).
+
+- 2026-09-29, phase 4's first change built (issue #888): slots in
+  `_slots.py`, `register_slot` with a union or nearest rule and
+  `contribute`, the dev group's tool lines and pytest's `addopts` as
+  the first two, filled by the check records' `contributions` and
+  rendered through a `slots` injection the base template reads, so
+  this repository's `pyproject.toml` lost the hand-written tool
+  lines and their comments and kept the same requirements;
+  package-settable options on the record, `[checks.<name>]` in the
+  package contract, every check carrying `enabled` and the python
+  test check `parallel`, a package that is not worker-safe running
+  its suite under `-n 0` in a run of its own, an unknown check, an
+  undeclared option or a wrong type refused in the layering check;
+  and the check's `tools` on the record, the profile reading them as
+  `check <name>` sites, the kinds keeping what operates them (uv,
+  cmake, conan, ninja) and clang-format, clang-tidy, ruff, pytest and
+  the checkers riding their records, so unregistering a check
+  removes its tool. Two things the change found. pytest stays on the
+  test record as a store tool beside its venv line, since the typed
+  handle the runner calls comes from the store and the venv copy is
+  the one that imports the environment. And the shared test run
+  runs whatever the members are, since the workspace's own tests
+  ride it; the pin over the gate's members counted on that. Not
+  built here: the second change, the configuration fragments and
+  the discovery shape, the editor settings and extensions, and the
+  ruff and clang-tidy proofs.
 
 ## Open
 

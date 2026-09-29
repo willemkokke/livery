@@ -117,24 +117,24 @@ def test_the_kind_chains_from_python() -> None:
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     assert managed_files("python-nanobind") == ("cliff.toml",)
-    # The chain's union: the base's and python's tools beneath the
-    # kind's own, the two clang tools among them.
+    # The chain's union of what operates the kinds: the base's and
+    # python's beneath the kind's own build tools; the checkers, the
+    # formatter, the test runner and the two clang tools ride their
+    # check records, which the chain reaches the same way.
     assert kind_tools({"python-nanobind"}) == (
-        "basedpyright",
-        "clang_format",
-        "clang_tidy",
         "cmake",
         "cmake_conan",
         "conan",
         "git_cliff",
-        "mypy",
         "ninja",
-        "pyrefly",
-        "pytest",
-        "ruff",
-        "ty",
         "uv",
     )
+    from livery.workshop._checks import tools_for_kind
+
+    # clang-tidy judges the cpp-conan kind alone, so its tool is not here.
+    assert {"clang_format", "ruff", "basedpyright", "pytest"} <= {
+        tool for tool, _ in tools_for_kind("python-nanobind")
+    }
     record = kind_for("python-nanobind")
     assert record.parent == "python"
     assert record.ci.check_verbs == (

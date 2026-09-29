@@ -195,16 +195,22 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
             name="cpp-fake-child", backend=fake, parent="cpp-fake", tools=("conan",)
         )
     )
+    # The kinds carry what operates them; the checkers, the formatter
+    # and the test runner ride their check records.
     assert kind_tools({"python"}) == (
-        "basedpyright",
         "git_cliff",  # the base kind's, through the chain
-        "mypy",
-        "pyrefly",
-        "pytest",
-        "ruff",
-        "ty",
         "uv",
     )
+    from livery.workshop._checks import tools_for_kind
+
+    assert {tool for tool, _ in tools_for_kind("python")} == {
+        "ruff",
+        "basedpyright",
+        "mypy",
+        "ty",
+        "pyrefly",
+        "pytest",
+    }
     # A kind registered without the base as its parent gets none of it.
     assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
 

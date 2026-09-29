@@ -259,9 +259,21 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "ty",
         "pyrefly",
     }
-    # The base kind heads the chain: its tool is declared first, by it.
-    assert {r.name: r.site for r in declared}["git_cliff"] == "kind base"
-    assert all(r.site == "kind python" for r in declared if r.name != "git_cliff")
+    # The base kind heads the chain: its tool is declared first, by it;
+    # uv is the python kind's own, and every checker names its check.
+    sites = {(r.name, r.site) for r in declared}
+    assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
+    assert {
+        ("ruff", "check format"),
+        ("ruff", "check lint"),
+        ("pytest", "check test"),
+        ("basedpyright", "check typecheck"),
+        ("basedpyright", "check typecomplete"),
+        ("mypy", "check typecheck"),
+        ("ty", "check typecheck"),
+        ("pyrefly", "check typecheck"),
+    } <= sites
+    assert {r.name for r in declared if r.site == "kind python"} == {"uv"}
     lock = _tools.write_lock(root)
     assert {name: entry.version for name, entry in lock.tools.items()} == dict.fromkeys(
         {r.name for r in declared}, "1.1.0"
@@ -296,7 +308,7 @@ def test_the_three_sites_union_and_each_names_itself(
     sites = {(r.name, r.site) for r in _tools.requirements(root)}
     assert ("cspell", "packages/member/workshop.toml") in sites
     assert ("git-cliff", "workshop.toml") in sites
-    assert ("ruff", "workshop.toml") in sites and ("ruff", "kind python") in sites
+    assert ("ruff", "workshop.toml") in sites and ("ruff", "check format") in sites
     lock = _tools.write_lock(root)
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
@@ -311,13 +323,13 @@ def test_the_three_sites_union_and_each_names_itself(
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
         "git_cliff",  # the base kind's, first in the chain
-        "uv",
-        "ruff",
-        "pytest",
+        "uv",  # the python kind's own
+        "ruff",  # then the checks' tools, in the checks' registration order
         "basedpyright",
         "mypy",
         "ty",
         "pyrefly",
+        "pytest",
     )
 
 
@@ -618,7 +630,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told
-    for name in ("ruff", "pytest"):
+    for name in ("ruff", "basedpyright"):
         assert name in told
     # The declaration, then the two verbs, in the order a reader runs them.
     assert "[tools]" in told and "index =" in told

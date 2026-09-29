@@ -468,7 +468,9 @@ def _register_builtin() -> None:
             backend=_python,
             template="package-python",
             parent="base",
-            tools=("uv", "ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"),
+            # uv operates the workspace; the checkers and the formatter
+            # ride their check records, and pytest the dev group's slot.
+            tools=("uv",),
         )
     )
     # The binary extension: a python distribution in every checker's
@@ -483,14 +485,9 @@ def _register_builtin() -> None:
             backend=_python_nanobind,
             template="package-python-nanobind",
             parent="python",
-            tools=(
-                "cmake",
-                "ninja",
-                "conan",
-                "cmake_conan",
-                "clang_format",
-                "clang_tidy",
-            ),
+            # The build tools; the native format and lint tools ride
+            # their check records.
+            tools=("cmake", "ninja", "conan", "cmake_conan"),
             native_sources=True,
             host_tools=("cc", "c++"),
             wheel_identity="platform",
@@ -508,7 +505,7 @@ def _register_builtin() -> None:
             backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            tools=("cmake", "conan", "ninja", "clang_format", "clang_tidy"),
+            tools=("cmake", "conan", "ninja"),
             native_sources=True,
             host_tools=("cc", "c++"),
             ci=CiContract(check_verbs=("format", "lint", "build", "test")),
