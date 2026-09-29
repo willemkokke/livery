@@ -649,26 +649,6 @@ def verify_digest(name: str, data: bytes, digest: str) -> None:
 TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
 
 
-def classify(package: Package, path: str) -> str:
-    """What *path*, relative to *package*, is to the cpp-conan kind.
-
-    A C or C++ source under ``tests/`` is a test, one ctest per file
-    named after its stem, as the template registers them; any other
-    file there is test support; ``src/`` and ``include/`` are source;
-    everything else (``CMakeLists.txt``, the conanfile, the contract)
-    is configuration.
-    """
-    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
-
-    del package
-    parts = path.split("/")
-    if parts[0] == "tests" and len(parts) > 1:
-        return TEST if parts[-1].endswith(TEST_SOURCES) else TEST_SUPPORT
-    if parts[0] in ("src", "include"):
-        return SOURCE
-    return CONFIGURATION
-
-
 def configure(package: Package) -> None:
     """Configure *package* into the gate's build directory.
 

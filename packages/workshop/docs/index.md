@@ -43,6 +43,32 @@ deleted, which is a project's opt-out from that target's opinions,
 and a name the list does not carry refuses. `fm layers` prints each
 layer, who requires it, its tools and its targets.
 
+The workshop asks two questions about a path, and `fm explain <path>`
+prints both answers with the layer that supplied each. Its
+**category** says what the file is to its package, `source`, `test`,
+`test-support`, `configuration`, and what a layer adds (`prose`,
+`example`, `asset`, `nav`); a kind or a layer registers a pattern
+table for a kind, `register_categories("python", [("src/**",
+"source"), ...])` in `livery.workshop._categories`, a derived kind
+inherits its parents' tables, the most specific pattern wins, and two
+patterns of one specificity claiming one path refuse naming both. A
+package reassigns its own paths in its contract, on this axis alone:
+
+```toml
+[categories]
+vendored = ["docs/assets/vendor/**"]
+```
+
+Its **channel** says who wrote the file and where to edit it,
+answered by ranked rules a layer may add to. The workspace root is a
+unit of its own, with `notes/`, the site's files and `README.md`
+categorised beside its tests, and a `src/` at the root refuses in the
+layering check, since the root is never a package. The site build
+claims the categories it reads, prose, nav, asset, example and the
+root's site files, so a pull request that changes only `notes/` skips
+the docs job with a line saying so, and `fm explain` prints
+`claimed by: site` on a file the build reads.
+
 The layering check parses every python source once per gate and
 memoises the parse by the file's bytes, and a kind or a layer may
 register a rule over that parse beside the builtin three (the

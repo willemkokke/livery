@@ -161,9 +161,8 @@ def affected_from_paths(
     page; other prose reaches nothing. ``None`` means everything, an
     empty scope nothing a gate reads.
     """
-    from livery.workshop._backends import _python
+    from livery.workshop._categories import TEST, category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
-    from livery.workshop._kinds import TEST, backend_for
 
     seeds: set[str] = set()
     picked: dict[str, list[str]] = {}
@@ -183,7 +182,8 @@ def affected_from_paths(
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
             tests_changed = True
-            classified = _python.classify(workspace_suite(root) or packages[0], path)
+            unit = workspace_suite(root)
+            classified = "" if unit is None else category_of(unit, path).name
             if classified == TEST and (root / path).is_file():
                 picked.setdefault(WORKSPACE_TESTS, []).append(path)
             else:
@@ -193,7 +193,7 @@ def affected_from_paths(
             if path.startswith(package.path + "/"):
                 relative = path[len(package.path) + 1 :]
                 if (
-                    backend_for(package).classify(package, relative) == TEST
+                    category_of(package, relative).name == TEST
                     # A test file the change deleted is still a changed
                     # path, and pytest handed a path that is gone ends
                     # the whole gate on "no tests ran". The package also

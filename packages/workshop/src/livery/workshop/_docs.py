@@ -1840,6 +1840,11 @@ def docs_build(
     docs did not move keeps its mount; ``--full`` rebuilds them all.
     """
     root = _root()
+    if not package and not full:
+        skip = unread_by_the_site(root)
+        if skip:
+            print(skip)
+            return
     require_sources(root)
     _generate_all(root, full=full)
     if package:
@@ -2037,3 +2042,63 @@ def docs_serve(
         return
     generate_release_pages(root)
     tools.zensical.opts(cwd=root).serve()
+
+
+#: The categories the site reads: a change to any other category
+#: leaves the site as it was, so the docs job has nothing to build.
+SITE_CATEGORIES = frozenset(
+    {"prose", "nav", "asset", "example", "generated", "site", "readme"}
+)
+
+
+def site_reads(root: Path, packages: tuple[Package, ...], path: str) -> bool:
+    """Whether the site build reads *path*: the docs check's claim.
+
+    A package's docs pages, nav, assets and examples, and the root's
+    site files and README, are what the build reads; a note under
+    ``notes/``, a source file or a contract is not. The answer comes
+    from the category registry, so a layer that adds a category the
+    site reads names it here.
+    """
+    from livery.workshop._categories import category_of
+    from livery.workshop._provenance import unit_of
+
+    unit, inside = unit_of(root, packages, path)
+    if unit is None:
+        return False
+    return category_of(unit, inside).name in SITE_CATEGORIES
+
+
+def unread_by_the_site(root: Path) -> str:
+    """The line that skips the build when nothing the site reads changed, or empty.
+
+    Only a pull request's docs job on a workspace declaring
+    ``[ci] affected-legs`` skips, the same terms the check legs
+    narrow on; the merge point's build and a person's own run always
+    build. The diff against the base branch is read the way the check
+    legs read it.
+    """
+    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._quality import ci_affected_base
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    base = ci_affected_base(root, run) if run is not None else ""
+    if not base:
+        return ""
+    git = GitOps(root)
+    try:
+        git.fetch()
+        paths = git.changed_paths(base)
+    except GitError as error:
+        print(f"  docs: no diff against origin/{base}; building ({error})")
+        return ""
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    read = [path for path in paths if site_reads(root, packages, path)]
+    if read:
+        return ""
+    return (
+        f"  docs: nothing the site reads changed against origin/{base}"
+        f" ({len(paths)} path(s) changed); the build is skipped"
+    )
