@@ -93,3 +93,11 @@ point = "nightly"
 task = "tools.refresh"
 args = ["--submit"]
 every = "2w"
+
+# The Windows coverage spike rides the gate's check job on this branch
+# alone: it prints its findings on the Windows leg and says so on the
+# others. Never merges.
+[[ci.schedule]]
+point = "gate"
+job = "check"
+task = "ci.coverage-spike"
