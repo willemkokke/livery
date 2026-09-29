@@ -5,6 +5,31 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.8.0] - 2026-09-29
+
+### Added
+
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+- The surface rides in the record, and the histories are absorbed by @willemkokke
+- The stubs live in typings/, written from the index, and the toolroom wheel ships none by @willemkokke
+- Stubs for the locked tools only, with sorted imports and a noqa header, declared by a handles module beside them by @willemkokke
+- The store renders stubs from surfaces, and the index holds none by @willemkokke
+- Pyrefly has a record, a stub and a place in the python kind's lock by @willemkokke
+- A package's docs section is the package's, and the site assembles its config at build time by @willemkokke
+- A tool's own switches live in its record's env, and gh's update check leaves the code for the record by @willemkokke
+- The tools lock and sync in uv's shape, and a newborn locks its own by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+
+### Fixed
+
+- The stubs and handles live beside the tools package, never inside its directory by @willemkokke
+
+### Changed
+
+- The tool store plan takes its digests from the host by @willemkokke
+- Pinning reads a digest per host rather than downloading every asset by @willemkokke
+- The contract key type becomes kind by @willemkokke
+
 ## [0.7.0] - 2026-09-13
 
 ### Added
