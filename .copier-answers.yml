@@ -15,7 +15,7 @@ packages:
   dev: livery-forge[github-secrets]
 - dir: workshop
   name: livery-workshop
-  dev: livery-workshop
+  dev: livery-workshop[dev]
 - dir: toolroom
   name: livery-toolroom
   dev: livery-toolroom[test]

@@ -2,7 +2,7 @@
 
 Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
-2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
+2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890) and phase 4b (#892) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
@@ -1404,7 +1404,6 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 | Windows C++ coverage deferral (phase 5) | a ruling once an MSVC toolchain answer exists |
 | `.clang-tidy` and `.clang-format` seeded per package, never rewritten | managed per-kind renders of the clang-tidy and clang-format check records (phase 4) |
 | The three basedpyright execution environments naming this repository's packages in the base template | the repository's own tail region in the root `pyproject.toml` (phase 3c); the lines themselves are the tracked content pass's debt |
-| `types-pyyaml` in the base template's dev group | the workshop member's `dev` extra (phase 3c's leftover) |
 | The forge layer's `.forge.dev.env` rule in the base `.gitignore` template | the forge layer's fragment for `.gitignore` (phase 4) |
 | The hand-written `[tool.ruff]` stubs in four packages | the claim-derived `per-file-ignores` (phase 4b); the docstring carve-outs inside them are the content pass's |
 | The four checkers and the voice fragments shipped by the base | `livery.housekeeping` (phase 8) |
@@ -2190,7 +2189,11 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   package that carries carve-outs must repeat `D1` beside them, and
   those carve-outs are the tracked content pass's debt as the phase
   says.
-
+- 2026-09-29, phase 3c's leftover landed (issue #896): `types-pyyaml`
+  is the workshop member's `dev` extra, and the answers' dev entry
+  for the member is `livery-workshop[dev]`; the base template names
+  nothing of this repository, which closes phase 3c's open
+  acceptance line.
 
 ## Open
 

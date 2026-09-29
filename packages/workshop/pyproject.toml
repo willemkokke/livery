@@ -48,6 +48,12 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.optional-dependencies]
+# What this package's own dev loop needs beyond its dependencies:
+# the stubs for its yaml reads, so mypy stays strict. The workspace's
+# dev group installs the member as `livery-workshop[dev]`.
+dev = ["types-pyyaml"]
+
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._tasks"
 

@@ -52,7 +52,7 @@ dev = [
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
     "livery-forge[github-secrets]",
-    "livery-workshop",
+    "livery-workshop[dev]",
     "livery-toolroom[test]",
     "livery-footman[test]",
     "livery-strongroom",
@@ -71,8 +71,6 @@ dev = [
     "coverage[toml]>=7.10",
     "coverage-enable-subprocess>=1.0",
     "pytest-xdist>=3.6",
-    # Stubs for the workshop's own yaml reads, so mypy stays strict.
-    "types-pyyaml",
 ]
 
 [tool.footman]
