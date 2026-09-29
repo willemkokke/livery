@@ -25,8 +25,8 @@ classifiers = [
 # refs and views; footman only where a verb runs, through a test extra
 # and the plugin entry that a later phase adds.
 dependencies = [
-    "livery-strongroom>=0.1.0",
-    "livery-toolroom>=0.7.0",
+    "livery-strongroom>=0.2.0",
+    "livery-toolroom>=0.8.0",
 ]
 
 [project.optional-dependencies]

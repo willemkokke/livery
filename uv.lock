@@ -914,12 +914,12 @@ provides-extras = ["github-secrets", "test"]
 
 [[package]]
 name = "livery-strongroom"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/strongroom" }
 
 [[package]]
 name = "livery-toolroom"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]
@@ -933,7 +933,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-bench"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/toolroom-bench" }
 dependencies = [
     { name = "livery-footman" },

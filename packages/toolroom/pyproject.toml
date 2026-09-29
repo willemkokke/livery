@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom"
-version = "0.7.0"
+version = "0.8.0"
 description = "Typed surfaces for command-line tools, generated from the tools themselves."
 readme = "README.md"
 license = "MIT"
