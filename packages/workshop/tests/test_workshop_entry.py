@@ -635,9 +635,10 @@ def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
 
     script = entry_script(tmp_path)
     data_var = _paths.env_var("DATA_DIR")
-    placed = script.index('UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"')
+    placed = script.index('UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"')
     assert 'if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then' in script
-    assert f'{data_var}="$RUNNER_TEMP/footman"' in script
+    # A placement the job already carries stands; the temp is the fallback.
+    assert f'{data_var}="${{{data_var}:-$RUNNER_TEMP/footman}}"' in script
     assert placed < script.index("uv sync --project")
     assert script.index(f'{data_var}="') < script.index("tools.sync --frozen")
     assert script.count(f"export UV_CACHE_DIR {data_var}") == 1
