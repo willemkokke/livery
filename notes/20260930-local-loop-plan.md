@@ -95,11 +95,22 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
    by every environment on the machine, and survive `--fresh` and
    the removal of any environment. `--purge-cache` removes them, and
    names each thing it removed.
-6. **The bench is a verb.** It runs a scenario set under each named
-   setup, no caches included, records wall time per scenario and per
-   job in the CI store's metrics series, prints the table, and with
-   `--apply` writes the fastest as this machine's default. It can be
-   scheduled.
+6. **The bench measures caching where CI runs a lot.** On the hosted
+   lane it runs the gate's legs under each cache variant the emitter
+   can write (the tool store's archive restored or downloaded, uv's
+   cache on or off, conan's home), one variant per run of a scheduled
+   point, with `fm ci.timings` and the metrics series as the record,
+   and the winning variant becomes what the emitter writes. Locally
+   the host setup with the persistent store on one disk is the
+   default without a bench, since nothing beats a store that is never
+   deleted or restored; `fm ci.e2e.bench` stays a hand tool for the
+   container setups.
+11. **The layer under test is the loop's second axis.** `fm ci.e2e
+    --layer=<name>` births the members of that layer's kinds,
+    publishes the layer's own dev wheel to the environment's
+    registry, and runs the scenarios against those members, release
+    included. A plain pass runs `develop` on the base's python
+    member; a pass with `--layer` runs the `release` set.
 7. **A job image is built from the lock.** When a setup runs jobs in
    containers, the image carries the tools the workspace would
    materialise, at their locked digests and in the store's own
@@ -154,9 +165,24 @@ its name, what it needs and the function that proves it:
 refuses a name it does not know with the list. Named sets: `develop`
 (birth, verified-skip, members, scoped-leg), `release` (develop plus
 release), `points` (nightly, dispatched-gate, contributed-point),
-`all`. The default set is `develop` (open item 1). Each pass prints a
-table at the end: scenario, wall time, runner runs, and writes the
-same rows to the metrics series, so a slow scenario is a number.
+`all`. The default set is `develop`. Each pass prints a table at the
+end: scenario, wall time, runner runs, and writes the same rows to
+the metrics series, so a slow scenario is a number.
+
+### The layer under test
+
+`fm ci.e2e --layer=<name>` (repeatable) is the second axis. The
+members the pass births are the layer's: one member per kind the
+layer registers (the cpp layer's cpp-conan member, the nanobind
+layer's extension beside it), each from the layer's own template,
+and the loop publishes the layer's dev wheel with the workshop's
+closure so the environment's forge runs the layer as it is in the
+tree. The scenarios then run against those members, the `release`
+set by default, since testing a layer end to end means its release:
+the gate on the layer's checks, the wave through the layer's
+artifact kind, the receipts in the environment's registries. Without
+`--layer` the pass births the base's python member and runs
+`develop`. The set is overridable either way with `--scenario`.
 
 ### Setups
 
@@ -280,13 +306,24 @@ bench decides which the machine at hand prefers; both are setups.
 
 ### The bench
 
-`fm ci.e2e.bench --setups=<names> --scenario=<set>` runs, per setup:
-the rig up in that shape, a cold pass (`--fresh --purge-cache`), a
-warm pass, and records both; then prints setup by scenario, cold and
-warm, and the runner runs per scenario. `--apply` writes the fastest
-warm setup as the machine's default. Scheduling: a `[[ci.schedule]]`
-point that runs on a runner labelled for the rig, or the janitor's
-schedule on the desk (open item 2).
+Two benches, one question: what is worth caching where CI runs a lot.
+
+On the hosted lane, a `[[ci.schedule]]` point runs the gate's legs
+under one cache variant per run: the tool store restored from the
+`actions/cache` archive or downloaded from the index, uv's cache
+restored or off, conan's home restored or rebuilt, per runner OS.
+`fm ci.timings` reads the runs and the metrics series keeps them, so
+the answer is a table of measured seconds per leg and variant; the
+winning variant becomes what the emitter writes for that lane. The
+claim the emitter makes today, that wheels download faster than an
+archive restores, is the first thing it measures.
+
+Locally, `fm ci.e2e.bench --setups=<names> --scenario=<set>` runs,
+per setup: the rig up in that shape, a cold pass (`--fresh
+--purge-cache`), a warm pass, and records both; then prints setup by
+scenario, cold and warm, and the runner runs per scenario. It is a
+hand tool for the container setups; the host setup with the
+persistent store is the default without it.
 
 ### Images from the lock
 
@@ -379,18 +416,38 @@ under the temp otherwise.
 
 ### Phase 3: the bench
 
-Deliverables: `fm ci.e2e.bench`, the setups table, the metrics rows,
-`--apply`, the schedule (open item 2). Tests, refusals first: a
-setup the machine cannot provide (the daemon absent for
-`docker-jobs`) is reported and skipped, never a red bench; `--apply`
-writes the name the table shows; the table is one row per setup and
-scenario with cold and warm.
+Deliverables: the hosted lane's scheduled point over the cache
+variants, the emitter's variant switch, the metrics rows and their
+table through `fm ci.timings`; locally `fm ci.e2e.bench` with the
+setups table. Tests, refusals first: a variant the emitter cannot
+write refuses naming it; a setup the machine cannot provide (the
+daemon absent for `docker-jobs`) is reported and skipped, never a
+red bench; the table is one row per variant or setup and leg or
+scenario, cold and warm.
 
 **Acceptance**
 
-- `fm ci.e2e.bench --setups=host,host-bare,container,container-bare
-  --scenario=develop` prints the table on this machine; its rows are
-  quoted in the decision record with the setup `--apply` chose.
+- The scheduled point's first run on GitHub prints the table for the
+  three gated runners; its rows are quoted in the decision record with
+  the variant the emitter then writes.
+- `fm ci.e2e.bench --setups=container,container-bare
+  --scenario=develop` prints the table on this machine.
+
+### Phase 3b: the layer under test
+
+Deliverables: `--layer` on `fm ci.e2e`, the members per layer kind
+from the layer's templates, the layer's dev wheel published with the
+closure, the `release` set as the default under `--layer`. Tests,
+refusals first: a layer not mounted refuses naming the mounted ones;
+a layer with no kind refuses naming it; the members born match the
+layer's kinds one to one. Waits for the cpp layer's extraction (the
+extensible gate plan's open item 17) to have a layer to test.
+
+**Acceptance**
+
+- `fm ci.e2e --layer=livery.workshop.cpp` on the `host` setup births
+  the cpp member, lands it and releases it; the loop pins the printed
+  lines.
 
 ### Phase 4: images from the lock
 
@@ -453,6 +510,18 @@ changes the tag.
   exist the label is hardcoded to one name. So a job's `runs-on`
   names the environment, never a platform it is not, and the loop's
   contract carries the environment's name as its runner.
+- 2026-09-30, Willem, on open item 2: the bench is for optimal CI
+  caching wherever CI runs a lot, GitHub free for livery and locally
+  too; locally, host mode with a persistent cache on the same disk,
+  clonable, never deleted or restored, has nothing to beat. Contract
+  6 and phase 3 restated: the hosted lane's cache variants under a
+  scheduled point, the local bench a hand tool.
+- 2026-09-30, Willem, on open item 1: when layers such as cpp are
+  split out, the loop must test a new layer end to end including its
+  release; that axis was missing. Contract 11 and phase 3b: `--layer`
+  births the layer's members and runs the `release` set. The plain
+  pass's default of `develop` is the agent's call, said so in the
+  reply, open to his change.
 - 2026-09-30, Willem: runners are named `<env>-<host>-<arch>-<nn>`,
   the number of runners per environment is configurable, and one may
   run in emulation beside a native one, for testing an x64-specific
@@ -476,11 +545,12 @@ changes the tag.
 
 ## Open
 
-1. The default scenario set: `develop` as listed, or `develop` plus
-   `release`. Owner: Willem, before phase 1.
-2. Where the bench's schedule runs: a `[[ci.schedule]]` point on a
-   runner labelled for the rig, or the janitor's schedule on the
-   desk. Owner: Willem, with phase 3.
+1. Resolved 2026-09-30: `develop` for a plain pass, the `release` set
+   under `--layer`; the layer under test is the second axis (contract
+   11, phase 3b).
+2. Resolved 2026-09-30: the bench measures caching where CI runs a
+   lot, as a scheduled point on the hosted lane; locally the host
+   setup with the persistent store needs no bench (contract 6).
 3. Whether the host runner's store is the machine's own (fastest, and
    a job's sweep then judges the desk's objects) or its own
    directory warmed once. The bench measures both; the sweep's
