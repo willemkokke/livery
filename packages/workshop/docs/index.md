@@ -332,7 +332,11 @@ absence.
   fixer that applies rewrites first, one at a time, then every judge
   runs in one parallel block, a check that rewrote not judged again;
   a check whose claims reach no file of its scope is named and no
-  process starts for it. On a machine the gate is the reflex:
+  process starts for it. `fm check <paths>` checks exactly those files,
+  or a directory's: every check whose claims reach one of them runs
+  over them alone, and nothing is recorded as proved; `--safe-fix`
+  fixes without removing code, the post-edit hook's mode; `--point`
+  selects a CI point's tests. On a machine the gate is the reflex:
   it runs what the working tree changed since the nearest tree this
   checkout's own green gates proved (the one with the fewest changed
   paths, a green check of the dirty tree included), the packages that
@@ -497,8 +501,8 @@ merge (main's run). `@pytest.mark.only_at("nightly")` runs it at the
 named points and nowhere else; `@pytest.mark.also_at("release")`
 adds points to the default ones. The job runner names the point to
 every child it spawns, and the workshop's pytest plugin deselects
-the rest; a local `fm test` selects for the gate, and
-`fm test -- --workshop-point nightly` selects for a point on demand.
+the rest; a local `fm check` selects for the gate, and
+`fm check --full --point=nightly` selects for a point on demand.
 A `[[ci.schedule]]` entry in `workshop.toml` attaches a task to a
 point's job; `every = "1w"` or `"2w"` runs it on Mondays, or on the
 Monday of an even ISO week, and any other run of the point skips it
@@ -607,7 +611,7 @@ the branch, skips the gate, and copies the branch's record into
 main's without measuring; a squash of a stale branch has another
 tree and pays the full gate. A suite neither record holds is
 measured on the spot. The janitor drops a branch's record once the
-branch is gone from origin. A local `fm test` prints its own
+branch is gone from origin. A local `fm check` prints its own
 lower-biased preview beside the floor, for information. Raise a
 committed floor as the suite grows; lower it only deliberately, in a
 reviewed change or an accepted row. The release legs publish a
@@ -633,7 +637,7 @@ ubuntu leg is red, and the other legs warn only. A new heavy test is
 a cost someone chose: `fm speed.accept <package> <seconds>
 --reason=<why>` raises the mark, on the ubuntu leg unless `--leg`
 names another. The marks are judged on the CI legs alone: a
-machine's clock is not a leg they were taken on, so `fm test` on a
+machine's clock is not a leg they were taken on, so `fm check` on a
 machine prints each package's summed time and reads no mark, and
 `fm speed.judge` is unavailable outside CI. `fm ci.timings` shows
 the marks beside the timings.

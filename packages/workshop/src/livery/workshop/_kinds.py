@@ -275,7 +275,8 @@ class KindRecord:
             says by name. A child kind takes the nearest ancestor's.
         examples: How the kind runs a package's documentation
             examples, the files under ``docs/examples/``, given the
-            package and the workspace root; None for a kind that runs
+            package, the workspace root and the named example files,
+            empty for all of them; None for a kind that runs
             none, which the examples check says by name. A child kind
             takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
@@ -299,7 +300,7 @@ class KindRecord:
     tests_need_build: bool = False
     native_sources: bool = False
     extractor: Extractor | None = None
-    examples: Callable[[Package, Path], None] | None = None
+    examples: Callable[[Package, Path, tuple[str, ...]], None] | None = None
     abstract: bool = False
 
 
@@ -466,7 +467,9 @@ def kind_extractor(kind_name: str) -> Extractor | None:
     return None
 
 
-def kind_examples(kind_name: str) -> Callable[[Package, Path], None] | None:
+def kind_examples(
+    kind_name: str,
+) -> Callable[[Package, Path, tuple[str, ...]], None] | None:
     """The examples runner *kind_name* uses: its own, else its nearest ancestor's."""
     for record in reversed(kind_chain(kind_name)):
         if record.examples is not None:

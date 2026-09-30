@@ -1391,7 +1391,9 @@ def unformatted(output: str) -> list[str]:
     return sorted(found)
 
 
-def format_check(package: Package, *, fix: bool = False) -> None:
+def format_check(
+    package: Package, *, fix: bool = False, files: tuple[Path, ...] | None = None
+) -> None:
     """Refuse a source clang-format would rewrite; *fix* rewrites it.
 
     The style is the package's own `.clang-format`, seeded at birth
@@ -1402,13 +1404,13 @@ def format_check(package: Package, *, fix: bool = False) -> None:
         Failed: when a file is not formatted, or clang-format exits
             non-zero for a reason of its own.
     """
-    files = sources(package)
-    if not files:
+    targets = sources(package) if files is None else list(files)
+    if not targets:
         return
     arguments = ["-i"] if fix else ["--dry-run", "--Werror"]
     result = tools.clang_format.opts(
         cwd=package.directory, nofail=True, recorded=False
-    )(*arguments, *(str(path) for path in files))
+    )(*arguments, *(str(path) for path in targets))
     if result.code == 0:
         return
     named = ", ".join(unformatted(result.stderr + result.stdout)) or "no file named"
@@ -1453,7 +1455,7 @@ def _toolchain_arguments() -> tuple[list[str], str]:
     return arguments, ""
 
 
-def lint(package: Package, root: Path) -> None:
+def lint(package: Package, root: Path, files: tuple[Path, ...] | None = None) -> None:
     """Run clang-tidy over the package's sources; a finding is a refusal.
 
     The checks are the package's own `.clang-tidy`. clang-tidy reads
@@ -1464,9 +1466,9 @@ def lint(package: Package, root: Path) -> None:
     Raises:
         Failed: when clang-tidy finds anything, with its own output.
     """
-    files = sources(package)
+    targets = sources(package) if files is None else list(files)
     database = package.directory / GATE_BUILD_DIR / "compile_commands.json"
-    if not files or not database.is_file():
+    if not targets or not database.is_file():
         return
     arguments, reason = _toolchain_arguments()
     if reason:
@@ -1476,7 +1478,7 @@ def lint(package: Package, root: Path) -> None:
         "-p",
         GATE_BUILD_DIR,
         *arguments,
-        *(str(path) for path in files),
+        *(str(path) for path in targets),
     )
     if result.code != 0:
         fail(

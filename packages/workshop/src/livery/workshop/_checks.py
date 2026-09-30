@@ -68,6 +68,12 @@ class GateContext:
         examples: The package paths whose changed files are examples
             and nothing else: their examples run and no suite.
         fix: Whether the rewriters run in their fix mode.
+        files: The files the run is limited to, root-relative, from
+            `fm check <paths>`; empty when the scope decides.
+        safe: Whether the fixers run in their in-flight mode, which
+            removes no code: ``--safe-fix``.
+        point: The CI point whose tests the test role selects; empty
+            for the gate's own.
         catalogue: Every file the run may read, by unit, each with its
             category, listed once per walk by
             [livery.workshop._checks.catalogue][]; None when there is
@@ -84,6 +90,9 @@ class GateContext:
     tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     examples: tuple[str, ...] = ()
     fix: bool = False
+    files: tuple[str, ...] = ()
+    safe: bool = False
+    point: str = ""
     catalogue: Mapping[str, tuple[tuple[str, str], ...]] | None = None
     package: Package | None = None
     selection: tuple[str, ...] = ()
@@ -744,7 +753,8 @@ def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None
     """Every file git holds under the root, by unit, each with its category.
 
     Listed once per walk: tracked files and untracked ones git does not
-    ignore, as the tools see them. A package's files are relative to it
+    ignore, as the tools see them, or the run's named files alone. A
+    package's files are relative to it
     and categorised by its kind's table; a file under no package
     belongs to [livery.workshop._checks.ROOT_UNIT], relative to the
     root and categorised by the workspace's table. None when the root
@@ -755,14 +765,18 @@ def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._provenance import unit_of
 
-    listing = tools.git.opts(cwd=ctx.root, recorded=False, nofail=True)(
-        "ls-files", "--cached", "--others", "--exclude-standard", "-z"
-    )
-    if listing.code != 0:
-        return None
+    if ctx.files:
+        names: set[str] = set(ctx.files)
+    else:
+        listing = tools.git.opts(cwd=ctx.root, recorded=False, nofail=True)(
+            "ls-files", "--cached", "--others", "--exclude-standard", "-z"
+        )
+        if listing.code != 0:
+            return None
+        names = {name for name in listing.stdout.split("\0") if name}
     packages = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
     found: dict[str, list[tuple[str, str]]] = {}
-    for name in sorted({name for name in listing.stdout.split("\0") if name}):
+    for name in sorted(names):
         if not (ctx.root / name).is_file():
             continue
         unit, inside = unit_of(ctx.root, packages, name)
@@ -798,9 +812,13 @@ def reads_files(
     """Whether *record*'s claims reach a file of *units*, or of its scope in this run.
 
     A check without claims reads what its own body decides, and a run
-    without a catalogue has no listing to judge by: both answer yes.
+    without a catalogue has no listing to judge by: both answer yes,
+    except over named files, which a check without claims cannot say
+    it reads.
     """
-    if not record.claims or ctx.catalogue is None:
+    if not record.claims:
+        return not ctx.files
+    if ctx.catalogue is None:
         return True
     for unit in units if units is not None else _scope_units(record, ctx):
         for relative, category in ctx.catalogue.get(unit, ()):
@@ -811,13 +829,40 @@ def reads_files(
     return False
 
 
+def claimed_files(
+    record: CheckRecord, ctx: GateContext, unit: str | None = None
+) -> tuple[str, ...]:
+    """The files of the run's catalogue *record*'s claims reach, as absolute paths.
+
+    For a run over named files: the ones a check takes. *unit* keeps
+    one package's alone, for a package check.
+    """
+    found: list[str] = []
+    for key, files in (ctx.catalogue or {}).items():
+        if unit is not None and key != unit:
+            continue
+        base = ctx.root if key == ROOT_UNIT else ctx.root / key
+        for relative, category in files:
+            if any(
+                c.category == category and _reaches(c, relative) for c in record.claims
+            ):
+                found.append(str(base / relative))
+    return tuple(sorted(found))
+
+
 def with_files(names: tuple[str, ...], ctx: GateContext) -> tuple[str, ...]:
     """*names* less the checks with no file to read in this run, each skip said.
 
     No process starts for a check whose claims reach nothing in scope.
     """
     kept: list[str] = []
-    where = "the affected packages" if ctx.scoped else "the workspace"
+    where = (
+        "the named files"
+        if ctx.files
+        else "the affected packages"
+        if ctx.scoped
+        else "the workspace"
+    )
     for name in names:
         if reads_files(_CHECKS[name], ctx):
             kept.append(name)
@@ -890,7 +935,9 @@ def _register_builtin() -> None:
         return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
 
     def paths(ctx: GateContext, name: str) -> tuple[str, ...]:
-        """The paths a path-narrowed check judges: the tree, or the enabled members'."""
+        """The paths a check judges: the named files, the tree, or the members'."""
+        if ctx.files:
+            return claimed_files(check_for(name), ctx)
         gated_members = gated(_members(ctx), name)
         members = enabled(name, gated_members)
         pythons = tuple(p for p in members if is_python_kind(p.kind))
@@ -908,15 +955,21 @@ def _register_builtin() -> None:
         _python.run_format(check=True, paths=paths(ctx, "format"))
 
     def format_fix(ctx: GateContext) -> None:
-        _python.run_format(check=False, paths=paths(ctx, "format"))
+        _python.run_format(check=False, safe_fix=ctx.safe, paths=paths(ctx, "format"))
 
     def lint_run(ctx: GateContext) -> None:
         _python.run_lint(fix=False, paths=paths(ctx, "lint"))
 
     def lint_fix(ctx: GateContext) -> None:
+        if ctx.safe:
+            _python.run_lint(safe_fix=True, paths=paths(ctx, "lint"))
+            return
         _python.run_lint(fix=True, paths=paths(ctx, "lint"))
 
     def typecheck_run(ctx: GateContext) -> None:
+        if ctx.files:
+            _python.run_typecheck(paths=claimed_files(check_for("typecheck"), ctx))
+            return
         judged = python_members(ctx, "typecheck", "typecheck") + unit(ctx)
         whole = len(judged) == len(python_kinds(ctx)) + len(unit(ctx))
         if not ctx.scoped and whole:
@@ -928,6 +981,32 @@ def _register_builtin() -> None:
         _python.run_typecomplete(python_members(ctx, "typecomplete", "typecomplete"))
 
     def test_run(ctx: GateContext) -> None:
+        point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
+        if ctx.files:
+            # Named test files run alone, each in its package's run.
+            record = check_for("test")
+            # The workspace's tests unit reads the root's own files.
+            selection = {
+                package.path: claimed_files(
+                    record,
+                    ctx,
+                    ROOT_UNIT if package.path == WORKSPACE_TESTS else package.path,
+                )
+                for package in (*python_members(ctx, "test", "test"), *unit(ctx))
+            }
+            named = tuple(
+                p
+                for p in (*python_members(ctx, "test", "test"), *unit(ctx))
+                if selection[p.path]
+            )
+            _python.run_test(
+                *point,
+                packages=named,
+                root=ctx.root,
+                scoped=True,
+                selection={path: files for path, files in selection.items() if files},
+            )
+            return
         # A package whose examples alone changed runs them, not its suite.
         judged = tuple(
             p for p in python_members(ctx, "test", "test") if p.path not in ctx.examples
@@ -943,10 +1022,11 @@ def _register_builtin() -> None:
             if extra and not members:
                 continue
             if not ctx.scoped:
-                _python.run_test(*extra, packages=members, root=ctx.root)
+                _python.run_test(*extra, *point, packages=members, root=ctx.root)
                 continue
             _python.run_test(
                 *extra,
+                *point,
                 packages=members,
                 root=ctx.root,
                 scoped=True,
@@ -969,7 +1049,10 @@ def _register_builtin() -> None:
                     f"  examples: {package.path} skips ({package.kind} kind runs none)"
                 )
                 continue
-            runner(package, ctx.root)
+            named = claimed_files(check_for("examples"), ctx, package.path)
+            if ctx.files and not named:
+                continue
+            runner(package, ctx.root, named)
 
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
@@ -1019,11 +1102,20 @@ def _register_builtin() -> None:
         assert ctx.package is not None
         return ctx.package
 
+    def named_sources(ctx: GateContext, name: str) -> tuple[Path, ...] | None:
+        """The named files a package check takes, or None for the package's own set."""
+        if not ctx.files:
+            return None
+        package = package_of(ctx)
+        return tuple(Path(p) for p in claimed_files(check_for(name), ctx, package.path))
+
     def clang_format_run(ctx: GateContext) -> None:
-        _cpp_conan.format_check(package_of(ctx), fix=False)
+        files = named_sources(ctx, "clang-format")
+        _cpp_conan.format_check(package_of(ctx), fix=False, files=files)
 
     def clang_format_fix(ctx: GateContext) -> None:
-        _cpp_conan.format_check(package_of(ctx), fix=True)
+        files = named_sources(ctx, "clang-format")
+        _cpp_conan.format_check(package_of(ctx), fix=True, files=files)
 
     def configure_run(ctx: GateContext) -> None:
         _cpp_conan.configure(package_of(ctx))
@@ -1036,7 +1128,8 @@ def _register_builtin() -> None:
         _cpp_conan.test(package, ctx.root, selection=ctx.selection)
 
     def clang_tidy_run(ctx: GateContext) -> None:
-        _cpp_conan.lint(package_of(ctx), ctx.root)
+        files = named_sources(ctx, "clang-tidy")
+        _cpp_conan.lint(package_of(ctx), ctx.root, files=files)
 
     # The slots the python records fill: the dev group's tool lines
     # and pytest's options, lines the base template no longer writes

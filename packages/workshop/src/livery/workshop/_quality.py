@@ -20,7 +20,6 @@ from livery.footman import Forward, context, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._checks import GateContext
-from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._state import RunContext
@@ -45,6 +44,9 @@ def _context(
     *,
     subset: tuple[Package, ...] | None = None,
     fix: bool = False,
+    files: tuple[str, ...] = (),
+    safe: bool = False,
+    point: str = "",
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
 ) -> GateContext:
@@ -59,10 +61,18 @@ def _context(
         tests=tests or {},
         examples=examples,
         fix=fix,
+        files=files,
+        safe=safe,
+        point=point,
     )
 
 
-def _walk(ctx: GateContext, *, between: Callable[[], None] | None = None) -> None:
+def _walk(
+    ctx: GateContext,
+    *,
+    between: Callable[[], None] | None = None,
+    judge: bool = True,
+) -> None:
     """Walk the registry: the one place the gate's order lives.
 
     Every gate comes here, the whole one, CI's narrowed legs and a
@@ -73,7 +83,8 @@ def _walk(ctx: GateContext, *, between: Callable[[], None] | None = None) -> Non
     *between* runs, where a machine's run measures the tree the judges
     read; then every judge runs in one parallel block, and one refusal
     is the verdict. A check whose claims reach no file in scope is
-    said and not started.
+    said and not started. Without *judge* the walk stops after the
+    fixers, the post-edit hook's run.
     """
     _checks.verify_roles()
     for line in _checks.narrowings():
@@ -84,6 +95,8 @@ def _walk(ctx: GateContext, *, between: Callable[[], None] | None = None) -> Non
             _checks.task_for(name)(fix=True)
     if ctx.fix and between is not None:
         between()
+    if not judge:
+        return
     with _checks.current(ctx), parallel():
         for name in _checks.with_files(_checks.judges(ctx), ctx):
             _checks.task_for(name)()
@@ -96,89 +109,6 @@ def _refuse_both(fix: bool, safe_fix: bool) -> None:
             " applies every safe fix, --safe-fix withholds the"
             " code-removing ones. Pass one."
         )
-
-
-@task
-def lint(
-    *paths: str,
-    fix: Annotated[bool, doc("apply safe fixes in place")] = False,
-    safe_fix: Annotated[
-        bool, doc("apply fixes safe for in-progress edits (keeps imports)")
-    ] = False,
-) -> None:
-    """Lint every package with its package kind's linter.
-
-    With *paths*, lints exactly those files (foreign filetypes pass
-    through); without, every package. ``--safe-fix`` is the
-    edit-in-flight fix, documented as safe to apply mid-edit.
-    """
-    _refuse_both(fix, safe_fix)
-    if not paths:
-        _packages()
-    _python.run_lint(fix=fix, safe_fix=safe_fix, paths=paths or _python.SRC)
-
-
-@task
-def format(
-    *paths: str,
-    fix: Annotated[bool, doc("rewrite instead of reporting")] = False,
-    safe_fix: Annotated[
-        bool, doc("rewrite; safe to apply to in-progress edits")
-    ] = False,
-) -> None:
-    """Check every package's formatting; ``--fix`` rewrites.
-
-    With *paths*, formats exactly those files (foreign filetypes
-    pass through); without, every package.
-    """
-    _refuse_both(fix, safe_fix)
-    members = () if paths else _packages()
-    _python.run_format(check=not fix, safe_fix=safe_fix, paths=paths or _python.SRC)
-    _format_native(members, fix=fix or safe_fix)
-
-
-def _format_native(packages: tuple[Package, ...], *, fix: bool) -> None:
-    """Format every native member's C and C++ sources, or refuse.
-
-    ruff owns the python files; a member whose kind carries C or C++
-    sources is formatted by clang-format against the member's own
-    `.clang-format`, in the same pass, so one verb means one answer
-    about formatting.
-    """
-    from livery.workshop._backends import _cpp_conan
-    from livery.workshop._kinds import kind_for, kind_names
-
-    for package in packages:
-        if package.kind not in kind_names():
-            continue
-        if not kind_for(package.kind).native_sources:
-            continue
-        _cpp_conan.format_check(package, fix=fix)
-
-
-@task
-def typecheck() -> None:
-    """Type-check every package with its package kind's gating checkers."""
-    _packages()
-    _python.run_typecheck()
-
-
-@task
-def typecomplete() -> None:
-    """Verify every package's public API is 100% type-complete."""
-    _python.run_typecomplete(gated(_packages(), "typecomplete"))
-
-
-@task
-def test(*pytest_args: str) -> None:
-    """Run the test suite, coverage floors enforced.
-
-    Args:
-        pytest_args: forwarded to pytest verbatim
-    """
-    packages = gated(_packages(), "test")
-    root = workspace_root()
-    _python.run_test(*pytest_args, packages=packages, root=root)
 
 
 #: The contract key that lets CI's check legs run the scoped gate.
@@ -283,11 +213,24 @@ def _affected(base: str = "main") -> tuple[Package, ...] | None:
 
 @task
 def check(
+    *paths: str,
     full: Annotated[bool, doc("run everything, whatever the record proves")] = False,
     fix: Forward[bool] = False,
+    safe_fix: Annotated[
+        bool, doc("fix, removing no code: safe for an edit in flight")
+    ] = False,
     base: Annotated[str, doc("the branch the chain's root is taken from")] = "main",
+    point: Annotated[str, doc("run the tests of this CI point, nightly say")] = "",
 ) -> None:
     """Run the gate: every registered check, the rewriters first under --fix.
+
+    With *paths*, exactly those files are checked, or the files under
+    those directories: every check whose claims reach one of them runs
+    over them and no other, a check without claims does not run, and
+    nothing is recorded as proved. ``--safe-fix`` runs the fixers in
+    their in-flight mode, which removes no code, and refuses beside
+    ``--fix``. ``--point`` hands a CI point to the test role, which
+    selects that point's tests instead of the gate's.
 
     On a machine the gate is the reflex: it runs what the working
     tree changed since the nearest tree this checkout's own green
@@ -326,6 +269,10 @@ def check(
 
     from livery.workshop._state import fetched_snapshot, run_context
 
+    _refuse_both(fix, safe_fix)
+    if paths:
+        _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point)
+        return
     root = workspace_root()
     scope = (
         fetched_snapshot(root)
@@ -333,10 +280,97 @@ def check(
         else nullcontext()
     )
     with scope:
-        _run_check(full=full, fix=fix, base=base)
+        _run_check(
+            full=full, fix=fix or safe_fix, base=base, point=point, safe=safe_fix
+        )
 
 
-def _run_check(full: bool, fix: bool, base: str) -> None:
+def named_files(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
+    """*paths* as the files they name, root-relative: a file, or a directory's files.
+
+    A directory stands for the files git holds under it, tracked or
+    untracked and not ignored, or every file under it outside a git
+    checkout. A path outside the root, or naming nothing, is left out.
+    """
+    from livery.toolroom import tools
+
+    found: set[str] = set()
+    for path in paths:
+        target = Path(path).resolve()
+        try:
+            relative = target.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            continue
+        if target.is_file():
+            found.add(relative)
+        elif target.is_dir():
+            listing = tools.git.opts(cwd=root, recorded=False, nofail=True)(
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                relative,
+            )
+            if listing.code == 0:
+                found.update(name for name in listing.stdout.split("\0") if name)
+            else:
+                found.update(
+                    p.relative_to(root.resolve()).as_posix()
+                    for p in target.rglob("*")
+                    if p.is_file()
+                )
+    return tuple(sorted(name for name in found if (root / name).is_file()))
+
+
+def _check_files(
+    paths: tuple[str, ...], *, fix: bool, safe: bool, point: str, judge: bool = True
+) -> None:
+    """The gate over the named files: the walk narrowed to them, nothing recorded."""
+    import os
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    if fix and os.environ.get("CI"):
+        fail(
+            "check --fix inside CI: the runner's checkout is judged, never rewritten."
+            f" Run `{footman.prog()} check --fix` locally and push the result."
+        )
+    files = named_files(root, paths)
+    if not files:
+        print("  nothing to check: no file under the named paths")
+        return
+    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._provenance import unit_of
+
+    packages = _packages()
+    holders = {unit_of(root, packages, name)[0] for name in files}
+    # The packages holding a named file, and the workspace's tests unit
+    # when a root file is named; the bare root is a unit of no kind.
+    subset = [package for package in packages if package in holders]
+    suite = workspace_suite(root)
+    if suite is not None and suite in holders:
+        subset.append(suite)
+    ctx = _context(
+        subset=tuple(subset),
+        fix=fix,
+        files=files,
+        safe=safe,
+        point=point,
+    )
+    _walk(ctx, judge=judge)
+
+
+def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
+    """Run the fixers over the named files, judging nothing: the post-edit hook."""
+    _check_files(paths, fix=True, safe=safe, point="", judge=False)
+
+
+def _run_check(
+    full: bool, fix: bool, base: str, point: str = "", safe: bool = False
+) -> None:
     """The gate itself; `check` opens the state store's snapshot around it."""
     import os
 
@@ -406,7 +440,7 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                         tuple(package.path for package in subset),
                         leg=run.leg,
                     )
-                _scoped_check(subset, fix=fix)
+                _scoped_check(subset, fix=fix, point=point)
                 return
     proved_tree = ""
     if run is None and root_for_ci is not None:
@@ -477,6 +511,8 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                             tests=scope.tests,
                             examples=scope.examples,
                             between=measure_step,
+                            point=point,
+                            safe=safe,
                         )
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
@@ -512,7 +548,7 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
         nonlocal proved_tree
         proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
 
-    _walk(_context(fix=fix), between=measure_whole)
+    _walk(_context(fix=fix, safe=safe, point=point), between=measure_whole)
     _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
 
 
@@ -738,6 +774,8 @@ def _scoped_check(
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
     between: Callable[[], None] | None = None,
+    point: str = "",
+    safe: bool = False,
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
 
@@ -749,7 +787,14 @@ def _scoped_check(
     fixers under ``--fix``, as [livery.workshop._quality._walk][] says.
     """
     _walk(
-        _context(subset=subset, fix=fix, tests=tests, examples=examples),
+        _context(
+            subset=subset,
+            fix=fix,
+            tests=tests,
+            examples=examples,
+            point=point,
+            safe=safe,
+        ),
         between=between,
     )
 

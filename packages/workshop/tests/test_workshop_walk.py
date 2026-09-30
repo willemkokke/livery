@@ -146,3 +146,134 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
     ctx = replace(ctx, catalogue=catalogue(ctx))
     run_check("acme-cpp", ctx)
     assert ran == ["packages/one"]
+
+
+# The gate over named files: `fm check <paths>`.
+
+
+def test_named_paths_become_the_files_they_name(tmp_path: Path) -> None:
+    from livery.workshop._quality import named_files
+
+    root = _repository(tmp_path)
+    (root / "packages" / "one" / "tests").mkdir()
+    (root / "packages" / "one" / "tests" / "test_a.py").write_text("x = 1\n")
+    outside = tmp_path / "elsewhere.py"
+    outside.write_text("x = 1\n")
+    found = named_files(
+        root,
+        (
+            str(root / "tasks.py"),
+            str(root / "packages" / "one" / "tests"),
+            str(outside),
+            str(root / "gone.py"),
+        ),
+    )
+    assert found == ("packages/one/tests/test_a.py", "tasks.py")
+
+
+def test_named_files_reach_only_the_checks_whose_claims_reach_them(
+    tmp_path: Path,
+    registry: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop import _quality
+    from livery.workshop._backends import _python
+
+    root = _repository(tmp_path)
+    (root / "packages" / "one" / "tests").mkdir()
+    test_file = root / "packages" / "one" / "tests" / "test_a.py"
+    test_file.write_text("def test_it() -> None:\n    pass\n")
+    monkeypatch.chdir(root)
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def spy(name: str):
+        def body(*args: object, **kwargs: object) -> None:
+            calls.append((name, {"args": args, **kwargs}))
+
+        return body
+
+    for name in (
+        "run_format",
+        "run_lint",
+        "run_typecheck",
+        "run_typecomplete",
+        "run_test",
+    ):
+        monkeypatch.setattr(_python, name, spy(name))
+    monkeypatch.setattr("livery.workshop._packages.verify_workspace", spy("layering"))
+    # A source file: the style and type checks take it, the tests do not run.
+    _quality.check(str(root / "packages" / "one" / "src" / "one" / "__init__.py"))
+    ran = {name for name, _ in calls}
+    assert {"run_format", "run_lint", "run_typecheck"} <= ran
+    assert "run_test" not in ran and "layering" not in ran
+    source = str(root / "packages" / "one" / "src" / "one" / "__init__.py")
+    assert dict(calls)["run_format"]["paths"] == (source,)
+    out = capsys.readouterr().out
+    assert "test: no file it reads in the named files; not run" in out
+    assert "layering: no file it reads in the named files; not run" in out
+    # A test file: the test check runs that file alone, at the point asked.
+    calls.clear()
+    _quality.check(str(test_file), point="nightly")
+    test_call = dict(calls)["run_test"]
+    assert test_call["selection"] == {"packages/one": (str(test_file),)}
+    assert test_call["args"] == ("--workshop-point=nightly",)
+    # A path no claim reaches runs nothing.
+    calls.clear()
+    (root / "notes.md").write_text("# notes\n")
+    _quality.check(str(root / "notes.md"))
+    assert calls == []
+
+
+def test_the_fixers_only_walk_judges_nothing(
+    tmp_path: Path, registry: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _quality
+    from livery.workshop._backends import _python
+
+    root = _repository(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    ran: list[str] = []
+
+    def spy(name: str):
+        def body(*args: object, **kwargs: object) -> None:
+            ran.append(f"{name}:{kwargs.get('safe_fix', '')}")
+
+        return body
+
+    for name in (
+        "run_format",
+        "run_lint",
+        "run_typecheck",
+        "run_typecomplete",
+        "run_test",
+    ):
+        monkeypatch.setattr(_python, name, spy(name))
+
+    def fix(ctx: GateContext) -> None:
+        assert ctx.safe and ctx.files == ("tasks.py",)
+        ran.append("acme-fixed")
+
+    def judge(ctx: GateContext) -> None:
+        del ctx
+        ran.append("acme-judged")
+
+    register_check(
+        CheckRecord(
+            "acme-fix",
+            "format",
+            judge,
+            fix=fix,
+            layer="acme.layer",
+            claims=(Claim("configuration", suffixes=(".py",)),),
+        )
+    )
+    _quality.fix_files((str(root / "tasks.py"),))
+    # Every fixer the file's claims reach ran, in its in-flight mode, and
+    # nothing judged: no type check, no test, not the layer's judge.
+    assert "run_format:True" in ran and "run_lint:True" in ran
+    assert "acme-fixed" in ran
+    assert "acme-judged" not in ran
+    assert not any(line.startswith(("run_typecheck", "run_test")) for line in ran)

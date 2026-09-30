@@ -146,7 +146,7 @@ def test_the_check_runs_the_kinds_runner_and_skips_a_tests_only_member(
     monkeypatch.setattr(
         _kinds,
         "kind_examples",
-        lambda kind: lambda package, root: ran.append(package.path),
+        lambda kind: lambda package, root, files=(): ran.append(package.path),
     )
     del _python
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)

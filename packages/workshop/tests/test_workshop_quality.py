@@ -230,13 +230,13 @@ def test_safe_fix_keeps_imports_and_foreign_files_pass_through(
     assert "import os" not in victim.read_text()
 
 
-def test_lint_and_format_refuse_both_fix_flags() -> None:
+def test_check_refuses_both_fix_flags_and_the_role_verbs_are_gone() -> None:
     with pytest.raises((SystemExit, Exception)) as caught:
-        _quality.lint(fix=True, safe_fix=True)
+        _quality.check("tasks.py", fix=True, safe_fix=True)
     assert "Pass one" in str(caught.value)
-    with pytest.raises((SystemExit, Exception)) as caught:
-        _quality.format(fix=True, safe_fix=True)
-    assert "Pass one" in str(caught.value)
+    # The registry's checks are the gate's surface: no verb duplicates one.
+    for verb in ("format", "lint", "typecheck", "typecomplete", "test"):
+        assert not hasattr(_quality, verb), verb
 
 
 def test_the_python_test_entry_maps_a_selection_to_its_files(

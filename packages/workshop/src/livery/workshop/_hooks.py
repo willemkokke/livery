@@ -153,7 +153,7 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
 
 @agent_hooks.task(name="post-edit")
 def post_edit(event: Annotated[HookEvent, stdin]) -> None:
-    """Keep the edited Python file ruff-clean; never block an edit.
+    """Run the fixers over the edited file; never block an edit.
 
     Best-effort by design: every outcome exits 0 and says nothing,
     because a formatter problem must never block an edit. The gate,
@@ -166,19 +166,22 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     the stop hook and the gate.
     """
     import contextlib
+    import io
 
-    from livery.workshop._quality import format as format_verb
-    from livery.workshop._quality import lint as lint_verb
+    from livery.workshop._quality import fix_files
 
     path = event.tool_input.file_path
     if not path or not Path(path).is_file():
         return
-    # Through the verbs, never a tool: a polyglot workspace lints C++
-    # with C++ tools, and the verb is where that dispatch grows. The
-    # foreign filetype is the verb's no-op, not the hook's business.
-    for verb in (format_verb, lint_verb):
-        with contextlib.suppress(Exception):
-            verb(path, safe_fix=True)
+    # Through the gate's walk, never a tool: every fixer whose claims
+    # reach the file runs over it, ruff's for python, clang-format's
+    # for C++, a layer's for its own files; a file no claim reaches is
+    # the walk's no-op, not the hook's business.
+    with (
+        contextlib.suppress(Exception, SystemExit),
+        contextlib.redirect_stdout(io.StringIO()),
+    ):
+        fix_files((path,), safe=True)
 
 
 _FAIL = re.compile(

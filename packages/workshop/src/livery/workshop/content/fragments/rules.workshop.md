@@ -128,7 +128,7 @@ This is the final form; there are no typing clean-up passes later.
   function a test hands to a spawned process lives in such a helper.
 - Four type checkers gate, none advisory: basedpyright with warnings
   as errors, mypy strict on the namespace (linux, darwin, and win32),
-  ty, and pyrefly. `fm typecomplete` requires every public API to be
+  ty, and pyrefly. the typecomplete check requires every public API to be
   100% type-complete.
 - A suppression is narrow, inline with the code, and carries a reason:
   `# type: ignore[code]`. Pyright-only suppressions use
