@@ -433,6 +433,11 @@ changes the tag.
   both in docker and directly on the host, which only Gitea makes
   easy; as disposable as uv has made venvs. Contract 10 and the
   "Environments" section; phase 2 carries them.
+- 2026-09-30, Willem: a macOS host runner's label is based on the
+  name of the persistent environment it serves; until environments
+  exist the label is hardcoded to one name. So a job's `runs-on`
+  names the environment, never a platform it is not, and the loop's
+  contract carries the environment's name as its runner.
 - 2026-09-30, Willem's question, answered yes: the loop runs on top
   of a local environment. The consequence taken with it: the caches
   are the rig's and shared, an environment is the forge's state
@@ -460,10 +465,10 @@ changes the tag.
    a job's sweep then judges the desk's objects) or its own
    directory warmed once. The bench measures both; the sweep's
    safety decides. Owner: the phase, with a line here.
-4. The `ubuntu-latest:host` label on a macOS host runner: keep the
-   name so the loop's contract stays as emitted, or label
-   `macos-latest:host` and have the loop's contract name it. Owner:
-   Willem, before phase 2.
+4. Resolved 2026-09-30: a host runner's label is its environment's
+   name (`<env>:host`), and the loop's contract names that label as
+   its runner; until environments exist the label is hardcoded.
+   Decision record.
 5. Resolved 2026-09-30: cibuildwheel is a `pypi` record with the
    floor 4.2.1, the lock pinning the newest, with the namespace flag
    on the Windows repair step and a wheel-list test. Decision record.
