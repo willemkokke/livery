@@ -15,20 +15,21 @@ the extractor on the kind record; #956, the private-members policy as a
 slot; #957, layer assets staged from the wheel and the theme slot; #958,
 examples as files) and the docs layer's three changes (#968, #970,
 #971), then phase 7's first change (#974, the conformance kit's first
-three clauses) and its second (#987, the check order and a layer's
-contribution modules), the gate's one walk (#976), the gate over named
-files (#979), whole suites (#982) and the role verbs generated from the
-checks' roles (#985). Beside the phases: the layering check's fix mode
-(#829) and phase 8's first change, the publishing opt-out (#871). On
-2026-09-28 and 2026-09-29 Willem ruled every open item the remaining
-phases waited on; the decision record carries each ruling, and the
-design section, the contracts, phases 3 to 9 and the open list carry
-their consequences. Next: phase 7's remaining clauses (config-fragment
-drift and contract 11's removal, then the gate's skip lines and fix
-order for a layer's checks), then the remainders of phases 5 and 8,
-phases 7b and 9, and the layer split as its own plan. The design section
-below is written to graduate into `packages/workshop/docs/` after
-review; everything else is working record.
+three clauses) its second (#987, the check order and a layer's
+contribution modules) and its third (#989, a layer's fragments through
+the render and contract 11), the gate's one walk (#976), the gate over
+named files (#979), whole suites (#982) and the role verbs generated
+from the checks' roles (#985). Beside the phases: the layering check's
+fix mode (#829) and phase 8's first change, the publishing opt-out
+(#871). On 2026-09-28 and 2026-09-29 Willem ruled every open item the
+remaining phases waited on; the decision record carries each ruling, and
+the design section, the contracts, phases 3 to 9 and the open list carry
+their consequences. Next: phase 7's last clauses (the gate's skip lines
+and fix order for a layer's checks, in a probe walk), then the
+remainders of phases 5 and 8, phases 7b and 9, and the layer split as
+its own plan. The design section below is written to graduate into
+`packages/workshop/docs/` after review; everything else is working
+record.
 
 ## Why
 
@@ -3041,6 +3042,26 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   of a layer's checks there: the gate's skip lines and fix order in a
   probe walk, a change of their own after config-fragment drift and
   contract 11's removal.
+
+- 2026-09-30, phase 7's third change (issue #989). Two clauses join
+  the kit, both driving the workshop's own render with the kit's probe
+  answers (a python member and a native member, so a fragment's loops
+  over either run). `fragment-drift`: every fragment the layer's
+  checks carry renders; the composed `pyproject.toml` still parses as
+  TOML, which names a layer's table that collides with one the base
+  writes; and a per-package file rendered into a probe package shows
+  no drift, while a hand edit of it is named. `withdrawn-file`, the
+  kit's side of contract 11: once the layer's check is withdrawn and
+  no other check renders the file for the kind, the render removes an
+  unedited copy and keeps an edited one. The registry is restored
+  after each withdrawal. The JSON project files are composed from
+  member lines and parse only inside their template, so the clause
+  judges their render and not their parse. Proven by tests: a table
+  colliding with ruff's and a fragment that does not render failing
+  the drift clause with each named; the drift judge forced to miss an
+  edit and to see drift in a fresh render; the settle forced to keep
+  an unedited copy and to remove an edited one; and the builtins
+  passing every clause.
 
 ## Open
 

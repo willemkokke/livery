@@ -194,6 +194,104 @@ def test_a_contribution_off_the_shape_or_naming_a_missing_module_breaks_the_clau
     ]
 
 
+def _tidy(text: str = "Checks: acme-*\n") -> Subject:
+    """A layer whose check carries a .clang-tidy for the child kind."""
+    _parent, child = _family()
+    register_check(
+        CheckRecord(
+            "acme-tidy",
+            "lint",
+            _idle,
+            scope=PACKAGE,
+            kinds=("acme-child",),
+            layer=LAYER,
+            fragments=(Fragment(".clang-tidy", text, kind="acme-child"),),
+        )
+    )
+    return Subject(LAYER, kinds=(child,), checks=(check_for("lint.acme-tidy"),))
+
+
+TIDY = "check lint.acme-tidy .clang-tidy for acme-child"
+
+
+def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_drift(
+    acme: None,
+) -> None:
+    subject = _tidy("{% if %}\n")
+    register_check(
+        CheckRecord(
+            "acme-table",
+            "lint",
+            _idle,
+            layer=LAYER,
+            fragments=(Fragment("pyproject.toml", "[tool.ruff]\nline-length = 100\n"),),
+        )
+    )
+    subject = replace(subject, checks=(*subject.checks, check_for("lint.acme-table")))
+    found = _names(subject, "fragment-drift")
+    assert len(found) == 2, found
+    assert found[0].startswith(
+        "fragment-drift: pyproject.toml: composed with the fragment of"
+        " lint.acme-table, it is not TOML: Cannot declare ('tool', 'ruff') twice"
+    )
+    assert found[1].startswith(f"fragment-drift: {TIDY}: does not render: ")
+
+
+def test_a_file_that_drifts_from_its_render_or_hides_an_edit_breaks_the_drift(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The render and the drift judge are the workshop's; the clause
+    # names the layer's file wherever the two disagree about it.
+    from livery.workshop import _templates
+
+    subject = _tidy()
+    assert _names(subject, "fragment-drift") == []
+    monkeypatch.setattr(_templates, "judge_fragment_file", lambda *args: [])
+    assert _names(subject, "fragment-drift") == [
+        f"fragment-drift: {TIDY}: a hand edit of the rendered file is not named as"
+        " drift"
+    ]
+    monkeypatch.setattr(
+        _templates, "judge_fragment_file", lambda *args: ["probe: differs"]
+    )
+    assert _names(subject, "fragment-drift") == [
+        f"fragment-drift: {TIDY}: drifts from its own render: probe: differs"
+    ]
+
+
+def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract_11(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _templates
+
+    subject = _tidy()
+    assert _names(subject, "withdrawn-file") == []
+    real = _templates.settle_fragment_file
+
+    def never_again(directory: Path, name: str, data: dict[str, object]) -> str:
+        if (directory / name).is_file():
+            return ""
+        return real(directory, name, data)
+
+    monkeypatch.setattr(_templates, "settle_fragment_file", never_again)
+    assert _names(subject, "withdrawn-file") == [
+        f"withdrawn-file: {TIDY}: an unedited copy stays once the check is"
+        " withdrawn; contract 11 removes it"
+    ]
+
+    def always_removes(directory: Path, name: str, data: dict[str, object]) -> str:
+        if (directory / name).is_file():
+            (directory / name).unlink()
+            return f"removed: {name}"
+        return real(directory, name, data)
+
+    monkeypatch.setattr(_templates, "settle_fragment_file", always_removes)
+    assert _names(subject, "withdrawn-file") == [
+        f"withdrawn-file: {TIDY}: an edited copy is removed once the check is"
+        " withdrawn; contract 11 keeps it as a local override"
+    ]
+
+
 # The nearest kind wins, for fragments and for categories alike.
 
 
@@ -272,6 +370,8 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "category-table",
         "check-order",
         "contribution-modules",
+        "fragment-drift",
+        "withdrawn-file",
     ]
     assert all(clause.rule.endswith(".") for clause in CLAUSES)
 
