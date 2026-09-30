@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
 from livery.footman.context import Failed
 from livery.toolroom.store import (
     Artifact,
+    Deployment,
     Graph,
     Layout,
     Lock,
@@ -21,6 +23,7 @@ from livery.toolroom.store import (
 )
 from livery.workshop import _tool_tasks, _tools
 from workshop_hosts import (  # noqa: F401
+    HERE,
     HOSTS,
     lock_for_this_host,
     no_graph_resolution,
@@ -1067,3 +1070,253 @@ def test_the_lock_check_answers_without_writing(
     with pytest.raises(Failed, match="no record of coffee"):
         _tool_tasks.tools_lock(check=True)
     assert (root / "tools.lock").read_bytes() == held
+
+
+# --- the host allowance --------------------------------------------------------
+
+
+def _contract(root: Path, tools: str) -> None:
+    (root / "workshop.toml").write_text(
+        f'[workspace]\n\n[tools]\nindex = "records"\n{tools}'
+    )
+
+
+def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The allowance is refused where a version is a verdict, an entry, or a typo."""
+    root = _workspace(tmp_path, monkeypatch, tools='host-allowed = ["ruff"]\n')
+    with pytest.raises(
+        Failed,
+        match=(
+            r"host-allowed names ruff, whose version is a verdict:"
+            r" format \(format\), lint \(lint\) read it"
+        ),
+    ):
+        _tools.write_lock(root)
+    _contract(root, 'host-allowed = ["uv"]\n')
+    with pytest.raises(
+        Failed, match=r"names uv, which takes no allowance: the entry pins uv"
+    ):
+        _tools.write_lock(root)
+    _contract(root, 'host-allowed = ["git_cliff"]\n')
+    with pytest.raises(
+        Failed, match=r"names git_cliff, which takes no allowance: the release train"
+    ):
+        _tools.write_lock(root)
+    _contract(root, 'host-allowed = ["nonesuch"]\n')
+    with pytest.raises(Failed, match=r"names nonesuch, which no site requires"):
+        _tools.write_lock(root)
+    _contract(root, 'host-allowed = "tea"\n')
+    with pytest.raises(Failed, match=r"host-allowed is not a list of strings"):
+        _tools.write_lock(root)
+
+
+def test_the_allowance_refuses_a_download_the_probe_cannot_find_by_its_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A download whose executable is named otherwise is not found on PATH."""
+    root = _workspace(
+        tmp_path,
+        monkeypatch,
+        tools='requires = ["pot"]\nhost-allowed = ["pot"]\n',
+    )
+    _records(
+        root,
+        Record(
+            "pot",
+            kind="download",
+            hosts=THREE,
+            layout=Layout(entry_points=("bin/kettle",), paths=("bin",)),
+            deltas=(
+                RecordDelta(
+                    1,
+                    "1.0.0",
+                    "",
+                    {h: Artifact(f"https://x/p/{h}.zip", SHA) for h in THREE},
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(
+        Failed, match=r"pot's executable is kettle; the allowance finds a tool on PATH"
+    ):
+        _tools.write_lock(root)
+
+
+class _Probing:
+    """A store whose system probe answers as the test says; its installs are fakes."""
+
+    host = HERE
+
+    answers: ClassVar[dict[str, object]] = {}
+    calls: ClassVar[list[tuple[str, str, str]]] = []
+
+    def __init__(self, home: Path, **kwargs: object) -> None:
+        pass
+
+    def supply(
+        self,
+        name: str,
+        kind: str,
+        version: str,
+        deployment: Deployment | None = None,
+        *,
+        min_version: str = "",
+        **kwargs: object,
+    ) -> object:
+        from livery.toolroom.store import Ensured, _engine
+
+        self.calls.append((name, kind, min_version))
+        if kind == "system-check":
+            answer = self.answers[name]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        landed = deployment
+        if landed is None:
+            landed = _engine._delegated(())  # pyright: ignore[reportPrivateUsage]
+        return Ensured(name, version, True, Path("/store") / name, landed, None)
+
+    def link(self, ensured: list[object], bin_dir: Path) -> list[Path]:
+        return []
+
+
+def _allowing_tea(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, floor: str = ""
+) -> Path:
+    spelled = f"tea>={floor}" if floor else "tea"
+    root = _workspace(
+        tmp_path,
+        monkeypatch,
+        tools=f'requires = ["{spelled}"]\nhost-allowed = ["tea"]\n',
+    )
+    _records(root, _tea())
+    _tools.write_lock(root)
+    _Probing.answers = {}
+    _Probing.calls = []
+    monkeypatch.setattr(_tools, "Store", _Probing)
+    return root
+
+
+def test_the_allowance_rides_the_lock_and_moves_it_when_withdrawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The entry carries `allow-host` as the sites' current word, never a kept one."""
+    root = _allowing_tea(tmp_path, monkeypatch)
+    lock = _tools.current_lock(root)
+    assert lock is not None and lock.tools["tea"].allow_host
+    assert json.loads((root / "tools.lock").read_text())["tools"]["tea"]["allow-host"]
+    assert _tools.lock_is_current(root) == (True, "")
+    _contract(root, 'requires = ["tea"]\n')
+    assert _tools.lock_is_current(root) == (False, "the lock would move: tea")
+    relocked = _tools.write_lock(root)
+    assert not relocked.tools["tea"].allow_host
+
+
+def test_a_host_copy_absent_or_below_the_floor_is_passed_over_for_the_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The allowance is permission: with no satisfying copy the store serves."""
+    from livery.toolroom.store import StoreError
+
+    root = _allowing_tea(tmp_path, monkeypatch, floor="1.0")
+    _Probing.answers = {
+        "tea": StoreError(
+            "tea: not on PATH; a system-check tool is the machine's own and the"
+            " store installs nothing for it"
+        )
+    }
+    (made,) = _tools.materialise(root, ("tea",))
+    assert made.receipt is not None and made.receipt.source == "store"
+    assert made.installed and made.note == (
+        "tea: not on PATH; a system-check tool is the machine's own and the store"
+        " installs nothing for it; the store's 1.0.0 serves"
+    )
+    # The host was asked first, held to the requirement's floor, then the store.
+    assert _Probing.calls == [
+        ("tea", "system-check", "1.0"),
+        ("tea", "download", ""),
+    ]
+    _Probing.calls = []
+    _Probing.answers = {
+        "tea": StoreError("tea: /usr/bin/tea reports 0.9.0, below the floor 1.0")
+    }
+    (made,) = _tools.materialise(root, ("tea",))
+    assert made.receipt is not None and made.receipt.source == "store"
+    assert made.note == (
+        "tea: /usr/bin/tea reports 0.9.0, below the floor 1.0; the store's 1.0.0 serves"
+    )
+    assert _tools.drift(root).get("tea", "") == ""
+
+
+def test_a_satisfying_host_copy_serves_and_a_fresh_receipt_is_reused_without_a_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The receipt says host, the version that answered, and the file it found."""
+    from livery.toolroom.store import Ensured, _engine
+    from livery.workshop import _env_tasks
+
+    root = _allowing_tea(tmp_path, monkeypatch)
+    host_bin = tmp_path / "hostbin"
+    host_bin.mkdir()
+    found = host_bin / _tools.exe("tea")
+    found.write_bytes(b"#!/bin/sh\n")
+    _Probing.answers = {
+        "tea": Ensured(
+            "tea",
+            "1.0.0",
+            False,
+            host_bin,
+            _engine._delegated(()),  # pyright: ignore[reportPrivateUsage]
+            None,
+            "1.2.0",
+        )
+    }
+    (made,) = _tools.materialise(root, ("tea",))
+    receipt = made.receipt
+    assert receipt is not None and receipt.source == "host" and not made.installed
+    assert receipt.version == "1.0.0" and receipt.answered == "1.2.0"
+    assert receipt.mode == "none" and receipt.tool_dir == str(host_bin)
+    assert receipt.stamp["path"] == str(found) and receipt.stamp["size"] == "10"
+    # The store was never asked to install anything.
+    assert _Probing.calls == [("tea", "system-check", "")]
+    written = _tools.receipts(root)["tea"]
+    assert written == receipt
+    assert _tools.drift(root).get("tea", "") == ""
+    assert _env_tasks.served_by(receipt) == "host 1.2.0"
+    # The same file again: the receipt is reused and nothing is probed.
+    _Probing.calls = []
+    (again,) = _tools.materialise(root, ("tea",))
+    assert again.receipt == receipt and _Probing.calls == []
+    # The file changed under the receipt: the next sync probes again.
+    found.write_bytes(b"#!/bin/sh\necho tea\n")
+    (probed,) = _tools.materialise(root, ("tea",))
+    assert _Probing.calls == [("tea", "system-check", "")]
+    assert probed.receipt is not None and probed.receipt.stamp["size"] == "19"
+
+
+def test_the_sync_names_the_host_served_tools_and_the_copies_passed_over(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The one line per sync says what came from the host, and why a copy did not."""
+    from livery.workshop import _env_tasks, _sync
+
+    hosted = _tools.Receipt(
+        "cmake", "4.4.2", HERE, "download", "none", source="host", answered="4.5.0"
+    )
+    stored = _tools.Receipt("ninja", "1.13.0", HERE, "download", "path")
+    assert _env_tasks.served_by(stored) == "store 1.13.0"
+    outcomes = (
+        _tools.Materialised(hosted, False),
+        _tools.Materialised(
+            stored, True, note="ninja: not on PATH; the store's 1.13.0 serves"
+        ),
+    )
+    monkeypatch.setattr(_tools, "current_lock", lambda root: object())
+    monkeypatch.setattr(_tools, "materialise", lambda root, **kwargs: outcomes)
+    monkeypatch.setattr(_tools, "stub_lines", lambda root, **kwargs: [])
+    assert _sync.materialise_tools(tmp_path) == [
+        "  tools: 2 receipt(s), installed ninja, from the host: cmake 4.5.0",
+        "  tools: ninja: not on PATH; the store's 1.13.0 serves",
+    ]

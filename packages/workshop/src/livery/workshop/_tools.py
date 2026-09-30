@@ -94,6 +94,12 @@ TOOLS = "tools"
 DEFAULT_HOSTS = ("linux-x64", "macos-arm", "windows-x64")
 """The hosts locked for unless the contract names others: the gated three."""
 
+VERDICT_ROLES = ("format", "lint", "typecheck", "typecomplete", "test")
+"""The check roles whose tools take no host allowance: the version is the verdict."""
+
+PINNED_TOOLS = ("uv", "git_cliff")
+"""The tools no allowance reaches: the entry pins uv, the train reads git-cliff."""
+
 TYPINGS = "typings"
 """The directory under the root the stubs are written into, pyright's default."""
 
@@ -164,6 +170,78 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         found += _requires(tools_table(contract), site=f"{package.path}/workshop.toml")
     found += _requires(tools_table(root / "workshop.toml"), site="workshop.toml")
     return tuple(found)
+
+
+def host_allowed(root: Path) -> tuple[str, ...]:
+    """The tools whose copy on the machine may serve: the contract's and the kinds'.
+
+    The root contract's list and the present kinds' `host_allowed`
+    union, sorted. A name no site requires refuses, since an allowance
+    for nothing is a misspelling. A tool a check reads its verdict
+    from refuses naming the check and its role: a linter that varies
+    by machine makes the gate disagree with CI. `uv` and `git_cliff`
+    refuse by name: the entry pins uv, and the release train reads
+    git-cliff's output. A download whose executable is not named like
+    the tool, or that has none, refuses too: the allowance finds the
+    tool on PATH by its name.
+    """
+    from livery.workshop._checks import check_for, tools_for_kind
+    from livery.workshop._kinds import kind_host_allowed
+
+    declared = tools_table(root / "workshop.toml").get("host-allowed", [])
+    if not isinstance(declared, list) or not all(isinstance(n, str) for n in declared):
+        fail("workshop.toml: [tools] host-allowed is not a list of strings")
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    kinds = {package.kind for package in packages} or {"python"}
+    names = tuple(sorted({*declared, *kind_host_allowed(kinds)}))
+    if not names:
+        return ()
+    required = {requirement.name for requirement in requirements(root)}
+    verdicts: dict[str, set[str]] = {}
+    for kind_name in sorted(kinds):
+        for tool, check in tools_for_kind(kind_name):
+            role = check_for(check).role
+            if role in VERDICT_ROLES:
+                verdicts.setdefault(tool, set()).add(f"{check} ({role})")
+    for name in names:
+        where = f"workshop.toml: [tools] host-allowed names {name}"
+        if name not in required:
+            fail(f"{where}, which no site requires")
+        if name in PINNED_TOOLS:
+            reason = (
+                "the entry pins uv"
+                if name == "uv"
+                else "the release train reads its output"
+            )
+            fail(f"{where}, which takes no allowance: {reason}")
+        if name in verdicts:
+            fail(
+                f"{where}, whose version is a verdict:"
+                f" {', '.join(sorted(verdicts[name]))} read it"
+            )
+    return names
+
+
+def _host_probe_gap(listing: Catalogue, name: str, version: str, host: str) -> str:
+    """Why *name* cannot be found on PATH by its own name; empty when it can."""
+    listed = listing.listed(name)
+    if listed.kind not in DOWNLOAD_KINDS:
+        return ""
+    try:
+        deployment = listing.deployment(name, version, host)
+    except (CatalogueError, RecordError):
+        return ""
+    if not deployment.entry_points:
+        return (
+            f"{name} has no executable; the allowance finds a tool on PATH by its name"
+        )
+    first = Path(deployment.entry_points[0]).name
+    if first.lower().removesuffix(".exe") != name:
+        return (
+            f"{name}'s executable is {first}; the allowance finds a tool on PATH by"
+            " its name"
+        )
+    return ""
 
 
 def tool_names(root: Path) -> tuple[str, ...]:
@@ -381,6 +459,7 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
             with_runtimes(tuple(requirements(root)), listing),
             hosts=locked_hosts(root),
             keep=held,
+            host_allowed=host_allowed(root),
         )
     except LockError as error:
         return False, str(error)
@@ -419,6 +498,7 @@ def write_lock(
     """
     listing = catalogue(root, offline=offline)
     kept = current_lock(root)
+    allowed = host_allowed(root)
     try:
         lock = resolve_lock(
             listing,
@@ -426,9 +506,16 @@ def write_lock(
             hosts=locked_hosts(root),
             keep=kept,
             upgrade=upgrade,
+            host_allowed=allowed,
         )
     except LockError as error:
         fail(str(error))
+    for name in allowed:
+        if name not in lock.tools:
+            continue
+        for host in lock.tools[name].on or lock.hosts:
+            if gap := _host_probe_gap(listing, name, lock.tools[name].version, host):
+                fail(f"workshop.toml: [tools] host-allowed: {gap}")
     lock, notes = with_graphs(root, lock, listing, kept=kept, relock=relock)
     lock.save(lock_path(root))
     for note in notes:
@@ -824,6 +911,15 @@ class Receipt:
             found on `paths` in `path` mode; empty in `none` mode. A
             check resolves the tool by these, never by its name, since
             a name (`git_cliff`) is not always a binary (`git-cliff`).
+        source: `store` for a tool the store supplied, `host` for a
+            copy already on the machine that served under the
+            allowance; `version` is the lock's either way, what the
+            stubs render for and the drift check speaks of.
+        answered: The version the host's copy printed when it served;
+            empty for a store install.
+        stamp: The host copy's identity when it served: its `path`,
+            `size` and `mtime`, so a sync that finds the same file
+            probes nothing; empty for a store install.
     """
 
     tool: str
@@ -836,6 +932,9 @@ class Receipt:
     paths: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     entry_points: tuple[str, ...] = ()
+    source: str = "store"
+    answered: str = ""
+    stamp: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         """The receipt as a JSON object."""
@@ -851,6 +950,9 @@ class Receipt:
             "paths": list(self.paths),
             "env": dict(self.env),
             "entry_points": list(self.entry_points),
+            "source": self.source,
+            "answered": self.answered,
+            "stamp": dict(self.stamp),
         }
 
     @classmethod
@@ -879,6 +981,9 @@ class Receipt:
                 tuple(str(p) for p in data.get("paths", [])),
                 {str(k): str(v) for k, v in data.get("env", {}).items()},
                 tuple(str(e) for e in data.get("entry_points", [])),
+                str(data.get("source", "store")),
+                str(data.get("answered", "")),
+                {str(k): str(v) for k, v in data.get("stamp", {}).items()},
             )
         except (KeyError, TypeError, AttributeError) as error:
             raise ValueError(f"{path}: not a receipt ({error})") from None
@@ -975,11 +1080,44 @@ class Materialised:
             be supplied and *strict* was off.
         installed: Whether the store installed it on this call.
         failure: Why the tool could not be supplied; empty when it was.
+        note: What the sync should say beyond the receipt: why a host
+            copy was passed over for the store's version; empty
+            otherwise.
     """
 
     receipt: Receipt | None
     installed: bool
     failure: str = ""
+    note: str = ""
+
+
+def _stamp(found: Path) -> dict[str, str]:
+    """The identity of *found* a later sync compares before probing; empty when gone."""
+    try:
+        stat = found.stat()
+    except OSError:
+        return {}
+    return {
+        "path": str(found),
+        "size": str(stat.st_size),
+        "mtime": str(stat.st_mtime_ns),
+    }
+
+
+def _fresh_host_receipt(root: Path, name: str) -> Receipt | None:
+    """*name*'s receipt when a host copy served and the same file is still there."""
+    path = receipts_dir(root) / f"{name}.json"
+    if not path.is_file():
+        return None
+    try:
+        receipt = Receipt.load(path)
+    except ValueError:
+        return None
+    if receipt.source != "host" or not receipt.stamp.get("path"):
+        return None
+    if _stamp(Path(receipt.stamp["path"])) != receipt.stamp:
+        return None
+    return receipt
 
 
 def site_floors(root: Path) -> dict[str, tuple[str, str]]:
@@ -1016,7 +1154,14 @@ def materialise(
     this host through the store's sources and the origin; a delegated
     kind through its installer. A system tool is the machine's own,
     held to the highest of the record's floor and the sites' floors;
-    the refusal names the site whose floor it is under. Tools in
+    the refusal names the site whose floor it is under. A tool the
+    lock marks `allow-host` is looked for on PATH first: a copy that
+    satisfies the floor serves, its receipt saying `host` and the
+    version that answered, and the store installs nothing for it; a
+    copy that is absent or below the floor is passed over with a
+    note, and the locked version is supplied as for any other tool. A
+    host receipt whose file is unchanged since it was written is
+    reused without a probe. Tools in
     `link` mode are linked into the checkout's bin directory together,
     so a name two tools offer goes to the first. A receipt is written
     per tool supplied, and on a materialise of the whole bundle the
@@ -1063,6 +1208,39 @@ def materialise(
             not floor or version_key(asked[0]) > version_key(floor)
         ):
             floor, site = asked
+        note = ""
+        if locked.allow_host:
+            fresh = _fresh_host_receipt(root, name)
+            if fresh is not None:
+                if name in RUNTIMES:
+                    runtimes[name] = Path(fresh.stamp["path"])
+                done.append(Materialised(fresh, False))
+                continue
+            asked = floors.get(name)
+            host_floor = asked[0] if asked is not None else listed.min_version
+            try:
+                served = store.supply(
+                    name, "system-check", locked.version, None, min_version=host_floor
+                )
+            except StoreError as error:
+                note = f"{error}; the store's {locked.version} serves"
+            else:
+                found = served.tool_dir / exe(name)
+                if name in RUNTIMES:
+                    runtimes[name] = found
+                receipt = Receipt(
+                    name,
+                    locked.version,
+                    host,
+                    listed.kind,
+                    "none",
+                    tool_dir=str(served.tool_dir),
+                    source="host",
+                    answered=served.answered,
+                    stamp=_stamp(found),
+                )
+                done.append(Materialised(receipt, False))
+                continue
         deployment: Deployment | None = None
         if listed.kind in DOWNLOAD_KINDS:
             try:
@@ -1121,7 +1299,7 @@ def materialise(
         )
         if mode == "link":
             linked.append((receipt, ensured))
-        done.append(Materialised(receipt, ensured.installed))
+        done.append(Materialised(receipt, ensured.installed, note=note))
     if linked or bin_dir(root).is_dir():
         store.link([ensured for _, ensured in linked], bin_dir(root))
     receipts_dir(root).mkdir(parents=True, exist_ok=True)
@@ -1439,6 +1617,8 @@ def drift(root: Path) -> dict[str, str]:
             )
             continue
         expected = locked.hosts.get(receipt.host)
+        if receipt.source == "host":
+            continue
         if expected is not None and str(expected) != receipt.deployment:
             found[name] = (
                 f"DRIFT: the deployment of {locked.version} on {receipt.host} moved"

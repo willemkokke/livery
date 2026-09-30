@@ -214,9 +214,21 @@ take `none`, unless the record or the root contract's `[tools] modes`
 says otherwise; every installer's kind takes `path`. A system tool is the machine's own: the store installs
 nothing for it and holds the copy on PATH to the highest of the
 record's floor and the sites' floors, naming the site whose floor it
-is under. Each tool leaves a receipt under `.workshop/receipts/`, this
-checkout's statement of what it installed: the exact version, the
-host, the deployment's digest and what reached PATH, as the release
+is under. A tool named in the root contract's `[tools] host-allowed`,
+or in a kind's own allowance, may be served by a copy already on the
+machine: `fm sync` looks on PATH first, and a copy that satisfies the
+floor (the requirement's, else the record's minimum, else any
+version) serves with nothing installed, while one that is absent or
+below the floor is passed over with a note and the locked version
+serves. A tool a check reads its verdict from (format, lint,
+typecheck, typecomplete, test), `uv` and `git_cliff` take no
+allowance, and the lock refuses one by name: a linter that varies by
+machine makes the gate disagree with CI. The lock's entry carries
+`allow-host`, so every checkout agrees on which tools may vary. Each
+tool leaves a receipt under `.workshop/receipts/`, this checkout's
+statement of what it installed: the exact version, the host, the
+deployment's digest and what reached PATH, and for a host-served
+tool `source: host` with the version its copy printed, as the release
 train's receipt is a release's statement. `fm env.emit` carries the
 receipts' paths and variables, and `fm env.check` names each required
 tool's receipt and the drift when the lock's deployment has moved

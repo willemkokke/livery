@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -194,12 +194,18 @@ class Locked:
         on: The locked hosts the tool is required on, when they are
             fewer than the lock's; empty when it is required on every
             one.
+        allow_host: Whether a copy of the tool already on the machine
+            may serve instead of the locked version, when it satisfies
+            the requirement's floor; the workspace's `host-allowed`
+            list says so, and the entry carries `allow-host` so every
+            checkout and CI agree on which tools may vary.
     """
 
     version: str
     hosts: dict[str, Digest] = field(default_factory=dict)
     graph: Graph | None = None
     on: tuple[str, ...] = ()
+    allow_host: bool = False
 
     def applies(self, host: str) -> bool:
         """Whether the tool is locked for *host*."""
@@ -215,6 +221,8 @@ class Locked:
             out["graph"] = self.graph.to_json()
         if self.on:
             out["on"] = list(self.on)
+        if self.allow_host:
+            out["allow-host"] = True
         return out
 
 
@@ -299,7 +307,14 @@ class Lock:
                     f"{path}: {name}: `on` names a host outside the lock's"
                     f" ({', '.join(hosts)})"
                 )
-            locked[str(name)] = Locked(entry["version"], digests, graph, tuple(scope))
+            allowed = entry.get("allow-host", False)
+            if not isinstance(allowed, bool):
+                raise LockError(
+                    f"{path}: {name}: `allow-host` is {allowed!r}, not true or false"
+                )
+            locked[str(name)] = Locked(
+                entry["version"], digests, graph, tuple(scope), allowed
+            )
         return cls(tuple(hosts), locked)
 
 
@@ -310,6 +325,7 @@ def resolve_lock(
     hosts: Iterable[str],
     keep: Lock | None = None,
     upgrade: Iterable[str] = (),
+    host_allowed: Iterable[str] = (),
 ) -> Lock:
     """The lock for *requirements* against *catalogue*, on *hosts*.
 
@@ -321,7 +337,9 @@ def resolve_lock(
     no locked host is left out. A tool *keep* already locks stays at
     its version when that version still satisfies and resolves,
     unless it is named in *upgrade*; a tool no requirement names any
-    more leaves the lock.
+    more leaves the lock. A tool named in *host_allowed* carries the
+    allowance in its entry, whatever *keep* said of it: the allowance
+    is the sites' current word, never a kept one.
 
     Raises:
         LockError: naming the first requirement that cannot be met:
@@ -336,6 +354,7 @@ def resolve_lock(
     for requirement in requirements:
         by_tool.setdefault(requirement.name, []).append(requirement)
     moving = set(upgrade)
+    allowed = set(host_allowed)
     tools: dict[str, Locked] = {}
     for name in sorted(by_tool):
         wants = by_tool[name]
@@ -355,10 +374,14 @@ def resolve_lock(
             continue
         scope = on if on != locked_hosts else ()
         held = keep.tools.get(name) if keep and name not in moving else None
-        if held is not None and _eligible(listed, held.version, wants, on):
-            tools[name] = _locked(listed, held.version, on, scope)
-            continue
-        tools[name] = _locked(listed, _newest(listed, wants, on), on, scope)
+        version = (
+            held.version
+            if held is not None and _eligible(listed, held.version, wants, on)
+            else _newest(listed, wants, on)
+        )
+        tools[name] = replace(
+            _locked(listed, version, on, scope), allow_host=name in allowed
+        )
     return Lock(locked_hosts, tools)
 
 

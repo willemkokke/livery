@@ -932,6 +932,21 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
         contract_text = contract_text.replace(
             "\n[ci]\n", "\n[ci]\nspeed-marks = true\n", 1
         )
+    if "host-allowed" not in contract_text:
+        # The allowance for the build tools: a runner with cmake and
+        # ninja on PATH serves them from the host, one without takes
+        # the store's, and the sync says which. The loop's container
+        # runner has neither, so the pass proves the store's path.
+        marker = "\n[tools]\n"
+        if marker not in contract_text:
+            fail(
+                "the loop's contract has no [tools] table to allow host"
+                " tools in; birth seeds one, so this workspace was not"
+                " born by the loop"
+            )
+        contract_text = contract_text.replace(
+            marker, marker + 'host-allowed = ["cmake", "ninja"]\n', 1
+        )
     if "[[ci.schedule]]" not in contract_text:
         # The schedule seam's first entry: the nightly point replays
         # the member's released wheel, so a dispatched nightly proves

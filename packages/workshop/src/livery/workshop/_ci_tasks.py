@@ -1033,14 +1033,22 @@ def doctor() -> None:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    from livery.workshop._env_tasks import missing_host_tools
+    from livery.workshop._env_tasks import missing_host_tools, served_by
     from livery.workshop._forge_lane import this_forge
+    from livery.workshop._tools import receipts
 
     for tool in missing_host_tools(root):
         print(
             f"  host: {tool} MISSING (a compiler the present package"
             " kinds need; install the platform toolchain)"
         )
+    hosted = [
+        f"{name} ({served_by(receipt)})"
+        for name, receipt in sorted(receipts(root).items())
+        if receipt.source == "host"
+    ]
+    if hosted:
+        print(f"  tools: served by the host: {', '.join(hosted)}")
     from livery.workshop._layers import available_layers, layer_names
 
     for module, dist in available_layers(layer_names(root)):
