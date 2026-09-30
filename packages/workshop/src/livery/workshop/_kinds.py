@@ -25,6 +25,7 @@ vocabulary a contract may use is the concrete kinds.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
@@ -187,6 +188,38 @@ class CiContract:
 
 
 @dataclass(frozen=True)
+class Extractor:
+    """How a kind's API reference is extracted for the site.
+
+    Extraction belongs to the kind: the docs assembly asks a
+    package's kind for its extractor and knows nothing of the
+    language behind it. A kind without one gets a section naming the
+    absence.
+
+    Attributes:
+        name: The mkdocstrings handler's name, `python`; one config
+            block is written per name, over every package that
+            extracts through it.
+        pages: The reference pages of a package, `(page path, dotted
+            name)` per page, in the order the section lists them;
+            empty when the package declines or has nothing to
+            extract.
+        sources: The handler's search paths for a package, relative
+            to the workspace root.
+        config: The handler's configuration lines given every
+            package's search paths and the inventories.
+        inventories: The inventories cross-references resolve
+            against.
+    """
+
+    name: str
+    pages: Callable[[Package], list[tuple[str, str]]]
+    sources: Callable[[Package], list[str]]
+    config: Callable[[list[str], tuple[str, ...]], list[str]]
+    inventories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class KindRecord:
     """One package kind, completely.
 
@@ -227,6 +260,9 @@ class KindRecord:
         native_sources: Whether the kind's members carry C or C++ the
             gate formats with clang-format, against the member's own
             `.clang-format`.
+        extractor: How the kind's API reference is extracted for the
+            site; None for a kind with no reference, which the site
+            says by name. A child kind takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools, managed files and
             template, builds nothing, and is never a package's
@@ -247,6 +283,7 @@ class KindRecord:
     wheel_identity: str = "pure"
     tests_need_build: bool = False
     native_sources: bool = False
+    extractor: Extractor | None = None
     abstract: bool = False
 
 
@@ -405,6 +442,14 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     return tuple(sorted(tools))
 
 
+def kind_extractor(kind_name: str) -> Extractor | None:
+    """The extractor *kind_name* uses: its own, else its nearest ancestor's."""
+    for record in reversed(kind_chain(kind_name)):
+        if record.extractor is not None:
+            return record.extractor
+    return None
+
+
 def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
     """The union of host allowances the present kinds grant, sorted."""
     tools: set[str] = set()
@@ -486,6 +531,7 @@ def _register_builtin() -> None:
             # uv operates the workspace; the checkers and the formatter
             # ride their check records, and pytest the dev group's slot.
             tools=("uv",),
+            extractor=_python.EXTRACTOR,
         )
     )
     # The binary extension: a python distribution in every checker's
