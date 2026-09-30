@@ -43,7 +43,8 @@ implementation that speaks the store's API:
 ```python
 from pathlib import Path
 
-from livery.strongroom import PythonHooks, Store, load_scenarios, run_scenario
+from livery.strongroom import Store
+from livery.strongroom.testing import PythonHooks, load_scenarios, run_scenario
 
 conformance = Path("packages/strongroom/spec/conformance")
 for scenario in load_scenarios(conformance):

@@ -77,7 +77,6 @@ def test_the_public_surface_is_pinned() -> None:
         "ALGORITHMS",
         "Algorithm",
         "Clock",
-        "ConformanceFailure",
         "Digest",
         "DropReport",
         "ENTRY_RUNGS",
@@ -90,13 +89,11 @@ def test_the_public_surface_is_pinned() -> None:
         "FormatError",
         "HashConstructor",
         "Hasher",
-        "Hooks",
         "HttpSource",
         "IntegrityError",
         "LAYOUT_VERSION",
         "Landed",
         "Link",
-        "LockHolder",
         "LockTimeout",
         "MANIFEST_NAME",
         "MUTATION_CLASSES",
@@ -122,8 +119,6 @@ def test_the_public_surface_is_pinned() -> None:
         "Pending",
         "Transaction",
         "Progress",
-        "PythonHooks",
-        "REFUSALS",
         "RUNGS",
         "RefConflict",
         "RefProtected",
@@ -132,13 +127,11 @@ def test_the_public_surface_is_pinned() -> None:
         "Rung",
         "RungUnavailable",
         "SHA256",
-        "Scenario",
         "ScrubReport",
         "ShedReport",
         "Source",
         "Store",
         "StoreError",
-        "StoreLike",
         "Subject",
         "SubjectKind",
         "SweepReport",
@@ -159,11 +152,40 @@ def test_the_public_surface_is_pinned() -> None:
         "digest_of",
         "digest_stream",
         "fetch_url",
-        "load_scenarios",
         "now",
-        "run_scenario",
         "silent",
     }
+
+
+def test_the_conformance_kit_is_a_module_of_its_own() -> None:
+    import livery.strongroom.testing as kit
+
+    assert set(kit.__all__) == {
+        "REFUSALS",
+        "ConformanceFailure",
+        "Hooks",
+        "LockHolder",
+        "PythonHooks",
+        "Scenario",
+        "StoreLike",
+        "load_scenarios",
+        "run_scenario",
+    }
+
+
+def test_importing_the_store_loads_no_part_of_the_conformance_kit() -> None:
+    # A fresh interpreter, so this suite's own imports do not count: a
+    # program that opens a store never pays for the kit, which imports
+    # subprocess and every seam a scenario reaches.
+    script = (
+        "import sys, livery.strongroom;"
+        " print(sorted(m for m in sys.modules"
+        " if m.startswith('livery.strongroom.testing')))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "[]"
     for name in package.__all__:
         assert hasattr(package, name), name
 

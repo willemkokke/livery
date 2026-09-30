@@ -623,6 +623,21 @@ Acceptance:
   ref is named at commit and a journal needs the ref at `add`; the
   two share the pending namespace and the move code instead.
 
+- 2026-10-01, the conformance kit is a module of its own (issue
+  #995). `livery.strongroom.testing` holds the harness
+  (`load_scenarios`, `run_scenario`, `Hooks`, `PythonHooks`,
+  `StoreLike`, `Scenario`, `LockHolder`, `ConformanceFailure`,
+  `REFUSALS`), the way `livery.forge.testing` and
+  `livery.workshop.testing` hold theirs, and the package root no longer
+  imports it, so a program that opens a store never loads the harness.
+  Willem's ruling: there is no reason to import it, whatever the time
+  it saves. Measured warm, the import of `livery.strongroom` goes from
+  20.6 ms to 20.0 ms; the 12.5 ms first reported was `-X importtime`
+  charging the store's own modules to the harness, which the root
+  imported second. Proven by a test that importing the package loads
+  no module of `livery.strongroom.testing`, which fails with the root
+  importing the kit.
+
 ## Open
 
 1. **Whether the wheel ships the spec and vectors.** The spec lives at
