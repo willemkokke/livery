@@ -67,15 +67,9 @@ SITE_TREES = ("packages", "releases", "tasks", "tools")
 #: they publish under the package's own path.
 API_DIR = "api"
 
-#: The inventories cross-ecosystem references resolve against.
-#: Pinned here so one workshop release moves every project; the
-#: footman and toolroom pins retire when those repositories migrate
-#: into the workspace.
-INVENTORIES = (
-    "https://docs.python.org/3/objects.inv",
-    "https://willemkokke.github.io/footman/objects.inv",
-    "https://willemkokke.github.io/toolroom/objects.inv",
-)
+#: The page a package whose kind extracts nothing gets instead of a
+#: reference: the section names the absence, never an empty page.
+NO_REFERENCE = "index.md"
 
 
 def docs_table(root: Path) -> dict[str, object]:
@@ -619,23 +613,10 @@ def abbreviation_files(root: Path) -> list[str]:
     return files
 
 
-def package_python_paths(package: Package) -> list[str]:
-    """The search paths a package's ``[docs] python-paths`` hands the API renderer.
-
-    Each is a directory relative to the package, holding modules the
-    pages reference beyond the package's sources: rendered stubs, for
-    one. Anything but a list of strings refuses naming the file.
-    """
-    contract_path = package.directory / "workshop.toml"
-    table = load_contract(contract_path).get("docs") or {}
-    if not isinstance(table, dict):
-        return []
-    declared = table.get("python-paths", [])
-    if not isinstance(declared, list) or not all(
-        isinstance(entry, str) for entry in declared
-    ):
-        fail(f"{contract_path}: [docs] python-paths must be a list of paths")
-    return list(declared)
+def declines_api(package: Package) -> bool:
+    """Whether *package* turns its reference off with ``[docs] api = false``."""
+    table = load_contract(package.directory / "workshop.toml").get("docs") or {}
+    return isinstance(table, dict) and table.get("api") is False
 
 
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
@@ -923,25 +904,29 @@ def zensical_config(root: Path) -> str:
         # contract render differently per checkout. The landing page
         # links its own year archives at build time instead.
         lines.append('    { "Releases" = "releases/index.md" },')
-    handler_paths: list[str] = []
+    from livery.workshop._kinds import Extractor, kind_extractor
+
+    handlers: dict[str, tuple[Extractor, list[str]]] = {}
     for package in discover_packages(root):
-        section, has_modules = _package_section(package)
+        section, _extracts = _package_section(package)
         if not section:
             continue
         lines += section
-        if has_modules:
-            handler_paths.append(f"packages/{package.directory.name}/src")
-        handler_paths += [
-            f"packages/{package.directory.name}/{extra}"
-            for extra in package_python_paths(package)
-        ]
+        extractor = kind_extractor(package.kind)
+        if extractor is None:
+            continue
+        # One handler block per extractor, over every package that
+        # extracts through it, in the packages' order.
+        _, paths = handlers.setdefault(extractor.name, (extractor, []))
+        paths += extractor.sources(package)
     lines.append(f"    {NAV_END}")
     lines.append("]")
     lines += _extra_asset_lines(root)
     lines += _theme_lines()
     lines += _extension_block(root)
-    if handler_paths:
-        lines += _mkdocstrings_lines(handler_paths, INVENTORIES)
+    for extractor, paths in handlers.values():
+        if paths:
+            lines += extractor.config(paths, extractor.inventories)
     return "\n".join(lines) + "\n"
 
 
@@ -954,12 +939,17 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     territory in either shape. Empty for a package with nothing to
     show.
     """
+    from livery.workshop._kinds import kind_extractor
+
     docs = package.directory / "docs"
     pages = [p for p in _pages(docs) if not p.startswith("_generated/")]
     modules = api_modules(package)
+    # A kind that extracts nothing still gets an API entry, to the
+    # page that names the absence, unless the package declined.
+    absent = kind_extractor(package.kind) is None and not declines_api(package)
     changelog = (package.directory / "CHANGELOG.md").is_file()
     authored = authored_nav(package)
-    if authored is None and not pages and not modules and not changelog:
+    if authored is None and not pages and not modules and not changelog and not absent:
         return ([], False)
     name = package.directory.name
     prefix = f"packages/{name}/"
@@ -981,6 +971,8 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
             ]
             api.append(f"{at}] }},")
             return api
+        if block == "api" and absent:
+            return [f'{at}{{ "API" = "{prefix}{API_DIR}/{NO_REFERENCE}" }},']
         return []
 
     placed = {
@@ -1014,33 +1006,6 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
         lines += section(block, inner)
     lines.append(f"{indent}] }},")
     return (lines, bool(modules))
-
-
-def _mkdocstrings_lines(paths: list[str], inventories: tuple[str, ...]) -> list[str]:
-    """The mkdocstrings handler block for the given source paths."""
-    listed = ", ".join(f'"{path}"' for path in paths)
-    linked = ", ".join(f'"{url}"' for url in inventories)
-    return [
-        "",
-        "[project.plugins.mkdocstrings.handlers.python]",
-        f"paths = [{listed}]",
-        f"inventories = [{linked}]",
-        "",
-        "[project.plugins.mkdocstrings.handlers.python.options]",
-        "# Google style is the house convention; a docstring is",
-        "# published the moment it is written, empty ones included.",
-        'docstring_style = "google"',
-        "show_if_no_docstring = true",
-        "show_root_heading = true",
-        "show_root_full_path = true",
-        "separate_signature = true",
-        "show_signature_annotations = true",
-        "signature_crossrefs = true",
-        'members_order = "source"',
-        "merge_init_into_class = true",
-        "summary = true",
-        "heading_level = 2",
-    ]
 
 
 RELEASES = "docs/releases"
@@ -1399,19 +1364,21 @@ def scoped_config(root: Path, package: Package) -> str:
     for page in _root_pages(root):
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
-    section, has_modules = _package_section(package)
+    from livery.workshop._kinds import kind_extractor
+
+    section, extracts = _package_section(package)
     lines += section
     lines.append("]")
     lines += _theme_lines()
     lines += _extension_block(root, relative_to="../..")
-    if has_modules:
-        inventories: list[str] = [*INVENTORIES]
+    extractor = kind_extractor(package.kind)
+    if extracts and extractor is not None:
+        inventories: list[str] = [*extractor.inventories]
         site_url = str(table.get("site-url", ""))
         if site_url:
             inventories.append(site_url.rstrip("/") + "/objects.inv")
-        lines += _mkdocstrings_lines(
-            [f"../../packages/{package.directory.name}/src"], tuple(inventories)
-        )
+        paths = [f"../../{path}" for path in extractor.sources(package)]
+        lines += extractor.config(paths, tuple(inventories))
     return "\n".join(lines) + "\n"
 
 
@@ -1450,7 +1417,7 @@ def materialise_preview(root: Path, package: Package) -> Path:
     return config
 
 
-def _module_root(package: Package) -> Path | None:
+def module_root(package: Package) -> Path | None:
     """The importable module's root: the shallowest ``__init__.py``."""
     src = package.directory / "src"
     if not src.is_dir():
@@ -1460,46 +1427,18 @@ def _module_root(package: Package) -> Path | None:
 
 
 def api_modules(package: Package) -> list[tuple[str, str]]:
-    """(page path, dotted import path) per module, public first.
+    """The reference pages of *package*, `(page path, dotted name)`, by its kind.
 
-    Every module gets a page, underscore-private included: the
-    standards fragment publishes a docstring the moment it is
-    written. Public sorts before private at every level of the
-    tree, and a package's ``__init__`` is its index page. A package
-    may decline the whole reference with ``[docs] api = false``,
-    the shape a forwarding shim takes: its surface is another
-    package's, and documenting the forwarders would document the
-    real thing twice.
+    Extraction belongs to the kind: the pages come from the kind's
+    extractor, and a kind without one has no pages, which the site
+    says by name on the absence page.
     """
-    contract = load_contract(package.directory / "workshop.toml")
-    table = contract.get("docs") or {}
-    if isinstance(table, dict) and table.get("api") is False:
+    from livery.workshop._kinds import kind_extractor
+
+    extractor = kind_extractor(package.kind)
+    if extractor is None:
         return []
-    module_root = _module_root(package)
-    if module_root is None:
-        return []
-    src = package.directory / "src"
-    entries: list[tuple[tuple[tuple[bool, str], ...], str, str]] = []
-    for path in module_root.rglob("*.py"):
-        if path.name == "__main__.py" or "_docs" in path.parts:
-            continue
-        relative = path.relative_to(module_root).with_suffix("")
-        parts = relative.parts
-        if parts and parts[-1] == "__init__":
-            parts = (*parts[:-1], "")
-        key = tuple((part.startswith("_"), part) for part in parts)
-        page = (
-            "index.md"
-            if relative.as_posix() == "__init__"
-            else relative.with_suffix(".md")
-            .as_posix()
-            .replace("/__init__.md", "/index.md")
-        )
-        dotted = ".".join(path.relative_to(src).with_suffix("").parts)
-        dotted = dotted.removesuffix(".__init__")
-        entries.append((key, page, dotted))
-    entries.sort()
-    return [(page, dotted) for _key, page, dotted in entries]
+    return extractor.pages(package)
 
 
 def generate_api_pages(root: Path) -> list[str]:
@@ -1509,13 +1448,29 @@ def generate_api_pages(root: Path) -> list[str]:
     the members. Written under ``api/`` in the tree the mount merges,
     so the pages publish under the package's own path.
     """
+    from livery.workshop._kinds import kind_extractor
+
     generated: list[str] = []
     for package in discover_packages(root):
+        base = package.directory / "docs" / GENERATED_DIR / API_DIR
+        if kind_extractor(package.kind) is None and not declines_api(package):
+            # The absence, named: a kind that extracts nothing gets
+            # one page saying so, never an empty section.
+            shutil.rmtree(base, ignore_errors=True)
+            base.mkdir(parents=True, exist_ok=True)
+            (base / NO_REFERENCE).write_text(
+                "# API reference\n\nNo API reference: the"
+                f" `{package.kind}` kind declares no extractor.\n",
+                encoding="utf-8",
+            )
+            generated.append(package.directory.name)
+            continue
         modules = api_modules(package)
+        # The generated reference is rebuilt whole: a package that
+        # declines, or extracts nothing now, keeps no stale pages.
+        shutil.rmtree(base, ignore_errors=True)
         if not modules:
             continue
-        base = package.directory / "docs" / GENERATED_DIR / API_DIR
-        shutil.rmtree(base, ignore_errors=True)
         for page, dotted in modules:
             target = base / page
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1530,8 +1485,8 @@ def module_docs_dir(package: Package) -> Path | None:
     The module root is the shallowest ``__init__.py`` under ``src``,
     which is the importable package uv_build ships.
     """
-    module_root = _module_root(package)
-    return None if module_root is None else module_root / "_docs"
+    found = module_root(package)
+    return None if found is None else found / "_docs"
 
 
 def materialise_module_docs(package: Package) -> Path | None:

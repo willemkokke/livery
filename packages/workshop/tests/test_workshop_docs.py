@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -200,7 +201,7 @@ def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None
 def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._docs import INVENTORIES
+    from livery.workshop._backends._python import INVENTORIES
 
     root = _workspace(tmp_path)
     config = zensical_config(root)
@@ -1556,3 +1557,100 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
         ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
     ).stdout.decode()
     assert status == "", status
+
+
+# Phase 6: extraction belongs to the kind. The absence first.
+
+
+@pytest.fixture
+def stone_kind() -> Iterator[None]:
+    """A concrete kind with no extractor, registered for one test and replaced after."""
+    from livery.workshop import _kinds
+    from livery.workshop._kinds import KindRecord, all_kinds, kind_for, register_kind
+
+    before = {record.name: record for record in all_kinds()}
+    python = kind_for("python")
+    register_kind(
+        KindRecord(name="stone", backend=python.backend, template=python.template)
+    )
+    yield
+    _kinds._KINDS.clear()  # pyright: ignore[reportPrivateUsage]
+    _kinds._KINDS.update(before)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_kind_without_an_extractor_names_the_absence_never_an_empty_page(
+    tmp_path: Path, stone_kind: None
+) -> None:
+    from livery.workshop._docs import (
+        API_DIR,
+        GENERATED_DIR,
+        api_modules,
+        generate_api_pages,
+    )
+
+    root = _workspace(tmp_path)
+    bare = root / "packages" / "bare"
+    (bare / "workshop.toml").write_text('kind = "stone"\nname = "acme-bare"\n')
+    stone = next(p for p in discover_packages(root) if p.directory.name == "bare")
+    assert api_modules(stone) == []
+    assert generate_api_pages(root) == ["bare", "core"]
+    page = bare / "docs" / GENERATED_DIR / API_DIR / "index.md"
+    assert page.read_text() == (
+        "# API reference\n\nNo API reference: the `stone` kind declares no extractor.\n"
+    )
+    config = tomllib.loads(zensical_config(root))
+    section = next(entry for entry in config["project"]["nav"] if "bare" in entry)
+    assert {"API": "packages/bare/api/index.md"} in section["bare"]
+    # Only the python kind's handler is configured, over the python package.
+    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
+    assert list(handlers) == ["python"]
+    assert handlers["python"]["paths"] == ["packages/core/src"]
+    # Declining the reference declines the absence page too.
+    (bare / "workshop.toml").write_text(
+        'kind = "stone"\nname = "acme-bare"\n\n[docs]\napi = false\n'
+    )
+    assert generate_api_pages(root) == ["core"]
+    assert not page.exists()
+    config = tomllib.loads(zensical_config(root))
+    assert not any("bare" in entry for entry in config["project"]["nav"])
+
+
+def test_a_second_extractor_reaches_the_config_through_the_kind_record(
+    tmp_path: Path, stone_kind: None
+) -> None:
+    from dataclasses import replace
+
+    from livery.workshop._kinds import (
+        Extractor,
+        kind_extractor,
+        kind_for,
+        register_kind,
+    )
+
+    root = _workspace(tmp_path)
+    (root / "packages" / "bare" / "workshop.toml").write_text(
+        'kind = "stone"\nname = "acme-bare"\n'
+    )
+    stone = kind_for("stone")
+    carved = Extractor(
+        "carve",
+        pages=lambda package: [("index.md", "acme.bare")],
+        sources=lambda package: [f"packages/{package.directory.name}/carved"],
+        config=lambda paths, inventories: [
+            "",
+            "[project.plugins.mkdocstrings.handlers.carve]",
+            "paths = [" + ", ".join(f'"{p}"' for p in paths) + "]",
+        ],
+    )
+    register_kind(replace(stone, extractor=carved))
+    assert kind_extractor("stone") is carved
+    config = tomllib.loads(zensical_config(root))
+    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
+    assert handlers["carve"]["paths"] == ["packages/bare/carved"]
+    assert handlers["python"]["paths"] == ["packages/core/src"]
+    section = next(entry for entry in config["project"]["nav"] if "bare" in entry)
+    api = next(part for part in section["bare"] if "API" in part)
+    assert api["API"] == [{"acme.bare": "packages/bare/api/index.md"}]
+    # A child kind takes the nearest ancestor's extractor.
+    register_kind(replace(stone, name="pebble", parent="stone", extractor=None))
+    assert kind_extractor("pebble") is carved

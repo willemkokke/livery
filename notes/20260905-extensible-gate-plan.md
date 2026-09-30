@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first slice (#955, the extractor on the kind record) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2506,6 +2506,38 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   undecided). Acceptance: the union across gcc, clang and MSVC is
   proven by the reducer's unit tests and the loop proves gcc's leg
   alone, so the third item stays open (item 26).
+
+- 2026-09-30, phase 6's first slice (issue #955): extraction belongs
+  to the kind. `KindRecord.extractor` names how a kind's API
+  reference is extracted (`livery.workshop._kinds.Extractor`: the
+  handler's name, the pages of a package, the handler's search paths
+  for it, its configuration lines, the inventories); the Python
+  kind's is mkdocstrings' python handler, moved whole into
+  `livery.workshop._backends._python` (the module walk, the
+  `python-paths`, the handler block, the inventories); a child kind
+  takes its nearest ancestor's, so the nanobind kind extracts as
+  python does and the cpp-conan kind has none. The site build asks
+  the kind and knows no language: one handler block per extractor
+  over every package that extracts through it, and a package whose
+  kind has no extractor gets one generated page, `api/index.md`,
+  naming the absence by kind, linked as its API entry, unless
+  `[docs] api = false` declines it; the generated reference is
+  rebuilt whole, so a decline leaves no stale page. Proven by tests:
+  the absence page and its nav entry, the decline, a second extractor
+  registered on a test kind reaching the config beside python's, and
+  the ancestor rule. The livery site was built on main (3e015ff2)
+  and on the branch and the trees diffed: 519 differences, none from
+  the assembly. 93 are coverage pages, whose data differs between the
+  two runs that produced them; the tool index's objects, refs and
+  stamps differ as build state, the main checkout's tree having
+  accumulated 1816 objects against a fresh 1640 and holding a stale
+  `_generated/tasks` tree under the toolroom package; the rest are
+  the API pages of the three modules this change edited, with
+  `objects.inv` and `search.json` following them. Acceptance items 2
+  and 5 of phase 6 are met for this slice; the remaining slices are
+  the private-members policy as a layer slot, the assets and the
+  theme slot, the examples check with examples as files, and the
+  docs layer module.
 
 ## Open
 
