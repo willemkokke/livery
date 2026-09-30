@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2795,6 +2795,39 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   examples check stays the base's, since it runs a kind's examples
   and generates no site. Open: item 27 (a test running the builder),
   and a doctor line naming the layer that brings the docs job.
+
+- 2026-10-01, phase 7's first change (issue #974): the conformance
+  kit. `livery.workshop.testing` follows `livery.forge.testing`: a
+  public package whose `Subject` names what a layer registers (its
+  kinds, its checks), whose `Clause`s each return the `Violation`s a
+  subject commits, every violation naming its clause, and whose
+  `CLAUSES` a layer's own suite parametrizes over; `builtin_subject()`
+  is the workshop's own kinds and checks, and the workshop's suite
+  runs every clause on it, so the kit is in `fm check`. Three clauses
+  land here. `backend-protocol` reads the protocol's methods from
+  `livery.workshop._kinds.Backend` itself and judges each concrete
+  kind's backend module: every method present, the protocol's
+  positional parameters in order, its keyword parameters taken, its
+  optional ones optional, no extra required parameter.
+  `nearest-fragment` judges that a per-package file resolves to the
+  nearest kind's fragment and that one kind has one owner per file.
+  `category-table` judges each rule of a kind's table on a
+  representative path against the documented order: the most
+  specific pattern wins, the nearer kind wins a tie between kinds,
+  and two rules of one kind never tie. The kit found two faults in
+  the base, both fixed here: `package_fragment` and `category_rules`
+  walked `kind_chain`, which is parent first, so the farthest
+  ancestor won where their docstrings and the ruling of 2026-09-28
+  say the nearest kind wins; no builtin table or fragment triggered
+  either. Proven by tests: per clause a broken subject fails with the
+  clause named (a backend missing a method and taking the wrong
+  calls, a concrete kind without a backend, two checks carrying one
+  file for one kind, two rules of one kind at one specificity), a
+  child kind's fragment and category rule winning over its parent's,
+  which fail with the two fixes reverted, and the builtins passing
+  every clause. Next: skip printing, narrowing, fix ordering,
+  config-fragment drift, contract 11's removal, and a contribution
+  mounting only with its target, each with the gap it reveals.
 
 ## Open
 
