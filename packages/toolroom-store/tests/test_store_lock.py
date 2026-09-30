@@ -944,3 +944,40 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     assert build_current(index) is True
     (records / "extra.jsonl").write_text("{}")
     assert build_current(index) is False
+
+
+# --- the host allowance --------------------------------------------------------
+
+
+def test_the_host_allowance_rides_the_entry_and_a_lock_without_it_reads_unchanged(
+    tmp_path,
+):
+    """`allow-host` is written only when set, read as false when absent, refused off shape."""
+    lock = Lock(
+        THREE,
+        {
+            "tea": Locked(
+                "1.0.0",
+                {host: Digest.parse(f"sha256:{SHA}") for host in THREE},
+                allow_host=True,
+            ),
+            "ruff": Locked("0.16.4"),
+        },
+    )
+    path = tmp_path / "tools.lock"
+    lock.save(path)
+    assert Lock.load(path) == lock
+    written = json.loads(path.read_text())
+    assert written["tools"]["tea"]["allow-host"] is True
+    assert "allow-host" not in written["tools"]["ruff"]
+    # A lock written before the field existed reads as one without the allowance.
+    del written["tools"]["tea"]["allow-host"]
+    path.write_text(json.dumps(written))
+    assert Lock.load(path).tools["tea"].allow_host is False
+    # A value that is not true or false refuses naming the tool.
+    written["tools"]["tea"]["allow-host"] = "yes"
+    path.write_text(json.dumps(written))
+    with pytest.raises(
+        LockError, match=r"tea: `allow-host` is 'yes', not true or false"
+    ):
+        Lock.load(path)

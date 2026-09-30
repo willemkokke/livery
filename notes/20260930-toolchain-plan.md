@@ -1,8 +1,8 @@
 # Toolchains: the host's, a floor, or an exact version
 
 Status: written 2026-09-30 from Willem's rulings of 2026-09-29 and
-2026-09-30; no phase started. Phase 1 (the host allowance for store
-tools) is the base's and first. Phases 2 to 4 belong to
+2026-09-30. Phase 1 (the host allowance for store tools) is built in
+the base (issue #937, Willem's go of 2026-09-30). Phases 2 to 4 belong to
 `livery.workshop.cpp`, so they wait for that layer's extraction (the
 extensible gate plan's open item 17 and the plan it names).
 
@@ -296,13 +296,13 @@ Deliverables:
   one leg, so the loop proves both paths.
 
 Tests, refusals first: the allowance on `ruff` refuses naming the
-format and lint roles; a host `cmake` below the floor refuses with
-the version it printed and the floor; an absent host `cmake` falls
-back to the store install and the receipt says `store`; a satisfying
-host `cmake` leaves the store untouched and the receipt says `host`;
-a warm sync with a fresh host receipt runs no probe (the seam counts
-calls); the lock round-trips `allow-host` and reads a lock without
-it.
+format and lint roles; a host `cmake` below the floor is passed over
+with the version it printed and the floor, and the store's version
+serves; an absent host `cmake` falls back to the store install and
+the receipt says `store`; a satisfying host `cmake` leaves the store
+untouched and the receipt says `host`; a warm sync with a fresh host
+receipt runs no probe (the seam counts calls); the lock round-trips
+`allow-host` and reads a lock without it.
 
 **Acceptance**
 
@@ -435,6 +435,26 @@ Deliverables:
   specific toolchain, and several toolchains may be active in one
   workspace. Contract 11 and the design carry both; the lock widens
   to one entry per toolchain record and exact version.
+- 2026-09-30, phase 1 built (issue #937): `[tools] host-allowed` and
+  the kinds' `host_allowed` union into the allowance; the lock entry
+  carries `allow-host`, the sites' current word and never a kept one,
+  so toggling the list moves the lock; a tool a check reads its
+  verdict from refuses naming the check and its role, `uv` and
+  `git_cliff` by name, and a download whose executable is not named
+  like the tool, since the allowance finds a tool on PATH by its name.
+  `fm sync` looks on PATH first for an allowed tool: a copy that
+  satisfies the floor (the requirement's, else the record's minimum,
+  else any) serves with a receipt saying `host` and the version that
+  answered, and its file's identity, so the next sync probes nothing
+  while the file is unchanged; a copy that is absent or below the
+  floor is passed over with a note and the locked version serves,
+  never a refusal, since the allowance is permission and not
+  obligation. `fm env.check` prints `host <version>` or `store
+  <version>` per tool; `fm doctor` names the host-served ones. The
+  loop's workspace allows `cmake` and `ninja`; its runner has neither
+  on PATH today, so the pass proves the store path, and the host path
+  is proven by the seam-faked tests until a host runner exists (the
+  local loop plan's phase 2).
 - 2026-09-30, on the cost of probing (Willem's question): a warm
   `fm tools.sync --frozen` is 1.2 s for 18 receipts and spawns no
   tool; a probe runs only for an absent or stale receipt, and a CI

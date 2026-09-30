@@ -124,6 +124,10 @@ class Ensured:
             `bin`, and nothing else.
         tree: The tree `tools/<name>@<version>` names; `None` for a
             delegated kind, whose bytes never went through the store.
+        answered: The version a system tool printed when it was probed
+            on the machine, so a receipt can say what answered; empty
+            for a tool the store installed, and for one that prints no
+            version.
     """
 
     name: str
@@ -132,6 +136,7 @@ class Ensured:
     tool_dir: Path
     deployment: Deployment
     tree: Digest | None
+    answered: str = ""
 
     @property
     def paths(self) -> tuple[Path, ...]:
@@ -1000,13 +1005,15 @@ class Store:
                 " the store installs nothing for it"
             )
         floor = min_version
-        reported = _version_in(read_version([found, "--version"])) if floor else ""
+        reported = _version_in(read_version([found, "--version"]))
         if floor and version_tuple(reported) < version_tuple(floor):
             raise StoreError(
                 f"{name}: {found} reports {reported or 'no version'}, below the"
                 f" floor {floor}"
             )
-        return Ensured(name, version, False, Path(found).parent, _delegated(()), None)
+        return Ensured(
+            name, version, False, Path(found).parent, _delegated(()), None, reported
+        )
 
     def _land(self, name: str, version: str, url: str, digest: Digest) -> Path:
         """The artifact's path here: the tiers first, then the origin unless offline."""

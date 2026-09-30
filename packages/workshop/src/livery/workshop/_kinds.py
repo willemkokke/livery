@@ -206,6 +206,11 @@ class KindRecord:
             will ever install (a C compiler); ``fm doctor`` and
             ``fm env.check`` name an absence instead of letting a
             build fail midway.
+        host_allowed: The kind's tools whose copy already on the
+            machine may serve when it satisfies the floor, so a
+            workspace of this kind installs them only where the
+            machine has none; the union along the chain joins the
+            root contract's `[tools] host-allowed`.
         managed: The rendered files the template keeps matching in
             a package of this kind; the chain's union is what the
             drift gate judges.
@@ -235,6 +240,7 @@ class KindRecord:
     parent: str = ""
     tools: tuple[str, ...] = ()
     host_tools: tuple[str, ...] = ()
+    host_allowed: tuple[str, ...] = ()
     managed: tuple[str, ...] = ()
     ci: CiContract = field(default_factory=CiContract)
     artifact: str = "python"
@@ -396,6 +402,15 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     for kind_name in present_types:
         for record in kind_chain(kind_name):
             tools.update(record.host_tools)
+    return tuple(sorted(tools))
+
+
+def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
+    """The union of host allowances the present kinds grant, sorted."""
+    tools: set[str] = set()
+    for kind_name in present_types:
+        for record in kind_chain(kind_name):
+            tools.update(record.host_allowed)
     return tuple(sorted(tools))
 
 

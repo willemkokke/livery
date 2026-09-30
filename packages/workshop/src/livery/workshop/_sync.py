@@ -527,10 +527,17 @@ def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
     done = materialise(root, strict=False, offline=offline)
     supplied = [m for m in done if m.receipt is not None]
     installed = [m.receipt.tool for m in supplied if m.installed and m.receipt]
+    hosted = [
+        f"{m.receipt.tool} {m.receipt.answered}".rstrip()
+        for m in supplied
+        if m.receipt is not None and m.receipt.source == "host"
+    ]
     lines = [
         f"  tools: {len(supplied)} receipt(s)"
         + (f", installed {', '.join(installed)}" if installed else ", all present")
+        + (f", from the host: {', '.join(hosted)}" if hosted else "")
     ]
+    lines += [f"  tools: {m.note}" for m in done if m.note]
     lines += [f"  tools: could not materialise: {m.failure}" for m in done if m.failure]
     return lines + stub_lines(root, strict=False, offline=offline)
 

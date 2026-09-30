@@ -34,7 +34,7 @@ from livery.workshop._envfile import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from livery.workshop._tools import Receipt
 
 #: Names never emitted for an agent: the PATH family is composed per
 #: shell, not copied between sessions.
@@ -728,6 +728,13 @@ def tool_profile(root: Path) -> tuple[str, ...]:
     return tool_names(root)
 
 
+def served_by(receipt: Receipt) -> str:
+    """Who serves *receipt*'s tool: the host at the version it printed, or the store."""
+    if receipt.source == "host":
+        return f"host {receipt.answered}".rstrip()
+    return f"store {receipt.version}"
+
+
 def missing_host_tools(root: Path) -> tuple[str, ...]:
     """The host requirements the present kinds name that do not resolve.
 
@@ -833,7 +840,7 @@ def env_check() -> int:
         if verdict:
             print(f"  {tool}: on PATH; {verdict}")
         else:
-            print(f"  {tool}: receipt ok")
+            print(f"  {tool}: receipt ok; {served_by(receipt)}")
         if tool == "uv":
             drift = _uv_drift(root)
             if drift:
