@@ -1064,3 +1064,23 @@ def test_ci_run_sweeps_the_tool_store_only_on_a_github_job(
         "tool store: 1 unreached object(s) swept before the save"
     )
     assert store.state(orphan) != "present" and store.state(kept) == "present"
+
+
+def test_a_placement_the_job_already_sets_stands(tmp_path: Path) -> None:
+    """A runner with persistent caches sets them; the temp is for what is unset."""
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+
+    temp = str(tmp_path / "_temp")
+    placed = runner_placements({"RUNNER_TEMP": temp})
+    assert placed == {
+        "UV_CACHE_DIR": f"{temp}/uv-cache",
+        "CONAN_HOME": f"{temp}/conan",
+        _paths.env_var("DATA_DIR"): f"{temp}/footman",
+    }
+    kept = runner_placements(
+        {"RUNNER_TEMP": temp, "UV_CACHE_DIR": "/rig/cache/uv", "CONAN_HOME": ""}
+    )
+    assert kept == {
+        "CONAN_HOME": f"{temp}/conan",
+        _paths.env_var("DATA_DIR"): f"{temp}/footman",
+    }

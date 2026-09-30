@@ -154,7 +154,7 @@ def test_missing_credentials_teach_the_dev_up_verb(
 ) -> None:
     monkeypatch.delenv("GITEA_URL", raising=False)
     monkeypatch.delenv("GITEA_TOKEN", raising=False)
-    with pytest.raises(_FAILURES, match=r"forge\.dev\.up"):
+    with pytest.raises(_FAILURES, match=r"devenv\.up"):
         _e2e.provision("gitea")
 
 
@@ -897,3 +897,59 @@ def test_a_pass_records_its_rows_on_the_local_loop_series(seeds: Seeds) -> None:
     assert row.data["scenarios"] == [
         {"name": "birth", "seconds": 12.3, "runs": 3, "failed": False}
     ]
+
+
+# --- the environment ------------------------------------------------------------
+
+
+@pytest.fixture
+def host_environment(monkeypatch: pytest.MonkeyPatch) -> _e2e.Current:
+    """A pass on a host-mode environment with its own runner label."""
+    current = _e2e.Current(
+        "scratch", "host", "http://localhost:43210", "token-abc", "scratch-macos-arm-01"
+    )
+    monkeypatch.setattr(_e2e, "CURRENT", current)
+    return current
+
+
+def test_a_host_environment_is_the_lane_s_alias_the_forge_and_the_workspace_s_home(
+    host_environment: _e2e.Current, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path)
+    lane = _e2e._lane("gitea")  # pyright: ignore[reportPrivateUsage]
+    assert lane.alias == "http://localhost:43210"
+    home = _e2e._loop_home("gitea")  # pyright: ignore[reportPrivateUsage]
+    assert home == tmp_path / "workshop-e2e" / "scratch" / "gitea"
+    # The alias requirement is the docker rig's; a localhost URL needs none.
+    _e2e._require_host_alias("gitea")  # pyright: ignore[reportPrivateUsage]
+    # The proofs read their lines with the environment's label in place
+    # of the hosted name.
+    pinned = ("coverage record: main/check-ubuntu-latest-3.14: 0 fresh",)
+    assert _e2e.with_label(pinned) == (
+        "coverage record: main/check-scratch-macos-arm-01-3.14: 0 fresh",
+    )
+    monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
+    assert _e2e.with_label(("check-ubuntu-latest-3.14",)) == (
+        "check-ubuntu-latest-3.14",
+    )
+    lane = _e2e._lane("gitea")  # pyright: ignore[reportPrivateUsage]
+    assert lane.alias == "http://gitea:3000"
+    home = _e2e._loop_home("gitea")  # pyright: ignore[reportPrivateUsage]
+    assert home == tmp_path / "workshop-e2e" / "gitea"
+
+
+def test_the_forge_credentials_come_from_the_environment_in_host_mode(
+    host_environment: _e2e.Current, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connected: list[tuple[str, str, str]] = []
+
+    def connect(kind: str, url: str, token: str) -> object:
+        connected.append((kind, url, token))
+        return object()
+
+    monkeypatch.setattr("livery.workshop._forge_lane._connect", connect)
+    monkeypatch.delenv("GITEA_URL", raising=False)
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
+    _forge, token = _e2e._dev_forge("gitea")  # pyright: ignore[reportPrivateUsage]
+    assert token == "token-abc"
+    assert connected == [("gitea", "http://localhost:43210", "token-abc")]
