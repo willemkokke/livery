@@ -77,7 +77,10 @@ the base template leaves for the records: the `dev` dependency
 group's tool lines and pytest's `addopts` are the first two, declared
 with `register_slot` and filled with `contribute` in
 `livery.workshop._slots`, a list composing as the union in
-contribution order and a scalar taking the nearest contribution. A
+contribution order and a scalar taking the nearest contribution. The
+site's private-members policy is the third, `docs.members`: `public`
+keeps each extractor's default filter, `all` documents every member,
+and any other value refuses naming both. A
 check a layer withdraws takes its lines with it. And its `options`
 are what a package may set under `[checks.<name>]` in its own
 contract, each with a type and a default; every check carries
