@@ -378,7 +378,7 @@ Deliverables:
 | Temporary | Replaced by |
 |---|---|
 | `host_tools=("cc", "c++")` on the native kinds | the toolchain declaration (phase 2) |
-| conan's `profile detect` in the cpp-conan backend | the profile from the receipt (phase 2) |
+| conan's `profile detect` in the cpp-conan backend | the receipt's profile (phase 2) |
 | the release tag as the only receipt | the `release` series rows beside it (phase 3) |
 
 ## Decision record
