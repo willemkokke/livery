@@ -15,18 +15,20 @@ the extractor on the kind record; #956, the private-members policy as a
 slot; #957, layer assets staged from the wheel and the theme slot; #958,
 examples as files) and the docs layer's three changes (#968, #970,
 #971), then phase 7's first change (#974, the conformance kit's first
-three clauses), the gate's one walk (#976), the gate over named files
-(#979), whole suites (#982) and the role verbs generated from the
+three clauses) and its second (#987, the check order and a layer's
+contribution modules), the gate's one walk (#976), the gate over named
+files (#979), whole suites (#982) and the role verbs generated from the
 checks' roles (#985). Beside the phases: the layering check's fix mode
 (#829) and phase 8's first change, the publishing opt-out (#871). On
 2026-09-28 and 2026-09-29 Willem ruled every open item the remaining
 phases waited on; the decision record carries each ruling, and the
 design section, the contracts, phases 3 to 9 and the open list carry
-their consequences. Next: phase 7's remaining clauses, then the
-remainders of phases 5 and 8, phases 7b and 9, and the layer split as
-its own plan. The design section below is written to graduate into
-`packages/workshop/docs/` after review; everything else is working
-record.
+their consequences. Next: phase 7's remaining clauses (config-fragment
+drift and contract 11's removal, then the gate's skip lines and fix
+order for a layer's checks), then the remainders of phases 5 and 8,
+phases 7b and 9, and the layer split as its own plan. The design section
+below is written to graduate into `packages/workshop/docs/` after
+review; everything else is working record.
 
 ## Why
 
@@ -3012,6 +3014,33 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   run over named files narrows the examples. Proven by a test whose
   example's test function would fail if collected, failing with the
   hook removed.
+
+- 2026-09-30, phase 7's second change (issue #987). Two clauses join
+  the kit. `check-order`: every name in a check's `after` is a check
+  the registry answers to (`livery.workshop._checks.answering`, the
+  lookup the verbs use, by name or by a further role's address), and
+  following `after` never leads back to the check; a missing name
+  stops a gate in the middle, and a loop leaves the scheduler waiting
+  on a task it runs once. `contribution-modules`: the layer's
+  `WORKSHOP_FOR`, read from its plugin module by the subject's import
+  path, maps each target to a module that imports, found without
+  running it; a missing module only refuses the mount once the
+  target is listed, so a workspace without the target would never
+  find out. One fault in the same code, fixed here: a `for` entry
+  naming a target its layer declares no contribution for crashed the
+  mount with a bare `KeyError` in
+  `livery.workshop._layers._graft_contributions`, so every `fm`
+  command failed before the layering check could name the entry,
+  which it already words; the mount now skips that target. Proven by
+  tests: a check after a missing name and two checks after each other
+  failing the clause with each named, a declaration off the shape and
+  a module that does not import failing the other, the mount going on
+  with the entry named, and the builtins passing every clause. The
+  fix-order and narrowing clauses of the plan are the engine's since
+  the rulings of 2026-09-30, so the kit judges the engine's treatment
+  of a layer's checks there: the gate's skip lines and fix order in a
+  probe walk, a change of their own after config-fragment drift and
+  contract 11's removal.
 
 ## Open
 

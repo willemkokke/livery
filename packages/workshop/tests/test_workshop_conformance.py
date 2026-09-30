@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import types
 from collections.abc import Iterator
 from dataclasses import replace
@@ -12,7 +13,13 @@ import pytest
 
 import livery.workshop.testing
 from livery.workshop import _categories, _checks, _kinds
-from livery.workshop._checks import PACKAGE, CheckRecord, GateContext, register_check
+from livery.workshop._checks import (
+    PACKAGE,
+    CheckRecord,
+    GateContext,
+    check_for,
+    register_check,
+)
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
@@ -145,6 +152,48 @@ def test_two_rules_of_one_kind_at_one_specificity_break_the_category_table(
     )
 
 
+def test_a_check_after_nothing_or_after_itself_breaks_the_check_order(
+    acme: None,
+) -> None:
+    register_check(
+        CheckRecord("late", "lint", _idle, after=("lint.gone",), layer=LAYER)
+    )
+    register_check(CheckRecord("a", "lint", _idle, after=("lint.b",), layer=LAYER))
+    register_check(CheckRecord("b", "lint", _idle, after=("lint.a",), layer=LAYER))
+    checks = tuple(check_for(name) for name in ("lint.late", "lint.a", "lint.b"))
+    found = _names(Subject(LAYER, checks=checks), "check-order")
+    assert found == [
+        "check-order: check lint.late: runs after lint.gone, which no registered"
+        " check answers to; the gate stops there",
+        "check-order: check lint.a: runs after itself through lint.b, lint.a;"
+        " the gate would wait on it for ever",
+        "check-order: check lint.b: runs after itself through lint.a, lint.b;"
+        " the gate would wait on it for ever",
+    ]
+
+
+def test_a_contribution_off_the_shape_or_naming_a_missing_module_breaks_the_clause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layer = types.ModuleType("acme_kit_layer")
+    monkeypatch.setitem(sys.modules, "acme_kit_layer", layer)
+    layer.WORKSHOP_FOR = ["acme.python"]  # type: ignore[attr-defined]
+    assert _names(Subject("acme_kit_layer"), "contribution-modules") == [
+        "contribution-modules: layer acme_kit_layer: WORKSHOP_FOR is not a map"
+        " from a target layer's import path to a module; the mount refuses the"
+        " layer"
+    ]
+    layer.WORKSHOP_FOR = {  # type: ignore[attr-defined]
+        "acme.python": "acme_kit_layer_absent.python",
+        "acme.cpp": "json",
+    }
+    assert _names(Subject("acme_kit_layer"), "contribution-modules") == [
+        "contribution-modules: layer acme_kit_layer for acme.python: names"
+        " acme_kit_layer_absent.python, which does not import; the mount refuses"
+        " once acme.python is listed"
+    ]
+
+
 # The nearest kind wins, for fragments and for categories alike.
 
 
@@ -217,7 +266,13 @@ def test_the_builtin_kinds_and_checks_pass_every_clause() -> None:
 
 def test_the_clauses_are_named_once_and_state_their_rule() -> None:
     names = [clause.name for clause in CLAUSES]
-    assert names == ["backend-protocol", "nearest-fragment", "category-table"]
+    assert names == [
+        "backend-protocol",
+        "nearest-fragment",
+        "category-table",
+        "check-order",
+        "contribution-modules",
+    ]
     assert all(clause.rule.endswith(".") for clause in CLAUSES)
 
 

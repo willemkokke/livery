@@ -302,7 +302,7 @@ def register_check(record: CheckRecord) -> None:
         )
     for role in (record.role, *record.roles):
         address = f"{role}.{record.tool}"
-        holder = _holder(address)
+        holder = answering(address)
         if holder is not None and holder != record.name:
             fail(
                 f"check {record.name!r} answers to {address}, which the check"
@@ -405,7 +405,7 @@ def option_problems(packages: tuple[Package, ...]) -> list[str]:
     for package in packages:
         for check, options in package.checks:
             record = _CHECKS.get(check)
-            holder = _holder(check)
+            holder = answering(check)
             if record is None and holder is not None:
                 problems.append(
                     f"{package.path}/workshop.toml: [checks.{check}] names the"
@@ -644,7 +644,7 @@ def extensions() -> tuple[str, ...]:
     return tuple(sorted({r.extension for r in _CHECKS.values() if r.extension}))
 
 
-def _holder(address: str) -> str | None:
+def answering(address: str) -> str | None:
     """The check answering to *address*, by its name or a further role."""
     if address in _CHECKS:
         return address
@@ -660,7 +660,7 @@ def check_for(name: str) -> CheckRecord:
 
     Refusal names the registry.
     """
-    holder = _holder(name)
+    holder = answering(name)
     if holder is None:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
     return _CHECKS[holder]

@@ -230,13 +230,18 @@ def _graft_contributions(
 
     Called after each layer mounts, so a contribution lands whichever
     of the two mounts later. A module that does not import refuses
-    naming the owner, the target and the module.
+    naming the owner, the target and the module. A ``for`` entry
+    naming a target the owner declares nothing for mounts nothing:
+    the layering check names that entry, and it can only run inside a
+    mount that went on.
     """
     for owner in present:
         for target in active.get(owner, ()):
             if target not in present or (owner, target) in grafted:
                 continue
-            module = declared[owner][target]
+            module = declared.get(owner, {}).get(target)
+            if module is None:
+                continue
             try:
                 importlib.import_module(module)
             except ModuleNotFoundError as error:

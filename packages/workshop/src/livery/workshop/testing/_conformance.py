@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import inspect
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,9 +17,15 @@ from livery.workshop._categories import (
     category_rules,
     matches,
 )
-from livery.workshop._checks import BASE_LAYER, CheckRecord, checks_by_name
+from livery.workshop._checks import (
+    BASE_LAYER,
+    CheckRecord,
+    answering,
+    checks_by_name,
+)
 from livery.workshop._fragments import package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
+from livery.workshop._layers import FOR_ATTRIBUTE
 from livery.workshop._packages import Package
 
 
@@ -29,7 +38,9 @@ class Subject:
     before the kit does.
 
     Attributes:
-        layer: The layer's import path, ``acme.layer``.
+        layer: The layer's import path, ``acme.layer``: its plugin
+            module, where the kit reads what the layer declares, its
+            contributions to other layers among them.
         kinds: The kinds the layer registers, and the kinds whose
             category tables it extends.
         checks: The checks the layer registers.
@@ -78,6 +89,8 @@ class Clause:
 BACKEND_PROTOCOL = "backend-protocol"
 NEAREST_FRAGMENT = "nearest-fragment"
 CATEGORY_TABLE = "category-table"
+CHECK_ORDER = "check-order"
+CONTRIBUTION_MODULES = "contribution-modules"
 
 
 # The backend protocol.
@@ -343,6 +356,104 @@ def _category_table(subject: Subject) -> list[Violation]:
     return list(dict.fromkeys(violations))
 
 
+# The order of a layer's checks.
+
+
+def _loop(start: str) -> list[str]:
+    """The checks from *start* back to itself through ``after``; empty without one."""
+    records = checks_by_name()
+
+    def visit(name: str, path: list[str], seen: set[str]) -> list[str]:
+        record = records.get(name)
+        if record is None:
+            return []
+        for earlier in record.after:
+            target = answering(earlier)
+            if target is None:
+                continue
+            if target == start:
+                return [*path, target]
+            if target in seen:
+                continue
+            seen.add(target)
+            found = visit(target, [*path, target], seen)
+            if found:
+                return found
+        return []
+
+    return visit(start, [], {start})
+
+
+def _check_order(subject: Subject) -> list[Violation]:
+    violations: list[Violation] = []
+    for record in subject.checks:
+        where = f"check {record.name}"
+        for earlier in record.after:
+            if answering(earlier) is None:
+                violations.append(
+                    Violation(
+                        CHECK_ORDER,
+                        where,
+                        f"runs after {earlier}, which no registered check"
+                        " answers to; the gate stops there",
+                    )
+                )
+        loop = _loop(record.name)
+        if loop:
+            violations.append(
+                Violation(
+                    CHECK_ORDER,
+                    where,
+                    f"runs after itself through {', '.join(loop)}; the gate"
+                    " would wait on it for ever",
+                )
+            )
+    return violations
+
+
+# A layer's contributions to other layers.
+
+
+def _imports(module: str) -> bool:
+    """Whether *module* is imported already, or can be found without running it."""
+    if module in sys.modules:
+        return True
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _contribution_modules(subject: Subject) -> list[Violation]:
+    if not _imports(subject.layer):
+        return []
+    declared: object = getattr(
+        importlib.import_module(subject.layer), FOR_ATTRIBUTE, {}
+    )
+    if not isinstance(declared, dict) or not all(
+        isinstance(target, str) and isinstance(module, str)
+        for target, module in declared.items()  # pyright: ignore[reportUnknownVariableType]
+    ):
+        return [
+            Violation(
+                CONTRIBUTION_MODULES,
+                f"layer {subject.layer}",
+                f"{FOR_ATTRIBUTE} is not a map from a target layer's import path"
+                " to a module; the mount refuses the layer",
+            )
+        ]
+    return [
+        Violation(
+            CONTRIBUTION_MODULES,
+            f"layer {subject.layer} for {target}",
+            f"names {module}, which does not import; the mount refuses once"
+            f" {target} is listed",
+        )
+        for target, module in declared.items()  # pyright: ignore[reportUnknownVariableType]
+        if not _imports(str(module))  # pyright: ignore[reportUnknownArgumentType]
+    ]
+
+
 CLAUSES: tuple[Clause, ...] = (
     Clause(
         BACKEND_PROTOCOL,
@@ -362,6 +473,18 @@ CLAUSES: tuple[Clause, ...] = (
         "A path's category is the most specific rule's, the nearer kind"
         " winning a tie between kinds, and two rules of one kind never tie.",
         _category_table,
+    ),
+    Clause(
+        CHECK_ORDER,
+        "Every check a check runs after is registered, and following the"
+        " checks it runs after never leads back to it.",
+        _check_order,
+    ),
+    Clause(
+        CONTRIBUTION_MODULES,
+        "A layer declares its contributions to other layers as a map from a"
+        " target layer's import path to a module that imports.",
+        _contribution_modules,
     ),
 )
 """Every clause, in the order the kit judges them."""
