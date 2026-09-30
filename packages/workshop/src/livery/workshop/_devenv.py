@@ -229,9 +229,12 @@ def spawn_detached(argv: Sequence[str], *, cwd: Path, log: Path) -> int:
     Stdout and stderr go to *log*, appended; stdin is closed. The
     child leads its own session (its own process group on Windows), so
     the shell that ran the verb never owns it and `down` can stop it
-    by its pid alone.
+    by its pid alone. The environment is this process's own, passed
+    on purpose: a daemon inherits the entered environment, the store's
+    node on PATH included, which the runner's JavaScript actions need.
     """
     log.parent.mkdir(parents=True, exist_ok=True)
+    environment = dict(os.environ)
     with log.open("ab") as sink:
         if sys.platform == "win32":
             flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
@@ -244,6 +247,7 @@ def spawn_detached(argv: Sequence[str], *, cwd: Path, log: Path) -> int:
                 stdout=sink,
                 stderr=subprocess.STDOUT,
                 creationflags=flags,
+                env=environment,
             )
         else:
             child = subprocess.Popen(
@@ -253,6 +257,7 @@ def spawn_detached(argv: Sequence[str], *, cwd: Path, log: Path) -> int:
                 stdout=sink,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
+                env=environment,
             )
     return child.pid
 
