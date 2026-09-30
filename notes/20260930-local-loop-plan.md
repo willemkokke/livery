@@ -228,8 +228,10 @@ pass resumes where the last one stopped, as it does today.
 `gitea-runner` becomes a `download` record (its releases ship a raw
 binary per host: darwin-arm64, linux-x64, linux-arm64, windows-x64),
 so the store supplies it and `fm forge.dev.up --setup=host` registers
-it against the local Gitea with `ubuntu-latest:host,linux:host` and
-starts it as a child of the rig, its config written by the verb:
+it against the local Gitea with the environment's name as its label
+(`<env>:host`, one hardcoded name until environments exist), which
+the loop's contract names as its runner, and starts it as a child of
+the rig, its config written by the verb:
 `host.workdir_parent` under the environment's directory and
 `runner.envs` naming the rig's cache: `FOOTMAN_DATA_DIR`,
 `UV_CACHE_DIR` and `CONAN_HOME` under `forge-dev/cache/`, on one
@@ -245,8 +247,8 @@ and the manylinux images are native arm64, and every job after the
 first finds the store, the wheels and conan's cache warm. What it does
 not cover: a job's Linux-shaped steps (`apt-get` for docs
 requirements) run on macOS and fail there, so a scenario needing them
-names a container setup; the runner's `ubuntu-latest` label is a name
-for "this machine", not a promise of Ubuntu.
+names a container setup; a job's `runs-on` names the environment,
+never a platform the machine is not.
 
 The GitLab lane's runner follows in the same phase: `gitlab-runner`
 as a record and a host process with the shell executor.
