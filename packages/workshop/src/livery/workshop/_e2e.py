@@ -25,7 +25,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
-from livery.workshop._state import Series
+from livery.workshop._series import LOOP
 from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
@@ -2621,10 +2621,9 @@ def timing_table(timings: Sequence[Timing]) -> list[str]:
     return lines
 
 
-#: The local series a pass writes its rows to: one file per pass on
-#: the driver's checkout, never pushed, so passes compare across days
-#: on one machine. `fm store.show loop` reads it.
-LOOP_SERIES = Series("loop", window=200, ci_only=False, local=True)
+#: The local series a pass writes its rows to, declared with the
+#: others so `fm store.show loop` reads it and the janitor bounds it.
+LOOP_SERIES = LOOP
 
 
 def record_pass(root: Path, pass_: Pass, asked: str) -> str:
