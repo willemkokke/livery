@@ -29,7 +29,8 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
 > later. I am going to want the ability to bring up persistent local
 > development environments, both in docker and on the host directly
 > (only Gitea makes that easy). They should become as disposable as
-> uv has made venvs. Willem, 2026-09-30
+> uv has made venvs. Can we implement the e2e on top of a local
+> devenv then? Willem, 2026-09-30
 
 ## What exists
 
@@ -87,7 +88,10 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
    native, with the store, uv's cache and footman's data persistent.
 4. **Emulation is opt-in.** No `platform: linux/amd64` unless a setup
    names it.
-5. **Caches survive `--fresh`.** `--purge-cache` removes them, and
+5. **Caches are the rig's.** The tool store, uv's cache, conan's
+   home and footman's data live in one directory of the rig, shared
+   by every environment on the machine, and survive `--fresh` and
+   the removal of any environment. `--purge-cache` removes them, and
    names each thing it removed.
 6. **The bench is a verb.** It runs a scenario set under each named
    setup, no caches included, records wall time per scenario and per
@@ -115,7 +119,9 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
     directory; nothing else on the machine changes: no system
     service, no daemon registered with the operating system. Gitea
     comes in both modes; GitLab in docker only. Bringing one up from
-    nothing costs seconds, not minutes, the way `uv venv` does.
+    nothing costs seconds, not minutes, the way `uv venv` does. The
+    loop runs on an environment: `fm ci.e2e --env=<name>`, by default
+    a disposable `e2e` that `--fresh` removes and recreates.
 
 ## The design
 
@@ -154,7 +160,7 @@ A table in code, `SETUPS`, one row per name:
 |---|---|---|---|---|
 | `host` (default) | gitea | a host process | store, uv, data | native |
 | `host-bare` | gitea | a host process | nothing | native |
-| `container` | gitea | a container, host mode | store, uv, data (cache server, volume) | native |
+| `container` | gitea | container, host mode | store, uv, data (cache server) | native |
 | `container-bare` | gitea | a container, host mode | nothing | native |
 | `docker-jobs` | gitea | a container running docker jobs | the cache server | native |
 | `gitlab-host` | gitlab | a host process (shell executor) | store, uv, data | native |
@@ -171,10 +177,18 @@ says so, and the pass refuses before the minutes are spent.
 `fm forge.dev.up --env=<name> --mode=docker|host` brings an
 environment up by name; the default name is `dev` and the default
 mode is `host`. Each environment owns one directory under the rig's
-data directory (`forge-dev/<name>/`): Gitea's data, the runner's
-registration and working directory, the persistent placements (the
-store, uv's cache, footman's data, conan's home), the seed's
-credentials, the ports it took, and the pid files of its processes.
+data directory (`forge-dev/envs/<name>/`): Gitea's data, the
+runner's registration and working directory, the seed's credentials,
+the ports it took, and the pid files of its processes. The caches
+are not there: `forge-dev/cache/` holds the tool store, uv's cache,
+conan's home and footman's data for every environment on the
+machine, on one filesystem with the workspaces so uv keeps
+hardlinking. A new environment is warm from its first job, and
+removing one removes no cache. A GitLab environment shares it the
+same way: GitLab itself runs in docker, since it ships as an omnibus
+of services for Linux and no single binary, and its runner is a host
+process with the shell executor, so its jobs read the rig's cache
+directly. GitLab on the host is not offered.
 `fm forge.dev.ls` lists them with their mode, ports and state;
 `fm forge.dev.down --env=<name>` stops one and keeps its directory;
 `fm forge.dev.rm --env=<name>` stops it and removes the directory
@@ -200,6 +214,15 @@ environment, the seed is API calls, and a fresh environment is up in
 seconds. A pass that wants a clean forge takes a new environment
 instead of purging an old one.
 
+The loop runs on an environment. `fm ci.e2e --env=<name>` births its
+workspace on that environment's forge, publishes its dev wheels to
+that forge's registry and follows its runs there; the default is a
+disposable `e2e` environment, and `--fresh` removes it and creates it
+again, which is the whole of what fresh means once environments
+exist. A named environment kept between passes (`--env=dev`) is the
+iterating case: the repository and the registry persist, and the
+pass resumes where the last one stopped, as it does today.
+
 ### The runner as a host process
 
 `gitea-runner` becomes a `download` record (its releases ship a raw
@@ -207,11 +230,11 @@ binary per host: darwin-arm64, linux-x64, linux-arm64, windows-x64),
 so the store supplies it and `fm forge.dev.up --setup=host` registers
 it against the local Gitea with `ubuntu-latest:host,linux:host` and
 starts it as a child of the rig, its config written by the verb:
-`host.workdir_parent` and `runner.envs` under the rig's data
-directory. The persistent placements are the runner's environment:
-`FOOTMAN_DATA_DIR`, `UV_CACHE_DIR` and `CONAN_HOME` under one
-directory on one filesystem with the workspaces, hse's rule for uv's
-hardlinks. The entry keeps a placement that is already set and places
+`host.workdir_parent` under the environment's directory and
+`runner.envs` naming the rig's cache: `FOOTMAN_DATA_DIR`,
+`UV_CACHE_DIR` and `CONAN_HOME` under `forge-dev/cache/`, on one
+filesystem with the workspaces, hse's rule for uv's hardlinks. The
+entry keeps a placement that is already set and places
 under the job's temp only where nothing is set, which is the one code
 change the hosted lane sees, and a no-op there. `fm forge.dev.down`
 stops the process; `--purge-cache` removes the directory.
@@ -271,9 +294,22 @@ The pin `cibuildwheel>=3.0,<4` resolves to 3.4.1. The 4 line raises on
 a failed container start, verifies interpreter downloads, retries
 downloads, pins container images by digest, and builds CPython 3.15
 by default; it also makes `delvewheel` the default repair step on
-Windows, which changes what a Windows wheel carries. The move is
-Willem's ruling (decision record, once given); the Windows wheels'
-repair step is reviewed in the same change.
+Windows, so a Windows wheel carries the DLLs its extension needs,
+which is wanted. cibuildwheel becomes a `pypi` record of the tool
+store with the floor 4.2.1, in the nanobind kind's tool list beside
+cmake, ninja and conan (Willem: in toolroom, like everything that can
+be); the lock pins the newest version at each `fm tools.lock`, every
+run installs that digest, and the backend calls the typed handle
+instead of `uv tool run`. It is the one tool the code runs outside
+the store today. Two things ride the same change: delvewheel
+patches or creates `__init__.py` in each top-level package to add the
+vendored DLLs' directory to the search path, and a nanobind package
+lives in a PEP 420 namespace, so the repair command passes
+`--namespace-pkg <namespace>` or the namespace gains an `__init__.py`
+that breaks every sibling; and a test pins the wheel's file list on
+the Windows leg. A wheel whose conan dependencies are static carries
+nothing extra and the step is a no-op. A major 5 arrives through a
+lock change, visible in review, never through a run.
 
 ## Phases
 
@@ -296,8 +332,10 @@ resolve in dependency order; the table has one row per scenario run.
 
 Deliverables: the `gitea`, `gitea-runner` and `gitlab-runner`
 records; `fm forge.dev.up --env --mode`, `fm forge.dev.ls`, `fm
-forge.dev.down --env`, `fm forge.dev.rm --env`; the environment's
-directory with its ports and pid files; Gitea as a host process with
+forge.dev.down --env`, `fm forge.dev.rm --env`; `fm ci.e2e --env`
+with the disposable `e2e` default and `--fresh` as remove-and-create;
+the rig's cache directory; the environment's directory with its
+ports and pid files; Gitea as a host process with
 its written `app.ini`; the setups `host` and `gitlab-host`; the
 runner's config and registration written by the verb; the persistent
 placements; the entry's keep-what-is-set rule; `--purge-cache`; the
@@ -363,7 +401,7 @@ changes the tag.
 | the runner container as the only runner | the host-process setups (phase 2) |
 | one pinned compose project as the only environment | named environments (phase 2) |
 | `uv`'s image as the GitLab job image | the image built from the lock (phase 4) |
-| the wheels job's binds refused on the loop (#931) | the host setup's filesystem (phase 2) |
+| the wheels job's binds refused on the loop (#931) | the host setup (phase 2) |
 
 ## Decision record
 
@@ -395,6 +433,21 @@ changes the tag.
   both in docker and directly on the host, which only Gitea makes
   easy; as disposable as uv has made venvs. Contract 10 and the
   "Environments" section; phase 2 carries them.
+- 2026-09-30, Willem's question, answered yes: the loop runs on top
+  of a local environment. The consequence taken with it: the caches
+  are the rig's and shared, an environment is the forge's state
+  alone, and a fresh pass is a new environment. Contracts 5 and 10.
+- 2026-09-30, Willem: shipping the dependency DLLs on Windows is
+  wanted; cibuildwheel moves to `>=latest`, and it lives in toolroom
+  like everything that can be: a `pypi` record with the floor 4.2.1,
+  the lock pinning the newest. The "cibuildwheel" section carries the
+  namespace flag and the wheel-list test that ride with it; open item
+  5 closes.
+- 2026-09-30, Willem: sharing the cache between all environments is
+  the goal; GitLab environments too, in docker, with GitLab on the
+  host not worth the complexity. The "Environments" section states
+  how a GitLab environment shares the cache: its runner is the host
+  process, GitLab stays a container.
 
 ## Open
 
@@ -411,8 +464,9 @@ changes the tag.
    name so the loop's contract stays as emitted, or label
    `macos-latest:host` and have the loop's contract name it. Owner:
    Willem, before phase 2.
-5. The cibuildwheel 4 line: move, with the Windows repair step
-   reviewed. Owner: Willem.
+5. Resolved 2026-09-30: cibuildwheel is a `pypi` record with the
+   floor 4.2.1, the lock pinning the newest, with the namespace flag
+   on the Windows repair step and a wheel-list test. Decision record.
 6. Gitea's version in host mode: the docker mode pins a nightly by
    digest for run cancellation; the record pins a release binary by
    version and digest, so the two modes may differ until 1.28 ships.
