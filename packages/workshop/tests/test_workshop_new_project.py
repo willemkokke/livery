@@ -232,7 +232,10 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
     fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
-    assert 'layers = ["livery.workshop", "acme_tools.brand"]' in contract
+    assert (
+        'layers = ["livery.workshop", { import = "livery.workshop.layers.docs",'
+        ' dist = "livery-workshop" }, "acme_tools.brand"]'
+    ) in contract
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
     assert '"acme_tools.brand" = "acme_tools.brand._tasks"' in pyproject

@@ -3,7 +3,7 @@
 Status: written 2026-09-30 from Willem's rulings of 2026-09-29 and
 2026-09-30. Phase 1 (the host allowance for store tools) is built in
 the base (issue #937, Willem's go of 2026-09-30). Phases 2 to 4 belong to
-`livery.workshop.cpp`, so they wait for that layer's extraction (the
+`livery.workshop.layers.cpp`, so they wait for that layer's extraction (the
 extensible gate plan's open item 17 and the plan it names).
 
 ## The prompt (Willem)
@@ -96,7 +96,7 @@ extensible gate plan's open item 17 and the plan it names).
    Nothing on the merge path waits for a person.
 10. **A toolchain is the cpp layer's.** The declaration, the probes,
     the toolchain receipt, the `llvm` and `gcc` records and the
-    unreal kind's derivation live in `livery.workshop.cpp`. The
+    unreal kind's derivation live in `livery.workshop.layers.cpp`. The
     table is `[cpp.toolchain]`: the cpp layer owns `[cpp]` the way
     the forge layer owns `[forge]` and the docs layer `[docs]`. A
     workspace that mounts no cpp layer has no `[cpp]` table (the
@@ -164,7 +164,7 @@ accident, and nobody special-cases a tool.
 
 ### Where it lives
 
-The cpp layer, `livery.workshop.cpp`, as the extensible gate plan
+The cpp layer, `livery.workshop.layers.cpp`, as the extensible gate plan
 rules it: a python-only project mounts no cpp layer and pays nothing
 for compilers. The base keeps the host allowance for store tools and
 the receipt shape; the layer registers the `[cpp.toolchain]` table, the
@@ -459,7 +459,7 @@ Deliverables:
   the host allowance first.
 - 2026-09-30, Willem: this is a thing only when a cpp layer is
   installed as well. Contract 10 places every toolchain part in
-  `livery.workshop.cpp`; the host allowance stays the base's, and
+  `livery.workshop.layers.cpp`; the host allowance stays the base's, and
   phases 2 to 4 wait for the layer's extraction.
 - 2026-09-30, Willem: the table is `[cpp.toolchain]`, under the cpp
   layer's own `[cpp]`, as `[forge]` and `[docs]` are their layers'.

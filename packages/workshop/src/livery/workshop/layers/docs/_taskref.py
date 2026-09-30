@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import cast
 
 from livery.footman import fail
-from livery.workshop._docs import nav_block_markers, write_nav_block
+from livery.workshop._navblocks import nav_block_markers, write_nav_block
 from livery.workshop._packages import Package, discover_packages
 
 #: The nav marker block the reference generator owns in a providing

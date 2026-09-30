@@ -56,6 +56,8 @@ dev = ["types-pyyaml"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._tasks"
+# The docs layer, a layer inside this wheel with a surface of its own.
+"livery.workshop.layers.docs" = "livery.workshop.layers.docs._tasks"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts

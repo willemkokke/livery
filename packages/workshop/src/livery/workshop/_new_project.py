@@ -210,6 +210,12 @@ def new_project(
         print("  workshop.toml: already seeded")
     else:
         spelled = ", ".join(f'"{entry}"' for entry in stack)
+        if "livery.workshop" in stack:
+            # The site's layer rides in the workshop wheel: listed by
+            # its import path, its distribution the workshop's own.
+            spelled += (
+                ', { import = "livery.workshop.layers.docs", dist = "livery-workshop" }'
+            )
         lines = [
             "[workspace]",
             f"layers = [{spelled}]",

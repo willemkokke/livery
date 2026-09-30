@@ -15,6 +15,7 @@ def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
     assert layer_names(ROOT) == (
         "livery.workshop",
+        "livery.workshop.layers.docs",
         "livery.forge",
         "livery.toolroom.bench",
         "livery.footman",

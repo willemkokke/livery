@@ -380,7 +380,7 @@ def build_wheels(
         Failed: when cibuildwheel exits non-zero, or the wheels it
             wrote carry no platform tag.
     """
-    from livery.workshop._docs import materialise_module_docs
+    from livery.workshop._docs_contract import materialise_module_docs
 
     materialise_module_docs(package)
     env = dict(os.environ)

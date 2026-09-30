@@ -3052,7 +3052,7 @@ _NAV_ENTRY = _re.compile(r'\{\s*"(?P<key>[^"]+)"\s*=\s*"_generated/tools/')
 
 def write_tools_nav(generated: Path, keys: list[str]) -> Path:
     """Emit the Tools nav block's entries from *keys* into *generated*; the path."""
-    from livery.workshop._docs import write_nav_block
+    from livery.workshop._navblocks import write_nav_block
 
     entries = [f'{{ "{k}" = "_generated/tools/{k}.md" }},' for k in keys]
     return write_nav_block(generated, "tools", entries)

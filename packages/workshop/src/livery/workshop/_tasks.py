@@ -24,7 +24,6 @@ from livery.workshop import (  # noqa: F401
     _clean,
     _commit,
     _devenv,
-    _docs,
     _e2e,
     _env_tasks,
     _graph,

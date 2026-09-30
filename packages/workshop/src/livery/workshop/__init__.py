@@ -14,8 +14,15 @@ steps and never hands a raw forge verb to a user.
 
 from __future__ import annotations
 
-from livery.workshop._docs import rewrite_nav_block
+from pkgutil import extend_path
+
+# Layers under livery.workshop.layers may ship as distributions of
+# their own: a tree that carries livery/workshop/layers/<name>/ and no
+# livery/workshop/__init__.py of its own joins this package's path.
+__path__ = extend_path(__path__, __name__)
+
 from livery.workshop._layers import layer_names, mount_layers, workspace_root
+from livery.workshop._navblocks import rewrite_nav_block
 from livery.workshop._packages import (
     Edge,
     Package,

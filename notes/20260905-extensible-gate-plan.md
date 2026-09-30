@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's first change, #968) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -123,13 +123,13 @@ and the entry contract, the root project and its `tasks.py`, the
 render and the drift gate, the gate's walk, the abstract base kind
 with the changelog engine, and the workspace's own checks (render
 drift, provenance, layering). It registers no language. Each
-language is a layer derived from the base: `livery.workshop.python`
+language is a layer derived from the base: `livery.workshop.layers.python`
 carries the python package kind, its template, its checks
 (formatting, lint, one type checker, the tests with their coverage
-floors) and its tools; `livery.workshop.cpp` carries the C++ kinds
+floors) and its tools; `livery.workshop.layers.cpp` carries the C++ kinds
 the same way, and `livery.workshop.nanobind`, a kind layer rather
 than a language, depends on both. Three more layers derive from the
-base and register no language: `livery.workshop.docs` assembles the
+base and register no language: `livery.workshop.layers.docs` assembles the
 site, judges the docs and runs the examples, asking each kind record
 for its extractor and its example runner; `livery.workshop.playground`
 depends on docs and python and adds the browser sandbox and the
@@ -699,7 +699,7 @@ its fix, `fm layers` and the doctor's discovery landed 2026-09-28
   serial-then-parallel ordering stays implemented once (contract
   16).
 - **Contributions by target.** A layer's plugin module declares
-  `WORKSHOP_FOR = {"livery.workshop.python": "livery.housekeeping.python", ...}`,
+  `WORKSHOP_FOR = {"livery.workshop.layers.python": "livery.housekeeping.python", ...}`,
   a map from target layer to the module carrying the registrations
   for that target. The mount grafts a contribution module when both
   its owner and its target are mounted, whichever mounts later; a
@@ -1197,7 +1197,7 @@ gaining gcc and gcov if it lacks them.
 
 Extraction moves to the kind record (Python's griffe wiring is the
 first implementation), policy to layer registration, and assembly to
-`livery.workshop.docs`, a layer derived from the base that registers
+`livery.workshop.layers.docs`, a layer derived from the base that registers
 no language (ruled 2026-09-28): the site build and its CI job, the
 docs categories (prose, nav, asset, generated, example), the examples
 check, the development section rendered from the prose fragments of
@@ -1332,7 +1332,7 @@ phase 4, and loses the three tools from the `dev` group, which
 arrive through the slot.
 
 The python package kind and its tooling leave the base too, into
-`livery.workshop.python` (ruled 2026-09-28, open item 17), a layer
+`livery.workshop.layers.python` (ruled 2026-09-28, open item 17), a layer
 derived from the base that the house depends on. That extraction
 is a plan of its own, sequenced with the C++ layer's, and this
 phase does not wait for it. Until it lands the python kind is
@@ -1811,7 +1811,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   Contract 14 states the aim; open item 16 lists what a fragment, a
   region and content cannot do, and the two ways out.
 - 2026-09-28, the C++ support becomes a layer of its own, named
-  `livery.workshop.cpp` (Willem: sounds good), so a python-only
+  `livery.workshop.layers.cpp` (Willem: sounds good), so a python-only
   project pays nothing for the conan kinds, their five tools, the
   compilers, the conan registry kind and the releases route. The
   spelling follows `livery.toolroom.bench`, a distribution of its
@@ -1834,8 +1834,8 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   (Willem, against the agent's lean that they stay one: the base
   contains enough to run the python that operates the workshop; the
   python package kinds and their tooling are separate and derived
-  from the base). `livery.workshop.python` beside
-  `livery.workshop.cpp`, each a layer depending on the base, and
+  from the base). `livery.workshop.layers.python` beside
+  `livery.workshop.layers.cpp`, each a layer depending on the base, and
   the house depending on the languages it wants. Contract 10 and
   the design section restated; open items 12 and 17 carry the sets
   and the extraction.
@@ -2662,6 +2662,67 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   table replaces the workspace's claims under ruff's `extend`, so the
   four packages that carry one spell it `extend-per-file-ignores`
   (issue #965 asks the render or the layering check to enforce that).
+
+- 2026-09-30, the docs layer's rulings, Willem's, before its first
+  change (issue #968). An example file is brought as close to the
+  normal checks as possible, filed as #967 rather than addressed in
+  the examples move. A layer that lives inside the workshop wheel is a
+  package under `livery.workshop.layers.<name>`, able to become a
+  distribution of its own later but not one now, so the toolchain
+  plan's cpp layer is `livery.workshop.layers.cpp`; for that,
+  `livery.workshop` keeps its `__init__.py` and extends its path with
+  `pkgutil.extend_path`, and so does `livery/workshop/layers/`,
+  whose `__init__.py` carries the path extension alone, the layering
+  check refusing anything more (a bare directory was the first cut;
+  griffe, the API extractor's collector, collects nothing under one,
+  so the pkgutil shape holds at both levels); the road after
+  that is the pure PEP 420 shape, the public surface leaving the
+  `__init__` for a public API module, because layers, third-party
+  ones included, call the workshop and what they call is public API
+  rather than the private modules everything uses today, and the site
+  will document public API only. The site's job comes with the layer:
+  mounting the docs layer contributes the job, and the job builds what
+  the affected walk tagged. The base knows the minimum of docs
+  generation, and everything zensical-related is the layer's.
+
+- 2026-09-30, the docs layer's first change (issue #968): the site's
+  assembly, verbs and slots leave the base for
+  `livery.workshop.layers.docs`. The assembly module moved whole
+  (`_site.py`, with `_llms.py` and `_taskref.py` beside it) into the
+  layer package, whose `_tasks.py` is its `footman.tasks` entry point
+  (`livery.workshop.layers.docs`) and registers the `docs` group under
+  the layer's identity; the contract lists the layer as a table naming
+  `livery-workshop` as its distribution, and a new project's seed
+  lists it beside the base. The base keeps two seam modules:
+  `livery.workshop._navblocks` (the markers and the block writers
+  generators use; `rewrite_nav_block` stays public) and
+  `livery.workshop._docs_contract` (the `[docs]` table and its
+  generators, the docs tree's layout, the wheel-side docs copy, the
+  publish seam, the categories the site reads), and gains
+  `livery.workshop._site_files`, a registry of files a mounted layer
+  renders at the CI emission, which the layer fills with the site's
+  override template. `livery.workshop` and `livery.workshop.layers`
+  extend their paths the pkgutil way, and the layering check gains
+  `base-imports-no-layer`: a base module importing under
+  `livery.workshop.layers` refuses, and a layers `__init__.py`
+  carrying more than the path extension refuses. Proven by tests: the
+  two refusals, a second tree's `livery/workshop/layers/acme`
+  importing beside the docs layer in a fresh interpreter, the layer's
+  entry point resolving to the `docs` group with its five verbs, the
+  base task module free of the site, the seam module carrying what
+  the base reads. The livery site was built on main (1d6b1426) and on
+  the branch and the articles diffed: 601 of 615 shared pages
+  identical; 11 API pages changed where docstrings name the moved
+  modules, the workshop's task reference lists the docs verbs under
+  the layer's provider, one coverage page carries the machine's
+  report state and the workshop index the new paragraph; the three
+  moved modules' pages sit under `layers/docs/` now with the layer's
+  own pages and the three seam modules' pages new; toolroom's three
+  task pages in the baseline were a stale generated tree of the main
+  checkout, since toolroom advertises no task entry point. Not this
+  change: the layer-contributed CI job (the third ruling), the
+  extractor as data with the mkdocstrings lines out of the python
+  backend, and the development section from the prose fragments.
 
 ## Open
 
