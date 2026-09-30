@@ -521,7 +521,14 @@ changes the tag.
   release; that axis was missing. Contract 11 and phase 3b: `--layer`
   births the layer's members and runs the `release` set. The plain
   pass's default of `develop` is the agent's call, said so in the
-  reply, open to his change.
+  reply.
+- 2026-09-30, Willem: the loop's defaults are the agent's to set, as
+  the one driving it ("set whatever defaults you think are best for
+  you driving this"). Set, and recorded here as the agent's: a plain
+  pass runs `develop` on the base's python member; `--layer` runs the
+  `release` set; the default setup is `host`; a pass uses a disposable
+  `e2e` environment and hand work a persistent `dev`; one host runner
+  per environment unless asked. A contract stays his ruling.
 - 2026-09-30, Willem: runners are named `<env>-<host>-<arch>-<nn>`,
   the number of runners per environment is configurable, and one may
   run in emulation beside a native one, for testing an x64-specific
