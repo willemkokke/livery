@@ -404,8 +404,16 @@ def _event(**kwargs: object) -> HookEvent:
 
 
 def test_post_edit_is_best_effort_and_touches_only_python(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The hook walks the workspace's registry from the project root,
+    # where a real hook runs.
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.chdir(tmp_path)
+    # A desk's edit: the gate's own test run sets the runner's
+    # variables, under which a fix refuses.
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     victim = tmp_path / "messy.py"
     victim.write_text("x=1\n")
     post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
@@ -418,7 +426,15 @@ def test_post_edit_is_best_effort_and_touches_only_python(
     assert other.read_text() == "#Heading\n"
 
 
-def test_post_edit_never_removes_an_import_mid_edit(tmp_path: Path) -> None:
+def test_post_edit_never_removes_an_import_mid_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.chdir(tmp_path)
+    # A desk's edit: the gate's own test run sets the runner's
+    # variables, under which a fix refuses.
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     # An edit in flight adds the import before the code that uses
     # it; the hook firing between the two edits must fix everything
     # else and leave the import standing (measured deleted, twice in

@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) and the gate's one walk (#976) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) the gate's one walk (#976) and the role verbs' removal (#979) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2876,6 +2876,35 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   package without its files and running once one appears, a
   workspace without python starting no python check, and the whole
   gate's eight members unchanged on a workspace with python.
+
+- 2026-10-01, the role verbs go (issue #979). `fm format`, `fm lint`,
+  `fm typecheck`, `fm typecomplete` and `fm test`, which called the
+  python backend's tools directly, are gone; the registry's checks
+  are the gate's whole surface. `fm check <paths>` walks the registry
+  over exactly the named files, or the files git holds under a named
+  directory: every check whose claims reach one of them runs over
+  them and no other (ruff, the type checkers and clang-format take the
+  files themselves, the test check selects the named test files, the
+  examples runner the named examples), a check without claims does
+  not run, since it cannot say which of them it reads, and nothing is
+  recorded as proved. `--safe-fix` runs the fixers in their in-flight
+  mode, which for ruff withholds the code-removing rules, and refuses
+  beside `--fix`; `--point=<point>` hands a CI point to the test
+  role, so `fm check --full --point=nightly` replaces `fm test --
+  --workshop-point nightly`. The post-edit hook runs the walk's
+  fixers over the edited file and judges nothing
+  (`livery.workshop._quality.fix_files`), so a C++ file gets
+  clang-format on edit through the same claims. The phase-audit skill,
+  the rules fragment and the docs name the new spellings. Proven by
+  tests: both fix flags refusing, the verbs absent, a path's files
+  (a file, a directory, a path outside the root and a missing one), a
+  source file reaching the style and type checks and not the tests, a
+  test file running alone at the point asked, a path no claim reaches
+  running nothing, the fixers-only walk judging nothing, and the hook
+  healing a file and keeping an import mid-edit. Open, asked the same
+  day: whether `fm test`'s passthrough of pytest arguments survives as
+  `fm check <paths> -- <arguments>` for the test role; this change
+  ships without it.
 
 ## Open
 

@@ -180,6 +180,8 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
         tests: object = None,
         examples: tuple[str, ...] = (),
         between: Callable[[], None] | None = None,
+        point: str = "",
+        safe: bool = False,
     ) -> None:
         # The walk's fixers rewrite, then the hook between them and the
         # judges measures the tree the judges read.
@@ -242,6 +244,8 @@ def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
         tests: dict[str, tuple[str, ...]] | None = None,
         examples: tuple[str, ...] = (),
         between: Callable[[], None] | None = None,
+        point: str = "",
+        safe: bool = False,
     ) -> None:
         seen.append((tuple(p.path for p in subset), dict(tests or {})))
 
@@ -358,8 +362,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, tests=None, examples=(), between=None: (
-            gated.append(tuple(p.path for p in subset))
+        lambda subset, *, fix=False, tests=None, examples=(), **_rest: gated.append(
+            tuple(p.path for p in subset)
         ),
     )
     _quality.check()
@@ -472,8 +476,8 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, tests=None, examples=(), between=None: (
-            gated.append(tuple(p.path for p in subset))
+        lambda subset, *, fix=False, tests=None, examples=(), **_rest: gated.append(
+            tuple(p.path for p in subset)
         ),
     )
     _quality.check()

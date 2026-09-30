@@ -1279,10 +1279,11 @@ def examples_of(package: Package) -> list[Path]:
     return sorted(path for path in base.rglob("*.py") if path.name != "conftest.py")
 
 
-def run_examples(package: Package, root: Path) -> None:
+def run_examples(package: Package, root: Path, files: tuple[str, ...] = ()) -> None:
     """Run *package*'s documentation examples, one test per file.
 
-    Pytest over the package's ``docs/examples/`` directory, whose
+    Pytest over the package's ``docs/examples/`` directory, or over
+    *files* alone when named, whose
     files the workshop's examples plugin collects
     ([livery.workshop._pytest_examples][]), from the workspace root so
     the workspace's pytest configuration applies. Captured and printed
@@ -1292,9 +1293,8 @@ def run_examples(package: Package, root: Path) -> None:
     if not examples_of(package):
         print(f"  examples: {package.path} has none")
         return
-    result = pytest.opts(in_process=False, cwd=root, nofail=True)(
-        f"{package.path}/docs/examples"
-    )
+    targets = files or (f"{package.path}/docs/examples",)
+    result = pytest.opts(in_process=False, cwd=root, nofail=True)(*targets)
     if result.code != 0:
         print(result.stdout, end="")
         print(result.stderr, end="")
