@@ -407,10 +407,10 @@ under the temp otherwise.
 
 **Acceptance**
 
-- `fm forge.dev.up --env=scratch --mode=host` from nothing, on a
-  machine whose store holds the records, is up and seeded within 30
-  seconds, measured and quoted in the decision record; `fm
-  forge.dev.rm --env=scratch` leaves no file and no process.
+- `fm devenv.up --env=scratch` from nothing, on a machine whose store
+  holds the records, is up and seeded within 30 seconds: 25 s
+  measured 2026-09-30 (decision record); `fm devenv.rm --env=scratch`
+  leaves no file and no process.
 - `fm ci.e2e --scenario=develop` on the `host` setup, warm, completes
   in the time the bench records, quoted in the decision record with
   the cold time beside it.
@@ -561,6 +561,36 @@ changes the tag.
   loop's contract names the environment's runner label as its runner
   and its wheel platform, and every pinned line reads with that label
   in place of `ubuntu-latest`.
+- 2026-09-30, the first passes on a host-mode environment, the phase 2
+  acceptance's evidence. `fm devenv.up --env=scratch` from nothing,
+  the records already in the store, was up and seeded in 25 seconds:
+  Gitea 28.0.0 on a free port, the runner registered as
+  `scratch-macos-arm-01` (4.0.0), the shared caches created. The
+  develop set then proved end to end on it in one pass of 64 minutes
+  and 5 followed runs: birth 388 s (1 run), verified-skip 387 s (1
+  run), members 1158 s (three members landed through the loop's own
+  gate, their pull requests followed to the merge, which the run
+  count does not see yet), ratchet 1083 s (1 run), scoped-leg 819 s
+  (2 runs). A run on the environment took 230 to 320 s for a pull
+  request and 330 to 380 s for a push to main, with four to six jobs
+  each; the one check job of a skipped gate took 113 s, of which the
+  entry's `tools.sync` spent 70 s installing the nine locked tools
+  again on every job, since the emitted `setup.sh` placed the store
+  under the job's temp whatever the runner had set (fixed in #950:
+  the entry keeps a set placement; this pass's dev wheels predate
+  it). Two earlier passes failed on the agent's sequencing, not on
+  the feature: one ran from a worktree whose armed submit merged and
+  removed it mid-pass, one ran from the main checkout, where the
+  dev-wheel publish takes the release train's rehearsal path and
+  footman's lowest-direct isolated leg failed on a stale floor (#952:
+  livery-toolroom 0.7.0 to 0.8.0). A live pass runs from a branch
+  worktree with nothing armed. Found on the way and fixed the same
+  day: an allowance ahead of its requirement refused (#948), the
+  pass's `loop` series unlisted by `fm store.show` (#948). Still
+  open in phase 2: the container setups (a docker environment by
+  name, the container runner shapes, the `linux/amd64` pin's removal
+  once the `llvm` record exists), and the run count for a followed
+  merge.
 - 2026-09-30, Willem: the loop's defaults are the agent's to set, as
   the one driving it ("set whatever defaults you think are best for
   you driving this"). Set, and recorded here as the agent's: a plain
