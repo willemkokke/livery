@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's first two changes, #968 and #970) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2752,6 +2752,49 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   regenerates only the mounts whose docs tree's digest moved, and the
   zensical build itself is whole. Not built: a doctor line naming the
   layer that brings the docs job.
+
+- 2026-10-01, the docs layer's third change (issue #971): the
+  extractor is data and the development section is pages.
+  `livery.workshop._kinds.Extractor` carries the handler's options as
+  a table (`options`) where it carried a callable writing TOML; the
+  python kind's are `PYTHON_HANDLER_OPTIONS` in the python backend,
+  and the layer renders every handler block from the extractor's data
+  with the members policy beside it, so the base writes nothing for
+  the site. The layer renders the development section from the prose
+  fragments of phase 4c: for each section with a fragment for a human
+  reader, one page under `development/` with the fragments' markdown
+  in `fragments()` order, headings demoted under the section's title,
+  an index, and a nav entry derived from the same fragments (never
+  from a page a previous build wrote); this repository gets voice,
+  standards, rules, gate, verbs, kinds and tools. Three faults found
+  on the way are fixed here. The python-coverage generator failed a
+  desk build when the local `.coverage` named a moved file; on a desk
+  the page now states the absence and an older report goes, and in CI,
+  where the data is the record of the tree being built, it stays red.
+  The mount compared file paths for a generated page against an
+  authored one, so toolroom's authored `api.md` and its generated
+  `api/index.md` published at one URL and the build served either;
+  it now compares published URLs (`published_url`), and toolroom's
+  curated page moved to `reference.md` under the same nav label. Proven
+  by tests: the extractor's options reaching a second handler's
+  table, the development pages and nav with and without fragments and
+  their rebuild, the coverage fallback on a desk and its refusal in
+  CI, the URL collision refusing both ways. The site was built in the
+  branch's worktree with the change stashed and with it, on the same
+  coverage data, and the articles diffed: 574 of 625 identical; the
+  eight development pages and toolroom's `reference/` new; five API
+  pages changed where the edited modules' docstrings changed, and
+  toolroom's `api/` now serves its generated module page every time;
+  44 toolroom tool pages' cross-references to `Tool` and `Argv` now
+  resolve to `reference/`, the curated page that documents them; one
+  coverage page carries its data; the workshop index carries the new
+  sentences. Phase 6 is built with two deviations from its text, both
+  under the ruling that the base knows the minimum of docs generation:
+  the docs categories stay the base's, since the affected walk and
+  the provenance lines read them for every workspace, and the
+  examples check stays the base's, since it runs a kind's examples
+  and generates no site. Open: item 27 (a test running the builder),
+  and a doctor line naming the layer that brings the docs job.
 
 ## Open
 

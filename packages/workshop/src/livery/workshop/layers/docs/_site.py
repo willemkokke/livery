@@ -38,7 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-from livery.footman import doc, fail, group
+from livery.footman import doc, fail, group, prog
 from livery.toolroom import tools
 from livery.workshop import _layers, _slots
 from livery.workshop._contract import load_contract
@@ -53,12 +53,21 @@ from livery.workshop._docs_contract import (
     publish_seam,
     site_reads,
 )
+from livery.workshop._kinds import ALL_MEMBERS, Extractor
 from livery.workshop._navblocks import (
     NAV_BEGIN,
     NAV_END,
     nav_block_file,
 )
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._prose import (
+    HUMAN,
+    Prose,
+    fragments,
+    repository_fragments,
+    sections,
+    shipped,
+)
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
 SITE_CONFIG = "zensical.toml"
@@ -67,7 +76,7 @@ SITE_CONFIG = "zensical.toml"
 #: The site tree's generated directories under the root ``docs/``,
 #: gitignored: the mounts, the release view, the runner's task aliases
 #: and the tool index. A root page never enumerates them.
-SITE_TREES = ("packages", "releases", "tasks", "tools")
+SITE_TREES = ("packages", "releases", "tasks", "tools", "development")
 
 #: Where the generated API pages live, per package directory name.
 #: Where a package's generated API pages live: inside its mount, so
@@ -869,6 +878,52 @@ def overrides_template(root: Path) -> str:
     )
 
 
+def _toml_value(value: object) -> str:
+    """*value* as a TOML literal: a bool, a number, a string, or a list of those."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        items: list[object] = list(value)
+        return "[" + ", ".join(_toml_value(item) for item in items) + "]"
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def handler_lines(
+    extractor: Extractor,
+    paths: list[str],
+    inventories: tuple[str, ...],
+    members: str,
+) -> list[str]:
+    """The mkdocstrings handler block for *extractor* over *paths*.
+
+    The handler's search paths and inventories, then its options as
+    the extractor carries them, then the members policy: ``all``
+    writes an empty filter list, so every member is documented, and
+    ``public`` leaves the handler's own default filter standing.
+    """
+    listed = ", ".join(f'"{path}"' for path in paths)
+    linked = ", ".join(f'"{url}"' for url in inventories)
+    lines = [
+        "",
+        f"[project.plugins.mkdocstrings.handlers.{extractor.name}]",
+        f"paths = [{listed}]",
+        f"inventories = [{linked}]",
+    ]
+    if extractor.options or members == ALL_MEMBERS:
+        lines += [
+            "",
+            f"[project.plugins.mkdocstrings.handlers.{extractor.name}.options]",
+        ]
+        lines += [
+            f"{key} = {_toml_value(value)}" for key, value in extractor.options.items()
+        ]
+        if members == ALL_MEMBERS:
+            lines.append("filters = []")
+    return lines
+
+
 def zensical_config(root: Path) -> str:
     """The assembled ``zensical.toml`` body, header excluded.
 
@@ -902,7 +957,8 @@ def zensical_config(root: Path) -> str:
         # contract render differently per checkout. The landing page
         # links its own year archives at build time instead.
         lines.append('    { "Releases" = "releases/index.md" },')
-    from livery.workshop._kinds import Extractor, kind_extractor
+    lines += development_nav_lines(root)
+    from livery.workshop._kinds import kind_extractor
 
     handlers: dict[str, tuple[Extractor, list[str]]] = {}
     for package in discover_packages(root):
@@ -925,7 +981,7 @@ def zensical_config(root: Path) -> str:
     members = members_policy()
     for extractor, paths in handlers.values():
         if paths:
-            lines += extractor.config(paths, extractor.inventories, members)
+            lines += handler_lines(extractor, paths, extractor.inventories, members)
     return "\n".join(lines) + "\n"
 
 
@@ -1283,6 +1339,20 @@ def _refresh_coverage(docs: Path, target: Path) -> None:
         shutil.copytree(source, destination)
 
 
+def published_url(page: str) -> str:
+    """The URL path a markdown page publishes at with directory URLs.
+
+    ``a/b.md`` and ``a/b/index.md`` are both ``a/b/``; the root
+    ``index.md`` is the empty path.
+    """
+    stem = page.removesuffix(".md")
+    if stem == "index":
+        return ""
+    if stem.endswith("/index"):
+        return stem.removesuffix("index")
+    return stem + "/"
+
+
 def _merge_generated(generated: Path, target: Path, package_path: str) -> None:
     """Copy the package's generated tree into the mount's root, path by path.
 
@@ -1294,15 +1364,29 @@ def _merge_generated(generated: Path, target: Path, package_path: str) -> None:
     """
     if not generated.is_dir():
         return
+    # With directory URLs a page publishes at its path less ``.md``, and
+    # an ``index.md`` at its directory: ``api.md`` and ``api/index.md``
+    # are one URL, and the build would serve whichever it read last.
+    authored = {
+        published_url(page.relative_to(target).as_posix()): page.relative_to(
+            target
+        ).as_posix()
+        for page in target.rglob("*.md")
+    }
     for source in sorted(generated.rglob("*")):
         if source.is_dir() or source.suffix == ".toml":
             continue  # the nav files configure the section; not site content
         relative = source.relative_to(generated).as_posix()
         destination = target / relative
-        if destination.exists():
+        holder = (
+            authored.get(published_url(relative)) if source.suffix == ".md" else None
+        )
+        if holder is None and destination.exists():
+            holder = relative
+        if holder is not None:
             fail(
                 f"{package_path}/docs: {GENERATED}{relative} and the authored"
-                f" {relative} would publish at one path; rename one"
+                f" {holder} would publish at one path; rename one"
             )
         destination.parent.mkdir(parents=True, exist_ok=True)
         if source.suffix == ".md":
@@ -1382,7 +1466,7 @@ def scoped_config(root: Path, package: Package) -> str:
         if site_url:
             inventories.append(site_url.rstrip("/") + "/objects.inv")
         paths = [f"../../{path}" for path in extractor.sources(package)]
-        lines += extractor.config(paths, tuple(inventories), members_policy())
+        lines += handler_lines(extractor, paths, tuple(inventories), members_policy())
     return "\n".join(lines) + "\n"
 
 
@@ -1569,6 +1653,7 @@ def render_python_coverage(root: Path) -> list[str]:
 
     from livery.workshop._backends._python import _unmetered
     from livery.workshop._kinds import is_python_kind
+    from livery.workshop._state import run_context
 
     # The coverage CLI on named files: ambient COVERAGE_* variables
     # from a metered shell would re-point it at that process's live
@@ -1613,10 +1698,28 @@ def render_python_coverage(root: Path) -> list[str]:
             "-d",
             f"packages/{name}/htmlcov",
         )
-        if result.code != 0 and "No data to report" in result.stdout + result.stderr:
+        output = result.stdout + result.stderr
+        if result.code != 0 and "No data to report" in output:
             # A package the data never touched, a unit the store could
             # not supply, say: its page states the absence.
             print(f"  coverage: {name}: no measured data; its page states the absence")
+            continue
+        if (
+            result.code != 0
+            and "No source for code" in output
+            and run_context() is None
+        ):
+            # A desk's own data outlives a file move until the next gate
+            # run measures again; a report from it would show old lines
+            # against new files, so the page states the absence and an
+            # older report goes. Inside CI the data is the record of the
+            # tree being built, and a missing source there stays red.
+            shutil.rmtree(root / "packages" / name / "htmlcov", ignore_errors=True)
+            print(
+                f"  coverage: {name}: the local data names files that moved or"
+                f" went; its page states the absence until `{prog()} check`"
+                " measures again"
+            )
             continue
         if result.code != 0:
             fail(
@@ -1757,6 +1860,9 @@ def docs_build(
             )
         print(f"  preview built at {config.parent / 'site'} (never published)")
         return
+    developed = generate_development_pages(root)
+    if developed:
+        print(f"  development pages: {', '.join(developed)}")
     releases = generate_release_pages(root)
     if releases:
         print(f"  release view: {', '.join(releases)}")
@@ -1992,3 +2098,96 @@ def _register_builtin() -> None:
 
 
 _register_builtin()
+
+
+#: The development section: one page per prose section, from the
+#: human-audience fragments the mounted layers ship and the repository's
+#: own, under the root ``docs/`` tree. Gitignored, rebuilt whole.
+DEVELOPMENT = "docs/development"
+
+
+def _shipped_prose(root: Path) -> list[Prose]:
+    """Every fragment in play: the mounted layers' shipped sets, then the own."""
+    listed: list[Prose] = []
+    for layer in _layers.layer_names(root):
+        content = _layers.layer_content(layer)
+        if content is not None:
+            listed += shipped(layer, content)
+    listed += repository_fragments(root)
+    return listed
+
+
+def _demoted(text: str) -> str:
+    """*text* with every ATX heading one level deeper, under the page's own title."""
+    return re.sub(r"^(#{1,5}) ", r"#\1 ", text, flags=re.M)
+
+
+def section_title(section: str) -> str:
+    """The page title of a prose section: its name, capitalised."""
+    return section.replace("-", " ").capitalize()
+
+
+def development_content(root: Path) -> dict[str, list[str]]:
+    """Each section's markdown for a human reader, in section order, empty left out.
+
+    The pages and the nav both read this, so the nav entry never waits
+    on a page a previous build wrote.
+    """
+    by_section: dict[str, list[str]] = {}
+    for prose in fragments(root, _shipped_prose(root), HUMAN):
+        text = prose.text(root, HUMAN).strip()
+        if text:
+            by_section.setdefault(prose.section, []).append(text)
+    return {
+        section: by_section[section] for section in sections() if section in by_section
+    }
+
+
+def generate_development_pages(root: Path) -> list[str]:
+    """Write the development section, one page per prose section; the pages written.
+
+    A section with no fragment for a human reader gets no page; a
+    page carries each fragment's markdown in the order
+    [livery.workshop._prose.fragments][] gives, headings demoted under
+    the page's title. The index lists the pages. Rebuilt whole.
+    """
+    base = root / DEVELOPMENT
+    shutil.rmtree(base, ignore_errors=True)
+    content = development_content(root)
+    if not content:
+        return []
+    base.mkdir(parents=True)
+    written: list[str] = []
+    for section, texts in content.items():
+        blocks = [f"# {section_title(section)}", ""]
+        for text in texts:
+            blocks += [_demoted(text), ""]
+        page = base / f"{section}.md"
+        page.write_text("\n".join(blocks).rstrip("\n") + "\n", encoding="utf-8")
+        written.append(f"{section}.md")
+    index = [
+        "# Development",
+        "",
+        "How this workspace is developed, one page per section:",
+        "",
+    ]
+    index += [f"- [{section_title(page[:-3])}]({page})" for page in written]
+    (base / "index.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    return ["index.md", *written]
+
+
+def development_nav_lines(root: Path) -> list[str]:
+    """The nav entry for the development section, empty without a section to show."""
+    content = development_content(root)
+    if not content:
+        return []
+    lines = [
+        '    { "Development" = [',
+        '        { "Overview" = "development/index.md" },',
+    ]
+    lines += [
+        f'        {{ "{section_title(section)}" = "development/{section}.md" }},'
+        for section in content
+    ]
+    lines.append("    ] },")
+    return lines

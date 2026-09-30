@@ -123,7 +123,12 @@ the gate point's `docs` job, which the verdict waits for, and the
 merge point's `deploy` job, each with the entries it runs, through
 `contribute_job` in `livery.workshop._points`; a workspace that does
 not list the layer renders neither job. A contributed job sits before
-the point's verdict job, or last on a point without one.
+the point's verdict job, or last on a point without one. The layer
+renders the site's development section from the prose fragments
+the mounted layers ship for a human reader, one page per section
+under `development/`, and renders each kind's API extractor from its
+data: the handler's name, a package's pages and search paths, the
+inventories, and the handler's options as a table.
 
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the

@@ -13,7 +13,7 @@ nav = [
     { "Testing" = "testing.md" },
     { "Typing and the stubs" = "typing.md" },
     { "Colour" = "_generated/colour.md" },
-    { "API reference" = "api.md" },
+    { "API reference" = "reference.md" },
     { "Tools" = [
         { "The curated tools" = "_generated/tools/index.md" },
         # nav:begin tools

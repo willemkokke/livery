@@ -1282,6 +1282,75 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     assert not (root / "packages" / "bare" / "htmlcov").exists()
 
 
+def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from coverage import CoverageData
+
+    from livery.workshop.layers.docs import _site as _docs
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    kept = root / "packages" / "core" / "src" / "core" / "kept.py"
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_text("a = 1\n")
+    gone = root / "packages" / "core" / "src" / "core" / "gone.py"
+    data = CoverageData(basename=str(root / ".coverage"))
+    data.add_arcs({str(kept): {(-1, 1), (1, -1)}, str(gone): {(-1, 1), (1, -1)}})
+    data.write()
+    stale = root / "packages" / "core" / "htmlcov"
+    stale.mkdir(parents=True)
+    (stale / "index.html").write_text("an older report")
+    monkeypatch.setattr(
+        "livery.workshop.layers.docs._site._stored_legs", lambda root: ([], [])
+    )
+    # Inside CI the data is the record of the tree being built: red.
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
+    with pytest.raises(_FAILURES, match="coverage html for core exited 1"):
+        _docs.render_python_coverage(root)
+    # On a desk the data outlived a move: the page states the absence.
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    assert _docs.render_python_coverage(root) == []
+    out = capsys.readouterr().out
+    assert "core: the local data names files that moved or went" in out
+    assert not stale.exists()
+
+
+def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop.layers.docs._site import published_url
+
+    assert published_url("index.md") == ""
+    assert published_url("api.md") == "api/"
+    assert published_url("api/index.md") == "api/"
+    assert published_url("api/_host.md") == "api/_host/"
+    root = _workspace(tmp_path)
+    docs = root / "packages" / "core" / "docs"
+    (docs / "api.md").write_text("# The curated reference\n")
+    generated = docs / "_generated" / "api"
+    generated.mkdir(parents=True)
+    (generated / "index.md").write_text("# `acme.core`\n")
+    with pytest.raises(
+        _FAILURES,
+        match=r"_generated/api/index\.md and the authored api\.md would publish at"
+        r" one path",
+    ):
+        mount_package_docs(root, full=True)
+    # The same path is the same refusal.
+    (docs / "api.md").unlink()
+    (docs / "api").mkdir()
+    (docs / "api" / "index.md").write_text("# Mine\n")
+    with pytest.raises(_FAILURES, match=r"and the authored api/index\.md would"):
+        mount_package_docs(root, full=True)
+    # Apart, both publish.
+    (docs / "api" / "index.md").rename(docs / "reference.md")
+    (docs / "api").rmdir()
+    assert "core" in mount_package_docs(root, full=True)
+
+
 def test_a_build_that_left_no_site_is_red(tmp_path: Path) -> None:
     from livery.workshop.layers.docs._site import require_site
 
@@ -1843,17 +1912,18 @@ def test_a_second_extractor_reaches_the_config_through_the_kind_record(
         "carve",
         pages=lambda package: [("index.md", "acme.bare")],
         sources=lambda package: [f"packages/{package.directory.name}/carved"],
-        config=lambda paths, inventories, members: [
-            "",
-            "[project.plugins.mkdocstrings.handlers.carve]",
-            "paths = [" + ", ".join(f'"{p}"' for p in paths) + "]",
-        ],
+        options={"depth": 2, "style": "chisel", "strict": True},
     )
     register_kind(replace(stone, extractor=carved))
     assert kind_extractor("stone") is carved
     config = tomllib.loads(zensical_config(root))
     handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
     assert handlers["carve"]["paths"] == ["packages/bare/carved"]
+    assert handlers["carve"]["options"] == {
+        "depth": 2,
+        "style": "chisel",
+        "strict": True,
+    }
     assert handlers["python"]["paths"] == ["packages/core/src"]
     section = next(entry for entry in config["project"]["nav"] if "bare" in entry)
     api = next(part for part in section["bare"] if "API" in part)
@@ -1861,3 +1931,75 @@ def test_a_second_extractor_reaches_the_config_through_the_kind_record(
     # A child kind takes the nearest ancestor's extractor.
     register_kind(replace(stone, name="pebble", parent="stone", extractor=None))
     assert kind_extractor("pebble") is carved
+
+
+# The development section. The fallback first: no fragments, no pages.
+
+
+def test_without_human_fragments_the_development_section_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _layers, _prose
+    from livery.workshop.layers.docs._site import (
+        development_nav_lines,
+        generate_development_pages,
+    )
+
+    root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
+    monkeypatch.setattr(_layers, "layer_content", lambda layer: None)
+    monkeypatch.setattr(_prose, "_RENDERED", {})
+    assert generate_development_pages(root) == []
+    assert not (root / "docs" / "development").exists()
+    assert development_nav_lines(root) == []
+    assert "Development" not in zensical_config(root)
+
+
+def test_the_development_section_renders_one_page_per_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _layers, _prose
+    from livery.workshop.layers.docs._site import (
+        development_nav_lines,
+        generate_development_pages,
+    )
+
+    root = _workspace(tmp_path, docs_table='layers = ["acme.prose"]\n')
+    content = tmp_path / "acme-prose-content"
+    fragments = content / "fragments"
+    fragments.mkdir(parents=True)
+    (fragments / "voice.tone.human.md").write_text(
+        "# Tone\n\nSay it plainly.\n\n## Words\n\nShort ones.\n"
+    )
+    (fragments / "rules.width.md").write_text("# Width\n\n88 columns.\n")
+    (fragments / "rules.style.agent.md").write_text(
+        "# Agent only\n\nNever on a page.\n"
+    )
+    monkeypatch.setattr(
+        _layers,
+        "layer_content",
+        lambda layer: content if layer == "acme.prose" else None,
+    )
+    monkeypatch.setattr(_prose, "_RENDERED", {})
+    # The nav reads the fragments, not a page an earlier build wrote.
+    assert '        { "Rules" = "development/rules.md" },' in development_nav_lines(
+        root
+    )
+    written = generate_development_pages(root)
+    assert written == ["index.md", "voice.md", "rules.md"]
+    voice = (root / "docs" / "development" / "voice.md").read_text()
+    assert voice.startswith("# Voice\n\n## Tone\n\nSay it plainly.\n\n### Words\n")
+    rules = (root / "docs" / "development" / "rules.md").read_text()
+    assert "## Width" in rules and "Agent only" not in rules
+    index = (root / "docs" / "development" / "index.md").read_text()
+    assert "[Voice](voice.md)" in index and "[Rules](rules.md)" in index
+    nav = development_nav_lines(root)
+    assert nav[0] == '    { "Development" = ['
+    assert '        { "Voice" = "development/voice.md" },' in nav
+    config = tomllib.loads(zensical_config(root))
+    entry = next(e for e in config["project"]["nav"] if "Development" in e)
+    assert entry["Development"][0] == {"Overview": "development/index.md"}
+    # Rebuilt whole: a fragment that leaves takes its page with it.
+    (fragments / "voice.tone.human.md").unlink()
+    assert generate_development_pages(root) == ["index.md", "rules.md"]
+    assert not (root / "docs" / "development" / "voice.md").exists()
+    assert not any("Voice" in line for line in development_nav_lines(root))

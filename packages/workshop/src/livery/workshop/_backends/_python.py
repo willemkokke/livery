@@ -37,7 +37,7 @@ from livery.toolroom.tools import (
     ty,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._kinds import ALL_MEMBERS, Extractor
+from livery.workshop._kinds import Extractor
 from livery.workshop._packages import Neighbours, Package
 from livery.workshop._state import RunContext, slug
 
@@ -2209,42 +2209,22 @@ def api_sources(package: Package) -> list[str]:
     return found
 
 
-def mkdocstrings_lines(
-    paths: list[str], inventories: tuple[str, ...], members: str
-) -> list[str]:
-    """The mkdocstrings python handler block for the given source paths.
-
-    *members* is the composed policy: ``public`` keeps the handler's
-    default filter, which hides members named with one leading
-    underscore; ``all`` writes an empty filter list, so every member
-    is documented.
-    """
-    listed = ", ".join(f'"{path}"' for path in paths)
-    linked = ", ".join(f'"{url}"' for url in inventories)
-    lines = [
-        "",
-        "[project.plugins.mkdocstrings.handlers.python]",
-        f"paths = [{listed}]",
-        f"inventories = [{linked}]",
-        "",
-        "[project.plugins.mkdocstrings.handlers.python.options]",
-        "# Google style is the house convention; a docstring is",
-        "# published the moment it is written, empty ones included.",
-        'docstring_style = "google"',
-        "show_if_no_docstring = true",
-        "show_root_heading = true",
-        "show_root_full_path = true",
-        "separate_signature = true",
-        "show_signature_annotations = true",
-        "signature_crossrefs = true",
-        'members_order = "source"',
-        "merge_init_into_class = true",
-        "summary = true",
-        "heading_level = 2",
-    ]
-    if members == ALL_MEMBERS:
-        lines.append("filters = []")
-    return lines
+#: The mkdocstrings python handler's options. Google style is the house
+#: convention; a docstring is published the moment it is written, empty
+#: ones included.
+PYTHON_HANDLER_OPTIONS: dict[str, object] = {
+    "docstring_style": "google",
+    "show_if_no_docstring": True,
+    "show_root_heading": True,
+    "show_root_full_path": True,
+    "separate_signature": True,
+    "show_signature_annotations": True,
+    "signature_crossrefs": True,
+    "members_order": "source",
+    "merge_init_into_class": True,
+    "summary": True,
+    "heading_level": 2,
+}
 
 
 #: The Python kind's extractor: mkdocstrings' python handler over the
@@ -2253,6 +2233,6 @@ EXTRACTOR = Extractor(
     "python",
     pages=api_pages,
     sources=api_sources,
-    config=mkdocstrings_lines,
+    options=PYTHON_HANDLER_OPTIONS,
     inventories=INVENTORIES,
 )
