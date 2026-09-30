@@ -137,9 +137,13 @@ imports; a check's fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
 once a check is withdrawn and no other check renders its per-package
-file for the kind, an unedited copy is removed and an edited one kept.
-The workshop's own kinds and checks pass the same clauses in its test
-suite.
+file for the kind, an unedited copy is removed and an edited one kept;
+and in the gate's walk over a probe workspace, with the check bodies
+recording instead of running, every check that can fix rewrites
+before any judge starts and is not judged again, every check names the
+layer that registered it, which the gate prints, and a check with no
+file to read is named and never started. The workshop's own kinds and
+checks pass the same clauses in its test suite.
 
 The documentation site is a layer inside the workshop wheel,
 `livery.workshop.layers.docs`, listed in `[workspace] layers` as a

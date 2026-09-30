@@ -67,7 +67,7 @@ def _context(
     )
 
 
-def _walk(
+def walk(
     ctx: GateContext,
     *,
     between: Callable[[], None] | None = None,
@@ -392,7 +392,7 @@ def _check_files(
         safe=safe,
         point=point,
     )
-    _walk(ctx, judge=judge, only=only)
+    walk(ctx, judge=judge, only=only)
 
 
 def run_checks(
@@ -420,7 +420,7 @@ def run_checks(
     if paths:
         _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point, only=only)
         return
-    _walk(_context(fix=fix or safe_fix, safe=safe_fix, point=point), only=only)
+    walk(_context(fix=fix or safe_fix, safe=safe_fix, point=point), only=only)
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
@@ -608,7 +608,7 @@ def _run_check(
         nonlocal proved_tree
         proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
 
-    _walk(_context(fix=fix, safe=safe, point=point), between=measure_whole)
+    walk(_context(fix=fix, safe=safe, point=point), between=measure_whole)
     _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
 
 
@@ -844,9 +844,9 @@ def _scoped_check(
     out by its record. *tests* names, per package path, the test files
     that stand for the package's suite in this run; *examples* the
     packages whose examples alone changed; *between* runs after the
-    fixers under ``--fix``, as [livery.workshop._quality._walk][] says.
+    fixers under ``--fix``, as [livery.workshop._quality.walk][] says.
     """
-    _walk(
+    walk(
         _context(
             subset=subset,
             fix=fix,

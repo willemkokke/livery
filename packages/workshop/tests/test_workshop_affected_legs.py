@@ -262,7 +262,7 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
     seen.clear()
     walked: list[object] = []
     monkeypatch.setattr(
-        "livery.workshop._quality._walk", lambda ctx, **kw: walked.append(ctx.subset)
+        "livery.workshop._quality.walk", lambda ctx, **kw: walked.append(ctx.subset)
     )
     paths.append("packages/y/tests/test_b.py")
     _quality.check()

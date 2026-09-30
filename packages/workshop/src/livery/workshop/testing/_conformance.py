@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
 import inspect
+import io
 import sys
 import tempfile
+import threading
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +26,9 @@ from livery.workshop._categories import (
 )
 from livery.workshop._checks import (
     BASE_LAYER,
+    WORKSPACE,
     CheckRecord,
+    GateContext,
     answering,
     checks_by_name,
 )
@@ -97,6 +102,8 @@ CHECK_ORDER = "check-order"
 CONTRIBUTION_MODULES = "contribution-modules"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
+WALK_ORDER = "walk-order"
+GATE_LINES = "gate-lines"
 
 
 # The backend protocol.
@@ -618,6 +625,197 @@ def _withdrawn_file(subject: Subject) -> list[Violation]:
     return violations
 
 
+# The gate's walk over a layer's checks.
+
+
+class _Recorder:
+    """The calls a probe walk makes into the subject's checks, in order."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._lock = threading.Lock()
+
+    def body(self, mode: str, name: str) -> Callable[[GateContext], None]:
+        def record(ctx: GateContext) -> None:
+            del ctx
+            with self._lock:
+                self.calls.append((mode, name))
+
+        return record
+
+
+#: A file of the probe workspace no check's claims reach.
+_UNCLAIMED = "probe/unclaimed.probe"
+
+
+def _probe_packages(root: Path) -> tuple[Package, ...]:
+    """One probe package of each concrete kind, so a package check finds its own."""
+    return tuple(
+        Package(
+            root / "packages" / kind.name,
+            f"packages/{kind.name}",
+            f"probe-{kind.name}",
+            kind.name,
+            (),
+        )
+        for kind in all_kinds()
+        if not kind.abstract
+    )
+
+
+def _probed(record: CheckRecord, packages: tuple[Package, ...]) -> bool:
+    """Whether the probe workspace gives *record* something to judge."""
+    if record.scope == WORKSPACE:
+        return True
+    return any(
+        kind in {link.name for link in kind_chain(package.kind)}
+        for package in packages
+        for kind in record.kinds
+    )
+
+
+def _probe_walk(
+    subject: Subject, *, fix: bool, named: bool
+) -> tuple[list[tuple[str, str]], str, tuple[Package, ...]]:
+    """Walk the gate over a probe workspace with the subject's checks recording.
+
+    The checks' bodies are replaced by recorders and their ``after``
+    lists emptied, so no tool runs; the registry is restored after.
+    *named* walks over one file no claim reaches; otherwise the walk
+    is whole and the checks' claims are emptied, so every check reads
+    whatever git lists around the probe. Returns the calls, the gate's
+    output, and the probe's packages.
+    """
+    from livery.workshop import _quality
+
+    recorder = _Recorder()
+    names = [
+        record.name for record in subject.checks if record.name in checks_by_name()
+    ]
+    state = _checks.snapshot()
+    out = io.StringIO()
+    try:
+        for record in subject.checks:
+            if record.name not in names:
+                continue
+            _checks.register_check(
+                replace(
+                    record,
+                    run=recorder.body("run", record.name),
+                    fix=None
+                    if record.fix is None
+                    else recorder.body("fix", record.name),
+                    after=(),
+                    claims=record.claims if named else (),
+                )
+            )
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / _UNCLAIMED).parent.mkdir(parents=True)
+            (root / _UNCLAIMED).write_text("probe\n")
+            packages = _probe_packages(root)
+            ctx = GateContext(
+                root=root,
+                packages=packages,
+                fix=fix,
+                files=(_UNCLAIMED,) if named else (),
+            )
+            with contextlib.redirect_stdout(out):
+                _quality.walk(ctx, only=frozenset(names))
+    finally:
+        _checks.restore(state)
+    return recorder.calls, out.getvalue(), packages
+
+
+def _walk_order(subject: Subject) -> list[Violation]:
+    calls, _out, packages = _probe_walk(subject, fix=True, named=False)
+    first_judge = next(
+        (index for index, (mode, _name) in enumerate(calls) if mode == "run"), None
+    )
+    violations: list[Violation] = []
+    for record in subject.checks:
+        if record.name not in checks_by_name():
+            continue
+        where = f"check {record.name}"
+        fixes = [
+            index for index, call in enumerate(calls) if call == ("fix", record.name)
+        ]
+        judged = ("run", record.name) in calls
+        if record.fix is not None:
+            if not fixes:
+                violations.append(
+                    Violation(WALK_ORDER, where, "never rewrote under --fix")
+                )
+            elif first_judge is not None and fixes[-1] > first_judge:
+                violations.append(
+                    Violation(
+                        WALK_ORDER,
+                        where,
+                        "rewrote after a judge started; every fixer runs before any"
+                        " judge",
+                    )
+                )
+            if judged:
+                violations.append(
+                    Violation(
+                        WALK_ORDER,
+                        where,
+                        "judged after it rewrote; a check that rewrote is not judged"
+                        " again",
+                    )
+                )
+        elif not judged and _probed(record, packages):
+            violations.append(Violation(WALK_ORDER, where, "never judged under --fix"))
+    return violations
+
+
+def _gate_lines(subject: Subject) -> list[Violation]:
+    calls, out, _packages = _probe_walk(subject, fix=False, named=True)
+    lines = out.splitlines()
+    violations: list[Violation] = []
+    for record in subject.checks:
+        if record.name not in checks_by_name():
+            continue
+        where = f"check {record.name}"
+        if subject.layer != BASE_LAYER and record.layer != subject.layer:
+            violations.append(
+                Violation(
+                    GATE_LINES,
+                    where,
+                    f"names {record.layer} as its layer; the gate says who"
+                    f" registered a check by it, and {subject.layer} registered"
+                    " this one",
+                )
+            )
+        elif (
+            record.layer != BASE_LAYER
+            and f"  {record.name}: registered by {record.layer}" not in lines
+        ):
+            violations.append(
+                Violation(
+                    GATE_LINES,
+                    where,
+                    f"the gate does not name {record.layer} as the layer that"
+                    " registered it",
+                )
+            )
+        said = f"  {record.name}: no file it reads in the named files; not run"
+        if said not in lines:
+            violations.append(
+                Violation(
+                    GATE_LINES,
+                    where,
+                    'not named when it had no file to read; the gate says "no file'
+                    ' it reads" and starts nothing',
+                )
+            )
+        if any(name == record.name for _mode, name in calls):
+            violations.append(
+                Violation(GATE_LINES, where, "started with no file to read")
+            )
+    return violations
+
+
 CLAUSES: tuple[Clause, ...] = (
     Clause(
         BACKEND_PROTOCOL,
@@ -662,6 +860,18 @@ CLAUSES: tuple[Clause, ...] = (
         "A per-package file whose check is withdrawn, and which no other check"
         " renders for the kind, is removed when unedited and kept when edited.",
         _withdrawn_file,
+    ),
+    Clause(
+        WALK_ORDER,
+        "Under --fix every check with a fix mode rewrites before any judge"
+        " starts and is not judged again, and every other check is judged.",
+        _walk_order,
+    ),
+    Clause(
+        GATE_LINES,
+        "Every check names the layer that registered it, which the gate prints,"
+        " and a check with no file to read is named and never started.",
+        _gate_lines,
     ),
 )
 """Every clause, in the order the kit judges them."""
