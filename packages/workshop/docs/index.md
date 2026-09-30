@@ -40,8 +40,10 @@ branches. The layering check's `--fix` writes the resolved targets
 into the entry once, `{ import = "acme.house", for = ["livery.workshop.python"] }`;
 from then on `for` is the truth: a name deleted from it stays
 deleted, which is a project's opt-out from that target's opinions,
-and a name the list does not carry refuses. `fm layers` prints each
-layer, who requires it, its tools and its targets.
+and a name the list does not carry refuses. A name the layer declares
+no contribution for mounts nothing, and the layering check names the
+entry. `fm layers` prints each layer, who requires it, its tools and
+its targets.
 
 The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the layer that supplied each. Its
@@ -126,10 +128,13 @@ each clause in `CLAUSES` returns the violations the subject commits,
 each naming its clause, and a layer's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
 call of the backend protocol; a per-package configuration file resolves
-to the nearest kind's fragment, one owner per kind and file; and a
-path's category is the most specific rule's, the nearer kind winning a
-tie between kinds and two rules of one kind never tying. The workshop's
-own kinds and checks pass the same clauses in its test suite.
+to the nearest kind's fragment, one owner per kind and file; a path's
+category is the most specific rule's, the nearer kind winning a tie
+between kinds and two rules of one kind never tying; every check a
+check runs `after` is registered, and following them never leads back
+to it; and a layer's `WORKSHOP_FOR` maps each target to a module that
+imports. The workshop's own kinds and checks pass the same clauses in
+its test suite.
 
 The documentation site is a layer inside the workshop wheel,
 `livery.workshop.layers.docs`, listed in `[workspace] layers` as a

@@ -247,6 +247,28 @@ def _mount(root: Path) -> None:
         _layers.mount_layers(root)
 
 
+def test_a_for_naming_a_target_the_layer_declares_nothing_for_mounts_and_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The mount goes on without the target, and the layering check,
+    # which runs inside a working fm, names the entry.
+    import sys
+
+    _house(tmp_path, monkeypatch)
+    _fake_layers(tmp_path, monkeypatch, cpp="")
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = [\n    "livery.workshop",\n    "acme.python",\n'
+        '    "acme.cpp",\n    { import = "acme.house", for = ["acme.cpp"] },\n]\n'
+    )
+    _mount(tmp_path)
+    assert "acme.house_python" not in sys.modules
+    (problem,) = _layers.closure_problems(tmp_path)
+    assert problem == (
+        "[workspace] layers: the entry for acme.house names acme.cpp in `for`,"
+        " and acme.house declares no contribution for it; remove it from `for`"
+    )
+
+
 def test_a_contribution_for_an_unlisted_target_never_mounts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
