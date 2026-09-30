@@ -126,13 +126,41 @@ extensible gate plan's open item 17 and the plan it names).
 
 LLVM's archives cover linux-x64, linux-arm, macos-arm, windows-x64
 and windows-arm at 0.3 to 1.2 GB as zst, and ship lld, llvm-cov,
-llvm-profdata, clang-format and clang-tidy. xpack's gcc covers
+llvm-profdata, clang-format and clang-tidy. The `llvm` record keeps
+what its profiles name, not the archive: see "Profiles" below; the
+`clang_format` and `clang_tidy` records retire when it lands, since
+the smallest profile carries both tools. xpack's gcc covers
 linux-x64 and linux-arm with binutils and gcov at 150 to 170 MB, and
 windows-x64 as MinGW-w64; WinLibs is the second Windows source. On
 macOS gcc is Homebrew's or the image's, never an archive. A sysroot
 stays the host's on every platform: glibc's headers and crt objects
 on Linux, the SDK on macOS, the MSVC headers, STL and Windows SDK for
 `clang-cl`. `zig` is a family for a later plan.
+
+### Profiles
+
+A record's layout may list profiles, ordered smallest to largest,
+each with the `include` patterns it adds to the one before it; the
+validation refuses a profile that is not a superset of its
+predecessor, so nesting is a checked fact. `include` and `exclude`
+are applied while unpacking, as a member filter, never after; when
+both are set, exclusions take precedence over inclusions, the rule
+and the words uv's build backend uses. For `llvm`: `edit-only`
+(clang-format, clang-tidy), `slim` (the compiler drivers, lld,
+llvm-cov, llvm-profdata, the resource directory with the coverage
+and sanitizer runtimes, libc++), `full` (everything).
+
+A requirement names a profile as an extra, `llvm[slim]`; a bare
+`llvm` is the first profile. An extra a record does not define
+refuses at lock time naming the profiles it does. The lock resolves
+each tool to the largest profile any site asks for, by the record's
+order, and its entry records it; the store extracts that profile
+into the tool's one tree, and a checkout that asked for less is
+satisfied by the larger tree, its receipt saying the profile it
+asked for and the one it got. The format and lint checks ask for
+`edit-only`; the cpp kind's toolchain asks for `slim` when clang is
+the family; `full` is typed on purpose. Nobody gets a gigabyte by
+accident, and nobody special-cases a tool.
 
 ### Where it lives
 
@@ -335,8 +363,14 @@ Deliverables:
   records alone.
 - Records: `llvm` (LLVM's archives, the zst variants, every host LLVM
   ships: linux-x64, linux-arm, macos-arm, windows-x64, windows-arm)
-  and `gcc` (xpack: linux-x64, linux-arm, windows-x64). Their layouts
-  name the drivers and the coverage readers.
+  with its three profiles, and `gcc` (xpack: linux-x64, linux-arm,
+  windows-x64). Their layouts name the drivers and the coverage
+  readers. Profiles in the record schema, `include` beside `exclude`
+  applied at unpack time, the extra on a requirement, the profile in
+  the lock entry and the receipt, and the largest-asked resolution
+  land here, in the store; the `clang_format` and `clang_tidy`
+  records retire and the format and lint checks name `llvm`'s
+  executables.
 - `fm doctor` prints the resolution: the families probed, the
   candidates, the winner, the spec.
 - The cpp-conan kind's `host_tools=("cc", "c++")` goes: the
@@ -455,6 +489,17 @@ Deliverables:
   on PATH today, so the pass proves the store path, and the host path
   is proven by the seam-faked tests until a host runner exists (the
   local loop plan's phase 2).
+- 2026-09-30, Willem: `include` on a record's layout is fine; when
+  both are set, exclude takes precedence over include, the rule uv's
+  build backend states. Applied while unpacking, never after.
+- 2026-09-30, Willem: clang-format and clang-tidy come from `llvm`'s
+  smallest profile and are not provided separately for now; open
+  item 4 closes. Then, on the agent's `[full]` extra: an even smaller
+  profile for format and tidy alone, through a generic mechanism and
+  no special case: ordered profiles, `edit-only`, `slim`, `full`, the
+  resolution taking the largest profile required. The "Profiles"
+  section states it; a bare requirement is the first profile, an
+  unknown extra refuses, nesting is validated.
 - 2026-09-30, on the cost of probing (Willem's question): a warm
   `fm tools.sync --frozen` is 1.2 s for 18 receipts and spawns no
   tool; a probe runs only for an absent or stale receipt, and a CI
@@ -470,8 +515,8 @@ Deliverables:
    at once. Contract 11.
 3. `zig` as a fifth family: one archive per host, MinGW ABI on
    Windows, no coverage reader inside. Owner: Willem, after phase 2.
-4. #930: the clang-format and clang-tidy records' source. The `llvm`
-   record of phase 2 carries both tools, at 1 GB per host; the PyPI
-   wheels carry them alone at a few MB. Owner: Willem, with #930.
+4. Resolved 2026-09-30: clang-format and clang-tidy come from the
+   `llvm` record's smallest profile; no separate records. Decision
+   record.
 5. The CycloneDX rendering of the release rows. Owner: Willem, after
    phase 3.
