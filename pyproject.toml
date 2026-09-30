@@ -87,6 +87,12 @@ line-length = 88
 target-version = "py311"
 src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/footman/src", "packages/footman/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/cbor/src", "packages/cbor/tests", "tests"]
 
+[tool.ruff.format]
+# A markdown page is prose: a python fence may hold a snippet directive
+# or code shown as it is, and a documentation example file keeps the
+# layout its page shows, so the formatter leaves both alone.
+exclude = ["*.md", "packages/*/docs/examples/**", "docs/examples/**"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
 
@@ -96,7 +102,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # The claims first: each line is a category's patterns for a present
 # kind, with the rules a check withholds there.
-"packages/*/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "I", "RUF", "SIM", "UP"]
+"packages/*/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "F841", "I", "RUF", "SIM", "UP"]
 "packages/*/tests/**" = ["D1"]
 "packages/*/tests/**/*_test.py" = ["D1"]
 "packages/*/tests/**/test_*.py" = ["D1"]
@@ -159,8 +165,10 @@ include = ["packages", "tests", "tasks.py"]
 # A conan recipe is conan's input, read by conan's own interpreter
 # where the conan package lives; the workspace venv never has it, so
 # the checker that reads the whole tree skips the recipes. The cpp
-# members are skipped whole: their kind type-checks nothing.
-exclude = ["packages/*/conanfile.py"]
+# members are skipped whole: their kind type-checks nothing. A
+# documentation example is judged for its names by lint and run by
+# the examples check; it is not typed code.
+exclude = ["packages/*/conanfile.py", "packages/*/docs/examples"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.

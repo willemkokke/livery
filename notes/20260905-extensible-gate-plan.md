@@ -2629,8 +2629,11 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   and a recording. The `examples` check, a role in every kind's
   default contract, claims the `example` category beside `lint` and
   the site; `format` claims it no longer, since an example keeps the
-  layout its page shows, and `lint` withholds every rule there but
-  the name checks (`F401` and `F811` withheld as well). The affected
+  layout its page shows, `lint` withholds every rule there but the
+  name checks (`F401` and `F811` withheld as well), and basedpyright's
+  rendered exclude skips the directory, since the full gate's checker
+  reads every package whole while the desk's scoped gate hands it the
+  sources and tests alone. The affected
   walk: a page reaches nothing, an example file its package's
   examples check and no suite (`Scope.examples`,
   `GateContext.examples`), and the package's source both. Proven by

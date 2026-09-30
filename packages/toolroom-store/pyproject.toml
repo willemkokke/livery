@@ -47,7 +47,9 @@ namespace = true
 [tool.ruff]
 extend = "../../pyproject.toml"
 
-[tool.ruff.lint.per-file-ignores]
+# Added to the workspace's claims, which the extended root renders;
+# a per-file-ignores table of our own would replace them.
+[tool.ruff.lint.extend-per-file-ignores]
 # The suite's refusal tests quote the messages they expect in full,
 # which runs past the column; the messages are the contract.
 "tests/**" = ["D1", "E501"]

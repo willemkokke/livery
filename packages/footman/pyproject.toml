@@ -95,7 +95,9 @@ module-name = "livery.footman"
 [tool.ruff]
 extend = "../../pyproject.toml"
 
-[tool.ruff.lint.per-file-ignores]
+# Added to the workspace's claims, which the extended root renders;
+# a per-file-ignores table of our own would replace them.
+[tool.ruff.lint.extend-per-file-ignores]
 # The imported sources predate the workspace's pydocstyle rule;
 # their docstring conformance is a tracked content pass, not a
 # cut-time rewrite. Retired by that pass.

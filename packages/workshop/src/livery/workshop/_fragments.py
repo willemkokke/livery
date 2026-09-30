@@ -146,6 +146,12 @@ RUFF_BASE = r"""[tool.ruff]
 line-length = 88
 target-version = "py{{ python_floor | replace('.', '') }}"
 src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
+
+[tool.ruff.format]
+# A markdown page is prose: a python fence may hold a snippet directive
+# or code shown as it is, and a documentation example file keeps the
+# layout its page shows, so the formatter leaves both alone.
+exclude = ["*.md", "packages/*/docs/examples/**", "docs/examples/**"]
 """
 
 RUFF_LINT = r"""[tool.ruff.lint]
@@ -175,8 +181,10 @@ include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
 # A conan recipe is conan's input, read by conan's own interpreter
 # where the conan package lives; the workspace venv never has it, so
 # the checker that reads the whole tree skips the recipes. The cpp
-# members are skipped whole: their kind type-checks nothing.
-exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/*/conanfile.py"]
+# members are skipped whole: their kind type-checks nothing. A
+# documentation example is judged for its names by lint and run by
+# the examples check; it is not typed code.
+exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/*/conanfile.py", "packages/*/docs/examples"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.

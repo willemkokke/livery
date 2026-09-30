@@ -1026,12 +1026,12 @@ def _register_builtin() -> None:
                         "RUF",
                         "F401",
                         "F811",
+                        "F841",
                     ),
                     suffixes=py,
                 ),
                 Claim("test-support", ignore=("D1",), suffixes=py),
                 Claim("configuration", suffixes=py),
-                Claim("example", suffixes=py),
             ),
         ),
         CheckRecord(
