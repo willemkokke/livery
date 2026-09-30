@@ -162,8 +162,11 @@ def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
         r" directories; the checks pass nothing through to a tool\.",
     ):
         _quality.run_checks(("test.pytest",), ("-k", "slow"))
-    with pytest.raises(_FAILURES, match=re.escape("in the workspace: gone.py, /")):
-        _quality.check("tasks.py", "gone.py", str(tmp_path.parent))
+    outside = str(tmp_path.parent)
+    with pytest.raises(
+        _FAILURES, match=re.escape(f"in the workspace: gone.py, {outside}.")
+    ):
+        _quality.check("tasks.py", "gone.py", outside)
     # The post-edit hook names files an edit may already have deleted.
     _quality.fix_files(("gone.py",))
 
