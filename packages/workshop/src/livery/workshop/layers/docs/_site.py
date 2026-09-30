@@ -42,24 +42,27 @@ from livery.footman import doc, fail, group
 from livery.toolroom import tools
 from livery.workshop import _layers, _slots
 from livery.workshop._contract import load_contract
+from livery.workshop._docs_contract import (
+    GENERATED,
+    GENERATED_DIR,
+    MOUNT,
+    NAV_TOML,
+    declines_api,
+    docs_table,
+    package_generators,
+    publish_seam,
+    site_reads,
+)
+from livery.workshop._navblocks import (
+    NAV_BEGIN,
+    NAV_END,
+    nav_block_file,
+)
 from livery.workshop._packages import Package, discover_packages
-
-#: The nav block the emitter owns; an edit between these is drift.
-NAV_BEGIN = "# docs-nav:begin (generated; the emitter owns this block)"
-NAV_END = "# docs-nav:end"
-
-#: Where package docs mount inside the site's tree, per package
-#: directory name. Gitignored; rebuilt on every docs verb.
-MOUNT = "docs/packages"
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
 SITE_CONFIG = "zensical.toml"
 
-#: A package's own generated tree, under its ``docs/``: a name on disk,
-#: never a published path. The mount merges it into the package's root
-#: and strips the prefix from every link into it.
-GENERATED_DIR = "_generated"
-GENERATED = GENERATED_DIR + "/"
 
 #: The site tree's generated directories under the root ``docs/``,
 #: gitignored: the mounts, the release view, the runner's task aliases
@@ -74,50 +77,6 @@ API_DIR = "api"
 #: The page a package whose kind extracts nothing gets instead of a
 #: reference: the section names the absence, never an empty page.
 NO_REFERENCE = "index.md"
-
-
-def docs_table(root: Path) -> dict[str, object]:
-    """The contract's ``[docs]`` table; empty when undeclared."""
-    contract = load_contract(root / "workshop.toml")
-    table = contract.get("docs") or {}
-    return dict(table) if isinstance(table, dict) else {}
-
-
-def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:
-    """The docs generators *package* declares: (verb, requirements) each.
-
-    A package's ``workshop.toml`` ``[docs]`` table lists them under
-    ``generators``: a verb name (a footman task the package ships),
-    or a table naming the verb and the system tools the generator
-    needs on a docs machine (``{ verb = "...", requires = [...] }``).
-    Anything else refuses naming the file and the entry. Empty
-    without a declaration.
-    """
-    contract_path = package.directory / "workshop.toml"
-    contract = load_contract(contract_path)
-    table = contract.get("docs") or {}
-    declared = table.get("generators") if isinstance(table, dict) else None
-    if declared is None:
-        return []
-    if not isinstance(declared, list):
-        fail(f"{contract_path}: [docs] generators must be a list")
-    generators: list[tuple[str, tuple[str, ...]]] = []
-    for entry in declared:
-        if isinstance(entry, str) and entry:
-            generators.append((entry, ()))
-            continue
-        if isinstance(entry, dict) and isinstance(entry.get("verb"), str):
-            requires = entry.get("requires", [])
-            if isinstance(requires, list) and all(
-                isinstance(tool, str) for tool in requires
-            ):
-                generators.append((entry["verb"], tuple(requires)))
-                continue
-        fail(
-            f"{contract_path}: [docs] generators entry {entry!r} is not a"
-            ' verb name or a { verb = "...", requires = [...] } table'
-        )
-    return generators
 
 
 def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
@@ -214,19 +173,6 @@ def generate_coverage_pages(root: Path) -> list[str]:
     return written
 
 
-def docs_requirements(root: Path) -> tuple[str, ...]:
-    """The union of every declared generator's system requirements.
-
-    What the emitted docs CI jobs install before building the site;
-    sorted, so the rendered workflow is deterministic.
-    """
-    union: set[str] = set()
-    for package in discover_packages(root):
-        for _verb, requires in package_generators(package):
-            union.update(requires)
-    return tuple(sorted(union))
-
-
 def run_generators(root: Path) -> list[str]:
     """Run every package's declared docs generators; the verbs run.
 
@@ -306,10 +252,6 @@ def _label(page: str) -> str:
     return "Index" if Path(page).name == "index.md" else Path(page).stem
 
 
-#: The package-owned nav file inside ``docs/``.
-NAV_TOML = "nav.toml"
-
-
 #: The sections the emitter itself renders into a package's nav, in the
 #: order they land when the author places none: a placed block fills
 #: where its markers sit. Any other marker pair is a generator's block
@@ -320,44 +262,6 @@ EMITTED_BLOCKS = ("changelog", "coverage", "api")
 #: How a placed block travels through the parsed tree: a leaf whose
 #: label and path both read `nav:<name>`, never a page.
 SENTINEL = "nav:"
-
-
-def nav_block_markers(name: str) -> tuple[str, str]:
-    """The begin and end marker lines for a generated block in ``nav.toml``.
-
-    The lines between a pair belong to the generator that owns
-    *name*; the surrounding tree stays hand-authored.
-    """
-    return (f"# nav:begin {name}", f"# nav:end {name}")
-
-
-def rewrite_nav_block(path: Path, name: str, entries: list[str]) -> None:
-    """Replace the *name* block's lines inside the ``nav.toml`` at *path*.
-
-    *entries* arrive unindented; each is re-indented to the begin
-    marker's own indentation, so a generator never bakes indentation
-    into its output and the author stays free to move the block. Both
-    markers must already exist: where the block sits in the tree is
-    the author's decision, and a missing marker refuses naming the
-    file and the block. Idempotent: rewriting the same entries leaves
-    the file byte-identical.
-    """
-    begin, end = nav_block_markers(name)
-    if not path.is_file():
-        fail(f"{path} does not exist: the nav block {name!r} has no home")
-    lines = path.read_text("utf-8").splitlines()
-    starts = [i for i, line in enumerate(lines) if line.strip() == begin]
-    ends = [i for i, line in enumerate(lines) if line.strip() == end]
-    if len(starts) != 1 or len(ends) != 1 or ends[0] < starts[0]:
-        fail(
-            f"{path} does not carry the {name!r} block markers"
-            f" ({begin!r} then {end!r}, once each): add them where the"
-            " block belongs in the tree"
-        )
-    indent = lines[starts[0]][: len(lines[starts[0]]) - len(lines[starts[0]].lstrip())]
-    body = [indent + entry if entry else "" for entry in entries]
-    rewritten = lines[: starts[0] + 1] + body + lines[ends[0] :]
-    path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
 
 
 def package_nav(package: Package) -> list[object] | None:
@@ -401,30 +305,6 @@ def authored_nav(
 
 
 _MARKER = re.compile(r"^(\s*)# nav:(begin|end) (\S+)\s*$")
-
-
-def nav_block_file(generated: Path, name: str) -> Path:
-    """Where a generator emits the *name* block's entries: `nav.<name>.toml`."""
-    return generated / f"nav.{name}.toml"
-
-
-def write_nav_block(generated: Path, name: str, entries: list[str]) -> Path:
-    """Emit the *name* block's *entries* into the package's generated tree; the path.
-
-    The file carries a `nav` list, the block's entries unindented, the
-    way `rewrite_nav_block` writes them between markers. The emitter
-    renders it where the authored ``nav.toml`` places the block's
-    marker pair, so nothing committed changes when the block does.
-    """
-    generated.mkdir(parents=True, exist_ok=True)
-    path = nav_block_file(generated, name)
-    body = "\n".join(entries)
-    path.write_text(
-        f"# The {name!r} nav block, emitted by its generator; the authored"
-        f" nav.toml places it.\nnav = [\n{body}\n]\n",
-        encoding="utf-8",
-    )
-    return path
 
 
 def _lift_blocks(
@@ -633,12 +513,6 @@ MEMBERS_SLOT = "docs.members"
 def members_policy() -> str:
     """The composed private-members policy, ``public`` or ``all``."""
     return str(_slots.composed(MEMBERS_SLOT))
-
-
-def declines_api(package: Package) -> bool:
-    """Whether *package* turns its reference off with ``[docs] api = false``."""
-    table = load_contract(package.directory / "workshop.toml").get("docs") or {}
-    return isinstance(table, dict) and table.get("api") is False
 
 
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
@@ -1547,15 +1421,6 @@ def materialise_preview(root: Path, package: Package) -> Path:
     return config
 
 
-def module_root(package: Package) -> Path | None:
-    """The importable module's root: the shallowest ``__init__.py``."""
-    src = package.directory / "src"
-    if not src.is_dir():
-        return None
-    inits = sorted(src.rglob("__init__.py"), key=lambda p: len(p.parts))
-    return inits[0].parent if inits else None
-
-
 def api_modules(package: Package) -> list[tuple[str, str]]:
     """The reference pages of *package*, `(page path, dotted name)`, by its kind.
 
@@ -1607,60 +1472,6 @@ def generate_api_pages(root: Path) -> list[str]:
             target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
         generated.append(package.directory.name)
     return generated
-
-
-def module_docs_dir(package: Package) -> Path | None:
-    """Where *package*'s wheel-embedded ``_docs`` lives; None without src.
-
-    The module root is the shallowest ``__init__.py`` under ``src``,
-    which is the importable package uv_build ships.
-    """
-    found = module_root(package)
-    return None if found is None else found / "_docs"
-
-
-def materialise_module_docs(package: Package) -> Path | None:
-    """Refresh the wheel-embedded ``_docs`` from the package's docs.
-
-    Machine territory: the copy is rebuilt whole so the wheel can
-    never carry docs older than the tree it was built from, and a
-    package without ``docs/`` gets its stale copy removed rather
-    than shipped. Returns the materialised path, or None when the
-    package has no module to carry it.
-    """
-    target = module_docs_dir(package)
-    if target is None:
-        return None
-    shutil.rmtree(target, ignore_errors=True)
-    docs = package.directory / "docs"
-    if not docs.is_dir():
-        return None
-    shutil.copytree(docs, target)
-    return target
-
-
-#: The publish seam each forge kind defaults to.
-DEFAULT_SEAMS = {"github": "pages", "gitlab": "pages", "gitea": "container"}
-
-
-def publish_seam(root: Path) -> str:
-    """The declared publish seam: pages, container, ssh, or none.
-
-    The contract's ``[docs] publish`` wins; without it the forge kind
-    picks its default. An unknown declaration fails naming the four.
-    """
-    table = docs_table(root)
-    declared = str(table.get("publish", ""))
-    if declared:
-        if declared not in ("pages", "container", "ssh", "none"):
-            fail(
-                f"[docs] publish = {declared!r} is not a seam: use"
-                " pages, container, ssh, or none"
-            )
-        return declared
-    contract = load_contract(root / "workshop.toml")
-    kind = str((contract.get("forge") or {}).get("kind", ""))
-    return DEFAULT_SEAMS.get(kind, "none")
 
 
 def _publish_container(root: Path) -> None:
@@ -1958,7 +1769,7 @@ def docs_build(
     in_ci = run_context() is not None
     for line in generator_lines(result.stdout, result.stderr, in_ci=in_ci):
         print(line)
-    from livery.workshop._llms import write_llms_files
+    from livery.workshop.layers.docs._llms import write_llms_files
 
     written = write_llms_files(root)
     print(f"  agent files: {', '.join(written)}")
@@ -2099,7 +1910,7 @@ def docs_task_reference() -> None:
     tree the runner's ``docs_url`` links through refreshed.
     Idempotent: re-rendering the same tree rewrites the same pages.
     """
-    from livery.workshop._taskref import generate_task_reference
+    from livery.workshop.layers.docs._taskref import generate_task_reference
 
     root = _root()
     rendered = generate_task_reference(root)
@@ -2130,31 +1941,6 @@ def docs_serve(
         return
     generate_release_pages(root)
     tools.zensical.opts(cwd=root).serve()
-
-
-#: The categories the site reads: a change to any other category
-#: leaves the site as it was, so the docs job has nothing to build.
-SITE_CATEGORIES = frozenset(
-    {"prose", "nav", "asset", "example", "generated", "site", "readme"}
-)
-
-
-def site_reads(root: Path, packages: tuple[Package, ...], path: str) -> bool:
-    """Whether the site build reads *path*: the docs check's claim.
-
-    A package's docs pages, nav, assets and examples, and the root's
-    site files and README, are what the build reads; a note under
-    ``notes/``, a source file or a contract is not. The answer comes
-    from the category registry, so a layer that adds a category the
-    site reads names it here.
-    """
-    from livery.workshop._categories import category_of
-    from livery.workshop._provenance import unit_of
-
-    unit, inside = unit_of(root, packages, path)
-    if unit is None:
-        return False
-    return category_of(unit, inside).name in SITE_CATEGORIES
 
 
 def unread_by_the_site(root: Path) -> str:

@@ -58,10 +58,7 @@ def _facts(root: Path) -> dict[str, Any]:
     answers hold identity alone.
     """
     from livery.workshop._compose import layer_template_tree
-    from livery.workshop._docs import (
-        docs_requirements,
-        publish_seam,
-    )
+    from livery.workshop._docs_contract import docs_requirements, publish_seam
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._layers import layer_entries
@@ -842,14 +839,17 @@ def generate(root: Path) -> dict[str, str]:
         files = {".gitlab-ci.yml": _gitlab_document(facts, prog, everything=everything)}
     files["setup.sh"] = entry_script(root)
     rendered = {path: header + content for path, content in files.items()}
-    from livery.workshop._docs import overrides_template
+    from livery.workshop._site_files import site_files
 
     jinja_header = (
         "{#\n"
         + "".join("  " + line.removeprefix("# ") + "\n" for line in header.splitlines())
         + "#}\n"
     )
-    rendered["overrides/main.html"] = jinja_header + overrides_template(root)
+    # A mounted layer's own rendered files, the site's override
+    # template for one, carry the same header in Jinja's comment form.
+    for path, render in site_files().items():
+        rendered[path] = jinja_header + render(root)
     return rendered
 
 

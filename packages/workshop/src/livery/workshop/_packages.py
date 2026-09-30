@@ -705,9 +705,88 @@ def _write_edges_fix(
     return write_edges(context.root)
 
 
+#: The base's own import path, and the namespace its in-wheel layers live under.
+BASE_MODULE = "livery.workshop"
+LAYERS_NAMESPACE = "livery.workshop.layers"
+
+
+def layer_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
+    """Each base module that imports a layer, with the layer named.
+
+    The base (``livery.workshop`` outside ``livery.workshop.layers``)
+    imports no layer: what a layer needs of the base it takes through
+    the base's seams, and the base reaches a layer only through the
+    registries the layer fills at mount.
+    """
+    problems: list[str] = []
+    for module in modules:
+        if not module.dotted.startswith(BASE_MODULE + "."):
+            continue
+        if module.dotted.startswith(LAYERS_NAMESPACE + "."):
+            continue
+        for imported in module.imports:
+            if imported == LAYERS_NAMESPACE or imported.startswith(
+                LAYERS_NAMESPACE + "."
+            ):
+                problems.append(
+                    f"{module.relative}: the base imports the layer {imported}; the"
+                    " base reaches a layer through a registry it fills at mount,"
+                    " never by import"
+                )
+    return problems
+
+
+def layers_namespace_inits(root: Path) -> list[str]:
+    """Each layers ``__init__.py`` under *root* carrying more than the path extension.
+
+    The layers directory spans distributions the pkgutil way: every
+    tree's ``__init__.py`` there carries the path extension and
+    nothing else, so the copies never disagree, and the API extractor,
+    which collects nothing under a bare directory, sees a package.
+    """
+    import ast
+
+    problems: list[str] = []
+    for path in sorted(root.glob("packages/*/src/livery/workshop/layers/__init__.py")):
+        tree = ast.parse(path.read_text("utf-8"))
+        body = [node for node in tree.body if not _is_docstring(node)]
+        shape = [type(node).__name__ for node in body]
+        extends = any(
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Name) and t.id == "__path__" for t in node.targets
+            )
+            for node in body
+        )
+        if shape != ["ImportFrom", "Assign"] or not extends:
+            problems.append(
+                f"{path.relative_to(root).as_posix()}: livery.workshop.layers carries"
+                " the path extension alone (`from pkgutil import extend_path` and"
+                " `__path__ = extend_path(__path__, __name__)`), so a layer from"
+                " another distribution can join it; put nothing else there"
+            )
+    return problems
+
+
+def _is_docstring(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+
+
+def _base_imports_no_layer(
+    modules: tuple[ParsedModule, ...], context: RuleContext
+) -> list[str]:
+    """The base-imports-no-layer rule with the namespace check beside it."""
+    return layer_imports_in_the_base(modules) + layers_namespace_inits(context.root)
+
+
 # The builtin rules, registered at import the way the builtin checks
 # and kinds are; a layer registers its own beside them.
 register_ast_rule(AstRule("runner-terminal", _runner_terminal))
+register_ast_rule(AstRule("base-imports-no-layer", _base_imports_no_layer))
 register_ast_rule(AstRule("forge-stdlib-only", _forge_stdlib))
 register_ast_rule(
     AstRule("sibling-references", _sibling_references, fix=_write_edges_fix)

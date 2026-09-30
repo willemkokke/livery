@@ -23,7 +23,8 @@ import re
 import tomllib
 from pathlib import Path
 
-from livery.workshop._docs import _project_name, docs_table, zensical_config
+from livery.workshop._docs_contract import docs_table
+from livery.workshop.layers.docs._site import _project_name, zensical_config
 
 #: Site-tree prefixes whose pages never enter ``llms-full.txt``:
 #: machine territory whose content is history or reference the

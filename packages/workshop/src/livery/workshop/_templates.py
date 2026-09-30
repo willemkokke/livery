@@ -253,7 +253,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         if isinstance(entry, dict)
     }
     from livery.workshop._checks import extensions
-    from livery.workshop._docs import docs_table
+    from livery.workshop._docs_contract import docs_table
     from livery.workshop._provenance import PROJECT_RENDERED
     from livery.workshop._regions import contents
     from livery.workshop._slots import all_composed
@@ -328,7 +328,7 @@ def package_injections(root: Path) -> dict[str, Any]:
     contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
     root_answers = read_answers(root / _ANSWERS)
-    from livery.workshop._docs import docs_table
+    from livery.workshop._docs_contract import docs_table
 
     return {
         "runner_prog": footman.prog(),

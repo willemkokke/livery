@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery.workshop._llms import (
+from livery.workshop.layers.docs._llms import (
     first_sentence,
     llms_files,
     page_url,
@@ -39,7 +39,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
 
 
 def _mounted(root: Path) -> Path:
-    from livery.workshop._docs import (
+    from livery.workshop.layers.docs._site import (
         generate_api_pages,
         generate_changelog_pages,
         mount_package_docs,

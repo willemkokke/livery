@@ -449,7 +449,7 @@ extensible gate plan's open item 17) to have a layer to test.
 
 **Acceptance**
 
-- `fm ci.e2e --layer=livery.workshop.cpp` on the `host` setup births
+- `fm ci.e2e --layer=livery.workshop.layers.cpp` on the `host` setup births
   the cpp member, lands it and releases it; the loop pins the printed
   lines.
 

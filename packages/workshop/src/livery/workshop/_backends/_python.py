@@ -1720,7 +1720,7 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """
     import shutil
 
-    from livery.workshop._docs import materialise_module_docs
+    from livery.workshop._docs_contract import materialise_module_docs
 
     # The wheel-embedded _docs refresh whole from packages/<name>/docs
     # here, so the wheel can never carry docs older than the tree it
@@ -2151,7 +2151,7 @@ def api_pages(package: Package) -> list[tuple[str, str]]:
     package's, and documenting the forwarders would document the
     real thing twice.
     """
-    from livery.workshop._docs import declines_api, module_root
+    from livery.workshop._docs_contract import declines_api, module_root
 
     if declines_api(package):
         return []

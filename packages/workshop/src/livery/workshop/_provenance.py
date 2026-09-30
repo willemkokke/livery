@@ -495,7 +495,7 @@ def explain(
 
 def describe(root: Path, relative: Path) -> list[str]:
     """The lines ``fm explain`` prints for *relative*: category, channel, claims."""
-    from livery.workshop._docs import site_reads
+    from livery.workshop._docs_contract import site_reads
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()

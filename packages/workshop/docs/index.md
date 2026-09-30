@@ -106,6 +106,19 @@ An option a check does not declare, a check that does not exist, and
 a value of the wrong type each refuse in the layering check, naming
 the vocabulary.
 
+The documentation site is a layer inside the workshop wheel,
+`livery.workshop.layers.docs`, listed in `[workspace] layers` as a
+table naming `livery-workshop` as its distribution. It owns the site's
+assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots
+and the staged layer css, and it arrives through its own task entry
+point. The base keeps what it reads of a package's docs for its own
+reasons (the `[docs]` table and its generators, the layout of the
+`docs/` tree, the publish seam, the categories the site reads) and
+the nav blocks generators write; it imports no layer, which the
+layering check enforces, and `livery.workshop.layers` spans
+distributions the pkgutil way, its `__init__.py` carrying the path
+extension alone, so a layer can ship as a distribution of its own.
+
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the
 snippets extension: a fence whose one line is the snippet marker
