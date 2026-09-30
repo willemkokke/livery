@@ -225,7 +225,7 @@ def category_rules(kind: str) -> tuple[CategoryRule, ...]:
 
     names = [kind]
     if kind in kind_names():
-        names = [record.name for record in kind_chain(kind)]
+        names = [record.name for record in reversed(kind_chain(kind))]
     found: list[CategoryRule] = []
     for name in names:
         found.extend(_CATEGORIES.get(name, []))

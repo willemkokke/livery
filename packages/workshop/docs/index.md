@@ -106,6 +106,17 @@ An option a check does not declare, a check that does not exist, and
 a value of the wrong type each refuse in the layering check, naming
 the vocabulary.
 
+A layer's kinds and checks are judged by the conformance kit,
+`livery.workshop.testing`: a `Subject` names what the layer registers,
+each clause in `CLAUSES` returns the violations the subject commits,
+each naming its clause, and a layer's own suite runs every clause on
+its subject. The clauses so far: a concrete kind's backend takes every
+call of the backend protocol; a per-package configuration file resolves
+to the nearest kind's fragment, one owner per kind and file; and a
+path's category is the most specific rule's, the nearer kind winning a
+tie between kinds and two rules of one kind never tying. The workshop's
+own kinds and checks pass the same clauses in its test suite.
+
 The documentation site is a layer inside the workshop wheel,
 `livery.workshop.layers.docs`, listed in `[workspace] layers` as a
 table naming `livery-workshop` as its distribution. It owns the site's

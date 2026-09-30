@@ -122,7 +122,7 @@ def package_fragment(kind_name: str, file: str) -> tuple[str, str] | None:
 
     if kind_name not in kind_names():
         return None
-    for kind in kind_chain(kind_name):
+    for kind in reversed(kind_chain(kind_name)):
         for name in sorted(checks_by_name()):
             for fragment in checks_by_name()[name].fragments:
                 if fragment.file == file and fragment.kind == kind.name:
