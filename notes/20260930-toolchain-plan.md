@@ -68,8 +68,8 @@ extensible gate plan's open item 17 and the plan it names).
    inputs (the driver's path, size and modification time; for MSVC
    the instance and toolset vswhere reports).
 3. **A platform scope covers its hosts; a host key overrides.**
-   `[toolchain.windows]` speaks for `windows-x64` and `windows-arm`;
-   `[toolchain.windows-arm]` beside it wins for that host alone. The
+   `[cpp.toolchain.windows]` speaks for `windows-x64` and `windows-arm`;
+   `[cpp.toolchain.windows-arm]` beside it wins for that host alone. The
    same vocabulary the lock's scopes use, nothing new to learn.
 4. **Verdict tools stay store-first.** A tool a check role reads a
    verdict from (format, lint, typecheck, typecomplete, test) and the
@@ -96,11 +96,22 @@ extensible gate plan's open item 17 and the plan it names).
    Nothing on the merge path waits for a person.
 10. **A toolchain is the cpp layer's.** The declaration, the probes,
     the toolchain receipt, the `llvm` and `gcc` records and the
-    unreal kind's derivation live in `livery.workshop.cpp`. A
-    workspace that mounts no cpp layer has no `[toolchain]` table
-    (the contract refuses it by name as that layer's), probes
-    nothing and installs nothing of it. The host allowance of
-    contract 4 is the base's, since it concerns every store tool.
+    unreal kind's derivation live in `livery.workshop.cpp`. The
+    table is `[cpp.toolchain]`: the cpp layer owns `[cpp]` the way
+    the forge layer owns `[forge]` and the docs layer `[docs]`. A
+    workspace that mounts no cpp layer has no `[cpp]` table (the
+    contract refuses it by name as that layer's), probes nothing and
+    installs nothing of it. The host allowance of contract 4 is the
+    base's, since it concerns every store tool.
+11. **A package overrides, key by key, and several toolchains may be
+    active at once.** A package's `[cpp.toolchain]` table wins for
+    every key it sets and inherits the rest from the workspace's; a
+    package that wants nothing inherited sets `policy`, `prefer` and
+    each platform itself. The resolution runs per effective
+    declaration, so two packages with different declarations resolve
+    to two toolchains in one workspace, each with its own receipt and
+    profile. The lock holds one entry per toolchain record and exact
+    version, since the store already keeps versions side by side.
 
 ## The design
 
@@ -128,32 +139,32 @@ on Linux, the SDK on macOS, the MSVC headers, STL and Windows SDK for
 The cpp layer, `livery.workshop.cpp`, as the extensible gate plan
 rules it: a python-only project mounts no cpp layer and pays nothing
 for compilers. The base keeps the host allowance for store tools and
-the receipt shape; the layer registers the `[toolchain]` table, the
+the receipt shape; the layer registers the `[cpp.toolchain]` table, the
 probes, the records and the unreal kind. Phase 1 lands in the base
 now; phases 2 to 4 land in the layer once it exists as a package.
 
 ### The declaration
 
-In `workshop.toml`; a package may carry the same table and override
-the workspace's.
+In `workshop.toml`; a package's own `workshop.toml` may carry the
+same table and overrides the workspace's key by key (contract 11).
 
 ```toml
-[toolchain]
+[cpp.toolchain]
 policy = "host"                     # host: detect, use what satisfies
                                     # store: install, never detect
 prefer = ["msvc", "clang", "gcc"]   # the admitted families, in order
 
-[toolchain.windows]
+[cpp.toolchain.windows]
 msvc = ">=14.44.35211"
 
-[toolchain.windows-arm]
+[cpp.toolchain.windows-arm]
 msvc = ">=14.44.35211"
 clang = "==20.1.8"
 
-[toolchain.linux]
+[cpp.toolchain.linux]
 clang = "==20.1.8"
 
-[toolchain.macos]
+[cpp.toolchain.macos]
 apple-clang = ">=15"
 ```
 
@@ -189,7 +200,12 @@ For the admitted families in order, for this host:
 5. The first family that resolves wins. The receipt says which, and
    which were probed and why they did not.
 
-The receipt, `.workshop/receipts/toolchain.json`:
+The resolution is keyed by the effective declaration: the workspace's
+table with a package's keys laid over it. One receipt per distinct
+effective declaration, under `.workshop/receipts/toolchain/`, named
+by the declaration's digest; each package's contract resolves to its
+receipt, and a workspace whose packages all share the declaration has
+one. The receipt:
 
 ```json
 {
@@ -222,8 +238,9 @@ host-allowed = ["cmake", "ninja", "conan", "node", "docker", "git"]
 A kind contributes its own names (`host_allowed` on the kind record,
 beside `tools` and `host_tools`). Under the allowance `fm sync`
 resolves a tool from PATH as a `system-check` when a copy satisfies
-the requirement's floor (any version without one), and writes the
-receipt with `source: host`; without a satisfying copy it installs
+the floor: the requirement's, else the record's own `min_version`,
+else any version. It writes the receipt with `source: host`; without
+a satisfying copy it installs
 the locked one as today. A verdict tool in the list refuses at lock
 time by name. The lock records the allowance per requirement
 (`allow-host`), so a checkout and CI agree on which tools may vary.
@@ -269,7 +286,8 @@ Deliverables:
   `fm tools.lock` refuses a verdict tool in the allowance by name and
   by role.
 - `fm sync` resolves an allowed tool from PATH when a copy satisfies
-  the floor, through the store's `system-check` path, and writes the
+  the floor (the requirement's, else the record's `min_version`,
+  else any), through the store's `system-check` path, and writes the
   receipt with `source: host`; otherwise it installs the locked one.
   A fresh receipt spawns nothing.
 - `fm doctor` and `fm env.check` print, per tool, `host` or `store`
@@ -301,14 +319,20 @@ it.
 
 Deliverables:
 
-- `[toolchain]` parsed with `policy`, `prefer`, and per-platform and
+- `[cpp.toolchain]` parsed with `policy`, `prefer`, and per-platform and
   per-host family tables; refusals at parse for an unknown family, a
   spec shape that is neither `>=` nor `==`, and a constrained family
   outside the admitted list.
 - One probe per family behind a seam: vswhere for `msvc`, xcrun for
   `apple-clang`, PATH and versioned names for `clang` and `gcc`.
-- The resolution of "The design", the receipt, and the conan profile
-  rendered from it; `toolchain_env()` enters the receipt's instance.
+- The resolution of "The design" per effective declaration, the
+  receipts under `.workshop/receipts/toolchain/`, and the conan
+  profile rendered per package from its receipt; `toolchain_env()`
+  enters the receipt's instance.
+- The lock holds one entry per toolchain record and exact version
+  (`llvm` at 20.1.8 and at 23.1.2 side by side when two packages ask),
+  an additive widening of "one version per tool" for the cpp layer's
+  records alone.
 - Records: `llvm` (LLVM's archives, the zst variants, every host LLVM
   ships: linux-x64, linux-arm, macos-arm, windows-x64, windows-arm)
   and `gcc` (xpack: linux-x64, linux-arm, windows-x64). Their layouts
@@ -336,7 +360,7 @@ receipt has the receipt's drivers and version.
   MSVC and measures with Microsoft's engine; the Linux leg with the
   receipt's gcc and gcov; the macOS leg with apple-clang and llvm-cov.
   Proven by the kind tests on each leg.
-- A branch leg with `[toolchain.linux] clang = "==20.1.8"` builds
+- A branch leg with `[cpp.toolchain.linux] clang = "==20.1.8"` builds
   with the store's LLVM 20.1.8 on ubuntu-latest, its receipt saying
   `source: store`; proven by a `[[ci.schedule]]` entry on the branch.
 - `fm doctor` on this repository prints the three resolutions per
@@ -403,6 +427,14 @@ Deliverables:
   installed as well. Contract 10 places every toolchain part in
   `livery.workshop.cpp`; the host allowance stays the base's, and
   phases 2 to 4 wait for the layer's extraction.
+- 2026-09-30, Willem: the table is `[cpp.toolchain]`, under the cpp
+  layer's own `[cpp]`, as `[forge]` and `[docs]` are their layers'.
+- 2026-09-30, Willem, on open item 1: a host-allowed tool with no
+  floor in its requirement is held to its record's minimum. On open
+  item 2: a package overrides, because a package may need a really
+  specific toolchain, and several toolchains may be active in one
+  workspace. Contract 11 and the design carry both; the lock widens
+  to one entry per toolchain record and exact version.
 - 2026-09-30, on the cost of probing (Willem's question): a warm
   `fm tools.sync --frozen` is 1.2 s for 18 receipts and spawns no
   tool; a probe runs only for an absent or stale receipt, and a CI
@@ -410,12 +442,12 @@ Deliverables:
 
 ## Open
 
-1. The floor for a host-allowed tool without one in its requirement:
-   any version (this note), or the record's own `min_version` when
-   it has one. Owner: Willem, before phase 1.
-2. Whether a package's `[toolchain]` table may widen the workspace's
-   (a looser floor) or only narrow it. This note says it overrides;
-   narrowing only is stricter. Owner: Willem, before phase 2.
+1. Resolved 2026-09-30: the record's own `min_version` is the floor
+   for a host-allowed tool whose requirement has none. Decision
+   record.
+2. Resolved 2026-09-30: a package's `[cpp.toolchain]` table overrides
+   the workspace's key by key, and several toolchains may be active
+   at once. Contract 11.
 3. `zig` as a fifth family: one archive per host, MinGW ABI on
    Windows, no coverage reader inside. Owner: Willem, after phase 2.
 4. #930: the clang-format and clang-tidy records' source. The `llvm`
