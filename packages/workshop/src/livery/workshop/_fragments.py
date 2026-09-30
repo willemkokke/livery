@@ -294,8 +294,8 @@ unnecessary-type-conversion = "error"
 TESTS = r"""[tool.coverage.run]
 # The tests measure, and every process they start, every
 # {{ runner_prog }} child a test spawns included: inside CI the test
-# runner arms COVERAGE_PROCESS_START in pytest's environment, the
-# installed .pth starts the meter in every python under it, and the
+# runner arms COVERAGE_PROCESS_START in pytest's environment, the .pth
+# coverage installs starts the meter in every python under it, and the
 # patch cascades through the workers. The gate's own driver is never
 # metered, so a line counts only when a test reached it. Parallel
 # data files merge per leg, then across legs in the aggregating

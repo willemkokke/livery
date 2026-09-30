@@ -1602,6 +1602,22 @@ not. Gates 0.1.0 together with phases 1-8.
   expands in python and the credential-carrying argv rides
   recorded=False, out of receipts and recordings.
 
+- 2026-10-01, coverage's own startup hook (issue #994). Since
+  coverage 7.13.0 the wheel installs `a1_coverage.pth`, which starts
+  the meter when `COVERAGE_PROCESS_START` or `COVERAGE_PROCESS_CONFIG`
+  is set and imports nothing otherwise: the job the 2026-09-02 entry
+  gave the `coverage-enable-subprocess` package. That package's `.pth`
+  imported coverage in every Python the venv started, armed or not,
+  about 29 ms of a 48 ms interpreter start, every `fm` invocation
+  included. This repository locked coverage 7.16.0 from the day the
+  package arrived, so coverage's own hook was already the one starting
+  the meter here. The ruling stands, and the hook is coverage's own:
+  the test check's dev-group contribution drops the package and raises
+  its floor to `coverage[toml]>=7.13`, since 7.10 to 7.12 ship no
+  hook. Proven by tests: an interpreter of the venv without the
+  coverage variables imports no coverage, which failed with the
+  package installed, and an armed one writes a data file.
+
 ## Open
 
 1. Resolved 2026-09-02 by footman 0.49: built-in tasks are the

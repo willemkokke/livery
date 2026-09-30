@@ -165,15 +165,18 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
         ")\n"
         "print('HEAVY ' + json.dumps(heavy))\n"
     )
-    # Coverage's .pth hook starts itself in every python child when the
-    # gate runs under it, and coverage imports pathlib and typing — which
-    # would be measured as the hot path's sins. The probe testifies about
-    # footman, so it runs uninstrumented. `-S` skips site processing
-    # entirely: a dev venv's .pth hooks (coverage-enable-subprocess
-    # imports coverage, and with it pathlib and typing, at every
-    # interpreter start) would otherwise stand in for footman's own
-    # imports. PYTHONPATH hands the child exactly the package a wheel
-    # install would put on sys.path.
+    # The probe testifies about footman alone. Coverage's .pth hook
+    # starts the meter in a child the gate armed, and coverage imports
+    # pathlib and typing, which would count as the hot path's; the
+    # COVERAGE_ variables leave the child's environment. `-S` skips site
+    # processing entirely, for two reasons that hold on any machine: a
+    # .pth hook or sitecustomize the environment carries runs before the
+    # probe and its imports would count as footman's (setuptools'
+    # editable finder imports pathlib), and without site the child's
+    # sys.path holds footman's source alone, which PYTHONPATH puts
+    # there. The probe sees what a wheel install gets, footman and the
+    # standard library, and a hot path that reaches an installed
+    # package fails.
     env = {
         **os.environ,
         "FOOTMAN_CACHE_DIR": str(tmp_path / "cache"),

@@ -1605,14 +1605,14 @@ def _register_builtin() -> None:
                 ),
             ),
             # pytest and coverage import the project's environment, so
-            # they live in the venv: coverage 7.10 for its subprocess
-            # patch, xdist for -n auto, the .pth that meters every
-            # python the tests start.
+            # they live in the venv: coverage 7.13 for the .pth it
+            # installs, which starts the meter in every python the tests
+            # start once the runner arms it and imports nothing
+            # otherwise, and xdist for -n auto.
             contributions=(
                 ("python.dev-group", "pytest>=8.0"),
                 ("python.dev-group", "pytest-cov>=5"),
-                ("python.dev-group", "coverage[toml]>=7.10"),
-                ("python.dev-group", "coverage-enable-subprocess>=1.0"),
+                ("python.dev-group", "coverage[toml]>=7.13"),
                 ("python.dev-group", "pytest-xdist>=3.6"),
                 ("python.test.addopts", "-q"),
                 ("python.test.addopts", "-n auto"),
