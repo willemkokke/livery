@@ -1104,12 +1104,23 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
         Failed, match=r"names git_cliff, which takes no allowance: the release train"
     ):
         _tools.write_lock(root)
-    _contract(root, 'host-allowed = ["nonesuch"]\n')
-    with pytest.raises(Failed, match=r"names nonesuch, which no site requires"):
-        _tools.write_lock(root)
     _contract(root, 'host-allowed = "tea"\n')
     with pytest.raises(Failed, match=r"host-allowed is not a list of strings"):
         _tools.write_lock(root)
+
+
+def test_an_allowance_ahead_of_its_requirement_is_kept_and_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A workspace may allow cmake before its first C++ package; the lock says so."""
+    root = _workspace(tmp_path, monkeypatch, tools='host-allowed = ["cmake"]\n')
+    lock = _tools.write_lock(root)
+    assert "cmake" not in lock.tools
+    assert _tools.unrequired_allowances(root) == ("cmake",)
+    assert (
+        "host-allowed: cmake is allowed and no site requires it yet"
+        in capsys.readouterr().out
+    )
 
 
 def test_the_allowance_refuses_a_download_the_probe_cannot_find_by_its_name(

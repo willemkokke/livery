@@ -21,6 +21,13 @@ from livery.workshop import (
 )
 from livery.workshop._state import FETCHED, Keyed, Series
 
+#: The local series a loop pass writes its rows to: one file per
+#: pass on the driver's checkout, never pushed, so passes compare
+#: across days on one machine. Declared here rather than beside the
+#: loop, since the loop's module loads the CI verbs and this module
+#: must import without them; `fm store.show loop` reads it.
+LOOP = Series("loop", window=200, ci_only=False, local=True)
+
 #: Every series and family, remote and local.
 DECLARED: tuple[Series | Keyed, ...] = (
     _metrics.SERIES,
@@ -33,5 +40,6 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _diagnostics.SERIES,
     _traces.TRACES,
     _traces.ABOUT,
+    LOOP,
     FETCHED,
 )

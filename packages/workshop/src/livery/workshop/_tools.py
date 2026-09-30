@@ -176,8 +176,10 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     """The tools whose copy on the machine may serve: the contract's and the kinds'.
 
     The root contract's list and the present kinds' `host_allowed`
-    union, sorted. A name no site requires refuses, since an allowance
-    for nothing is a misspelling. A tool a check reads its verdict
+    union, sorted. A name no site requires yet is kept and named by
+    the lock as an allowance ahead of its requirement: a workspace may
+    allow `cmake` before its first C++ package arrives, and the lock's
+    line is where a misspelling shows. A tool a check reads its verdict
     from refuses naming the check and its role: a linter that varies
     by machine makes the gate disagree with CI. `uv` and `git_cliff`
     refuse by name: the entry pins uv, and the release train reads
@@ -196,7 +198,6 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     names = tuple(sorted({*declared, *kind_host_allowed(kinds)}))
     if not names:
         return ()
-    required = {requirement.name for requirement in requirements(root)}
     verdicts: dict[str, set[str]] = {}
     for kind_name in sorted(kinds):
         for tool, check in tools_for_kind(kind_name):
@@ -205,8 +206,6 @@ def host_allowed(root: Path) -> tuple[str, ...]:
                 verdicts.setdefault(tool, set()).add(f"{check} ({role})")
     for name in names:
         where = f"workshop.toml: [tools] host-allowed names {name}"
-        if name not in required:
-            fail(f"{where}, which no site requires")
         if name in PINNED_TOOLS:
             reason = (
                 "the entry pins uv"
@@ -220,6 +219,12 @@ def host_allowed(root: Path) -> tuple[str, ...]:
                 f" {', '.join(sorted(verdicts[name]))} read it"
             )
     return names
+
+
+def unrequired_allowances(root: Path) -> tuple[str, ...]:
+    """The host-allowed names no site requires yet, sorted: allowances ahead of need."""
+    required = {requirement.name for requirement in requirements(root)}
+    return tuple(name for name in host_allowed(root) if name not in required)
 
 
 def _host_probe_gap(listing: Catalogue, name: str, version: str, host: str) -> str:
@@ -520,6 +525,8 @@ def write_lock(
     lock.save(lock_path(root))
     for note in notes:
         print(f"  {note}")
+    for name in unrequired_allowances(root):
+        print(f"  host-allowed: {name} is allowed and no site requires it yet")
     for note in unreached_scopes(root, lock):
         print(f"  {note}")
     return lock

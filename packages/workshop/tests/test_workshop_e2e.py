@@ -884,6 +884,13 @@ def test_a_scenario_is_timed_with_its_runs_and_a_failure_is_marked() -> None:
     assert _e2e.timing_table([]) == ["  timing: nothing ran"]
 
 
+def test_the_loop_series_is_declared_with_the_others() -> None:
+    from livery.workshop._series import DECLARED
+
+    assert _e2e.LOOP_SERIES in DECLARED and _e2e.LOOP_SERIES.local
+    assert not _e2e.LOOP_SERIES.ci_only
+
+
 def test_a_pass_records_its_rows_on_the_local_loop_series(seeds: Seeds) -> None:
     work = seeds("pushed", pushed) / "work"
     pass_ = _e2e.Pass("gitea", "http://gitea:3000")
