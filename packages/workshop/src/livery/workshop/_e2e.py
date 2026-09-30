@@ -16,8 +16,8 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +25,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
+from livery.workshop._state import Series
 from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
@@ -50,6 +51,18 @@ DEV_MEMBER = "packages/workshop"
 #: What a reset of the loop's tree keeps: the directories `fm sync`
 #: materialises, gitignored and read by the gate on the desk.
 KEPT_BY_SYNC = (".venv", "typings", ".workshop")
+
+
+@dataclass
+class RunCount:
+    """How many runner runs the pass has followed so far; the timing table reads it."""
+
+    count: int = 0
+
+
+#: The pass-wide count every wait on a run adds to, so a scenario's
+#: row says how many runs it cost, not only how long it took.
+RUNS = RunCount()
 
 
 def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
@@ -1073,6 +1086,7 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
                     f" {repo.web_url()}/actions/runs/{latest.id}"
                 )
             print(f"  {workflow:<14} {latest.conclusion}")
+            RUNS.count += 1
             return
         if time.monotonic() >= deadline:
             fail(
@@ -1223,6 +1237,7 @@ def _watch(
                 f"{waited}: {repo.web_url()}/actions"
             )
         time.sleep(interval)
+    RUNS.count += len(runs)
     for line in judge_runs(repo, runs, branch=branch):
         print(line)
 
@@ -1447,6 +1462,7 @@ def _completed_run(
                 f" {repo.web_url()}/actions"
             )
         time.sleep(interval)
+    RUNS.count += 1
     if run.conclusion != "success":
         fail(
             f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
@@ -2298,83 +2314,314 @@ def _merge_setup(kind: str, sha: str) -> None:
     print(f"  setup PR #{pr.number}: merged; the gate is proven")
 
 
+# --- the scenarios ---------------------------------------------------------------
+
+
+@dataclass
+class Pass:
+    """What one pass carries between its scenarios.
+
+    Attributes:
+        forge: The lane's kind, ``gitea`` or ``gitlab``.
+        url: The forge's host-side URL from the shared environment.
+        fresh: Whether the pass starts over from nothing.
+        root: The loop's workspace once ``birth`` has run; None before.
+        timings: One entry per scenario run, in order.
+    """
+
+    forge: str
+    url: str
+    fresh: bool = False
+    root: Path | None = None
+    timings: list[Timing] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Timing:
+    """What one scenario cost.
+
+    Attributes:
+        name: The scenario.
+        seconds: Its wall time.
+        runs: The runner runs it followed.
+        failed: Whether it ended in a refusal or an error.
+    """
+
+    name: str
+    seconds: float
+    runs: int
+    failed: bool = False
+
+
+@dataclass(frozen=True)
+class Scenario:
+    """One thing the loop proves, by name, with what must have run before it.
+
+    Attributes:
+        name: The name ``--scenario`` takes.
+        needs: The scenarios this one builds on; a pass runs them
+            first, once, whether or not they were named.
+        run: The proof, given the pass.
+        daemon: Whether it needs the runner's docker socket: the
+            release builds the native member's wheel through
+            cibuildwheel on the runner, and nothing else does.
+    """
+
+    name: str
+    needs: tuple[str, ...]
+    run: Callable[[Pass], None]
+    daemon: bool = False
+
+
+def _born(pass_: Pass) -> None:
+    """Birth or resume the loop's workspace and merge its setup pull request.
+
+    The repository, its protection and the setup pull request through
+    ``fm new.project``, the secrets, the wiring to the workshop's own
+    dev wheels, the pushed head's runs followed to their verdicts on
+    the real runner, and the setup squash merged.
+    """
+    forge = pass_.forge
+    lane, lane_token = _dev_forge(forge)
+    root = _loop_home(forge) / E2E_REPO
+    if pass_.fresh:
+        for line in start_over(lane, lane_token, root, url=pass_.url, kind=forge):
+            print(line)
+    if (root / ".git").is_dir():
+        # A resumed birth pushes before it returns, so an existing
+        # workspace authenticates first; birth resets the remote, so
+        # it authenticates again after. Main then fast-forwards onto
+        # the merges the loop itself made: without the reconcile,
+        # birth's foreign-repo guard reads our own squash as a
+        # stranger's history and refuses.
+        _authenticate_remote(root, lane_token, forge)
+        _align_main(root)
+        # Birth's resume renders from the contract's template source
+        # before the wiring re-points it, and the source a previous
+        # pass named may be a worktree that no longer exists; this
+        # pass's templates are the source, from here.
+        contract = root / "workshop.toml"
+        contract.write_text(
+            _point_templates(contract.read_text("utf-8"), _TEMPLATES), "utf-8"
+        )
+    root = _birth(forge, pass_.url)
+    _authenticate_remote(root, lane_token, forge)
+    provision(forge)
+    # After the project exists: GitLab's registry belongs to the
+    # project, and a fresh start's delete is asynchronous, so a
+    # publish before the birth lands in the project being deleted.
+    pins = _publish_dev_wheels(forge)
+    sha = _eat_dev_wheels(root, pins, forge)
+    print(f"  watching {sha[:12]} on the runner")
+    from livery.workshop._new_project import _SETUP_BRANCH
+
+    _watch(forge, pass_.url, sha, branch=_SETUP_BRANCH)
+    print("  green: the loop's gate ran on the real runner")
+    _merge_setup(forge, sha)
+    pass_.root = root
+
+
+def _at(pass_: Pass) -> Path:
+    """The loop's workspace; a refusal when birth has not run in this pass."""
+    if pass_.root is None:
+        fail("the loop's workspace is not born yet; `birth` runs before every scenario")
+    return pass_.root
+
+
+#: Every scenario, in dependency order: a scenario's needs come
+#: before it, so a chosen subset runs in this order too.
+SCENARIOS: tuple[Scenario, ...] = (
+    Scenario("birth", (), _born),
+    Scenario(
+        "verified-skip", ("birth",), lambda p: _prove_verified_skip(_at(p), p.forge)
+    ),
+    Scenario("members", ("birth",), lambda p: _ensure_members(_at(p))),
+    Scenario("ratchet", ("members",), lambda p: _prepare_ratchet(_at(p), p.forge)),
+    Scenario("scoped-leg", ("ratchet",), lambda p: _prove_scoped_leg(_at(p), p.forge)),
+    Scenario("prose-leg", ("members",), lambda p: _prove_prose_leg(_at(p), p.forge)),
+    Scenario("tests-leg", ("members",), lambda p: _prove_tests_leg(_at(p), p.forge)),
+    Scenario(
+        "release", ("members",), lambda p: _release_act(_at(p), p.forge), daemon=True
+    ),
+    Scenario("nightly", ("release",), lambda p: _prove_nightly(_at(p), p.forge)),
+    Scenario(
+        "dispatched-gate",
+        ("members",),
+        lambda p: _prove_dispatched_gate(_at(p), p.forge),
+    ),
+    Scenario(
+        "contributed-point",
+        ("members",),
+        lambda p: _prove_contributed_point(_at(p), p.forge),
+    ),
+)
+
+#: The named sets ``--scenario`` takes beside the scenarios' own names.
+SETS: dict[str, tuple[str, ...]] = {
+    "develop": ("birth", "verified-skip", "members", "scoped-leg"),
+    "release": ("birth", "verified-skip", "members", "scoped-leg", "release"),
+    "points": ("nightly", "dispatched-gate", "contributed-point"),
+    "all": tuple(scenario.name for scenario in SCENARIOS),
+}
+
+
+def scenarios_for(spec: str) -> tuple[Scenario, ...]:
+    """The scenarios *spec* names, their needs added, in the registry's order.
+
+    *spec* is comma-separated set names and scenario names. A name
+    that is neither refuses naming both lists; an empty *spec*
+    refuses too. A need is run once however many names reach it.
+    """
+    by_name = {scenario.name: scenario for scenario in SCENARIOS}
+    wanted: set[str] = set()
+    for token in (part.strip() for part in spec.split(",")):
+        if not token:
+            continue
+        if token in SETS:
+            wanted.update(SETS[token])
+        elif token in by_name:
+            wanted.add(token)
+        else:
+            fail(
+                f"{token!r} is not a scenario or a set; the sets are"
+                f" {', '.join(SETS)} and the scenarios {', '.join(by_name)}"
+            )
+    if not wanted:
+        fail(f"--scenario names nothing; the sets are {', '.join(SETS)}")
+    pending = list(wanted)
+    while pending:
+        for need in by_name[pending.pop()].needs:
+            if need not in wanted:
+                wanted.add(need)
+                pending.append(need)
+    return tuple(scenario for scenario in SCENARIOS if scenario.name in wanted)
+
+
+def daemon_needed(scenarios: Sequence[Scenario]) -> bool:
+    """Whether any of *scenarios* needs the runner's docker socket."""
+    return any(scenario.daemon for scenario in scenarios)
+
+
+def run_scenario(pass_: Pass, scenario: Scenario) -> None:
+    """Run *scenario* for *pass_*, timed; a failure is timed and marked, then raised."""
+    import time
+
+    started = time.monotonic()
+    runs_before = RUNS.count
+    print(f"  scenario {scenario.name}")
+    failed = True
+    try:
+        scenario.run(pass_)
+        failed = False
+    finally:
+        pass_.timings.append(
+            Timing(
+                scenario.name,
+                time.monotonic() - started,
+                RUNS.count - runs_before,
+                failed,
+            )
+        )
+
+
+def timing_table(timings: Sequence[Timing]) -> list[str]:
+    """The lines a pass ends with: each scenario's time and runs, then the total."""
+    if not timings:
+        return ["  timing: nothing ran"]
+    width = max(len(timing.name) for timing in timings)
+    lines = [
+        f"  {timing.name:<{width}}  {timing.seconds:7.1f}s  {timing.runs} run(s)"
+        + ("  failed" if timing.failed else "")
+        for timing in timings
+    ]
+    total = sum(timing.seconds for timing in timings)
+    runs = sum(timing.runs for timing in timings)
+    lines.append(f"  {'total':<{width}}  {total:7.1f}s  {runs} run(s)")
+    return lines
+
+
+#: The local series a pass writes its rows to: one file per pass on
+#: the driver's checkout, never pushed, so passes compare across days
+#: on one machine. `fm store.show loop` reads it.
+LOOP_SERIES = Series("loop", window=200, ci_only=False, local=True)
+
+
+def record_pass(root: Path, pass_: Pass, asked: str) -> str:
+    """Put the pass's timings on the local loop series; the line to print."""
+    from datetime import UTC, datetime
+
+    when = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    row = {
+        "forge": pass_.forge,
+        "asked": asked,
+        "scenarios": [
+            {
+                "name": timing.name,
+                "seconds": round(timing.seconds, 1),
+                "runs": timing.runs,
+                "failed": timing.failed,
+            }
+            for timing in pass_.timings
+        ],
+    }
+    why = LOOP_SERIES.put(
+        root, {f"pass-{when}.json": row}, message=f"loop: pass {when} ({asked})"
+    )
+    if why:
+        return f"  loop series: {why}; the pass is not recorded"
+    return f"  loop series: pass {when} recorded ({len(pass_.timings)} scenario(s))"
+
+
 if _WORKSHOP_TESTS.is_dir():
     # serial: the driver births into and pushes from its own
     # directories, so it owns the process globals for the run.
     @ci.task(name="e2e", serial=True)
-    def e2e(forge: str = "gitea", fresh: bool = False) -> None:
-        """Exercise the CI and release story on the local forge.
+    def e2e(
+        forge: str = "gitea", fresh: bool = False, scenario: str = "develop"
+    ) -> None:
+        """Exercise the CI and release story on the local forge, by scenario.
 
-        Births or resumes the loop's workspace through
-        ``fm new.project`` (repository, protection, setup pull
-        request), provisions the secrets, wires the workspace to the
-        workshop's own dev wheels, and follows the pushed head's
-        workflow runs to their verdicts on the real runner. Re-running
-        is the recovery procedure at every step. The release act into
-        the local registry follows in this phase; the verb always says
-        exactly what it covers. ``--fresh`` starts over from nothing:
-        the loop's repository on the dev forge, its releases in the
-        forge's registry, and the local workspace go, then the pass
-        births everything anew. It refuses while the workspace holds
-        commits the forge has not seen.
+        ``--scenario`` names what the pass proves: scenario names, set
+        names, or both, comma-separated. The sets are ``develop``
+        (birth, the verified skip, the members, the scoped leg),
+        ``release`` (develop and the release act), ``points`` (the
+        nightly, the dispatched gate, the contributed point) and
+        ``all``; a scenario's needs run first, once. ``birth`` births
+        or resumes the loop's workspace through ``fm new.project``
+        (repository, protection, setup pull request), provisions the
+        secrets, wires the workspace to the workshop's own dev wheels,
+        and follows the pushed head's runs to their verdicts on the
+        real runner. Re-running is the recovery procedure at every
+        step. The pass ends with a table, each scenario's time and
+        runs, and records the same rows on the local ``loop`` series.
+        ``--fresh`` starts over from nothing: the loop's repository on
+        the dev forge, its releases in the forge's registry, and the
+        local workspace go, then the pass births everything anew. It
+        refuses while the workspace holds commits the forge has not
+        seen.
         """
         import os
 
+        from livery.workshop._layers import workspace_root
+
+        chosen = scenarios_for(scenario)
         # Every commit the pass makes, the driver's, the birth's and
         # the loop's own fm's, is unsigned: the setting rides the
         # task's environment into each child.
         os.environ.update(unsigned_environment(os.environ))
-        url = os.environ.get(_lane(forge).url_var, "")
         _require_host_alias(forge)
-        _require_runner_docker(forge)
-        lane, lane_token = _dev_forge(forge)
-        root = _loop_home(forge) / E2E_REPO
-        if fresh:
-            for line in start_over(lane, lane_token, root, url=url, kind=forge):
+        if daemon_needed(chosen):
+            _require_runner_docker(forge)
+        pass_ = Pass(forge, os.environ.get(_lane(forge).url_var, ""), fresh)
+        RUNS.count = 0
+        try:
+            for item in chosen:
+                run_scenario(pass_, item)
+        finally:
+            for line in timing_table(pass_.timings):
                 print(line)
-        if (root / ".git").is_dir():
-            # A resumed birth pushes before it returns, so an
-            # existing workspace authenticates first; birth resets
-            # the remote, so it authenticates again after. Main then
-            # fast-forwards onto the merges the loop itself made:
-            # without the reconcile, birth's foreign-repo guard reads
-            # our own squash as a stranger's history and refuses.
-
-            _authenticate_remote(root, lane_token, forge)
-            _align_main(root)
-            # Birth's resume renders from the contract's template
-            # source before the wiring re-points it, and the source a
-            # previous pass named may be a worktree that no longer
-            # exists; this pass's templates are the source, from here.
-            contract = root / "workshop.toml"
-            contract.write_text(
-                _point_templates(contract.read_text("utf-8"), _TEMPLATES), "utf-8"
-            )
-        root = _birth(forge, url)
-        _authenticate_remote(root, lane_token, forge)
-        provision(forge)
-        # After the project exists: GitLab's registry belongs to the
-        # project, and a fresh start's delete is asynchronous, so a
-        # publish before the birth lands in the project being deleted.
-        pins = _publish_dev_wheels(forge)
-        sha = _eat_dev_wheels(root, pins, forge)
-        print(f"  watching {sha[:12]} on the runner")
-        from livery.workshop._new_project import _SETUP_BRANCH
-
-        _watch(forge, url, sha, branch=_SETUP_BRANCH)
-        print("  green: the loop's gate ran on the real runner")
-        _merge_setup(forge, sha)
-        _prove_verified_skip(root, forge)
-        _ensure_members(root)
-        _prepare_ratchet(root, forge)
-        _prove_scoped_leg(root, forge)
-        _prove_prose_leg(root, forge)
-        _prove_tests_leg(root, forge)
-        _release_act(root, forge)
-        _prove_nightly(root, forge)
-        _prove_dispatched_gate(root, forge)
-        _prove_contributed_point(root, forge)
-        print(
-            "  the loop is whole: gate, merge, release, receipt, nightly, the"
-            " gate on command, and a contributed point"
-        )
+            driver = workspace_root()
+            if driver is not None:
+                print(record_pass(driver, pass_, scenario))
+        names = ", ".join(item.name for item in chosen)
+        print(f"  the loop proved {names}")
