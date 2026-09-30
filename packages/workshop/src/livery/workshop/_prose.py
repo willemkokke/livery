@@ -450,19 +450,17 @@ def render_gate(root: Path, audience: str | None) -> str:
     lines = ["# The gate's checks", ""]
     if audience == HUMAN:
         lines += [
-            f"`{prog} check` runs every check below, each a record a layer"
-            f" registered; the package kinds present are {kinds}.",
+            f"`{prog} check` runs every check below, each registered by a"
+            f" layer; the package kinds present are {kinds}.",
             "",
-            "| check | role | tools | kinds | rewrites under `--fix` |",
-            "| --- | --- | --- | --- | --- |",
+            "| check | tools | kinds | rewrites under `--fix` |",
+            "| --- | --- | --- | --- |",
         ]
         for record in records:
             tools = ", ".join(record.tools) or "none"
             scope = ", ".join(record.kinds) or "every"
             fix = "yes" if record.fix is not None else "no"
-            lines.append(
-                f"| {record.name} | {record.role} | {tools} | {scope} | {fix} |"
-            )
+            lines.append(f"| {record.name} | {tools} | {scope} | {fix} |")
     else:
         lines += [
             f"`{prog} check` runs these checks in parallel, the rewriters first"
@@ -471,10 +469,18 @@ def render_gate(root: Path, audience: str | None) -> str:
             "",
         ]
         for record in records:
-            tools = f" ({', '.join(record.tools)})" if record.tools else ""
-            scope = f" on {', '.join(record.kinds)} packages" if record.kinds else ""
+            # The name carries the tool; the store's tools are named
+            # only where they are more than it.
+            tools = (
+                f" ({', '.join(record.tools)})"
+                if record.tools and record.tools != (record.tool,)
+                else ""
+            )
+            where = "the workspace"
+            if record.kinds:
+                where = f"{', '.join(record.kinds)} packages"
             fix = "; rewrites under --fix" if record.fix is not None else ""
-            lines.append(f"- {record.name}{tools}: {record.role}{scope}{fix}")
+            lines.append(f"- {record.name}{tools}: judges {where}{fix}")
     return "\n".join(lines) + "\n"
 
 

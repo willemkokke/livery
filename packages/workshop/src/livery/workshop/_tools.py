@@ -180,7 +180,7 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     the lock as an allowance ahead of its requirement: a workspace may
     allow `cmake` before its first C++ package arrives, and the lock's
     line is where a misspelling shows. A tool a check reads its verdict
-    from refuses naming the check and its role: a linter that varies
+    from refuses, naming the checks that read it: a linter that varies
     by machine makes the gate disagree with CI. `uv` and `git_cliff`
     refuse by name: the entry pins uv, and the release train reads
     git-cliff's output. A download whose executable is not named like
@@ -201,9 +201,8 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     verdicts: dict[str, set[str]] = {}
     for kind_name in sorted(kinds):
         for tool, check in tools_for_kind(kind_name):
-            role = check_for(check).role
-            if role in VERDICT_ROLES:
-                verdicts.setdefault(tool, set()).add(f"{check} ({role})")
+            if check_for(check).role in VERDICT_ROLES:
+                verdicts.setdefault(tool, set()).add(check)
     for name in names:
         where = f"workshop.toml: [tools] host-allowed names {name}"
         if name in PINNED_TOOLS:

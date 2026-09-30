@@ -268,14 +268,14 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     sites = {(r.name, r.site) for r in declared}
     assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
     assert {
-        ("ruff", "check format"),
-        ("ruff", "check lint"),
-        ("pytest", "check test"),
-        ("basedpyright", "check typecheck"),
-        ("basedpyright", "check typecomplete"),
-        ("mypy", "check typecheck"),
-        ("ty", "check typecheck"),
-        ("pyrefly", "check typecheck"),
+        ("ruff", "check format.ruff"),
+        ("ruff", "check lint.ruff"),
+        ("pytest", "check test.pytest"),
+        ("basedpyright", "check typecheck.basedpyright"),
+        ("basedpyright", "check typecomplete.basedpyright"),
+        ("mypy", "check typecheck.mypy"),
+        ("ty", "check typecheck.ty"),
+        ("pyrefly", "check typecheck.pyrefly"),
     } <= sites
     assert {r.name for r in declared if r.site == "kind python"} == {"uv"}
     lock = _tools.write_lock(root)
@@ -312,7 +312,7 @@ def test_the_three_sites_union_and_each_names_itself(
     sites = {(r.name, r.site) for r in _tools.requirements(root)}
     assert ("cspell", "packages/member/workshop.toml") in sites
     assert ("git-cliff", "workshop.toml") in sites
-    assert ("ruff", "workshop.toml") in sites and ("ruff", "check format") in sites
+    assert ("ruff", "workshop.toml") in sites and ("ruff", "check format.ruff") in sites
     lock = _tools.write_lock(root)
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
@@ -1090,7 +1090,7 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
         Failed,
         match=(
             r"host-allowed names ruff, whose version is a verdict:"
-            r" format \(format\), lint \(lint\) read it"
+            r" format\.ruff, lint\.ruff read it"
         ),
     ):
         _tools.write_lock(root)

@@ -89,22 +89,36 @@ its wheel under `content/docs/assets/`; the build stages it under
 `docs/_layers/` and lists it in `extra_css` in layer order, before
 the packages' declared sheets and the workspace's own
 `docs/assets/site.css`, which loads last. A
-check a layer withdraws takes its lines with it. And its `options`
-are what a package may set under `[checks.<name>]` in its own
-contract, each with a type and a default; every check carries
-`enabled`, and the python test check carries `parallel`:
+check a layer withdraws takes its lines with it.
+
+A check is named by its role and its tool, `test.pytest`, and that
+name is everything a person types: every role is a verb and every
+check a sub-task of it, generated from the registry. `fm test` runs
+every check of the test role and `fm test.pytest` the one, over the
+named paths or the workspace; a check with a second role answers
+under both. A verb offers exactly the flags its checks read:
+`--fix` and `--safe-fix` where a check can fix, `--point` where one
+selects tests by CI point, so `fm test --point=nightly` runs the
+nightly's tests and `fm test.ctest` offers no point at all. A role
+whose verb already exists is served by it: the template check is
+`fm template.check`, the provenance check `fm provenance`.
+
+A check's `options` are what a package may set under
+`[checks.<role>.<tool>]` in its own contract, each with a type and a
+default; every check carries `enabled`, and pytest's test check
+carries `parallel`:
 
 ```toml
-[checks.typecomplete]
+[checks.typecomplete.basedpyright]
 enabled = false        # skipped by name in the gate's output
 
-[checks.test]
+[checks.test.pytest]
 parallel = false       # this package's suite runs under -n 0, in a run of its own
 ```
 
-An option a check does not declare, a check that does not exist, and
-a value of the wrong type each refuse in the layering check, naming
-the vocabulary.
+An option a check does not declare, a check that does not exist, an
+option set on a role rather than on one of its checks, and a value of
+the wrong type each refuse, naming the vocabulary.
 
 A layer's kinds and checks are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the layer registers,
@@ -147,15 +161,20 @@ snippets extension: a fence whose one line is the snippet marker
 followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
-`examples` check runs each file as
-one test through the kind's runner, pytest for python, from the
-workspace root; a failure reports the example's own file and line. A
-`conftest.py` beside the examples is the package's setup around them,
-never an example: it reaches every example item through the `example`
-marker, as footman's does to run each inside a captured registry. The
-`example` category is claimed by `lint`, for names only, by
-`examples` and by the site; a page's prose reaches the site build and
-no test, and an example file reaches the examples check and the site.
+`examples.pytest` check runs each file as one test through the kind's
+runner, pytest for python, from the workspace root; a failure reports
+the example's own file and line. An example is never a test module:
+pytest's own collector leaves it alone, named or not, so a `test_*`
+function in it is code a reader sees and never a test the workspace
+runs. A run over named files runs the named examples; a whole walk
+runs the package's directory. A `conftest.py` beside the examples is
+the package's setup around them, never an example: it reaches every
+example item through the `example` marker, as footman's does to run
+each inside a captured registry, and naming it runs every example.
+The `example` category is claimed by `lint.ruff`, for names only, by
+`examples.pytest` and by the site; a page's prose reaches the site
+build and no test, and an example file reaches the examples check and
+the site.
 
 A check record also owns its configuration. Its `fragments`, one per
 rendered file, are what the render writes for it: the format, lint,
@@ -336,7 +355,11 @@ absence.
   or a directory's: every check whose claims reach one of them runs
   over them alone, and nothing is recorded as proved; `--safe-fix`
   fixes without removing code, the post-edit hook's mode; `--point`
-  selects a CI point's tests. On a machine the gate is the reflex:
+  selects a CI point's tests. A named path that is no file or
+  directory in the workspace refuses, since checking nothing there
+  would pass; the checks pass nothing through to a tool, so a tool's
+  own arguments after `--` refuse the same way. On a machine the gate
+  is the reflex:
   it runs what the working tree changed since the nearest tree this
   checkout's own green gates proved (the one with the fewest changed
   paths, a green check of the dirty tree included), the packages that
@@ -376,6 +399,12 @@ absence.
   that base tree's, so their verdicts carry over, and the row names
   the base. Without such a base a narrowed run stamps nothing. The
   release train reads the same record before it waits on main's run.
+- `fm <role>` and `fm <role>.<tool>`: one role's checks, or one
+  check, generated from the check registry and run over the named
+  paths or the workspace the way `fm check <paths>` runs them, with
+  nothing recorded as proved; each offers exactly the flags its
+  checks read. `fm test.pytest packages/cbor` runs one package's
+  suite.
 - The check legs run on every runner the contract names, with the
   newest Python of a derived matrix; the nightly point runs the whole
   matrix, floor included, so the floor's legs cost runner minutes at
@@ -505,7 +534,7 @@ named points and nowhere else; `@pytest.mark.also_at("release")`
 adds points to the default ones. The job runner names the point to
 every child it spawns, and the workshop's pytest plugin deselects
 the rest; a local `fm check` selects for the gate, and
-`fm check --full --point=nightly` selects for a point on demand.
+`fm test --point=nightly` selects for a point on demand.
 A `[[ci.schedule]]` entry in `workshop.toml` attaches a task to a
 point's job; `every = "1w"` or `"2w"` runs it on Mondays, or on the
 Monday of an even ISO week, and any other run of the point skips it

@@ -57,6 +57,25 @@ def pytest_collect_file(
     return ExampleFile.from_parent(parent, path=file_path)
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_pycollect_makemodule(
+    module_path: Path, parent: pytest.Collector
+) -> pytest.Collector | None:
+    """Keep pytest's python collector off an example.
+
+    Pytest collects a file named on its command line as a test module
+    whatever its name, and one whose name matches ``python_files`` in
+    a directory it walks. Either way it would import the example
+    outside the setup its conftest gives it, and run the example's
+    ``test_*`` functions as tests of the workspace: a function showing
+    a reader how to test a tasks file then runs the workspace's own
+    gate from inside it. The example stays this plugin's, run whole.
+    """
+    if not is_example(module_path):
+        return None
+    return Withheld.from_parent(parent, path=module_path)
+
+
 class ExampleFile(pytest.File):
     """One example file: one item, the file run whole."""
 
@@ -64,6 +83,13 @@ class ExampleFile(pytest.File):
         item = ExampleItem.from_parent(self, name=self.path.stem)
         item.add_marker(MARKER)
         yield item
+
+
+class Withheld(pytest.File):
+    """An example as pytest's python collector sees it: nothing to collect."""
+
+    def collect(self) -> Iterator[pytest.Item]:
+        return iter(())
 
 
 class ExampleItem(pytest.Item):

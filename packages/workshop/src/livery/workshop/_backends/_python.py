@@ -130,8 +130,8 @@ def run_lint(
     ruff.check(*chosen, fix=fix)
 
 
-def run_typecheck(paths: tuple[str, ...] = ()) -> None:
-    """Type-check with all four gating checkers, in parallel.
+def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
+    """Type-check with the four gating checkers in parallel, or with *only* one.
 
     basedpyright runs with warnings gating as errors. mypy is strict
     on livery.* and checks every test body as consumer code, once per
@@ -141,7 +141,9 @@ def run_typecheck(paths: tuple[str, ...] = ()) -> None:
     checker livery uses is a checker the tree is clean against.
 
     *paths* narrows basedpyright and mypy to the affected subset; ty
-    and pyrefly keep their configured whole either way.
+    and pyrefly keep their configured whole either way. *only* names
+    one checker, ``basedpyright``, ``mypy``, ``ty`` or ``pyrefly``,
+    the way each is a check of the typecheck role.
     """
     from livery.footman import parallel, step
 
@@ -165,14 +167,16 @@ def run_typecheck(paths: tuple[str, ...] = ()) -> None:
     def run_pyrefly() -> None:
         pyrefly("check")
 
-    parallel(
-        step(based, title="basedpyright")(),
-        step(mypy_linux)(),
-        step(mypy_darwin)(),
-        step(mypy_win32)(),
-        step(run_ty, title="ty")(),
-        step(run_pyrefly, title="pyrefly")(),
-    )
+    steps = {
+        "basedpyright": (step(based, title="basedpyright"),),
+        "mypy": (step(mypy_linux), step(mypy_darwin), step(mypy_win32)),
+        "ty": (step(run_ty, title="ty"),),
+        "pyrefly": (step(run_pyrefly, title="pyrefly"),),
+    }
+    chosen = [
+        s for name, group in steps.items() if not only or name == only for s in group
+    ]
+    parallel(*(made() for made in chosen))
 
 
 def run_typecomplete(packages: tuple[Package, ...]) -> None:
@@ -1283,17 +1287,26 @@ def run_examples(package: Package, root: Path, files: tuple[str, ...] = ()) -> N
     """Run *package*'s documentation examples, one test per file.
 
     Pytest over the package's ``docs/examples/`` directory, or over
-    *files* alone when named, whose
-    files the workshop's examples plugin collects
+    *files* alone when every one of them is an example, whose files
+    the workshop's examples plugin collects
     ([livery.workshop._pytest_examples][]), from the workspace root so
-    the workspace's pytest configuration applies. Captured and printed
-    on a red exit, so a runner's log carries the failing example's
-    file and line; a package without examples says so and passes.
+    the workspace's pytest configuration applies. A named file that is
+    no example, the examples' ``conftest.py``, is every example's
+    setup, so the whole directory runs. Captured and printed on a red
+    exit, so a runner's log carries the failing example's file and
+    line; a package without examples says so and passes.
     """
+    from livery.workshop._pytest_examples import is_example
+
     if not examples_of(package):
         print(f"  examples: {package.path} has none")
         return
-    targets = files or (f"{package.path}/docs/examples",)
+    named = tuple(name for name in files if is_example(Path(name)))
+    targets = (
+        named
+        if files and len(named) == len(files)
+        else (f"{package.path}/docs/examples",)
+    )
     result = pytest.opts(in_process=False, cwd=root, nofail=True)(*targets)
     if result.code != 0:
         print(result.stdout, end="")

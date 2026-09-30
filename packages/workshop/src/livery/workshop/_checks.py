@@ -17,24 +17,31 @@ names the kinds it judges, so a C++ kind says ``format`` applies
 and whether that means ruff over its recipe or clang-format over
 its sources is the checks' business.
 
-Every registered check is also a hidden task, `checks.<name>`, and
-the gate schedules those tasks: the rewriters serially before any
-judge reads the tree ([livery.workshop._checks.rewriters][]), then
-every judge together ([livery.workshop._checks.judges][]), each with
-its own report row. A check that must follow another on the same
-package, a build after its configure, names it in ``after`` and the
-scheduler orders them.
+A check is named by its role and its tool, ``test.pytest``. Every
+role is a verb and every check a sub-task of it, made by
+[livery.workshop._checks.generate_verbs][] from the registry: ``fm
+test`` runs the test role's checks and ``fm test.pytest`` the one.
+
+Every registered check is also a hidden task, ``checks.test-pytest``,
+and the gate schedules those tasks: the rewriters serially before
+any judge reads the tree ([livery.workshop._checks.rewriters][]),
+then every judge together ([livery.workshop._checks.judges][]), each
+with its own report row. A check that must follow another on the
+same package, a build after its configure, names it in ``after`` and
+the scheduler orders them.
 """
 
 from __future__ import annotations
 
+import inspect
+import weakref
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
-from livery.footman import context, doc, fail, group, prog
+from livery.footman import Group, context, doc, fail, group, prog
 from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
 
@@ -116,7 +123,7 @@ class GateContext:
 
 @dataclass(frozen=True)
 class Option:
-    """One option a package may set on a check, in its ``[checks.<name>]`` table.
+    """One option a package may set on a check, in its ``[checks.<role>.<tool>]`` table.
 
     Attributes:
         name: The option's key, kebab-case.
@@ -162,13 +169,18 @@ class Claim:
 class CheckRecord:
     """One check, completely.
 
+    A check's name is its role and its tool, ``test.pytest``: the
+    verb ``fm test.pytest``, the ``[checks.test.pytest]`` table of its
+    options, the gate's lines, and every lookup use it.
+
     Attributes:
-        name: The check's name, what the gate output and a skip print.
+        tool: The tool the check runs, as its sub-task names it under
+            its role: ``pytest`` in ``fm test.pytest``.
         role: What the check implements: ``format``, ``lint``,
             ``typecheck``, ``typecomplete``, ``test``, ``build``,
-            ``render``, ``provenance`` or ``layering``. A kind's CI
-            contract names roles, and a role a kind does not carry
-            skips by name.
+            ``template``, ``provenance`` or ``layering``, a string a
+            verb is generated from. A kind's CI contract names roles,
+            and a role a kind does not carry skips by name.
         run: The judging callable; a refusal is its verdict.
         scope: ``workspace`` for a check that judges the whole in one
             run, ``package`` for one that judges one package at a
@@ -202,7 +214,7 @@ class CheckRecord:
             the check judges, naming ``check <name>`` as its site, and
             leaves it when the check is unregistered.
         options: The options a package may set under
-            ``[checks.<name>]``; ``enabled`` is every check's.
+            ``[checks.<role>.<tool>]``; ``enabled`` is every check's.
         contributions: ``(slot, value)`` pairs the record puts into
             slots at registration, the dev group's lines say; withdrawn
             with the record.
@@ -218,9 +230,16 @@ class CheckRecord:
             judges every file its claims reach and no other, and the
             render derives a ruff-shaped tool's per-file ignores from
             them.
+        roles: Further roles the check implements; it answers to
+            ``<role>.<tool>`` under each, and its options stay in its
+            own table, ``[checks.<role>.<tool>]`` for ``role``.
+        flags: The command-line flags the check reads, from `FLAGS`:
+            ``point`` for a check that selects tests by CI point. A
+            generated verb offers the flags its checks declare, and
+            ``--fix`` with ``--safe-fix`` where a check has a fix mode.
     """
 
-    name: str
+    tool: str
     role: str
     run: Callable[[GateContext], None]
     scope: str = WORKSPACE
@@ -237,6 +256,13 @@ class CheckRecord:
     fragments: tuple[Fragment, ...] = ()
     extension: str = ""
     claims: tuple[Claim, ...] = ()
+    roles: tuple[str, ...] = ()
+    flags: tuple[str, ...] = ()
+
+    @property
+    def name(self) -> str:
+        """The check's name: its role and its tool, ``test.pytest``."""
+        return f"{self.role}.{self.tool}"
 
 
 _CHECKS: dict[str, CheckRecord] = {}
@@ -246,18 +272,52 @@ _CHECKS: dict[str, CheckRecord] = {}
 _WITHDRAWN: dict[str, str] = {}
 
 
+#: The command-line flags a check may read, beyond the fix modes.
+FLAGS = ("point",)
+
+
 def register_check(record: CheckRecord) -> None:
     """Register *record*; a name already registered is replaced.
 
     Layers call this from their plugin at mount. Replacing is how a
     layer swaps a tool under a role, and how a test injects a fake;
     a package check names at least one kind, since a check that
-    judges packages and applies to none never runs.
+    judges packages and applies to none never runs. Each address the
+    check answers to, ``<role>.<tool>`` under its role and each
+    further one, is a task's address, so a dot inside the role or
+    the tool refuses, a tool named ``default`` refuses (that address
+    is the role verb's own), and an address another check answers to
+    refuses: one address runs one check.
     """
+    for part in (record.role, *record.roles, record.tool):
+        if not part or "." in part:
+            fail(
+                f"check {record.name!r}: a role and a tool are one word each,"
+                f" not {part!r}; the check answers to <role>.<tool>"
+            )
+    if record.tool == "default":
+        fail(
+            f"check {record.name!r}: {record.name} is the address of the"
+            f" {record.role} verb itself; name the check by its tool"
+        )
+    for role in (record.role, *record.roles):
+        address = f"{role}.{record.tool}"
+        holder = _holder(address)
+        if holder is not None and holder != record.name:
+            fail(
+                f"check {record.name!r} answers to {address}, which the check"
+                f" {holder!r} answers to already: one address runs one check"
+            )
     if record.scope not in (WORKSPACE, PACKAGE):
         fail(
             f"check {record.name!r}: scope is {WORKSPACE!r} or {PACKAGE!r},"
             f" not {record.scope!r}"
+        )
+    unknown = [flag for flag in record.flags if flag not in FLAGS]
+    if unknown:
+        fail(
+            f"check {record.name!r} reads {', '.join(unknown)}, which no verb"
+            f" offers; the flags are {', '.join(FLAGS)}"
         )
     if record.narrowing not in (PATHS, PACKAGES, NONE):
         fail(
@@ -335,7 +395,7 @@ def option_value(record: CheckRecord, package: Package, name: str) -> object:
 
 
 def option_problems(packages: tuple[Package, ...]) -> list[str]:
-    """Every ``[checks.<name>]`` entry no record declares, one line each.
+    """Every ``[checks.<role>.<tool>]`` entry no check declares, one line each.
 
     Read by the layering check, so a package that sets an option on a
     check that does not exist, or one the check does not declare, is
@@ -345,6 +405,14 @@ def option_problems(packages: tuple[Package, ...]) -> list[str]:
     for package in packages:
         for check, options in package.checks:
             record = _CHECKS.get(check)
+            holder = _holder(check)
+            if record is None and holder is not None:
+                problems.append(
+                    f"{package.path}/workshop.toml: [checks.{check}] names the"
+                    f" check {holder} by a further role; its options live under"
+                    f" [checks.{holder}]"
+                )
+                continue
             if record is None:
                 problems.append(
                     f"{package.path}/workshop.toml: [checks.{check}] names no"
@@ -576,17 +644,33 @@ def extensions() -> tuple[str, ...]:
     return tuple(sorted({r.extension for r in _CHECKS.values() if r.extension}))
 
 
+def _holder(address: str) -> str | None:
+    """The check answering to *address*, by its name or a further role."""
+    if address in _CHECKS:
+        return address
+    role, _, tool = address.partition(".")
+    for record in _CHECKS.values():
+        if record.tool == tool and role in record.roles:
+            return record.name
+    return None
+
+
 def check_for(name: str) -> CheckRecord:
-    """The record named *name*; refusal names the registry."""
-    record = _CHECKS.get(name)
-    if record is None:
+    """The check named *name*, ``test.pytest``, a further role's name included.
+
+    Refusal names the registry.
+    """
+    holder = _holder(name)
+    if holder is None:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
-    return record
+    return _CHECKS[holder]
 
 
 def roles() -> tuple[str, ...]:
     """The roles the registered checks implement, sorted."""
-    return tuple(sorted({record.role for record in _CHECKS.values()}))
+    return tuple(
+        sorted({role for r in _CHECKS.values() for role in (r.role, *r.roles)})
+    )
 
 
 def verify_roles() -> None:
@@ -646,9 +730,9 @@ _CURRENT: GateContext | None = None
 
 #: The registered checks as hidden tasks, one per name: the task is
 #: what the gate schedules, so each check gets its own report row and
-#: its prints reach the console, and `fm checks.<name>` runs one
-#: check by hand. The body reads the record by name when it runs, so
-#: re-registering a name replaces the record and keeps the task.
+#: its prints reach the console. The body reads the record by name
+#: when it runs, so re-registering a name replaces the record and
+#: keeps the task.
 checks = group("checks", help="The registered checks, one task each", hidden=True)
 _TASKS: dict[str, Any] = {}
 
@@ -668,8 +752,8 @@ def current(ctx: GateContext) -> Generator[None, None, None]:
 def _context_now() -> GateContext:
     if _CURRENT is None:
         fail(
-            f"a check's task ran outside the gate: `{prog()} checks.<name>` is"
-            f" the gate's own spelling and runs inside `{prog()} check`"
+            f"a check's task ran outside the gate: `{prog()} check` runs it,"
+            f" and `{prog()} <role>.<tool>` runs one check alone"
         )
     return _CURRENT
 
@@ -683,15 +767,216 @@ def _ensure_task(record: CheckRecord) -> None:
     def body(fix: Annotated[bool, doc("run the check's fix mode")] = False) -> None:
         run_check(name, _context_now(), fix=fix)
 
-    body.__name__ = name.replace("-", "_")
+    body.__name__ = name.replace("-", "_").replace(".", "_")
     body.__doc__ = f"Run the {name} check over the gate's context."
-    _TASKS[name] = checks.task(name=name)(body)
+    _TASKS[name] = checks.task(name=name.replace(".", "-"))(body)
 
 
 def task_for(name: str) -> Any:
     """The hidden task that runs the check *name*; refusal names the registry."""
     check_for(name)
     return _TASKS[name]
+
+
+def verb_tree() -> dict[str, dict[str, CheckRecord]]:
+    """Each role's checks by tool, sorted: the verbs the registry generates."""
+    tree: dict[str, dict[str, CheckRecord]] = {}
+    for record in _CHECKS.values():
+        for role in (record.role, *record.roles):
+            tree.setdefault(role, {})[record.tool] = record
+    return {role: dict(sorted(tools.items())) for role, tools in sorted(tree.items())}
+
+
+#: The verb functions the generator made. Footman shares a task's
+#: function when it copies a tree into a project, so the function is
+#: how a later generation knows a verb as its own: its own it remakes
+#: or removes, and any other task at an address serves that address.
+_MADE: weakref.WeakSet[Callable[..., None]] = weakref.WeakSet()
+
+
+def _run_named(
+    names: tuple[str, ...],
+    paths: tuple[str, ...],
+    *,
+    fix: bool = False,
+    safe_fix: bool = False,
+    point: str = "",
+) -> None:
+    from livery.workshop import _quality
+
+    _quality.run_checks(names, paths, fix=fix, safe_fix=safe_fix, point=point)
+
+
+#: A generated verb's flags, each with its help text. They live at
+#: module level because footman reads a task's annotations in its
+#: module's namespace: a name local to the function making the verb
+#: does not resolve there, and the flag's value would arrive as text.
+_Fix = Annotated[bool, doc("rewrite what the checks can, then judge the rest")]
+_SafeFix = Annotated[bool, doc("fix, removing no code: safe for an edit in flight")]
+_Point = Annotated[
+    str, doc("select this CI point's tests: gate, merge, nightly, release")
+]
+
+
+def _verb(
+    select: Callable[[], tuple[str, ...]], *, fixes: bool, reads_point: bool, what: str
+) -> Callable[..., None]:
+    """A verb over the checks *select* names, offering exactly the flags they read.
+
+    ``--fix`` and ``--safe-fix`` where a check can fix, ``--point``
+    where one reads the point; the paths narrow the run to those files.
+    """
+
+    def with_fix_and_point(
+        *paths: str, fix: _Fix = False, safe_fix: _SafeFix = False, point: _Point = ""
+    ) -> None:
+        _run_named(select(), paths, fix=fix, safe_fix=safe_fix, point=point)
+
+    def with_fix(*paths: str, fix: _Fix = False, safe_fix: _SafeFix = False) -> None:
+        _run_named(select(), paths, fix=fix, safe_fix=safe_fix)
+
+    def with_point(*paths: str, point: _Point = "") -> None:
+        _run_named(select(), paths, point=point)
+
+    def bare(*paths: str) -> None:
+        _run_named(select(), paths)
+
+    chosen: Callable[..., None] = (
+        with_fix_and_point
+        if fixes and reads_point
+        else with_fix
+        if fixes
+        else with_point
+        if reads_point
+        else bare
+    )
+    chosen.__doc__ = what
+    _MADE.add(chosen)
+    return chosen
+
+
+def _role_checks(role: str) -> Callable[[], tuple[str, ...]]:
+    """Every registered check of *role*, read when the verb runs."""
+
+    def select() -> tuple[str, ...]:
+        return tuple(
+            record.name
+            for record in _CHECKS.values()
+            if role in (record.role, *record.roles)
+        )
+
+    return select
+
+
+def _one_check(name: str) -> Callable[[], tuple[str, ...]]:
+    def select() -> tuple[str, ...]:
+        return (name,)
+
+    return select
+
+
+def _is_made(task: Callable[..., object]) -> bool:
+    """Whether the generator made *task*, through the function footman wraps."""
+    return inspect.unwrap(task) in _MADE
+
+
+def _flags_of(task: Callable[..., object]) -> frozenset[str]:
+    """The flags a verb offers: its keyword parameters."""
+    return frozenset(
+        name
+        for name, parameter in inspect.signature(task).parameters.items()
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    )
+
+
+def _place(parent: Group, key: str, verb: Callable[..., None]) -> None:
+    """Put *verb* at *key* in *parent*, unless a verb that serves it is there.
+
+    A verb the generator made is remade when its flags changed, so a
+    check registered later that fixes or reads the point reaches its
+    role's verb; any other task at the address is left alone.
+    """
+    existing = parent.tasks.get(key)
+    if existing is not None:
+        if not _is_made(existing) or _flags_of(existing) == _flags_of(verb):
+            return
+        del parent.tasks[key]
+    if key == "default":
+        parent.default(verb)
+    else:
+        parent.task(name=key)(verb)
+
+
+def _prune(target: Group, tree: Mapping[str, Mapping[str, CheckRecord]]) -> None:
+    """Remove the verbs the generator made whose checks are gone.
+
+    A role with no check left loses its verb, and its group when that
+    leaves the group empty; a task another layer put there stays.
+    """
+    for role, parent in list(target.groups.items()):
+        tools = tree.get(role, {})
+        removed = False
+        for key, task in list(parent.tasks.items()):
+            kept = bool(tools) if key == "default" else key in tools
+            if _is_made(task) and not kept:
+                del parent.tasks[key]
+                removed = True
+        if removed and not parent.tasks and not parent.groups:
+            del target.groups[role]
+
+
+def generate_verbs(into: Group | None = None) -> None:
+    """Make a verb per role and a sub-task per check, from the registry.
+
+    ``fm test`` runs every check of the test role and ``fm test.pytest``
+    the one, each offering exactly the flags its checks read. A role
+    or a sub-task whose address a verb already holds is served by that
+    verb, ``fm template.check`` and ``fm provenance``, and nothing is
+    made there. Run again after layers registered or withdrew checks,
+    it makes what is new, remakes a verb whose flags changed, and
+    removes a verb whose check is gone.
+    """
+    from livery.footman import registry
+
+    target = into if into is not None else registry.root
+    tree = verb_tree()
+    _prune(target, tree)
+    for role, tools in tree.items():
+        if role in target.tasks:
+            continue
+        parent = target.groups.get(role)
+        default = None if parent is None else parent.default_task
+        # The generator owns the role's verb in a group it made; a
+        # group of another verb's, template's, gets no default.
+        owned = parent is None or (default is not None and _is_made(default))
+        if parent is None:
+            parent = target.group(role, help=f"The {role} checks, one task each")
+        if owned:
+            _place(
+                parent,
+                "default",
+                _verb(
+                    _role_checks(role),
+                    fixes=any(r.fix is not None for r in tools.values()),
+                    reads_point=any("point" in r.flags for r in tools.values()),
+                    what=f"Run every {role} check, over the named paths or the"
+                    " workspace.",
+                ),
+            )
+        for tool, record in tools.items():
+            if tool in parent.groups:
+                continue
+            _place(
+                parent,
+                tool,
+                _verb(
+                    _one_check(record.name),
+                    fixes=record.fix is not None,
+                    reads_point="point" in record.flags,
+                    what=f"Run the {record.name} check alone, over the named paths"
+                    " or the workspace.",
+                ),
+            )
 
 
 def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
@@ -938,7 +1223,7 @@ def _register_builtin() -> None:
         """The paths a check judges: the named files, the tree, or the members'."""
         if ctx.files:
             return claimed_files(check_for(name), ctx)
-        gated_members = gated(_members(ctx), name)
+        gated_members = gated(_members(ctx), check_for(name).role)
         members = enabled(name, gated_members)
         pythons = tuple(p for p in members if is_python_kind(p.kind))
         natives = tuple(p for p in members if not is_python_kind(p.kind))
@@ -952,43 +1237,64 @@ def _register_builtin() -> None:
         return _python.package_paths(judged) + claimed(name, present)
 
     def format_run(ctx: GateContext) -> None:
-        _python.run_format(check=True, paths=paths(ctx, "format"))
+        _python.run_format(check=True, paths=paths(ctx, "format.ruff"))
 
     def format_fix(ctx: GateContext) -> None:
-        _python.run_format(check=False, safe_fix=ctx.safe, paths=paths(ctx, "format"))
+        _python.run_format(
+            check=False, safe_fix=ctx.safe, paths=paths(ctx, "format.ruff")
+        )
 
     def lint_run(ctx: GateContext) -> None:
-        _python.run_lint(fix=False, paths=paths(ctx, "lint"))
+        _python.run_lint(fix=False, paths=paths(ctx, "lint.ruff"))
 
     def lint_fix(ctx: GateContext) -> None:
         if ctx.safe:
-            _python.run_lint(safe_fix=True, paths=paths(ctx, "lint"))
+            _python.run_lint(safe_fix=True, paths=paths(ctx, "lint.ruff"))
             return
-        _python.run_lint(fix=True, paths=paths(ctx, "lint"))
+        _python.run_lint(fix=True, paths=paths(ctx, "lint.ruff"))
 
-    def typecheck_run(ctx: GateContext) -> None:
+    def typecheck_paths(ctx: GateContext, tool: str) -> tuple[str, ...]:
+        """The paths one type checker reads: the named files, the members', or all."""
+        name = f"typecheck.{tool}"
         if ctx.files:
-            _python.run_typecheck(paths=claimed_files(check_for("typecheck"), ctx))
-            return
-        judged = python_members(ctx, "typecheck", "typecheck") + unit(ctx)
+            return claimed_files(check_for(name), ctx)
+        judged = python_members(ctx, "typecheck", name) + unit(ctx)
         whole = len(judged) == len(python_kinds(ctx)) + len(unit(ctx))
         if not ctx.scoped and whole:
-            _python.run_typecheck()
-            return
-        _python.run_typecheck(paths=_python.package_paths(judged))
+            return ()
+        return _python.package_paths(judged)
+
+    def basedpyright_run(ctx: GateContext) -> None:
+        _python.run_typecheck(
+            paths=typecheck_paths(ctx, "basedpyright"), only="basedpyright"
+        )
+
+    def mypy_run(ctx: GateContext) -> None:
+        _python.run_typecheck(paths=typecheck_paths(ctx, "mypy"), only="mypy")
+
+    # ty and pyrefly check their configured whole whatever the scope.
+    def ty_run(ctx: GateContext) -> None:
+        del ctx
+        _python.run_typecheck(only="ty")
+
+    def pyrefly_run(ctx: GateContext) -> None:
+        del ctx
+        _python.run_typecheck(only="pyrefly")
 
     def typecomplete_run(ctx: GateContext) -> None:
-        _python.run_typecomplete(python_members(ctx, "typecomplete", "typecomplete"))
+        _python.run_typecomplete(
+            python_members(ctx, "typecomplete", "typecomplete.basedpyright")
+        )
 
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
         if ctx.files:
             # A named test or source file runs its package's whole suite;
             # the workspace's tests unit reads the root's own files.
-            record = check_for("test")
+            record = check_for("test.pytest")
             named = tuple(
                 p
-                for p in (*python_members(ctx, "test", "test"), *unit(ctx))
+                for p in (*python_members(ctx, "test", "test.pytest"), *unit(ctx))
                 if claimed_files(
                     record, ctx, ROOT_UNIT if p.path == WORKSPACE_TESTS else p.path
                 )
@@ -997,9 +1303,11 @@ def _register_builtin() -> None:
             return
         # A package whose examples alone changed runs them, not its suite.
         judged = tuple(
-            p for p in python_members(ctx, "test", "test") if p.path not in ctx.examples
+            p
+            for p in python_members(ctx, "test", "test.pytest")
+            if p.path not in ctx.examples
         )
-        record = check_for("test")
+        record = check_for("test.pytest")
         serial = tuple(p for p in judged if not option_value(record, p, "parallel"))
         parallel = tuple(p for p in judged if p not in serial) + unit(ctx)
         # A package whose suite is not worker-safe runs in an invocation
@@ -1024,7 +1332,7 @@ def _register_builtin() -> None:
     def examples_run(ctx: GateContext) -> None:
         from livery.workshop._kinds import kind_examples
 
-        for package in python_members(ctx, "examples", "examples"):
+        for package in python_members(ctx, "examples", "examples.pytest"):
             if (
                 ctx.scoped
                 and package.path in ctx.tests
@@ -1037,9 +1345,13 @@ def _register_builtin() -> None:
                     f"  examples: {package.path} skips ({package.kind} kind runs none)"
                 )
                 continue
-            named = claimed_files(check_for("examples"), ctx, package.path)
-            if ctx.files and not named:
-                continue
+            # Only a run over named files narrows the examples; a whole
+            # walk runs the package's directory.
+            named: tuple[str, ...] = ()
+            if ctx.files:
+                named = claimed_files(check_for("examples.pytest"), ctx, package.path)
+                if not named:
+                    continue
             runner(package, ctx.root, named)
 
     def render_run(ctx: GateContext) -> None:
@@ -1098,11 +1410,11 @@ def _register_builtin() -> None:
         return tuple(Path(p) for p in claimed_files(check_for(name), ctx, package.path))
 
     def clang_format_run(ctx: GateContext) -> None:
-        files = named_sources(ctx, "clang-format")
+        files = named_sources(ctx, "format.clang-format")
         _cpp_conan.format_check(package_of(ctx), fix=False, files=files)
 
     def clang_format_fix(ctx: GateContext) -> None:
-        files = named_sources(ctx, "clang-format")
+        files = named_sources(ctx, "format.clang-format")
         _cpp_conan.format_check(package_of(ctx), fix=True, files=files)
 
     def configure_run(ctx: GateContext) -> None:
@@ -1116,7 +1428,7 @@ def _register_builtin() -> None:
         _cpp_conan.test(package, ctx.root, selection=ctx.selection)
 
     def clang_tidy_run(ctx: GateContext) -> None:
-        files = named_sources(ctx, "clang-tidy")
+        files = named_sources(ctx, "lint.clang-tidy")
         _cpp_conan.lint(package_of(ctx), ctx.root, files=files)
 
     # The slots the python records fill: the dev group's tool lines
@@ -1131,10 +1443,13 @@ def _register_builtin() -> None:
     # its sources, so its records apply to the native kind as well.
     ruffed = ("python", "cpp-conan")
     py = _python.PY_SUFFIXES
+    typed_claims = tuple(
+        Claim(category, suffixes=py) for category in ("source", "test", "test-support")
+    )
     cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
         CheckRecord(
-            "format",
+            "ruff",
             "format",
             format_run,
             narrowing=PATHS,
@@ -1174,7 +1489,7 @@ def _register_builtin() -> None:
             ),
         ),
         CheckRecord(
-            "lint",
+            "ruff",
             "lint",
             lint_run,
             narrowing=PATHS,
@@ -1212,24 +1527,49 @@ def _register_builtin() -> None:
             ),
         ),
         CheckRecord(
+            "basedpyright",
             "typecheck",
-            "typecheck",
-            typecheck_run,
+            basedpyright_run,
             narrowing=PATHS,
             kinds=python,
-            tools=("basedpyright", "mypy", "ty", "pyrefly"),
-            fragments=(Fragment("pyproject.toml", _fragments.TYPECHECKERS),),
+            tools=("basedpyright",),
+            fragments=(Fragment("pyproject.toml", _fragments.BASEDPYRIGHT),),
             extension="detachedfork.basedpyright",
-            claims=tuple(
-                Claim(category, suffixes=py)
-                for category in ("source", "test", "test-support")
-            ),
+            claims=typed_claims,
+        ),
+        CheckRecord(
+            "mypy",
+            "typecheck",
+            mypy_run,
+            narrowing=PATHS,
+            kinds=python,
+            tools=("mypy",),
+            fragments=(Fragment("pyproject.toml", _fragments.MYPY),),
+            claims=typed_claims,
             # mypy reads the members' own stubs from the venv, so it
             # rides the dev group beside the store's copy.
             contributions=(("python.dev-group", "mypy>=1.14"),),
         ),
         CheckRecord(
-            "typecomplete",
+            "ty",
+            "typecheck",
+            ty_run,
+            kinds=python,
+            tools=("ty",),
+            fragments=(Fragment("pyproject.toml", _fragments.TY),),
+            claims=typed_claims,
+        ),
+        CheckRecord(
+            "pyrefly",
+            "typecheck",
+            pyrefly_run,
+            kinds=python,
+            tools=("pyrefly",),
+            fragments=(Fragment("pyproject.toml", _fragments.PYREFLY),),
+            claims=typed_claims,
+        ),
+        CheckRecord(
+            "basedpyright",
             "typecomplete",
             typecomplete_run,
             narrowing=PACKAGES,
@@ -1238,9 +1578,10 @@ def _register_builtin() -> None:
             claims=(Claim("source", suffixes=py),),
         ),
         CheckRecord(
-            "test",
+            "pytest",
             "test",
             test_run,
+            flags=("point",),
             narrowing=PACKAGES,
             kinds=python,
             # pytest is the record's tool in the store, for the typed
@@ -1280,7 +1621,7 @@ def _register_builtin() -> None:
             ),
         ),
         CheckRecord(
-            "examples",
+            "pytest",
             "examples",
             examples_run,
             narrowing=PACKAGES,
@@ -1288,15 +1629,15 @@ def _register_builtin() -> None:
             tools=("pytest",),
             claims=(Claim("example", suffixes=py),),
         ),
-        CheckRecord("template_check", "render", render_run, in_scoped=False),
+        CheckRecord("check", "template", render_run, in_scoped=False),
         CheckRecord(
-            "provenance_check",
+            "check",
             "provenance",
             provenance_run,
             fix=provenance_fix,
             in_scoped=False,
         ),
-        CheckRecord("layering", "layering", layering_run, fix=layering_fix),
+        CheckRecord("graph", "layering", layering_run, fix=layering_fix),
         CheckRecord(
             "configure",
             "build",
@@ -1306,13 +1647,13 @@ def _register_builtin() -> None:
             tests_only=True,
         ),
         CheckRecord(
-            "build",
+            "compile",
             "build",
             build_run,
             scope=PACKAGE,
             kinds=("cpp-conan",),
             tests_only=True,
-            after=("configure",),
+            after=("build.configure",),
         ),
         CheckRecord(
             "ctest",
@@ -1321,7 +1662,7 @@ def _register_builtin() -> None:
             scope=PACKAGE,
             kinds=("cpp-conan",),
             tests_only=True,
-            after=("build",),
+            after=("build.compile",),
             claims=(Claim("test", suffixes=cpp), Claim("source", suffixes=cpp)),
         ),
         CheckRecord(
@@ -1330,7 +1671,7 @@ def _register_builtin() -> None:
             clang_tidy_run,
             scope=PACKAGE,
             kinds=("cpp-conan",),
-            after=("configure",),
+            after=("build.configure",),
             tools=("clang_tidy",),
             fragments=tuple(
                 Fragment(".clang-tidy", _fragments.CLANG_TIDY, kind=kind)

@@ -72,6 +72,7 @@ def _walk(
     *,
     between: Callable[[], None] | None = None,
     judge: bool = True,
+    only: frozenset[str] | None = None,
 ) -> None:
     """Walk the registry: the one place the gate's order lives.
 
@@ -84,21 +85,26 @@ def _walk(
     read; then every judge runs in one parallel block, and one refusal
     is the verdict. A check whose claims reach no file in scope is
     said and not started. Without *judge* the walk stops after the
-    fixers, the post-edit hook's run.
+    fixers, the post-edit hook's run. *only* keeps the named checks
+    alone, a generated verb's run.
     """
     _checks.verify_roles()
     for line in _checks.narrowings():
         print(line)
     ctx = replace(ctx, catalogue=_checks.catalogue(ctx))
+
+    def chosen(names: tuple[str, ...]) -> tuple[str, ...]:
+        return names if only is None else tuple(n for n in names if n in only)
+
     with _checks.current(ctx):
-        for name in _checks.with_files(_checks.rewriters(ctx), ctx):
+        for name in _checks.with_files(chosen(_checks.rewriters(ctx)), ctx):
             _checks.task_for(name)(fix=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
     with _checks.current(ctx), parallel():
-        for name in _checks.with_files(_checks.judges(ctx), ctx):
+        for name in _checks.with_files(chosen(_checks.judges(ctx)), ctx):
             _checks.task_for(name)()
 
 
@@ -324,10 +330,28 @@ def named_files(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(sorted(name for name in found if (root / name).is_file()))
 
 
+def _in_workspace(root: Path, path: str) -> bool:
+    """Whether *path* is a file or a directory under *root*."""
+    target = Path(path).resolve()
+    return target.is_relative_to(root.resolve()) and target.exists()
+
+
 def _check_files(
-    paths: tuple[str, ...], *, fix: bool, safe: bool, point: str, judge: bool = True
+    paths: tuple[str, ...],
+    *,
+    fix: bool,
+    safe: bool,
+    point: str,
+    judge: bool = True,
+    only: frozenset[str] | None = None,
 ) -> None:
-    """The gate over the named files: the walk narrowed to them, nothing recorded."""
+    """The gate over the named files: the walk narrowed to them, nothing recorded.
+
+    A person's path that names nothing in the workspace refuses, since
+    running nothing there would pass: a typo, or a tool's own argument
+    after ``--``, which the checks never pass through. The post-edit
+    hook, which judges nothing, may name a file already deleted.
+    """
     import os
 
     root = workspace_root()
@@ -338,6 +362,14 @@ def _check_files(
             "check --fix inside CI: the runner's checkout is judged, never rewritten."
             f" Run `{footman.prog()} check --fix` locally and push the result."
         )
+    if judge:
+        unknown = [path for path in paths if not _in_workspace(root, path)]
+        if unknown:
+            fail(
+                "not a file or directory in the workspace:"
+                f" {', '.join(unknown)}. Name files or directories; the checks"
+                " pass nothing through to a tool."
+            )
     files = named_files(root, paths)
     if not files:
         print("  nothing to check: no file under the named paths")
@@ -360,7 +392,35 @@ def _check_files(
         safe=safe,
         point=point,
     )
-    _walk(ctx, judge=judge)
+    _walk(ctx, judge=judge, only=only)
+
+
+def run_checks(
+    names: tuple[str, ...],
+    paths: tuple[str, ...] = (),
+    *,
+    fix: bool = False,
+    safe_fix: bool = False,
+    point: str = "",
+) -> None:
+    """Run the checks *names* through the walk: a generated verb's body.
+
+    Over the named paths, or the whole workspace; nothing is recorded
+    as proved, since a part of the gate ran.
+    """
+    import os
+
+    _refuse_both(fix, safe_fix)
+    if (fix or safe_fix) and os.environ.get("CI"):
+        fail(
+            "a fix inside CI: the runner's checkout is judged, never rewritten."
+            f" Run `{footman.prog()} check --fix` locally and push the result."
+        )
+    only = frozenset(names)
+    if paths:
+        _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point, only=only)
+        return
+    _walk(_context(fix=fix or safe_fix, safe=safe_fix, point=point), only=only)
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:

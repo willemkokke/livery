@@ -49,6 +49,39 @@ def test_an_example_that_raises_reports_its_own_file_and_line(tmp_path: Path) ->
     assert "1 failed, 1 passed" in run.stdout, run.stdout
 
 
+def test_a_named_example_runs_whole_once_and_its_test_functions_never(
+    tmp_path: Path,
+) -> None:
+    # Pytest collects a file named on its command line as a test module,
+    # and one matching python_files by pattern in a directory it walks;
+    # either would import the example outside its setup and run its
+    # test functions as the workspace's tests.
+    base = _examples(tmp_path)
+    ran = tmp_path / "ran.txt"
+    body = (
+        "from pathlib import Path\n\n"
+        f"with Path({str(ran)!r}).open('a') as out:\n"
+        "    out.write('ran\\n')\n\n\n"
+        "def test_boom() -> None:\n"
+        "    raise SystemExit('an example function ran as a test')\n"
+    )
+    (base / "guide.py").write_text(body)
+    (base / "test_guide.py").write_text(body)
+    run = _pytest(
+        str(base / "guide.py"), str(base / "test_guide.py"), "-v", cwd=tmp_path
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "guide.py::guide PASSED" in run.stdout
+    assert "test_guide.py::test_guide PASSED" in run.stdout
+    assert "test_boom" not in run.stdout
+    assert ran.read_text() == "ran\nran\n"
+    ran.unlink()
+    run = _pytest(str(base), "-v", cwd=tmp_path)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "test_boom" not in run.stdout
+    assert ran.read_text() == "ran\nran\n"
+
+
 def test_only_example_files_are_collected_and_a_conftest_never_is(
     tmp_path: Path,
 ) -> None:
@@ -116,6 +149,14 @@ def test_the_runner_says_so_without_examples_and_names_a_red_exit(
     assert fake.calls[-2][1] == {"in_process": False, "cwd": tmp_path, "nofail": True}
     fake.code = 0
     _python.run_examples(package, tmp_path)
+    # Named examples run alone; a named conftest is every example's
+    # setup, so the directory runs.
+    ok = str(tmp_path / "packages/x/docs/examples/ok.py")
+    conftest = str(tmp_path / "packages/x/docs/examples/conftest.py")
+    _python.run_examples(package, tmp_path, (ok,))
+    assert fake.calls[-1][0] == (ok,)
+    _python.run_examples(package, tmp_path, (ok, conftest))
+    assert fake.calls[-1][0] == ("packages/x/docs/examples",)
 
 
 def test_the_kind_names_its_runner_and_a_child_inherits_it() -> None:
@@ -134,25 +175,43 @@ def test_the_check_runs_the_kinds_runner_and_skips_a_tests_only_member(
     from livery.workshop._checks import GateContext, check_for
     from livery.workshop._packages import discover_packages
 
-    record = check_for("examples")
+    record = check_for("examples.pytest")
     assert record.role == "examples" and record.kinds == ("python",)
     assert [claim.category for claim in record.claims] == ["example"]
     assert record.tools == ("pytest",)
     package = _package(tmp_path)
-    ran: list[str] = []
+    ran: list[tuple[str, tuple[str, ...]]] = []
     # The record holds the runner itself, so the lookup is the seam.
     from livery.workshop import _kinds
 
     monkeypatch.setattr(
         _kinds,
         "kind_examples",
-        lambda kind: lambda package, root, files=(): ran.append(package.path),
+        lambda kind: lambda package, root, files=(): ran.append((package.path, files)),
     )
     del _python
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)
     packages = discover_packages(tmp_path)
+    # A whole walk runs the package's directory, whatever its catalogue
+    # lists; a run over named files hands the runner the named examples.
+    listed = {"packages/x": (("docs/examples/ok.py", "example"),)}
+    record.run(GateContext(root=tmp_path, packages=packages, catalogue=listed))
+    assert ran == [("packages/x", ())]
+    ran.clear()
+    record.run(
+        GateContext(
+            root=tmp_path,
+            packages=packages,
+            subset=(package,),
+            files=("packages/x/docs/examples/ok.py",),
+            catalogue=listed,
+        )
+    )
+    example = str(tmp_path / "packages/x/docs/examples/ok.py")
+    assert ran == [("packages/x", (example,))]
+    ran.clear()
     record.run(GateContext(root=tmp_path, packages=packages))
-    assert ran == ["packages/x"]
+    assert ran == [("packages/x", ())]
     # Scoped, with its tests alone changed: the examples did not move.
     record.run(
         GateContext(
@@ -162,7 +221,7 @@ def test_the_check_runs_the_kinds_runner_and_skips_a_tests_only_member(
             tests={"packages/x": ("packages/x/tests/test_a.py",)},
         )
     )
-    assert ran == ["packages/x"]
+    assert ran == [("packages/x", ())]
     # Scoped, with its examples alone changed: they run.
     record.run(
         GateContext(
@@ -172,5 +231,5 @@ def test_the_check_runs_the_kinds_runner_and_skips_a_tests_only_member(
             examples=("packages/x",),
         )
     )
-    assert ran == ["packages/x", "packages/x"]
+    assert ran == [("packages/x", ()), ("packages/x", ())]
     del capsys

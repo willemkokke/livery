@@ -88,12 +88,12 @@ def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
         )
     )
     register_check(CheckRecord("acme-tree", "lint", _idle))
-    assert with_files(("acme-xyz", "acme-py", "acme-tree"), ctx) == (
-        "acme-py",
-        "acme-tree",
+    assert with_files(("lint.acme-xyz", "lint.acme-py", "lint.acme-tree"), ctx) == (
+        "lint.acme-py",
+        "lint.acme-tree",
     )
     assert (
-        "acme-xyz: no file it reads in the workspace; not run"
+        "lint.acme-xyz: no file it reads in the workspace; not run"
         in capsys.readouterr().out
     )
     # The root's own files count: tasks.py is configuration there.
@@ -105,10 +105,10 @@ def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
             claims=(Claim("configuration", suffixes=(".py",)),),
         )
     )
-    assert reads_files(_checks.check_for("acme-conf"), ctx)
+    assert reads_files(_checks.check_for("lint.acme-conf"), ctx)
     # A scoped run reads its subset and the root's files.
     scoped = replace(ctx, subset=packages)
-    assert with_files(("acme-xyz",), scoped) == ()
+    assert with_files(("lint.acme-xyz",), scoped) == ()
     assert "in the affected packages; not run" in capsys.readouterr().out
 
 
@@ -137,14 +137,14 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
             claims=(Claim("source", suffixes=(".cpp",)),),
         )
     )
-    run_check("acme-cpp", ctx)
+    run_check("format.acme-cpp", ctx)
     assert ran == []
-    assert "acme-cpp: packages/one has no file it reads; not run" in (
+    assert "format.acme-cpp: packages/one has no file it reads; not run" in (
         capsys.readouterr().out
     )
     (root / "packages" / "one" / "src" / "one" / "native.cpp").write_text("int x;\n")
     ctx = replace(ctx, catalogue=catalogue(ctx))
-    run_check("acme-cpp", ctx)
+    run_check("format.acme-cpp", ctx)
     assert ran == ["packages/one"]
 
 
@@ -214,7 +214,7 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     assert [p.path for p in suite["packages"]] == ["packages/one"]  # type: ignore[attr-defined]
     assert "selection" not in suite or not suite["selection"]
     out = capsys.readouterr().out
-    assert "layering: no file it reads in the named files; not run" in out
+    assert "layering.graph: no file it reads in the named files; not run" in out
     # A test file: its package's whole suite, at the point asked.
     calls.clear()
     _quality.check(str(test_file), point="nightly")

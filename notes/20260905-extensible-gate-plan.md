@@ -2,20 +2,30 @@
 
 Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
-2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
-up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) the gate's one walk (#976), the role verbs' removal (#979) and whole suites (#982) beside the layering
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
-check's fix mode (#829) and phase 8's first change, the publishing
-opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
-item the remaining phases waited on; the decision record carries each
-ruling, and the design section, the contracts, phases 3 to 9 and the
-open list carry their consequences. Next, in dependency order: phase 3's
-remainder (the tool declaration, the AST rule registry, contributions
-by target), phase 3b (the category and channel registries), phase 4
-with 4b and 4c, the small 3c leftover, then phases 5 to 9 and the layer
-split as its own plan. The design section below is written to graduate
-into `packages/workshop/docs/` after review; everything else is working
+2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's
+leftover on 2026-09-29, #896), phase 3 up to the dependency closure the
+same day (#876) and the rest of it on 2026-09-29 (#884). On 2026-09-29
+phase 3b (#886), phase 4's two changes (#888, #890), phase 4b (#892),
+phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907),
+the MSVC measurer with the Windows toolchain environment (#912),
+host-scoped tool requirements (#917) and the conformance loop's
+cpp-conan member (#914, the wave's wheels leg open in #931) landed. On
+2026-09-30 phase 6 landed, open item 27 aside: its four slices (#955,
+the extractor on the kind record; #956, the private-members policy as a
+slot; #957, layer assets staged from the wheel and the theme slot; #958,
+examples as files) and the docs layer's three changes (#968, #970,
+#971), then phase 7's first change (#974, the conformance kit's first
+three clauses), the gate's one walk (#976), the gate over named files
+(#979), whole suites (#982) and the role verbs generated from the
+checks' roles (#985). Beside the phases: the layering check's fix mode
+(#829) and phase 8's first change, the publishing opt-out (#871). On
+2026-09-28 and 2026-09-29 Willem ruled every open item the remaining
+phases waited on; the decision record carries each ruling, and the
+design section, the contracts, phases 3 to 9 and the open list carry
+their consequences. Next: phase 7's remaining clauses, then the
+remainders of phases 5 and 8, phases 7b and 9, and the layer split as
+its own plan. The design section below is written to graduate into
+`packages/workshop/docs/` after review; everything else is working
 record.
 
 ## Why
@@ -160,13 +170,21 @@ proves only that the engine renders and gates with nothing listed,
 its rendered `tasks.py` judged by the drift gate byte for byte.
 
 **The quality gate is a set of checks, grouped by role.** A
-*check* is one tool's judgment: ruff's format pass, mypy on
-linux, the render drift comparison. A *role* is what a check is
-an implementation of: `format`, `lint`, `types`, `build`,
-`test`, and the workspace roles such as `render`. The *gate* (`fm check`) is the
-conjunction: every applicable check green, the exit code the
-verdict. Kinds gate on roles, never on tools: a C++ kind says
-"format applies", and whether format means ruff or clang-format
+*check* is one tool's judgment: ruff's format pass, mypy, the
+render drift comparison. A *role* is what a check is an
+implementation of, a string: `format`, `lint`, `typecheck`,
+`build`, `test`, and the workspace roles such as `template`. A
+check is named by its role and its tool, `test.pytest`, and may
+implement further roles, answering under each. Every role is a
+verb and every check a sub-task of it, generated from the
+registry: `fm test` runs every check of the test role and
+`fm test.pytest` the one, over named paths or the workspace, and
+each verb offers exactly the flags its checks declare, `--fix` and
+`--safe-fix` where one can fix, `--point` where one selects tests
+by CI point. The *gate* (`fm check`) is the conjunction: every
+applicable check green, the exit code the verdict. Kinds gate on
+roles, never on tools: a C++ kind says "format applies", and
+whether format means ruff or clang-format
 is the check's business, so swapping a tool never touches a kind.
 A role is a set, not a slot: every applicable check of the role
 judges the files it claims, so one package may be formatted by
@@ -196,7 +214,7 @@ place the tool exists:
 - the options a package may set for it. The record declares each
   with a type and a default, a kind sets defaults, a layer
   overrides, and a package sets them in its contract under
-  `[checks.<name>]`: `parallel = false` on the python test check
+  `[checks.<role>.<tool>]`: `parallel = false` on `test.pytest`
   passes `-n 0` for that package, and `typecomplete` is one such
   option, on by default. The record decides what a package may
   say, so a fact about the package is offered and a rule set is
@@ -999,7 +1017,7 @@ Two more things the record carries, ruled 2026-09-28:
 - **Package-settable options.** The record declares the options a
   package may set, each with a type and a default; a kind sets
   defaults, a layer overrides, a package sets them in its contract
-  under `[checks.<name>]`; the render writes them where the tool
+  under `[checks.<role>.<tool>]`; the render writes them where the tool
   reads a file and the check passes them where it invokes. The
   python test record declares `parallel`, and a package that says
   `parallel = false` runs under `-n 0`. `typecomplete` is such an
@@ -1055,7 +1073,7 @@ registered checks. Closes livery#779.
   group carries the line; unlisting the layer removes it; a scalar
   slot claimed twice at one level refuses naming both; proven by
   forced tests, the refusal first.
-- A package setting `[checks.test] parallel = false` runs its suite
+- A package setting `[checks.test.pytest] parallel = false` runs its suite
   under `-n 0` while its siblings run under `-n auto`, and a package
   turning `typecomplete` off skips it by name, proven by tests over
   the invocation and the gate output.
@@ -2753,7 +2771,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   zensical build itself is whole. Not built: a doctor line naming the
   layer that brings the docs job.
 
-- 2026-10-01, the docs layer's third change (issue #971): the
+- 2026-09-30, the docs layer's third change (issue #971): the
   extractor is data and the development section is pages.
   `livery.workshop._kinds.Extractor` carries the handler's options as
   a table (`options`) where it carried a callable writing TOML; the
@@ -2796,7 +2814,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   and generates no site. Open: item 27 (a test running the builder),
   and a doctor line naming the layer that brings the docs job.
 
-- 2026-10-01, phase 7's first change (issue #974): the conformance
+- 2026-09-30, phase 7's first change (issue #974): the conformance
   kit. `livery.workshop.testing` follows `livery.forge.testing`: a
   public package whose `Subject` names what a layer registers (its
   kinds, its checks), whose `Clause`s each return the `Violation`s a
@@ -2829,7 +2847,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   config-fragment drift, contract 11's removal, and a contribution
   mounting only with its target, each with the gap it reveals.
 
-- 2026-10-01, rulings, Willem's, while phase 7's second change was
+- 2026-09-30, rulings, Willem's, while phase 7's second change was
   being read. The python kind does nothing but register its checks;
   the whole gate is kind independent; and the logic of running the
   checks that can fix serially and the rest in parallel lives in one
@@ -2848,7 +2866,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   <paths>` walks the registry over exactly those files, with `--fix`
   and `--safe-fix`, and the post-edit hook calls it; `fm check
   --point=<point>` selects a point's tests.
-- 2026-10-01, the gate's one walk (issue #976). `livery.workshop.
+- 2026-09-30, the gate's one walk (issue #976). `livery.workshop.
   _quality._walk` is the one place the gate's order lives, and every
   gate calls it: the whole gate, CI's narrowed legs and a machine's
   narrowed step. It prints the narrowings, runs every fixer that
@@ -2877,7 +2895,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   workspace without python starting no python check, and the whole
   gate's eight members unchanged on a workspace with python.
 
-- 2026-10-01, the role verbs go (issue #979). `fm format`, `fm lint`,
+- 2026-09-30, the role verbs go (issue #979). `fm format`, `fm lint`,
   `fm typecheck`, `fm typecomplete` and `fm test`, which called the
   python backend's tools directly, are gone; the registry's checks
   are the gate's whole surface. `fm check <paths>` walks the registry
@@ -2906,7 +2924,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   `fm check <paths> -- <arguments>` for the test role; this change
   ships without it.
 
-- 2026-10-01, rulings, Willem's, on #979. The verbs were not meant to
+- 2026-09-30, rulings, Willem's, on #979. The verbs were not meant to
   go: each checker registers with one or more roles, a role being a
   string; the verbs are generated from all the checkers' roles; and
   each checker is a sub-task of its role, `fm test.pytest` and
@@ -2914,7 +2932,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   change generates them. And a package's tests all run whenever any
   test or source file in the package changed, until a better way of
   narrowing exists.
-- 2026-10-01, whole suites (issue #982). The affected walk no longer
+- 2026-09-30, whole suites (issue #982). The affected walk no longer
   narrows a suite to the changed test files: a change to a package's
   test files runs its whole suite and no dependent's, since nothing
   imports a test, a deleted test file included; a change under the
@@ -2929,6 +2947,71 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   the walk (a test-only change, two packages' tests, a deleted test
   file, the workspace unit) and over named files (a source file and a
   test file each running their package's suite).
+
+- 2026-09-30, rulings, Willem's, on the shape of the generated
+  verbs. A check's identity is its role and its tool, `role.tool`,
+  and its options live under `[checks.<role>.<tool>]`: the words a
+  person meets, where a record is a word most never see. The type
+  check splits into one check per type checker, and the render and
+  provenance checks fold into the verbs that already run them. A
+  check declares the flags it reads, and a generated verb offers
+  exactly the flags its checks declare: the more specific the check,
+  the fewer. `--point` is offered by `fm check` and by the verbs
+  whose checks select tests. The role's verb is its group's default.
+- 2026-09-30, the role verbs, generated (issue #985). A check is named
+  by its role and its tool, `test.pytest`: `CheckRecord` takes the
+  tool first and derives the name, and the gate's lines, the
+  `claimed by` lines of `fm explain`, the tool sites (`check
+  format.ruff`) and every lookup use it. A package's contract holds a
+  check's options under `[checks.<role>.<tool>]`; an option set on
+  the role refuses, naming the check's own table. Every role is a
+  verb and every check a sub-task of it, made by
+  `livery.workshop._checks.generate_verbs` when the workshop's
+  modules have registered their checks and again after the layers
+  mounted: `fm test` runs every check of the test role and
+  `fm test.pytest` the one, over the named paths or the workspace,
+  through the gate's one walk (`livery.workshop._quality.run_checks`),
+  which records nothing as proved. A check declares the flags it
+  reads (`flags`, from `FLAGS`: `point` alone today, and an unknown
+  flag refuses); each verb offers exactly the flags its checks
+  declare, `--fix` and `--safe-fix` where one can fix, so
+  `fm test --point=nightly` runs the nightly's tests and
+  `fm test.ctest` offers no point. A check may implement further
+  roles (`roles`) and answers to `<role>.<tool>` under each; one
+  address runs one check, so a second check at an address refuses,
+  as do a dot in a role or a tool and a tool named `default`, the
+  address of the role's own verb. A generation run again remakes a
+  verb whose flags changed and removes a verb whose check is gone,
+  knowing its own verbs by their functions, which footman shares when
+  it copies a tree into a project. A task already at an address
+  serves it: the template check stays `fm template.check` and the
+  provenance check `fm provenance`. The type check is four checks,
+  `typecheck.basedpyright`, `typecheck.mypy`, `typecheck.ty` and
+  `typecheck.pyrefly`, each with its own report row and its own
+  fragment; the render and provenance checks are `template.check`
+  and `provenance.check`, the layering check `layering.graph`, and
+  the native build's two checks `build.configure` and
+  `build.compile`. The gate fragment lists each check by that name
+  with what it judges. Proven by tests: an unknown flag, a name that
+  is no address, two checks at one address, an option on a role and
+  on a further role's address refusing; the tree a registry of fakes
+  generates with each verb's flags; a verb running its checks through
+  the walk; an existing verb serving its address; a second generation
+  keeping what did not change, remaking a verb whose flags changed
+  and removing a withdrawn check's; and the builtin tree. Open item
+  29 carries #979's question of passing arguments through to a tool.
+  Found by this change's first whole gate on a machine, and fixed in
+  it: since #979 a whole walk handed pytest every example file by
+  name, and pytest collects a named file as a test module, importing
+  the example outside its conftest's setup and running its `test_*`
+  functions; footman's `testing.py` example runs `fm check` in the
+  project it runs in, so the gate ran itself without end. The
+  examples plugin now keeps pytest's own collector off every example
+  (`pytest_pycollect_makemodule`), the runner names example files
+  alone and runs the directory when a conftest is named, and only a
+  run over named files narrows the examples. Proven by a test whose
+  example's test function would fail if collected, failing with the
+  hook removed.
 
 ## Open
 
@@ -2993,9 +3076,6 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 20. Resolved 2026-09-29: the cpp-conan kind requires
     `dotnet_coverage@windows`, a host-scoped requirement the lock
     holds on the Windows hosts alone. Decision record.
-20. A per-project opt-out of one target's opinions beyond deleting
-    a name from `for`, a negative spelling say. Not built until
-    wanted. Owner: Willem.
 21. The tool records' home and a repository's own records:
     livery#882 carries the decision and its two design points; no
     work is scheduled. Owner: Willem.
@@ -3032,3 +3112,15 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     (decision record, 2026-09-30); no test runs zensical today. A
     test that runs the builder lands with the docs layer slice, whose
     examples check needs the builder under test. Owner: the phase.
+28. A per-project opt-out of one target's opinions beyond deleting
+    a name from `for`, a negative spelling say. Not built until
+    wanted. Owner: Willem.
+29. Whether a verb passes arguments through to its tool,
+    `fm test.pytest <paths> -- <arguments>` say, as `fm test` passed
+    pytest's own before #979. The generated verbs take paths and the
+    flags their checks declare, and nothing else. Owner: Willem.
+30. Whether `CheckRecord.narrowing` leaves the record. The engine
+    narrows by claims and affected packages (the ruling of
+    2026-09-30), and no code reads the field; registration still
+    judges its value. Removing a field breaks contract 8's additive
+    records, so the removal waits for a ruling. Owner: Willem.
