@@ -9,7 +9,6 @@ head-to-head behind these claims is on the [Comparison](comparison.md) page.
 The gentlest move, since it's the family footman grew up in. Drop the `ctx`
 parameter and shell out through `run()`:
 
-<!-- example: fragment -->
 ```python
 # duty
 @duty
@@ -37,7 +36,6 @@ footman uses `--fix`.
 Drop the `c` parameter and delete the manual `Collection` wiring: in footman a
 module *is* a group and `group()` opens a nested one:
 
-<!-- example: fragment -->
 ```python
 # invoke: hand-assembled namespaces
 ns = Collection()
@@ -78,13 +76,7 @@ args = [{ name = "fix", options = ["--fix"], type = "boolean" }]
 ```
 
 ```python
-# footman
-from livery.footman import run, task
-
-
-@task
-def lint(fix: bool = False):
-    run("ruff check ." + (" --fix" if fix else ""))
+--8<-- "packages/footman/docs/examples/migrating.py:part-1"
 ```
 
 You keep parallelism (poe's `parallel = [...]` task type → footman is parallel by default) and

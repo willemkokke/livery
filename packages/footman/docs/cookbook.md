@@ -13,36 +13,7 @@ Every repo deserves one command that answers "is this fine?". Give the
 independent checks to `parallel()` and let the machine use its cores:
 
 ```python
-from livery.footman import task, parallel
-from livery.toolroom.tools import basedpyright, pytest, ruff
-
-
-@task
-def lint(fix: bool = False):
-    "Lint with ruff."
-    ruff.check("src", "tests", fix=fix)
-
-
-@task
-def typecheck():
-    "Type-check with basedpyright."
-    basedpyright()
-
-
-@task
-def test(*pytest_args: str):
-    "Run the test suite."
-    pytest(*pytest_args)
-
-
-@task
-def check():
-    "Lint, typecheck, and test, in parallel."
-    # A call with arguments goes in the block form; bare tasks ride along.
-    with parallel():
-        lint(fix=False)
-        typecheck()
-        test()
+--8<-- "packages/footman/docs/examples/cookbook.py:part-1"
 ```
 
 `fm check` fans out across cores, keeps every task's output in one
@@ -55,12 +26,8 @@ the same command, the same exit codes.
 A `*args` parameter receives everything after `--`, verbatim, with no
 quoting gymnastics, no flag collisions with footman's own:
 
-<!-- example: revision -->
 ```python
-@task
-def test(*pytest_args: str):
-    "Run the test suite."
-    pytest(*pytest_args)
+--8<-- "packages/footman/docs/examples/cookbook-r1.py:part-1"
 ```
 
 ```console
@@ -91,12 +58,7 @@ A `Literal` is a validated choice list, a completion menu, and a
 did-you-mean in one annotation:
 
 ```python
-from typing import Literal
-
-
-@task
-def deploy(target: Literal["dev", "staging", "prod"]):
-    "Ship to an environment."
+--8<-- "packages/footman/docs/examples/cookbook.py:part-2"
 ```
 
 ```console
@@ -113,30 +75,8 @@ Exit code 64, nothing executed, and the fix is in the message.
 Markers stack. Each one validates eagerly, before anything runs, and
 each failure is a taught error, not a traceback:
 
-<!-- example: fresh-session -->
 ```python
-from pathlib import Path
-from typing import Annotated
-from livery.footman import task, run
-from livery.footman.params import between, check, env, isfile
-
-
-def semver(value: str) -> None:
-    import re
-
-    if not re.fullmatch(r"\d+\.\d+\.\d+", value):
-        raise ValueError(f"expected MAJOR.MINOR.PATCH, got {value!r}")
-
-
-@task
-def deploy(
-    config: Annotated[Path, isfile],
-    version: Annotated[str, check(semver)],
-    workers: Annotated[int, between(1, 32)] = 4,
-    target: Annotated[str, env("DEPLOY_ENV")] = "staging",
-):
-    "Roll out."
-    run(f"./rollout.sh {target} {version} --config {config} -j {workers}")
+--8<-- "packages/footman/docs/examples/cookbook-2.py:part-1"
 ```
 
 `config` must name an existing file; `version` goes through your own
@@ -154,25 +94,7 @@ dynamic, cross-field one: a new version checked against the *current* release of
 the package named in an earlier argument, looked up at run time.
 
 ```python
-from typing import Annotated
-from livery.footman import task
-from livery.footman.params import check
-
-
-def current_version(name: str) -> str: ...  # your lookup (pyproject, git…)
-def newer(version: str, current: str) -> bool: ...  # your comparison; none bundled
-
-
-def newer_than_current(version, params):
-    current = current_version(params["name"])
-    if not newer(version, current):
-        raise ValueError(f"{version} is not newer than {current}")
-
-
-@task
-def release(name: str, version: Annotated[str, check(newer_than_current)]):
-    "Cut a release, but only forward."
-    ...
+--8<-- "packages/footman/docs/examples/cookbook-2.py:part-2"
 ```
 
 `fm release core 1.4.0` binds `name` before validating `version`, so the bound
@@ -203,28 +125,7 @@ the value (in a bounded subprocess), so <kbd>Tab</kbd> offers current branches,
 never a stale snapshot:
 
 ```python
-from typing import Annotated
-from livery.footman import task, run
-from livery.footman.params import suggest
-from livery.toolroom.tools import docker
-
-
-def branches() -> list[str]:
-    import subprocess  # inside the body, so importing tasks.py stays cheap
-
-    out = subprocess.run(
-        ["git", "branch", "--format=%(refname:short)"],
-        capture_output=True,
-        text=True,
-    )
-    return out.stdout.split()
-
-
-@task
-def review(branch: Annotated[str, suggest(branches)]):
-    "Check out and gate a branch."
-    run(f"git switch {branch}")
-    run("fm check")
+--8<-- "packages/footman/docs/examples/cookbook-2.py:part-3"
 ```
 
 `fm review <TAB>` offers real branches. `suggest` is strict by default:
@@ -237,12 +138,7 @@ A `dict` parameter speaks the `--name=KEY=VALUE` dialect, repeatable,
 with taught errors for malformed pairs:
 
 ```python
-@task
-def image(tag: str, build_args: dict[str, str] | None = None):
-    "Build the container image."
-    docker.build(
-        ".", tag=tag, build_arg=[f"{k}={v}" for k, v in (build_args or {}).items()]
-    )
+--8<-- "packages/footman/docs/examples/cookbook-2.py:part-4"
 ```
 
 ```console
@@ -256,13 +152,7 @@ default, a *required* one. So a task can take an open list of inputs
 positionally and still demand a named output:
 
 ```python
-from pathlib import Path
-
-
-@task
-def bundle(*entries: str, out: Path):
-    "Bundle entry points into one artifact."
-    run(f"./bundle.sh {' '.join(entries)} -o {out}")
+--8<-- "packages/footman/docs/examples/cookbook-2.py:part-5"
 ```
 
 ```console
@@ -278,38 +168,8 @@ fm: bundle: missing required option(s): --out
 `pre` and `post` build a DAG; a dependency shared by several tasks runs
 once per invocation:
 
-<!-- example: fresh-session -->
 ```python
-from livery.footman import run, task
-
-
-@task
-def proto():
-    "Generate protobuf stubs."
-    run("buf generate")
-
-
-@task(pre=[proto])
-def build():
-    "Compile the service."
-    run("cargo build --release")
-
-
-@task(pre=[proto])
-def docs():
-    "Render the API docs."
-    run("./render-docs.sh")
-
-
-@task
-def notify():
-    "Announce the finished train."
-    run("./notify.sh done")
-
-
-@task(pre=[build, docs], post=[notify])
-def release():
-    "The whole train."
+--8<-- "packages/footman/docs/examples/cookbook-3.py:part-1"
 ```
 
 `fm build docs` runs `proto` exactly once, then both dependents in
@@ -322,27 +182,8 @@ to lie.
 The block form fans the same task over arguments; `keep_going` collects
 every failure instead of stopping at the first:
 
-<!-- example: fresh-session -->
 ```python
-from livery.footman import parallel, run, task
-
-TARGETS = ("linux-x86_64", "linux-arm64", "darwin-arm64")
-
-
-@task
-def build(target: str):
-    "Compile one target."
-    run(f"cargo zigbuild --target {target}")
-
-
-@task
-def matrix():
-    "Compile every target."
-    with parallel(keep_going=True) as p:
-        for t in TARGETS:
-            build(t)
-    if any(p):  # the block is its list of codes
-        raise SystemExit(1)
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-1"
 ```
 
 `-j` caps the fan-out's width from the command line; the timing history
@@ -354,10 +195,7 @@ Some tasks end when you say so, not when they finish. Mark them
 `infinite` and footman stops pretending otherwise:
 
 ```python
-@task(infinite=True)
-def serve(port: int = 8000):
-    "Run the dev server until Ctrl-C."
-    run(f"uvicorn app:api --reload --port {port}")
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-2"
 ```
 
 `infinite=True` implies `progress=False` (a duration that never arrives
@@ -376,25 +214,7 @@ subcommands; keyword arguments translate mechanically (`detach=True` →
 `--detach`, lists repeat, trailing `_` escapes Python keywords):
 
 ```python
-from livery.toolroom.tools import docker, mkdocs, terraform
-
-
-@task
-def up(detach: bool = True):
-    "Start the stack."
-    docker.compose.up(detach=detach)
-
-
-@task
-def plan(out: str = "tf.plan"):
-    "Terraform plan, saved."
-    terraform.plan(out=out, input_=False)
-
-
-@task
-def site():
-    "Build the docs."
-    mkdocs.build(strict=True)  # in-process: no interpreter spawn
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-3"
 ```
 
 Two extras worth knowing: any tool's `installed_version()` for the
@@ -412,19 +232,7 @@ The cwd is policy, not an accident: root a task anywhere on the ladder, and
 suffix one call without ceremony.
 
 ```python
-from livery.footman import task, run
-
-
-@task(cwd="root", rel="services/api")
-def deploy():
-    "Deploy the api service, wherever fm was invoked from."
-    run("docker compose up -d")
-
-
-@task
-def bundle():
-    "Build the web bundle from a subdirectory of this task's own dir."
-    run("npm run build", rel="web")  # <task cwd>/web, this call only
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-4"
 ```
 
 ### The task that anchors one branch on the root
@@ -435,14 +243,7 @@ anchors on — the highest tasks file's directory in the cascade — readable
 from any body, whatever the task's own cwd policy says:
 
 ```python
-from livery.footman import project_root, task, run
-
-
-@task
-def audit(path: str = ".", affected: bool = False):
-    "Audit a path as given, or with --affected the whole tree."
-    target = project_root() if affected else path
-    run(f"pytest {target}", shell=False)
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-5"
 ```
 
 The distinction doing the work: the task's *cwd* is policy, resolved once
@@ -457,15 +258,7 @@ A helper that genuinely chdirs, or drives a library that only reads the
 process state, declares it and gets the real globals, safely:
 
 ```python
-from livery import footman
-from livery.footman import task, run
-
-
-@task(serial=True)
-def legacy_build():
-    "One serial task at a time; the parallel pool keeps running around it."
-    with footman.chdir(rel="vendor"):  # a real chdir, legal here
-        run("make")
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-6"
 ```
 
 The serial lane costs less than it sounds for tools that parallelise
@@ -477,10 +270,7 @@ their own, so serialising the *task* forgoes almost nothing.
 `exclusive=True` is the real full drain, with nothing else in flight:
 
 ```python
-@task(exclusive=True)
-def bench():
-    "Timings mean nothing with a build running next door."
-    run("pytest tests/bench --benchmark-only")
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-7"
 ```
 
 ### Environment for a child, not the world
@@ -489,10 +279,7 @@ Writes to `os.environ` in a parallel task scope to the task: its children
 see them, siblings never do. The deliberate spellings say it out loud:
 
 ```python
-@task
-def publish(ctx):
-    ctx.env["TWINE_NON_INTERACTIVE"] = "1"  # every child of this task
-    run("twine upload dist/*", shell=True, env={"TWINE_VERBOSE": "1"})  # one call
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-8"
 ```
 
 ### The release flow that asks once
@@ -502,16 +289,7 @@ runs, so you answer and walk away, and a value on the command line, in the
 environment, or in a default means no question at all.
 
 ```python
-from typing import Annotated
-from livery.footman import ask, task, run
-
-
-@task(confirm="Publish to PyPI?")
-def release(version: Annotated[str, ask()]):
-    "fm release → asks version up front, confirms, then runs unattended."
-    run(f"uv version {version}", shell=False)
-    run("uv build")
-    run("uv publish")
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-9"
 ```
 
 ## Monorepos
@@ -540,7 +318,6 @@ A tasks file can declare what it needs, inline, with a
 [PEP 723](https://peps.python.org/pep-0723/) header. Then it needs no
 project at all: drop it in any directory and run it:
 
-<!-- example: fragment -->
 ```python
 # /// script
 # requires-python = ">=3.11"
@@ -587,7 +364,6 @@ refuses, because the environment provably could not run the file.
 
 Two touches make it a command in its own right:
 
-<!-- example: fragment -->
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
@@ -621,16 +397,7 @@ Overriding by name usually means *and also*, not *instead of*.
 you the task you shadow, as the plain function it is.
 
 ```python
-# svc/api/tasks.py; the repo root also defines `check`
-from livery.footman import inherited, run, task
-
-
-@task
-def check(fix: bool = False, contracts: bool = True):
-    "The shared gate, plus this service's contracts."
-    inherited()(fix=fix)  # the root's check, arguments forwarded
-    if contracts:
-        run("./verify-contracts.sh")
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-10"
 ```
 
 Here the forwarding is spelled out on purpose. `inherited()` calls a task you
@@ -676,27 +443,7 @@ download) and that beats any timing history. Report it and the live
 bar fills from the truth:
 
 ```python
-from pathlib import Path
-from livery.footman import task, track, progress
-
-
-def load_records() -> list: ...  # your own work, whatever shape it takes
-def apply(record): ...
-def build_index(path): ...
-
-
-@task
-def migrate():
-    "Apply pending migrations."
-    for record in track(load_records()):  # total from len()
-        apply(record)
-
-
-@task
-def index(path: Path):
-    "Rebuild the search index."
-    for done, total in build_index(path):
-        progress(done, total)  # the explicit form
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-11"
 ```
 
 Counted beats estimated, so a reporting task is exact on its *first*
@@ -711,26 +458,7 @@ story, covering the live status line, the timing history and the off switches, i
 artifacts for deleted projects clean themselves up.
 
 ```python
-from pathlib import Path
-from livery.footman import fetch, parallel, step, task
-
-TOOLCHAIN = {
-    "protoc": ("https://example.com/protoc-27.tar.gz", "9f86d081884c…"),
-    "buf": ("https://example.com/buf-1.34.tar.gz", "2c26b46b68ff…"),
-}
-
-
-@task
-def vendor():
-    "Fetch the pinned toolchain, in parallel."
-    # step(fetch) lifts the helper into an owned item, so each download
-    # gets its own receipt and its own worker.
-    parallel(
-        *(
-            step(fetch)(url, sha256=digest, into=Path("vendor") / name)
-            for name, (url, digest) in TOOLCHAIN.items()
-        )
-    )
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-12"
 ```
 
 A second run revalidates with the server (ETag / `If-None-Match`)
@@ -763,14 +491,7 @@ Return a dict and `--json` carries it verbatim under `returned`: your
 task's own machine surface, no printing-and-parsing:
 
 ```python
-@task
-def coverage() -> dict:
-    "Measure test coverage."
-    run("pytest --cov=app --cov-report=json -q")
-    import json
-
-    percent = json.load(open("coverage.json"))["totals"]["percent_covered"]
-    return {"percent": round(percent, 2)}
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-13"
 ```
 
 ```console
@@ -812,7 +533,6 @@ Tasks are plain functions, so plain calls already work. `recording()`
 asserts *which commands would run* without running them, and the pytest
 fixtures scaffold whole projects:
 
-<!-- example: fragment -->
 ```python
 from livery.footman import recording
 from tasks import deploy
@@ -853,14 +573,7 @@ A branded tool is footman with your name on it: same grammar, same
 completion, same docs machinery, answering as itself:
 
 ```python
-# acme_cli.py
-from livery.footman import App
-
-app = App(name="Acme", prog="acme", version="1.4.0")
-
-
-def main() -> None:
-    raise SystemExit(app.run())
+--8<-- "packages/footman/docs/examples/cookbook-4.py:part-14"
 ```
 
 ```toml

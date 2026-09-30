@@ -12,7 +12,6 @@ hand-written code, never a dialect.
 
 One module, three kinds of contribution:
 
-<!-- example: fragment -->
 ```python
 # acme_devkit/footman_tasks.py
 from pathlib import Path
@@ -68,7 +67,6 @@ provider. Footman's own `footman.docs`,
 
 An installed plugin is inert metadata until a tasks file says otherwise:
 
-<!-- example: fragment -->
 ```python
 from livery.footman.compose import plugin
 
@@ -86,7 +84,6 @@ An option may be named without a value: `--profile` beside
 the option would have had anyway) and carries *presence*, which `.given`
 reports:
 
-<!-- example: fragment -->
 
 ```python
 PROFILE = GlobalOption("profile", Path, default=Path("fm-profile.json"))
@@ -115,7 +112,6 @@ A global option opts into project config with `config=True`, and a project
 sets its default under the plugin's own section of the reserved `plugins.`
 child:
 
-<!-- example: fragment -->
 
 ```python
 REGION = GlobalOption(
@@ -193,15 +189,7 @@ in real invocations.
 you, a tmp directory, assertions on the report:
 
 ```python
-from livery.footman.testing import Runner
-
-
-def test_the_option_reaches_the_task(tmp_path):
-    (tmp_path / "tasks.py").write_text(
-        'from livery.footman.compose import plugin\nplugin("acme.devkit")\n'
-    )
-    result = Runner().invoke("--region=us deploy", tasks=tmp_path / "tasks.py")
-    assert result.ok
+--8<-- "packages/footman/docs/examples/plugins.py:part-1"
 ```
 
 Entry points resolve from installed metadata, so the test environment

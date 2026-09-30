@@ -42,6 +42,9 @@ SOURCE = "source"
 TEST = "test"
 TEST_SUPPORT = "test-support"
 CONFIGURATION = "configuration"
+#: A documentation example: a python file under ``docs/examples/`` a
+#: page shows by snippet, run by the examples check and no suite.
+EXAMPLE = "example"
 
 #: The kind name of the workspace's own unit, the root's tests and the
 #: files beside them; the base registers its category rules.

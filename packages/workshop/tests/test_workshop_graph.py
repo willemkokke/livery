@@ -316,46 +316,34 @@ def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(
     assert [p.path for p in scope.packages] == ["tests"]
 
 
-def test_a_docs_page_reaches_its_examples_harness_narrowed(seeds: Seeds) -> None:
-    """Contract: a page edit runs the page's own examples; other prose runs nothing."""
-    from livery.workshop._graph import EXAMPLES_HARNESS, docs_page
+def test_a_docs_page_reaches_nothing_and_an_example_its_packages_examples(
+    seeds: Seeds,
+) -> None:
+    """Contract: a page is the site's; an example runs its package's examples alone."""
+    from livery.workshop._graph import docs_page
 
     root = _workspace(seeds)
-    _paths(root, f"packages/mid/{EXAMPLES_HARNESS}")
-    (root / "packages/mid/docs").mkdir(parents=True, exist_ok=True)
+    (root / "packages/mid/docs/examples").mkdir(parents=True, exist_ok=True)
     (root / "packages/mid/docs/guide.md").write_text("# guide\n")
+    (root / "packages/mid/docs/examples/guide.py").write_text("x = 1\n")
     packages = discover_packages(root)
     mid = next(p for p in packages if p.path == "packages/mid")
     assert docs_page(packages, "packages/mid/docs/guide.md") is mid
     assert docs_page(packages, "packages/mid/docs/_generated/api.md") is None
     assert docs_page(packages, "docs/index.md") is None
+    # A prose-only page edit reaches no test: the site build reads it.
     scope = affected_from_paths(root, packages, ["packages/mid/docs/guide.md"])
     assert scope is not None
+    assert scope.packages == () and scope.tests == {} and scope.examples == ()
+    # An example file reaches its package's examples alone, and no suite.
+    scope = affected_from_paths(root, packages, ["packages/mid/docs/examples/guide.py"])
+    assert scope is not None
     assert [p.path for p in scope.packages] == ["packages/mid"]
-    assert scope.tests == {"packages/mid": (f"packages/mid/{EXAMPLES_HARNESS}",)}
-    assert scope.pages == {"packages/mid": ("packages/mid/docs/guide.md",)}
-    # Two pages of one package: one harness run, both pages named.
+    assert scope.tests == {} and scope.examples == ("packages/mid",)
+    # Beside a source change of its package, the suite runs as well.
     scope = affected_from_paths(
-        root, packages, ["packages/mid/docs/guide.md", "packages/mid/docs/index.md"]
+        root, packages, ["packages/mid/docs/examples/guide.py", "packages/mid/thing.py"]
     )
     assert scope is not None
-    assert scope.tests == {"packages/mid": (f"packages/mid/{EXAMPLES_HARNESS}",)}
-    assert scope.pages["packages/mid"] == (
-        "packages/mid/docs/guide.md",
-        "packages/mid/docs/index.md",
-    )
-    # A page beside a source change of its package runs the suite whole.
-    scope = affected_from_paths(
-        root, packages, ["packages/mid/docs/guide.md", "packages/mid/thing.py"]
-    )
-    assert scope is not None and scope.tests == {} and scope.pages == {}
-    # A package without a harness, the root docs, a note and a README
-    # reach nothing.
-    for path in (
-        "packages/core/docs/guide.md",
-        "docs/index.md",
-        "notes/20260101-plan.md",
-        "README.md",
-    ):
-        scope = affected_from_paths(root, packages, [path])
-        assert scope is not None and scope.packages == () and scope.pages == {}, path
+    assert scope.examples == ()
+    assert "packages/mid" in [p.path for p in scope.packages]

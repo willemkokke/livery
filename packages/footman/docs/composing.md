@@ -16,11 +16,7 @@ names the task anyway:
 calls and a human never types: a CI entry point, a step another task drives.
 
 ```python
-from livery.footman import task
-
-
-@task(hidden=True)
-def ci_publish(): ...
+--8<-- "packages/footman/docs/examples/composing.py:part-1"
 ```
 
 It drops out of `--list`, `--tree` and group help, the listings a human
@@ -41,17 +37,7 @@ has gone wrong) is the one most worth being spelled for you.
 declaration hides a whole subtree, and a child can still come back.
 
 ```python
-from livery.footman import group
-
-internal = group("internal", hidden=True)  # the whole subtree, one word
-
-
-@internal.task
-def sweep(): ...  # hidden, like its group
-
-
-@internal.task(hidden=False)
-def status(): ...  # listed again, deliberately
+--8<-- "packages/footman/docs/examples/composing.py:part-2"
 ```
 
 Setting it on a `@group.default` says the same thing about the group it
@@ -79,26 +65,14 @@ list. Reach for it when the task is *meaningless* here, not merely
 uninteresting to type.
 
 ```python
-import sys
-from pathlib import Path
-
-if sys.platform == "darwin":
-
-    @task
-    def notarize(app: Path): ...
+--8<-- "packages/footman/docs/examples/composing.py:part-3"
 ```
 
 **Disabled but listed** — pytest-skip semantics, for "this task exists but
 can't run *here*":
 
 ```python
-from livery.footman import task, requires_tool
-
-
-@task
-@requires_tool("docker")
-def up(detach: bool = True):
-    "Start the dev containers."
+--8<-- "packages/footman/docs/examples/composing.py:part-4"
 ```
 
 ```console
@@ -143,7 +117,6 @@ silent skip: silently dropping `lint` from `check` on the wrong machine is
 how CI learns to lie. When you want the optional-dependency flow, compose the
 list instead:
 
-<!-- example: fragment -->
 ```python
 @task(pre=[fmt, lint] + ([docker_up] if shutil.which("docker") else []))
 def check(): ...
@@ -170,7 +143,6 @@ imported-vs-imported clashes are loud.
 
 ## Mounting from your own modules: `include()`
 
-<!-- example: fragment -->
 ```python
 from livery.footman import include
 
@@ -229,17 +201,7 @@ paying those imports on every `fm lint`. You already can; it comes down to
 where the heavy `import` lives:
 
 ```python
-# devkit/tasks.py
-from livery.footman import task, requires_dep
-
-
-@task
-@requires_dep("stripe", reason="pip install devkit[release]")
-def publish(version: str):
-    "Cut and publish a release."
-    import stripe  # imported only when publish actually runs
-
-    ...
+--8<-- "packages/footman/docs/examples/composing.py:part-5"
 ```
 
 `include()` imports `devkit.tasks` to read task *signatures* for the
@@ -270,24 +232,11 @@ A package publishes a `Group` under the `footman.tasks` entry point:
 ```
 
 ```python
-# acme_mkdocs/__init__.py
-from livery.footman import Group, requires_tool
-
-tasks = Group("mkdocs", help="MkDocs site tasks")
-
-
-@tasks.task
-def build(strict: bool = True): ...
-
-
-@tasks.task
-@requires_tool("mike")
-def deploy(version: str): ...
+--8<-- "packages/footman/docs/examples/composing.py:part-6"
 ```
 
 And a project **opts in** with a mount line in its tasks file:
 
-<!-- example: fragment -->
 ```python
 from livery.footman import plugin
 

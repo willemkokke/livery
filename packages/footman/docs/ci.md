@@ -106,12 +106,7 @@ commands to know:
 environment works naturally:
 
 ```python
-from livery.footman import requires_env, task
-
-
-@task
-@requires_env("CI")
-def publish_coverage(): ...
+--8<-- "packages/footman/docs/examples/ci.py:part-1"
 ```
 
 Locally it's listed as `(unavailable: set CI)` and refuses to run; on the

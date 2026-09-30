@@ -65,8 +65,8 @@ class GateContext:
             whole gate.
         tests: Per package path, the test files that stand for the
             package's suite in this run.
-        pages: Per package path, the docs pages an examples harness
-            narrows to.
+        examples: The package paths whose changed files are examples
+            and nothing else: their examples run and no suite.
         fix: Whether the rewriters run in their fix mode.
         check_style: False when a rewrite pass already ran, so the
             style checks may skip re-judging what they just wrote.
@@ -80,7 +80,7 @@ class GateContext:
     packages: tuple[Package, ...]
     subset: tuple[Package, ...] | None = None
     tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    pages: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    examples: tuple[str, ...] = ()
     fix: bool = False
     check_style: bool = True
     package: Package | None = None
@@ -832,7 +832,10 @@ def _register_builtin() -> None:
         _python.run_typecomplete(python_members(ctx, "typecomplete", "typecomplete"))
 
     def test_run(ctx: GateContext) -> None:
-        judged = python_members(ctx, "test", "test")
+        # A package whose examples alone changed runs them, not its suite.
+        judged = tuple(
+            p for p in python_members(ctx, "test", "test") if p.path not in ctx.examples
+        )
         record = check_for("test")
         serial = tuple(p for p in judged if not option_value(record, p, "parallel"))
         parallel = tuple(p for p in judged if p not in serial) + unit(ctx)
@@ -846,15 +849,31 @@ def _register_builtin() -> None:
             if not ctx.scoped:
                 _python.run_test(*extra, packages=members, root=ctx.root)
                 continue
-            narrowed = [page for found in ctx.pages.values() for page in found]
             _python.run_test(
                 *extra,
-                *_python.page_arguments(narrowed),
                 packages=members,
                 root=ctx.root,
                 scoped=True,
                 selection=ctx.tests,
             )
+
+    def examples_run(ctx: GateContext) -> None:
+        from livery.workshop._kinds import kind_examples
+
+        for package in python_members(ctx, "examples", "examples"):
+            if (
+                ctx.scoped
+                and package.path in ctx.tests
+                and package.path not in ctx.examples
+            ):
+                continue  # its tests alone changed: the examples did not move
+            runner = kind_examples(package.kind)
+            if runner is None:
+                print(
+                    f"  examples: {package.path} skips ({package.kind} kind runs none)"
+                )
+                continue
+            runner(package, ctx.root)
 
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
@@ -918,12 +937,7 @@ def _register_builtin() -> None:
 
     def ctest_run(ctx: GateContext) -> None:
         package = package_of(ctx)
-        _cpp_conan.test(
-            package,
-            ctx.root,
-            selection=ctx.selection,
-            pages=ctx.pages.get(package.path, ()),
-        )
+        _cpp_conan.test(package, ctx.root, selection=ctx.selection)
 
     def clang_tidy_run(ctx: GateContext) -> None:
         _cpp_conan.lint(package_of(ctx), ctx.root)
@@ -962,7 +976,6 @@ def _register_builtin() -> None:
                     "test",
                     "test-support",
                     "configuration",
-                    "example",
                 )
             ),
         ),
@@ -998,9 +1011,27 @@ def _register_builtin() -> None:
             claims=(
                 Claim("source", suffixes=py),
                 Claim("test", ignore=("D1",), suffixes=py),
+                # An example keeps the layout its page shows; ruff judges
+                # its names, as the page harness did, and nothing of style.
+                Claim(
+                    "example",
+                    ignore=(
+                        "D",
+                        "E",
+                        "I",
+                        "UP",
+                        "B",
+                        "SIM",
+                        "C4",
+                        "RUF",
+                        "F401",
+                        "F811",
+                        "F841",
+                    ),
+                    suffixes=py,
+                ),
                 Claim("test-support", ignore=("D1",), suffixes=py),
                 Claim("configuration", suffixes=py),
-                Claim("example", suffixes=py),
             ),
         ),
         CheckRecord(
@@ -1064,6 +1095,15 @@ def _register_builtin() -> None:
                 ("python.test.addopts", "--dist=worksteal"),
                 ("python.test.addopts", "--import-mode=importlib"),
             ),
+        ),
+        CheckRecord(
+            "examples",
+            "examples",
+            examples_run,
+            narrowing=PACKAGES,
+            kinds=python,
+            tools=("pytest",),
+            claims=(Claim("example", suffixes=py),),
         ),
         CheckRecord("template_check", "render", render_run, in_scoped=False),
         CheckRecord(

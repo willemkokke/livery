@@ -214,6 +214,7 @@ def test_the_kind_chains_from_python() -> None:
         "typecheck",
         "typecomplete",
         "test",
+        "examples",
     )
     assert record.host_tools == ("cc", "c++")
 

@@ -46,7 +46,7 @@ def _context(
     fix: bool = False,
     check_style: bool = True,
     tests: Mapping[str, tuple[str, ...]] | None = None,
-    pages: Mapping[str, tuple[str, ...]] | None = None,
+    examples: tuple[str, ...] = (),
 ) -> GateContext:
     """This workspace's gate context: the root, every package, and the run's scope."""
     root = workspace_root()
@@ -57,7 +57,7 @@ def _context(
         packages=_packages(),
         subset=subset,
         tests=tests or {},
-        pages=pages or {},
+        examples=examples,
         fix=fix,
         check_style=check_style,
     )
@@ -444,15 +444,14 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                         names = ", ".join(package.path for package in subset)
                         print(f"  affected: {names}")
                         for path, files in sorted(scope.tests.items()):
-                            narrowed = scope.pages.get(path, ())
                             print(
                                 f"  {path}: {len(files)} test file(s) changed and"
                                 " nothing else; they run alone"
-                                + (
-                                    f", the examples of {', '.join(narrowed)}"
-                                    if narrowed
-                                    else ""
-                                )
+                            )
+                        for path in scope.examples:
+                            print(
+                                f"  {path}: its examples changed and nothing else;"
+                                " they run and no suite"
                             )
                         tree = reflex.tree
                         if fix:
@@ -463,7 +462,7 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                             fix=fix,
                             rewritten=fix,
                             tests=scope.tests,
-                            pages=scope.pages,
+                            examples=scope.examples,
                         )
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
@@ -727,7 +726,7 @@ def _scoped_check(
     fix: bool = False,
     rewritten: bool = False,
     tests: Mapping[str, tuple[str, ...]] | None = None,
-    pages: Mapping[str, tuple[str, ...]] | None = None,
+    examples: tuple[str, ...] = (),
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
 
@@ -738,13 +737,13 @@ def _scoped_check(
     ran them already to measure the tree they left; the style judges
     then skip, since re-judging what was just written only spends
     time agreeing. *tests* names, per package path, the test files
-    that stand for the package's suite in this run; *pages* the docs
-    pages an examples harness narrows to.
+    that stand for the package's suite in this run; *examples* the
+    packages whose examples alone changed.
     """
     _checks.verify_roles()
     if fix and not rewritten:
-        _rewrite(_context(subset=subset, fix=True, tests=tests, pages=pages))
-    _judge(_context(subset=subset, check_style=not fix, tests=tests, pages=pages))
+        _rewrite(_context(subset=subset, fix=True, tests=tests, examples=examples))
+    _judge(_context(subset=subset, check_style=not fix, tests=tests, examples=examples))
 
 
 coverage = group("coverage", help="The measured union and its floors")

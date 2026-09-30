@@ -12,7 +12,6 @@ small API lets a task add its own timing to the same picture.
 
 Mount it like any plugin:
 
-<!-- example: fragment -->
 ```python
 from livery.footman.compose import plugin
 
@@ -62,7 +61,6 @@ contain is its own write.
 The trace subdivides further wherever a task says so. Three primitives, all
 recorded on the run's clock and carried on the task's row:
 
-<!-- example: fragment -->
 ```python
 from livery import footman
 from livery.footman import task
@@ -86,7 +84,6 @@ Work that *overlaps*, with several waits in flight at once, belongs on a
 `footman.stream(name)` returns a `Stream`; sections on it come in two
 forms:
 
-<!-- example: fragment -->
 ```python
 @task
 def await_ci(ref: str):
@@ -172,7 +169,6 @@ An exec runs no exit handler. Everything a process recorded before replacing
 itself would die with it, and its box would be left behind. So a verb that
 replaces its own process wraps the replacing in footman's own handoff:
 
-<!-- example: fragment -->
 
 ```python
 import livery.footman as footman

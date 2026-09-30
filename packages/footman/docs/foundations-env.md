@@ -70,7 +70,6 @@ router**, the same move as its stdout router applied to a second global:
 you pass is what it gets. Both standard idioms work, and neither needs a
 footman-specific spelling:
 
-<!-- example: fragment -->
 ```python
 run(cmd, env={**os.environ, "CI": "1"})  # add to what this task has
 
@@ -95,7 +94,6 @@ the process's.
 Where an environment variable travels is easiest to see by following one
 all the way down. Say a task selects a test tier:
 
-<!-- example: fragment -->
 ```python
 @task
 def gate():

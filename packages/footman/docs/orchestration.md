@@ -10,27 +10,7 @@ request, body calls, sharing, steps of your own) lives on
 The examples on this page share a small cast of stand-in tasks:
 
 ```python
-from livery.footman import task
-
-
-@task
-def fmt(): ...
-
-
-@task
-def lint(): ...
-
-
-@task
-def typecheck(): ...
-
-
-@task
-def test(): ...
-
-
-@task
-def notify(): ...
+--8<-- "packages/footman/docs/examples/orchestration.py:part-1"
 ```
 
 ## Chaining
@@ -109,17 +89,7 @@ least deliberate:
   run rather than one task.
 
 ```python
-from livery.footman import task, fail
-
-
-def open_pr() -> bool: ...  # your own lookup
-
-
-@task
-def release(armed: bool = False):
-    if not open_pr():
-        fail("no open PR for setup — run `fm create repo` first")
-    ...
+--8<-- "packages/footman/docs/examples/orchestration.py:part-2"
 ```
 
 A `run()` command that exits non-zero raises `RunFailed` on your behalf (unless
@@ -143,8 +113,7 @@ failure in one pass. `--fail-fast` forces the default back when a task declares
 otherwise. Which wins is **three-state: command line > declared > built-in**.
 
 ```python
-@task(keep_going=True)  # this gate wants to surface every problem at once
-def check(): ...
+--8<-- "packages/footman/docs/examples/orchestration.py:part-3"
 ```
 
 - `fm check` keeps going, by its own declaration.
@@ -184,13 +153,8 @@ Three escape hatches for the kill:
 one *use* wants a different policy, `.opts()` overrides it there, without
 touching the registered task:
 
-<!-- example: revision -->
 ```python
-from livery.footman import Forward
-
-
-@task(pre=[fmt.opts(atomic=True), lint])  # protect fmt's writes here, not everywhere
-def check(fix: Forward[bool] = False): ...
+--8<-- "packages/footman/docs/examples/orchestration-r1.py:part-1"
 ```
 
 `.opts()` returns the same task with the options overridden for that use only,
@@ -245,14 +209,8 @@ Declare prerequisites and follow-ups on the task; footman schedules them (a
 prerequisite mounted in twice runs once) and skips a task whose prerequisite
 failed:
 
-<!-- example: revision -->
 ```python
-@task(pre=[fmt, lint, typecheck, test])  # all four run before check
-def check(): ...
-
-
-@task(post=[notify])  # notify runs after deploy succeeds
-def deploy(): ...
+--8<-- "packages/footman/docs/examples/orchestration-r2.py:part-1"
 ```
 
 `check`'s four prerequisites have no edges *between* them, so footman runs all
@@ -281,16 +239,8 @@ its value threads to every task this one dispatches (its `pre`/`post`
 prerequisites and a [runnable group](#runnable-groups)'s members) that declares
 a parameter of the same name:
 
-<!-- example: revision -->
 ```python
-from typing import Annotated
-from livery.footman import task
-from livery.footman.params import forward
-
-
-@task(pre=[fmt, lint, test])
-def check(fix: Annotated[bool, forward] = False):
-    "fm check --fix reaches fmt & lint; test (no `fix`) runs defaulted."
+--8<-- "packages/footman/docs/examples/orchestration-r3.py:part-1"
 ```
 
 `Forward[bool]` is the shorthand (`Forward[T]` ≡ `Annotated[T, forward]`, like
@@ -322,17 +272,8 @@ gets.
 fail. It honours the same `-s` and `-j` as the scheduler (one worker under
 `-s`), so concurrency stays controlled in one place:
 
-<!-- example: revision -->
 ```python
-from livery.footman import task, parallel, step
-
-
-def clean(): ...
-
-
-@task
-def check():
-    parallel(lint, typecheck, test, step(clean)())
+--8<-- "packages/footman/docs/examples/orchestration-r4.py:part-1"
 ```
 
 Three things can go in:
@@ -358,7 +299,6 @@ Passing arguments through built step items works for two or three; past
 that, writing the calls plainly reads better, and the block form is the
 only one that hands the return values back:
 
-<!-- example: fragment -->
 ```python
 @task
 def release():
@@ -380,7 +320,6 @@ a task runs where it stands rather than joining the fan-out. A lifted step
 joins through `p(item)`, and its value lands in `results` in written
 order:
 
-<!-- example: fragment -->
 ```python
 with parallel() as p:
     build("web")
@@ -427,33 +366,8 @@ A group is a namespace: `fm lint.markdown` runs a task under `lint`, but bare
 `fm lint` is an error. Give the group a **default action** with `@group.default`
 and the bare form runs, while the members stay addressable:
 
-<!-- example: fresh-session -->
 ```python
-from livery.footman import group, run, task
-from livery.footman.params import Forward
-from livery.toolroom.tools import ruff, markdownlint, cspell
-
-lint = group("lint")
-
-
-@lint.task
-def python(fix: bool = False):
-    ruff("check", "src", fix=fix)
-
-
-@lint.task
-def markdown(fix: bool = False):
-    markdownlint("**/*.md", fix=fix)
-
-
-@lint.task
-def spelling():
-    cspell("lint", "**/*")  # no --fix
-
-
-@lint.default
-def lint_all(fix: Forward[bool] = False):
-    "Lint everything; --fix reaches the members that support it."
+--8<-- "packages/footman/docs/examples/orchestration-2.py:part-1"
 ```
 
 - `fm lint` fans out every member task; `fm lint --fix` fixes what's fixable and
@@ -507,11 +421,7 @@ and `fm --help lint` renders it as a command in its own right. And it composes: 
 A runnable group is also **callable from a task body**, the way a task is:
 
 ```python
-@task
-def check(fix: bool = False):
-    lint(fix=fix)  # runs lint's default — fans out, or runs its body
-    if fix:
-        run("./stamp-version.sh")
+--8<-- "packages/footman/docs/examples/orchestration-2.py:part-2"
 ```
 
 `lint(fix=fix)` runs the default's action synchronously and in order — its body

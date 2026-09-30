@@ -14,17 +14,9 @@ callable: calling it from another task body checks your parameters and
 return type, and your editor completes them.
 
 ```python
-from livery.footman import task
-
-
-@task
-def build(target: str, release: bool = False) -> int: ...
-
-
-build("web", release=True)  # checked: parameters, names, return type
+--8<-- "packages/footman/docs/examples/typechecking.py:part-1"
 ```
 
-<!-- example: fragment -->
 
 ```python
 build(7)  # a type error, before anything runs
@@ -37,10 +29,9 @@ typed set: the names complete inside the parens, and a misspelt one is a
 static error at the call site.
 
 ```python
-build.opts(atomic=True)("web")  # still (target: str, release: bool) -> int
+--8<-- "packages/footman/docs/examples/typechecking.py:part-2"
 ```
 
-<!-- example: fragment -->
 
 ```python
 build.opts(atomci=True)  # a type error: not a policy option

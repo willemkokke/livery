@@ -43,28 +43,7 @@ Tasks are plain functions. A `@task` decorator registers one; a `group()` opens
 a nested command group. Put a `tasks.py` at your project root:
 
 ```python
-from livery.footman import task, group
-
-
-@task
-def lint(fix: bool = False):
-    "Run ruff over the project."
-    ...
-
-
-@task
-def test(marker: str = "", *pytest_args):
-    "Run the test suite (extra pytest args after --)."
-    ...
-
-
-docs = group("docs", help="Documentation")
-
-
-@docs.task(infinite=True)
-def serve(port: int = 8000):
-    "Serve the docs locally."
-    ...
+--8<-- "packages/footman/docs/examples/getting-started.py:part-1"
 ```
 
 The docstring's **first line** is the task's help text: it shows up in

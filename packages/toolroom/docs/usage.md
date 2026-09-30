@@ -24,7 +24,6 @@ Keyword arguments become flags mechanically:
 Positional strings pass through verbatim, and attribute access chains
 subcommands:
 
-<!-- example: fragment -->
 ```python
 from livery.toolroom.tools import docker
 
@@ -46,7 +45,6 @@ carrying `stdout`, `stderr`, `ok`, `code`, and `to_argv()`. Standalone,
 a non-zero exit raises `ToolError` — which carries the `Result` — so
 the default reading of a tool call is "this worked":
 
-<!-- example: fragment -->
 ```python
 from livery.toolroom.tools import git, ToolError
 
@@ -58,7 +56,6 @@ except ToolError as err:
 
 Tolerate failure deliberately with `nofail`:
 
-<!-- example: fragment -->
 ```python
 r = git.opts(nofail=True).push()
 if not r.ok:
@@ -75,7 +72,6 @@ message, and (hosted) footman's receipts, which see the marker because
 the bridge passes a `str` through as its own type rather than
 flattening it:
 
-<!-- example: fragment -->
 ```python
 from livery.footman import Secret
 from livery.toolroom.tools import docker
@@ -101,7 +97,6 @@ type that opts into the same shape.
 Policy rides *beside* the call and never becomes a tool flag, so a
 tool's own `--capture` (pytest has one) can't collide:
 
-<!-- example: fragment -->
 ```python
 pytest.opts(capture=False)("-s")  # stream live
 git.opts(cwd=repo_dir).status()  # root this call elsewhere
@@ -118,7 +113,6 @@ taught refusal, because the in-process lane belongs to the host.
 
 Some flags belong to the tool, not the verb, and must precede it:
 
-<!-- example: fragment -->
 ```python
 docker.flags(host="tcp://x").ps(all=True)
 #  -> docker --host=tcp://x ps --all
@@ -135,7 +129,6 @@ three separate channels: `.at()`, `.opts()`, `.flags()`.
 Insert `.argv` before the parentheses and the call hands back an
 `Argv` — the raw tokens, an ordinary `list[str]`:
 
-<!-- example: fragment -->
 ```python
 cmd = mkdocs.gh_deploy.argv(force=True)
 #  -> Argv(['mkdocs', 'gh-deploy', '--force'])
@@ -154,7 +147,6 @@ POSIX-quoted.
 comparable int tuple, cached per process, resolved outside any host so
 dry-run and recording can't lie to it:
 
-<!-- example: fragment -->
 ```python
 if ruff.installed_version() >= (0, 14):
     ...

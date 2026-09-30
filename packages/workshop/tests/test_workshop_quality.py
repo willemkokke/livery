@@ -214,8 +214,8 @@ def test_lint_and_format_refuse_both_fix_flags() -> None:
     assert "Pass one" in str(caught.value)
 
 
-def test_the_pages_reach_pytest_as_docs_page_arguments(
-    monkeypatch, tmp_path: Path
+def test_the_python_test_entry_maps_a_selection_to_its_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._backends import _python
 
@@ -224,21 +224,12 @@ def test_the_pages_reach_pytest_as_docs_page_arguments(
         _python, "run_test", lambda *args, **kwargs: calls.append((args, kwargs))
     )
     package = _package(tmp_path)
-    _python.test(
-        package,
-        tmp_path,
-        selection=("tests/test_docs_examples.py",),
-        pages=(f"{package.path}/docs/a.md", f"{package.path}/docs/b.md"),
-    )
+    _python.test(package, tmp_path, selection=("tests/test_a.py",))
     args, kwargs = calls[0]
-    assert args == (
-        f"--docs-page={package.path}/docs/a.md",
-        f"--docs-page={package.path}/docs/b.md",
-    )
-    assert kwargs["selection"] == {
-        package.path: (f"{package.path}/tests/test_docs_examples.py",)
-    }
-    assert _python.page_arguments(()) == []
+    assert args == ()
+    assert kwargs["selection"] == {package.path: (f"{package.path}/tests/test_a.py",)}
+    _python.test(package, tmp_path)
+    assert calls[1][1]["selection"] is None
 
 
 # --- what the gate is, pinned before the check registry replaces it -----------

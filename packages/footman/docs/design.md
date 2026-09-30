@@ -103,20 +103,7 @@ command-line interface (typed flags, positionals, completion) and its
 body is ordinary Python:
 
 ```python
-from livery.footman import task, run
-
-
-@task
-def test(coverage: bool = False):
-    """Run the test suite."""
-    run("pytest --cov" if coverage else "pytest")
-    # The typed tool handles live in toolroom (import toolroom as
-    # tools), where flags become checked keyword arguments with
-    # completion:
-    #
-    #     tools.pytest(cov=coverage)
-    #
-    # This page sticks to plain run() commands everyone already knows.
+--8<-- "packages/footman/docs/examples/design.py:part-1"
 ```
 
 That `run()` call makes a **step**: one recorded piece of the task's
@@ -151,24 +138,7 @@ Nothing else divides them.
 You can make a step three ways, and all three are the same word:
 
 ```python
-import shutil
-
-from livery.footman import step
-
-
-def write_fixtures(): ...  # stand-ins for your own helpers
-def build_docs(): ...
-
-
-@step  # 1. a function that IS a step
-def clean():
-    shutil.rmtree("build", ignore_errors=True)
-
-
-with step("prepare fixtures"):  # 2. record a block of your own code
-    write_fixtures()
-
-docs = step(build_docs, title="docs")  # 3. wrap an existing function
+--8<-- "packages/footman/docs/examples/design.py:part-2"
 ```
 
 One note, learned from Python itself: calling a step function
@@ -181,19 +151,7 @@ be a surprise.
 A step can also be a generator, which buys two things with one keyword:
 
 ```python
-from pathlib import Path
-
-
-def to_webp(image: Path): ...  # your converter
-
-
-@step
-def convert(images: list[Path]):
-    view = yield  # the step's own record, mid-work
-    for done, image in enumerate(images, start=1):
-        view.title = f"converting {done}/{len(images)}"
-        to_webp(image)
-        yield  # a checkpoint, once per image
+--8<-- "packages/footman/docs/examples/design.py:part-3"
 ```
 
 Every bare `yield` is a **checkpoint**: a place where footman may
@@ -213,7 +171,6 @@ is safe to stop, and footman will only ever stop you there.
 
 Hand footman a bare function and it will refuse:
 
-<!-- example: fragment -->
 ```python
 parallel(lint, test, lambda: shutil.rmtree("build"))  # refused
 parallel(lint, test, step(clean, title="clear build/"))  # one wrapper fixes it
@@ -252,7 +209,6 @@ Sometimes execution is the *only* half you want. A task that reads the
 current git hash isn't telling the story of the run; it's learning
 something in order to tell it:
 
-<!-- example: fragment -->
 ```python
 head = run("git rev-parse HEAD", recorded=False)  # off the record
 ```
@@ -294,7 +250,6 @@ The design answer is a **review window**. Between a step finishing and
 its record being sealed, a reviewer you name may read the draft and
 amend the verdict:
 
-<!-- example: fragment -->
 ```python
 def reformatted_is_fine(view):
     if "reformatted" in view.stdout or view.code == 0:
@@ -329,13 +284,7 @@ no way to write. An observer that finds a problem is not powerless,
 though: it can *fail* the work, loudly and attributably:
 
 ```python
-from livery.footman import fail
-
-
-@test.post_task
-def budget(result):
-    if result.duration > 60.0:
-        fail(f"too slow: {result.duration:.0f}s against the 60s budget")
+--8<-- "packages/footman/docs/examples/design.py:part-4"
 ```
 
 Notice where that lives: on `test`, right next to the knowledge it
@@ -484,13 +433,7 @@ Everything else is yours to declare. A lane is created by binding a
 name, and claimed by handing that binding around:
 
 ```python
-from livery import footman
-
-db = footman.lane("database", reason="serialises the shared dev DB")
-
-
-@task(lanes=(db,))
-def migrate(): ...
+--8<-- "packages/footman/docs/examples/design.py:part-5"
 ```
 
 Two details carry the design's weight here. Lanes are **handles, not

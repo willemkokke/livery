@@ -22,11 +22,13 @@ DOCS = ROOT / "docs"
 
 
 def _handwritten_docs() -> list[Path]:
-    return [
+    """The pages, and the example files the pages show by snippet."""
+    pages = [
         p
         for p in DOCS.rglob("*.md")
         if "_generated" not in p.parts and "htmlcov" not in p.parts
     ]
+    return pages + sorted((DOCS / "examples").glob("*.py"))
 
 
 def _assignment_docstrings() -> set[str]:

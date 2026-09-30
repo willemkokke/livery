@@ -860,7 +860,6 @@ def test(
     root: Path,
     *,
     selection: tuple[str, ...] = (),
-    pages: tuple[str, ...] = (),
 ) -> None:
     """Run ctest over the gate build, measured: every test, or *selection*'s alone.
 
@@ -875,7 +874,6 @@ def test(
     none, and a family without a measurer refuses by name, since a
     suite that ran unmeasured never passes as measured.
     """
-    del pages  # no docs examples harness answers to a C++ kind
     from livery.workshop import _coverage_lines as lines_
 
     build_dir = package.directory / GATE_BUILD_DIR

@@ -106,6 +106,22 @@ An option a check does not declare, a check that does not exist, and
 a value of the wrong type each refuse in the layering check, naming
 the vocabulary.
 
+A package's documentation examples are files under `docs/examples/`,
+python files a page shows whole or by named section through the
+snippets extension: a fence whose one line is the snippet marker
+followed by the quoted repository-relative path of the file, with
+`:part-1` after the path for one part, and `# --8<-- [start:part-1]`
+and `# --8<-- [end:part-1]` lines around that part in the file. The
+`examples` check runs each file as
+one test through the kind's runner, pytest for python, from the
+workspace root; a failure reports the example's own file and line. A
+`conftest.py` beside the examples is the package's setup around them,
+never an example: it reaches every example item through the `example`
+marker, as footman's does to run each inside a captured registry. The
+`example` category is claimed by `lint`, for names only, by
+`examples` and by the site; a page's prose reaches the site build and
+no test, and an example file reaches the examples check and the site.
+
 A check record also owns its configuration. Its `fragments`, one per
 rendered file, are what the render writes for it: the format, lint,
 typecheck and test records carry every `[tool.*]` table of the root

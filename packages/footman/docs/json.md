@@ -118,15 +118,7 @@ Return a value from a task and it lands in the task's entry. No decorator,
 no context API: the `return` statement is the whole feature.
 
 ```python
-from pathlib import Path
-from livery.footman import task
-
-
-@task
-def coverage() -> dict:
-    "Measure coverage."
-    ...
-    return {"percent": 94.2, "failed": [], "report": Path("htmlcov/index.html")}
+--8<-- "packages/footman/docs/examples/json.py:part-1"
 ```
 
 ```console
@@ -160,25 +152,7 @@ The return *annotation* is the output contract, the same way a typed
 signature is the input contract. No decorator, no schema language:
 
 ```python
-from dataclasses import dataclass
-from livery.footman import task
-
-
-@dataclass
-class Affected:
-    tasks: list[str]
-    reason: str
-    since: str
-
-
-@task
-def affected() -> Affected:
-    """The tasks a change reaches.
-
-    Returns:
-        Which tasks the change reaches, and why.
-    """
-    ...
+--8<-- "packages/footman/docs/examples/json.py:part-2"
 ```
 
 A declaring task's entry carries `returned_schema` beside `returned`, so
@@ -290,13 +264,7 @@ A task can declare that its return value *is* the document on stdout, in
 the signature, where the rest of its contract lives:
 
 ```python
-from livery.footman import Stdout, task
-
-
-@task
-def status() -> Stdout[dict]:
-    "Where the repo stands."
-    return {"branch": "main", "dirty": False}
+--8<-- "packages/footman/docs/examples/json.py:part-3"
 ```
 
 ```console
