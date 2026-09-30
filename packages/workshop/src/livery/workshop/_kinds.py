@@ -214,9 +214,10 @@ class Extractor:
             extract.
         sources: The handler's search paths for a package, relative
             to the workspace root.
-        config: The handler's configuration lines given every
-            package's search paths, the inventories, and the
-            members policy, one of `MEMBERS_POLICIES`.
+        options: The handler's options, by name, which the site's
+            assembly renders as the handler's options table; the
+            members policy, one of `MEMBERS_POLICIES`, is applied
+            beside them by the assembly.
         inventories: The inventories cross-references resolve
             against.
     """
@@ -224,7 +225,7 @@ class Extractor:
     name: str
     pages: Callable[[Package], list[tuple[str, str]]]
     sources: Callable[[Package], list[str]]
-    config: Callable[[list[str], tuple[str, ...], str], list[str]]
+    options: dict[str, object] = field(default_factory=dict)
     inventories: tuple[str, ...] = ()
 
 
