@@ -68,8 +68,7 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.0",
     "pytest-cov>=5",
-    "coverage[toml]>=7.10",
-    "coverage-enable-subprocess>=1.0",
+    "coverage[toml]>=7.13",
     "pytest-xdist>=3.6",
 ]
 
@@ -123,8 +122,8 @@ convention = "google"
 [tool.coverage.run]
 # The tests measure, and every process they start, every
 # fm child a test spawns included: inside CI the test
-# runner arms COVERAGE_PROCESS_START in pytest's environment, the
-# installed .pth starts the meter in every python under it, and the
+# runner arms COVERAGE_PROCESS_START in pytest's environment, the .pth
+# coverage installs starts the meter in every python under it, and the
 # patch cascades through the workers. The gate's own driver is never
 # metered, so a line counts only when a test reached it. Parallel
 # data files merge per leg, then across legs in the aggregating

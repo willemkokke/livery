@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -241,6 +243,70 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
     assert [args for args, _env in fake.calls] == [("packages/thing/tests", "tests")]
     assert not any("--cov" in args for args, _env in fake.calls)
+
+
+def _python_of_the_venv(env: dict[str, str], code: str, cwd: Path) -> str:
+    """Run *code* in a fresh interpreter of this venv; what it printed."""
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=cwd,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout.strip()
+
+
+def _unarmed() -> dict[str, str]:
+    """This process's environment without the variables that arm a meter."""
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+
+
+def test_an_unarmed_python_of_the_venv_imports_no_coverage(tmp_path: Path) -> None:
+    # Every fm start, test worker and subprocess pays for what the
+    # venv's startup hooks import. Coverage's own hook imports coverage
+    # only when the runner arms it; a hook that imported it anyway cost
+    # most of a bare interpreter start.
+    found = _python_of_the_venv(
+        _unarmed(), "import sys; print('coverage' in sys.modules)", tmp_path
+    )
+    assert found == "False"
+
+
+def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("coverage")
+    config = tmp_path / "coverage.ini"
+    config.write_text(
+        f"[run]\nparallel = true\ndata_file = {(tmp_path / '.coverage').as_posix()}\n"
+    )
+    env = {**_unarmed(), "COVERAGE_PROCESS_START": str(config)}
+    _python_of_the_venv(env, "x = 1", tmp_path)
+    assert list(tmp_path.glob(".coverage.*"))
+
+
+def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
+    from livery.workshop._checks import check_for
+
+    contributed = [
+        str(value)
+        for slot, value in check_for("test.pytest").contributions
+        if slot == "python.dev-group"
+    ]
+    # 7.13 is the first coverage that installs its own startup hook: an
+    # older one would leave every process the tests start unmetered.
+    assert "coverage[toml]>=7.13" in contributed
+    assert not any(
+        value.startswith("coverage-enable-subprocess") for value in contributed
+    )
 
 
 def test_the_preview_tolerates_a_run_that_measured_nothing(
