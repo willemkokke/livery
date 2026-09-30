@@ -80,7 +80,15 @@ with `register_slot` and filled with `contribute` in
 contribution order and a scalar taking the nearest contribution. The
 site's private-members policy is the third, `docs.members`: `public`
 keeps each extractor's default filter, `all` documents every member,
-and any other value refuses naming both. A
+and any other value refuses naming both. The theme block is the
+fourth, `docs.theme`: a table of the block's values (`language`,
+`font.text`, `font.code`, `features`, `palette`) a theme layer
+contributes in part, merged key by key in contribution order over the
+base's block, an unknown key refusing. A layer's site css ships in
+its wheel under `content/docs/assets/`; the build stages it under
+`docs/_layers/` and lists it in `extra_css` in layer order, before
+the packages' declared sheets and the workspace's own
+`docs/assets/site.css`, which loads last. A
 check a layer withdraws takes its lines with it. And its `options`
 are what a package may set under `[checks.<name>]` in its own
 contract, each with a type and a default; every check carries

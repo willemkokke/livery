@@ -40,7 +40,7 @@ from typing import Annotated
 
 from livery.footman import doc, fail, group
 from livery.toolroom import tools
-from livery.workshop import _slots
+from livery.workshop import _layers, _slots
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package, discover_packages
 
@@ -574,10 +574,16 @@ def _authored_nav_lines(
     return lines
 
 
-#: The workspace css seeds the emitter lists while they exist:
-#: instance-owned files, born from the template, overridable by
-#: editing them and removable by deleting them.
-WORKSPACE_CSS = ("assets/palette.css", "assets/type.css")
+#: The workspace's own css, listed last while it exists: an
+#: instance-owned file, born from the template as an empty sheet,
+#: written by the instance and removable by deleting it.
+WORKSPACE_CSS = ("assets/site.css",)
+#: Where the build stages the layers' site assets, relative to the
+#: docs tree, one directory per layer: machine territory, rebuilt
+#: whole by every build and gitignored.
+LAYER_ASSETS = "_layers"
+#: The directory of a layer's content that holds its site assets.
+CONTENT_ASSETS = "docs/assets"
 #: The link-preview card image's committed home; the image tags are
 #: emitted only while it exists.
 CARD_IMAGE = "docs/assets/og-card.png"
@@ -688,20 +694,60 @@ def _js_line(entry: object, prefix: str) -> str:
     return "    { " + ", ".join(parts) + " },"
 
 
+def layer_assets(root: Path) -> list[tuple[str, Path]]:
+    """Each mounted layer that ships site assets, with its assets directory.
+
+    In the workspace's layer order. A layer ships site assets under
+    ``content/docs/assets/`` in its wheel; a layer without that
+    directory, or not installed, ships none and is not listed.
+    """
+    found: list[tuple[str, Path]] = []
+    for layer in _layers.layer_names(root):
+        content = _layers.layer_content(layer)
+        if content is None:
+            continue
+        assets = content / CONTENT_ASSETS
+        if assets.is_dir():
+            found.append((layer, assets))
+    return found
+
+
+def stage_layer_assets(root: Path) -> list[str]:
+    """Copy every layer's site assets under ``docs/_layers/``; the layers staged.
+
+    Rebuilt whole: a file a layer no longer ships leaves no stale
+    copy, and a layer that left the workspace loses its directory.
+    """
+    base = root / "docs" / LAYER_ASSETS
+    shutil.rmtree(base, ignore_errors=True)
+    staged: list[str] = []
+    for layer, assets in layer_assets(root):
+        shutil.copytree(assets, base / layer / "assets")
+        staged.append(layer)
+    return staged
+
+
 def _extra_asset_lines(root: Path) -> list[str]:
     """``extra_css`` and ``extra_javascript`` for the whole site.
 
-    The workspace's own css seeds while they exist, then each
-    package's declared entries at its mounted paths. Top-level
-    ``[project]`` keys, so they render before any subtable.
+    The css in cascade order: every layer's staged sheets in layer
+    order, then each package's declared entries at its mounted paths,
+    then the workspace's own sheet while it exists, so the instance's
+    rules win. Top-level ``[project]`` keys, so they render before
+    any subtable.
     """
-    css = [name for name in WORKSPACE_CSS if (root / "docs" / name).is_file()]
+    css = [
+        f"{LAYER_ASSETS}/{layer}/assets/{sheet.name}"
+        for layer, assets in layer_assets(root)
+        for sheet in sorted(assets.glob("*.css"))
+    ]
     js: list[str] = []
     for package in discover_packages(root):
         declared_css, declared_js = package_docs_extras(package)
         prefix = f"packages/{package.directory.name}/"
         css += [prefix + _published(entry) for entry in declared_css]
         js += [_js_line(entry, prefix) for entry in declared_js]
+    css += [name for name in WORKSPACE_CSS if (root / "docs" / name).is_file()]
     lines: list[str] = []
     if css:
         lines.append("extra_css = [")
@@ -714,55 +760,117 @@ def _extra_asset_lines(root: Path) -> list[str]:
     return lines
 
 
-def _theme_lines() -> list[str]:
-    """The theme block: workshop defaults an instance restyles in css.
+#: The slot deciding the theme block's values. The base's block is
+#: the default; a theme layer contributes a table of the keys it
+#: changes, and contributions merge key by key in contribution order,
+#: so the nearest layer's keys win.
+THEME_SLOT = "docs.theme"
+#: The base's theme: the stock fonts, and a palette that follows the
+#: OS with a manual light/dark/auto toggle cycle.
+THEME_DEFAULT: dict[str, object] = {
+    "language": "en",
+    "font.text": "Inter",
+    "font.code": "Fira Code",
+    "features": [
+        "announce.dismiss",
+        "content.code.annotate",
+        "content.code.copy",
+        "content.tooltips",
+        "navigation.footer",
+        "navigation.indexes",
+        "navigation.instant",
+        "navigation.instant.prefetch",
+        "navigation.sections",
+        "navigation.tabs",
+        "navigation.tabs.sticky",
+        "navigation.top",
+        "navigation.tracking",
+        "search.highlight",
+        "toc.follow",
+    ],
+    "palette": [
+        {
+            "media": "(prefers-color-scheme)",
+            "toggle.icon": "lucide/sun-moon",
+            "toggle.name": "Switch to light mode",
+        },
+        {
+            "media": "(prefers-color-scheme: light)",
+            "scheme": "default",
+            "toggle.icon": "lucide/sun",
+            "toggle.name": "Switch to dark mode",
+        },
+        {
+            "media": "(prefers-color-scheme: dark)",
+            "scheme": "slate",
+            "toggle.icon": "lucide/moon",
+            "toggle.name": "Switch to system preference",
+        },
+    ],
+}
 
-    The palette follows the OS with a manual light/dark/auto toggle
-    cycle; the override directory carries the rendered link-preview
-    template.
+
+def _merge_theme(values: list[object]) -> object:
+    """The theme's values: the default, each contribution's keys over it.
+
+    Raises:
+        SlotError: when a contribution is not a table, or names a key
+            outside the block's vocabulary.
     """
-    return [
+    theme: dict[str, object] = dict(THEME_DEFAULT)
+    for value in values:
+        if not isinstance(value, dict):
+            raise _slots.SlotError(
+                f"slot {THEME_SLOT!r}: a contribution is a table of the theme's"
+                f" keys, not {value!r}"
+            )
+        table: dict[object, object] = dict(value)
+        for key, setting in table.items():
+            if not isinstance(key, str) or key not in THEME_DEFAULT:
+                raise _slots.SlotError(
+                    f"slot {THEME_SLOT!r}: unknown key {key!r}; the keys are"
+                    f" {', '.join(THEME_DEFAULT)}"
+                )
+            theme[key] = setting
+    return theme
+
+
+def theme_values() -> dict[str, object]:
+    """The composed theme block's values, by key."""
+    composed = _slots.composed(THEME_SLOT)
+    assert isinstance(composed, dict)
+    table: dict[object, object] = dict(composed)
+    return {str(key): value for key, value in table.items()}
+
+
+def _theme_lines(theme: dict[str, object]) -> list[str]:
+    """The theme block from its composed values.
+
+    The override directory is the assembly's own: it carries the
+    rendered link-preview template.
+    """
+    lines = [
         "",
         "[project.theme]",
-        'language = "en"',
-        'font.text = "Inter"',
-        'font.code = "Fira Code"',
+        f'language = "{theme["language"]}"',
+        f'font.text = "{theme["font.text"]}"',
+        f'font.code = "{theme["font.code"]}"',
         'custom_dir = "overrides"',
         "features = [",
-        '    "announce.dismiss",',
-        '    "content.code.annotate",',
-        '    "content.code.copy",',
-        '    "content.tooltips",',
-        '    "navigation.footer",',
-        '    "navigation.indexes",',
-        '    "navigation.instant",',
-        '    "navigation.instant.prefetch",',
-        '    "navigation.sections",',
-        '    "navigation.tabs",',
-        '    "navigation.tabs.sticky",',
-        '    "navigation.top",',
-        '    "navigation.tracking",',
-        '    "search.highlight",',
-        '    "toc.follow",',
-        "]",
-        "",
-        "[[project.theme.palette]]",
-        'media = "(prefers-color-scheme)"',
-        'toggle.icon = "lucide/sun-moon"',
-        'toggle.name = "Switch to light mode"',
-        "",
-        "[[project.theme.palette]]",
-        'media = "(prefers-color-scheme: light)"',
-        'scheme = "default"',
-        'toggle.icon = "lucide/sun"',
-        'toggle.name = "Switch to dark mode"',
-        "",
-        "[[project.theme.palette]]",
-        'media = "(prefers-color-scheme: dark)"',
-        'scheme = "slate"',
-        'toggle.icon = "lucide/moon"',
-        'toggle.name = "Switch to system preference"',
     ]
+    features = theme["features"]
+    assert isinstance(features, list)
+    lines += [f'    "{feature}",' for feature in features]
+    lines.append("]")
+    palettes = theme["palette"]
+    assert isinstance(palettes, list)
+    for palette in palettes:
+        assert isinstance(palette, dict)
+        entries: dict[object, object] = dict(palette)
+        lines.append("")
+        lines.append("[[project.theme.palette]]")
+        lines += [f'{key} = "{value}"' for key, value in entries.items()]
+    return lines
 
 
 def _extension_block(root: Path, *, relative_to: str = ".") -> list[str]:
@@ -938,7 +1046,7 @@ def zensical_config(root: Path) -> str:
     lines.append(f"    {NAV_END}")
     lines.append("]")
     lines += _extra_asset_lines(root)
-    lines += _theme_lines()
+    lines += _theme_lines(theme_values())
     lines += _extension_block(root)
     members = members_policy()
     for extractor, paths in handlers.values():
@@ -1386,7 +1494,7 @@ def scoped_config(root: Path, package: Package) -> str:
     section, extracts = _package_section(package)
     lines += section
     lines.append("]")
-    lines += _theme_lines()
+    lines += _theme_lines(theme_values())
     lines += _extension_block(root, relative_to="../..")
     extractor = kind_extractor(package.kind)
     if extracts and extractor is not None:
@@ -1791,6 +1899,9 @@ def _generate_all(root: Path, *, full: bool = False) -> None:
         print(f"  mounted docs for {', '.join(mounted)}")
     else:
         print("  mounts current: no package's docs moved")
+    staged = stage_layer_assets(root)
+    if staged:
+        print(f"  layer assets for {', '.join(staged)}")
     print(f"  assembled {write_site_config(root).name}")
 
 
@@ -2086,6 +2197,7 @@ def _register_builtin() -> None:
         default=PUBLIC_MEMBERS,
         values=MEMBERS_POLICIES,
     )
+    _slots.register_slot(THEME_SLOT, compose=_merge_theme, default=THEME_DEFAULT)
 
 
 _register_builtin()

@@ -26,8 +26,6 @@ Idempotent: a second run changes nothing and says nothing.
 
 from __future__ import annotations
 
-import importlib
-from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -38,7 +36,7 @@ from livery.footman.params import Forward
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
 
-from livery.workshop._layers import layer_names, workspace_root
+from livery.workshop._layers import layer_content, layer_names, workspace_root
 from livery.workshop._materialise import materialise, materialise_file, write_lf
 
 # Formatted at write time: a module-level f-string would freeze the
@@ -49,22 +47,6 @@ _STUB_HEADER = (
     "     CLAUDE.project.md, which always wins. Edit CLAUDE.project.md,\n"
     "     never this file. -->\n"
 )
-
-
-def _layer_content(layer: str) -> Path | None:
-    """The installed layer's ``content/`` directory, or None.
-
-    A layer is a Python package; its content ships inside the wheel.
-    In the monorepo the "wheel" is the editable source tree, which is
-    what lets the materialised links point back into the repository.
-    """
-    try:
-        module = importlib.import_module(layer)
-    except ModuleNotFoundError:
-        return None
-    root = resources.files(module)
-    content = Path(str(root)) / "content"
-    return content if content.is_dir() else None
 
 
 def sync_workspace(root: Path) -> list[str]:
@@ -78,7 +60,7 @@ def sync_workspace(root: Path) -> list[str]:
     contents = [
         (layer, content)
         for layer in layers
-        if (content := _layer_content(layer)) is not None
+        if (content := layer_content(layer)) is not None
     ]
 
     from livery.workshop import _prose

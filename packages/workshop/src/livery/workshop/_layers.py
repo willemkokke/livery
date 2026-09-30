@@ -13,6 +13,7 @@ import contextlib
 import importlib
 import re
 import tomllib
+from importlib import resources
 from pathlib import Path
 from types import ModuleType
 
@@ -98,6 +99,23 @@ def layer_names(start: Path | None = None) -> tuple[str, ...]:
     empty on the same terms.
     """
     return tuple(import_path for import_path, _ in layer_entries(start))
+
+
+def layer_content(layer: str) -> Path | None:
+    """The installed layer's ``content/`` directory, or None.
+
+    A layer is a Python package; its content ships inside the wheel.
+    In the monorepo the "wheel" is the editable source tree, which is
+    what lets the materialised links point back into the repository.
+    None for a layer that is not installed or ships no content.
+    """
+    try:
+        module = importlib.import_module(layer)
+    except ModuleNotFoundError:
+        return None
+    root = resources.files(module)
+    content = Path(str(root)) / "content"
+    return content if content.is_dir() else None
 
 
 def layer_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
