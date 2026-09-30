@@ -9,9 +9,11 @@ contributes, [livery.workshop._slots.contribute][]; the render reads
 the composed value, [livery.workshop._slots.composed][]. A list slot
 composes as the union in contribution order. A scalar slot takes the
 nearest contribution, the last one made, and two claims from one
-layer refuse naming both. A contribution to a slot nobody declared
-refuses naming the layer, which the dependency closure makes rare:
-the owner is listed before whoever contributes.
+layer refuse naming both. A slot declared with its values refuses any
+other contribution, naming the contributor and the values. A
+contribution to a slot nobody declared refuses naming the layer, which
+the dependency closure makes rare: the owner is listed before whoever
+contributes.
 """
 
 from __future__ import annotations
@@ -58,6 +60,8 @@ class Slot:
         default: What the slot composes to with no contribution.
         layer: The layer that declared it.
         contributions: Every contribution so far.
+        values: The only values a contribution may carry, or None
+            for any value.
     """
 
     name: str
@@ -65,6 +69,7 @@ class Slot:
     default: object
     layer: str
     contributions: list[Contribution] = field(default_factory=list)
+    values: tuple[object, ...] | None = None
 
 
 _SLOTS: dict[str, Slot] = {}
@@ -76,11 +81,13 @@ def register_slot(
     compose: str | Compose = UNION,
     default: object = None,
     layer: str = _BASE,
+    values: tuple[object, ...] | None = None,
 ) -> None:
     """Declare *name* with its composition rule; a declared name is replaced.
 
     A list slot's default is an empty list; a scalar's is None unless
-    given. Replacing a declaration keeps its contributions.
+    given. A slot declared with *values* accepts no other contribution.
+    Replacing a declaration keeps its contributions.
     """
     if compose not in (UNION, NEAREST) and not callable(compose):
         raise SlotError(
@@ -89,7 +96,7 @@ def register_slot(
     if default is None and compose == UNION:
         default = []
     kept = _SLOTS[name].contributions if name in _SLOTS else []
-    _SLOTS[name] = Slot(name, compose, default, layer, kept)
+    _SLOTS[name] = Slot(name, compose, default, layer, kept, values=values)
 
 
 def unregister_slot(name: str) -> None:
@@ -101,13 +108,19 @@ def contribute(name: str, value: object, *, layer: str = _BASE, by: str = "") ->
     """Add *value* to the slot *name*.
 
     Raises:
-        SlotError: when no layer declared *name*.
+        SlotError: when no layer declared *name*, or the slot declares
+            its values and *value* is not one of them.
     """
     slot = _SLOTS.get(name)
     if slot is None:
         raise SlotError(
             f"{by or layer} contributes to slot {name!r}, which no layer declares;"
             f" the slots are {', '.join(sorted(_SLOTS)) or 'none'}"
+        )
+    if slot.values is not None and value not in slot.values:
+        raise SlotError(
+            f"{by or layer} contributes {value!r} to slot {name!r}, whose values"
+            f" are {', '.join(repr(known) for known in slot.values)}"
         )
     slot.contributions.append(Contribution(value, layer, by or layer))
 

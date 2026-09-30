@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first slice (#955, the extractor on the kind record) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2539,6 +2539,36 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   theme slot, the examples check with examples as files, and the
   docs layer module.
 
+- 2026-09-30, phase 6's second slice (issue #956): policy belongs to
+  the layer. Whether private members are documented is a slot,
+  `docs.members`, declared by the docs assembly
+  (`livery.workshop._docs`) as a scalar with the values `public` and
+  `all`, the default `public`, composed by the nearest rule, so one
+  layer's contribution wins over the base's default. A slot may now
+  declare its values (`register_slot(..., values=...)`), and a
+  contribution outside them refuses at once, naming the contributor
+  and the values. An extractor's configuration takes the composed
+  policy as its third argument beside the search paths and the
+  inventories, so every extractor applies it the same way; the Python
+  one writes `filters = []` for `all`, which documents every member,
+  and writes nothing for `public`, the handler's own default filter
+  standing, which hides names with one leading underscore. Proven by
+  tests: the refusal in the slots suite and the docs suite, no
+  `filters` line without a contribution in the site config and the
+  scoped preview, `all` writing the empty filter in both, the nearest
+  layer winning and its withdrawal restoring the earlier value. The
+  rendered proof is one build of this repository: the config
+  assembled with and without the contribution differs by the one
+  line `filters = []`; the site built in-process with `all`
+  contributed as a layer would, since no layer does today, exited 0
+  in 154 s with 708 pages, and the page of `livery.workshop._docs`
+  renders `_slug`, `_label`, `_pages`, `_package_section` and
+  `_register_builtin` as headings, which the baseline built on main
+  (3e015ff2) renders 0 times. Acceptance item 1 asks for a
+  docs-build test; the suite proves the policy where the build reads
+  it and no test runs zensical today, so the builder-running test is
+  open item 27, owed by the docs layer slice.
+
 ## Open
 
 1. Does `Edge.kind` rename too, or does "edge kind" bound by its
@@ -2634,3 +2664,10 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     tests over the reducer. A three-runner proof needs a cpp-conan
     member in a workspace with the three runners, and this repository
     has none. Where that proof lives is a ruling. Owner: Willem.
+27. Phase 6's first acceptance item names a docs-build test for the
+    private-members policy. The suite proves the policy where the
+    build reads it, the assembled config, and one build of this
+    repository with `all` contributed proves the rendered page
+    (decision record, 2026-09-30); no test runs zensical today. A
+    test that runs the builder lands with the docs layer slice, whose
+    examples check needs the builder under test. Owner: the phase.
