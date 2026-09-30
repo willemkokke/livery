@@ -7,7 +7,8 @@ module. ``check`` is the whole local gate; CI runs the same command.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -44,7 +45,6 @@ def _context(
     *,
     subset: tuple[Package, ...] | None = None,
     fix: bool = False,
-    check_style: bool = True,
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
 ) -> GateContext:
@@ -59,21 +59,33 @@ def _context(
         tests=tests or {},
         examples=examples,
         fix=fix,
-        check_style=check_style,
     )
 
 
-def _rewrite(ctx: GateContext) -> None:
-    """Run every rewriter's task serially, before any judge reads the tree."""
+def _walk(ctx: GateContext, *, between: Callable[[], None] | None = None) -> None:
+    """Walk the registry: the one place the gate's order lives.
+
+    Every gate comes here, the whole one, CI's narrowed legs and a
+    machine's narrowed step alike. What was narrowed and by whom is
+    printed first. Under ``--fix`` every fixer that applies runs, one
+    at a time in registration order, before any judge reads the tree,
+    and a check that rewrote is not judged again in the run; then
+    *between* runs, where a machine's run measures the tree the judges
+    read; then every judge runs in one parallel block, and one refusal
+    is the verdict. A check whose claims reach no file in scope is
+    said and not started.
+    """
+    _checks.verify_roles()
+    for line in _checks.narrowings():
+        print(line)
+    ctx = replace(ctx, catalogue=_checks.catalogue(ctx))
     with _checks.current(ctx):
-        for name in _checks.rewriters(ctx):
+        for name in _checks.with_files(_checks.rewriters(ctx), ctx):
             _checks.task_for(name)(fix=True)
-
-
-def _judge(ctx: GateContext) -> None:
-    """Run every judge's task in one parallel block; one refusal is the verdict."""
+    if ctx.fix and between is not None:
+        between()
     with _checks.current(ctx), parallel():
-        for name in _checks.judges(ctx):
+        for name in _checks.with_files(_checks.judges(ctx), ctx):
             _checks.task_for(name)()
 
 
@@ -454,15 +466,17 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                                 " they run and no suite"
                             )
                         tree = reflex.tree
-                        if fix:
-                            _python.scoped_rewrite(subset)
+
+                        def measure_step() -> None:
+                            nonlocal tree
                             tree = _rewritten_tree(root_for_ci, run, tree)
+
                         _scoped_check(
                             subset,
                             fix=fix,
-                            rewritten=fix,
                             tests=scope.tests,
                             examples=scope.examples,
+                            between=measure_step,
                         )
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
@@ -491,17 +505,14 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
     # as a root change on the next affected gate.
     if root_for_ci is not None and run is not None:
         _verified.write_marker(root_for_ci, _verified.FULL, leg=run.leg)
-    # The whole gate is the registry's walk: the rewriters serially
-    # under --fix, the tree recomputed so the judges read what they
-    # left, then every judge together.
-    _checks.verify_roles()
-    for line in _checks.narrowings():
-        print(line)
-    ctx = _context(fix=fix)
-    _rewrite(ctx)
-    if fix:
+
+    # The whole gate is the registry's walk, the tree measured between
+    # the fixers and the judges so the row names what the judges read.
+    def measure_whole() -> None:
+        nonlocal proved_tree
         proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
-    _judge(ctx)
+
+    _walk(_context(fix=fix), between=measure_whole)
     _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
 
 
@@ -724,26 +735,23 @@ def _scoped_check(
     subset: tuple[Package, ...],
     *,
     fix: bool = False,
-    rewritten: bool = False,
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
+    between: Callable[[], None] | None = None,
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
 
     A workspace check that does not run in a scoped gate (the render
     gate, whose inputs a package-scoped change cannot touch) is left
-    out by its record. ``fix`` runs every rewriter serially before
-    any judge reads the tree, unless ``rewritten`` says the caller
-    ran them already to measure the tree they left; the style judges
-    then skip, since re-judging what was just written only spends
-    time agreeing. *tests* names, per package path, the test files
+    out by its record. *tests* names, per package path, the test files
     that stand for the package's suite in this run; *examples* the
-    packages whose examples alone changed.
+    packages whose examples alone changed; *between* runs after the
+    fixers under ``--fix``, as [livery.workshop._quality._walk][] says.
     """
-    _checks.verify_roles()
-    if fix and not rewritten:
-        _rewrite(_context(subset=subset, fix=True, tests=tests, examples=examples))
-    _judge(_context(subset=subset, check_style=not fix, tests=tests, examples=examples))
+    _walk(
+        _context(subset=subset, fix=fix, tests=tests, examples=examples),
+        between=between,
+    )
 
 
 coverage = group("coverage", help="The measured union and its floors")

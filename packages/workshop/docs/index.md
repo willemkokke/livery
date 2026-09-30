@@ -327,7 +327,12 @@ absence.
 
 - `fm check`: format, lint, four gating type checkers, public-API
   type-completeness, the tests with per-package coverage floors, and
-  the render gate, in parallel. On a machine the gate is the reflex:
+  the render gate. Every gate walks the check registry the same way,
+  whole or narrowed, on a machine or on a leg: under `--fix` every
+  fixer that applies rewrites first, one at a time, then every judge
+  runs in one parallel block, a check that rewrote not judged again;
+  a check whose claims reach no file of its scope is named and no
+  process starts for it. On a machine the gate is the reflex:
   it runs what the working tree changed since the nearest tree this
   checkout's own green gates proved (the one with the fewest changed
   paths, a green check of the dirty tree included), the packages that

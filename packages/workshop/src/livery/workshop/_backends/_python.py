@@ -1246,24 +1246,6 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
     return measured
 
 
-def scoped_rewrite(subset: tuple[Package, ...]) -> None:
-    """Run the python kind's rewriters over *subset*, serially.
-
-    Format and lint rewrite the same files, so their order is this
-    backend's knowledge: format first, lint's fixes second. The
-    caller runs rewrites before any kind's checks read the tree.
-    """
-    from livery.footman import step
-
-    paths = package_paths(subset)
-    # The record-only block: the calls run bare and serial, and the
-    # record keeps the title, verdict, and duration.
-    with step("format"):
-        run_format(check=False, paths=paths)
-    with step("lint"):
-        run_lint(fix=True, paths=paths)
-
-
 def gate_build(package: Package, root: Path) -> None:
     """Nothing: python tests run on source, so there is nothing to build."""
     del package, root
@@ -1317,61 +1299,6 @@ def run_examples(package: Package, root: Path) -> None:
         print(result.stdout, end="")
         print(result.stderr, end="")
         fail(f"examples of {package.path}: pytest exited {result.code}")
-
-
-def scoped_gate(
-    subset: tuple[Package, ...],
-    *,
-    root: Path,
-    check_style: bool = True,
-    tests: Mapping[str, tuple[str, ...]] | None = None,
-    examples: tuple[str, ...] = (),
-) -> None:
-    """Run the python kind's checks over *subset*, composed here.
-
-    The verbs, their titles, and what runs in parallel are this
-    backend's knowledge: everything fans out together, and
-    [livery.workshop._backends._python.run_typecheck][] nests its
-    own fan-out inside. ``check_style`` is off when a rewrite pass
-    already ran, where re-judging the style it just wrote would
-    only spend time agreeing. *tests* names, per package path, the
-    test files that stand for the package's suite in this run, and
-    *examples* the packages whose examples alone changed: they run
-    their examples and no suite.
-
-    The steps are built at call time, so the property tests that
-    patch this module's verbs keep gating the composition.
-    """
-    from livery.footman import parallel, step
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
-    from livery.workshop._kinds import gated
-
-    # The workspace's own tests are a unit of this gate with no kind:
-    # formatted, linted, type-checked, and run, never type-complete.
-    members = tuple(package for package in subset if package.path != WORKSPACE_TESTS)
-    unit = tuple(package for package in subset if package.path == WORKSPACE_TESTS)
-    paths = package_paths(subset)
-    type_paths = package_paths(gated(members, "typecheck") + unit)
-    complete = gated(members, "typecomplete")
-    tested = tuple(p for p in gated(members, "test") if p.path not in examples) + unit
-    with parallel() as p:
-        if check_style:
-            p(step(run_format, title="format")(check=True, paths=paths))
-            p(step(run_lint, title="lint")(paths=paths))
-        p(step(run_typecheck, title="typecheck")(paths=type_paths))
-        p(step(run_typecomplete, title="typecomplete")(complete))
-        p(
-            step(run_test, title="test")(
-                packages=tested,
-                root=root,
-                scoped=True,
-                selection=tests,
-            )
-        )
-        for package in gated(members, "examples"):
-            if package.path in (tests or {}) and package.path not in examples:
-                continue
-            p(step(run_examples, title=f"examples {package.path}")(package, root))
 
 
 #: The variables that tell a test it runs on a forge's runner. A

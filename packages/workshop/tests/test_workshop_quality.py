@@ -132,13 +132,38 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     rewrites = {c["verb"]: c for c in calls[:2]}
     assert rewrites["format"]["check"] is False
     assert rewrites["lint"]["fix"] is True
-    # A caller that ran the rewriters itself, to measure the tree they
-    # left, says so: the checks run and the rewriters do not run twice.
-    ran.clear()
-    _quality._scoped_check((package,), fix=True, rewritten=True)
-    # The layering check rewrites, so it sits out a run whose caller
-    # already ran the rewriters, the way format and lint do.
-    assert sorted(ran) == ["test", "typecheck", "typecomplete"]
+    # Every fixer that applies rewrites before any judge, the layering
+    # fix and a layer's own included, and none of them is judged after:
+    # the order lives in the walk alone, whichever gate calls it.
+    from livery.workshop import _checks
+    from livery.workshop._checks import CheckRecord, GateContext, register_check
+
+    state = _checks.snapshot()
+
+    def acme_fix(ctx: GateContext) -> None:
+        del ctx
+        ran.append("acme-fix")
+
+    def acme_judge(ctx: GateContext) -> None:
+        del ctx
+        ran.append("acme-judged")
+
+    try:
+        register_check(
+            CheckRecord("acme", "format", acme_judge, fix=acme_fix, layer="acme.layer")
+        )
+        ran.clear()
+        between: list[list[str]] = []
+        _quality._scoped_check(
+            (package,), fix=True, between=lambda: between.append(list(ran))
+        )
+    finally:
+        _checks.restore(state)
+    fixed = between[0]
+    assert fixed[:2] == ["format", "lint"]
+    assert "layering" in fixed and "acme-fix" in fixed
+    assert sorted(ran[len(fixed) :]) == ["test", "typecheck", "typecomplete"]
+    assert "acme-judged" not in ran
 
 
 def test_the_module_derives_from_the_src_tree_not_the_dist_name(
@@ -246,13 +271,15 @@ def test_the_python_test_entry_maps_a_selection_to_its_files(
 
 
 def _whole_gate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, python: bool = True
 ) -> tuple[list[str], list[str]]:
     """Drive the whole gate against a seeded repository; what ran, and trees.
 
     Returns the recorded run, with `<parallel` and `>parallel` around
     each block footman schedules, and the tree ids the rewrite pass
-    recomputed.
+    recomputed. With *python* the repository holds a package's source,
+    a ``tasks.py`` and a root test, so every python check has files to
+    read; without, it holds its contract alone.
     """
     import contextlib
 
@@ -305,6 +332,17 @@ def _whole_gate(
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nlayers = ["livery.workshop"]\n'
     )
+    if python:
+        member = tmp_path / "packages" / "one"
+        (member / "src" / "one").mkdir(parents=True)
+        (member / "src" / "one" / "__init__.py").write_text("x = 1\n")
+        (member / "workshop.toml").write_text('kind = "python"\nname = "acme-one"\n')
+        (member / "pyproject.toml").write_text('[project]\nname = "acme-one"\n')
+        (tmp_path / "tasks.py").write_text("x = 1\n")
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_seed.py").write_text(
+            "def test_it() -> None:\n    pass\n"
+        )
     git = tools.git.opts(cwd=tmp_path, nofail=True, recorded=False)
     git("init", "-q", "--initial-branch=main")
     git("add", "-A")
@@ -342,6 +380,19 @@ def test_the_whole_gate_is_eight_members_in_one_parallel_block(
         "typecheck",
         "typecomplete",
     ]
+
+
+def test_a_workspace_without_python_starts_no_python_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path, python=False)
+    _quality._run_check(full=True, fix=False, base="")
+    # The checks without claims read what their own body decides; the
+    # python ones claim .py files, and none is there to read.
+    assert sorted(ran[1:-1]) == ["layering", "provenance_check", "template_check"]
+    out = capsys.readouterr().out
+    for name in ("format", "lint", "test", "typecheck", "typecomplete"):
+        assert f"  {name}: no file it reads in the workspace; not run" in out
 
 
 def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
