@@ -86,8 +86,10 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
    uv's cache, footman's data, conan's home; or nothing) and an
    architecture. The default is Gitea, the runner as a host process,
    native, with the store, uv's cache and footman's data persistent.
-4. **Emulation is opt-in.** No `platform: linux/amd64` unless a setup
-   names it.
+4. **Emulation is opt-in, per runner.** No `platform: linux/amd64`
+   unless a runner is asked for it; an environment may run one
+   emulated runner beside a native one, for an x64-only build or
+   fault, never for speed.
 5. **Caches are the rig's.** The tool store, uv's cache, conan's
    home and footman's data live in one directory of the rig, shared
    by every environment on the machine, and survive `--fresh` and
@@ -121,7 +123,11 @@ seven decisions (issues #930 and #931); no phase started. Phase 1
     comes in both modes; GitLab in docker only. Bringing one up from
     nothing costs seconds, not minutes, the way `uv venv` does. The
     loop runs on an environment: `fm ci.e2e --env=<name>`, by default
-    a disposable `e2e` that `--fresh` removes and recreates.
+    a disposable `e2e` that `--fresh` removes and recreates. An
+    environment has a configurable number of runners, each labelled
+    `<env>-<host>-<arch>-<nn>` (`dev-macos-arm-01`,
+    `dev-linux-x64-02`), the host and architecture the runner's own,
+    so a job's `runs-on` names one runner shape of one environment.
 
 ## The design
 
@@ -228,10 +234,10 @@ pass resumes where the last one stopped, as it does today.
 `gitea-runner` becomes a `download` record (its releases ship a raw
 binary per host: darwin-arm64, linux-x64, linux-arm64, windows-x64),
 so the store supplies it and `fm forge.dev.up --setup=host` registers
-it against the local Gitea with the environment's name as its label
-(`<env>:host`, one hardcoded name until environments exist), which
-the loop's contract names as its runner, and starts it as a child of
-the rig, its config written by the verb:
+it against the local Gitea labelled `<env>-<host>-<arch>-<nn>:host`
+(`dev-macos-arm-01`; one hardcoded name until environments exist),
+which the loop's contract names as its runner, and starts it as a
+child of the rig, its config written by the verb:
 `host.workdir_parent` under the environment's directory and
 `runner.envs` naming the rig's cache: `FOOTMAN_DATA_DIR`,
 `UV_CACHE_DIR` and `CONAN_HOME` under `forge-dev/cache/`, on one
@@ -252,6 +258,13 @@ never a platform the machine is not.
 
 The GitLab lane's runner follows in the same phase: `gitlab-runner`
 as a record and a host process with the shell executor.
+
+`fm forge.dev.up --env=dev --runners=<spec>` says how many runners
+the environment has and of which shape, `host`, `container` or
+`container:linux-x64` (emulated), one label per runner numbered from
+`01`; the default is one host runner. Two runners of one shape share
+the rig's cache; an emulated one has its own store directory, since
+its objects are another host's.
 
 ### The container setups
 
@@ -440,6 +453,11 @@ changes the tag.
   exist the label is hardcoded to one name. So a job's `runs-on`
   names the environment, never a platform it is not, and the loop's
   contract carries the environment's name as its runner.
+- 2026-09-30, Willem: runners are named `<env>-<host>-<arch>-<nn>`,
+  the number of runners per environment is configurable, and one may
+  run in emulation beside a native one, for testing an x64-specific
+  issue or build rather than for speed. Contract 4 and the runner
+  section carry it; open item 4 restated.
 - 2026-09-30, Willem's question, answered yes: the loop runs on top
   of a local environment. The consequence taken with it: the caches
   are the rig's and shared, an environment is the forge's state
@@ -467,9 +485,10 @@ changes the tag.
    a job's sweep then judges the desk's objects) or its own
    directory warmed once. The bench measures both; the sweep's
    safety decides. Owner: the phase, with a line here.
-4. Resolved 2026-09-30: a host runner's label is its environment's
-   name (`<env>:host`), and the loop's contract names that label as
-   its runner; until environments exist the label is hardcoded.
+4. Resolved 2026-09-30: a runner's label is
+   `<env>-<host>-<arch>-<nn>`, the loop's contract names the label it
+   wants, the count and the shape per runner are configured on the
+   environment, and until environments exist one label is hardcoded.
    Decision record.
 5. Resolved 2026-09-30: cibuildwheel is a `pypi` record with the
    floor 4.2.1, the lock pinning the newest, with the namespace flag
