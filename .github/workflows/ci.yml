@@ -99,47 +99,6 @@ jobs:
         env:
           FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: fm ci.run --point=gate --job=gate
-  # The site's deploy through the contract's seam, on the push alone. The
-  # release view reads the receipt tags; a shallow tagless clone renders
-  # its no-tags fallback page instead.
-  deploy:
-    if: github.event_name == 'push'
-    needs: [gate]
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-tags: true
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          enable-cache: false
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
-          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
-      - name: Enter the workspace
-        run: bash setup.sh github
-      - name: Deploy
-        env:
-          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: fm ci.run --point=merge --job=deploy
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
   # The repository settings reconciled when the merge changed a contract
   # or the owners file. The commit's own file list decides whether
   # anything is governed; a depth of one would read a squash as a root.
@@ -194,3 +153,44 @@ jobs:
         env:
           FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: fm ci.run --point=merge --job=dispatch
+  # The site's deploy through the contract's seam, on the push alone. The
+  # release view reads the receipt tags; a shallow tagless clone renders
+  # its no-tags fallback page instead.
+  deploy:
+    if: github.event_name == 'push'
+    needs: [gate]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          enable-cache: false
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/footman/toolroom
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
+      - name: Enter the workspace
+        run: bash setup.sh github
+      - name: Deploy
+        env:
+          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: fm ci.run --point=merge --job=deploy
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

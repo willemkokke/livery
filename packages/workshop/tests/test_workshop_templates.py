@@ -13,6 +13,9 @@ from pathlib import Path
 
 import pytest
 
+# The site's jobs are the docs layer's: importing its task module
+# contributes them to the builtin points, as the mount does.
+import livery.workshop.layers.docs._tasks  # noqa: F401
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import (
     apply_packages,
@@ -416,7 +419,7 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert ".gitea/workflows/docs.yml" not in files
     workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "deploy", "govern", "dispatch"]
+    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         # One verb per job: the entry script, then ci.run, nothing else.
@@ -475,7 +478,7 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     files = generate(_contract_root(tmp_path, "github"))
     workflow = yaml.safe_load(files[".github/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "deploy", "govern", "dispatch"]
+    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
     assert ".github/workflows/governance.yml" not in files
     assert ".github/workflows/docs.yml" not in files
     # The nightly point's shell: the clock, a dispatch, one verb per
@@ -541,7 +544,7 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     # The merge point's jobs, on the push alone, as the Gitea shell
     # has them: the admin secret in govern and nowhere else, the
     # pages grant and environment on deploy and nowhere else.
-    for name in ("deploy", "govern", "dispatch"):
+    for name in ("govern", "dispatch", "deploy"):
         assert jobs[name]["if"] == "github.event_name == 'push'", name
     assert jobs["deploy"]["needs"] == ["gate"]
     assert jobs["dispatch"]["needs"] == ["gate"]

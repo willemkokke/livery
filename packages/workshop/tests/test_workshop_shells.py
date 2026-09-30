@@ -13,6 +13,9 @@ from pathlib import Path
 
 import pytest
 
+# The site's jobs are the docs layer's: importing its task module
+# contributes them to the builtin points, as the mount does.
+import livery.workshop.layers.docs._tasks  # noqa: F401
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
@@ -381,7 +384,9 @@ def test_ci_run_spawns_the_jobs_entries(
     monkeypatch.setattr(footman, "run", green)
     _ci_tasks.ci_run(point="gate", job="docs")
     assert seen == [["fm", "--profile=fm-profile-docs-build.json", "docs.build"]]
-    assert "gate/docs: docs.build (builtin)" in capsys.readouterr().out
+    assert (
+        "gate/docs: docs.build (livery.workshop.layers.docs)" in capsys.readouterr().out
+    )
     with pytest.raises(_FAILURES, match="has no job 'nope'"):
         _ci_tasks.ci_run(point="gate", job="nope")
 

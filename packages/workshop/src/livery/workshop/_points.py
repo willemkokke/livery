@@ -225,17 +225,8 @@ DECLARED: tuple[Point, ...] = (
                 ),
             ),
             Job(
-                "docs",
-                docs_tools=True,
-                note=(
-                    "The strict site build: broken links and orphan pages go"
-                    " red here, required through the gate context, never"
-                    " inside the local check."
-                ),
-            ),
-            Job(
                 "gate",
-                needs=("check", "docs"),
+                needs=("check",),
                 always=True,
                 fetch="full",
                 token="job",
@@ -261,20 +252,6 @@ DECLARED: tuple[Point, ...] = (
         ("push",),
         inherits="gate",
         jobs=(
-            Job(
-                "deploy",
-                needs=("gate",),
-                fetch="tags",
-                token="job",
-                docs_tools=True,
-                deploy=True,
-                note=(
-                    "The site's deploy through the contract's seam, on the"
-                    " push alone. The release view reads the receipt tags; a"
-                    " shallow tagless clone renders its no-tags fallback page"
-                    " instead."
-                ),
-            ),
             Job(
                 "govern",
                 fetch="2",
@@ -651,16 +628,131 @@ def contributed(
     return tuple(contributions)
 
 
+@dataclass(frozen=True)
+class JobContribution:
+    """One job a mounted layer adds to a builtin point, with its entries.
+
+    Attributes:
+        point: The builtin point the job joins.
+        job: The job, as the point would declare it.
+        entries: The tasks the job runs, each naming the point and the job.
+        gates: Whether the point's verdict waits for the job.
+        layer: The layer that contributed it, for a refusal.
+    """
+
+    point: str
+    job: Job
+    entries: tuple[Entry, ...] = ()
+    gates: bool = False
+    layer: str = ""
+
+
+_CONTRIBUTED_JOBS: dict[tuple[str, str], JobContribution] = {}
+
+
+def contribute_job(
+    point: str,
+    job: Job,
+    *,
+    entries: tuple[Entry, ...] = (),
+    gates: bool = False,
+    layer: str,
+) -> None:
+    """Add *job* to the builtin *point* on behalf of *layer*.
+
+    The job sits before the point's verdict job when the point has
+    one, else last, so a contributed job renders where a declared one
+    would; a gating job joins the verdict's needs. Refuses a point
+    that is not builtin, a job name the point already has, from its
+    declaration or another layer, and an entry naming another point
+    or job.
+    """
+    by_name = {declared.name: declared for declared in DECLARED}
+    if point not in by_name:
+        fail(
+            f"{layer} contributes the job {job.name!r} to {point!r}, which is not a"
+            f" builtin point; the points are {', '.join(by_name)}"
+        )
+    declared_names = [declared.name for declared in by_name[point].jobs]
+    if job.name in declared_names:
+        fail(
+            f"{layer} contributes the job {job.name!r} to the {point} point, which"
+            " declares it already"
+        )
+    other = _CONTRIBUTED_JOBS.get((point, job.name))
+    if other is not None and other.layer != layer:
+        fail(
+            f"{layer} contributes the job {job.name!r} to the {point} point, which"
+            f" {other.layer} contributed already"
+        )
+    for entry in entries:
+        if entry.point != point or entry.job != job.name:
+            fail(
+                f"{layer} contributes the job {job.name!r} to the {point} point"
+                f" with an entry for {entry.point}/{entry.job}; an entry names"
+                " the job it runs in"
+            )
+    _CONTRIBUTED_JOBS[(point, job.name)] = JobContribution(
+        point, job, tuple(entries), gates, layer
+    )
+
+
+def withdraw_job(point: str, name: str) -> None:
+    """Remove the contributed job *name* from *point*; nothing when there is none."""
+    _CONTRIBUTED_JOBS.pop((point, name), None)
+
+
+def contributed_jobs(point: str) -> tuple[JobContribution, ...]:
+    """The jobs the layers contributed to *point*, in contribution order."""
+    return tuple(item for item in _CONTRIBUTED_JOBS.values() if item.point == point)
+
+
+def verdict_needs(point: str) -> tuple[str, ...]:
+    """What *point*'s verdict waits for: its declared needs, then the gating jobs."""
+    declared = {item.name: item for item in DECLARED}
+    verdict = next((job for job in declared[point].jobs if job.always), None)
+    needs = tuple(verdict.needs) if verdict is not None else ()
+    return needs + tuple(
+        item.job.name for item in contributed_jobs(point) if item.gates
+    )
+
+
+def composed_points() -> tuple[Point, ...]:
+    """The builtin points with the layers' contributed jobs in place."""
+    from dataclasses import replace
+
+    composed: list[Point] = []
+    for point in DECLARED:
+        added = [item.job for item in contributed_jobs(point.name)]
+        if not added:
+            composed.append(point)
+            continue
+        jobs = list(point.jobs)
+        verdict = next((i for i, job in enumerate(jobs) if job.always), None)
+        if verdict is None:
+            jobs.extend(added)
+        else:
+            jobs[verdict:verdict] = added
+            jobs[verdict + len(added)] = replace(
+                jobs[verdict + len(added)], needs=verdict_needs(point.name)
+            )
+        composed.append(replace(point, jobs=tuple(jobs)))
+    return tuple(composed)
+
+
 def points(root: Path | None) -> tuple[Point, ...]:
     """Every point *root* has: the builtin four, then the ones its packages contribute.
 
     ``None`` is a process outside any workspace, which has the builtin
-    four alone. The whole set is verified as one: a contributed point
-    cannot share a file or a name with another.
+    four alone, with the jobs the mounted layers contributed in place.
+    The whole set is verified as one: a contributed point cannot
+    share a file or a name with another.
     """
+    builtin = composed_points()
     if root is None:
-        return DECLARED
-    everything = DECLARED + tuple(item.point for item in contributed(root))
+        verify_points(builtin)
+        return builtin
+    everything = builtin + tuple(item.point for item in contributed(root))
     verify_points(everything)
     return everything
 
@@ -863,7 +955,6 @@ BUILTIN: tuple[Entry, ...] = (
     # The leg's one write: its timing row and its measured suites go
     # on its per-run ref together.
     Entry("gate", "check", "coverage.leg", ("--job={display}",)),
-    Entry("gate", "docs", "docs.build"),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
     # release title the changelogs do not match before anything else
@@ -883,12 +974,12 @@ BUILTIN: tuple[Entry, ...] = (
     # suite over its mark for the second run in a row is red here,
     # before the verdict, so the record never names a slow tree green.
     Entry("gate", "gate", "speed.judge"),
-    Entry("gate", "gate", "ci.verdict", ("--needs=check,docs",)),
+    # The verdict waits for the check and for every contributed job that
+    # gates; `schedule` writes the composed list into this entry.
+    Entry("gate", "gate", "ci.verdict", ("--needs=check",)),
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.
     Entry("gate", "gate", "ci.verified.stamp"),
-    Entry("merge", "deploy", "docs.build"),
-    Entry("merge", "deploy", "docs.publish"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     Entry("merge", "dispatch", "workflow.release.dispatch"),
     # The janitor after the stamp, on the merge point alone: every
@@ -959,9 +1050,47 @@ def declared(root: Path) -> tuple[Entry, ...]:
     return tuple(entries)
 
 
+def builtin_schedule() -> tuple[Entry, ...]:
+    """The builtin entries with the layers' contributed jobs' entries in place.
+
+    A contributed job's entries follow the declared entries of its
+    point's jobs before the verdict, and the verdict's ``--needs``
+    names the composed list.
+    """
+    from dataclasses import replace
+
+    composed: list[Entry] = []
+    for entry in BUILTIN:
+        if entry.task == "ci.verdict":
+            for item in contributed_jobs(entry.point):
+                composed.extend(item.entries)
+            composed.append(
+                replace(
+                    entry, args=(f"--needs={','.join(verdict_needs(entry.point))}",)
+                )
+            )
+            continue
+        composed.append(entry)
+    seen = {(entry.point, entry.job, entry.task) for entry in composed}
+    for point in DECLARED:
+        if any(job.always for job in point.jobs):
+            continue
+        for item in contributed_jobs(point.name):
+            composed.extend(
+                entry
+                for entry in item.entries
+                if (entry.point, entry.job, entry.task) not in seen
+            )
+    return tuple(composed)
+
+
 def schedule(root: Path) -> tuple[Entry, ...]:
     """Every entry: the builtin ones, the packages' contributed ones, the contract's."""
-    return BUILTIN + tuple(item.entry for item in contributed(root)) + declared(root)
+    return (
+        builtin_schedule()
+        + tuple(item.entry for item in contributed(root))
+        + declared(root)
+    )
 
 
 def workflow_of(point: str, root: Path | None = None) -> str:
