@@ -28,10 +28,12 @@ fi
 # The workflow restores the store before this script runs and saves
 # it after the job; uv's cache is placed for the drive alone. Exported
 # before the sync and the materialise, and persisted by the emission
-# below for every later step.
+# below for every later step. A placement the job already carries
+# stands: a runner that keeps its caches across jobs sets them in its
+# own environment, and the temp is only where nothing is set.
 if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
-    UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"
-    FOOTMAN_DATA_DIR="$RUNNER_TEMP/footman"
+    UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
+    FOOTMAN_DATA_DIR="${FOOTMAN_DATA_DIR:-$RUNNER_TEMP/footman}"
     export UV_CACHE_DIR FOOTMAN_DATA_DIR
 fi
 # An ARRAY, not a string: CI may invoke this with zsh, which does not
