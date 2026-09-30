@@ -11,6 +11,7 @@ import pytest
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -810,3 +811,89 @@ def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
         _e2e._require_lines(
             repo, run, logs, "gate", (), forbidden=("concluded success", "absent")
         )
+
+
+# --- the scenarios ---------------------------------------------------------------
+
+
+def test_an_unknown_scenario_refuses_naming_the_sets_and_the_scenarios() -> None:
+    from livery.footman.context import Failed
+
+    with pytest.raises(
+        Failed, match=r"'nonesuch' is not a scenario or a set; the sets are develop"
+    ):
+        _e2e.scenarios_for("develop,nonesuch")
+    with pytest.raises(Failed, match=r"--scenario names nothing"):
+        _e2e.scenarios_for(" , ")
+
+
+def test_a_choice_resolves_its_needs_once_in_the_registry_s_order() -> None:
+    names = [scenario.name for scenario in _e2e.scenarios_for("develop")]
+    assert names == ["birth", "verified-skip", "members", "ratchet", "scoped-leg"]
+    # A scenario alone brings what it builds on, whether or not it was named.
+    assert [s.name for s in _e2e.scenarios_for("scoped-leg")] == [
+        "birth",
+        "members",
+        "ratchet",
+        "scoped-leg",
+    ]
+    assert [s.name for s in _e2e.scenarios_for("nightly")] == [
+        "birth",
+        "members",
+        "release",
+        "nightly",
+    ]
+    # `all` is the registry, and a set beside a name adds nothing twice.
+    everything = [s.name for s in _e2e.SCENARIOS]
+    assert [s.name for s in _e2e.scenarios_for("all")] == everything
+    assert [s.name for s in _e2e.scenarios_for("points, release")] == [
+        name for name in everything if name not in ("prose-leg", "tests-leg")
+    ]
+    # Only the release needs the runner's docker socket.
+    assert not _e2e.daemon_needed(_e2e.scenarios_for("develop"))
+    assert _e2e.daemon_needed(_e2e.scenarios_for("release"))
+
+
+def test_a_scenario_is_timed_with_its_runs_and_a_failure_is_marked() -> None:
+    from livery.footman.context import Failed
+
+    pass_ = _e2e.Pass("gitea", "http://gitea:3000")
+
+    def proves(p: _e2e.Pass) -> None:
+        _e2e.RUNS.count += 2
+
+    def refuses(p: _e2e.Pass) -> None:
+        raise Failed("the runner said no")
+
+    _e2e.RUNS.count = 0
+    _e2e.run_scenario(pass_, _e2e.Scenario("quick", (), proves))
+    with pytest.raises(Failed, match="the runner said no"):
+        _e2e.run_scenario(pass_, _e2e.Scenario("slow", (), refuses))
+    assert [(t.name, t.runs, t.failed) for t in pass_.timings] == [
+        ("quick", 2, False),
+        ("slow", 0, True),
+    ]
+    lines = _e2e.timing_table(
+        [_e2e.Timing("quick", 61.24, 2), _e2e.Timing("slow", 3.0, 0, failed=True)]
+    )
+    assert lines == [
+        "  quick     61.2s  2 run(s)",
+        "  slow       3.0s  0 run(s)  failed",
+        "  total     64.2s  2 run(s)",
+    ]
+    assert _e2e.timing_table([]) == ["  timing: nothing ran"]
+
+
+def test_a_pass_records_its_rows_on_the_local_loop_series(seeds: Seeds) -> None:
+    work = seeds("pushed", pushed) / "work"
+    pass_ = _e2e.Pass("gitea", "http://gitea:3000")
+    pass_.timings.append(_e2e.Timing("birth", 12.34, 3))
+    line = _e2e.record_pass(work, pass_, "develop")
+    assert line.startswith("  loop series: pass ") and line.endswith("(1 scenario(s))")
+    found = _e2e.LOOP_SERIES.rows(work)
+    assert not found.failed and len(found.rows) == 1
+    (row,) = found.rows
+    assert row.name.startswith("pass-") and row.data["asked"] == "develop"
+    assert row.data["scenarios"] == [
+        {"name": "birth", "seconds": 12.3, "runs": 3, "failed": False}
+    ]

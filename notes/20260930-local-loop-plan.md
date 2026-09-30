@@ -1,9 +1,9 @@
 # The local loop: fast by default, scenarios and setups by choice
 
 Status: written 2026-09-30 from Willem's rulings on the loop runner's
-seven decisions (issues #930 and #931); no phase started. Phase 1
-(scenarios by name) touches no infrastructure and comes first; phase
-2 (the runner as a host process) is where the time goes.
+seven decisions (issues #930 and #931). Phase 1 (scenarios by name)
+is built (issue #942, 2026-09-30); phase 2 (the runner as a host
+process) is where the time goes and comes next.
 
 ## The prompt (Willem)
 
@@ -163,11 +163,14 @@ its name, what it needs and the function that proves it:
 
 `fm ci.e2e --scenario=<names>` runs those, in dependency order, and
 refuses a name it does not know with the list. Named sets: `develop`
-(birth, verified-skip, members, scoped-leg), `release` (develop plus
-release), `points` (nightly, dispatched-gate, contributed-point),
-`all`. The default set is `develop`. Each pass prints a table at the
-end: scenario, wall time, runner runs, and writes the same rows to
-the metrics series, so a slow scenario is a number.
+(birth, verified-skip, members, scoped-leg, with `ratchet` brought in
+as the scoped leg's need), `release` (develop plus release), `points`
+(nightly, dispatched-gate, contributed-point, with `release` brought
+in as the nightly's need), `all`. The default set is `develop`. Each
+pass prints a table at the end: scenario, wall time, runner runs,
+and writes the same rows to the local `loop` series of the driver's
+checkout, so a slow scenario is a number and passes compare across
+days on one machine.
 
 ### The layer under test
 
@@ -522,6 +525,17 @@ changes the tag.
   births the layer's members and runs the `release` set. The plain
   pass's default of `develop` is the agent's call, said so in the
   reply.
+- 2026-09-30, phase 1 built (issue #942): the scenario registry in
+  dependency order, `--scenario` with the sets `develop`, `release`,
+  `points` and `all`, the needs brought in once, the runner's docker
+  socket required only when a chosen scenario needs it (the release),
+  the timing table per pass with each scenario's runner runs, and the
+  local `loop` series on the driver's checkout that `fm store.show
+  loop` reads. `ratchet` is a scenario of its own that `scoped-leg`
+  needs, since the scoped leg's proof reads the mark the ratchet
+  lowered, so `develop` runs five scenarios, not four; `nightly` needs
+  `release`, since it replays the released wheel. A pass proves the
+  scenarios it ran and names them, `all` being today's whole.
 - 2026-09-30, Willem: the loop's defaults are the agent's to set, as
   the one driving it ("set whatever defaults you think are best for
   you driving this"). Set, and recorded here as the agent's: a plain
