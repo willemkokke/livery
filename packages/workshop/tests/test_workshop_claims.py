@@ -126,12 +126,18 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
         "tests/test_native.cpp",
     )
     assert claimants(native, "conanfile.py") == ("format", "lint")
-    assert claimants(native, "src/native.cpp") == ("clang-format", "clang-tidy")
+    # The tests measure the source, so the test checks claim it too.
+    assert claimants(native, "src/native.cpp") == (
+        "clang-format",
+        "clang-tidy",
+        "ctest",
+    )
     assert claimants(native, "CMakeLists.txt") == ()
     assert claimants(python, "src/livery/py/mod.py") == (
         "acme-sources",
         "format",
         "lint",
+        "test",
         "typecheck",
         "typecomplete",
     )

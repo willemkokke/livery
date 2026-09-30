@@ -210,7 +210,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     assert recorded[0]["tree"] == "t" * 40
 
 
-def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
+def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import _gate_record
@@ -255,21 +255,20 @@ def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
     _quality.check()
     out = capsys.readouterr().out
     assert "affected: packages/x" in out
-    assert "packages/x: 1 test file(s) changed and nothing else; they run alone" in out
-    assert seen == [(("packages/x",), {"packages/x": ("packages/x/tests/test_a.py",)})]
-    # Test files in every package: still their files, never everything.
+    # The package's whole suite, named by no file, and no dependent.
+    assert seen == [(("packages/x",), {})]
+    # Test files in every package: every package's whole suite, which
+    # is the whole walk; the scoped one does not run.
     seen.clear()
+    walked: list[object] = []
+    monkeypatch.setattr(
+        "livery.workshop._quality._walk", lambda ctx, **kw: walked.append(ctx.subset)
+    )
     paths.append("packages/y/tests/test_b.py")
     _quality.check()
-    assert seen == [
-        (
-            ("packages/x", "packages/y"),
-            {
-                "packages/x": ("packages/x/tests/test_a.py",),
-                "packages/y": ("packages/y/tests/test_b.py",),
-            },
-        )
-    ]
+    assert seen == []
+    assert walked == [None]
+    assert "every package is affected: everything runs" in capsys.readouterr().out
 
 
 def test_a_pull_request_with_a_declared_key_narrows_against_its_base(

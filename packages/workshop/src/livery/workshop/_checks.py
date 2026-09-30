@@ -983,29 +983,17 @@ def _register_builtin() -> None:
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
         if ctx.files:
-            # Named test files run alone, each in its package's run.
+            # A named test or source file runs its package's whole suite;
+            # the workspace's tests unit reads the root's own files.
             record = check_for("test")
-            # The workspace's tests unit reads the root's own files.
-            selection = {
-                package.path: claimed_files(
-                    record,
-                    ctx,
-                    ROOT_UNIT if package.path == WORKSPACE_TESTS else package.path,
-                )
-                for package in (*python_members(ctx, "test", "test"), *unit(ctx))
-            }
             named = tuple(
                 p
                 for p in (*python_members(ctx, "test", "test"), *unit(ctx))
-                if selection[p.path]
+                if claimed_files(
+                    record, ctx, ROOT_UNIT if p.path == WORKSPACE_TESTS else p.path
+                )
             )
-            _python.run_test(
-                *point,
-                packages=named,
-                root=ctx.root,
-                scoped=True,
-                selection={path: files for path, files in selection.items() if files},
-            )
+            _python.run_test(*point, packages=named, root=ctx.root, scoped=True)
             return
         # A package whose examples alone changed runs them, not its suite.
         judged = tuple(
@@ -1260,7 +1248,13 @@ def _register_builtin() -> None:
             # one that imports the project's environment.
             tools=("pytest",),
             fragments=(Fragment("pyproject.toml", _fragments.TESTS),),
-            claims=(Claim("test"), Claim("test-support")),
+            # A package's tests measure its source, so a source change
+            # is one the test check reads, and runs the suite for.
+            claims=(
+                Claim("test"),
+                Claim("test-support"),
+                Claim("source", suffixes=py),
+            ),
             options=(
                 Option(
                     "parallel",
@@ -1328,6 +1322,7 @@ def _register_builtin() -> None:
             kinds=("cpp-conan",),
             tests_only=True,
             after=("build",),
+            claims=(Claim("test", suffixes=cpp), Claim("source", suffixes=cpp)),
         ),
         CheckRecord(
             "clang-tidy",
