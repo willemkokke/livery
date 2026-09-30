@@ -27,7 +27,7 @@ def _list(name: str) -> list[object]:
 @pytest.fixture
 def scratch_slots():
     yield
-    for name in ("acme.list", "acme.scalar"):
+    for name in ("acme.list", "acme.scalar", "acme.enum"):
         unregister_slot(name)
     withdraw("python.dev-group", by="acme.brand")
 
@@ -55,6 +55,21 @@ def test_two_claims_at_one_level_on_a_scalar_refuse_naming_both(scratch_slots) -
 def test_a_bad_compose_rule_refuses() -> None:
     with pytest.raises(SlotError, match="compose is"):
         register_slot("acme.bad", compose="merge")
+
+
+def test_a_value_outside_the_declared_values_refuses_naming_them(
+    scratch_slots,
+) -> None:
+    register_slot("acme.enum", compose=NEAREST, default="on", values=("on", "off"))
+    with pytest.raises(
+        SlotError,
+        match=r"acme\.brand:switch contributes 'dim' to slot 'acme\.enum', whose"
+        r" values are 'on', 'off'",
+    ):
+        contribute("acme.enum", "dim", layer="acme.brand", by="acme.brand:switch")
+    assert composed("acme.enum") == "on"
+    contribute("acme.enum", "off", layer="acme.brand", by="acme.brand:switch")
+    assert composed("acme.enum") == "off"
 
 
 # Then the composition.

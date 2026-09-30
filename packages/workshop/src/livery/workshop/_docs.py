@@ -7,7 +7,10 @@ section per package from the nav each package emits into its own
 generated tree. Nothing committed enumerates the packages. Authors
 write ``packages/<name>/docs/`` and the root ``docs/`` tree; every
 underscore path this module writes is machine territory, refreshed by
-the verbs and never edited by a person.
+the verbs and never edited by a person. Whether private members are
+documented is the layers' decision through the ``docs.members`` slot:
+``public`` keeps each extractor's default filter, ``all`` documents
+every member.
 
 A package owns the shape of its own site section through
 ``docs/nav.toml``: a hand-authored tree the emitter merges under
@@ -37,6 +40,7 @@ from typing import Annotated
 
 from livery.footman import doc, fail, group
 from livery.toolroom import tools
+from livery.workshop import _slots
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package, discover_packages
 
@@ -613,6 +617,18 @@ def abbreviation_files(root: Path) -> list[str]:
     return files
 
 
+#: The slot deciding whether private members are documented: ``public``
+#: keeps each extractor's default filter, ``all`` documents every
+#: member. A scalar the nearest layer decides; the base contributes
+#: nothing, so its default stands until a layer says otherwise.
+MEMBERS_SLOT = "docs.members"
+
+
+def members_policy() -> str:
+    """The composed private-members policy, ``public`` or ``all``."""
+    return str(_slots.composed(MEMBERS_SLOT))
+
+
 def declines_api(package: Package) -> bool:
     """Whether *package* turns its reference off with ``[docs] api = false``."""
     table = load_contract(package.directory / "workshop.toml").get("docs") or {}
@@ -924,9 +940,10 @@ def zensical_config(root: Path) -> str:
     lines += _extra_asset_lines(root)
     lines += _theme_lines()
     lines += _extension_block(root)
+    members = members_policy()
     for extractor, paths in handlers.values():
         if paths:
-            lines += extractor.config(paths, extractor.inventories)
+            lines += extractor.config(paths, extractor.inventories, members)
     return "\n".join(lines) + "\n"
 
 
@@ -1378,7 +1395,7 @@ def scoped_config(root: Path, package: Package) -> str:
         if site_url:
             inventories.append(site_url.rstrip("/") + "/objects.inv")
         paths = [f"../../{path}" for path in extractor.sources(package)]
-        lines += extractor.config(paths, tuple(inventories))
+        lines += extractor.config(paths, tuple(inventories), members_policy())
     return "\n".join(lines) + "\n"
 
 
@@ -2057,3 +2074,18 @@ def unread_by_the_site(root: Path) -> str:
         f"  docs: nothing the site reads changed against origin/{base}"
         f" ({len(paths)} path(s) changed); the build is skipped"
     )
+
+
+def _register_builtin() -> None:
+    """Declare the docs assembly's slots, until the docs layer declares them."""
+    from livery.workshop._kinds import MEMBERS_POLICIES, PUBLIC_MEMBERS
+
+    _slots.register_slot(
+        MEMBERS_SLOT,
+        compose=_slots.NEAREST,
+        default=PUBLIC_MEMBERS,
+        values=MEMBERS_POLICIES,
+    )
+
+
+_register_builtin()
