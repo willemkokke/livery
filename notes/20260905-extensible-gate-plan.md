@@ -2648,8 +2648,20 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   plugins, profiling, typechecking) by blank lines beside those
   comments, and typing's three tabbed blocks losing a paragraph
   wrapper the marker inside the tab had caused. Acceptance item 3 is
-  met. Observed: the check runs footman's 39 files in 1m59s inside
-  the gate; issue #959 records the cost.
+  met. The check's cost, from the CI store after the merge: 4.1 s on
+  macOS, 4.4 s on ubuntu and 8.5 s on windows per leg, with footman's
+  suite mark unchanged (277, 209 and 330 s against medians of 276, 210
+  and 317 s before the move); the 1m59s a desk run showed was
+  contention beside the gate's test step (issue #959, closed with the
+  numbers). Landing the slice found three traps the fix commit
+  closes: the full gate's basedpyright reads every package whole, so
+  the example files are in its rendered exclude; ruff 0.16 formats
+  python fences in markdown and would rewrite a snippet directive, so
+  the formatter's rendered exclude names `*.md` and the example
+  files; and a package's own `[tool.ruff.lint.per-file-ignores]`
+  table replaces the workspace's claims under ruff's `extend`, so the
+  four packages that carry one spell it `extend-per-file-ignores`
+  (issue #965 asks the render or the layering check to enforce that).
 
 ## Open
 
