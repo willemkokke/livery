@@ -4,6 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first three slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2568,6 +2569,43 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   docs-build test; the suite proves the policy where the build reads
   it and no test runs zensical today, so the builder-running test is
   open item 27, owed by the docs layer slice.
+
+- 2026-09-30, phase 6's third slice (issue #957): assets belong to
+  the layers. A layer ships site assets in its wheel under
+  `content/docs/assets/`; the build stages every mounted layer's
+  under `docs/_layers/<layer>/assets/`, rebuilt whole and gitignored
+  by the template, and lists them in `extra_css` in layer order, then
+  the packages' declared sheets, then the workspace's own
+  `docs/assets/site.css` last, so the instance's rules win the
+  cascade. The base's palette and type sheets are its content now,
+  empty of rules, and the project template seeds `site.css` in their
+  place; this repository's two seeds are deleted and the new one
+  rendered. The installed layer's content directory is one function,
+  `livery.workshop._layers.layer_content`, read by the sync, the
+  provenance and the build. The theme block's values are a slot,
+  `docs.theme`: a table of `language`, `font.text`, `font.code`,
+  `features` and `palette`, the base's block the default, each
+  contribution's keys merged over it in contribution order; a key
+  outside those five, or a contribution that is not a table, refuses
+  naming it and the keys; the override directory stays the
+  assembly's own. Proven by tests: the two refusals, a layer without
+  assets or not installed staging and listing nothing, the staging
+  rebuilt whole so a sheet a layer stops shipping leaves no copy, the
+  cascade order in the assembled config with the workspace's sheet
+  after a package's, a font contribution changing one font and
+  keeping the rest in the site config and the scoped preview, and its
+  withdrawal restoring the base's. The rendered proof is one build
+  of this repository with a test layer listed in the contract for
+  that build only, importable by every child the build spawns, and
+  `{"font.text": "Lato"}` contributed in-process: exit 0 in 132 s;
+  the built home page links, in order,
+  `_layers/livery.workshop/assets/palette.css`, its `type.css`,
+  `_layers/acme_theme/assets/theme.css`,
+  `packages/workshop/assets/workshop.css` and `assets/site.css`, the
+  staged sheet is served, and the fonts request names Lato and Fira
+  Code. Acceptance item 4 is met; the site's content is unchanged by
+  the seam apart from the sheet links, since the moved sheets carry
+  no rules.
 
 ## Open
 

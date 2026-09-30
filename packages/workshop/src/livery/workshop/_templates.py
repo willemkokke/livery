@@ -690,8 +690,7 @@ PROJECT_SEEDS = (
     "tests/test_docs_drift.py",
     "docs/index.md",
     "docs/assets/og-card.png",
-    "docs/assets/palette.css",
-    "docs/assets/type.css",
+    "docs/assets/site.css",
     "README.md",
     "LICENSE",
 )

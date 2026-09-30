@@ -226,10 +226,10 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
 
 def _shipped(subdir: str, name: str) -> bool:
     """Whether any mounted layer ships this content entry."""
-    from livery.workshop._sync import _layer_content
+    from livery.workshop._layers import layer_content
 
     for layer in layer_names():
-        content = _layer_content(layer)
+        content = layer_content(layer)
         if content is None:
             continue
         candidate = content / subdir / name if subdir else content / name

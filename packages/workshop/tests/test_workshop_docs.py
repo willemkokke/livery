@@ -13,6 +13,7 @@ from livery.workshop._docs import (
     MEMBERS_SLOT,
     NAV_BEGIN,
     NAV_END,
+    THEME_SLOT,
     materialise_module_docs,
     module_docs_dir,
     mount_package_docs,
@@ -1002,22 +1003,146 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
     )
 
 
-def test_the_workspace_css_seeds_are_listed_while_they_exist(
-    tmp_path: Path,
-) -> None:
-    from livery.workshop._docs import zensical_config
-
+def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    # The fallback first: no seeds, no extra_css at all.
+    # The fallback first: no layers, no sheet, no extra_css at all.
     assert "extra_css" not in zensical_config(root)
     assets = root / "docs" / "assets"
     assets.mkdir(parents=True)
-    (assets / "palette.css").write_text("/* seed */\n")
-    config = zensical_config(root)
-    assert '"assets/palette.css",' in config
-    # Deleting the seed is the opt-out: no stale reference survives.
-    (assets / "palette.css").unlink()
-    assert "palette.css" not in zensical_config(root)
+    (assets / "site.css").write_text("/* mine */\n")
+    (root / "packages" / "core" / "workshop.toml").write_text(
+        'kind = "python"\nname = "acme-core"\n[docs]\nextra-css = ["extra.css"]\n'
+    )
+    config = tomllib.loads(zensical_config(root))
+    # A package's declared sheet comes before the workspace's own.
+    assert config["project"]["extra_css"] == [
+        "packages/core/extra.css",
+        "assets/site.css",
+    ]
+    # Deleting the sheet is the opt-out: no stale reference survives.
+    (assets / "site.css").unlink()
+    assert "site.css" not in zensical_config(root)
+
+
+# The layers' site assets. The layer without any first.
+
+
+@pytest.fixture
+def layered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A workspace listing the base and a theme layer whose content is faked."""
+    from livery.workshop import _layers
+
+    root = _workspace(
+        tmp_path, docs_table='layers = ["livery.workshop", "acme.theme"]\n'
+    )
+    content = tmp_path / "acme-theme-content"
+    (content / "docs" / "assets").mkdir(parents=True)
+    (content / "docs" / "assets" / "theme.css").write_text("body { color: red }\n")
+    real = _layers.layer_content
+
+    def faked(layer: str) -> Path | None:
+        return content if layer == "acme.theme" else real(layer)
+
+    monkeypatch.setattr(_layers, "layer_content", faked)
+    return root
+
+
+def test_a_layer_without_site_assets_stages_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _layers
+    from livery.workshop._docs import layer_assets, stage_layer_assets
+
+    root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
+    monkeypatch.setattr(_layers, "layer_content", lambda layer: tmp_path / "none")
+    assert layer_assets(root) == []
+    assert stage_layer_assets(root) == []
+    assert not (root / "docs" / "_layers").exists()
+    # An uninstalled layer ships nothing either.
+    monkeypatch.setattr(_layers, "layer_content", lambda layer: None)
+    assert layer_assets(root) == []
+    assert "extra_css" not in zensical_config(root)
+
+
+def test_layer_assets_are_staged_whole_and_listed_in_cascade_order(
+    tmp_path: Path, layered: Path
+) -> None:
+    from livery.workshop._docs import stage_layer_assets
+
+    root = layered
+    (root / "docs" / "assets").mkdir(parents=True)
+    (root / "docs" / "assets" / "site.css").write_text("")
+    assert stage_layer_assets(root) == ["livery.workshop", "acme.theme"]
+    staged = root / "docs" / "_layers"
+    theme = staged / "acme.theme" / "assets" / "theme.css"
+    assert theme.read_text() == "body { color: red }\n"
+    assert (staged / "livery.workshop" / "assets" / "palette.css").is_file()
+    config = tomllib.loads(zensical_config(root))
+    assert config["project"]["extra_css"] == [
+        "_layers/livery.workshop/assets/palette.css",
+        "_layers/livery.workshop/assets/type.css",
+        "_layers/acme.theme/assets/theme.css",
+        "assets/site.css",
+    ]
+    # Rebuilt whole: a sheet the layer no longer ships leaves no copy.
+    (tmp_path / "acme-theme-content" / "docs" / "assets" / "theme.css").unlink()
+    assert stage_layer_assets(root) == ["livery.workshop", "acme.theme"]
+    assert not theme.exists()
+    assert "theme.css" not in zensical_config(root)
+
+
+# The theme block, a slot a theme layer fills. Refusals first.
+
+
+@pytest.fixture
+def theme_layers() -> Iterator[None]:
+    """Withdraw what the test layers contributed to the theme slot."""
+    from livery.workshop._slots import withdraw
+
+    yield
+    for by in ("acme.base", "acme.site"):
+        withdraw(THEME_SLOT, by=by)
+
+
+def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
+    theme_layers: None,
+) -> None:
+    from livery.workshop._docs import theme_values
+    from livery.workshop._slots import SlotError, contribute, withdraw
+
+    contribute(THEME_SLOT, {"font.body": "Lato"}, layer="acme.site", by="acme.site")
+    with pytest.raises(
+        SlotError,
+        match=r"unknown key 'font\.body'; the keys are language, font\.text,"
+        r" font\.code, features, palette",
+    ):
+        theme_values()
+    withdraw(THEME_SLOT, by="acme.site")
+    contribute(THEME_SLOT, "Lato", layer="acme.site", by="acme.site")
+    with pytest.raises(SlotError, match="a table of the theme's keys, not 'Lato'"):
+        theme_values()
+
+
+def test_a_theme_contribution_changes_the_fonts_and_keeps_the_rest(
+    tmp_path: Path, theme_layers: None
+) -> None:
+    from livery.workshop._slots import contribute, withdraw
+
+    root = _workspace(tmp_path)
+    theme = tomllib.loads(zensical_config(root))["project"]["theme"]
+    assert theme["font"] == {"text": "Inter", "code": "Fira Code"}
+    contribute(THEME_SLOT, {"font.text": "Lato"}, layer="acme.site", by="acme.site")
+    theme = tomllib.loads(zensical_config(root))["project"]["theme"]
+    assert theme["font"] == {"text": "Lato", "code": "Fira Code"}
+    assert theme["language"] == "en" and len(theme["palette"]) == 3
+    assert "navigation.tabs" in theme["features"]
+    assert theme["custom_dir"] == "overrides"
+    # The scoped preview follows, and the withdrawal restores the base's.
+    preview = tomllib.loads(scoped_config(root, named_package(root, "core")))
+    assert preview["project"]["theme"]["font"]["text"] == "Lato"
+    withdraw(THEME_SLOT, by="acme.site")
+    restored = tomllib.loads(zensical_config(root))["project"]["theme"]
+    assert restored["font"]["text"] == "Inter"
 
 
 def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:

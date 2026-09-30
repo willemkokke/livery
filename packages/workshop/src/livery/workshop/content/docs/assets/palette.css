@@ -1,0 +1,3 @@
+/* The base layer's palette: no rules of its own, so the theme's
+   stock colours stand. A theme layer's sheet loads after this one,
+   and the workspace's own docs/assets/site.css after every layer's. */
