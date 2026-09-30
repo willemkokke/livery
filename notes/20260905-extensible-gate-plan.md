@@ -16,20 +16,19 @@ slot; #957, layer assets staged from the wheel and the theme slot; #958,
 examples as files) and the docs layer's three changes (#968, #970,
 #971), then phase 7's first change (#974, the conformance kit's first
 three clauses) its second (#987, the check order and a layer's
-contribution modules) and its third (#989, a layer's fragments through
-the render and contract 11), the gate's one walk (#976), the gate over
-named files (#979), whole suites (#982) and the role verbs generated
-from the checks' roles (#985). Beside the phases: the layering check's
-fix mode (#829) and phase 8's first change, the publishing opt-out
-(#871). On 2026-09-28 and 2026-09-29 Willem ruled every open item the
-remaining phases waited on; the decision record carries each ruling, and
-the design section, the contracts, phases 3 to 9 and the open list carry
-their consequences. Next: phase 7's last clauses (the gate's skip lines
-and fix order for a layer's checks, in a probe walk), then the
-remainders of phases 5 and 8, phases 7b and 9, and the layer split as
-its own plan. The design section below is written to graduate into
-`packages/workshop/docs/` after review; everything else is working
-record.
+contribution modules), its third (#989, a layer's fragments through the
+render and contract 11) and its fourth (#991, the gate's walk over a
+layer's checks), which complete it, the gate's one walk (#976), the gate
+over named files (#979), whole suites (#982) and the role verbs
+generated from the checks' roles (#985). Beside the phases: the layering
+check's fix mode (#829) and phase 8's first change, the publishing
+opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
+item the remaining phases waited on; the decision record carries each
+ruling, and the design section, the contracts, phases 3 to 9 and the
+open list carry their consequences. Next: the remainders of phases 5 and
+8, phases 7b and 9, and the layer split as its own plan. The design
+section below is written to graduate into `packages/workshop/docs/`
+after review; everything else is working record.
 
 ## Why
 
@@ -3062,6 +3061,30 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   edit and to see drift in a fresh render; the settle forced to keep
   an unedited copy and to remove an edited one; and the builtins
   passing every clause.
+
+- 2026-09-30, phase 7's fourth change (issue #991), which completes
+  the kit. The fix-order, skip-printing and narrowing clauses of the
+  phase judge the gate's walk, which owns them since the rulings of
+  2026-09-30: the kit walks the gate (`livery.workshop._quality.walk`,
+  public for it) over a probe workspace, one package of every
+  concrete kind, with the subject's check bodies replaced by
+  recorders and their `after` lists emptied, so no tool runs, and
+  the registry restored after. `walk-order`: under `--fix`, with the
+  claims emptied so every check reads, every check with a fix mode
+  rewrites before any judge starts and is not judged again, and every
+  other check is judged. `gate-lines`: every check names the layer
+  that registered it (`CheckRecord.layer`), which the gate prints,
+  and over one file no claim reaches each check is named "no file it
+  reads" and never started. A check registered without `layer=`
+  looks like a builtin in the gate's output, which hides the layer
+  that changed the gate; that is the one of these a layer's own
+  record can break, and the clause names it. Proven by tests: a check
+  registered without its layer; a walk forced to start checks with
+  nothing to read and to say nothing, and one forced to judge before
+  it fixes and one forced to run nothing, each failing with the clause
+  named; and the builtins passing all nine clauses. Phase 7's
+  acceptance is met: the builtin kinds and checks pass the kit in
+  `fm check`, and a broken subject fails each clause by name.
 
 ## Open
 

@@ -16,6 +16,7 @@ from livery.workshop import _categories, _checks, _kinds
 from livery.workshop._checks import (
     PACKAGE,
     CheckRecord,
+    Claim,
     GateContext,
     check_for,
     register_check,
@@ -292,6 +293,109 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
     ]
 
 
+def _walkers() -> Subject:
+    """A layer with a check that fixes and one that judges, both reading python."""
+    register_check(
+        CheckRecord(
+            "acme-fixer",
+            "format",
+            _idle,
+            fix=_idle,
+            layer=LAYER,
+            claims=(Claim("source", suffixes=(".py",)),),
+        )
+    )
+    register_check(
+        CheckRecord(
+            "acme-judge",
+            "lint",
+            _idle,
+            scope=PACKAGE,
+            kinds=("python",),
+            layer=LAYER,
+            claims=(Claim("source", suffixes=(".py",)),),
+        )
+    )
+    checks = (check_for("format.acme-fixer"), check_for("lint.acme-judge"))
+    return Subject(LAYER, checks=checks)
+
+
+def test_a_check_registered_without_its_layer_breaks_the_gate_lines(
+    acme: None,
+) -> None:
+    register_check(CheckRecord("acme-quiet", "lint", _idle))
+    found = _names(Subject(LAYER, checks=(check_for("lint.acme-quiet"),)), "gate-lines")
+    assert found == [
+        "gate-lines: check lint.acme-quiet: names livery.workshop as its layer; the"
+        " gate says who registered a check by it, and acme.layer registered this"
+        " one"
+    ]
+
+
+def test_a_walk_that_starts_a_check_with_nothing_to_read_breaks_the_gate_lines(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _quality
+
+    subject = _walkers()
+    assert _names(subject, "gate-lines") == []
+
+    def careless(ctx: GateContext, **kwargs: object) -> None:
+        only = cast("frozenset[str]", kwargs["only"])
+        for name in sorted(only):
+            _checks.check_for(name).run(ctx)
+
+    monkeypatch.setattr(_quality, "walk", careless)
+    assert _names(subject, "gate-lines") == [
+        "gate-lines: check format.acme-fixer: the gate does not name acme.layer as"
+        " the layer that registered it",
+        "gate-lines: check format.acme-fixer: not named when it had no file to"
+        ' read; the gate says "no file it reads" and starts nothing',
+        "gate-lines: check format.acme-fixer: started with no file to read",
+        "gate-lines: check lint.acme-judge: the gate does not name acme.layer as"
+        " the layer that registered it",
+        "gate-lines: check lint.acme-judge: not named when it had no file to read;"
+        ' the gate says "no file it reads" and starts nothing',
+        "gate-lines: check lint.acme-judge: started with no file to read",
+    ]
+
+
+def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _quality
+
+    subject = _walkers()
+    assert _names(subject, "walk-order") == []
+
+    def backwards(ctx: GateContext, **kwargs: object) -> None:
+        only = cast("frozenset[str]", kwargs["only"])
+        for name in sorted(only):
+            record = _checks.check_for(name)
+            record.run(ctx)
+        for name in sorted(only):
+            record = _checks.check_for(name)
+            if record.fix is not None:
+                record.fix(ctx)
+
+    monkeypatch.setattr(_quality, "walk", backwards)
+    assert _names(subject, "walk-order") == [
+        "walk-order: check format.acme-fixer: rewrote after a judge started; every"
+        " fixer runs before any judge",
+        "walk-order: check format.acme-fixer: judged after it rewrote; a check that"
+        " rewrote is not judged again",
+    ]
+
+    def idle(ctx: GateContext, **kwargs: object) -> None:
+        del ctx, kwargs
+
+    monkeypatch.setattr(_quality, "walk", idle)
+    assert _names(subject, "walk-order") == [
+        "walk-order: check format.acme-fixer: never rewrote under --fix",
+        "walk-order: check lint.acme-judge: never judged under --fix",
+    ]
+
+
 # The nearest kind wins, for fragments and for categories alike.
 
 
@@ -372,6 +476,8 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "contribution-modules",
         "fragment-drift",
         "withdrawn-file",
+        "walk-order",
+        "gate-lines",
     ]
     assert all(clause.rule.endswith(".") for clause in CLAUSES)
 
