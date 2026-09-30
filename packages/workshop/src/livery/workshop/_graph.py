@@ -116,9 +116,9 @@ class Scope:
     Attributes:
         packages: The packages to gate, in discovery order, the
             workspace's own tests unit last when its files changed.
-        tests: For a package whose changed files are tests and
-            nothing else, those files, repo-relative; a package absent
-            here runs its suite.
+        tests: Per package, the test files that stand for its suite;
+            the walk names none until a better narrowing exists, so
+            every package runs its suite whole.
         examples: The package paths whose changed files are examples
             and nothing else: their examples run and no suite. A
             package reached through its source runs both.
@@ -149,10 +149,11 @@ def affected_from_paths(
     between a proved tree and the working tree. Each path is
     classified by its package's kind: a test file reaches its own
     package alone, since nothing imports a test, and that package
-    runs those files when they are all that changed in it; source,
-    test support, and configuration reach the package's dependents
-    and run the suites. A docs page reaches nothing: the site build
-    reads it. An example file reaches its package's examples check
+    runs its whole suite; source, test support, and configuration
+    reach the package's dependents and run the suites. A change under
+    the workspace's own tests runs that unit whole. A docs page
+    reaches nothing: the site build reads it. An example file reaches
+    its package's examples check
     and no suite, unless source of the package changed too. ``None``
     means everything, an empty scope nothing a gate reads.
     """
@@ -160,10 +161,13 @@ def affected_from_paths(
     from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
 
     seeds: set[str] = set()
-    picked: dict[str, list[str]] = {}
+    # A package whose test files changed runs its whole suite; nothing
+    # imports a test, so its dependents' suites do not run. The suite
+    # is not narrowed to the changed files until a better narrowing
+    # exists: the tests a change reaches are more than the ones it edits.
+    suites: set[str] = set()
     examples: set[str] = set()
     tests_changed = False
-    unit_suite = False
     for path in paths:
         if docs_page(packages, path) is not None:
             continue
@@ -171,12 +175,6 @@ def affected_from_paths(
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
             tests_changed = True
-            unit = workspace_suite(root)
-            classified = "" if unit is None else category_of(unit, path).name
-            if classified == TEST and (root / path).is_file():
-                picked.setdefault(WORKSPACE_TESTS, []).append(path)
-            else:
-                unit_suite = True
             continue
         for package in packages:
             if path.startswith(package.path + "/"):
@@ -184,15 +182,8 @@ def affected_from_paths(
                 category = category_of(package, relative).name
                 if category == EXAMPLE:
                     examples.add(package.path)
-                elif (
-                    category == TEST
-                    # A test file the change deleted is still a changed
-                    # path, and pytest handed a path that is gone ends
-                    # the whole gate on "no tests ran". The package also
-                    # proves less than it did, so its suite runs.
-                    and (package.directory / relative).is_file()
-                ):
-                    picked.setdefault(package.path, []).append(path)
+                elif category == TEST:
+                    suites.add(package.path)
                 else:
                     seeds.add(package.path)
                 break
@@ -200,26 +191,21 @@ def affected_from_paths(
             print(f"  {path}: outside the packages; everything runs")
             return None
     reached = {package.path for package in dependents_closure(packages, seeds)}
-    tests = {
-        path: tuple(files)
-        for path, files in picked.items()
-        if path != WORKSPACE_TESTS and path not in reached
-    }
-    alone = tuple(sorted(path for path in examples if path not in reached))
+    alone = tuple(
+        sorted(path for path in examples if path not in reached and path not in suites)
+    )
     members = tuple(
         package
         for package in packages
-        if package.path in reached or package.path in tests or package.path in alone
+        if package.path in reached or package.path in suites or package.path in alone
     )
     if not tests_changed:
-        return Scope(members, tests, alone)
+        return Scope(members, {}, alone)
     unit = workspace_suite(root)
     if unit is None:
         print(f"  {WORKSPACE_TESTS}/: changed and gone; everything runs")
         return None
-    if not unit_suite and WORKSPACE_TESTS in picked:
-        tests[WORKSPACE_TESTS] = tuple(picked[WORKSPACE_TESTS])
-    return Scope((*members, unit), tests, alone)
+    return Scope((*members, unit), {}, alone)
 
 
 @graph.task(name="affected")

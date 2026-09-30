@@ -202,21 +202,25 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     ):
         monkeypatch.setattr(_python, name, spy(name))
     monkeypatch.setattr("livery.workshop._packages.verify_workspace", spy("layering"))
-    # A source file: the style and type checks take it, the tests do not run.
+    # A source file: the style and type checks take it, and the
+    # package's whole suite runs, since its tests measure that source.
     _quality.check(str(root / "packages" / "one" / "src" / "one" / "__init__.py"))
     ran = {name for name, _ in calls}
-    assert {"run_format", "run_lint", "run_typecheck"} <= ran
-    assert "run_test" not in ran and "layering" not in ran
+    assert {"run_format", "run_lint", "run_typecheck", "run_test"} <= ran
+    assert "layering" not in ran
     source = str(root / "packages" / "one" / "src" / "one" / "__init__.py")
     assert dict(calls)["run_format"]["paths"] == (source,)
+    suite = dict(calls)["run_test"]
+    assert [p.path for p in suite["packages"]] == ["packages/one"]  # type: ignore[attr-defined]
+    assert "selection" not in suite or not suite["selection"]
     out = capsys.readouterr().out
-    assert "test: no file it reads in the named files; not run" in out
     assert "layering: no file it reads in the named files; not run" in out
-    # A test file: the test check runs that file alone, at the point asked.
+    # A test file: its package's whole suite, at the point asked.
     calls.clear()
     _quality.check(str(test_file), point="nightly")
     test_call = dict(calls)["run_test"]
-    assert test_call["selection"] == {"packages/one": (str(test_file),)}
+    assert [p.path for p in test_call["packages"]] == ["packages/one"]  # type: ignore[attr-defined]
+    assert "selection" not in test_call or not test_call["selection"]
     assert test_call["args"] == ("--workshop-point=nightly",)
     # A path no claim reaches runs nothing.
     calls.clear()

@@ -231,7 +231,10 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
     assert category_of(package, "src/livery/x/mod.py").pattern == "src/**"
 
 
-def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> None:
+def test_a_test_file_reaches_its_package_alone_and_runs_its_whole_suite(
+    seeds: Seeds,
+) -> None:
+    """Ruled 2026-10-01: a package's tests run whole when any of them changed."""
     root = _workspace(seeds)
     _paths(
         root,
@@ -242,8 +245,9 @@ def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> N
     packages = discover_packages(root)
     scope = affected_from_paths(root, packages, ["packages/mid/tests/test_a.py"])
     assert scope is not None
+    # The package's whole suite, not the changed file, and no dependent.
     assert [p.path for p in scope.packages] == ["packages/mid"]
-    assert scope.tests == {"packages/mid": ("packages/mid/tests/test_a.py",)}
+    assert scope.tests == {}
     # Test support and configuration widen to the suite and the dependents.
     for path in ("packages/mid/tests/conftest.py", "packages/mid/pyproject.toml"):
         scope = affected_from_paths(root, packages, [path])
@@ -266,7 +270,7 @@ def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> N
         "packages/mid",
         "packages/top",
     ]
-    # Two packages' tests alone: each runs its own files.
+    # Two packages' tests alone: each runs its own whole suite.
     scope = affected_from_paths(
         root,
         packages,
@@ -274,17 +278,14 @@ def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> N
     )
     assert scope is not None
     assert [p.path for p in scope.packages] == ["packages/aside", "packages/mid"]
-    assert scope.tests == {
-        "packages/aside": ("packages/aside/tests/test_z.py",),
-        "packages/mid": ("packages/mid/tests/test_a.py",),
-    }
+    assert scope.tests == {}
 
 
 def test_a_deleted_test_file_runs_its_packages_suite(seeds: Seeds) -> None:
     # The fallback first: a test file the change removed is still a
-    # changed path, and it cannot be run. Its package also proves less
-    # than it did, so the package's suite runs and the dependents with
-    # it, exactly as a source change does.
+    # changed path, and it cannot be run. Its package proves less than
+    # it did, so the package's suite runs whole; nothing imports a
+    # test, so no dependent's suite runs.
     root = _workspace(seeds)
     # A workspace suite that exists, so the question is one file, not
     # the whole unit disappearing.
@@ -292,14 +293,14 @@ def test_a_deleted_test_file_runs_its_packages_suite(seeds: Seeds) -> None:
     packages = discover_packages(root)
     scope = affected_from_paths(root, packages, ["packages/mid/tests/test_gone.py"])
     assert scope is not None and scope.tests == {}
-    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    assert [p.path for p in scope.packages] == ["packages/mid"]
     # The workspace suite the same way: the unit runs whole.
     scope = affected_from_paths(root, packages, ["tests/test_gone.py"])
     assert scope is not None and scope.tests == {}
     assert [p.path for p in scope.packages] == ["tests"]
 
 
-def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(
+def test_the_workspace_tests_unit_runs_whole_when_any_of_it_changed(
     seeds: Seeds,
 ) -> None:
     root = _workspace(seeds)
@@ -308,7 +309,7 @@ def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(
     scope = affected_from_paths(root, packages, ["tests/test_all.py"])
     assert scope is not None
     assert [p.path for p in scope.packages] == ["tests"]
-    assert scope.tests == {"tests": ("tests/test_all.py",)}
+    assert scope.tests == {}
     scope = affected_from_paths(
         root, packages, ["tests/conftest.py", "tests/test_all.py"]
     )

@@ -344,10 +344,13 @@ absence.
   and records the working tree as proved, so the tenth commit of a
   branch pays for what the tenth commit touched and a tree the record
   already proves runs nothing; `--full` runs everything. A delta
-  confined to a package's test files runs those files alone, after
-  the kind's gate build when its tests run on a build (a C++
-  package's ctest); a changed conftest or helper widens to the suite,
-  and a source change runs the suite and its dependents'. A machine's
+  confined to a package's test files runs the package's whole suite
+  and no dependent's, since nothing imports a test, after the kind's
+  gate build when its tests run on a build (a C++ package's ctest); a
+  changed conftest or helper, and a source change, run the suite and
+  its dependents'. A suite is never narrowed to the changed test
+  files: the tests a change reaches are more than the ones it edits.
+  A machine's
   test run sets the runner's variables, so a test that reads them is
   judged here as on the legs. The chain of
   records rests on a full gate here or on the nearest tree in HEAD's

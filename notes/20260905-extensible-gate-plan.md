@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) the gate's one walk (#976) and the role verbs' removal (#979) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) the gate's one walk (#976), the role verbs' removal (#979) and whole suites (#982) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2905,6 +2905,30 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   day: whether `fm test`'s passthrough of pytest arguments survives as
   `fm check <paths> -- <arguments>` for the test role; this change
   ships without it.
+
+- 2026-10-01, rulings, Willem's, on #979. The verbs were not meant to
+  go: each checker registers with one or more roles, a role being a
+  string; the verbs are generated from all the checkers' roles; and
+  each checker is a sub-task of its role, `fm test.pytest` and
+  `fm test.ctest`. #979 removed them on a misreading, and the next
+  change generates them. And a package's tests all run whenever any
+  test or source file in the package changed, until a better way of
+  narrowing exists.
+- 2026-10-01, whole suites (issue #982). The affected walk no longer
+  narrows a suite to the changed test files: a change to a package's
+  test files runs its whole suite and no dependent's, since nothing
+  imports a test, a deleted test file included; a change under the
+  workspace's own tests runs that unit whole; a source change runs
+  the suite and the dependents', as before. The narrowing plumbing,
+  `Scope.tests` and a test selection, stays and is fed nothing. For
+  named files the python test check and ctest claim their package's
+  source beside its tests, which their runs measure, so `fm check`
+  over a source or a test file runs the whole suite of the package
+  holding it. When every package's tests changed, the gate runs the
+  whole walk, since the scope is every package. Proven by tests over
+  the walk (a test-only change, two packages' tests, a deleted test
+  file, the workspace unit) and over named files (a source file and a
+  test file each running their package's suite).
 
 ## Open
 
