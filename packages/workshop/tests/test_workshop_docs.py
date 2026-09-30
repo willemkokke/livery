@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 
 import livery.workshop
+
+# The site's jobs are the docs layer's: importing its task module
+# contributes them to the builtin points, as the mount does.
+import livery.workshop.layers.docs._tasks
 from livery.footman import Failed
 from livery.workshop._docs_contract import materialise_module_docs, module_docs_dir
 from livery.workshop._navblocks import NAV_BEGIN, NAV_END

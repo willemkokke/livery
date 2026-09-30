@@ -18,6 +18,10 @@ import pytest
 import yaml
 
 import livery.footman as footman
+
+# The site's jobs are the docs layer's: importing its task module
+# contributes them to the builtin points, as the mount does.
+import livery.workshop.layers.docs._tasks  # noqa: F401
 from livery.workshop._ci_generate import generate
 
 KINDS = ("github", "gitea")
@@ -77,7 +81,7 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     assert set(triggers) == {"pull_request", "push", "workflow_dispatch"}
     assert triggers["push"] == {"branches": ["main"]}
     jobs = doc["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "deploy", "govern", "dispatch"]
+    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
     # The one call per job, its point and its job.
     assert {name: _calls(job) for name, job in jobs.items()} == {
         "check": [
@@ -115,7 +119,7 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
         "python": ["3.13", "3.14"],
     }
     assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
-    for name in ("docs", "gate", "deploy", "govern", "dispatch"):
+    for name in ("docs", "gate", "govern", "dispatch", "deploy"):
         assert jobs[name]["runs-on"] == "ubuntu-latest", name
     # The secrets each job names, and no other.
     assert {name: _secrets(job) for name, job in jobs.items()} == {
@@ -333,9 +337,9 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         "check",
         "docs",
         "gate",
-        "pages",
         "govern",
         "dispatch",
+        "pages",
         "nightly",
         "publish",
     ]

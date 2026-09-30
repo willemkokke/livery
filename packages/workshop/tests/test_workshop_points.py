@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+# The site's jobs are the docs layer's: importing its task module
+# contributes them to the builtin points, as the mount does.
+import livery.workshop.layers.docs._tasks  # noqa: F401
 from livery.workshop import _points
 
 _FAILURES = (BaseException,)
@@ -131,7 +134,18 @@ def test_each_point_names_its_workflow_and_events() -> None:
     from livery.workshop._points import INHERITS, POINT_BY_NAME
 
     assert INHERITS == {"merge": "gate"}
-    assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "docs", "gate"]
+    # The base declares the check and the verdict; the docs job is the
+    # docs layer's, in place once its tasks module is imported.
+    assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "gate"]
+    from livery.workshop._points import point_by_name
+    from livery.workshop.layers.docs import _tasks as docs_tasks
+
+    del docs_tasks
+    assert [job.name for job in point_by_name(None)["gate"].jobs] == [
+        "check",
+        "docs",
+        "gate",
+    ]
     assert POINT_BY_NAME["release"].ref_input == "ref"
     assert [i.name for i in POINT_BY_NAME["release"].inputs] == ["ref", "workshop"]
 
@@ -293,9 +307,9 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
         "check",
         "docs",
         "gate",
-        "deploy",
         "govern",
         "dispatch",
+        "deploy",
     )
     # The nightly point runs the whole check, its own tests selected in.
     assert _points.jobs_of(root, "nightly") == ("nightly",)

@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's first change, #968) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's first two changes, #968 and #970) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2723,6 +2723,35 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   change: the layer-contributed CI job (the third ruling), the
   extractor as data with the mkdocstrings lines out of the python
   backend, and the development section from the prose fragments.
+
+- 2026-09-30, the docs layer's second change (issue #970): the site's
+  jobs come with the layer. `livery.workshop._points` gains a registry
+  a mounted layer fills, `contribute_job(point, job, entries=, gates=,
+  layer=)`: a job for a builtin point with the entries it runs and
+  whether the point's verdict waits for it; a point that is not
+  builtin, a job name the point declares or another layer contributed,
+  and an entry naming another job each refuse by name. `points()`
+  composes the builtin points with the contributions, a contributed
+  job sitting before the point's verdict job or last on a point
+  without one, the verdict's needs being its declared needs and the
+  gating jobs; `builtin_schedule()` places the contributed entries
+  before the verdict's entry, whose `--needs` names the composed list,
+  and the whole set is verified as one. The base declares neither the
+  gate's `docs` job nor the merge point's `deploy`; the docs layer
+  contributes both at mount, their entries naming the layer as their
+  source. Proven by tests: the three refusals, a gating job before the
+  verdict and in its needs and entry, a job on a point without a
+  verdict landing last, the docs layer's two contributions with the
+  verdict needing `check,docs`, and the three forges' renders listing
+  the jobs. The rendered `ci.yml` differs from before in one way: the
+  merge point's deploy job renders after govern and dispatch, since
+  the point has no verdict job and a contribution lands last; GitLab's
+  `pages` job follows it the same way. The build's answer to the walk
+  is what it was, named here as the ruling's reading: the docs job
+  skips when nothing the site reads changed against the base and
+  regenerates only the mounts whose docs tree's digest moved, and the
+  zensical build itself is whole. Not built: a doctor line naming the
+  layer that brings the docs job.
 
 ## Open
 

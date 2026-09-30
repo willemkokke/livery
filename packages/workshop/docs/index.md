@@ -118,6 +118,12 @@ the nav blocks generators write; it imports no layer, which the
 layering check enforces, and `livery.workshop.layers` spans
 distributions the pkgutil way, its `__init__.py` carrying the path
 extension alone, so a layer can ship as a distribution of its own.
+The site's two CI jobs come with the layer: at mount it contributes
+the gate point's `docs` job, which the verdict waits for, and the
+merge point's `deploy` job, each with the entries it runs, through
+`contribute_job` in `livery.workshop._points`; a workspace that does
+not list the layer renders neither job. A contributed job sits before
+the point's verdict job, or last on a point without one.
 
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the
