@@ -171,21 +171,29 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
         lambda root, packages, paths: Scope((x,)),
     )
 
-    def _rewrite(subset: tuple[Package, ...]) -> None:
-        (root / "packages" / "x" / "a.py").write_text("x = 2\n")
-
-    monkeypatch.setattr(_python, "scoped_rewrite", _rewrite)
     judged: list[bool] = []
-    monkeypatch.setattr(
-        "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False, tests=None, examples=(): (
-            judged.append(rewritten)
-        ),
-    )
+
+    def _scoped(
+        subset: tuple[Package, ...],
+        *,
+        fix: bool = False,
+        tests: object = None,
+        examples: tuple[str, ...] = (),
+        between: Callable[[], None] | None = None,
+    ) -> None:
+        # The walk's fixers rewrite, then the hook between them and the
+        # judges measures the tree the judges read.
+        judged.append(fix)
+        if fix:
+            (root / "packages" / "x" / "a.py").write_text("x = 2\n")
+            assert between is not None
+            between()
+
+    monkeypatch.setattr("livery.workshop._quality._scoped_check", _scoped)
     monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
     monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
     _quality.check(fix=True)
-    # The router is told the rewriters ran, and the row names their tree.
+    # The walk ran the fixers, and the row names the tree they left.
     assert judged == [True]
     left = GitOps(root).working_tree_id()
     assert left != "t" * 40
@@ -231,9 +239,9 @@ def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
         subset: tuple[Package, ...],
         *,
         fix: bool = False,
-        rewritten: bool = False,
         tests: dict[str, tuple[str, ...]] | None = None,
         examples: tuple[str, ...] = (),
+        between: Callable[[], None] | None = None,
     ) -> None:
         seen.append((tuple(p.path for p in subset), dict(tests or {})))
 
@@ -350,8 +358,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False, tests=None: gated.append(
-            tuple(p.path for p in subset)
+        lambda subset, *, fix=False, tests=None, examples=(), between=None: (
+            gated.append(tuple(p.path for p in subset))
         ),
     )
     _quality.check()
@@ -464,8 +472,8 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False, tests=None: gated.append(
-            tuple(p.path for p in subset)
+        lambda subset, *, fix=False, tests=None, examples=(), between=None: (
+            gated.append(tuple(p.path for p in subset))
         ),
     )
     _quality.check()
@@ -494,7 +502,6 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
 def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._backends import _python
 
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")

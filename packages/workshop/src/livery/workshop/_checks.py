@@ -68,8 +68,10 @@ class GateContext:
         examples: The package paths whose changed files are examples
             and nothing else: their examples run and no suite.
         fix: Whether the rewriters run in their fix mode.
-        check_style: False when a rewrite pass already ran, so the
-            style checks may skip re-judging what they just wrote.
+        catalogue: Every file the run may read, by unit, each with its
+            category, listed once per walk by
+            [livery.workshop._checks.catalogue][]; None when there is
+            no listing, and then every check that applies runs.
         package: The package a per-package check is judging, else
             None.
         selection: The test files selected for that package, relative
@@ -82,7 +84,7 @@ class GateContext:
     tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     examples: tuple[str, ...] = ()
     fix: bool = False
-    check_style: bool = True
+    catalogue: Mapping[str, tuple[tuple[str, str], ...]] | None = None
     package: Package | None = None
     selection: tuple[str, ...] = ()
 
@@ -713,6 +715,9 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
         return
     for package in _members(ctx):
         if record in _package_records(ctx, package):
+            if not reads_files(record, ctx, (package.path,)):
+                print(f"  {record.name}: {package.path} has no file it reads; not run")
+                continue
             if not option_value(record, package, "enabled"):
                 print(
                     f"  {record.name}: {package.path} skips (turned off in"
@@ -728,6 +733,97 @@ def _applies_now(record: CheckRecord, ctx: GateContext) -> bool:
     if record.scope == WORKSPACE:
         return record.in_scoped or not ctx.scoped
     return any(record in _package_records(ctx, p) for p in _members(ctx))
+
+
+#: The unit of every file under no package: the root's own files,
+#: ``tasks.py`` and the workspace's tests among them.
+ROOT_UNIT = "."
+
+
+def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None:
+    """Every file git holds under the root, by unit, each with its category.
+
+    Listed once per walk: tracked files and untracked ones git does not
+    ignore, as the tools see them. A package's files are relative to it
+    and categorised by its kind's table; a file under no package
+    belongs to [livery.workshop._checks.ROOT_UNIT], relative to the
+    root and categorised by the workspace's table. None when the root
+    is not a git checkout, and then every check that applies runs.
+    """
+    from livery.toolroom import tools
+    from livery.workshop._categories import category_of
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._provenance import unit_of
+
+    listing = tools.git.opts(cwd=ctx.root, recorded=False, nofail=True)(
+        "ls-files", "--cached", "--others", "--exclude-standard", "-z"
+    )
+    if listing.code != 0:
+        return None
+    packages = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
+    found: dict[str, list[tuple[str, str]]] = {}
+    for name in sorted({name for name in listing.stdout.split("\0") if name}):
+        if not (ctx.root / name).is_file():
+            continue
+        unit, inside = unit_of(ctx.root, packages, name)
+        if unit is None:
+            continue
+        key = unit.path if unit in packages else ROOT_UNIT
+        found.setdefault(key, []).append((inside, category_of(unit, inside).name))
+    return {key: tuple(files) for key, files in found.items()}
+
+
+def _scope_units(record: CheckRecord, ctx: GateContext) -> tuple[str, ...]:
+    """The units *record* reads in this run.
+
+    A package check reads the packages it judges. A workspace check
+    reads every unit in a whole gate; in a scoped one, the subset's
+    packages and the root's own files, since the workspace's tests
+    ride every scoped run.
+    """
+    if record.scope == PACKAGE:
+        return tuple(
+            package.path
+            for package in _members(ctx)
+            if record in _package_records(ctx, package)
+        )
+    if ctx.subset is None or ctx.catalogue is None:
+        return tuple(ctx.catalogue or ())
+    return (*(package.path for package in _members(ctx)), ROOT_UNIT)
+
+
+def reads_files(
+    record: CheckRecord, ctx: GateContext, units: tuple[str, ...] | None = None
+) -> bool:
+    """Whether *record*'s claims reach a file of *units*, or of its scope in this run.
+
+    A check without claims reads what its own body decides, and a run
+    without a catalogue has no listing to judge by: both answer yes.
+    """
+    if not record.claims or ctx.catalogue is None:
+        return True
+    for unit in units if units is not None else _scope_units(record, ctx):
+        for relative, category in ctx.catalogue.get(unit, ()):
+            if any(
+                c.category == category and _reaches(c, relative) for c in record.claims
+            ):
+                return True
+    return False
+
+
+def with_files(names: tuple[str, ...], ctx: GateContext) -> tuple[str, ...]:
+    """*names* less the checks with no file to read in this run, each skip said.
+
+    No process starts for a check whose claims reach nothing in scope.
+    """
+    kept: list[str] = []
+    where = "the affected packages" if ctx.scoped else "the workspace"
+    for name in names:
+        if reads_files(_CHECKS[name], ctx):
+            kept.append(name)
+        else:
+            print(f"  {name}: no file it reads in {where}; not run")
+    return tuple(kept)
 
 
 def rewriters(ctx: GateContext) -> tuple[str, ...]:
@@ -754,7 +850,7 @@ def judges(ctx: GateContext) -> tuple[str, ...]:
     for record in _CHECKS.values():
         if not _applies_now(record, ctx):
             continue
-        if record.fix is not None and (ctx.fix or not ctx.check_style):
+        if record.fix is not None and ctx.fix:
             continue
         names.append(record.name)
     return tuple(names)

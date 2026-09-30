@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files; the docs layer's three changes, #968, #970 and #971), phase 7's first change (#974, the conformance kit's first three clauses) and the gate's one walk (#976) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2828,6 +2828,54 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   every clause. Next: skip printing, narrowing, fix ordering,
   config-fragment drift, contract 11's removal, and a contribution
   mounting only with its target, each with the gap it reveals.
+
+- 2026-10-01, rulings, Willem's, while phase 7's second change was
+  being read. The python kind does nothing but register its checks;
+  the whole gate is kind independent; and the logic of running the
+  checks that can fix serially and the rest in parallel lives in one
+  place. The packages a check runs on are filtered by the packages
+  the affected walk returns, and by file type first, since there is
+  no point starting a process when there are no files to check: the
+  engine narrows, not the check's body, which answers the open
+  question of what `CheckRecord.narrowing` means. The empty skeleton
+  supports python, because it cannot run anything without it; the
+  python kind adds building and publishing a wheel. That refines
+  phase 8's "the python package kind and its tooling leave the base":
+  the checking of python files stays the base's, the wheel is what
+  moves. The role verbs (`fm format`, `fm lint`, `fm typecheck`,
+  `fm typecomplete`, `fm test`) go, as the record of #312 foresaw;
+  the replacement spellings proposed, not yet ruled: `fm check
+  <paths>` walks the registry over exactly those files, with `--fix`
+  and `--safe-fix`, and the post-edit hook calls it; `fm check
+  --point=<point>` selects a point's tests.
+- 2026-10-01, the gate's one walk (issue #976). `livery.workshop.
+  _quality._walk` is the one place the gate's order lives, and every
+  gate calls it: the whole gate, CI's narrowed legs and a machine's
+  narrowed step. It prints the narrowings, runs every fixer that
+  applies one at a time in registration order under `--fix`, runs a
+  hook between the fixers and the judges where a machine's run
+  measures the tree the judges read, then runs every judge in one
+  parallel block, a check that rewrote not judged again. Before a
+  check starts, the walk asks whether its claims reach a file of its
+  scope, from one catalogue per walk (`livery.workshop._checks.
+  catalogue`: one `git ls-files` at the root, every file with its
+  unit and its category); a check reaching none is named ("no file it
+  reads in the affected packages; not run") and no process starts, a
+  package check the same per package; a check without claims, and a
+  run without a listing, run as before. The fault it closes: a
+  machine's narrowed `fm check --fix` ran ruff's two fixers through
+  the python backend's `scoped_rewrite` and then judged with every
+  fixer left out, so the layering check and clang-format were neither
+  fixed nor judged there, nor any layer's fixer; a test pinned that.
+  `scoped_rewrite` and `scoped_gate`, a composition nothing called,
+  left the python backend, and the `rewritten` and `check_style` flags
+  went with them. Proven by tests: a layer's fixer and the layering
+  fixer rewriting in the narrowed `--fix` before any judge and judged
+  by none, the row naming the tree the fixers left, a check with no
+  file of its type not started and said, a package check skipping a
+  package without its files and running once one appears, a
+  workspace without python starting no python check, and the whole
+  gate's eight members unchanged on a workspace with python.
 
 ## Open
 

@@ -42,6 +42,10 @@ def _workspace(root: Path) -> None:
         '[project]\nname = "livery-thing"\ndependencies = []\n'
     )
     (package / "src" / "livery" / "thing" / "mod.py").write_text("x = 1\n")
+    # A test for the suite to run: the gate starts no test process for
+    # a workspace without one.
+    (package / "tests").mkdir()
+    (package / "tests" / "test_mod.py").write_text("def test_it() -> None:\n    pass\n")
 
 
 def _build(base: Path) -> None:
