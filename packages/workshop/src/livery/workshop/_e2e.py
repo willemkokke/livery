@@ -65,6 +65,46 @@ class RunCount:
 RUNS = RunCount()
 
 
+@dataclass
+class Current:
+    """The environment a pass runs on, as the loop reads its forge from it.
+
+    Attributes:
+        name: The environment's name; empty outside a pass.
+        mode: `host` or `docker`.
+        url: The forge's URL in host mode; empty in docker mode, where
+            the cascade's shared file names it.
+        token: The seeded API token in host mode.
+        label: The runner label the loop's workspace names as its
+            runner and its wheel platform; the hosted name in docker
+            mode, the environment's own label in host mode.
+    """
+
+    name: str = ""
+    mode: str = ""
+    url: str = ""
+    token: str = ""
+    label: str = "ubuntu-latest"
+
+
+#: The environment of the running pass. `ci.e2e` sets it from
+#: `--env` before anything reads the forge; the tests set it by hand.
+CURRENT = Current()
+
+
+def with_label(lines: tuple[str, ...]) -> tuple[str, ...]:
+    """*lines* with the hosted runner's name replaced by the pass's label.
+
+    The proofs are written against `ubuntu-latest`, the name a born
+    workspace's contract carries; on an environment whose runner has
+    its own label, the emitted jobs and the coverage legs carry that
+    label instead, and the proof reads the same lines with it.
+    """
+    if CURRENT.label == "ubuntu-latest":
+        return lines
+    return tuple(line.replace("ubuntu-latest", CURRENT.label) for line in lines)
+
+
 def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
     """The variables that turn commit signing off for every git a pass runs.
 
@@ -203,6 +243,18 @@ def _require_runner_docker(kind: str) -> None:
 
     from livery.toolroom import tools
 
+    if CURRENT.mode == "host":
+        # The runner is a process of this machine, and cibuildwheel
+        # reaches the machine's own daemon: the one question is
+        # whether it answers.
+        info = tools.docker.opts(nofail=True, recorded=False)("info")
+        if info.code != 0:
+            fail(
+                "the machine's docker daemon does not answer, and the loop's"
+                " native member builds its wheel through cibuildwheel on it:"
+                " start Docker Desktop, or the daemon"
+            )
+        return
     lane = _lane(kind)
     container = f"{_DEV_PROJECT}-{lane.runner}-1"
     result = tools.docker.opts(nofail=True, recorded=False)(
@@ -229,13 +281,22 @@ def _require_runner_docker(kind: str) -> None:
 
 
 def _lane(kind: str) -> Lane:
-    """The lane for *kind*; refuses a kind with no local containers."""
+    """The lane for *kind*; refuses a kind with no local containers.
+
+    On a host-mode environment the lane's alias is the environment's
+    own URL: the forge and the runner are processes of this machine,
+    so one localhost URL is true on both sides of the loop.
+    """
+    from dataclasses import replace
+
     lane = LANES.get(kind)
     if lane is None:
         fail(
             f"--forge={kind} is not a local lane: the loop runs against"
             f" {', '.join(LANES)}"
         )
+    if CURRENT.mode == "host" and CURRENT.url:
+        return replace(lane, alias=CURRENT.url)
     return lane
 
 
@@ -247,14 +308,13 @@ def _dev_forge(kind: str) -> tuple[Forge, str]:
     nothing beyond the containers being up.
     """
     lane = _lane(kind)
-    url = os.environ.get(lane.url_var, "")
-    token = os.environ.get(lane.token_var, "")
+    url = CURRENT.url or os.environ.get(lane.url_var, "")
+    token = CURRENT.token or os.environ.get(lane.token_var, "")
     if not url or not token:
         fail(
             f"the local {kind}'s credentials are not in the environment."
-            f" Run `{footman.prog()} forge.dev.up --profile={kind}`: it"
-            " starts and seeds"
-            f" the containers and writes {lane.url_var} and {lane.token_var}"
+            f" Run `{footman.prog()} devenv.up`: it starts and seeds the"
+            f" environment and writes {lane.url_var} and {lane.token_var}"
             " into the shared env file the cascade reads"
         )
     from livery.workshop._forge_lane import _connect
@@ -483,6 +543,10 @@ def _require_host_alias(kind: str = "gitea") -> None:
     import urllib.error
     import urllib.request
 
+    if CURRENT.mode == "host":
+        # A localhost URL needs no alias: the same address is true for
+        # the driver, the forge and the runner, all on this machine.
+        return
     lane = _lane(kind)
     try:
         with urllib.request.urlopen(lane.alias + lane.version_path, timeout=2):
@@ -510,7 +574,10 @@ def _loop_home(kind: str) -> Path:
     """
     from livery.footman.context import data_dir
 
-    return data_dir() / "workshop-e2e" / kind
+    home = data_dir() / "workshop-e2e"
+    if CURRENT.name:
+        home = home / CURRENT.name
+    return home / kind
 
 
 def _dev_pins(root: Path, head: str, members: tuple[str, ...]) -> dict[str, str]:
@@ -937,6 +1004,13 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
             )
         contract_text = contract_text.replace(
             marker, marker + 'python-versions = ["3.14"]\naffected-legs = true\n', 1
+        )
+    if CURRENT.label != "ubuntu-latest":
+        # The environment's runner answers to its own label, so the
+        # workspace names it: the check legs run there, and the wheels
+        # job builds there.
+        contract_text = contract_text.replace(
+            'runners = ["ubuntu-latest"]', f'runners = ["{CURRENT.label}"]', 1
         )
     if "speed-marks" not in contract_text:
         # Seeded on its own: an adopted loop born before the key
@@ -1378,7 +1452,7 @@ def _ensure_members(root: Path) -> None:
             # one linux container, and the leg must be schedulable.
             body = body.replace(
                 'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
-                'wheel-platforms = ["ubuntu-latest"]',
+                f'wheel-platforms = ["{CURRENT.label}"]',
             )
         if "[release]" not in body:
             body = (
@@ -1489,6 +1563,8 @@ def _require_lines(
     if found is None:
         fail(f"run {run.id} has no {job} job: {repo.web_url()}/actions/runs/{run.id}")
     log = repo.checks.job_log(found.id)
+    needed = with_label(needed)
+    forbidden = with_label(forbidden)
     missing = [line for line in needed if line not in log]
     if missing:
         fail(
@@ -2384,9 +2460,14 @@ def _born(pass_: Pass) -> None:
     forge = pass_.forge
     lane, lane_token = _dev_forge(forge)
     root = _loop_home(forge) / E2E_REPO
-    if pass_.fresh:
+    if pass_.fresh and CURRENT.mode != "host":
+        # A fresh host-mode pass took a new environment: its forge
+        # holds nothing yet. The docker rig is long-lived, so its
+        # repository, releases and workspace go here.
         for line in start_over(lane, lane_token, root, url=pass_.url, kind=forge):
             print(line)
+    elif pass_.fresh and root.exists():
+        shutil.rmtree(root, ignore_errors=True)
     if (root / ".git").is_dir():
         # A resumed birth pushes before it returns, so an existing
         # workspace authenticates first; birth resets the remote, so
@@ -2577,10 +2658,20 @@ if _WORKSHOP_TESTS.is_dir():
     # directories, so it owns the process globals for the run.
     @ci.task(name="e2e", serial=True)
     def e2e(
-        forge: str = "gitea", fresh: bool = False, scenario: str = "develop"
+        forge: str = "gitea",
+        fresh: bool = False,
+        scenario: str = "develop",
+        env: str = "e2e",
+        purge_cache: bool = False,
     ) -> None:
-        """Exercise the CI and release story on the local forge, by scenario.
+        """Exercise the CI and release story on a local environment, by scenario.
 
+        ``--env`` names the environment the pass runs on, `e2e` by
+        default: one that does not exist is brought up in host mode
+        with one runner, ``--fresh`` removes it and brings it up
+        again, so a fresh pass is a new forge, and ``--purge-cache``
+        removes the rig's shared caches first. The docker-mode
+        environment ``dev`` is the compose rig, addressed as before.
         ``--scenario`` names what the pass proves: scenario names, set
         names, or both, comma-separated. The sets are ``develop``
         (birth, the verified skip, the members, the scoped leg),
@@ -2602,9 +2693,28 @@ if _WORKSHOP_TESTS.is_dir():
         """
         import os
 
+        from livery.workshop import _devenv
         from livery.workshop._layers import workspace_root
 
         chosen = scenarios_for(scenario)
+        if forge != "gitea":
+            fail(f"--env addresses a Gitea environment; --forge={forge} has none yet")
+        if purge_cache:
+            for line in _devenv.purge_cache():
+                print(line)
+        place = _devenv.environment(env)
+        if fresh and place.mode == "host":
+            for line in _devenv.remove(place):
+                print(line)
+            place = _devenv.environment(env)
+        if place.mode == "docker":
+            CURRENT.name, CURRENT.mode = env, "docker"
+        else:
+            _devenv.up_host(place, ("host",))
+            values = place.values()
+            CURRENT.name, CURRENT.mode = env, "host"
+            CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
+            CURRENT.label = values["LABELS"].split(",")[0]
         # Every commit the pass makes, the driver's, the birth's and
         # the loop's own fm's, is unsigned: the setting rides the
         # task's environment into each child.
@@ -2612,7 +2722,9 @@ if _WORKSHOP_TESTS.is_dir():
         _require_host_alias(forge)
         if daemon_needed(chosen):
             _require_runner_docker(forge)
-        pass_ = Pass(forge, os.environ.get(_lane(forge).url_var, ""), fresh)
+        pass_ = Pass(
+            forge, CURRENT.url or os.environ.get(_lane(forge).url_var, ""), fresh
+        )
         RUNS.count = 0
         try:
             for item in chosen:

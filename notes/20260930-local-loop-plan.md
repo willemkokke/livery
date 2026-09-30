@@ -2,8 +2,9 @@
 
 Status: written 2026-09-30 from Willem's rulings on the loop runner's
 seven decisions (issues #930 and #931). Phase 1 (scenarios by name)
-is built (issue #942, 2026-09-30); phase 2 (the runner as a host
-process) is where the time goes and comes next.
+is built (issue #942, 2026-09-30); phase 2's first slice, host-mode
+environments with the runner as a process (issue #944), the same
+day; the container setups are its second slice.
 
 ## The prompt (Willem)
 
@@ -536,6 +537,30 @@ changes the tag.
   lowered, so `develop` runs five scenarios, not four; `nightly` needs
   `release`, since it replays the released wheel. A pass proves the
   scenarios it ran and names them, `all` being today's whole.
+- 2026-09-30, phase 2's first slice built (issue #944): environments
+  by name under `forge-dev/envs/<name>/`, the shared caches under
+  `forge-dev/cache/`, host mode with Gitea and each runner as
+  processes of this machine from the `gitea` (28.0.0) and
+  `gitea_runner` (4.0.0) records, seeded by Gitea's own CLI, the
+  runner registered once under `<env>-<host>-<arch>-<nn>`, the verbs
+  `fm devenv.up`, `devenv.ls`, `devenv.down`, `devenv.rm`
+  (`--purge-caches`), `fm ci.e2e --env` with the disposable `e2e`
+  default, `--fresh` as remove-and-create in host mode, and
+  `--purge-cache`; the entry keeps a cache placement the job's
+  environment already sets. Two placements differ from the plan's
+  text and are deliberate: the verbs live in the workshop layer as
+  the `devenv` group, since the forge's dev plugin imports no tool
+  store and the environment reads the workspace's catalogue and
+  store, which the workshop owns; and the rig's binaries are supplied
+  by the store on demand at pinned versions rather than locked, since
+  a lock materialises on every CI job and the rig's servers are the
+  desk's alone. Docker mode stays the one compose environment named
+  `dev` and delegates to `fm forge.dev.up`; a docker environment by
+  any other name, the container runner shapes and the `linux/amd64`
+  pin's removal come with the container setups (the next slice). The
+  loop's contract names the environment's runner label as its runner
+  and its wheel platform, and every pinned line reads with that label
+  in place of `ubuntu-latest`.
 - 2026-09-30, Willem: the loop's defaults are the agent's to set, as
   the one driving it ("set whatever defaults you think are best for
   you driving this"). Set, and recorded here as the agent's: a plain
