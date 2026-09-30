@@ -19,7 +19,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1274,15 +1274,10 @@ def test(
     root: Path,
     *,
     selection: tuple[str, ...] = (),
-    pages: tuple[str, ...] = (),
 ) -> None:
-    """Run *package*'s tests: its suite, or the files in *selection* alone.
-
-    *pages* narrows the docs examples harness among them to those pages.
-    """
+    """Run *package*'s tests: its suite, or the files in *selection* alone."""
     files = tuple(f"{package.path}/{path}" for path in selection)
     run_test(
-        *page_arguments(pages),
         packages=(package,),
         root=root,
         scoped=True,
@@ -1290,9 +1285,38 @@ def test(
     )
 
 
-def page_arguments(pages: Iterable[str]) -> list[str]:
-    """The pytest arguments that narrow a docs examples harness to *pages*."""
-    return [f"--docs-page={page}" for page in pages]
+def examples_of(package: Package) -> list[Path]:
+    """The example files *package* ships under ``docs/examples/``, sorted.
+
+    A ``conftest.py`` there is the package's setup around them, never
+    an example.
+    """
+    base = package.directory / "docs" / "examples"
+    if not base.is_dir():
+        return []
+    return sorted(path for path in base.rglob("*.py") if path.name != "conftest.py")
+
+
+def run_examples(package: Package, root: Path) -> None:
+    """Run *package*'s documentation examples, one test per file.
+
+    Pytest over the package's ``docs/examples/`` directory, whose
+    files the workshop's examples plugin collects
+    ([livery.workshop._pytest_examples][]), from the workspace root so
+    the workspace's pytest configuration applies. Captured and printed
+    on a red exit, so a runner's log carries the failing example's
+    file and line; a package without examples says so and passes.
+    """
+    if not examples_of(package):
+        print(f"  examples: {package.path} has none")
+        return
+    result = pytest.opts(in_process=False, cwd=root, nofail=True)(
+        f"{package.path}/docs/examples"
+    )
+    if result.code != 0:
+        print(result.stdout, end="")
+        print(result.stderr, end="")
+        fail(f"examples of {package.path}: pytest exited {result.code}")
 
 
 def scoped_gate(
@@ -1301,7 +1325,7 @@ def scoped_gate(
     root: Path,
     check_style: bool = True,
     tests: Mapping[str, tuple[str, ...]] | None = None,
-    pages: Mapping[str, tuple[str, ...]] | None = None,
+    examples: tuple[str, ...] = (),
 ) -> None:
     """Run the python kind's checks over *subset*, composed here.
 
@@ -1312,7 +1336,8 @@ def scoped_gate(
     already ran, where re-judging the style it just wrote would
     only spend time agreeing. *tests* names, per package path, the
     test files that stand for the package's suite in this run, and
-    *pages* the docs pages a package's examples harness narrows to.
+    *examples* the packages whose examples alone changed: they run
+    their examples and no suite.
 
     The steps are built at call time, so the property tests that
     patch this module's verbs keep gating the composition.
@@ -1328,23 +1353,25 @@ def scoped_gate(
     paths = package_paths(subset)
     type_paths = package_paths(gated(members, "typecheck") + unit)
     complete = gated(members, "typecomplete")
-    tested = gated(members, "test") + unit
+    tested = tuple(p for p in gated(members, "test") if p.path not in examples) + unit
     with parallel() as p:
         if check_style:
             p(step(run_format, title="format")(check=True, paths=paths))
             p(step(run_lint, title="lint")(paths=paths))
         p(step(run_typecheck, title="typecheck")(paths=type_paths))
         p(step(run_typecomplete, title="typecomplete")(complete))
-        narrowed = [page for found in (pages or {}).values() for page in found]
         p(
             step(run_test, title="test")(
-                *page_arguments(narrowed),
                 packages=tested,
                 root=root,
                 scoped=True,
                 selection=tests,
             )
         )
+        for package in gated(members, "examples"):
+            if package.path in (tests or {}) and package.path not in examples:
+                continue
+            p(step(run_examples, title=f"examples {package.path}")(package, root))
 
 
 #: The variables that tell a test it runs on a forge's runner. A

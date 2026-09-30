@@ -62,7 +62,6 @@ A bare `--target` binds exactly what absence would have bound, since the same
 `env()`-then-default ladder runs, so on its own it changes nothing. What it
 adds is that somebody named it, which `given()` reports:
 
-<!-- example: fragment -->
 
 ```python
 from livery.footman import task, given
@@ -97,7 +96,6 @@ A Python default is evaluated once, when the module is imported: fine for a
 constant, wrong for anything that depends on the machine, the environment or
 the clock. `default(fn)` calls `fn()` at bind time instead:
 
-<!-- example: fragment -->
 
 ```python
 @task
@@ -114,7 +112,6 @@ Declare one positional argument and it receives the **sibling parameters**
 resolved so far, the same courtesy `check(fn)` gets, because a default is
 often a function of the inputs beside it:
 
-<!-- example: fragment -->
 
 ```python
 @task
@@ -156,13 +153,7 @@ parameter into a position or a flag reads the *default*, not the
 annotation. This is a working CLI:
 
 ```python
-from livery.footman import task
-
-
-@task
-def ship(target, port=8000, ratio=1.5, name="web", verbose=False):
-    "Ship it."
-    print(target, port + 1, ratio, name, verbose)
+--8<-- "packages/footman/docs/examples/typing.py:part-1"
 ```
 
 `fm ship prod --port=9000 --verbose` gives you a required positional, three
@@ -175,10 +166,7 @@ before anything runs, with the same taught message an annotated `int` gets.
 The limit is what a bare default can't say. These stay strings:
 
 ```python
-@task
-def stamp(
-    out=None, paths=(), tags=["docs"]
-): ...  # out, paths and tags all arrive as `str`
+--8<-- "packages/footman/docs/examples/typing.py:part-2"
 ```
 
 A `None` default names no type, and a container's default says nothing about
@@ -211,11 +199,7 @@ value wins (`int` → `float` → `Path` → `str`, with `str` as the universal
 fallback):
 
 ```python
-from livery.footman import task
-
-
-@task
-def scale(factor: int | float): ...
+--8<-- "packages/footman/docs/examples/typing.py:part-3"
 ```
 
 `Many[T]` is exactly `list[T]`: a parameter that accepts one or more values and
@@ -224,13 +208,7 @@ bare `list[T]` at a positional). Required when positional, so at least one value
 must be given:
 
 ```python
-from livery.footman import Many
-
-
-@task
-def build(targets: Many[str]):
-    ...  # fm build web     -> ["web"]
-    # fm build web api -> ["web", "api"]
+--8<-- "packages/footman/docs/examples/typing.py:part-4"
 ```
 
 `set[T]`, `frozenset[T]` and `tuple[T, ...]` accept values exactly the same
@@ -238,8 +216,7 @@ way. They differ only in the container your function receives, which is the
 point of naming one:
 
 ```python
-@task
-def label(tags: set[str] = frozenset()): ...  # fm label --tags=a,b,a -> {"a", "b"}
+--8<-- "packages/footman/docs/examples/typing.py:part-5"
 ```
 
 A bare `list`, `set`, `frozenset` or `tuple` means a collection of `str`.
@@ -252,22 +229,14 @@ Values accumulate from commas and from repetition into **one stream**, so
 PowerShell:
 
 ```python
-@task
-def release(tags: list[str] = []): ...  # fm release --tags=a,b,c  -> ["a", "b", "c"]
+--8<-- "packages/footman/docs/examples/typing.py:part-6"
 ```
 
 When a value may itself contain a comma, mark the parameter `nosplit`: then only
 the repeated flag adds items, and a comma stays literal.
 
 ```python
-from livery.footman import NoSplit
-
-
-@task
-def notify(lines: NoSplit[list[str]] = []): ...
-
-
-# fm notify --lines="Smith, John" --lines="Doe, Jane"  -> two names, commas kept
+--8<-- "packages/footman/docs/examples/typing.py:part-7"
 ```
 
 `NoSplit[list[str]]` is shorthand for `Annotated[list[str], nosplit]`: the
@@ -284,8 +253,7 @@ declared arity takes it in groups of that size, which is the next section.
 system: `dict[str, int | str]`, and even `dict[str, list[...]]`:
 
 ```python
-@task
-def env(vars: dict[str, int | str]): ...  # fm env --vars=port=8080 --vars=name=web
+--8<-- "packages/footman/docs/examples/typing.py:part-8"
 ```
 
 ## Fixed-arity values
@@ -295,17 +263,7 @@ option. Prefer a `NamedTuple`: it names its fields, and the names do real
 work:
 
 ```python
-from typing import NamedTuple
-from livery.footman import task
-
-
-class Size(NamedTuple):
-    width: int
-    height: int
-
-
-@task
-def render(size: Size = Size(1920, 1080)): ...  # fm render --size=800,600
+--8<-- "packages/footman/docs/examples/typing.py:part-9"
 ```
 
 `--size=800,600` fills `width` and `height`. So does `--size=800 --size=600`,
@@ -313,17 +271,7 @@ because there is only ever one stream of values and the declared arity groups
 it. That is also what makes a *container* of shapes work:
 
 ```python
-class Spot(NamedTuple):
-    x: float
-    y: float
-
-
-@task
-def route(points: list[Spot] = ()): ...
-
-
-# fm route --points=1,2 --points=3,4   -> [Spot(1.0, 2.0), Spot(3.0, 4.0)]
-# fm route --points=1,2,3,4            -> the same two points
+--8<-- "packages/footman/docs/examples/typing.py:part-10"
 ```
 
 Nothing is guessed. `--points=1,2,3` cannot be a whole number of points, so it
@@ -350,17 +298,7 @@ A dataclass, or any class with an annotated `__init__`, works the same way,
 with the constructor's parameters as the fields:
 
 ```python
-from dataclasses import dataclass
-
-
-@dataclass
-class Window:
-    title: str
-    width: int = 800
-
-
-@task
-def open_(window: Window = Window("footman")): ...  # fm open --window=Docs,1024
+--8<-- "packages/footman/docs/examples/typing.py:part-11"
 ```
 
 ### Arity ranges
@@ -421,13 +359,7 @@ with that token. `datetime` uses `fromisoformat`; everything else is
 constructed as `T(value)`:
 
 ```python
-from uuid import UUID
-from decimal import Decimal
-from datetime import datetime
-
-
-@task
-def record(id: UUID, amount: Decimal, when: datetime): ...
+--8<-- "packages/footman/docs/examples/typing.py:part-12"
 ```
 
 This is the one-field case of the rule above: a type with a single constructor
@@ -440,24 +372,7 @@ Eager, taught validation is the whole pitch, so constraints ride in
 `Annotated`, the same idiom as `suggest` and `nosplit`:
 
 ```python
-from pathlib import Path
-from typing import Annotated
-from livery.footman import task, between, check, doc, env, isfile
-
-
-def semver(value: str) -> None: ...  # your validator: raise ValueError to refuse
-
-
-@task
-def deploy(
-    config: Annotated[Path, isfile],  # must exist, be a file
-    jobs: Annotated[int, between(1, 32)] = 4,  # inclusive bounds
-    target: Annotated[
-        str, env("DEPLOY_ENV")
-    ] = "staging",  # CLI > $DEPLOY_ENV > default
-    version: Annotated[str, check(semver)] = "0.0.0",  # your own validator
-    force: Annotated[bool, doc("skip the health check")] = False,  # help text
-): ...
+--8<-- "packages/footman/docs/examples/typing.py:part-13"
 ```
 
 ```console
@@ -514,14 +429,7 @@ flowing down.
 else:
 
 ```python
-from typing import Annotated
-from livery.footman import task
-from livery.footman.params import hidden
-
-
-@task
-def publish(target: str, legacy: Annotated[str, hidden] = ""):
-    """Ship it."""
+--8<-- "packages/footman/docs/examples/typing.py:part-14"
 ```
 
 `fm --help publish` shows `<target>` and stops there: no `--legacy`, and the
@@ -549,48 +457,20 @@ always wins over a docstring entry for the same parameter:
 
 === "Google"
 
-    <!-- example: revision -->
     ```python
-    @task
-    def deploy(target: str, fix: bool = False):
-        """Ship a build.
-
-        Checks out, builds, and uploads — see the release runbook.
-
-        Args:
-            target: where to deploy
-            fix: apply fixes first
-        """
+    --8<-- "packages/footman/docs/examples/typing-r1.py:part-1"
     ```
 
 === "NumPy"
 
-    <!-- example: revision -->
     ```python
-    @task
-    def deploy(target: str, fix: bool = False):
-        """Ship a build.
-
-        Parameters
-        ----------
-        target : str
-            where to deploy
-        fix : bool
-            apply fixes first
-        """
+    --8<-- "packages/footman/docs/examples/typing-r2.py:part-1"
     ```
 
 === "Sphinx"
 
-    <!-- example: revision -->
     ```python
-    @task
-    def deploy(target: str, fix: bool = False):
-        """Ship a build.
-
-        :param target: where to deploy
-        :param fix: apply fixes first
-        """
+    --8<-- "packages/footman/docs/examples/typing-r3.py:part-1"
     ```
 
 A docstring entry that names no real parameter earns a `UserWarning`, the
@@ -625,16 +505,7 @@ marks them `(dynamic)`, the way a computed default is marked `(computed)`:
 what you are reading is this moment's answer, not a fixed set.
 
 ```python
-from typing import Annotated
-from livery.footman import task, suggest
-
-
-def shares() -> list[str]:
-    return ["main", "scratch", "archive"]
-
-
-@task
-def mount(share: Annotated[str, suggest(shares)]): ...
+--8<-- "packages/footman/docs/examples/typing.py:part-15"
 ```
 
 Keep a completer's imports **inside its body**, the way footman keeps optional
@@ -643,15 +514,7 @@ the completer's cost (a subprocess, a network round-trip) is paid only when it
 runs, not every time the file is imported:
 
 ```python
-def branches() -> list[str]:
-    import subprocess  # here, not at module top
-
-    out = subprocess.run(
-        ["git", "branch", "--format=%(refname:short)"],
-        capture_output=True,
-        text=True,
-    )
-    return out.stdout.split()
+--8<-- "packages/footman/docs/examples/typing.py:part-16"
 ```
 
 The first example, recorded in PowerShell: the demo project's tasks.py is

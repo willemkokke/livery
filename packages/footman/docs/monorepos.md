@@ -57,14 +57,7 @@ The cascade has an outermost rung above the repo root: **`~/.config/footman/task
 every project, and in directories that are no project at all:
 
 ```python
-# ~/.config/footman/tasks.py
-from livery.footman import run, task
-
-
-@task
-def scratch():
-    """Spin up a throwaway venv here."""
-    run(["uv", "venv", ".scratch"])
+--8<-- "packages/footman/docs/examples/monorepos.py:part-1"
 ```
 
 ```console
@@ -82,10 +75,7 @@ Some personal tasks only make sense in a checkout. Say so, and footman keeps
 them out of the way everywhere else:
 
 ```python
-@task(expose="project_only")
-def sync_upstream():
-    """Rebase onto upstream/main."""
-    run(["git", "fetch", "upstream"])
+--8<-- "packages/footman/docs/examples/monorepos.py:part-2"
 ```
 
 Outside a project that task is not listed, not completed, and not offered as

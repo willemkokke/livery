@@ -6,15 +6,7 @@ distinguishes "footman did not understand you" from "the work failed". One
 signature, both directions:
 
 ```python
-from typing import Annotated
-from livery.footman import Stdout, stdin, task
-
-
-@task
-def summarise(diff: Annotated[str, stdin] = "") -> Stdout[dict]:
-    "Reduce a diff to the numbers."
-    added = sum(1 for line in diff.splitlines() if line.startswith("+"))
-    return {"added": added}
+--8<-- "packages/footman/docs/examples/pipelines.py:part-1"
 ```
 
 ```console
@@ -59,24 +51,7 @@ The dataclass form is the one to reach for when a machine sends you JSON:
 an agent-hook payload, a webhook body, another tool's `--json` output:
 
 ```python
-from dataclasses import dataclass, field
-
-
-@dataclass
-class ToolInput:
-    file_path: str = ""
-
-
-@dataclass
-class Event:
-    tool_input: ToolInput = field(default_factory=ToolInput)
-    stop_hook_active: bool = False
-
-
-@task(hidden=True)
-def on_edit(event: Annotated[Event, stdin]) -> None:
-    if event.tool_input.file_path.endswith(".py"):
-        ...
+--8<-- "packages/footman/docs/examples/pipelines.py:part-2"
 ```
 
 Unknown keys are ignored (a producer may grow fields without breaking
@@ -126,12 +101,7 @@ one, a task also *writes* a child's standard input, because some payloads have n
 argv spelling at all (`uv pip install -r -` reads its requirements there):
 
 ```python
-from livery.footman import run, task
-
-
-@task
-def install(requirement: str) -> None:
-    run("uv pip install -r -", input=requirement)
+--8<-- "packages/footman/docs/examples/pipelines.py:part-3"
 ```
 
 The string arrives whole and the pipe closes, so a child that reads to EOF

@@ -16,11 +16,6 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 
-FRAGMENT = "<!-- example: fragment -->"
-FRESH = "<!-- example: fresh-session -->"
-REVISION = "<!-- example: revision -->"
-_OPEN = re.compile(r"^(?P<indent>[ ]*)```python\s*$")
-
 
 def _js_source() -> str:
     return (DOCS / "assets" / "playground.js").read_text(encoding="utf-8")
@@ -102,19 +97,3 @@ def test_playground_ship_builds_without_running(tmp_path: Path):
     code, output = _playground_invoke(tmp_path, "-s ship")
     assert code == 0, output
     assert "docker compose up --detach" in output, output
-
-
-def test_example_markers_are_spent():
-    """Every example marker sits directly above a ```python fence — a
-    marker that drifted away from its fence would silently stop exempting
-    anything.
-    """
-    for page in sorted(p for p in DOCS.rglob("*.md") if "_generated" not in p.parts):
-        lines = page.read_text(encoding="utf-8").splitlines()
-        for i, line in enumerate(lines):
-            if line.strip() not in (FRAGMENT, FRESH, REVISION):
-                continue
-            following = next((ln for ln in lines[i + 1 :] if ln.strip()), "")
-            assert _OPEN.match(following), (
-                f"{page.name}:{i + 1}: example marker without a python fence"
-            )

@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first three slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first four slices (#955, the extractor on the kind record; #956, the private-members policy as a slot; #957, layer assets staged from the wheel and the theme slot; #958, examples as files) beside the layering
 2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931), phase 6's first two slices (#955, the extractor on the kind record; #956, the private-members policy as a slot) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
@@ -2606,6 +2606,47 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   Code. Acceptance item 4 is met; the site's content is unchanged by
   the seam apart from the sheet links, since the moved sheets carry
   no rules.
+
+- 2026-09-30, phase 6's fourth slice (issue #958): examples are
+  files. A package's documentation examples live under
+  `docs/examples/` as python files a page shows whole or by named
+  section through the snippets extension. Footman's 120 running
+  blocks on 26 pages became 39 files: one per page session, one per
+  fresh session, and one per revision, a revision's file carrying a
+  preamble above the shown part that gives it the names the page
+  defined earlier; its 54 fragment fences stayed prose; the three HTML
+  markers left footman's and toolroom's pages together with the
+  harness that read them, so `packages/footman/tests/test_docs_examples.py`
+  keeps the playground and gallery tests alone and the `--docs-page`
+  option is gone. The kind record names its examples runner
+  (`KindRecord.examples`, `livery.workshop._kinds.kind_examples`
+  nearest along the chain); the python kind's runs pytest over the
+  package's `docs/examples/` from the workspace root, and a `pytest11`
+  plugin, `livery.workshop._pytest_examples`, collects each file as
+  one item executed whole under its own path, every item carrying the
+  `example` marker for a package's own setup: footman's
+  `docs/examples/conftest.py` runs each inside a captured registry
+  and a recording. The `examples` check, a role in every kind's
+  default contract, claims the `example` category beside `lint` and
+  the site; `format` claims it no longer, since an example keeps the
+  layout its page shows, and `lint` withholds every rule there but
+  the name checks (`F401` and `F811` withheld as well). The affected
+  walk: a page reaches nothing, an example file its package's
+  examples check and no suite (`Scope.examples`,
+  `GateContext.examples`), and the package's source both. Proven by
+  tests: an example that raises reports its own file and line
+  (`docs/examples/bad.py:3`), only example files are collected and a
+  conftest never, the runner's absent case and its red exit, the kind
+  lookup with its inheritance, the check's registration and its skip
+  of a tests-only member, and the walk's three cases. Footman's site
+  was built before the move (main, 3e015ff2) and after, and the 73
+  articles diffed with the chrome set aside: 55 identical, 13
+  differing by the 67 removed marker comments alone, 4 (input,
+  plugins, profiling, typechecking) by blank lines beside those
+  comments, and typing's three tabbed blocks losing a paragraph
+  wrapper the marker inside the tab had caused. Acceptance item 3 is
+  met. Observed: the check runs footman's 39 files in 1m59s inside
+  the gate; issue #959 records the cost.
 
 ## Open
 

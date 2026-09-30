@@ -39,19 +39,7 @@ prerequisite you also call hands back what it already produced, which is how a
 task reads a value `pre=` cannot pass:
 
 ```python
-from livery.footman import run, task
-
-
-@task
-def build() -> str:
-    ...
-    return "dist/app.tar"
-
-
-@task(pre=[build])
-def publish():
-    artifact = build()  # the build that already ran, not a second one
-    run(f"./upload {artifact}")
+--8<-- "packages/footman/docs/examples/execution-model.py:part-1"
 ```
 
 Whether a task was reached by declaration or by a call makes no difference to
@@ -76,7 +64,6 @@ does: stdin, then its `env()` variable, then the default, with a defaultless
 `ask()` prompting as the last resort, so a task behaves the same however it is
 asked for:
 
-<!-- example: fragment -->
 ```python
 from typing import Annotated
 from livery.footman import env, task
@@ -118,7 +105,6 @@ own `.opts(shared=…)`, then the task's declaration, then whatever asked for it
 then shared. `.opts(shared=False)` asks for one unshared run without changing
 the task, on a call or on a declared edge alike:
 
-<!-- example: fragment -->
 ```python
 @task
 def stamp(): ...
@@ -148,7 +134,6 @@ never looks like it did less than you asked.
 `run()` makes a step out of a command. `step()` makes one out of *your own
 code*, in one name and three positions:
 
-<!-- example: fragment -->
 ```python
 import shutil
 
@@ -186,7 +171,6 @@ threading a keyword through each of them.
 
 A step can also be a generator, which buys two things with one keyword:
 
-<!-- example: fragment -->
 ```python
 @step
 def convert(images: list[Path]):
@@ -222,7 +206,6 @@ show has no business outliving its run.
 That makes `task(fn)` the general way to run a plain callable *as a task*,
 in a block or out of one:
 
-<!-- example: fragment -->
 ```python
 from livery.footman import parallel, task
 

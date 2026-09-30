@@ -27,15 +27,7 @@ use its typed tool handles, which detect footman and route every call through
 exactly what broke:
 
 ```python
-from livery.footman import task, run
-from livery.toolroom.tools import pytest, ruff
-
-
-@task
-def check():
-    ruff("check", "src", fix=False)  # subprocess (ruff is a binary)
-    pytest("-x")  # in-process via pytest.main
-    run("mkdocs build --strict")  # any command at all
+--8<-- "packages/footman/docs/examples/tools.py:part-1"
 ```
 
 Each toolroom handle is imported by name: `from livery.toolroom.tools import git` gives
@@ -77,18 +69,7 @@ directory `$FOOTMAN_CACHE_DIR` moves and the cache collector tends, so vendored
 artifacts for deleted projects clean themselves up:
 
 ```python
-from pathlib import Path
-from livery.footman import fetch, task
-
-
-@task
-def vendor():
-    "Fetch the pinned toolchain."
-    fetch(
-        "https://example.com/protoc-27.tar.gz",
-        sha256="9f86d081884c…",
-        into=Path("vendor/protoc"),
-    )
+--8<-- "packages/footman/docs/examples/tools.py:part-2"
 ```
 
 Like `run()`, a fetch **is a step**: `--dry-run` prints it without touching the
@@ -108,13 +89,7 @@ Everything a task ordinarily reaches for is a free function that finds the
 running task by itself, so a body stays boilerplate-free:
 
 ```python
-from livery.footman import passthrough, task
-from livery.toolroom.tools import pytest
-
-
-@task
-def test():
-    pytest(*passthrough())  # fm test -- -k mytest -x
+--8<-- "packages/footman/docs/examples/tools.py:part-3"
 ```
 
 `run()`, `cwd()`, `project_root()`, `given()`, `passthrough()`, `prog()`,
@@ -125,15 +100,7 @@ of the *invocation itself*, which is not something most tasks should
 branch on.
 
 ```python
-from livery.footman import Context, task, run
-
-
-@task
-def publish(ctx: Context):
-    if ctx.dry_run:  # fm --dry-run publish
-        print("would upload the built artifacts")
-        return
-    run("./upload dist/*")
+--8<-- "packages/footman/docs/examples/tools.py:part-4"
 ```
 
 `ctx.dry_run`, `ctx.verbose`, `ctx.quiet`, `ctx.jobs`, `ctx.sequential`

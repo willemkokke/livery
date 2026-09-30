@@ -1385,7 +1385,12 @@ def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
             docs,
             target,
             ignore=lambda directory, names, docs=docs: (
-                [NAV_TOML, GENERATED_DIR] if Path(directory) == docs else []
+                [NAV_TOML, GENERATED_DIR]
+                if Path(directory) == docs
+                # The package's setup around its examples is not site content.
+                else ["conftest.py"]
+                if Path(directory) == docs / "examples"
+                else []
             ),
         )
         _merge_generated(docs / GENERATED_DIR, target, package.path)

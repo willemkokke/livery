@@ -19,16 +19,7 @@ and its `env()` don't supply one, coercing the answer through the same pipeline
 as a flag:
 
 ```python
-from typing import Annotated, Literal
-from livery.footman import ask, task
-
-
-@task
-def release(version: Annotated[str, ask()]): ...
-
-
-@task
-def deploy(env: Annotated[Literal["staging", "prod"], ask()]): ...
+--8<-- "packages/footman/docs/examples/input.py:part-1"
 ```
 
 `fm release --version=1.2.3` uses the flag; `fm release` asks `version:` and
@@ -38,7 +29,6 @@ parameter is a CLI-optional option, so it never becomes a required positional.)
 
 A declared default becomes the **offer** rather than a reason not to ask:
 
-<!-- example: fragment -->
 
 ```python
 @task
@@ -54,15 +44,7 @@ The choices can be computed at run time, too: pair `ask()` with a
 numbered menu, asked up front like every other `ask()`:
 
 ```python
-from livery.footman import suggest
-
-
-def stale_branches() -> list[str]:
-    return ["old/spike", "old/wip"]
-
-
-@task
-def prune(branch: Annotated[str, ask(), suggest(stale_branches)]): ...
+--8<-- "packages/footman/docs/examples/input.py:part-2"
 ```
 
 `fm prune --branch=old/wip` skips the question and validates against a fresh
@@ -94,16 +76,7 @@ Two halves of the same idea: how a value is *collected*, and how it is
 `Secret`.
 
 ```python
-from typing import Annotated
-from livery.footman import Secret, Stdout, ask, run, task
-
-
-@task
-def login(token: Annotated[str, ask(secret=True)]): ...
-
-
-@task
-def publish(token: Secret): ...  # a flag or env() value, still redacted
+--8<-- "packages/footman/docs/examples/input.py:part-3"
 ```
 
 `Secret` is the display half, and it stands alone: annotate any parameter
@@ -117,9 +90,7 @@ A secret handed to `run()` as an argument of its own is a shown value too —
 footman does the joining there, so it does the hiding:
 
 ```python
-@task
-def upload(token: Secret):
-    run(["twine", "upload", "--password", token])  # shows `… --password ***`
+--8<-- "packages/footman/docs/examples/input.py:part-4"
 ```
 
 The step line, the `--verbose` announce, the `--json` step row, a profile
@@ -134,9 +105,7 @@ The bytes a task deliberately writes. `Secret` is a real `str`, so every
 string operation on it yields a plain one:
 
 ```python
-@task
-def env_export(token: Secret) -> Stdout[str]:
-    return f"export TOKEN={token}"  # emits the real value; no switch needed
+--8<-- "packages/footman/docs/examples/input.py:part-5"
 ```
 
 That is what makes footman usable as a filter for a task whose *job* is to
@@ -149,9 +118,7 @@ Where a `Secret` *would* survive into a structured surface and you mean it
 to be emitted, say so:
 
 ```python
-@task
-def creds(token: Secret) -> Stdout[dict]:
-    return {"token": token.reveal()}  # deliberate; a plain str from here on
+--8<-- "packages/footman/docs/examples/input.py:part-6"
 ```
 
 `reveal()` exists so that intent is greppable: every deliberate exposure in
@@ -162,10 +129,8 @@ give you.
 
 A yes/no question asked *before* the task and its prerequisites run:
 
-<!-- example: revision -->
 ```python
-@task(confirm="Deploy to production?")
-def deploy(): ...
+--8<-- "packages/footman/docs/examples/input-r1.py:part-1"
 ```
 
 Deny it and the task never runs, the run exits non-zero, and anything that
@@ -190,14 +155,7 @@ genuinely runs a wizard or a REPL declares itself interactive, and then owns the
 real terminal, uncaptured, with sole stdio:
 
 ```python
-from livery.footman import prompt, select, task
-
-
-@task(interactive=True)
-def scaffold():
-    name = prompt("project name? ")
-    kind = select("what kind?", ["library", "app", "plugin"])
-    ...
+--8<-- "packages/footman/docs/examples/input.py:part-7"
 ```
 
 `select()` picks one — or `multiple=True` picks several — from a list computed
@@ -209,7 +167,6 @@ prompt errors instead).
 runs through the same coercion pipeline a flag does, with a bad answer taught
 and re-asked rather than raised:
 
-<!-- example: fragment -->
 
 ```python
 port = prompt("port? ", type=Annotated[int, between(1024, 65535)])
@@ -235,14 +192,7 @@ ownership window, so nothing scribbles over a prompt.
 Three readers answer "who is on the other end?", each a different question:
 
 ```python
-from livery.footman import attended, colored, tty
-
-
-@task(interactive=True)
-def setup(licence: str = "MIT"):
-    if attended():
-        licence = prompt("licence? ", default=licence)  # someone can answer
-    print(f"licence: {licence}")  # CI, a pipe, --no-input: the quiet path
+--8<-- "packages/footman/docs/examples/input.py:part-8"
 ```
 
 `attended()` is the input side: stdin is a real terminal and the run was not

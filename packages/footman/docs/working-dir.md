@@ -41,35 +41,20 @@ replaces a farther one, never stacks. A relative `cwd=`, an absolute `rel=`,
 and `rel=` under `unmanaged` are errors that say what to use instead.
 
 ```python
-from livery.footman import run, task
-
-
-@task(cwd="root", rel="services/api")
-def deploy():
-    run("docker compose up -d")  # spawned from <root>/services/api
+--8<-- "packages/footman/docs/examples/working-dir.py:part-1"
 ```
 
 Inside the body, `ctx.cwd` is always a concrete `Path`, and
 `footman.cwd()` hands it to you for path arithmetic:
 
 ```python
-from livery import footman
-
-
-@task
-def bundle():
-    out = footman.cwd() / "dist"  # the task's own directory, not the
-    out.mkdir(exist_ok=True)  # process's; safe under parallelism
+--8<-- "packages/footman/docs/examples/working-dir.py:part-2"
 ```
 
 Per call, `run()` and the toolroom handles take the same pair:
 
 ```python
-from livery.toolroom import tools
-
-run("npm run build", rel="web")  # this one call, in <cwd>/web
-tools.npm.opts(rel="web").run("build")  # same, through the handle
-web_npm = tools.npm.opts(rel="web")  # or bind it once
+--8<-- "packages/footman/docs/examples/working-dir.py:part-3"
 ```
 
 The rule that makes all of this one idea: **`rel` is a suffix on whatever
@@ -150,10 +135,7 @@ Some tasks genuinely need the real globals: legacy helpers that chdir,
 tools driven through APIs that only read the process state. Declare it:
 
 ```python
-@task(serial=True)
-def legacy_build():
-    with footman.chdir(rel="vendor"):  # a real chdir, legal here
-        run("make")
+--8<-- "packages/footman/docs/examples/working-dir.py:part-4"
 ```
 
 - **`serial=True`.** The task owns the process globals. At most one serial
@@ -189,7 +171,6 @@ system is the registry, so a misspelt lane is an undefined name, never a
 silently new lane that contends with nothing. Re-declaring a taken name
 is an error naming both sites:
 
-<!-- example: fragment -->
 ```python
 from livery.footman import lane, task
 

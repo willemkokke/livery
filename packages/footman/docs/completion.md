@@ -234,13 +234,7 @@ answers from a cached manifest and never touches the filesystem. `matching()`
 is what it hands *along*: the pattern the shell filters by.
 
 ```python
-from pathlib import Path
-from typing import Annotated
-from livery.footman import matching, task
-
-
-@task
-def load(env_file: Annotated[Path, matching(".env*")] = Path(".env")): ...
+--8<-- "packages/footman/docs/examples/completion.py:part-1"
 ```
 
 `fm load --env-file=<Tab>` then offers `.env`, `.env.local`,

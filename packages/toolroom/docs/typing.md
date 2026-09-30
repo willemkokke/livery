@@ -63,7 +63,6 @@ wrappers that pass flags through:
 Positionals are `str | PathLike[str]` for the same reason:
 `ruff.check(Path("src"))` is exactly the call the bridge makes.
 
-<!-- example: fragment -->
 ```python
 from livery.toolroom.tools import Flag, Value, ruff
 
@@ -84,7 +83,6 @@ Every generated class is generic over what a call returns. A running
 handle answers in `Result`; `.argv` re-parameterises the same class
 over `Argv`, so a *built* call keeps the same flag checking as a run:
 
-<!-- example: fragment -->
 ```python
 from livery.toolroom.tools import git
 

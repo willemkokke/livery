@@ -11,18 +11,7 @@ still footman underneath.
 ## Build a branded entry point
 
 ```python
-# acme/cli.py
-from livery.footman import App
-
-app = App(
-    name="Acme",  # long / display name  → the --version banner
-    prog="acme",  # short / command name → "acme: ..." errors and hints
-    version="1.4.0",  # YOUR version, not footman's
-)
-
-
-def main() -> None:
-    raise SystemExit(app.run())
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-1"
 ```
 
 A brand can also rename the tasks file its users write:
@@ -41,7 +30,6 @@ acme = "acme.cli:main"
 
 Add a `__main__.py` beside it, three lines, so `python -m acme` works too:
 
-<!-- example: fragment -->
 ```python
 # acme/__main__.py
 from acme.cli import main
@@ -115,7 +103,7 @@ one thing more, because it has to know which distribution ships *your*
 runner:
 
 ```python
-app = App(name="Acme", prog="acme", version="1.4.0", dist="acme-cli")
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-2"
 ```
 
 With `dist` set, `acme self.install` also knows what to put on the
@@ -136,14 +124,7 @@ Your CLI is a product; footman is a dependency inside it. It keeps things in
 exactly two folders, and you place each one:
 
 ```python
-from pathlib import Path
-
-app = App(
-    name="Acme",
-    prog="acme",
-    cache_dir=Path.home() / ".acme" / "cache",
-    data_dir=Path.home() / ".acme" / "data",
-)
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-3"
 ```
 
 **Cache** is derived data: completion manifests, timing history, the
@@ -155,15 +136,7 @@ They are not anchored to each other, which matters when your product already
 has somewhere for one of them:
 
 ```python
-import os
-
-acme_home = Path(os.environ.get("ACME_HOME", Path.home() / ".acme"))
-app = App(
-    name="Acme",
-    prog="acme",
-    cache_dir=acme_home / ".cache" / "acme-cli",
-    data_dir=acme_home / "acme-cli",
-)
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-4"
 ```
 
 `ACME_CACHE_DIR` and `ACME_DATA_DIR` override them at run time, which is what
@@ -183,18 +156,7 @@ None of the above is a task author's problem. They ask for the kind of folder
 they want and get one that exists:
 
 ```python
-from livery import footman
-from livery.footman import task
-
-
-@task
-def login(token: str):
-    (footman.data_dir() / "credentials.json").write_text(token)
-
-
-@task
-def index():
-    (footman.cache_dir() / "index.json").write_text("{}")
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-5"
 ```
 
 Both create the directory if it isn't there, so a task never writes a `mkdir`
@@ -233,7 +195,7 @@ prefix.
 yours to arrange, because footman never guesses which of your variables is which:
 
 ```python
-app = App(name="Acme", prog="acme", env_prefix="ACME_RUNNER")
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-6"
 ```
 
 ## Config files follow the brand too
@@ -242,7 +204,7 @@ Your users write `acme.toml`, or a `[tool.acme]` table in `pyproject.toml`,
 not footman's. Both come from one field, so they cannot drift apart:
 
 ```python
-app = App(name="Acme", prog="acme")  # config_name defaults to prog: `acme`
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-7"
 ```
 
 Two branded CLIs can then live in one repository, each reading its own
@@ -283,7 +245,7 @@ project) are exactly the ones it should offer there. `builtin=` names the
 surface your CLI provides with no project at all:
 
 ```python
-app = App(name="Acme", prog="acme", dist="acme-cli", builtin=["acme.global"])
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-8"
 ```
 
 The names are `footman.tasks` entry points: strings, never live objects,
@@ -306,9 +268,7 @@ A listing shows the noise, but the real damage is the confident fiction.
 Declare the exceptions:
 
 ```python
-@task(expose="always")
-def whoami():
-    """Who am I logged in as? Answerable from anywhere."""
+--8<-- "packages/footman/docs/examples/custom-cli.py:part-9"
 ```
 
 Outside a project, a task that needs one is **not listed, not completed,

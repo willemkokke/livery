@@ -32,9 +32,7 @@ dependency.)
 The plugin mounts like any other, in one line in your tasks file:
 
 ```python
-from livery.footman import plugin
-
-plugin("footman.docs")
+--8<-- "packages/footman/docs/examples/taskdocs.py:part-1"
 ```
 
 That's also the one-line demo of the [plugin system](composing.md): the
@@ -162,22 +160,7 @@ Generated pages drift unless a build regenerates them. The tasks are plain
 functions, so footman's own docs task calls them directly. Copy the shape:
 
 ```python
-from pathlib import Path
-from livery.footman import group
-
-docs = group("docs", help="Documentation")
-
-
-@docs.task(name="build")
-def docs_build(check: bool = False):
-    "Build the docs site; regenerates the task reference first."
-    from livery.footman.tasks.docs import globals_, page, site
-    from livery.toolroom.tools import zensical
-
-    site(Path("docs/tasks"))
-    page(target="docs", heading=3, out=Path("_generated/tasks-page.md"))
-    globals_(out=Path("_generated/globals.md"))
-    zensical.build(clean=True, strict=check)
+--8<-- "packages/footman/docs/examples/taskdocs.py:part-2"
 ```
 
 Add the generated paths to `.gitignore`: they're build output, not source.

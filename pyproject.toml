@@ -96,6 +96,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # The claims first: each line is a category's patterns for a present
 # kind, with the rules a check withholds there.
+"packages/*/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "I", "RUF", "SIM", "UP"]
 "packages/*/tests/**" = ["D1"]
 "packages/*/tests/**/*_test.py" = ["D1"]
 "packages/*/tests/**/test_*.py" = ["D1"]

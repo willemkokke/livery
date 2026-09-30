@@ -11,7 +11,6 @@ end auto-load when footman and pytest share an environment.
 `@task` returns your function untouched. No wrapper, no argparse object, so
 the first altitude of testing is plain Python:
 
-<!-- example: fragment -->
 ```python
 from tasks import lint
 
@@ -28,7 +27,6 @@ commands, you usually want the next altitude instead.
 `recording()` captures every command a block would run, silently and without
 executing any of them, then hands you the steps to assert on:
 
-<!-- example: fragment -->
 ```python
 from livery.footman.testing import recording
 from tasks import release
@@ -55,7 +53,6 @@ A plain recording answers every call with a blank success. When the task
 under test *reads* a command's output, or has an error path worth
 exercising, hand the recording a table of answers:
 
-<!-- example: fragment -->
 ```python
 from livery.footman.testing import recording
 from tasks import release
@@ -101,7 +98,6 @@ Each recorded step also keeps the environment and directory the call
 would have run with, for the assertions that are about *where* a command
 would have run rather than *that* it would:
 
-<!-- example: fragment -->
 ```python
 with recording() as steps:
     build_wheel()
@@ -112,7 +108,6 @@ assert steps[0].cwd == Path("packages/hse-devkit")
 `Runner.invoke` takes the same table and implies `--dry-run`, so a CLI
 drives end to end against a scripted world:
 
-<!-- example: fragment -->
 ```python
 result = fm.invoke("release 1.2.0", answers={"git describe": "v1.1.0\n"})
 assert result.ok
@@ -128,7 +123,6 @@ answers stand and the record sees nothing.
 Under the hood this is `Context(dry_run=True, quiet=True)` installed with
 `use_context()`. Both are public, so you can compose your own variants:
 
-<!-- example: fragment -->
 ```python
 import os
 
@@ -148,34 +142,7 @@ assert ctx.steps[-1].code == 0
 taught errors, exit codes — and captures everything:
 
 ```python
-from livery.footman.testing import Runner
-
-TASKS = """
-from livery.footman import task, run
-
-@task
-def format():
-    "Format the tree."
-    run("ruff format .")
-
-@task
-def lint(fix: bool = False):
-    "Lint it."
-    run("ruff check ." + (" --fix" if fix else ""))
-
-@task
-def test():
-    "Run the suite."
-    run("pytest -q")
-"""
-
-
-def test_the_check_pipeline(tmp_path):
-    (tmp_path / "tasks.py").write_text(TASKS)
-    result = Runner().invoke("--dry-run format lint --fix test", cwd=tmp_path)
-    assert result.ok
-    assert [t.task for t in result.results] == ["format", "lint", "test"]
-    assert "ruff check . --fix" in result.stdout
+--8<-- "packages/footman/docs/examples/testing.py:part-1"
 ```
 
 `cwd` is where the `tasks.py` cascade starts, so it needs a tasks file to
@@ -205,7 +172,6 @@ terminal", so a test never reads the harness's own stream.
 
 Point it at a task surface three ways:
 
-<!-- example: fragment -->
 ```python
 Runner().invoke("build", cwd=project_dir)  # normal cascade discovery
 Runner().invoke("build", tasks=Path("ci/tasks.py"))  # one file (--tasks-file)
@@ -219,27 +185,7 @@ entry point, so there is nothing to enable, and pytest is never a footman
 dependency):
 
 ```python
-def test_release_dry(fm_project):
-    fm = fm_project("""
-        from livery.footman import task, run
-
-        @task
-        def release(version: str, push: bool = False):
-            "Tag and optionally push."
-            run(f"git tag v{version}")
-            if push:
-                run("git push --tags")
-    """)
-    result = fm.invoke("--dry-run release 1.2.0 --push")
-    assert result.ok
-
-
-def test_release_records_the_tag(fm_record):
-    from tasks import release
-
-    release("1.2.0")
-    assert fm_record[0].command == "git tag v1.2.0"
-    assert len(fm_record) == 1  # --push not given: no push
+--8<-- "packages/footman/docs/examples/testing.py:part-2"
 ```
 
 - **`fm`** — a `Runner` for the project the tests run in.
@@ -259,15 +205,7 @@ documented in full on [JSON output](json.md) and additive-only after 1.0.
 Filter the volatile fields and snapshot the shape:
 
 ```python
-import json
-
-
-def test_check_pipeline_shape(fm):
-    payload = json.loads(fm.invoke("--json check").stdout)
-    tasks = [(t["task"], t["ok"]) for t in payload["items"] if "task" in t]
-    commands = [s["command"] for s in payload["items"] if "command" in s]
-    assert tasks == [("lint", True), ("test", True)]
-    assert commands == ["ruff check .", "pytest -q"]
+--8<-- "packages/footman/docs/examples/testing.py:part-3"
 ```
 
 `--dry-run` output stays human-oriented. Snapshot it within a pinned version
@@ -279,14 +217,7 @@ A custom `App` tests exactly like `fm`. Hand it to the `Runner` and every
 user-facing string carries your brand, including the error prefix:
 
 ```python
-from livery.footman import App
-from livery.footman.testing import Runner
-
-
-def test_acme_teaches_with_its_own_name(tmp_path):
-    acme = Runner(App(name="Acme", prog="acme", version="1.4.0"))
-    result = acme.invoke("nope", cwd=tmp_path)
-    assert result.stderr.startswith("acme:")
+--8<-- "packages/footman/docs/examples/testing.py:part-4"
 ```
 
 Each invocation puts the brand back when it finishes, along with the folders

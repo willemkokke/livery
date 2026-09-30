@@ -7,7 +7,6 @@ icon: lucide/warehouse
 Typed surfaces for command-line tools, generated from the tools
 themselves.
 
-<!-- example: fragment -->
 ```python
 from livery.toolroom.tools import cmake, git
 

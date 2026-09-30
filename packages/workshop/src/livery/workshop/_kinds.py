@@ -37,6 +37,9 @@ from livery.workshop._categories import (
     CONFIGURATION as CONFIGURATION,
 )
 from livery.workshop._categories import (
+    EXAMPLE as EXAMPLE,
+)
+from livery.workshop._categories import (
     SOURCE as SOURCE,
 )
 from livery.workshop._categories import (
@@ -151,12 +154,8 @@ class Backend(Protocol):
         root: Path,
         *,
         selection: tuple[str, ...] = (),
-        pages: tuple[str, ...] = (),
     ) -> None:
         """Run the kind's tests of *package*; a refusal is the verdict.
-
-        *pages* narrows a docs examples harness in *selection* to
-        those pages, repo-relative; a kind without one ignores it.
 
         Every test, or with *selection* the tests of the named files
         alone, relative to the package. A selection the kind cannot
@@ -184,6 +183,7 @@ class CiContract:
         "typecheck",
         "typecomplete",
         "test",
+        "examples",
     )
 
 
@@ -272,6 +272,11 @@ class KindRecord:
         extractor: How the kind's API reference is extracted for the
             site; None for a kind with no reference, which the site
             says by name. A child kind takes the nearest ancestor's.
+        examples: How the kind runs a package's documentation
+            examples, the files under ``docs/examples/``, given the
+            package and the workspace root; None for a kind that runs
+            none, which the examples check says by name. A child kind
+            takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools, managed files and
             template, builds nothing, and is never a package's
@@ -293,6 +298,7 @@ class KindRecord:
     tests_need_build: bool = False
     native_sources: bool = False
     extractor: Extractor | None = None
+    examples: Callable[[Package, Path], None] | None = None
     abstract: bool = False
 
 
@@ -459,6 +465,14 @@ def kind_extractor(kind_name: str) -> Extractor | None:
     return None
 
 
+def kind_examples(kind_name: str) -> Callable[[Package, Path], None] | None:
+    """The examples runner *kind_name* uses: its own, else its nearest ancestor's."""
+    for record in reversed(kind_chain(kind_name)):
+        if record.examples is not None:
+            return record.examples
+    return None
+
+
 def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
     """The union of host allowances the present kinds grant, sorted."""
     tools: set[str] = set()
@@ -541,6 +555,7 @@ def _register_builtin() -> None:
             # ride their check records, and pytest the dev group's slot.
             tools=("uv",),
             extractor=_python.EXTRACTOR,
+            examples=_python.run_examples,
         )
     )
     # The binary extension: a python distribution in every checker's
@@ -599,7 +614,7 @@ def _register_categories() -> None:
             ("docs/**/*.md", "prose"),
             ("docs/nav.toml", "nav"),
             ("docs/assets/**", "asset"),
-            ("docs/examples/**/*.py", "example"),
+            ("docs/examples/**/*.py", EXAMPLE),
             ("docs/_generated/**", "generated"),
             ("**", CONFIGURATION),
         ],

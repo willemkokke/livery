@@ -20,20 +20,7 @@ once per invocation on the **fully-merged** tree, before availability gates, the
 manifest, or any task. It is footman's `pytest_collection_modifyitems`.
 
 ```python
-# repo/tasks.py
-from livery import footman
-from livery.footman import task
-
-
-@task
-def audit(): ...
-
-
-@footman.pre_tasks
-def gate_deploys(inv):
-    for t in inv.tasks:
-        if t.name.startswith("deploy") and "audit" in inv.tasks:
-            t.add_pre(inv.tasks["audit"])
+--8<-- "packages/footman/docs/examples/hooks.py:part-1"
 ```
 
 The hook is handed the **`Invocation`**: what this `fm` line is doing, and the
@@ -61,11 +48,7 @@ Provenance lets a hook decide by *where* a task came from. To gate every
 task defined under an `infra/` directory, regardless of its name:
 
 ```python
-@footman.pre_tasks
-def gate_infra(inv):
-    for t in inv.tasks:
-        if (t.defining_dir or "").endswith("infra"):
-            t.add_pre(inv.tasks["audit"])
+--8<-- "packages/footman/docs/examples/hooks.py:part-2"
 ```
 
 To decide by *who* a task came from instead, read `t.mounted_from`: the
@@ -104,7 +87,6 @@ it sees the arguments the body actually receives; `post_task(inv, task,
 result)` fires after the body, whatever the outcome. Both run on the task's
 worker thread, in parallel across tasks:
 
-<!-- example: fragment -->
 ```python
 from livery import footman
 
@@ -176,7 +158,6 @@ parameters are bound, so what it writes into `task.env` is what `env()`
 fallbacks resolve, what coercion sees, and what `check(fn)` validators read. It is
 the one moment a plugin can influence what the body will be handed:
 
-<!-- example: fragment -->
 ```python
 @footman.pre_bind
 def credentials(inv, task):
@@ -211,7 +192,6 @@ thread, after every task has concluded and *before* the summary or the
 `--json` envelope prints, so a rewrite a hook makes through a result view
 is what gets reported. The invocation now carries the whole story:
 
-<!-- example: fragment -->
 ```python
 @footman.post_tasks
 def digest(inv):
@@ -235,7 +215,6 @@ environment. Everything the process held is lost across that, and no exit
 handler runs to notice. A plugin with state worth keeping subscribes to the
 moment:
 
-<!-- example: fragment -->
 ```python
 @footman.pre_reexec
 @contextlib.contextmanager
@@ -250,7 +229,6 @@ for the successor. The verb doing the replacing calls `handing_off`, which
 enters every subscriber, merges what they yield, and hands the caller one
 mapping to pass to `execve` or to `subprocess.run(env=…)`:
 
-<!-- example: fragment -->
 ```python
 with footman.handing_off() as handed:
     os.execve(exe, cmd, {**os.environ, **handed})
@@ -270,7 +248,6 @@ is a request like any other: its own row, sharing with the rest, the same
 refusals a body call gets (a `serial=` task, or one that would wait on
 itself, is taught rather than deadlocked):
 
-<!-- example: fragment -->
 ```python
 @footman.pre_task
 def ensure(inv, task):
@@ -296,7 +273,6 @@ When the pre and the post are two halves of one thought — open a span, close
 it; start a clock, log it — a wrapper says it in one place, with locals
 instead of `task.state` and `try/finally` doing the pairing:
 
-<!-- example: fragment -->
 ```python
 @footman.wrap_task
 def span(inv, task):
@@ -316,7 +292,6 @@ The one thing `wrap_task` cannot see is a task that failed to **bind**: its
 anchor moment never fires, so there is no generator to unwind. `wrap_bind`
 enters at the bind boundary, takes two yields, and closes even then:
 
-<!-- example: fragment -->
 ```python
 @footman.wrap_bind
 def audit(inv, task):
@@ -350,26 +325,7 @@ a timing collector, or a CI annotator. A rule about *one* task belongs on that
 task, and every task's handle carries its own lifecycle for exactly this:
 
 ```python
-from livery.footman import fail, task
-
-
-@task
-def build(target: str = "web"): ...
-
-
-@build.pre_task  # setup that belongs to build
-def warm(): ...
-
-
-@build.pre_record  # build's reviewer: the draft, before sealing
-def review(view):
-    view.title = f"build: {view.returned or 'ok'}"
-
-
-@build.post_task  # watch build's sealed record; veto via fail()
-def budget(result):
-    if result.duration > 60.0:
-        fail(f"too slow: {result.duration:.0f}s")
+--8<-- "packages/footman/docs/examples/hooks.py:part-3"
 ```
 
 The line between the two channels is one sentence: the moment a global hook
@@ -401,11 +357,7 @@ carriage as lifecycle hooks, so it reaches a run only when its owner is
 mounted, and an unmounted owner's option is an unknown option, taught.
 
 ```python
-from pathlib import Path
-from livery.footman import GlobalOption
-
-ENV_FILE = GlobalOption("env-file", Path, help="load this .env file first")
-AUDIT = GlobalOption("audit", help="report, change nothing")  # bool → a flag
+--8<-- "packages/footman/docs/examples/hooks.py:part-4"
 ```
 
 The value is `=`-attached like every option's, long-form only, coerced and
@@ -438,9 +390,7 @@ of everything above (a lifecycle hook, a `GlobalOption`, an optional
 dependency):
 
 ```python
-from livery.footman.compose import plugin
-
-plugin("footman.env_files")
+--8<-- "packages/footman/docs/examples/hooks.py:part-5"
 ```
 
 Mounted, it loads `.env` from the invocation's directory at the run's
