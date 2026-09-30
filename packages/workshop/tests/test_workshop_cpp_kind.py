@@ -291,6 +291,16 @@ def test_python_verbs_skip_by_name(
         assert "skips" not in capsys.readouterr().out
 
 
+# The native kind's checks, in the order the walk runs them.
+NATIVE_CHECKS = (
+    "format.clang-format",
+    "build.configure",
+    "build.compile",
+    "test.ctest",
+    "lint.clang-tidy",
+)
+
+
 def test_a_pure_python_workspace_gate_is_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -300,8 +310,7 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     # No package check judges a python package: the walk schedules
     # none of the native records for a workspace of python packages.
     ctx = GateContext(root=tmp_path, packages=(py,))
-    native_checks = {"clang-format", "configure", "build", "ctest", "clang-tidy"}
-    assert not native_checks & set(judges(ctx))
+    assert not set(NATIVE_CHECKS) & set(judges(ctx))
     assert capsys.readouterr().out == ""
 
 
@@ -311,7 +320,7 @@ def test_the_native_checks_run_per_package_in_order(
     from dataclasses import replace
 
     ran: list[tuple[str, str, tuple[str, ...]]] = []
-    for name in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+    for name in NATIVE_CHECKS:
         record = check_for(name)
 
         def spy(ctx: GateContext, name: str = name) -> None:
@@ -328,15 +337,9 @@ def test_the_native_checks_run_per_package_in_order(
         return capsys.readouterr().out
 
     out = run_package(GateContext(root=tmp_path, packages=(native,)))
-    for name in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+    for name in NATIVE_CHECKS:
         assert f"  {name}: packages/native runs (cpp-conan kind)" in out
-    assert [name for name, _, _ in ran] == [
-        "clang-format",
-        "configure",
-        "build",
-        "ctest",
-        "clang-tidy",
-    ]
+    assert [name for name, _, _ in ran] == list(NATIVE_CHECKS)
     # A selection: the build first, since the kind's tests run on a
     # build, then the chosen ctest alone; the formatter and the linter
     # sit out a change confined to the tests.
@@ -350,9 +353,9 @@ def test_the_native_checks_run_per_package_in_order(
     out = run_package(scoped)
     assert "clang-format" not in out
     assert ran == [
-        ("configure", "acme-native", ("tests/test_native.cpp",)),
-        ("build", "acme-native", ("tests/test_native.cpp",)),
-        ("ctest", "acme-native", ("tests/test_native.cpp",)),
+        ("build.configure", "acme-native", ("tests/test_native.cpp",)),
+        ("build.compile", "acme-native", ("tests/test_native.cpp",)),
+        ("test.ctest", "acme-native", ("tests/test_native.cpp",)),
     ]
 
 

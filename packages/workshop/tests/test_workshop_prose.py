@@ -327,28 +327,26 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
     # neither the test layer's nor ruff, which judges no kind present.
     agent = render_gate(root, AGENT)
     assert "acme-native" not in agent and "format" not in agent
-    assert "- layering: layering; rewrites under --fix" in agent
+    assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
     assert "the package kinds present are none." in agent
     _member(root, "cpp", "cpp-conan")
     agent = render_gate(root, AGENT)
-    assert "- acme-native: lint on cpp-conan packages" in agent
+    assert "- lint.acme-native: judges cpp-conan packages" in agent
     assert (
-        "- format (ruff): format on python, cpp-conan packages; rewrites under --fix"
+        "- format.ruff: judges python, cpp-conan packages; rewrites under --fix"
         in agent
     )
     assert "typecheck" not in agent
     assert "the package kinds present are cpp-conan." in agent
     _member(root, "py", "python")
     agent = render_gate(root, AGENT)
-    assert (
-        "- typecheck (basedpyright, mypy, ty, pyrefly): typecheck on python packages"
-        in agent
-    )
+    for tool in ("basedpyright", "mypy", "ty", "pyrefly"):
+        assert f"- typecheck.{tool}: judges python packages" in agent
     assert "the package kinds present are cpp-conan, python." in agent
     human = render_gate(root, HUMAN)
     assert human != agent
-    assert "| acme-native | lint | none | cpp-conan | no |" in human
-    assert "| format | format | ruff | python, cpp-conan | yes |" in human
+    assert "| lint.acme-native | none | cpp-conan | no |" in human
+    assert "| format.ruff | ruff | python, cpp-conan | yes |" in human
 
 
 def test_a_shipped_fragment_lands_byte_for_byte_and_an_edit_is_kept_and_named(

@@ -212,6 +212,11 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
             mounted.append(layer)
         present.append(layer)
         _graft_contributions(present, declared, active, grafted)
+    # A layer's checks registered as it mounted; their verbs join the
+    # ones the workshop generated as it loaded.
+    from livery.workshop._checks import generate_verbs
+
+    generate_verbs()
     return tuple(mounted)
 
 

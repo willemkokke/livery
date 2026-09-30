@@ -124,9 +124,9 @@ def test_two_checks_carrying_one_file_for_one_kind_break_the_nearest_fragment(
         )
     found = _names(Subject(LAYER, kinds=(child,)), "nearest-fragment")
     assert found == [
-        "nearest-fragment: kind acme-child .clang-tidy: acme-tidy and acme-tidy-too"
-        " both carry it for the kind; the render would pick one by name, so one of"
-        " them yields"
+        "nearest-fragment: kind acme-child .clang-tidy: lint.acme-tidy and"
+        " lint.acme-tidy-too both carry it for the kind; the render would pick one"
+        " by name, so one of them yields"
     ]
 
 
@@ -167,11 +167,11 @@ def test_the_nearest_kinds_fragment_renders(acme: None) -> None:
         )
     assert package_fragment("acme-child", ".clang-tidy") == (
         "# acme-child\n",
-        "acme-child-tidy",
+        "lint.acme-child-tidy",
     )
     assert package_fragment("acme-parent", ".clang-tidy") == (
         "# acme-parent\n",
-        "acme-parent-tidy",
+        "lint.acme-parent-tidy",
     )
     assert _names(Subject(LAYER, kinds=(parent, child)), "nearest-fragment") == []
 
@@ -207,7 +207,11 @@ def test_the_builtin_kinds_and_checks_pass_every_clause() -> None:
         "python-nanobind",
         "cpp-conan",
     }
-    assert {record.name for record in subject.checks} >= {"format", "lint", "test"}
+    assert {record.name for record in subject.checks} >= {
+        "format.ruff",
+        "lint.ruff",
+        "test.pytest",
+    }
     assert judge(subject) == []
 
 

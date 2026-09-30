@@ -64,7 +64,7 @@ class Package:
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
         checks: The options the package sets on its checks, from the
-            contract's ``[checks.<name>]`` tables, check name to
+            contract's ``[checks.<role>.<tool>]`` tables, check name to
             ``(option, value)`` pairs; the check registry validates
             them against what each record declares.
         categories: The package's own reassignments of its paths
@@ -159,20 +159,34 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 )
             reassigned.append((str(category), tuple(patterns)))
         checks_table = contract.get("checks", {})
-        if not isinstance(checks_table, dict) or not all(
-            isinstance(options, dict) for options in checks_table.values()
-        ):
+        if not isinstance(checks_table, dict):
             raise ValueError(
                 f"{directory.name}: [checks] holds one table per check,"
-                " [checks.<name>] with the options the check declares"
+                " [checks.<role>.<tool>] with the options the check declares"
             )
-        options_by_check = tuple(
-            (
-                str(name),
-                tuple((str(option), value) for option, value in options.items()),
-            )
-            for name, options in checks_table.items()
-        )
+        options: list[tuple[str, tuple[tuple[str, object], ...]]] = []
+        for role, tools in checks_table.items():
+            if not isinstance(tools, dict):
+                raise ValueError(
+                    f"{directory.name}: [checks] sets {role} to {tools!r}; a"
+                    f" check's options live under [checks.{role}.<tool>], the"
+                    " check's own table"
+                )
+            loose = [key for key, value in tools.items() if not isinstance(value, dict)]
+            if loose:
+                raise ValueError(
+                    f"{directory.name}: [checks.{role}] sets {', '.join(loose)} on"
+                    f" the role {role}; a check's options live under"
+                    f" [checks.{role}.<tool>], the check's own table"
+                )
+            for tool, table in tools.items():
+                options.append(
+                    (
+                        f"{role}.{tool}",
+                        tuple((str(key), value) for key, value in table.items()),
+                    )
+                )
+        options_by_check = tuple(options)
         publish = release.get("publish", True) if isinstance(release, dict) else True
         if not isinstance(publish, bool):
             problems.append(

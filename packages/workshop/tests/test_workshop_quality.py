@@ -15,6 +15,17 @@ from livery.workshop import _quality
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
+# The python checks that judge and never rewrite, sorted, as the fakes
+# below record them: one type check per type checker.
+PYTHON_JUDGES = (
+    "test.pytest",
+    "typecheck.basedpyright",
+    "typecheck.mypy",
+    "typecheck.pyrefly",
+    "typecheck.ty",
+    "typecomplete.basedpyright",
+)
+
 
 def _package(tmp_path: Path) -> Package:
     member = tmp_path / "packages" / "one"
@@ -45,13 +56,18 @@ def _record(
 
         return body
 
+    def typecheck(*args: object, **kwargs: object) -> None:
+        named(f"typecheck.{kwargs['only']}")(*args, **kwargs)
+
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
-    monkeypatch.setattr("livery.workshop._packages.verify_workspace", named("layering"))
-    monkeypatch.setattr(_python, "run_format", named("format"))
-    monkeypatch.setattr(_python, "run_lint", named("lint"))
-    monkeypatch.setattr(_python, "run_typecheck", named("typecheck"))
-    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete"))
-    monkeypatch.setattr(_python, "run_test", named("test"))
+    monkeypatch.setattr(
+        "livery.workshop._packages.verify_workspace", named("layering.graph")
+    )
+    monkeypatch.setattr(_python, "run_format", named("format.ruff"))
+    monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
+    monkeypatch.setattr(_python, "run_typecheck", typecheck)
+    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
+    monkeypatch.setattr(_python, "run_test", named("test.pytest"))
     return ran, calls
 
 
@@ -70,16 +86,11 @@ def test_the_scoped_gate_runs_every_verb(
 ) -> None:
     ran, _ = _record(monkeypatch, tmp_path)
     _quality._scoped_check((_package(tmp_path),))
-    # kindcheck retired with the registry: a python package has no
-    # per-package check, and the layering check runs in a scoped gate.
-    assert sorted(ran) == [
-        "format",
-        "layering",
-        "lint",
-        "test",
-        "typecheck",
-        "typecomplete",
-    ]
+    # A python package has no per-package check, and the layering
+    # check runs in a scoped gate.
+    assert sorted(ran) == sorted(
+        ("format.ruff", "layering.graph", "lint.ruff", *PYTHON_JUDGES)
+    )
 
 
 def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
@@ -95,12 +106,16 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     # Style and types over the directory itself, the tests run as the
     # one suite, no type-completeness, and no kind check for it.
     by_verb = {c["verb"]: c for c in calls}
-    assert by_verb["format"]["paths"] == ("tests",)
-    assert by_verb["lint"]["paths"] == ("tests",)
-    assert by_verb["typecheck"]["paths"] == ("tests",)
-    assert by_verb["typecomplete"]["args"] == ((),)
-    assert by_verb["test"]["packages"] == (unit,)
-    assert by_verb["test"]["scoped"] is True
+    assert by_verb["format.ruff"]["paths"] == ("tests",)
+    assert by_verb["lint.ruff"]["paths"] == ("tests",)
+    for tool in ("basedpyright", "mypy"):
+        assert by_verb[f"typecheck.{tool}"]["paths"] == ("tests",)
+    # ty and pyrefly read their configured whole whatever the scope.
+    for tool in ("ty", "pyrefly"):
+        assert "paths" not in by_verb[f"typecheck.{tool}"]
+    assert by_verb["typecomplete.basedpyright"]["args"] == ((),)
+    assert by_verb["test.pytest"]["packages"] == (unit,)
+    assert by_verb["test.pytest"]["scoped"] is True
     # Beside a package, the unit rides along and the package keeps its
     # own paths.
     ran.clear()
@@ -108,8 +123,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     package = _package(tmp_path)
     _quality._scoped_check((package, unit))
     by_verb = {c["verb"]: c for c in calls}
-    assert by_verb["format"]["paths"] == ("packages/one/tests", "tests")
-    assert by_verb["test"]["packages"] == (package, unit)
+    assert by_verb["format.ruff"]["paths"] == ("packages/one/tests", "tests")
+    assert by_verb["test.pytest"]["packages"] == (package, unit)
 
 
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
@@ -120,18 +135,13 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     ran, calls = _record(monkeypatch, tmp_path)
     package = _package(tmp_path)
     _quality._scoped_check((package,), fix=True)
-    assert ran[:2] == ["format", "lint"]
-    assert sorted(ran) == [
-        "format",
-        "layering",
-        "lint",
-        "test",
-        "typecheck",
-        "typecomplete",
-    ]
+    assert ran[:2] == ["format.ruff", "lint.ruff"]
+    assert sorted(ran) == sorted(
+        ("format.ruff", "layering.graph", "lint.ruff", *PYTHON_JUDGES)
+    )
     rewrites = {c["verb"]: c for c in calls[:2]}
-    assert rewrites["format"]["check"] is False
-    assert rewrites["lint"]["fix"] is True
+    assert rewrites["format.ruff"]["check"] is False
+    assert rewrites["lint.ruff"]["fix"] is True
     # Every fixer that applies rewrites before any judge, the layering
     # fix and a layer's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
@@ -160,9 +170,9 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     finally:
         _checks.restore(state)
     fixed = between[0]
-    assert fixed[:2] == ["format", "lint"]
-    assert "layering" in fixed and "acme-fix" in fixed
-    assert sorted(ran[len(fixed) :]) == ["test", "typecheck", "typecomplete"]
+    assert fixed[:2] == ["format.ruff", "lint.ruff"]
+    assert "layering.graph" in fixed and "acme-fix" in fixed
+    assert sorted(ran[len(fixed) :]) == list(PYTHON_JUDGES)
     assert "acme-judged" not in ran
 
 
@@ -230,11 +240,12 @@ def test_safe_fix_keeps_imports_and_foreign_files_pass_through(
     assert "import os" not in victim.read_text()
 
 
-def test_check_refuses_both_fix_flags_and_the_role_verbs_are_gone() -> None:
+def test_check_refuses_both_fix_flags_and_no_role_verb_is_written_by_hand() -> None:
     with pytest.raises((SystemExit, Exception)) as caught:
         _quality.check("tasks.py", fix=True, safe_fix=True)
     assert "Pass one" in str(caught.value)
-    # The registry's checks are the gate's surface: no verb duplicates one.
+    # The role verbs are generated from the registry: none is written
+    # here beside the checks it would duplicate.
     for verb in ("format", "lint", "typecheck", "typecomplete", "test"):
         assert not hasattr(_quality, verb), verb
 
@@ -298,6 +309,9 @@ def _whole_gate(
 
         return body
 
+    def typecheck(*args: object, **kwargs: object) -> None:
+        ran.append(f"typecheck.{kwargs['only']}")
+
     @contextlib.contextmanager
     def watched():
         ran.append("<parallel")
@@ -313,16 +327,18 @@ def _whole_gate(
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.setattr(_quality, "parallel", watched)
-    monkeypatch.setattr(_quality, "template_check", named("template_check"))
-    monkeypatch.setattr("livery.workshop._packages.verify_workspace", named("layering"))
+    monkeypatch.setattr(_quality, "template_check", named("template.check"))
     monkeypatch.setattr(
-        "livery.workshop._provenance.provenance_check", named("provenance_check")
+        "livery.workshop._packages.verify_workspace", named("layering.graph")
     )
-    monkeypatch.setattr(_python, "run_format", named("format"))
-    monkeypatch.setattr(_python, "run_lint", named("lint"))
-    monkeypatch.setattr(_python, "run_typecheck", named("typecheck"))
-    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete"))
-    monkeypatch.setattr(_python, "run_test", named("test"))
+    monkeypatch.setattr(
+        "livery.workshop._provenance.provenance_check", named("provenance.check")
+    )
+    monkeypatch.setattr(_python, "run_format", named("format.ruff"))
+    monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
+    monkeypatch.setattr(_python, "run_typecheck", typecheck)
+    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
+    monkeypatch.setattr(_python, "run_test", named("test.pytest"))
 
     def rewritten(root: object, run: object, tree: str) -> str:
         trees.append(tree)
@@ -361,25 +377,25 @@ def _whole_gate(
     return ran, trees
 
 
-def test_the_whole_gate_is_eight_members_in_one_parallel_block(
+def test_the_whole_gate_runs_every_member_in_one_parallel_block(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=False, base="")
     assert ran[0] == "<parallel"
     assert ran[-1] == ">parallel"
-    # kindcheck retired with the registry (its cpp-conan records judge
-    # no package here) and the layering check joined the base's set.
-    assert sorted(ran[1:-1]) == [
-        "format",
-        "layering",
-        "lint",
-        "provenance_check",
-        "template_check",
-        "test",
-        "typecheck",
-        "typecomplete",
-    ]
+    # The cpp-conan checks judge no package here, and the examples
+    # check finds no example to read.
+    assert sorted(ran[1:-1]) == sorted(
+        (
+            "format.ruff",
+            "layering.graph",
+            "lint.ruff",
+            "provenance.check",
+            "template.check",
+            *PYTHON_JUDGES,
+        )
+    )
 
 
 def test_a_workspace_without_python_starts_no_python_check(
@@ -389,9 +405,9 @@ def test_a_workspace_without_python_starts_no_python_check(
     _quality._run_check(full=True, fix=False, base="")
     # The checks without claims read what their own body decides; the
     # python ones claim .py files, and none is there to read.
-    assert sorted(ran[1:-1]) == ["layering", "provenance_check", "template_check"]
+    assert sorted(ran[1:-1]) == ["layering.graph", "provenance.check", "template.check"]
     out = capsys.readouterr().out
-    for name in ("format", "lint", "test", "typecheck", "typecomplete"):
+    for name in ("format.ruff", "lint.ruff", *PYTHON_JUDGES):
         assert f"  {name}: no file it reads in the workspace; not run" in out
 
 
@@ -401,17 +417,16 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=True, base="")
     opened = ran.index("<parallel")
-    # The three rewriters, in order, before any block is opened: they
-    # write the files the judges then read.
-    # The layering check rewrites too since its fix mode landed, so it
-    # is the fourth rewriter and no longer a judge under --fix.
-    assert ran[:opened] == ["format", "lint", "provenance_check", "layering"]
-    assert sorted(ran[opened + 1 : -1]) == [
-        "template_check",
-        "test",
-        "typecheck",
-        "typecomplete",
+    # The rewriters, in order, before any block is opened: they write
+    # the files the judges then read, and none of them is a judge under
+    # --fix.
+    assert ran[:opened] == [
+        "format.ruff",
+        "lint.ruff",
+        "provenance.check",
+        "layering.graph",
     ]
+    assert sorted(ran[opened + 1 : -1]) == ["template.check", *PYTHON_JUDGES]
     assert ran[-1] == ">parallel"
 
 

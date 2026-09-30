@@ -113,7 +113,7 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     assert ".clang-tidy" in read_rendered(member)
     assert settle_fragment_file(member, ".clang-tidy", data) == ""
     # The check withdrawn: the edited arm first, kept and named.
-    unregister_check("clang-tidy", by="acme.brand")
+    unregister_check("lint.clang-tidy", by="acme.brand")
     (member / ".clang-tidy").write_text("Checks: mine\n")
     assert (
         judge_fragment_file(member, ".clang-tidy", data, "packages/native/.clang-tidy")
@@ -124,9 +124,9 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     )
     assert (member / ".clang-tidy").is_file()
     # The unedited arm: stale, named as drift, removed by the apply.
-    register_check(_checks._CHECKS.get("clang-tidy") or _restore_clang_tidy())
+    register_check(_checks._CHECKS.get("lint.clang-tidy") or _restore_clang_tidy())
     settle_fragment_file(member, ".clang-tidy", data)
-    unregister_check("clang-tidy", by="acme.brand")
+    unregister_check("lint.clang-tidy", by="acme.brand")
     (line,) = judge_fragment_file(
         member, ".clang-tidy", data, "packages/native/.clang-tidy"
     )
@@ -142,7 +142,7 @@ def _restore_clang_tidy() -> CheckRecord:
     from livery.workshop._checks import _register_builtin
 
     _register_builtin()
-    return _checks._CHECKS["clang-tidy"]
+    return _checks._CHECKS["lint.clang-tidy"]
 
 
 def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
@@ -195,8 +195,8 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
 def test_unregistering_the_ruff_checks_removes_every_trace(restored_checks) -> None:
     from livery.workshop._checks import extensions, tools_for_kind
 
-    unregister_check("format", by="acme.brand")
-    unregister_check("lint", by="acme.brand")
+    unregister_check("format.ruff", by="acme.brand")
+    unregister_check("lint.ruff", by="acme.brand")
     composed = compose_project(_data())
     assert "[tool.ruff" not in composed["pyproject.toml"]
     assert "ruff" not in composed[".vscode/settings.json"]
@@ -229,10 +229,10 @@ def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None
         )
     )
     found = package_fragment("python-nanobind", ".clang-tidy")
-    assert found is not None and found[1] == "acme-tidy"
+    assert found is not None and found[1] == "lint.acme-tidy"
     assert package_fragment("cpp-conan", ".clang-tidy") == (
         _fragments.CLANG_TIDY,
-        "clang-tidy",
+        "lint.clang-tidy",
     )
 
 

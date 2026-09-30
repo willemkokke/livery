@@ -151,17 +151,17 @@ def test_an_undeclared_layer_is_taken_at_the_current_version() -> None:
 
 def test_the_gate_names_what_a_layer_registered_and_withdrew(restored_checks) -> None:
     assert _checks.narrowings() == ()
-    register_check(CheckRecord("brand-lint", "lint", _noop, layer="acme.brand"))
-    unregister_check("typecheck", by="acme.brand")
+    register_check(CheckRecord("brand", "lint", _noop, layer="acme.brand"))
+    unregister_check("typecheck.mypy", by="acme.brand")
     assert _checks.narrowings() == (
-        "  brand-lint: registered by acme.brand",
-        "  typecheck: withdrawn by acme.brand",
+        "  lint.brand: registered by acme.brand",
+        "  typecheck.mypy: withdrawn by acme.brand",
     )
     # A layer withdrawing its own check narrows nothing the base owned.
-    unregister_check("brand-lint", by="acme.brand")
-    assert _checks.narrowings() == ("  typecheck: withdrawn by acme.brand",)
+    unregister_check("lint.brand", by="acme.brand")
+    assert _checks.narrowings() == ("  typecheck.mypy: withdrawn by acme.brand",)
     # Registering the name again clears the withdrawal.
-    register_check(CheckRecord("typecheck", "typecheck", _noop))
+    register_check(CheckRecord("mypy", "typecheck", _noop))
     assert _checks.narrowings() == ()
 
 

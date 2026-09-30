@@ -176,7 +176,7 @@ convention = "google"
 "**/_fragments.py" = ["E501"]
 """
 
-TYPECHECKERS = r"""[tool.basedpyright]
+BASEDPYRIGHT = r"""[tool.basedpyright]
 include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
 # A conan recipe is conan's input, read by conan's own interpreter
 # where the conan package lives; the workspace venv never has it, so
@@ -196,8 +196,9 @@ stubPath = "typings"
 pythonVersion = "{{ python_floor }}"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
+"""
 
-[tool.mypy]
+MYPY = r"""[tool.mypy]
 # Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
 # run the usage-checking half (check_untyped_defs, on via strict), so
 # every test body type-checks as consumer code without demanding
@@ -248,8 +249,9 @@ disallow_untyped_decorators = true
 # the generator's business, not drift.
 module = "*.toolroom.stubs.*"
 warn_unused_ignores = false
+"""
 
-[tool.ty]
+TY = r"""[tool.ty]
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
@@ -261,8 +263,9 @@ python-platform = "all"
 python-version = "{{ python_floor }}"
 # The tool stubs `{{ runner_prog }} tools.restub` writes.
 extra-paths = ["typings"]
+"""
 
-[tool.pyrefly]
+PYREFLY = r"""[tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
 # strict demands @override, and `typing.override` is Python 3.12+; a
 # zero-dependency 3.11 library cannot spell it without a

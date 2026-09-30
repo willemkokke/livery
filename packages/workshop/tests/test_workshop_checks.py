@@ -109,29 +109,29 @@ def test_a_registered_check_runs_narrows_and_is_replaced_by_name(
         seen.append(("fix", None))
 
     register_check(CheckRecord("spy", "lint", spy, narrowing=PATHS, fix=fixer))
-    assert "spy" in check_names() and "lint" in roles()
+    assert "lint.spy" in check_names() and "lint" in roles()
     member = _package(tmp_path, "one", "python")
     whole = GateContext(root=tmp_path, packages=(member,))
-    assert "spy" in judges(whole)
-    run_check("spy", whole)
+    assert "lint.spy" in judges(whole)
+    run_check("lint.spy", whole)
     assert seen == [("spy", None)]
     # Narrowed to the subset it is handed.
     seen.clear()
     scoped = GateContext(root=tmp_path, packages=(member,), subset=(member,))
-    run_check("spy", scoped)
+    run_check("lint.spy", scoped)
     assert seen == [("spy", ("packages/one",))]
     # Under --fix the rewriter runs, and is not judged again.
     seen.clear()
     fixing = GateContext(root=tmp_path, packages=(member,), fix=True)
-    assert rewriters(fixing)[-1] == "spy"
-    run_check("spy", fixing, fix=True)
+    assert rewriters(fixing)[-1] == "lint.spy"
+    run_check("lint.spy", fixing, fix=True)
     assert seen == [("fix", None)]
-    assert "spy" not in judges(fixing)
+    assert "lint.spy" not in judges(fixing)
     # Re-registering the name replaces the record: how a layer swaps a tool.
     register_check(CheckRecord("spy", "lint", _noop))
-    assert check_for("spy").narrowing == NONE
-    unregister_check("spy")
-    assert "spy" not in check_names()
+    assert check_for("lint.spy").narrowing == NONE
+    unregister_check("lint.spy")
+    assert "lint.spy" not in check_names()
 
 
 def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
@@ -152,11 +152,13 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     native = _package(tmp_path, "native", "cpp-conan")
     # The probe judges the native package alone, announcing it by name;
     # a workspace of python packages schedules no probe at all.
-    assert "probe" in judges(GateContext(root=tmp_path, packages=(py, native)))
-    assert "probe" not in judges(GateContext(root=tmp_path, packages=(py,)))
-    run_check("probe", GateContext(root=tmp_path, packages=(py, native)))
+    assert "lint.probe" in judges(GateContext(root=tmp_path, packages=(py, native)))
+    assert "lint.probe" not in judges(GateContext(root=tmp_path, packages=(py,)))
+    run_check("lint.probe", GateContext(root=tmp_path, packages=(py, native)))
     assert ran == ["acme-native"]
-    assert "  probe: packages/native runs (cpp-conan kind)" in capsys.readouterr().out
+    assert (
+        "  lint.probe: packages/native runs (cpp-conan kind)" in capsys.readouterr().out
+    )
     # A role the kind's contract lacks skips by name, as the gate prints it.
     assert gated((py, native), "typecheck") == (py,)
     assert (
@@ -190,21 +192,21 @@ def test_an_option_on_an_unknown_check_or_an_undeclared_option_refuses(
 ) -> None:
     from livery.workshop._checks import check_for, option_problems, option_value
 
-    package = _member_with(tmp_path, "[checks.nothing]\nenabled = false\n")
+    package = _member_with(tmp_path, "[checks.nothing.x]\nenabled = false\n")
     (problem,) = option_problems((package,))
     assert problem.startswith(
-        "packages/x/workshop.toml: [checks.nothing] names no registered check"
+        "packages/x/workshop.toml: [checks.nothing.x] names no registered check"
     )
-    package = _member_with(tmp_path, "[checks.test]\nworkers = 3\n")
+    package = _member_with(tmp_path, "[checks.test.pytest]\nworkers = 3\n")
     (problem,) = option_problems((package,))
     assert "declares no option 'workers'; its options are parallel, enabled" in problem
-    package = _member_with(tmp_path, '[checks.test]\nparallel = "no"\n')
+    package = _member_with(tmp_path, '[checks.test.pytest]\nparallel = "no"\n')
     (problem,) = option_problems((package,))
-    assert problem.endswith("[checks.test] parallel is bool, not 'no'")
+    assert problem.endswith("[checks.test.pytest] parallel is bool, not 'no'")
     with pytest.raises(_FAILURES, match="parallel is bool"):
-        option_value(check_for("test"), package, "parallel")
+        option_value(check_for("test.pytest"), package, "parallel")
     with pytest.raises(_FAILURES, match="declares no option 'workers'"):
-        option_value(check_for("test"), package, "workers")
+        option_value(check_for("test.pytest"), package, "workers")
 
 
 def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
@@ -218,6 +220,27 @@ def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     with pytest.raises(ValueError, match=r"\[checks\] holds one table per check"):
         discover_packages(tmp_path)
+    # A check's options live in its own table, never on its role: the
+    # role's table holds one table per tool.
+    member.joinpath("workshop.toml").write_text(
+        'kind = "python"\nname = "livery-x"\n[checks.test]\nparallel = false\n'
+    )
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"x: \[checks.test\] sets parallel on the role test; a check's options"
+            r" live under \[checks.test.<tool>\], the check's own table"
+        ),
+    ):
+        discover_packages(tmp_path)
+    member.joinpath("workshop.toml").write_text(
+        'kind = "python"\nname = "livery-x"\n[checks]\ntest = 3\n'
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"x: \[checks\] sets test to 3; a check's options live under",
+    ):
+        discover_packages(tmp_path)
 
 
 def test_a_package_turns_a_check_off_and_is_skipped_by_name(
@@ -225,15 +248,18 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
 ) -> None:
     from livery.workshop._checks import check_for, enabled, option_value
 
-    package = _member_with(tmp_path, "[checks.typecomplete]\nenabled = false\n")
-    assert option_value(check_for("typecomplete"), package, "enabled") is False
-    assert option_value(check_for("test"), package, "enabled") is True
-    assert enabled("typecomplete", (package,)) == ()
-    assert (
-        "typecomplete: packages/x skips (turned off in packages/x/workshop.toml)"
-        in (capsys.readouterr().out)
+    package = _member_with(
+        tmp_path, "[checks.typecomplete.basedpyright]\nenabled = false\n"
     )
-    assert enabled("test", (package,)) == (package,)
+    record = check_for("typecomplete.basedpyright")
+    assert option_value(record, package, "enabled") is False
+    assert option_value(check_for("test.pytest"), package, "enabled") is True
+    assert enabled("typecomplete.basedpyright", (package,)) == ()
+    assert (
+        "typecomplete.basedpyright: packages/x skips (turned off in"
+        " packages/x/workshop.toml)" in (capsys.readouterr().out)
+    )
+    assert enabled("test.pytest", (package,)) == (package,)
 
 
 def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
@@ -242,7 +268,7 @@ def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
     from livery.workshop._backends import _python
     from livery.workshop._checks import GateContext, check_for
 
-    serial = _member_with(tmp_path, "[checks.test]\nparallel = false\n")
+    serial = _member_with(tmp_path, "[checks.test.pytest]\nparallel = false\n")
     other = tmp_path / "packages" / "y"
     other.mkdir()
     other.joinpath("workshop.toml").write_text('kind = "python"\nname = "livery-y"\n')
@@ -261,7 +287,7 @@ def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
     monkeypatch.setattr(_python, "run_test", fake_run_test)
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)
     ctx = GateContext(root=tmp_path, packages=packages)
-    check_for("test").run(ctx)
+    check_for("test.pytest").run(ctx)
     assert runs == [
         ((), ("packages/y",)),
         (("-n", "0"), ("packages/x",)),

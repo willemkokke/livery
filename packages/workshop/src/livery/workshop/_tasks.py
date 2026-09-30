@@ -19,6 +19,7 @@ from __future__ import annotations
 from livery.footman import fail, task
 
 # Importing registers each module's tasks with footman.
+from livery.workshop import _checks as _checks_module
 from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _clean,
@@ -69,3 +70,8 @@ def layers() -> None:
     for line in lines:
         print(line)
     print("  ... then the instance's own files, which always win")
+
+
+# The role verbs, generated from the checks registered above: every
+# module that registers a check was imported first.
+_checks_module.generate_verbs()

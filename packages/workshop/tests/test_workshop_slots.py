@@ -113,8 +113,8 @@ def test_the_records_fill_the_dev_group_and_addopts_and_a_withdrawn_check_leaves
     assert "hypothesis>=6" not in _list("python.dev-group")
     # Unregistering the check that contributes withdraws its lines;
     # registering it again restores them.
-    record = check_for("typecheck")
-    unregister_check("typecheck", by="acme.brand")
+    record = check_for("typecheck.mypy")
+    unregister_check("typecheck.mypy", by="acme.brand")
     assert "mypy>=1.14" not in _list("python.dev-group")
     register_check(record)
     assert "mypy>=1.14" in _list("python.dev-group")

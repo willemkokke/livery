@@ -261,19 +261,6 @@ disallow_untyped_decorators = true
 module = "*.toolroom.stubs.*"
 warn_unused_ignores = false
 
-[tool.ty]
-# Third gate. Scope: the packages themselves; the consumer seam in
-# tests is already double-checked by basedpyright and mypy.
-[tool.ty.src]
-include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/cbor/src"]
-
-[tool.ty.environment]
-# Every platform at once (ty checks the union), 3.11 floor.
-python-platform = "all"
-python-version = "3.11"
-# The tool stubs `fm tools.restub` writes.
-extra-paths = ["typings"]
-
 [tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
 # strict demands @override, and `typing.override` is Python 3.12+; a
@@ -298,6 +285,19 @@ python-version = "3.11"
 # zero today.
 deprecated = "error"
 unnecessary-type-conversion = "error"
+
+[tool.ty]
+# Third gate. Scope: the packages themselves; the consumer seam in
+# tests is already double-checked by basedpyright and mypy.
+[tool.ty.src]
+include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/cbor/src"]
+
+[tool.ty.environment]
+# Every platform at once (ty checks the union), 3.11 floor.
+python-platform = "all"
+python-version = "3.11"
+# The tool stubs `fm tools.restub` writes.
+extra-paths = ["typings"]
 
 [tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or
