@@ -132,9 +132,14 @@ to the nearest kind's fragment, one owner per kind and file; a path's
 category is the most specific rule's, the nearer kind winning a tie
 between kinds and two rules of one kind never tying; every check a
 check runs `after` is registered, and following them never leads back
-to it; and a layer's `WORKSHOP_FOR` maps each target to a module that
-imports. The workshop's own kinds and checks pass the same clauses in
-its test suite.
+to it; a layer's `WORKSHOP_FOR` maps each target to a module that
+imports; a check's fragments render with the kit's probe answers, the
+composed `pyproject.toml` still parses, and a per-package file matches
+its render until a person edits it, when the drift gate names it; and
+once a check is withdrawn and no other check renders its per-package
+file for the kind, an unedited copy is removed and an edited one kept.
+The workshop's own kinds and checks pass the same clauses in its test
+suite.
 
 The documentation site is a layer inside the workshop wheel,
 `livery.workshop.layers.docs`, listed in `[workspace] layers` as a

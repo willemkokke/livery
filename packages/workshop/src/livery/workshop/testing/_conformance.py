@@ -6,10 +6,14 @@ import importlib
 import importlib.util
 import inspect
 import sys
+import tempfile
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from livery.workshop import _checks
 from livery.workshop._categories import (
     CategoryError,
     CategoryRule,
@@ -23,7 +27,7 @@ from livery.workshop._checks import (
     answering,
     checks_by_name,
 )
-from livery.workshop._fragments import package_fragment
+from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
 from livery.workshop._layers import FOR_ATTRIBUTE
 from livery.workshop._packages import Package
@@ -91,6 +95,8 @@ NEAREST_FRAGMENT = "nearest-fragment"
 CATEGORY_TABLE = "category-table"
 CHECK_ORDER = "check-order"
 CONTRIBUTION_MODULES = "contribution-modules"
+FRAGMENT_DRIFT = "fragment-drift"
+WITHDRAWN_FILE = "withdrawn-file"
 
 
 # The backend protocol.
@@ -454,6 +460,164 @@ def _contribution_modules(subject: Subject) -> list[Violation]:
     ]
 
 
+# A layer's configuration files, through the workshop's own render.
+
+
+def _probe_answers(kind: str = "") -> dict[str, Any]:
+    """The answers the kit renders a layer's fragments with.
+
+    A workspace of one python member and one native member, so a
+    fragment's loops over either run, rendering *kind*'s package files.
+    """
+    return {
+        "packages": [
+            {
+                "dir": "probe",
+                "name": "acme-probe",
+                "dev": "acme-probe",
+                "kind": "package-python",
+            },
+            {"dir": "native", "name": "acme-native", "kind": "package-cpp-conan"},
+        ],
+        "python_floor": "3.11",
+        "namespace_package": "acme",
+        "runner_prog": "fm",
+        "project_name": "acme",
+        "docs_site_url": "",
+        "template_source_label": "kit",
+        "kind": kind,
+    }
+
+
+def _package_fragments(subject: Subject) -> list[tuple[CheckRecord, Fragment]]:
+    """The subject's fragments for per-package files, each with its check."""
+    return [
+        (record, fragment)
+        for record in subject.checks
+        for fragment in record.fragments
+        if fragment.kind
+    ]
+
+
+def _project_drift(subject: Subject) -> list[Violation]:
+    """The composed project files, judged where the subject carries fragments."""
+    from livery.workshop import _templates
+
+    owners = sorted(
+        record.name
+        for record in subject.checks
+        for fragment in record.fragments
+        if fragment.file == "pyproject.toml"
+    )
+    if not owners:
+        return []
+    try:
+        composed = _templates.compose_fragments(_probe_answers())
+    except Exception as error:
+        return [
+            Violation(FRAGMENT_DRIFT, "the project files", f"do not render: {error}")
+        ]
+    try:
+        tomllib.loads(composed.get("pyproject.toml", ""))
+    except tomllib.TOMLDecodeError as error:
+        return [
+            Violation(
+                FRAGMENT_DRIFT,
+                "pyproject.toml",
+                f"composed with the fragment of {', '.join(owners)}, it is not"
+                f" TOML: {error}",
+            )
+        ]
+    return []
+
+
+def _package_drift(fragment: Fragment) -> str:
+    """What goes wrong rendering *fragment* into a probe package; empty when nothing."""
+    from livery.workshop import _templates
+
+    data = _probe_answers(fragment.kind)
+    relative = f"packages/probe/{fragment.file}"
+    with tempfile.TemporaryDirectory() as scratch:
+        member = Path(scratch)
+        try:
+            _templates.settle_fragment_file(member, fragment.file, data)
+        except Exception as error:
+            return f"does not render: {error}"
+        drift = _templates.judge_fragment_file(member, fragment.file, data, relative)
+        if drift:
+            return f"drifts from its own render: {drift[0]}"
+        copy = member / fragment.file
+        copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
+        if not _templates.judge_fragment_file(member, fragment.file, data, relative):
+            return "a hand edit of the rendered file is not named as drift"
+    return ""
+
+
+def _fragment_drift(subject: Subject) -> list[Violation]:
+    violations = _project_drift(subject)
+    for record, fragment in _package_fragments(subject):
+        problem = _package_drift(fragment)
+        if problem:
+            where = f"check {record.name} {fragment.file} for {fragment.kind}"
+            violations.append(Violation(FRAGMENT_DRIFT, where, problem))
+    return violations
+
+
+def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
+    """What goes wrong when *record* leaves a rendered file behind; empty when nothing.
+
+    The render writes the file into a probe package, a person edits it
+    or not, the check is withdrawn, and the render settles the file
+    again. A file another check still renders for the kind is not
+    withdrawn at all, and says nothing here.
+    """
+    from livery.workshop import _templates
+
+    if record.name not in checks_by_name():
+        return ""
+    data = _probe_answers(fragment.kind)
+    state = _checks.snapshot()
+    with tempfile.TemporaryDirectory() as scratch:
+        member = Path(scratch)
+        copy = member / fragment.file
+        try:
+            _templates.settle_fragment_file(member, fragment.file, data)
+            if not copy.is_file():
+                return ""  # it did not render: the drift clause names that
+            if edited:
+                copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
+            _checks.unregister_check(record.name)
+            if package_fragment(fragment.kind, fragment.file) is not None:
+                return ""
+            _templates.settle_fragment_file(member, fragment.file, data)
+        except Exception:
+            return ""  # a render that fails is the drift clause's to name
+        finally:
+            _checks.restore(state)
+        if edited and not copy.is_file():
+            return (
+                "an edited copy is removed once the check is withdrawn;"
+                " contract 11 keeps it as a local override"
+            )
+        if not edited and copy.is_file():
+            return (
+                "an unedited copy stays once the check is withdrawn; contract 11"
+                " removes it"
+            )
+    return ""
+
+
+def _withdrawn_file(subject: Subject) -> list[Violation]:
+    violations: list[Violation] = []
+    for record, fragment in _package_fragments(subject):
+        where = f"check {record.name} {fragment.file} for {fragment.kind}"
+        for edited in (False, True):
+            problem = _withdraw(record, fragment, edited=edited)
+            if problem:
+                violations.append(Violation(WITHDRAWN_FILE, where, problem))
+    return violations
+
+
 CLAUSES: tuple[Clause, ...] = (
     Clause(
         BACKEND_PROTOCOL,
@@ -485,6 +649,19 @@ CLAUSES: tuple[Clause, ...] = (
         "A layer declares its contributions to other layers as a map from a"
         " target layer's import path to a module that imports.",
         _contribution_modules,
+    ),
+    Clause(
+        FRAGMENT_DRIFT,
+        "A check's fragments render, the composed pyproject.toml parses, and a"
+        " per-package file matches its render until a person edits it, when"
+        " the drift gate names it.",
+        _fragment_drift,
+    ),
+    Clause(
+        WITHDRAWN_FILE,
+        "A per-package file whose check is withdrawn, and which no other check"
+        " renders for the kind, is removed when unedited and kept when edited.",
+        _withdrawn_file,
     ),
 )
 """Every clause, in the order the kit judges them."""
