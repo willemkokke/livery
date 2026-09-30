@@ -187,6 +187,14 @@ class CiContract:
     )
 
 
+#: The private-members policies an extractor applies: ``public``
+#: documents what its handler's default filter keeps, ``all`` every
+#: member. The docs assembly composes the policy from the layers.
+PUBLIC_MEMBERS = "public"
+ALL_MEMBERS = "all"
+MEMBERS_POLICIES = (PUBLIC_MEMBERS, ALL_MEMBERS)
+
+
 @dataclass(frozen=True)
 class Extractor:
     """How a kind's API reference is extracted for the site.
@@ -207,7 +215,8 @@ class Extractor:
         sources: The handler's search paths for a package, relative
             to the workspace root.
         config: The handler's configuration lines given every
-            package's search paths and the inventories.
+            package's search paths, the inventories, and the
+            members policy, one of `MEMBERS_POLICIES`.
         inventories: The inventories cross-references resolve
             against.
     """
@@ -215,7 +224,7 @@ class Extractor:
     name: str
     pages: Callable[[Package], list[tuple[str, str]]]
     sources: Callable[[Package], list[str]]
-    config: Callable[[list[str], tuple[str, ...]], list[str]]
+    config: Callable[[list[str], tuple[str, ...], str], list[str]]
     inventories: tuple[str, ...] = ()
 
 

@@ -37,7 +37,7 @@ from livery.toolroom.tools import (
     ty,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._kinds import Extractor
+from livery.workshop._kinds import ALL_MEMBERS, Extractor
 from livery.workshop._packages import Neighbours, Package
 from livery.workshop._state import RunContext, slug
 
@@ -2182,11 +2182,19 @@ def api_sources(package: Package) -> list[str]:
     return found
 
 
-def mkdocstrings_lines(paths: list[str], inventories: tuple[str, ...]) -> list[str]:
-    """The mkdocstrings python handler block for the given source paths."""
+def mkdocstrings_lines(
+    paths: list[str], inventories: tuple[str, ...], members: str
+) -> list[str]:
+    """The mkdocstrings python handler block for the given source paths.
+
+    *members* is the composed policy: ``public`` keeps the handler's
+    default filter, which hides members named with one leading
+    underscore; ``all`` writes an empty filter list, so every member
+    is documented.
+    """
     listed = ", ".join(f'"{path}"' for path in paths)
     linked = ", ".join(f'"{url}"' for url in inventories)
-    return [
+    lines = [
         "",
         "[project.plugins.mkdocstrings.handlers.python]",
         f"paths = [{listed}]",
@@ -2207,6 +2215,9 @@ def mkdocstrings_lines(paths: list[str], inventories: tuple[str, ...]) -> list[s
         "summary = true",
         "heading_level = 2",
     ]
+    if members == ALL_MEMBERS:
+        lines.append("filters = []")
+    return lines
 
 
 #: The Python kind's extractor: mkdocstrings' python handler over the

@@ -10,11 +10,14 @@ import pytest
 
 from livery.footman import Failed
 from livery.workshop._docs import (
+    MEMBERS_SLOT,
     NAV_BEGIN,
     NAV_END,
     materialise_module_docs,
     module_docs_dir,
     mount_package_docs,
+    named_package,
+    scoped_config,
     zensical_config,
 )
 from livery.workshop._packages import discover_packages
@@ -214,6 +217,70 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
     api = next(part for part in core["core"] if "API" in part)
     assert api["API"][0] == {"acme.core": "packages/core/api/index.md"}
+
+
+# The private-members policy, a slot the layers fill: the refusal
+# first, then the default, then a contribution and the nearest rule.
+
+
+def _python_options(config: str) -> dict[str, object]:
+    """The python handler's options table of an assembled config."""
+    parsed = tomllib.loads(config)
+    options = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"][
+        "options"
+    ]
+    assert isinstance(options, dict)
+    return options
+
+
+@pytest.fixture
+def members_layers() -> Iterator[None]:
+    """Withdraw what the test layers contributed to the members slot."""
+    from livery.workshop._slots import withdraw
+
+    yield
+    for by in ("acme.base", "acme.site"):
+        withdraw(MEMBERS_SLOT, by=by)
+
+
+def test_a_members_policy_outside_public_and_all_refuses_naming_them(
+    members_layers: None,
+) -> None:
+    from livery.workshop._slots import SlotError, contribute
+
+    with pytest.raises(
+        SlotError,
+        match=r"acme\.site contributes 'some' to slot 'docs\.members', whose values"
+        r" are 'public', 'all'",
+    ):
+        contribute(MEMBERS_SLOT, "some", layer="acme.site", by="acme.site")
+
+
+def test_without_a_contribution_the_handler_keeps_its_default_filter(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    assert "filters" not in _python_options(zensical_config(root))
+    preview = scoped_config(root, named_package(root, "core"))
+    assert "filters" not in _python_options(preview)
+
+
+def test_all_members_writes_an_empty_filter_and_the_nearest_layer_wins(
+    tmp_path: Path, members_layers: None
+) -> None:
+    from livery.workshop._slots import contribute, withdraw
+
+    root = _workspace(tmp_path)
+    contribute(MEMBERS_SLOT, "all", layer="acme.base", by="acme.base")
+    assert _python_options(zensical_config(root))["filters"] == []
+    preview = scoped_config(root, named_package(root, "core"))
+    assert _python_options(preview)["filters"] == []
+    # The nearest layer decides: a later contribution wins over an
+    # earlier one, and its withdrawal restores the earlier one.
+    contribute(MEMBERS_SLOT, "public", layer="acme.site", by="acme.site")
+    assert "filters" not in _python_options(zensical_config(root))
+    withdraw(MEMBERS_SLOT, by="acme.site")
+    assert _python_options(zensical_config(root))["filters"] == []
 
 
 # Phase 3: changelogs and the release view. Fallbacks first.
@@ -1636,7 +1703,7 @@ def test_a_second_extractor_reaches_the_config_through_the_kind_record(
         "carve",
         pages=lambda package: [("index.md", "acme.bare")],
         sources=lambda package: [f"packages/{package.directory.name}/carved"],
-        config=lambda paths, inventories: [
+        config=lambda paths, inventories, members: [
             "",
             "[project.plugins.mkdocstrings.handlers.carve]",
             "paths = [" + ", ".join(f'"{p}"' for p in paths) + "]",
