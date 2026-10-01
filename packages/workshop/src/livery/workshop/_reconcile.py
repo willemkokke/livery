@@ -237,7 +237,7 @@ def _reexec(root: Path) -> None:
     prog = footman.prog()
     if os.environ.get(_GUARD):
         _say(
-            f"{prog}: the environment changed again after re-running;"
+            f"{prog}: this command already re-ran once on updated code;"
             " continuing on the loaded code"
         )
         return

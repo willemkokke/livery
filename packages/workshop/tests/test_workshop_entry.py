@@ -466,7 +466,7 @@ def test_the_rerun_guard_refuses_a_second_lap(
     monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "1")
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("exec despite the guard"))
     _reconcile._reexec(tmp_path)
-    assert "changed again" in capsys.readouterr().err
+    assert "already re-ran once on updated code" in capsys.readouterr().err
 
 
 def test_a_missing_uv_degrades_the_rerun_to_a_note(

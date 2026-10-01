@@ -25,7 +25,9 @@ commit and `fm submit --armed` again for a real failure.
 `fm submit --armed` without `--no-follow` watches until the merge or
 the first blocker, and self-heals the two that need no decision
 (behind the base, or conflicting with it) by integrating the base and
-re-submitting. Use it when the merge is the next thing you need.
+re-submitting. The re-submit is a fresh `fm submit` on the merged
+code, so the gate judges the merged tree with the code it carries.
+Use it when the merge is the next thing you need.
 
 ## Several changes at once
 

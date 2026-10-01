@@ -104,12 +104,26 @@ def _seed(base: Path) -> None:
     _git(clone, "commit", "-m", "feat: the first change")
 
 
+def _stays(root: Path) -> None:
+    """The handoff to a fresh process, standing in: it cannot start here.
+
+    A heal hands the submit to a fresh ``fm submit`` on the merged code;
+    under test that would exec a real one, so the submit carries on in
+    this process, as it does when the handoff cannot start.
+    """
+
+
 @pytest.fixture
-def rig(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, SubmitGit]:
+def rig(
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[FakeForge, SubmitGit]:
     """A bare origin, a clone on a feature branch, and the fake."""
+    from livery.workshop import _reconcile
+
     seeds("submit", _seed)
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="test")
+    monkeypatch.setattr(_reconcile, "_reexec", _stays)
     return fake, SubmitGit(tmp_path / "clone", fake)
 
 
@@ -1560,6 +1574,58 @@ def test_the_self_heal_gate_narrows_the_same_way(
     assert answered == [EXIT_BEHIND]
     assert calls == [{"full": False, "fix": False, "base": "main"}] * 2
     assert git.behind_base("main") == 0  # the heal integrated the advance
+
+
+def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The merge can carry the code this process runs, so the gate after
+    # it belongs to a fresh submit on the merged code. Above, the
+    # handoff cannot start and the heal gates in this process.
+    from livery.workshop import _reconcile
+
+    fake, git = rig
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
+    other = git.root.parent / "other"
+    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
+    _git(other, "config", "user.email", "other@livery.local")
+    _git(other, "config", "user.name", "Other")
+    (other / "elsewhere.txt").write_text("independent\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: independent change")
+    _git(other, "push", "origin", "main")
+    answered: list[int] = []
+
+    def _follow(*args: object, **kwargs: object) -> None:
+        answered.append(EXIT_BEHIND)
+        raise SystemExit(EXIT_BEHIND)
+
+    handed: list[Path] = []
+
+    def _handed_on(root: Path) -> None:
+        handed.append(root)
+        raise SystemExit(0)
+
+    monkeypatch.setattr("livery.workshop._submit.follow", _follow)
+    monkeypatch.setattr(_reconcile, "_reexec", _handed_on)
+    git.auto_settle = False
+    before = git.head_sha()
+    with pytest.raises(SystemExit) as caught:
+        _submit(fake, git, gate=True, armed=True)
+    assert caught.value.code == 0
+    assert answered == [EXIT_BEHIND]
+    assert handed == [git.root]
+    # The first gate ran here; the one after the merge is the fresh
+    # submit's, on the merged code.
+    assert calls == [{"full": False, "fix": False, "base": "main"}]
+    out = capsys.readouterr().out
+    assert (
+        f"the checkout moved from {before[:12]} to {git.head_sha()[:12]}; the"
+        " submit continues on that code" in out
+    )
 
 
 # --- the one keep-or-drop rule, and the submit's own teardown ------------------
