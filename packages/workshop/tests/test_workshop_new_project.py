@@ -62,21 +62,25 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
     monkeypatch.setattr("livery.workshop._new_project._git", informed)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
-    # The first lock resolves against the published index over the
-    # network and installs what it names; the suite records that it was
-    # asked for and writes the lock.
-    locked: list[Path] = []
 
-    def _locked(root: Path) -> None:
-        locked.append(root)
+    # A lock resolves against the published index over the network and
+    # installs what it names. Every step of a birth reaches it through
+    # one engine, the newborn's first lock and a wired member's alike,
+    # so the suite fakes the engine and writes an empty lock.
+    def _locked(root: Path, **_flags: object) -> None:
         # A lock of the schema with nothing in it: the sync's renders read
         # it, and a file that is not a lock would refuse there.
         (root / "tools.lock").write_text('{"schema": 1, "hosts": [], "tools": {}}\n')
 
-    monkeypatch.setattr("livery.workshop._new_project._sync_tools", _locked)
-    monkeypatch.setattr(
-        "livery.workshop._new_project._locked_roots", locked, raising=False
-    )
+    monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _locked)
+
+    # Nothing in a birth test reaches the network: a fetch that escapes
+    # the fakes refuses here, naming its host, instead of reading the
+    # live site, whose answers a deploy can change mid-run.
+    def offline(address: object, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError(f"a birth test reached the network: {address}")
+
+    monkeypatch.setattr("socket.create_connection", offline)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     (tmp_path / "gitconfig").write_text(
         "[user]\n\temail = t@l\n\tname = T\n[init]\n\tdefaultBranch = main\n"
@@ -94,6 +98,25 @@ def _birth(**overrides: Any) -> None:
     }
     arguments.update(overrides)
     new_project(**arguments)
+
+
+def test_a_birth_test_that_reaches_the_network_refuses_naming_the_host() -> None:
+    # The fallback before the births: a fetch the fakes miss fails here,
+    # by name, rather than passing or failing with whatever the live
+    # site answers at that moment.
+    from livery.strongroom import fetch_url
+
+    with (
+        pytest.raises(
+            AssertionError, match=r"reached the network: .*docs\.willem\.net"
+        ),
+        fetch_url(
+            "https://docs.willem.net/livery/tools/pointer.json",
+            connect_timeout=5,
+            transfer_timeout=5,
+        ),
+    ):
+        pass
 
 
 def test_birth_end_to_end_and_the_second_run_resumes(
