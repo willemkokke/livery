@@ -26,7 +26,11 @@ opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
 ruling, and the design section, the contracts, phases 3 to 9 and the
 open list carry their consequences. Next: the remainders of phases 5 and
-8, phases 7b and 9, and the layer split as its own plan. The design
+8, phases 7b and 9, and the layer split as its own plan. On 2026-10-01
+the empty shell plan (`notes/20260930-empty-shell-plan.md`), built in
+another session, made every layer a distribution of its own under
+`livery.workshop.layers`; phases 7b, 8 and 9 are restated for it, and
+8 and 9 follow its phases 2 and 4. The design
 section below is written to graduate into `packages/workshop/docs/`
 after review; everything else is working record.
 
@@ -139,15 +143,15 @@ language is a layer derived from the base: `livery.workshop.layers.python`
 carries the python package kind, its template, its checks
 (formatting, lint, one type checker, the tests with their coverage
 floors) and its tools; `livery.workshop.layers.cpp` carries the C++ kinds
-the same way, and `livery.workshop.nanobind`, a kind layer rather
+the same way, and `livery.workshop.layers.nanobind`, a kind layer rather
 than a language, depends on both. Three more layers derive from the
 base and register no language: `livery.workshop.layers.docs` assembles the
 site, judges the docs and runs the examples, asking each kind record
-for its extractor and its example runner; `livery.workshop.playground`
+for its extractor and its example runner; `livery.workshop.layers.playground`
 depends on docs and python and adds the browser sandbox and the
-second run of the examples inside it; `livery.workshop.claude` writes
+second run of the examples inside it; `livery.workshop.layers.claude` writes
 the agent's entry file from the prose fragments the listed layers
-deliver. A house, `livery.housekeeping` here, is a layer of opinions:
+deliver. A house, `livery.workshop.layers.housekeeping` here, is a layer of opinions:
 a second and a third type checker, a docstring convention, a voice,
 a theme, each a registration or content, listed by the project that
 wants it. It depends on the base alone and contributes to each
@@ -719,7 +723,7 @@ its fix, `fm layers` and the doctor's discovery landed 2026-09-28
   serial-then-parallel ordering stays implemented once (contract
   16).
 - **Contributions by target.** A layer's plugin module declares
-  `WORKSHOP_FOR = {"livery.workshop.layers.python": "livery.housekeeping.python", ...}`,
+  `WORKSHOP_FOR = {"livery.workshop.layers.python": "livery.workshop.layers.housekeeping.python", ...}`,
   a map from target layer to the module carrying the registrations
   for that target. The mount grafts a contribution module when both
   its owner and its target are mounted, whichever mounts later; a
@@ -1301,8 +1305,9 @@ Instead:
 - `release_templates` publishes every tree-shipping layer in the
   wave, each to a branch of the one artifact named by the layer,
   tagged `<layer>/v<version>` in lockstep with the layer's release
-  tag; a layer inside the workshop wheel publishes nothing, its
-  templates ride the `workshop` series. The default branch holds a
+  tag. Every layer is a distribution of its own, so every layer that
+  ships a tree publishes its own series; the base's templates are the
+  `workshop` series. The default branch holds a
   README naming the series. `composition.toml` goes.
 - The render composes on demand: for each listed layer that ships a
   tree, the series at the version `uv.lock` pins for that layer,
@@ -1329,15 +1334,15 @@ Instead:
 ### Phase 8: the house layer, and the base's small set
 
 The proof that the seam separates the workshop from livery's
-opinions. The house is `livery.housekeeping` (ruled 2026-09-28,
+opinions. The house is `livery.workshop.layers.housekeeping` (ruled 2026-09-28,
 open item 13), a member of this workspace listed after the
 languages, depending on the base alone. Its plugin module declares
-`WORKSHOP_FOR`, and `livery.housekeeping.python` carries the
+`WORKSHOP_FOR`, and `livery.workshop.layers.housekeeping.python` carries the
 registrations for the python layer: mypy on its three platforms, ty
 and pyrefly under the `types` role, `D` with the google convention
 contributed to the ruff slot, and the three tools contributed to
-the `dev` group slot; a `livery.housekeeping.cpp` and a
-`livery.housekeeping.nanobind` follow when the house has opinions
+the `dev` group slot; a `livery.workshop.layers.housekeeping.cpp` and a
+`livery.workshop.layers.housekeeping.nanobind` follow when the house has opinions
 there. `typecomplete` stays the python layer's, optional per
 package. Its prose fragments carry `voice.interaction-voice.md`,
 `standards.documentation-standards.md` and the house half of
@@ -1385,6 +1390,13 @@ nothing else in its tree: everything else it says is a fragment, a
 slot contribution, a region or content, all in the wheel, and a
 need none of those can carry is first a gap in the base template.
 
+The house is a distribution of its own,
+`livery-workshop-layers-housekeeping`, born after the empty shell
+plan's phase 2 (namespace packages and the `api` module) and its
+phase 4 (the docs layer ships apart), so it starts in that layout and
+ships the way the docs layer does; that plan's phase 14 then moves
+our layout rules into it.
+
 Needs phases 3, 4 and 7b: a check moved out of the base takes its
 configuration and its tool with it, the contributions need the
 mount of phase 3, and the seeds need the series of 7b. Independent
@@ -1424,7 +1436,7 @@ project.
   the `workshop` series is unchanged by the house's presence, proven
   by a test over the published trees.
 - A project listing the house and the python layer mounts
-  `livery.housekeeping.python` and no C++ contribution, `fm layers`
+  `livery.workshop.layers.housekeeping.python` and no C++ contribution, `fm layers`
   says so, and its `for` entry lists python alone after `--fix`,
   proven by the conformance suite.
 
@@ -1432,8 +1444,10 @@ project.
 
 The Claude pieces leave the base (ruled 2026-09-28): `.claude/`
 skills, hooks and settings, the `hooks.pre-bash` verb, and the
-assembly of `CLAUDE.md` move into `livery.workshop.claude`, a layer
-depending on the base. Its one job beyond delivering its content is
+assembly of `CLAUDE.md` move into `livery.workshop.layers.claude`, a
+layer depending on the base and a distribution of its own,
+`livery-workshop-layers-claude`, built after the empty shell plan's
+phase 4 ships the docs layer apart. Its one job beyond delivering its content is
 the entry file: one import line per delivered fragment in section
 order, the repository's own fragments last, written by `fm sync`
 only while the layer is listed. The prose fragments stay with the
@@ -1468,12 +1482,12 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 | The three basedpyright execution environments naming this repository's packages in the base template | the repository's own tail region in the root `pyproject.toml` (phase 3c); the lines themselves are the tracked content pass's debt |
 | The forge layer's `.forge.dev.env` rule in the base `.gitignore` template | the forge layer's fragment for `.gitignore` (phase 4) |
 | The hand-written `[tool.ruff]` stubs in four packages | the claim-derived `per-file-ignores` (phase 4b); the docstring carve-outs inside them are the content pass's |
-| The four checkers and the voice fragments shipped by the base | `livery.housekeeping` (phase 8) |
+| The four checkers and the voice fragments shipped by the base | `livery.workshop.layers.housekeeping` (phase 8) |
 | The `dev` group's hand-written tool lines and pytest's `addopts` in the base template | slots the check records fill (phase 4) |
 | The three parse walks inside the layering check | the one traversal with registered rules (phase 3) |
 | footman's page-as-session harness with its three markers, and the playground assets hand-copied into two packages' docs | examples as files run by the docs layer, assets staged at build (phase 6, then the playground layer) |
 | The pre-composed template artifact, `composition.toml`, and the last-layer publisher | template series per layer, composed on demand (phase 7b) |
-| The Claude skills, hooks and the `CLAUDE.md` assembly in the base | `livery.workshop.claude` (phase 9) |
+| The Claude skills, hooks and the `CLAUDE.md` assembly in the base | `livery.workshop.layers.claude` (phase 9) |
 
 ## Decision record
 
@@ -3085,6 +3099,16 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   named; and the builtins passing all nine clauses. Phase 7's
   acceptance is met: the builtin kinds and checks pass the kit in
   `fm check`, and a broken subject fails each clause by name.
+- 2026-10-01, Willem: the empty shell plan is built in another
+  session, and this plan's remaining phases take it into account.
+  The difference that reaches them is that every layer is a
+  distribution of its own under `livery.workshop.layers`, named after
+  its import path. Phase 7b loses the case of a layer inside the
+  workshop wheel; the house is
+  `livery.workshop.layers.housekeeping` and the agent layer
+  `livery.workshop.layers.claude`, as are the nanobind and
+  playground layers in the design section; phase 8 follows the
+  empty shell plan's phases 2 and 4, and phase 9 its phase 4.
 
 ## Open
 
@@ -3123,7 +3147,9 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 12. Resolved 2026-09-28: the sets as tabled in the design section; the python
     layer's ruff set is today's minus `D`; the docstring sentence
     moves with the rule. Decision record.
-13. Resolved 2026-09-28: `livery.housekeeping`. Decision record.
+13. Resolved 2026-09-28: `livery.housekeeping`, moved to
+    `livery.workshop.layers.housekeeping` by the empty shell plan's
+    ruling of 2026-09-30. Decision record.
 14. Resolved 2026-09-28: `WORKSHOP_TOOLS` on the plugin module. Decision record.
 15. Resolved 2026-09-28: the repository's own override of a
     check's configuration lives in the managed file's region (phase
@@ -3197,3 +3223,8 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     2026-09-30), and no code reads the field; registration still
     judges its value. Removing a field breaks contract 8's additive
     records, so the removal waits for a ruling. Owner: Willem.
+31. How the changelog layer delivers `cliff.toml`, which the empty
+    shell plan's phase 8 moves out of the base kind. As a file of the
+    layer's template tree it needs phase 7b's series first; as a
+    fragment through the check's configuration (phase 4) it does not.
+    Owner: the empty shell plan's phase 8.
