@@ -1818,6 +1818,46 @@ def test_the_base_is_the_recorded_parent_while_origin_has_it(
     assert resolve_base(git, "release", given=True) == "release"
 
 
+def test_a_stacked_branch_whose_parent_merged_moves_its_own_commits_before_the_push(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, git = rig
+    root = git.root
+    # The parent: two commits, the second fixing the first, pushed; the
+    # child starts on it, as `fm start --from` leaves it.
+    _git(root, "checkout", "-b", "feat/0-parent", "origin/main")
+    (root / "shared.txt").write_text("a\nb\nc\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: the parent")
+    (root / "shared.txt").write_text("a\nB\nc\n")
+    _git(root, "commit", "-am", "fix: the parent's fix")
+    _git(root, "push", "-u", "origin", "feat/0-parent")
+    start = git.head_sha()
+    _git(root, "checkout", "-B", "feat/1-first", "feat/0-parent")
+    git.record_stack("feat/1-first", "feat/0-parent", start)
+    (root / "shared.txt").write_text("a\nB\nc\nd\n")
+    _git(root, "commit", "-am", "feat: the child")
+    # The parent lands on main as one squash commit, and origin deletes
+    # its branch: a merge of main into the child would replay the squash
+    # against the parent's own two commits.
+    _git(root, "checkout", "-b", "landing", "origin/main")
+    _git(root, "merge", "--squash", "feat/0-parent")
+    _git(root, "commit", "-m", "feat: the parent (#0)")
+    _git(root, "push", "origin", "landing:main")
+    _git(root, "push", "origin", "--delete", "feat/0-parent")
+    _git(root, "checkout", "feat/1-first")
+    _git(root, "branch", "-D", "landing")
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    out = capsys.readouterr().out
+    assert "feat/0-parent has merged: feat/1-first stands on main now" in out
+    subjects = _git(root, "log", "--format=%s", "origin/main..HEAD").split("\n")[:-1]
+    assert subjects == ["feat: the child"]
+    # The rewrite reached origin: the push went with the lease.
+    assert _git(root, "ls-remote", "origin", "feat/1-first").split()[0] == (
+        git.head_sha()
+    )
+
+
 def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     rig: tuple[FakeForge, SubmitGit],
     capsys: pytest.CaptureFixture[str],

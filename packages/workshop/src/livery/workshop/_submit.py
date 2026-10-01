@@ -404,7 +404,7 @@ def resolve_base(git: GitOps, base: str, *, given: bool) -> str:
     """
     if given:
         return base
-    parent = git.config_get(f"branch.{git.current_branch()}.workshop-parent")
+    parent, _tip = git.stack(git.current_branch())
     if not parent:
         return base
     if parent in git.remote_branches(parent):
@@ -784,6 +784,33 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
         )
 
 
+def _restack_before_push(git: GitOps) -> bool:
+    """Move a stacked branch onto its moved or merged parent; whether it moved.
+
+    The pull request of a branch whose parent merged is retargeted to
+    main, and a merge of main into it replays the parent's squash
+    against the parent's own commits; the restack moves the branch's
+    own commits alone ([livery.workshop._sync.restack][]), so the push
+    that follows needs the lease. A dirty tree is left to the gate's
+    fold, and a restack with conflicts refuses naming the verb that
+    resolves it.
+    """
+    branch = git.current_branch()
+    parent, _tip = git.stack(branch)
+    if not parent or not git.is_clean():
+        return False
+    from livery.workshop._sync import restack
+
+    moved = restack(git, branch, interactive=False)
+    if moved is None:
+        fail(
+            f"{branch} could not follow its parent without conflicts: run"
+            f" `{footman.prog()} sync` where a person can resolve them, then"
+            f" `{footman.prog()} submit` again"
+        )
+    return moved
+
+
 def submit_flow(
     repo: Repository,
     git: GitOps,
@@ -815,6 +842,7 @@ def submit_flow(
     # they could have passed, and the title is decided from the
     # branch as it is, before a fold adds a commit of its own.
     git.fetch()
+    force = _restack_before_push(git) or force
     plan = prepare(git, title=title, body=body, base=base)
     # A first open only: a pull request that exists, open, merged, or
     # closed, keeps its title, and the merged and closed cases get

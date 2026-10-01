@@ -1054,5 +1054,7 @@ def test_start_from_refuses_an_unpushed_parent_then_starts_on_it_and_records_it(
     start("docs/child", worktree=False, from_="feat/9-parent")
     assert git.current_branch() == "docs/child"
     assert git.head_sha() == parent_head
-    assert git.config_get("branch.docs/child.workshop-parent") == "feat/9-parent"
+    # The parent and the commit the child started from, so a sync moves
+    # the child's own commits alone once the parent moves or merges.
+    assert git.stack("docs/child") == ("feat/9-parent", parent_head)
     assert "parent: feat/9-parent" in capsys.readouterr().out

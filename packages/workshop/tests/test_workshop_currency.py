@@ -113,6 +113,141 @@ def test_a_clean_rebase_lands_and_the_remote_follows_leased(
     assert log.strip() == ""
 
 
+# A stacked branch: `fm start --from` records its parent and the commit
+# it started from, and sync moves the branch's own commits alone.
+
+
+def _stacked(clone: Path, *, record_start: bool = True) -> str:
+    """A parent of two commits and a child started on it, both pushed.
+
+    The parent's second commit edits a line its first wrote, and the
+    child adds a line after it: a squash of the parent then carries
+    neither of the parent's commits as they were. Returns the commit the
+    child started from.
+    """
+    _git(clone, "checkout", "-b", "feat/1-parent")
+    (clone / "shared.txt").write_text("a\nb\nc\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "feat: the parent")
+    (clone / "shared.txt").write_text("a\nB\nc\n")
+    _git(clone, "commit", "-am", "fix: the parent's fix")
+    _git(clone, "push", "-u", "origin", "feat/1-parent")
+    start = _git(clone, "rev-parse", "HEAD").strip()
+    _git(clone, "checkout", "-b", "feat/2-child")
+    git = GitOps(clone)
+    if record_start:
+        git.record_stack("feat/2-child", "feat/1-parent", start)
+    else:
+        git.config_set("branch.feat/2-child.workshop-parent", "feat/1-parent")
+    (clone / "shared.txt").write_text("a\nB\nc\nd\n")
+    _git(clone, "commit", "-am", "feat: the child")
+    _git(clone, "push", "-u", "origin", "feat/2-child")
+    return start
+
+
+def _squash_parent(tmp_path: Path, origin: Path) -> None:
+    """Land the parent on main as one squash commit and delete its branch."""
+    other = _other(tmp_path, origin, email="forge@livery.local")
+    _git(other, "fetch", "origin")
+    _git(other, "merge", "--squash", "origin/feat/1-parent")
+    _git(other, "commit", "-m", "feat: the parent (#1)")
+    _git(other, "push", "origin", "main")
+    _git(other, "push", "origin", "--delete", "feat/1-parent")
+
+
+def _own(clone: Path, base: str) -> list[str]:
+    """The subjects the branch carries beyond *base*, newest first."""
+    return _git(clone, "log", "--format=%s", f"{base}..HEAD").split("\n")[:-1]
+
+
+def test_a_stacked_branch_whose_own_commit_conflicts_is_left_as_it_was(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, origin = _rig(seeds)
+    _stacked(clone)
+    _squash_parent(tmp_path, origin)
+    # Main then writes the line the child's own commit adds.
+    other = _other(tmp_path, origin, email="forge@livery.local")
+    (other / "shared.txt").write_text("a\nB\nc\nD\n")
+    _git(other, "commit", "-am", "feat: main's own line")
+    _git(other, "push", "origin", "main")
+    before = _git(clone, "rev-parse", "HEAD").strip()
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert "the rebase has conflicts" in capsys.readouterr().out
+    assert _git(clone, "rev-parse", "HEAD").strip() == before
+    assert "rebase" not in _git(clone, "status")
+    assert GitOps(clone).stack("feat/2-child")[0] == "feat/1-parent"
+
+
+def test_a_stacked_branch_with_no_recorded_start_falls_back_to_a_plain_rebase(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Started before the start commit was recorded: git's own matching
+    # drops a parent that landed as one commit and no other, so a parent
+    # of two commits conflicts against its own squash.
+    clone, origin = _rig(seeds)
+    _stacked(clone, record_start=False)
+    _squash_parent(tmp_path, origin)
+    before = _git(clone, "rev-parse", "HEAD").strip()
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert "the rebase has conflicts" in capsys.readouterr().out
+    assert _git(clone, "rev-parse", "HEAD").strip() == before
+
+
+def test_a_stacked_branch_moves_its_own_commits_onto_main_once_its_parent_merged(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, origin = _rig(seeds)
+    _stacked(clone)
+    _squash_parent(tmp_path, origin)
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert "rebased feat/2-child onto origin/main" in out
+    assert "feat/1-parent has merged: feat/2-child stands on main now" in out
+    assert "leased force-push" in out
+    assert _own(clone, "origin/main") == ["feat: the child"]
+    assert (clone / "shared.txt").read_text() == "a\nB\nc\nd\n"
+    assert GitOps(clone).stack("feat/2-child") == ("", "")
+    remote = _git(clone, "ls-remote", "origin", "feat/2-child").split()[0]
+    assert remote == _git(clone, "rev-parse", "HEAD").strip()
+
+
+def test_a_stacked_branch_follows_its_parent_when_the_parent_moves(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, origin = _rig(seeds)
+    _stacked(clone)
+    # The parent is rewritten on origin: rebased onto a moved main and
+    # pushed with force, as a sync of the parent does.
+    _advance_main(tmp_path, origin)
+    other = _other(tmp_path, origin)
+    _git(other, "fetch", "origin")
+    _git(other, "checkout", "-b", "feat/1-parent", "origin/feat/1-parent")
+    _git(other, "rebase", "origin/main")
+    _git(other, "push", "--force", "origin", "feat/1-parent")
+    parent_tip = _git(other, "rev-parse", "HEAD").strip()
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert "rebased feat/2-child onto origin/feat/1-parent" in capsys.readouterr().out
+    assert _own(clone, "origin/feat/1-parent") == ["feat: the child"]
+    assert GitOps(clone).stack("feat/2-child") == ("feat/1-parent", parent_tip)
+
+
+def test_a_stacked_branch_stays_on_its_open_parent_when_main_moves(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, origin = _rig(seeds)
+    start = _stacked(clone)
+    _advance_main(tmp_path, origin)
+    before = _git(clone, "rev-parse", "HEAD").strip()
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert (
+        "feat/2-child is stacked on feat/1-parent: main reaches it when"
+        " feat/1-parent merges"
+    ) in capsys.readouterr().out
+    assert _git(clone, "rev-parse", "HEAD").strip() == before
+    assert GitOps(clone).stack("feat/2-child") == ("feat/1-parent", start)
+
+
 def test_a_moved_remote_branch_fast_forwards_when_behind_only(
     seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
