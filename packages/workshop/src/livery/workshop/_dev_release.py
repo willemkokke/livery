@@ -19,11 +19,11 @@ from pathlib import Path
 
 import livery.footman as footman
 from livery.footman import fail
-from livery.workshop import _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
+from livery.workshop._release_notes import release_notes
 from livery.workshop._update import latest_released
 from livery.workshop._versions import derive_version
 
@@ -189,7 +189,8 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
         backend_for(package).stamp_version(package).stamp(
             semver_to_pep440(plan.version)
         )
-        excerpt = _cliff.unreleased_entry(root, package)
+        notes = release_notes()
+        excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():
             original = readme.read_text("utf-8")
             readme.write_text(

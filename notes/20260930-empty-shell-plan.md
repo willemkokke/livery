@@ -1,8 +1,9 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; Willem's go on 2026-10-01. Phases 1, 3, 7 and 11a built
-(issues #998, #1000, #1006, #1011, #1018); the others not started. Fourteen phases, each
+day; Willem's go on 2026-10-01. Phases 1, 3, 7, 8a and 11a built
+(issues #998, #1000, #1006, #1011, #1022, #1018); manifest dispatch
+waits to be revisited; the others not started. Fourteen phases, each
 gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
@@ -714,23 +715,55 @@ Acceptance of 7b, with the evidence of 2026-10-01:
 
 ### Phase 8: the changelog layer
 
-Deliverables:
+Two changes: 8a cuts the seam in the base, 8b ships the layer as its
+own distribution (Willem, 2026-10-01: a separate wheel from the
+start).
 
-- `packages/workshop-layers-changelog/`, carrying
-  `livery.workshop.layers.changelog`: `ReleaseNotes` over git-cliff,
-  `cliff.toml` and the `git_cliff` tool leave the `base` kind for the
-  layer, and the changelog pages reach the docs layer through
-  `WORKSHOP_FOR`.
-- The wave records notes when the layer is mounted and uses the
-  commit subjects when it is not, printing which.
+**8a, built (issue #1022).**
+
+- `livery.workshop._release_notes`: the `ReleaseNotes` protocol
+  (`entry`, `record`, `verify`) and its registry, one provider at a
+  time, withdrawn by the layer that registered it.
+- `prepare_release`, `verify_release`, the dev release's excerpt and
+  the docs layer's unreleased section ask the registered provider.
+  With none, the version is stamped, no notes are written or judged,
+  and the train prints that no mounted layer records them.
+- The git-cliff and `CHANGELOG.md` provider is `CliffChangelog` in
+  `_cliff.py`, registered by the base until 8b; `_release.py`
+  imports `_cliff` for that registration.
+
+Acceptance of 8a, with the evidence of 2026-10-01:
+
+- `fm check --fix` exits 0 (1m59s); every existing release test
+  passes unchanged with the provider registered.
+- With no provider, `prepare_release` stamps the version, writes no
+  changelog and prints why:
+  `test_without_a_notes_provider_prepare_stamps_and_writes_no_notes`.
+- One provider at a time, withdrawn by its layer:
+  `test_the_notes_provider_is_one_registration_withdrawn_by_its_layer`.
+
+**8b, not started.**
+
+- `packages/workshop-layers-changelog/`, distribution
+  `livery-workshop-layers-changelog`, carrying
+  `livery.workshop.layers.changelog`: `CliffChangelog` and `_cliff.py`
+  move there and the layer registers the provider at mount; the
+  base's registration and `_release.py`'s import of `_cliff` go.
+- `cliff.toml`, its template and the `git_cliff` tool leave the
+  `base` kind for the layer. The base kind manages `cliff.toml` today
+  (`managed=("cliff.toml",)`), and no registry lets a layer add a
+  managed file to a kind: 8b adds one, or the layer renders the file
+  through its template overlay and the base kind stops naming it.
+- The tool lock's by-name refusal of a host copy of `git_cliff`
+  (`PINNED_TOOLS`) becomes the layer's declaration.
 - This workspace lists the layer; the template seeds it for a new
   project.
 
-Acceptance:
+Acceptance of 8b:
 
 - `fm check` exits 0.
-- A workspace without the layer releases, and its PR body is the
-  commit subjects: `test_a_release_without_the_changelog_layer_uses_the_subjects`.
+- A workspace without the layer releases with no notes:
+  `test_a_release_without_the_changelog_layer_writes_no_notes`.
 - `fm docs.build` renders every package's changelog page.
 - `fm ci.e2e --layer=livery.workshop.layers.changelog` is green once
   the local loop plan's phase 3b exists; until then an open line.
@@ -1036,6 +1069,10 @@ Acceptance:
   30 ms, not the 55 ms estimated on 2026-09-30: that estimate
   charged the forge and the store for standard-library modules
   footman imports anyway.
+- 2026-10-01, phase 8a: without a provider the train writes no notes
+  at all. The release pull request's body was never the notes (it
+  is the member summary and the Mined-At line), so the plan's
+  "commit subjects in the PR body" has nothing to replace.
 - 2026-09-30: the ecosystem half is the workshop's `Ecosystem`, and
   `livery.forge.Registry` stays the read-only probe with
   `SimpleRegistry` in the forge, as the kind hierarchy plan ruled on

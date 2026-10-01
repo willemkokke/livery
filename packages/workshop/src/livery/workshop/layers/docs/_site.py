@@ -1087,10 +1087,11 @@ def changelog_page(root: Path, package: Package) -> str | None:
     if not changelog.is_file():
         return None
     text = changelog.read_text("utf-8")
-    try:
-        from livery.workshop import _cliff
+    from livery.workshop._release_notes import release_notes
 
-        unreleased = _cliff.unreleased_entry(root, package)
+    notes = release_notes()
+    try:
+        unreleased = notes.entry(root, package) if notes is not None else ""
     except BaseException as error:
         print(f"  {package.name}: unreleased section skipped: {error}")
         unreleased = ""
