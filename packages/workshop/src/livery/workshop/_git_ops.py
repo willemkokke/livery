@@ -277,6 +277,29 @@ class GitOps:
         """Set *key* to *value* in the repository's git config."""
         self._run("config", key, value)
 
+    def stack(self, branch: str) -> tuple[str, str]:
+        """The parent *branch* was started on, and the commit it started from.
+
+        What ``fm start --from`` records. Both are empty for a branch
+        started on main; the commit is empty for a branch started before
+        it was recorded.
+        """
+        parent = self.config_get(f"branch.{branch}.workshop-parent")
+        tip = self.config_get(f"branch.{branch}.workshop-parent-tip") if parent else ""
+        return parent, tip
+
+    def record_stack(self, branch: str, parent: str, tip: str) -> None:
+        """Record *branch* as stacked on *parent*, its own commits after *tip*."""
+        self.config_set(f"branch.{branch}.workshop-parent", parent)
+        self.config_set(f"branch.{branch}.workshop-parent-tip", tip)
+
+    def forget_stack(self, branch: str) -> None:
+        """Drop the stack record: *branch* stands on main now."""
+        for key in ("workshop-parent", "workshop-parent-tip"):
+            tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+                "config", "--unset", f"branch.{branch}.{key}"
+            )
+
     def sha_of(self, ref: str) -> str:
         """The commit *ref* resolves to; empty when this checkout cannot.
 

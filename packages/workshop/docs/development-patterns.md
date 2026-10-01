@@ -53,15 +53,30 @@ fm start 124 --from=feat/123-the-parent
 ```
 
 The worktree is added at the parent's pushed tip, and the parent is
-recorded against the child's branch. `fm submit` from the child
+recorded against the child's branch together with that tip, so the
+commits after it are the child's own. `fm submit` from the child
 targets the parent, so the child's pull request shows only its own
-diff and gets its own CI while the parent's is still running. When
-the parent merges, the forge retargets the child's pull request to
-main, and the next `fm submit` from the child says it now targets
-main. One `fm integrate` then merges main into the child, which takes
-the parent's squash in and leaves the child's own diff; the resubmit
-pays one more CI run for the new head. A `--base` flag on `fm submit`
-always wins over the record.
+diff and gets its own CI while the parent's is still running. A
+`--base` flag on `fm submit` always wins over the record.
+
+The child's own commits then follow the parent:
+
+- **The parent moves.** When the parent gains commits or is rebased
+  and pushed again, `fm sync` in the child moves the child's own
+  commits onto the parent's new tip.
+- **The parent merges.** When the parent merges and origin deletes
+  its branch, the forge retargets the child's pull request to main.
+  `fm sync`, or the next `fm submit`, then moves the child's own
+  commits onto main, where the parent's squash already is, whatever
+  number of commits it was made from. The push goes with a lease, and
+  the resubmit pays one more CI run for the new head.
+- **Only main moves.** While the parent is open, main reaches the
+  child through it, so `fm sync` leaves the child on its parent.
+
+A conflict in the child's own commits leaves the branch as it was and
+names `fm sync`, which offers the rebase to a person at a terminal.
+`fm integrate` merges main in instead, which conflicts wherever the
+child edited lines next to the parent's.
 
 The parent must be pushed before the child starts on it: an
 unpushed parent is refused by name.

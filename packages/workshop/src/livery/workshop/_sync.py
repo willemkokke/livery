@@ -99,35 +99,44 @@ def sync_workspace(root: Path) -> list[str]:
     return lines
 
 
-def _foreign_authors(git: GitOps, onto: str) -> set[str]:
-    """Author emails a rebase onto *onto* would rewrite; never this user's."""
+def _foreign_authors(git: GitOps, since: str) -> set[str]:
+    """Author emails of the commits after *since* a rebase would rewrite; never mine."""
     me = git._run("config", "user.email").strip()
-    authors = git._run("log", "--format=%ae", f"{onto}..HEAD").strip()
+    authors = git._run("log", "--format=%ae", f"{since}..HEAD").strip()
     return {email for email in authors.splitlines() if email and email != me}
 
 
-def _try_rebase(git: GitOps, onto: str) -> str:
+def _rebase_args(onto: str, upstream: str) -> tuple[str, ...]:
+    """The rebase's arguments: onto *onto*, the commits after *upstream* when given."""
+    return ("--onto", onto, upstream) if upstream else (onto,)
+
+
+def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> str:
     """Attempt a rebase onto *onto*: ``clean`` or ``conflict``.
 
-    A conflicted attempt is aborted, so the branch is exactly as it
-    was: the caller decides whether a person resolves it.
+    With *upstream*, only the commits after it move. A conflicted
+    attempt is aborted, so the branch is exactly as it was: the caller
+    decides whether a person resolves it.
     """
     from livery.workshop._git_ops import GitError
 
     try:
-        git._run("rebase", onto)
+        git._run("rebase", *_rebase_args(onto, upstream))
     except GitError:
         git._run("rebase", "--abort")
         return "conflict"
     return "clean"
 
 
-def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
+def _rebase_step(
+    git: GitOps, onto: str, *, interactive: bool, upstream: str = ""
+) -> bool:
     """One rebase of the current branch onto *onto*; whether it landed.
 
-    Foreign-authored commits gate the rebase: rewriting them orphans
-    every other copy of the branch, so the shared-branch case goes
-    through ``fm integrate`` (a merge) unless a person says
+    With *upstream*, only the commits after it move: a stacked branch's
+    own. Foreign-authored commits gate the rebase: rewriting them
+    orphans every other copy of the branch, so the shared-branch case
+    goes through ``fm integrate`` (a merge) unless a person says
     otherwise. A conflicted rebase is never entered silently: an
     interactive run may choose to resolve it now, everything else
     parks with the teaching.
@@ -135,7 +144,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
     import livery.footman as footman
 
     branch = git.current_branch()
-    foreign = _foreign_authors(git, onto)
+    foreign = _foreign_authors(git, upstream or onto)
     if foreign:
         listed = ", ".join(sorted(foreign))
         if not (
@@ -151,7 +160,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
                 f" Bring the base in by merge instead: `{footman.prog()} integrate`."
             )
             return False
-    outcome = _try_rebase(git, onto)
+    outcome = _try_rebase(git, onto, upstream)
     if outcome == "clean":
         print(f"  rebased {branch} onto {onto}")
         return True
@@ -164,7 +173,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
         from livery.workshop._git_ops import GitError
 
         with contextlib.suppress(GitError):
-            git._run("rebase", onto)
+            git._run("rebase", *_rebase_args(onto, upstream))
         raise SystemExit(
             "  the rebase is started and waiting on you: resolve the"
             f" conflicts, `git rebase --continue`, then run `{footman.prog()} sync`"
@@ -176,6 +185,48 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
         f" by merge with `{footman.prog()} integrate`."
     )
     return False
+
+
+def restack(git: GitOps, branch: str, *, interactive: bool) -> bool | None:
+    """Move a stacked branch's own commits onto its parent, or onto main once it merged.
+
+    A branch ``fm start --from`` began carries its parent's commits
+    under its own. The ones after the recorded start commit are the
+    branch's own whatever the parent became since, so they move alone:
+    onto the parent's new tip when the parent moved, onto
+    ``origin/main`` once the parent merged and origin deleted it. A
+    parent squashed from several commits then moves nothing it
+    carried, where a plain rebase replays those commits against their
+    squash and conflicts. A branch started before the start commit was
+    recorded, or moved by hand off it since, falls back on git's own
+    matching, which drops a parent that landed as one commit. A branch
+    whose parent is still open and unchanged is left where it is: main
+    reaches it through the parent.
+
+    Returns whether the branch moved; None when it was left behind; a
+    branch that is not stacked returns False.
+    """
+    parent, tip = git.stack(branch)
+    if not parent:
+        return False
+    if tip and not git.is_ancestor(tip, "HEAD"):
+        tip = ""  # moved by hand since: its history no longer holds the start
+    merged = parent not in git.remote_branches(parent)
+    onto = "origin/main" if merged else f"origin/{parent}"
+    if not merged:
+        target = git.sha_of(onto)
+        if tip == target or (not tip and git.is_ancestor(target, "HEAD")):
+            if not tip:
+                git.record_stack(branch, parent, target)
+            return False
+    if not _rebase_step(git, onto, interactive=interactive, upstream=tip):
+        return None
+    if merged:
+        git.forget_stack(branch)
+        print(f"  {parent} has merged: {branch} stands on main now")
+    else:
+        git.record_stack(branch, parent, git.sha_of(onto))
+    return True
 
 
 def _repository(root: Path) -> Any:
@@ -249,8 +300,9 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     the checkout steps off it; a detached HEAD names no branch, and a
     dirty tree is never moved: each skips with its note. A feature
     branch fast-forwards onto its moved remote, rebases onto it when
-    diverged, then rebases onto the base; a rebase of a pushed
-    branch finishes the job with the leased force-push, because
+    diverged, then rebases onto the base; a stacked branch follows its
+    parent instead ([livery.workshop._sync.restack][]). A rebase of a
+    pushed branch finishes the job with the leased force-push, because
     rebased-locally with a stale remote is the worst state.
     """
     _ = root
@@ -303,7 +355,19 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
             else:
                 rebased = True
     behind_base = git._run("rev-list", "--count", f"{branch}..origin/main").strip()
-    if behind_base != "0":
+    parent, _tip = git.stack(branch)
+    if parent:
+        moved = restack(git, branch, interactive=interactive)
+        if moved is None:
+            return
+        if moved:
+            rebased = True
+        elif behind_base != "0":
+            print(
+                f"  {branch} is stacked on {parent}: main reaches it when"
+                f" {parent} merges"
+            )
+    elif behind_base != "0":
         if not _rebase_step(git, "origin/main", interactive=interactive):
             return
         rebased = True
@@ -382,7 +446,8 @@ def sync(
     """Bring the checkout current, materialise content, match the lock.
 
     The one-stop: fast-forward or rebase the current branch (asking
-    before anything conflicted or shared), fetch origin's state store
+    before anything conflicted or shared; a branch started on another
+    with ``fm start --from`` follows its parent), fetch origin's state store
     into the checkout's mirror for the gate to read, then every
     layer's fragments, skills, and hooks, then the two locks. Both
     halves match their lock the way uv does: `tools.sync` for the

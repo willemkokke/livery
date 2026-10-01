@@ -334,8 +334,10 @@ def start(
     ``fm submit`` closes the issue on merge; a plain branch is named
     as given and closes nothing. Every branch starts from a fetched
     ``origin/main``, so a stale base is impossible; ``--from=<branch>``
-    starts on a pushed, unmerged parent instead, records the parent,
-    and ``fm submit`` targets the parent until it has merged. A worktree under
+    starts on a pushed, unmerged parent instead and records the parent
+    with the commit the branch starts from. ``fm submit`` targets the
+    parent until it has merged, and ``fm sync`` and ``fm submit`` move
+    the branch's own commits when the parent moves or merges. A worktree under
     the runner's home is the default, entered in a shell when a
     person is at the terminal (``--open=code`` opens the editor
     instead, ``--open=none`` prints the path); ``--no-worktree``
@@ -445,10 +447,15 @@ def start(
 
 
 def _record_parent(git: GitOps, branch: str, parent: str) -> None:
-    """Record *parent* as the base ``fm submit`` targets for *branch*; none, nothing."""
+    """Record *parent* as the base ``fm submit`` targets for *branch*; none, nothing.
+
+    The parent's pushed tip is recorded beside it: *branch* starts
+    there, so the commits after it are the branch's own, which is what
+    ``fm sync`` moves when the parent moves or merges.
+    """
     if not parent:
         return
-    git.config_set(f"branch.{branch}.workshop-parent", parent)
+    git.record_stack(branch, parent, git.sha_of(f"origin/{parent}"))
     print(f"  parent: {parent} (`{footman.prog()} submit` targets it until it merges)")
 
 
