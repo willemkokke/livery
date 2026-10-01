@@ -19,6 +19,16 @@ revises them, and never written down where they would harden.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.toolroom.store import (
+        Observation,
+        Option,
+        Record,
+        ToolSpec,
+    )
+
 import itertools
 import json
 from collections.abc import Iterable
@@ -26,18 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.store import (
-    Observation,
-    Option,
-    Record,
-    RecordDelta,
-    Surface,
-    ToolSpec,
-    Verb,
-    observations,
-    spec_from,
-    surface_at,
-)
+from livery.toolroom.store import RecordDelta, Surface, spec_from
 from livery.toolroom.tools import version_tuple
 
 EXTRACTOR = 4
@@ -340,6 +339,8 @@ def _option_fields(option: Option, **replaced: Any) -> dict[str, Any]:
 
 def versions(record: Record) -> list[str]:
     """Every version read, newest first: the versions whose delta carries a surface."""
+    from livery.toolroom.store import observations
+
     return [seen.version for seen in reversed(observations(record))]
 
 
@@ -354,6 +355,8 @@ def observation(record: Record, version: str) -> Observation | None:
     A version the record does not track answers `None` too: to a reader
     of surfaces an unknown version and an unread one are one case.
     """
+    from livery.toolroom.store import surface_at
+
     if version not in record.versions:
         return None
     return surface_at(record, version)
@@ -417,6 +420,8 @@ class _Reading:
 
 
 def _readings(record: Record) -> list[_Reading]:
+    from livery.toolroom.store import observations
+
     seen = {found.version: found for found in observations(record)}
     out: list[_Reading] = []
     for delta in record.deltas:
@@ -435,6 +440,8 @@ def _readings(record: Record) -> list[_Reading]:
 
 def _assemble(record: Record, readings: list[_Reading]) -> Record:
     """The record rebuilt from *readings*: sparse surfaces derived in sequence."""
+    from livery.toolroom.store import Record
+
     deltas: list[RecordDelta] = []
     previous: dict[str, Any] | None = None
     for sequence, reading in enumerate(readings, start=1):
@@ -560,6 +567,8 @@ def new(
     provision floor, stamped on the axis when one is declared; *runtime*
     is what an npm package runs on, stamped the same way.
     """
+    from livery.toolroom.store import Record
+
     return Record(
         name,
         kind=kind,
@@ -844,6 +853,8 @@ def load(path: Path) -> Record | None:
         RecordError: for a record that is there and does not validate;
             a broken record is corrected, never read as no record.
     """
+    from livery.toolroom.store import Record
+
     if not path.is_file():
         return None
     return Record.load(path)
@@ -881,6 +892,8 @@ class Chain:
             ValueError: when *upto* is not a version the record has read,
                 or nothing was read at all.
         """
+        from livery.toolroom.store import observations
+
         found = list(observations(record))
         if upto:
             spots = [n for n, seen in enumerate(found) if seen.version == upto]
@@ -935,6 +948,8 @@ def union(
 
 def union_of(chain: Chain, *, name: str, in_process: bool = False) -> ToolSpec:
     """The union over *chain*; see `union`."""
+    from livery.toolroom.store import Option, ToolSpec, Verb
+
     versions_ = chain.versions  # newest first
     floor_ = versions_[-1]
     surfaces = {version: chain.surface(version) for version in versions_}

@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from livery.toolroom.store import HOSTS, Artifact, RecordError
+from livery.toolroom.store import HOSTS
 
 if TYPE_CHECKING:
     from livery.toolroom.bench._drivers import Driver
@@ -110,6 +110,7 @@ def record_version(
             host, or a host whose deployment does not resolve whole.
     """
     from livery.toolroom.bench import _provision
+    from livery.toolroom.store import Artifact, RecordError
 
     if not lists_assets(driver):
         raise ArtifactError(

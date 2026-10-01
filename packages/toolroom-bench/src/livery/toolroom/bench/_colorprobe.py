@@ -20,6 +20,11 @@ output. Figured out once per tool; one without a trigger reports `unprobed`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.toolroom.store import ToolSpec
+
 import contextlib
 import os
 import re
@@ -29,8 +34,6 @@ from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-from livery.toolroom.store import ToolSpec
 
 _SGR = re.compile("\x1b\\[")  # a CSI escape — how "it emitted colour" is seen
 

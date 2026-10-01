@@ -19,6 +19,11 @@ from the installed tool, every time the stubs are regenerated.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.toolroom.store import ToolSpec
+
 import os
 import re
 import shutil
@@ -28,7 +33,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from livery.toolroom.bench import _toolhelp, _toolspec
-from livery.toolroom.store import ToolSpec, Verb
 
 
 @dataclass(frozen=True)
@@ -947,6 +951,8 @@ def extract(driver: Driver, home: Path | None = None) -> ToolSpec:
     mention it in prose. So structure wins when it is available, and the
     help text covers everyone else.
     """
+    from livery.toolroom.store import ToolSpec
+
     spec = ToolSpec(name=driver.name)
     if driver.source in {"auto", "click"}:
         spec = _from_click(driver) or spec
@@ -1071,6 +1077,8 @@ def _rebase(spec: ToolSpec, base: tuple[str, ...]) -> ToolSpec:
     So that verb's options become the stub's `__call__`, and the rest of
     the tool is somebody else's stub.
     """
+    from livery.toolroom.store import ToolSpec, Verb
+
     wanted = ".".join(base).replace("-", "_")
     for verb in spec.verbs:
         if verb.name == wanted:
@@ -1117,6 +1125,8 @@ def _from_click(driver: Driver) -> ToolSpec | None:
 
 def _select(spec: ToolSpec, verbs: tuple[str, ...]) -> ToolSpec:
     """Keep the verbs the driver asked for, plus the tool's own options."""
+    from livery.toolroom.store import ToolSpec
+
     if not verbs:
         return spec
     wanted = {v.replace("-", "_") for v in verbs} | {""}

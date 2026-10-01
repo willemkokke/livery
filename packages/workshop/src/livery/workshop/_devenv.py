@@ -21,6 +21,11 @@ rig takes a name of its own. A runner is labelled
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 import os
 import platform
 import secrets
@@ -39,7 +44,6 @@ from typing import Annotated
 
 import livery.footman as footman
 from livery.footman import doc, fail, group
-from livery.toolroom.store import host_key
 
 devenv = group("devenv", help="Local development environments by name")
 
@@ -93,6 +97,8 @@ def cache_dir() -> Path:
 
 def this_host() -> str:
     """This machine's host key, `macos-arm`."""
+    from livery.toolroom.store import host_key
+
     return host_key(platform.system(), platform.machine())
 
 

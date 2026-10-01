@@ -42,10 +42,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.toolroom.store import Option, ToolSpec, Verb
-
 if TYPE_CHECKING:
     from livery.footman.context import Result
+    from livery.toolroom.store import Option, ToolSpec, Verb
 
 
 def _run(*args: Any, **kwargs: Any) -> Result:
@@ -405,6 +404,8 @@ def _option(
     (python's `-m`, git's `-C`), and `"all"` also keys on a short that has a
     long — `_short_alias` adds the extra keyword for that mode.
     """
+    from livery.toolroom.store import Option
+
     flags, meta, optional = _spellings(head, strict=strict, bare_meta=bare_meta)
     if strict and not meta and not optional and not head.startswith("--"):
         # The manual's flag column names a value with a bare word — mdoc
@@ -542,6 +543,8 @@ def _pair_negations(options: list[Option]) -> list[Option]:
 
 
 def _with_negation(option: Option, negation: str) -> Option:
+    from livery.toolroom.store import Option
+
     if option.negation:
         return option
     return Option(
@@ -565,6 +568,8 @@ def parse_help(
     from a different place: a `usage:` line normally, the `SYNOPSIS` forms
     for a manual.
     """
+    from livery.toolroom.store import Verb
+
     sections = _sections(text)
     # The flags the usage line has already given a value to. Where it has
     # spoken, the block's bare-lowercase-word rule is redundant at best and
@@ -1373,6 +1378,8 @@ def from_help(
     options (verb `""`). With `man`, per-verb manuals are read but the root
     stays on `--help`, which is where a tool prints its verb list.
     """
+    from livery.toolroom.store import ToolSpec
+
     cmd = binary or name
     # Against a fetched manual there is no binary to ask for a usage line,
     # and asking the machine's own would describe a different release.
