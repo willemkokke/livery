@@ -1159,6 +1159,117 @@ def stored_union(
     return written, misses
 
 
+def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str]:
+    """Render an htmlcov tree for each of *packages* from the measured data.
+
+    The python kind's coverage pages: the site's layer hands over the
+    packages that declare an ``htmlcov`` report, and each gets its
+    tree rendered from the workspace's measured data, scoped to its
+    own files. In
+    the merge point's deploy job the data is main's coverage record,
+    every unit on every check leg, the union main's gate judged
+    whatever its legs ran; anywhere else it is the local ``.coverage``
+    a gate run left. With none, nothing renders and the coverage page
+    states the absence.
+    """
+    import tempfile
+
+    from livery.workshop._state import run_context
+
+    # The coverage CLI on named files: ambient COVERAGE_* variables
+    # from a metered shell would re-point it at that process's live
+    # data file, and the page would find no union.
+    unmetered = _unmetered()
+    legs, misses = _stored_legs(root)
+    for miss in misses:
+        print(f"  coverage: {miss}: not in the record; the pages render without it")
+    if legs:
+        print(f"  coverage: the pages read {len(legs)} recorded unit file(s)")
+    if legs:
+        with tempfile.TemporaryDirectory() as scratch:
+            copies = []
+            for index, leg in enumerate(legs):
+                copy = Path(scratch) / f".coverage.{index}"
+                shutil.copy2(leg, copy)
+                copies.append(str(copy))
+            combined = tools.coverage.opts(
+                cwd=root, env=unmetered, nofail=True, recorded=False
+            )("combine", "--keep", *copies)
+            if combined.code != 0:
+                fail(
+                    f"coverage combine exited {combined.code}:\n"
+                    f"{combined.stdout}{combined.stderr}"
+                )
+    if not (root / ".coverage").is_file():
+        return []
+    rendered: list[str] = []
+    for package in packages:
+        name = package.directory.name
+        result = tools.coverage.opts(
+            cwd=root, env=unmetered, nofail=True, recorded=False
+        )(
+            "html",
+            f"--include=packages/{name}/*",
+            "-d",
+            f"packages/{name}/htmlcov",
+        )
+        output = result.stdout + result.stderr
+        if result.code != 0 and "No data to report" in output:
+            # A package the data never touched, a unit the store could
+            # not supply, say: its page states the absence.
+            print(f"  coverage: {name}: no measured data; its page states the absence")
+            continue
+        if (
+            result.code != 0
+            and "No source for code" in output
+            and run_context() is None
+        ):
+            # A desk's own data outlives a file move until the next gate
+            # run measures again; a report from it would show old lines
+            # against new files, so the page states the absence and an
+            # older report goes. Inside CI the data is the record of the
+            # tree being built, and a missing source there stays red.
+            shutil.rmtree(root / "packages" / name / "htmlcov", ignore_errors=True)
+            print(
+                f"  coverage: {name}: the local data names files that moved or"
+                f" went; its page states the absence until `{footman.prog()} check`"
+                " measures again"
+            )
+            continue
+        if result.code != 0:
+            fail(
+                f"coverage html for {name} exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+        rendered.append(name)
+    return rendered
+
+
+def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
+    """In the merge point's deploy job, main's recorded units for every check leg.
+
+    Returns the files and the misses. Anywhere else nothing is pulled:
+    a pull request's docs job builds without the legs' data by design,
+    and a machine's build renders the local data a gate run left, or
+    states the absence.
+    """
+    import os
+
+    from livery.workshop._points import check_legs
+    from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
+
+    deploying = (
+        os.environ.get(POINT_VARIABLE) == "merge"
+        and os.environ.get(LEG_VARIABLE) == "deploy"
+    )
+    if run_context() is None or not deploying:
+        return [], []
+    from livery.workshop._state import remote_snapshot
+
+    with remote_snapshot(root, fetch=("coverage/main/",)):
+        return stored_union(root, check_legs(root), root / "coverage-data")
+
+
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
     """Fail any package measurably below its floor; the measured percentages.
 

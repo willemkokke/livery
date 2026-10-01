@@ -1242,6 +1242,23 @@ def test_a_missing_report_states_the_absence_and_stays_green(
     assert "iframe" not in page
 
 
+def test_a_kind_with_no_coverage_renderer_states_the_absence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop.layers.docs import _site as _docs
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    monkeypatch.setattr(
+        "livery.workshop._kinds.kind_coverage_pages", lambda kind_name: None
+    )
+    assert _docs.render_coverage_pages(root) == []
+    out = capsys.readouterr().out
+    assert "core: the python kind renders no coverage pages" in out
+
+
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1258,7 +1275,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     source.write_text("a = 1\nb = 2\n")
     # Outside CI nothing is pulled: no data, nothing rendered.
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
-    assert _docs.render_python_coverage(root) == []
+    assert _docs.render_coverage_pages(root) == []
     # Inside CI the store's units stand in for the legs' data.
     stored = root / "coverage-data" / "check-a" / "reuse-core.coverage"
     stored.parent.mkdir(parents=True)
@@ -1266,14 +1283,14 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     data.add_arcs({str(source): {(-1, 1), (1, 2), (2, -1)}})
     data.write()
     monkeypatch.setattr(
-        "livery.workshop.layers.docs._site._stored_legs",
+        "livery.workshop._backends._python._stored_legs",
         lambda root: ([stored], ["packages/other on check-a"]),
     )
     # A declared package the data never touched states the absence.
     _declare_generators(
         root, "bare", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
-    assert _docs.render_python_coverage(root) == ["core"]
+    assert _docs.render_coverage_pages(root) == ["core"]
     out = capsys.readouterr().out
     assert "packages/other on check-a: not in the record; the pages render" in out
     assert "the pages read 1 recorded unit file(s)" in out
@@ -1304,15 +1321,15 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
     stale.mkdir(parents=True)
     (stale / "index.html").write_text("an older report")
     monkeypatch.setattr(
-        "livery.workshop.layers.docs._site._stored_legs", lambda root: ([], [])
+        "livery.workshop._backends._python._stored_legs", lambda root: ([], [])
     )
     # Inside CI the data is the record of the tree being built: red.
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
     with pytest.raises(_FAILURES, match="coverage html for core exited 1"):
-        _docs.render_python_coverage(root)
+        _docs.render_coverage_pages(root)
     # On a desk the data outlived a move: the page states the absence.
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
-    assert _docs.render_python_coverage(root) == []
+    assert _docs.render_coverage_pages(root) == []
     out = capsys.readouterr().out
     assert "core: the local data names files that moved or went" in out
     assert not stale.exists()
@@ -1405,7 +1422,6 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._backends import _python
-    from livery.workshop.layers.docs import _site as _docs
 
     root = _workspace(tmp_path)
     calls: list[tuple[list[str], Path]] = []
@@ -1421,14 +1437,14 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "deploy")
-    assert _docs._stored_legs(root) == ([], [])
+    assert _python._stored_legs(root) == ([], [])
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
     monkeypatch.setenv("WORKSHOP_POINT", "gate")
     monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _docs._stored_legs(root) == ([], [])
+    assert _python._stored_legs(root) == ([], [])
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "deploy")
-    files, misses = _docs._stored_legs(root)
+    files, misses = _python._stored_legs(root)
     assert files == [root / "coverage-data" / "x.coverage"]
     assert misses == ["packages/bare on check-a"]
     assert calls == [(["check-a"], root / "coverage-data")]

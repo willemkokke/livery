@@ -38,7 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-from livery.footman import doc, fail, group, prog
+from livery.footman import doc, fail, group
 from livery.toolroom import tools
 from livery.workshop import _layers, _slots
 from livery.workshop._contract import load_contract
@@ -1637,96 +1637,35 @@ def _publish_ssh(root: Path) -> None:
     print(f"  deployed to {destination}:{target}")
 
 
-def render_python_coverage(root: Path) -> list[str]:
-    """Render per-package htmlcov trees from the measured data.
+def render_coverage_pages(root: Path) -> list[str]:
+    """Hand each package's declared coverage report to its kind's renderer.
 
-    The python packages' answer to the coverage seam: every python
-    package declaring an ``htmlcov`` report gets its tree rendered
-    from the workspace's measured data, scoped to its own files. In
-    the merge point's deploy job the data is main's coverage record,
-    every unit on every check leg, the union main's gate judged
-    whatever its legs ran; anywhere else it is the local ``.coverage``
-    a gate run left. With none, nothing renders and the coverage page
-    states the absence.
+    A package that declares an ``htmlcov`` report and whose kind names
+    a coverage page renderer is rendered by it; the packages sharing a
+    renderer go to it together, since it reads the measured data once.
+    Returns the names of the packages rendered.
     """
-    import tempfile
+    from livery.workshop._kinds import kind_coverage_pages
 
-    from livery.workshop._backends._python import _unmetered
-    from livery.workshop._kinds import is_python_kind
-    from livery.workshop._state import run_context
-
-    # The coverage CLI on named files: ambient COVERAGE_* variables
-    # from a metered shell would re-point it at that process's live
-    # data file, and the page would find no union.
-    unmetered = _unmetered()
-    legs, misses = _stored_legs(root)
-    for miss in misses:
-        print(f"  coverage: {miss}: not in the record; the pages render without it")
-    if legs:
-        print(f"  coverage: the pages read {len(legs)} recorded unit file(s)")
-    if legs:
-        with tempfile.TemporaryDirectory() as scratch:
-            copies = []
-            for index, leg in enumerate(legs):
-                copy = Path(scratch) / f".coverage.{index}"
-                shutil.copy2(leg, copy)
-                copies.append(str(copy))
-            combined = tools.coverage.opts(
-                cwd=root, env=unmetered, nofail=True, recorded=False
-            )("combine", "--keep", *copies)
-            if combined.code != 0:
-                fail(
-                    f"coverage combine exited {combined.code}:\n"
-                    f"{combined.stdout}{combined.stderr}"
-                )
-    if not (root / ".coverage").is_file():
-        return []
-    rendered: list[str] = []
+    by_renderer: dict[
+        Callable[[Path, tuple[Package, ...]], list[str]], list[Package]
+    ] = {}
     for package in discover_packages(root):
-        if not is_python_kind(package.kind):
-            continue
         if not any(
             path == "htmlcov" for _label_, path in package_coverage_reports(package)
         ):
             continue
-        name = package.directory.name
-        result = tools.coverage.opts(
-            cwd=root, env=unmetered, nofail=True, recorded=False
-        )(
-            "html",
-            f"--include=packages/{name}/*",
-            "-d",
-            f"packages/{name}/htmlcov",
-        )
-        output = result.stdout + result.stderr
-        if result.code != 0 and "No data to report" in output:
-            # A package the data never touched, a unit the store could
-            # not supply, say: its page states the absence.
-            print(f"  coverage: {name}: no measured data; its page states the absence")
-            continue
-        if (
-            result.code != 0
-            and "No source for code" in output
-            and run_context() is None
-        ):
-            # A desk's own data outlives a file move until the next gate
-            # run measures again; a report from it would show old lines
-            # against new files, so the page states the absence and an
-            # older report goes. Inside CI the data is the record of the
-            # tree being built, and a missing source there stays red.
-            shutil.rmtree(root / "packages" / name / "htmlcov", ignore_errors=True)
+        renderer = kind_coverage_pages(package.kind)
+        if renderer is None:
             print(
-                f"  coverage: {name}: the local data names files that moved or"
-                f" went; its page states the absence until `{prog()} check`"
-                " measures again"
+                f"  coverage: {package.directory.name}: the {package.kind} kind"
+                " renders no coverage pages; its page states the absence"
             )
             continue
-        if result.code != 0:
-            fail(
-                f"coverage html for {name} exited {result.code}:\n"
-                f"{result.stdout}{result.stderr}"
-            )
-        rendered.append(name)
+        by_renderer.setdefault(renderer, []).append(package)
+    rendered: list[str] = []
+    for renderer, members in by_renderer.items():
+        rendered += renderer(root, tuple(members))
     return rendered
 
 
@@ -1964,44 +1903,19 @@ def docs_publish() -> None:
         print("  publish seam is none: skipping by declaration")
 
 
-def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
-    """In the merge point's deploy job, main's recorded units for every check leg.
+@docs_group.task(name="coverage-pages")
+def docs_coverage_pages() -> None:
+    """Render the coverage report pages the packages declare.
 
-    Returns the files and the misses. Anywhere else nothing is pulled:
-    a pull request's docs job builds without the legs' data by design,
-    and a machine's build renders the local data a gate run left, or
-    states the absence.
-    """
-    import os
-
-    from livery.workshop._backends import _python
-    from livery.workshop._points import check_legs
-    from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
-
-    deploying = (
-        os.environ.get(POINT_VARIABLE) == "merge"
-        and os.environ.get(LEG_VARIABLE) == "deploy"
-    )
-    if run_context() is None or not deploying:
-        return [], []
-    from livery.workshop._state import remote_snapshot
-
-    with remote_snapshot(root, fetch=("coverage/main/",)):
-        return _python.stored_union(root, check_legs(root), root / "coverage-data")
-
-
-@docs_group.task(name="python-coverage")
-def docs_python_coverage() -> None:
-    """Render the python packages' declared htmlcov trees.
-
-    The generator verb a python package declares beside an
-    ``htmlcov`` coverage report. Idempotent: re-rendering from the
-    same data rewrites the same tree.
+    The generator verb a package declares beside a coverage report
+    its kind renders, such as a python package's ``htmlcov``. Each
+    package whose kind names a renderer is handed to it. Idempotent:
+    re-rendering from the same data rewrites the same tree.
     """
     root = _root()
-    rendered = render_python_coverage(root)
+    rendered = render_coverage_pages(root)
     if rendered:
-        print(f"  htmlcov for {', '.join(rendered)}")
+        print(f"  coverage pages for {', '.join(rendered)}")
     else:
         print("  no measured data: declared reports will state the absence")
 

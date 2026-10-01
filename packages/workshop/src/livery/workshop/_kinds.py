@@ -279,6 +279,11 @@ class KindRecord:
             empty for all of them; None for a kind that runs
             none, which the examples check says by name. A child kind
             takes the nearest ancestor's.
+        coverage_pages: How the kind renders the coverage report
+            pages of its packages for the site, given the workspace
+            root and the packages that declare one; returns the names
+            of the packages it rendered. None for a kind with no such
+            pages. A child kind takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools, managed files and
             template, builds nothing, and is never a package's
@@ -301,6 +306,7 @@ class KindRecord:
     native_sources: bool = False
     extractor: Extractor | None = None
     examples: Callable[[Package, Path, tuple[str, ...]], None] | None = None
+    coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
 
 
@@ -477,6 +483,16 @@ def kind_examples(
     return None
 
 
+def kind_coverage_pages(
+    kind_name: str,
+) -> Callable[[Path, tuple[Package, ...]], list[str]] | None:
+    """The coverage page renderer of *kind_name*, else its nearest ancestor's."""
+    for record in reversed(kind_chain(kind_name)):
+        if record.coverage_pages is not None:
+            return record.coverage_pages
+    return None
+
+
 def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
     """The union of host allowances the present kinds grant, sorted."""
     tools: set[str] = set()
@@ -560,6 +576,7 @@ def _register_builtin() -> None:
             tools=("uv",),
             extractor=_python.EXTRACTOR,
             examples=_python.run_examples,
+            coverage_pages=_python.render_coverage_pages,
         )
     )
     # The binary extension: a python distribution in every checker's

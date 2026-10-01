@@ -36,7 +36,7 @@ floor = "0.1.0"
 
 [docs]
 extra-css = ["assets/workshop.css"]
-generators = ["docs.python-coverage", "docs.task-reference"]
+generators = ["docs.coverage-pages", "docs.task-reference"]
 coverage = [
     { label = "Python", path = "htmlcov" },
     { label = "Native (fixture)", path = "tests/fixtures/native-htmlcov" },
