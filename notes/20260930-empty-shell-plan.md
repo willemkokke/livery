@@ -1,12 +1,9 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; Willem's go on 2026-10-01. Phases 1 and 3 built (issues #998
-and #1000); the others not started. Fourteen phases, each gate-green
-and mergeable alone. It builds on the
 day; Willem's go on 2026-10-01. Phases 1, 3 and 7a built (issues
-#998, #1000, #1006); the others not started. Fourteen phases, each gate-green and mergeable
-alone. It builds on the
+#998, #1000, #1006); the others not started. Fourteen phases, each
+gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
 loop plan (`notes/20260930-local-loop-plan.md`) and the toolchain plan
