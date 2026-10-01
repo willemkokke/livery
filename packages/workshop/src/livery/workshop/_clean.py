@@ -54,14 +54,15 @@ def _protected(path: str) -> bool:
     return Path(path).name.endswith(PROTECTED_SUFFIX)
 
 
-def _protected_within(root: Path, candidate: str) -> tuple[str, ...]:
-    """Protected files beneath *candidate*, relative to *root*.
+def protected_within(root: Path, candidate: str) -> tuple[str, ...]:
+    """The machine secrets beneath *candidate*, relative to *root*.
 
-    The untracked enumeration collapses an untracked directory into
-    one entry, so a secret nested inside it never reaches the name
-    check and would be removed with its parent. Directories are
-    searched so the caller can take the contents one file at a time
-    instead.
+    A directory removed whole takes every secret nested in it, so a
+    caller that removes directories asks here first. The untracked
+    enumeration collapses an untracked directory into one entry, so a
+    secret nested inside it never reaches the name check: the clean
+    takes such a directory one file at a time instead, and the sync's
+    sweep of a removed package's leftovers keeps it.
     """
     target = root / candidate
     if not target.is_dir():
@@ -112,7 +113,7 @@ def plan_clean(root: Path, *, everything: bool) -> CleanPlan:
         if _protected(candidate):
             protected.append(candidate)
             continue
-        nested = _protected_within(root, candidate)
+        nested = protected_within(root, candidate)
         if not nested:
             removable.append(candidate)
             continue

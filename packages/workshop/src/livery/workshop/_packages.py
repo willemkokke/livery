@@ -88,13 +88,112 @@ class Package:
     checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
 
 
+#: How git sees a directory under ``packages/`` that has no contract.
+RESIDUE = "residue"
+TRACKED = "tracked"
+UNTRACKED = "untracked"
+SECRET = "secret"
+UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class Leftover:
+    """A directory under ``packages/`` with no ``workshop.toml``, as git sees it.
+
+    Git removes a package's tracked files when a checkout moves past
+    the package's removal and keeps the files it ignores (bytecode,
+    built wheels, coverage pages), so the directory stays behind
+    without its contract.
+
+    Attributes:
+        directory: The directory.
+        state: ``residue`` when git tracks nothing under it and every
+            file it holds is one git ignores, none of them a machine
+            secret: what a removed package leaves behind, which can go.
+            ``tracked`` when git tracks a file there: a package
+            missing its contract. ``untracked`` when it holds a file
+            git neither tracks nor ignores: work nobody committed yet.
+            ``secret`` when an ignored file is a machine secret, which
+            no checkout can restore. ``unknown`` when git could not
+            answer.
+        paths: The files that decide the state, relative to the root:
+            the ignored files of residue, else the tracked, untracked
+            or secret ones.
+        reason: git's own words, when it could not answer.
+    """
+
+    directory: Path
+    state: str
+    paths: tuple[str, ...] = ()
+    reason: str = ""
+
+
+def _ls_files(root: Path, relative: str, *args: str) -> tuple[tuple[str, ...], str]:
+    """The files ``git ls-files`` lists under *relative*; git's words if it fails."""
+    from livery.toolroom import tools
+
+    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
+        "ls-files", "-z", *args, "--", relative
+    )
+    if result.code != 0:
+        said = (result.stderr or result.stdout).strip()
+        return (), said or f"git ls-files exited {result.code}"
+    return tuple(sorted(entry for entry in result.stdout.split("\0") if entry)), ""
+
+
+def leftover(root: Path, directory: Path) -> Leftover:
+    """How git sees *directory*, a directory under ``packages/`` with no contract."""
+    from livery.workshop._clean import protected_within
+
+    # A pathspec in posix form: git reads a backslash as an escape.
+    relative = directory.relative_to(root).as_posix()
+    tracked, failed = _ls_files(root, relative)
+    if failed:
+        return Leftover(directory, UNKNOWN, reason=failed)
+    if tracked:
+        return Leftover(directory, TRACKED, tracked)
+    untracked, failed = _ls_files(root, relative, "--others", "--exclude-standard")
+    if failed:
+        return Leftover(directory, UNKNOWN, reason=failed)
+    if untracked:
+        return Leftover(directory, UNTRACKED, untracked)
+    secrets = protected_within(root, relative)
+    if secrets:
+        return Leftover(directory, SECRET, secrets)
+    ignored, failed = _ls_files(
+        root, relative, "--others", "--ignored", "--exclude-standard"
+    )
+    if failed:
+        return Leftover(directory, UNKNOWN, reason=failed)
+    return Leftover(directory, RESIDUE, ignored)
+
+
+def _no_contract(root: Path, directory: Path) -> str:
+    """Discovery's problem for *directory*, which has no contract.
+
+    The classification asks git, which costs a process or three, and
+    runs only here, on the way to a refusal.
+    """
+    if leftover(root, directory).state != RESIDUE:
+        return f"{directory.name}: no workshop.toml"
+    import livery.footman as footman
+
+    return (
+        f"{directory.name}: no workshop.toml, and git tracks nothing under"
+        f" packages/{directory.name}: it holds only ignored files, what a removed"
+        f" package leaves behind. `{footman.prog()} sync` removes the directory"
+    )
+
+
 def discover_packages(root: Path) -> tuple[Package, ...]:
     """Every package the workspace carries, by its contract, sorted by path.
 
     Raises ValueError, with every finding listed, when a directory
     under ``packages/`` lacks its contract, or lacks the
     ``pyproject.toml`` its declared kind requires: a half-present
-    package is a wrong state, not a lesser one. An unknown kind
+    package is a wrong state, not a lesser one. A directory holding
+    only what a removed package left behind is named as such, with
+    the ``fm sync`` that removes it. An unknown kind
     passes discovery so the backend refusal can name the vocabulary.
     A contract still naming the package kind under ``type`` refuses
     with the one-line migration.
@@ -111,7 +210,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
         contract_file = directory / "workshop.toml"
         if not contract_file.is_file():
-            problems.append(f"{directory.name}: no workshop.toml")
+            problems.append(_no_contract(root, directory))
             continue
         contract = load_contract(contract_file)
         if "type" in contract:
