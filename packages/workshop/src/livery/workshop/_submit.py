@@ -906,6 +906,7 @@ def submit_flow(
                     f" re-submitting (self-heal {heals}/{_MAX_HEALS})"
                 )
                 disarm_before_push(repo, git, plan.branch)
+                before = git.head_sha()
                 try:
                     git.integrate(plan.base)
                 except GitError as exc2:
@@ -913,6 +914,13 @@ def submit_flow(
                         f"the merge stopped on a conflict; resolve it, commit,"
                         f" and re-run `{footman.prog()} submit`:\n{exc2}"
                     )
+                # The merge can bring the code this process runs, and the
+                # gate must judge the merged tree with the code it carries:
+                # the rest is a fresh submit on that code. Re-running the
+                # verb is the recovery, so nothing is lost by the handoff.
+                from livery.workshop._sync import continue_on_moved_code
+
+                continue_on_moved_code(git.root, before, git.head_sha(), verb="submit")
                 if gate:
                     _gate(root=git.root, base=plan.base)
                 number = push_and_pr(

@@ -270,22 +270,25 @@ def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
     teardown_branch(repo, git, branch, "main")
 
 
-def continue_on_moved_code(root: Path, before: str, after: str) -> bool:
+def continue_on_moved_code(
+    root: Path, before: str, after: str, *, verb: str = "sync"
+) -> bool:
     """Hand the command to a fresh process when the checkout moved under it.
 
     The modules this process imported are the checkout's old code;
     what follows a move reads the new source, and a mixed process
     fails on the first changed signature. The handoff re-runs the
-    same command through uv on the code now on disk. Returns False
-    when nothing moved; when the re-run cannot start it is named and
-    the command continues on the loaded code, which returns True.
+    same command through uv on the code now on disk; *verb* names it
+    in the line. Returns False when nothing moved; when the re-run
+    cannot start it is named and the command continues on the loaded
+    code, which returns True.
     """
     if after == before:
         return False
     from livery.workshop import _reconcile
 
     print(
-        f"  the checkout moved from {before[:12]} to {after[:12]}; the sync"
+        f"  the checkout moved from {before[:12]} to {after[:12]}; the {verb}"
         " continues on that code"
     )
     _reconcile._reexec(root)  # pyright: ignore[reportPrivateUsage]

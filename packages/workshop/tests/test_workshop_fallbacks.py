@@ -117,8 +117,11 @@ def test_the_clean_heal_reships_and_lands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The heal's full continuation: behind the base with no conflict,
-    # integrate succeeds, the re-gate is skipped, the re-push re-arms,
-    # and the merge lands on the healed head.
+    # integrate succeeds and moves the head, the handoff to a fresh
+    # submit cannot start so the heal carries on here, the re-gate is
+    # skipped, the re-push re-arms, and the merge lands on the healed
+    # head.
+    from livery.workshop import _reconcile
     from livery.workshop._submit import submit_flow
     from livery.workshop._verdict import EXIT_BEHIND
 
@@ -133,6 +136,9 @@ def test_the_clean_heal_reships_and_lands(
 
         def integrate(self, base: str) -> None:
             calls["integrated"] = True
+
+        def head_sha(self) -> str:
+            return ("b" if calls.get("integrated") else "a") * 40
 
         def current_branch(self) -> str:
             return "feat/1-heal"
@@ -164,7 +170,11 @@ def test_the_clean_heal_reships_and_lands(
         fake.settle(OWNER, NAME, sha)
         return real_follow(*args, **kwargs)
 
+    def cannot_start(root: Path) -> None:
+        """The handoff to a fresh submit cannot start: the heal carries on here."""
+
     monkeypatch.setattr("livery.workshop._submit.follow", follow_behind_once)
+    monkeypatch.setattr(_reconcile, "_reexec", cannot_start)
     number = submit_flow(
         repo,
         HealGit(tmp_path),
