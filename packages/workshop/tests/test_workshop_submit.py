@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -1661,6 +1662,17 @@ def _linked(git: SubmitGit, wt: Path) -> None:
     _git(wt, "commit", "-m", "feat: linked work")
 
 
+def _sweep(git: SubmitGit, wt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove *wt* the way another command's janitor does."""
+    if sys.platform == "win32":
+        # Windows refuses to delete a directory that is a process's
+        # current directory, so there the janitor can sweep the tree
+        # only after this process has left it. Elsewhere the process
+        # stays inside the deleted tree, which the tidy must leave.
+        monkeypatch.chdir(wt.parent)
+    _git(git.root, "worktree", "remove", "--force", str(wt))
+
+
 def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
     rig: tuple[FakeForge, SubmitGit],
     tmp_path: Path,
@@ -1680,7 +1692,7 @@ def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
 
     def swept_follow(*args: object, **kwargs: object) -> object:
         result = real_follow(*args, **kwargs)  # type: ignore[arg-type]
-        _git(git.root, "worktree", "remove", "--force", str(wt))
+        _sweep(git, wt, monkeypatch)
         return result
 
     monkeypatch.setattr("livery.workshop._submit.follow", swept_follow)
@@ -1710,7 +1722,7 @@ def test_a_worktree_swept_while_the_tidy_runs_still_finishes_clean(
 
     def swept_mid_tidy(*args: object, **kwargs: object) -> str:
         found = real_check(*args, **kwargs)  # type: ignore[arg-type]
-        _git(git.root, "worktree", "remove", "--force", str(wt))
+        _sweep(git, wt, monkeypatch)
         return found
 
     monkeypatch.setattr(_submit, "only_local_work", swept_mid_tidy)
