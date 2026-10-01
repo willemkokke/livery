@@ -1654,6 +1654,74 @@ def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
     assert wt.is_dir() and (wt / "scratch.txt").exists()
 
 
+def _linked(git: SubmitGit, wt: Path) -> None:
+    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    (wt / "linked.txt").write_text("w\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-m", "feat: linked work")
+
+
+def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Any fm command's janitor sweeps a worktree whose branch merged,
+    # so another one can remove the tree between the merge and the
+    # tidy: the merge landed, and nothing is left to do.
+    from livery.workshop._verdict import follow as real_follow
+
+    fake, git = rig
+    wt = tmp_path / "wt-swept"
+    _linked(git, wt)
+    monkeypatch.chdir(wt)
+    linked = SubmitGit(wt, fake)
+
+    def swept_follow(*args: object, **kwargs: object) -> object:
+        result = real_follow(*args, **kwargs)  # type: ignore[arg-type]
+        _git(git.root, "worktree", "remove", "--force", str(wt))
+        return result
+
+    monkeypatch.setattr("livery.workshop._submit.follow", swept_follow)
+    number = submit_flow(
+        _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
+    )
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged
+    assert f"the worktree {wt} is gone already" in capsys.readouterr().out
+    assert Path.cwd().is_dir()
+
+
+def test_a_worktree_swept_while_the_tidy_runs_still_finishes_clean(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _submit
+
+    fake, git = rig
+    wt = tmp_path / "wt-racing"
+    _linked(git, wt)
+    monkeypatch.chdir(wt)
+    linked = SubmitGit(wt, fake)
+    real_check = _submit.only_local_work
+
+    def swept_mid_tidy(*args: object, **kwargs: object) -> str:
+        found = real_check(*args, **kwargs)  # type: ignore[arg-type]
+        _git(git.root, "worktree", "remove", "--force", str(wt))
+        return found
+
+    monkeypatch.setattr(_submit, "only_local_work", swept_mid_tidy)
+    number = submit_flow(
+        _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
+    )
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged
+    assert f"the worktree {wt} is gone already" in capsys.readouterr().out
+
+
 def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
     rig: tuple[FakeForge, SubmitGit],
     tmp_path: Path,

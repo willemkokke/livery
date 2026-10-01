@@ -1132,7 +1132,37 @@ def _tidy_after_merge(
     something the merge did not take is kept and named. The main
     checkout keeps its branch: a person reads the run's logs from it,
     and the janitor's branch rule drops it later.
+
+    The janitor runs with any ``fm`` command, so another one may sweep
+    the tree once its branch merged, before or while this tidy runs.
+    That leaves nothing to do: the tidy says so and moves the process
+    out of the directory that is gone. A missing executable is not
+    that, and still raises.
     """
+    try:
+        _tidy_tree(repo, git, branch, base, number)
+    except FileNotFoundError:
+        if git.root.is_dir():
+            raise
+        _swept(git.root)
+
+
+def _swept(root: Path) -> None:
+    """Say the tree at *root* was swept already, standing the process somewhere real."""
+    print(f"  the worktree {root} is gone already: swept after the merge")
+    home = root.parent
+    while not home.is_dir() and home != home.parent:
+        home = home.parent
+    os.chdir(home)
+
+
+def _tidy_tree(
+    repo: Repository, git: GitOps, branch: str, base: str, number: int
+) -> None:
+    """The tidy itself, for a tree that may vanish under it."""
+    if not git.root.is_dir():
+        _swept(git.root)
+        return
     try:
         git_dir = git._run("rev-parse", "--git-dir").strip()
         common_dir = git._run("rev-parse", "--git-common-dir").strip()
