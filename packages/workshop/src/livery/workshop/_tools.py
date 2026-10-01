@@ -42,6 +42,22 @@ and every lock verb.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.strongroom import Source
+    from livery.toolroom.store import (
+        Catalogue,
+        Deployment,
+        Ensured,
+        Graph,
+        Home,
+        Listed,
+        Lock,
+        Locked,
+        Requirement,
+    )
+
 import hashlib
 import json
 import shutil
@@ -53,37 +69,6 @@ from typing import Any
 
 from livery.footman import fail, prog
 from livery.footman.context import Failed, run
-from livery.strongroom import FolderSource, HttpSource, Source, canonical, digest_of
-from livery.toolroom.store import (
-    DOWNLOAD_KINDS,
-    GRAPHS,
-    LOCK_FILE,
-    MODES,
-    POINTER,
-    RUNTIMES,
-    Catalogue,
-    CatalogueError,
-    Deployment,
-    Ensured,
-    Graph,
-    Home,
-    Listed,
-    Lock,
-    Locked,
-    LockError,
-    RecordError,
-    Requirement,
-    Store,
-    StoreError,
-    class_name,
-    default_mode,
-    host_key,
-    read_pointer,
-    records_in,
-    resolve_lock,
-    tree_fingerprint,
-    version_key,
-)
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import kind_chain
 from livery.workshop._packages import discover_packages
@@ -118,6 +103,8 @@ def tools_table(path: Path) -> dict[str, object]:
 
 
 def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
+    from livery.toolroom.store import LockError, Requirement
+
     declared = table.get("requires", [])
     if not isinstance(declared, list) or not all(isinstance(r, str) for r in declared):
         fail(f"{site}: [tools] requires is not a list of strings")
@@ -138,6 +125,7 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     `WORKSHOP_TOOLS`; an unlisted layer declares nothing here, since
     listing is the only activation channel.
     """
+    from livery.toolroom.store import LockError, Requirement
     from livery.workshop._layers import layer_tools
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
@@ -228,6 +216,8 @@ def unrequired_allowances(root: Path) -> tuple[str, ...]:
 
 def _host_probe_gap(listing: Catalogue, name: str, version: str, host: str) -> str:
     """Why *name* cannot be found on PATH by its own name; empty when it can."""
+    from livery.toolroom.store import DOWNLOAD_KINDS, CatalogueError, RecordError
+
     listed = listing.listed(name)
     if listed.kind not in DOWNLOAD_KINDS:
         return ""
@@ -380,6 +370,8 @@ def store_cannot_supply(root: Path) -> str:
 
 def _is_records(source: str) -> bool:
     """Whether *source* is a directory of records rather than an index."""
+    from livery.toolroom.store import POINTER, records_in
+
     if "://" in source:
         return False
     directory = Path(source)
@@ -398,6 +390,8 @@ def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
 
 def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
     """The catalogue at *source*, records or index, with no build first."""
+    from livery.toolroom.store import Catalogue, CatalogueError
+
     if _is_records(source):
         return Catalogue.of_records(Path(source))
     try:
@@ -413,17 +407,22 @@ def _home() -> Home:
 def store_home() -> Home:
     """The store's home on this machine: `toolroom` in the runner's data directory."""
     from livery.footman.context import data_dir
+    from livery.toolroom.store import Home
 
     return Home(data_dir() / "toolroom")
 
 
 def lock_path(root: Path) -> Path:
     """The lock's file, `tools.lock` at the root."""
+    from livery.toolroom.store import LOCK_FILE
+
     return root / LOCK_FILE
 
 
 def current_lock(root: Path) -> Lock | None:
     """The lock as committed, or `None` when the repository has none yet."""
+    from livery.toolroom.store import Lock, LockError
+
     path = lock_path(root)
     if not path.is_file():
         return None
@@ -453,6 +452,8 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
         not: no lock at all, a requirement nothing satisfies, or the
         tools whose entries would move.
     """
+    from livery.toolroom.store import LOCK_FILE, LockError, resolve_lock
+
     held = current_lock(root)
     if held is None:
         return False, f"there is no {LOCK_FILE}"
@@ -500,6 +501,8 @@ def write_lock(
     stands, which is what an install the graph could not satisfy asks
     for.
     """
+    from livery.toolroom.store import LockError, resolve_lock
+
     listing = catalogue(root, offline=offline)
     kept = current_lock(root)
     allowed = host_allowed(root)
@@ -568,6 +571,9 @@ def resolve_graph(
     not materialised its tools yet locks the version and says the
     graph waits.
     """
+    from livery.strongroom import digest_of
+    from livery.toolroom.store import Graph
+
     directory = graphs_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / _graph_file(name, kind)
@@ -677,6 +683,8 @@ def _graph_path(root: Path, locked: Locked) -> Path | None:
     lock recorded, is not installed from: the tool installs the way
     it did, and the next lock writes the graph again.
     """
+    from livery.strongroom import digest_of
+
     if locked.graph is None:
         return None
     path = graphs_dir(root) / locked.graph.file
@@ -687,6 +695,8 @@ def _graph_path(root: Path, locked: Locked) -> Path | None:
 
 def graphs_dir(root: Path) -> Path:
     """Where the resolved graphs live, beside the lock."""
+    from livery.toolroom.store import GRAPHS
+
     return root / GRAPHS
 
 
@@ -706,6 +716,8 @@ def _kept_graph(
     graph. A version that moved, a graph never written, and a file
     edited or gone since are each resolved again.
     """
+    from livery.strongroom import digest_of
+
     before = kept.tools.get(name) if kept is not None else None
     if before is None or before.version != locked.version or before.graph is None:
         return None
@@ -739,6 +751,8 @@ def with_graphs(
     answer from an index, so it moves the lock, and a lock moves when
     a person says so, never as a side effect of installing.
     """
+    from livery.toolroom.store import CatalogueError
+
     directory = graphs_dir(root)
     tools: dict[str, Locked] = {}
     notes: list[str] = []
@@ -810,6 +824,8 @@ def with_runtimes(
     catalogue does not list is left for the resolver to refuse by
     name.
     """
+    from livery.toolroom.store import CatalogueError, Requirement
+
     everywhere = {requirement.name for requirement in found if not requirement.hosts}
     present = {(requirement.name, requirement.hosts) for requirement in found}
     added: list[Requirement] = []
@@ -843,6 +859,8 @@ def declare(root: Path, text: str) -> bool:
     spelling, is left as it is. The contract is edited in place: the
     `[tools]` table gains the entry, or is added at the end with it.
     """
+    from livery.toolroom.store import LockError, Requirement
+
     try:
         Requirement.parse(text, site="workshop.toml")
     except LockError as error:
@@ -1051,6 +1069,8 @@ def mode_of(
     *paths* are the deployment's, which decide a download's default.
     Raises a refusal naming the override when it is not one of `MODES`.
     """
+    from livery.toolroom.store import MODES, default_mode
+
     overrides = tools_table(root / "workshop.toml").get("modes", {})
     if not isinstance(overrides, dict):
         fail("workshop.toml: [tools] modes is not a table")
@@ -1065,6 +1085,8 @@ def mode_of(
 
 def sources(root: Path) -> tuple[Source, ...]:
     """The tiers consulted before an origin, `[tools] sources`: folders or URLs."""
+    from livery.strongroom import FolderSource, HttpSource
+
     declared = tools_table(root / "workshop.toml").get("sources", [])
     if not isinstance(declared, list) or not all(isinstance(s, str) for s in declared):
         fail("workshop.toml: [tools] sources is not a list of strings")
@@ -1134,6 +1156,8 @@ def site_floors(root: Path) -> dict[str, tuple[str, str]]:
     machine honours them here, since the machine's own copy is never
     the locked version.
     """
+    from livery.toolroom.store import version_key
+
     highest: dict[str, tuple[str, str]] = {}
     for requirement in requirements(root):
         if not requirement.floor:
@@ -1181,6 +1205,16 @@ def materialise(
     origin being unreachable must not stop the environment from
     entering.
     """
+    from livery.toolroom.store import (
+        DOWNLOAD_KINDS,
+        LOCK_FILE,
+        RUNTIMES,
+        CatalogueError,
+        Store,
+        StoreError,
+        version_key,
+    )
+
     lock = current_lock(root)
     if lock is None:
         fail(f"no {LOCK_FILE}: lock the tools first with `{prog()} tools.lock`")
@@ -1364,6 +1398,8 @@ def _no_command(listing: Catalogue, name: str, version: str) -> bool:
     """Whether *name* is a download with no entry point: no command, so no stub."""
     import platform
 
+    from livery.toolroom.store import CatalogueError, RecordError, host_key
+
     if listing.listed(name).kind != "download":
         return False
     try:
@@ -1398,6 +1434,8 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     the steady state of every sync; otherwise a stub already on disk
     as the source renders it is kept, so a checker's cache stands.
     """
+    from livery.toolroom.store import CatalogueError
+
     source = index_source(root)
     lock = current_lock(root)
     locked = dict(lock.tools) if lock is not None else {}
@@ -1455,6 +1493,9 @@ def source_mark(source: str) -> str:
     A directory of records is its stat fingerprint; an index, by
     directory or URL, is the digest of its pointer document.
     """
+    from livery.strongroom import canonical, digest_of
+    from livery.toolroom.store import read_pointer, tree_fingerprint
+
     if _is_records(source):
         return tree_fingerprint([source])
     return str(digest_of(canonical(read_pointer(source))))
@@ -1530,6 +1571,8 @@ def handles_index(names: list[str]) -> str:
     this module, so the handle `ruff` types as `Ruff[Result]` exactly
     when `stubs/ruff.pyi` is beside it.
     """
+    from livery.toolroom.store import class_name
+
     lines = [
         f"# Rendered by `{prog()} tools.restub`: the handles this workspace",
         "# locks. Do not edit by hand.",

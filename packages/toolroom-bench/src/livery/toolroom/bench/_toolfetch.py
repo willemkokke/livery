@@ -16,6 +16,11 @@ as having no history — the same doctrine `audit` follows.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 import json
 import os
 import re
@@ -30,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver, Plugin, Provision
-from livery.toolroom.store import FetchError, fetch_bytes
+from livery.toolroom.store import fetch_bytes
 
 PYPI = "https://pypi.org/pypi/{package}/json"
 TIMEOUT = 30
@@ -286,6 +291,8 @@ def _read_index(url: str) -> bytes:
     `Unreachable` ends the run when the store's tries are spent: an
     index that will not answer must never read as "nothing new".
     """
+    from livery.toolroom.store import FetchError
+
     try:
         return fetch_bytes(url)
     except FetchError as cause:

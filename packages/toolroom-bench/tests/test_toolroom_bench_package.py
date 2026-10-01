@@ -20,3 +20,19 @@ def test_importing_the_bench_mounts_its_verbs() -> None:
     }
     assert package.tasks.name == "tools"
     assert "docs" in package.tasks.tasks
+
+
+def test_mounting_the_bench_loads_no_store_engine() -> None:
+    import subprocess
+    import sys
+
+    # A fresh interpreter, so this suite's own imports do not count.
+    script = (
+        "import sys, livery.toolroom.bench;"
+        " print(sorted(m for m in sys.modules if m in"
+        " ('livery.toolroom.store._engine', 'livery.strongroom._store')))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "[]"

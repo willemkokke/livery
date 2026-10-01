@@ -31,32 +31,25 @@ rebuilds every tool from the records alone.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.strongroom import (
+        Digest,
+        Entry,
+        Store,
+    )
+    from livery.toolroom.store import (
+        Record,
+    )
+
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom import (
-    Digest,
-    Entry,
-    Namespace,
-    Store,
-    Subject,
-    Tree,
-    canonical,
-    digest_of,
-)
-from livery.toolroom.store import (
-    BUILD_FILE,
-    RECORD_SUFFIX,
-    Record,
-    build_current,
-    observations,
-    records_in,
-    resolve,
-    tree_fingerprint,
-)
+from livery.strongroom import Subject
 
 INDEX = "index"
 """The namespace of the index store: `index/<tool>` names the tool's tree; volatile."""
@@ -97,6 +90,8 @@ def record_digest(path: Path) -> Digest:
     digests the same, one edited anywhere does not, and the cost is a
     read of the bytes rather than a parse and a canonical dump.
     """
+    from livery.strongroom import digest_of
+
     return digest_of(f"{path.name}\0".encode() + path.read_bytes() + b"\0")
 
 
@@ -106,6 +101,8 @@ def open_index(into: Path) -> Store:
     Raises:
         ManifestError: when *into* holds a store of another layout.
     """
+    from livery.strongroom import Namespace, Store
+
     namespaces = (Namespace(INDEX, "volatile"),)
     if (into / "strongroom.json").is_file():
         return Store.open(into, namespaces=namespaces)
@@ -141,6 +138,8 @@ def load_records(records: Path) -> list[Record]:
         RecordError: for a record that does not validate, as the store
             refuses it.
     """
+    from livery.toolroom.store import Record, records_in
+
     return [Record.load(path) for path in records_in(records)]
 
 
@@ -166,6 +165,13 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
         RecordError: for a record that does not validate.
         ValueError: for a pointer that is not one.
     """
+    from livery.toolroom.store import (
+        BUILD_FILE,
+        RECORD_SUFFIX,
+        build_current,
+        tree_fingerprint,
+    )
+
     fingerprint = tree_fingerprint([str(records.resolve())])
     if not from_genesis and build_current(into):
         answer = _standing(into)
@@ -235,6 +241,8 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
 
 def _standing(into: Path) -> Built | None:
     """The last build's answer, when every tree and ref the pointer names stand."""
+    from livery.strongroom import Digest
+
     pointer = read_pointer(into)
     if pointer is None:
         return None
@@ -261,6 +269,8 @@ def _standing(into: Path) -> Built | None:
 
 def materialise(store: Store, record: Record) -> Digest:
     """Land *record* whole into *store* and return its tree's digest."""
+    from livery.toolroom.store import observations
+
     entries: list[Entry] = [
         _blob(store, "tool", record.to_json()),
         _blob(store, "versions", list(record.versions)),
@@ -303,14 +313,20 @@ def materialise(store: Store, record: Record) -> Digest:
 
 
 def _deployment(record: Record, version: str, host: str) -> dict[str, Any]:
+    from livery.toolroom.store import resolve
+
     return resolve(record, version, host).to_json()
 
 
 def _blob(store: Store, name: str, value: Any) -> Entry:
+    from livery.strongroom import Entry, canonical
+
     data = canonical(value)
     return Entry(name, "blob", store.put(data), len(data))
 
 
 def _tree(store: Store, name: str, entries: Iterable[Entry]) -> Entry:
+    from livery.strongroom import Entry, Tree
+
     data = Tree.of(entries).encode()
     return Entry(name, "tree", store.put(data), len(data))

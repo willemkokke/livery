@@ -1,9 +1,8 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; Willem's go on 2026-10-01. Phases 1, 3 and 7 built (issues
-#998, #1000, #1006, #1011); phase 11 waits for a ruling on its
-design; the others not started. Fourteen phases, each
+day; Willem's go on 2026-10-01. Phases 1, 3, 7 and 11a built
+(issues #998, #1000, #1006, #1011, #1018); the others not started. Fourteen phases, each
 gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
@@ -780,7 +779,49 @@ Acceptance:
   module of the docs layer beyond its plugin module:
   `test_mounting_loads_no_backend_and_no_site_code`.
 
+### Phase 11a: load less by convention
+
+Built (issue #1018), Willem's option A of 2026-10-01; manifest
+dispatch, the original phase 11 below, waits to be revisited.
+
+Deliverables:
+
+- `livery.forge`, `livery.toolroom.store` and `livery.strongroom`
+  serve their public names from their modules on first use: the
+  names stay declared for the checkers under `TYPE_CHECKING`, and a
+  module `__getattr__` imports the defining module and keeps the
+  value. Importing a root loads none of its modules.
+- The workshop's `_tools` and `_devenv`, and eleven of the bench's
+  modules, import the store and strongroom inside the functions that
+  use them. A name used at import time (a default argument, a module
+  constant) or reached by a test as the module's own seam stays a
+  module-level import, which now loads only the module defining it.
+- The tests that patched `livery.workshop._tools.Store` patch the
+  store package's `Store`, the name the functions now read.
+
+Acceptance, with the evidence of 2026-10-01:
+
+- `fm check --fix` exits 0 across forge, strongroom, the store, the
+  bench and the workshop (3m06s).
+- Importing each root loads none of its modules, one name loads only
+  its defining module, every public name resolves:
+  `test_importing_the_root_loads_no_module_of_the_package`,
+  `test_one_name_loads_only_the_module_that_defines_it`,
+  `test_every_public_name_resolves` in each of the three packages.
+- Loading the workshop's plugin loads no forge backend and no store
+  engine: `test_mounting_the_workshop_loads_no_forge_backend_and_no_store_engine`;
+  the bench's likewise: `test_mounting_the_bench_loads_no_store_engine`.
+- `fm commit --help` in this repository, fifteen runs each: median
+  284 ms before, 255 ms after; 386 modules loaded before, 365 after.
+  What still loads of the two is the forge root with its error,
+  protocol and type modules (the mounted forge layer's own), and the
+  store's record, spec and stub modules with three small strongroom
+  modules, for the constants and seams named above.
+
 ### Phase 11: footman dispatches from manifests
+
+Deferred (Willem, 2026-10-01: "A, revisit later"); the open item
+below names what it must survive.
 
 In footman, generic, with no workshop vocabulary.
 
@@ -987,6 +1028,14 @@ Acceptance:
   CI checkout's history and tags are not guaranteed, and a scenario
   states each rule it pins. The comparison over this repository's
   members was run once and is recorded above.
+- 2026-10-01, Willem: phase 11 takes option A now and revisits
+  manifest dispatch later. A needed lazy roots in the forge, the
+  store and strongroom as well as the workshop's own imports: the
+  forge layer's entry point lives inside the forge package, and any
+  submodule import ran the store's whole root. The saving is about
+  30 ms, not the 55 ms estimated on 2026-09-30: that estimate
+  charged the forge and the store for standard-library modules
+  footman imports anyway.
 - 2026-09-30: the ecosystem half is the workshop's `Ecosystem`, and
   `livery.forge.Registry` stays the read-only probe with
   `SimpleRegistry` in the forge, as the kind hierarchy plan ruled on
@@ -1009,4 +1058,5 @@ Acceptance:
    loads neither, with no footman change; (B) manifest dispatch
    redesigned around the five facts; (C) B as a plugin's opt-in. The
    agent recommends A now and B only if A's measurement leaves too
-   much. Owner: Willem.
+   much. A is built as phase 11a and saved about 30 ms of 284 on
+   `fm commit --help`; B and C wait to be revisited. Owner: Willem.

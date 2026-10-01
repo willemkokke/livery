@@ -41,6 +41,11 @@ completion hot path.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 import os
 import platform
 import re
@@ -54,17 +59,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver
-from livery.toolroom.store import (
-    ARCHIVE_SUFFIXES,
-    HOSTS,
-    FetchError,
-    UnpackError,
-    bun_global_project,
-    fetch_file,
-    fetch_json,
-    npm_cli,
-    unpack,
-)
+from livery.toolroom.store import HOSTS, fetch_file, fetch_json, npm_cli
 
 
 class ProvisionError(Exception):
@@ -425,6 +420,8 @@ def _node_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
     of them; a package whose driver names bun is installed by the
     provisioned bun as well.
     """
+    from livery.toolroom.store import bun_global_project
+
     if not drivers:
         return []
     node = provisioned_node(prefix)
@@ -680,6 +677,8 @@ def _platform_tokens(host: str = "") -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, str]:
     """The one asset for *host*, or this OS and CPU; archives before bare binaries."""
+    from livery.toolroom.store import ARCHIVE_SUFFIXES
+
     os_aliases, arch_aliases = _platform_tokens(host)
 
     def hit(alias: str, low: str) -> bool:
@@ -738,6 +737,8 @@ def _get_json(url: str) -> Any:
     Raises:
         ProvisionError: when the URL cannot be read or answers no JSON.
     """
+    from livery.toolroom.store import FetchError
+
     try:
         return fetch_json(url)
     except FetchError as exc:
@@ -750,6 +751,8 @@ def _download(url: str, prefix: Path) -> Path:
     Raises:
         ProvisionError: when the URL cannot be read after the store's tries.
     """
+    from livery.toolroom.store import FetchError
+
     try:
         return fetch_file(url, prefix / ".cache")
     except FetchError as exc:
@@ -782,6 +785,8 @@ def place_binary(
         ProvisionError: when the archive will not unpack or holds no
             such file.
     """
+    from livery.toolroom.store import ARCHIVE_SUFFIXES, UnpackError, unpack
+
     if windows is None:
         windows = os.name == "nt"
     into.mkdir(parents=True, exist_ok=True)

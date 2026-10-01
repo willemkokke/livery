@@ -288,3 +288,35 @@ def test_a_layer_importing_a_backend_is_named(tmp_path: Path) -> None:
     )
     _, layers = scan(src, set())
     assert layers == ["layers.site._pages:2"]
+
+
+def _loaded_by(statement: str, prefixes: tuple[str, ...]) -> list[str]:
+    import subprocess
+    import sys
+
+    # A fresh interpreter, so this suite's own imports do not count.
+    script = (
+        f"import sys; {statement};"
+        " print('\\n'.join(sorted(m for m in sys.modules"
+        f" if m.startswith({prefixes!r}))))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    return result.stdout.split()
+
+
+#: What a verb that reaches no forge and no tool store must not load:
+#: the forge's backends and the store's engine with strongroom's store.
+HEAVY = (
+    "livery.forge._github",
+    "livery.forge._gitea",
+    "livery.forge._gitlab",
+    "livery.forge._registry",
+    "livery.toolroom.store._engine",
+    "livery.strongroom._store",
+)
+
+
+def test_mounting_the_workshop_loads_no_forge_backend_and_no_store_engine() -> None:
+    assert _loaded_by("import livery.workshop._tasks", HEAVY) == []

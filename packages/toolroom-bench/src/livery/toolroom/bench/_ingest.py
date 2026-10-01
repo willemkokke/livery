@@ -32,21 +32,21 @@ and are the six-host point's business.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from livery.toolroom.store import (
+        Deployment,
+        Record,
+        Store,
+    )
+
 import fnmatch
 import stat
 import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from livery.toolroom.store import (
-    PACKAGE_VAR,
-    Deployment,
-    Record,
-    Store,
-    StoreError,
-    resolve,
-)
 
 CHECKS = (
     "root",
@@ -154,6 +154,8 @@ def verify(
     Raises:
         RecordError: when the record does not track *version*.
     """
+    from livery.toolroom.store import StoreError, resolve
+
     delta = record.delta_for(version)
     before = previous_with_hosts(record, version) if previous is None else previous
     wanted = tuple(host for host in delta.hosts if not hosts or host in hosts)
@@ -224,6 +226,8 @@ def _check_tree(
     into: Path,
 ) -> list[Finding]:
     """The checks over one host's unpacked tree, exclusions applied."""
+    from livery.toolroom.store import PACKAGE_VAR
+
     found: list[Finding] = []
     windows = host.startswith("windows")
     for entry in deployment.entry_points:

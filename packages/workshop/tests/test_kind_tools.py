@@ -762,7 +762,7 @@ def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
             supplied.append(name)
             raise StoreError(f"{name}: stood in for")
 
-    monkeypatch.setattr(_tools, "Store", _Store)
+    monkeypatch.setattr("livery.toolroom.store.Store", _Store)
     # Named outright, the tool refuses: it is locked for another host.
     with pytest.raises(
         Failed, match=rf"tea is locked for {elsewhere} and not for this host"
@@ -805,7 +805,7 @@ def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
             supplied.append(name)
             raise StoreError(f"{name}: stood in for")
 
-    monkeypatch.setattr(_tools, "Store", _Store)
+    monkeypatch.setattr("livery.toolroom.store.Store", _Store)
     # Strict, the refusal names the tool and the host.
     with pytest.raises(Failed, match=rf"tea 1.0.0: not locked for {HERE}"):
         _tools.materialise(root, ("tea",))
@@ -1206,7 +1206,7 @@ def _allowing_tea(
     _tools.write_lock(root)
     _Probing.answers = {}
     _Probing.calls = []
-    monkeypatch.setattr(_tools, "Store", _Probing)
+    monkeypatch.setattr("livery.toolroom.store.Store", _Probing)
     return root
 
 

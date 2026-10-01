@@ -30,9 +30,12 @@ store, which renders them; this module is the reading side.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
-from livery.toolroom.store import Option, ToolSpec, Verb
+if TYPE_CHECKING:
+    from livery.toolroom.store import Option, ToolSpec, Verb
+
+from typing import Any
 
 
 def _type_name(param: Any) -> str:
@@ -60,6 +63,8 @@ def from_click(command: Any, *, name: str = "", version: str = "") -> ToolSpec:
     `secondary_opts` — `--clean` / `--dirty` — which is exactly the fact
     `off` needs and cannot infer.
     """
+    from livery.toolroom.store import ToolSpec
+
     tool = name or getattr(command, "name", "") or ""
     commands = getattr(command, "commands", None)
     if commands:
@@ -79,6 +84,8 @@ def from_click(command: Any, *, name: str = "", version: str = "") -> ToolSpec:
 
 
 def _verb_from_click(name: str, command: Any) -> Verb:
+    from livery.toolroom.store import Option, Verb
+
     options = []
     arguments = []
     for param in getattr(command, "params", ()):

@@ -40,24 +40,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, cast
 
 from livery.toolroom.bench import _artifacts, _drivers, _index, _surfaces
-from livery.toolroom.store import (
-    RECORD_SUFFIX,
-    Catalogue,
-    Ensured,
-    Home,
-    Store,
-    StoreError,
-    ToolSpec,
-    class_name,
-    records_in,
-    render,
-)
 
 if TYPE_CHECKING:
     from types import ModuleType
 
     from livery.toolroom.bench import _provision, _toolfetch
-    from livery.toolroom.store import Record
+    from livery.toolroom.store import (
+        Ensured,
+        Record,
+        Store,
+        ToolSpec,
+    )
 
 import livery.toolroom.tools as _tools
 from livery.footman import fail
@@ -99,6 +92,8 @@ class _Ambiguous(Exception):
 
 
 def _record_path(key: str) -> Path:
+    from livery.toolroom.store import RECORD_SUFFIX
+
     return _records_dir() / f"{key}{RECORD_SUFFIX}"
 
 
@@ -378,6 +373,8 @@ def _stub_from(
     this machine's: the file says what was read, and a prime run elsewhere
     must not rewrite that claim.
     """
+    from livery.toolroom.store import render
+
     newest = _surfaces.versions(record)[0]
     spec = _surfaces.union(record, name=driver.name, in_process=in_process)
     return render(
@@ -459,6 +456,8 @@ def _today() -> str:
 
 
 def _render(driver: _drivers.Driver, spec: ToolSpec) -> str:
+    from livery.toolroom.store import render
+
     return render(
         spec,
         platform=_platform(),
@@ -473,6 +472,8 @@ def _mode(driver: _drivers.Driver, spec: ToolSpec) -> str:
 
 
 def _class_name(key: str) -> str:
+    from livery.toolroom.store import class_name
+
     return class_name(key)
 
 
@@ -803,6 +804,7 @@ def _color_probe_and_write(
     only: str, write: bool, on: bool, root: Path | None = None
 ) -> None:
     from livery.toolroom.bench import _colorprobe
+    from livery.toolroom.store import ToolSpec
 
     installed: list[tuple[str, str, str, ToolSpec]] = []
     for driver in _drivers.DRIVERS:
@@ -933,7 +935,7 @@ def verify_host(
     """
     import subprocess
 
-    from livery.toolroom.store import DOWNLOAD_KINDS
+    from livery.toolroom.store import DOWNLOAD_KINDS, StoreError
 
     engine = store or _bench_store()
     checks: list[HostCheck] = []
@@ -1958,6 +1960,8 @@ def submit_refresh(
 
 def _bench_store() -> Store:
     """The bench's own store, under its room in the runner's data directory."""
+    from livery.toolroom.store import Home, Store
+
     return Store(Home(default_prefix() / "store"))
 
 
@@ -2630,6 +2634,8 @@ def tools_verify(
 
 
 def _record_names() -> list[str]:
+    from livery.toolroom.store import records_in
+
     return [path.stem for path in records_in(_records_dir())]
 
 
@@ -2758,7 +2764,7 @@ def goldens(
     test, so it moves here too. `--check` names what would move and
     writes nothing.
     """
-    from livery.toolroom.store import export_schema
+    from livery.toolroom.store import Catalogue, export_schema
 
     wrote: list[str] = []
     unchanged: list[str] = []
