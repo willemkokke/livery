@@ -408,6 +408,84 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     )
 
 
+# --- a row a write moves on from stays a day, refusals first -----------------
+
+
+def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(
+    work: Path,
+) -> None:
+    down = _coverage_store.Record({}, failed=True, reason="remote down")
+    why = _coverage_store.put_record(work, RUN, leg=LEG, fresh={}, held=down)
+    assert why == (
+        f"refusing: main's record on {LEG} could not be read (remote down), so"
+        " the rows it keeps are unknown"
+    )
+
+
+def test_a_kept_row_past_the_day_or_without_a_stamp_expires() -> None:
+    now = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    unit = _unit("packages/base")
+    record = _coverage_store.Record(
+        {},
+        kept=(
+            _coverage_store.Kept(
+                "young.json", unit, (now - timedelta(hours=23)).isoformat()
+            ),
+            _coverage_store.Kept(
+                "old.json", unit, (now - timedelta(hours=25)).isoformat()
+            ),
+            _coverage_store.Kept("unstamped.json", unit, ""),
+        ),
+    )
+    assert record.expired(now) == ["old.json", "unstamped.json"]
+
+
+def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> None:
+    old, new = "c" * 64, "d" * 64
+    base = _unit("packages/base", closure=old, run="1")
+    top = _unit("packages/top", closure=old, run="1")
+    ghost = _unit("packages/ghost", run="1")
+    first = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
+    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=first) == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.units == first and held.kept == ()
+    # Another merge's run: base moves on, top is measured again at its
+    # own closure, and ghost's unit is gone.
+    later = _state.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
+    moved = _unit("packages/base", closure=new, run="2")
+    again = _unit("packages/top", closure=old, run="2")
+    stale = held.stale(["packages/base", "packages/top"])
+    why = _coverage_store.put_record(
+        work,
+        later,
+        leg=LEG,
+        fresh={"packages/base": moved, "packages/top": again},
+        remove=stale,
+        held=held,
+    )
+    assert why == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.units == {"packages/base": moved, "packages/top": again}
+    assert sorted(kept.name for kept in held.kept) == [
+        _coverage_store.kept_name("packages/base", old),
+        _coverage_store.kept_name("packages/ghost", "a" * 64),
+    ]
+    # The union asks at the closure its leg skipped on.
+    assert held.at("packages/base", old) == base
+    assert held.at("packages/base", new) == moved
+    assert held.at("packages/ghost", "a" * 64) == ghost
+    assert held.at("packages/base", "e" * 64) is None
+    # A day on, the next write lets the kept rows go.
+    tomorrow = datetime.now(UTC) + timedelta(days=1, minutes=1)
+    why = _coverage_store.put_record(
+        work, later, leg=LEG, fresh={}, held=held, now=tomorrow
+    )
+    assert why == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.kept == ()
+    assert held.units == {"packages/base": moved, "packages/top": again}
+
+
 def _contract(work: Path, runners: str) -> None:
     (work / "workshop.toml").write_text(
         f'[ci]\nrunners = [{runners}]\npython-versions = ["3.14"]\n'
