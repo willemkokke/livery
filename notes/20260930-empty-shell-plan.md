@@ -1,8 +1,9 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; not started, waiting for Willem's go. Fourteen phases, each
-gate-green and mergeable alone. It builds on the
+day; Willem's go on 2026-10-01. Phase 1 built (issue #998); phases 2
+to 14 not started. Fourteen phases, each gate-green and mergeable
+alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
 loop plan (`notes/20260930-local-loop-plan.md`) and the toolchain plan
@@ -96,16 +97,15 @@ Measured on main at 1d6b1426 and read on main at 4e6f1e9b.
   slots, AST rules, prose sections, site files and job contributions
   each have a register call. No layer outside the workshop calls any
   of them, and all of them live in underscore modules.
-- **The reach-ins this plan removes.** Six base modules import a
-  concrete backend: `_checks.py:772`, `_quality.py:20,136,678,708`,
-  `_release.py:428`, `_release_driver.py:27,1210`, `_e2e.py:513`, and
-  the docs layer's `_site.py:1570,1871`, which reaches into the base's
-  python backend. About 25 base modules branch on `"python"`,
-  `"conan"`, `*.whl`, `pyproject.toml` or `uv publish` by name.
-  `KindRecord` defaults to `artifact="python"` and
-  `wheel_identity="pure"`. The extensible gate plan's contract 10
-  promises a vocabulary test that refuses a kind or tool name in the
-  core; no such test exists on main.
+- **The reach-ins this plan removes.** The vocabulary test
+  (`packages/workshop/tests/test_workshop_vocabulary.py`) lists them:
+  79 findings in 17 base modules, 9 of them imports of a concrete
+  backend (`_checks`, `_e2e`, `_kinds`, `_quality`, `_release`,
+  `_release_driver`), the rest literal kind, ecosystem and member
+  manifest names. Beyond what it counts, the base also branches on
+  `*.whl`, `uv publish` and wheel tags. `KindRecord` defaults to
+  `artifact="python"` and `wheel_identity="pure"`. No layer imports a
+  backend.
 - **The release train.** `Backend` already carries `build`,
   `publish_artifact`, `current_version`, `stamp_version`,
   `declared_requirements` and `declare_requirement`. The rest is by
@@ -406,42 +406,55 @@ user's own code.
 
 ### Phase 1: the base's vocabulary, proved
 
-Contract 10 of the extensible gate plan promises a test that does not
-exist. This phase writes it as a check that can only tighten.
+Built (issue #998). Contract 10 of the extensible gate plan promised a
+vocabulary test that did not exist; this phase wrote it as a check that
+can only tighten.
 
 Deliverables:
 
-- An AST rule in the layering check, `base-names-no-kind`, over every
-  base module outside `_backends/`: an import of a backend module, and
-  a string literal equal to a registered kind name, an artifact name
-  (`python`, `conan`, `container`), or a package manifest name
-  (a member's `pyproject.toml`, `conanfile.py`) outside a docstring,
-  refuses.
-- The runtime is exempt by an explicit allow, each entry with its
-  reason: uv, the venv, the root `pyproject.toml` and `uv.lock`,
-  copier, and the interpreter. The line the rule draws is between the
-  workspace's own python project, which is the base's, and a
-  package's, which is its kind's.
-- The current findings are the rule's allowance, a list in
-  `packages/workshop/tests/` with one line per module and count. A
-  count may fall and never rise; a module leaving the list is struck
-  in the same change.
-- The docs layer's two imports of `_backends._python` go through the
-  kind's registration (its extractor and its examples runner), so the
-  first layer reaches no backend.
+- `packages/workshop/tests/test_workshop_vocabulary.py` scans every
+  base module outside `_backends/` and `layers/`. A finding is an
+  import of a concrete backend module, or a string literal outside a
+  docstring that equals a concrete kind name or `conan` or
+  `container`, or holds `pyproject.toml` or `conanfile.py` as a path
+  segment. A word inside a longer string is not counted.
+- `RUNTIME` lists the base's own python runtime, each entry with its
+  count and reason: the root `pyproject.toml` and its fragments, the
+  uv workspace the venv and the lock follow, the interpreter and a
+  runner's interpreter version, and one false friend, `container` as
+  a docs publish seam. 20 occurrences in 14 entries.
+- `ALLOWANCE` is the rest: 79 findings in 36 entries across 17
+  modules. A count above it refuses; a count below it refuses until it
+  is lowered, so the list always says what is left. A runtime count
+  above what the scan finds refuses the same way.
+- The same test refuses any layer module importing a backend.
+- The docs layer's two backend imports were the python coverage
+  pages. `KindRecord.coverage_pages` names a kind's renderer, resolved
+  from the nearest ancestor like the extractor; the python kind
+  registers `render_coverage_pages`, moved from the docs layer into
+  `_backends/_python.py` with `_stored_legs`. The docs layer hands each
+  package that declares an `htmlcov` report to its kind's renderer,
+  and a kind with none states the absence. The generator verb is
+  `docs.coverage-pages`, which replaces `docs.python-coverage`.
 
-Acceptance:
+Acceptance, with the evidence of 2026-10-01:
 
-- `fm check` exits 0.
-- A new base module importing `_backends._python` refuses naming the
-  rule: `test_a_base_module_importing_a_backend_refuses`.
-- A new `"conan"` literal in a base module refuses:
-  `test_a_new_kind_literal_in_the_base_refuses_naming_the_module`.
+- `fm check --fix` exits 0 (3m03s; 1482 tests in the workshop's
+  suite).
+- A new base module importing `_backends._python` refuses:
+  `test_a_base_module_importing_a_backend_refuses`.
+- A new `"conan"` literal and a member manifest path refuse, naming
+  the module: `test_a_new_kind_literal_in_the_base_refuses_naming_the_module`.
 - A count above the allowance refuses, and one below it refuses until
-  the allowance is lowered:
-  `test_the_allowance_only_falls`.
+  the allowance is lowered: `test_the_allowance_only_falls`; the same
+  for the runtime list: `test_the_runtime_list_exempts_only_its_count`.
+- A kind with no coverage renderer states the absence:
+  `test_a_kind_with_no_coverage_renderer_states_the_absence`.
 - `git grep -n "_backends" packages/workshop/src/livery/workshop/layers`
-  prints nothing.
+  prints nothing (exit 1), and `test_no_layer_imports_a_backend` keeps
+  it so.
+- `fm docs.coverage-pages` exits 0 and prints
+  `coverage pages for workshop`.
 
 ### Phase 2: namespaces without `__init__.py`, public API in `api`
 
@@ -888,6 +901,15 @@ Acceptance:
 - 2026-09-30, Willem: the codec becomes a subpackage of strongroom.
   This amends the strongroom redesign plan's contract 3, which made
   `livery.cbor` the codec's only home. Phase 3.
+- 2026-10-01, phase 1: the vocabulary check is a test, not an AST
+  rule in the layering check as first written. Contract 10 of the
+  extensible gate plan names a test; the findings exist only in this
+  repository's source, so a rule would ship the allowance in the
+  wheel for a check no other workspace can trigger.
+- 2026-10-01, phase 1: the docs layer's backend imports were the
+  python coverage pages, not the extractor and the examples runner
+  the plan named. They became a field on the kind record, and the
+  generator verb `docs.python-coverage` became `docs.coverage-pages`.
 - 2026-09-30: the ecosystem half is the workshop's `Ecosystem`, and
   `livery.forge.Registry` stays the read-only probe with
   `SimpleRegistry` in the forge, as the kind hierarchy plan ruled on
