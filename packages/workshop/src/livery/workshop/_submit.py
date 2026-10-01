@@ -1141,7 +1141,9 @@ def _tidy_after_merge(
     """
     try:
         _tidy_tree(repo, git, branch, base, number)
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
+        # A process started in a directory that is gone raises
+        # FileNotFoundError on POSIX and NotADirectoryError on Windows.
         if git.root.is_dir():
             raise
         _swept(git.root)

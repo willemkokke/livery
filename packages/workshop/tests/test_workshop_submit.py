@@ -1734,6 +1734,46 @@ def test_a_worktree_swept_while_the_tidy_runs_still_finishes_clean(
     assert f"the worktree {wt} is gone already" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("error", [FileNotFoundError, NotADirectoryError])
+def test_the_tidy_reads_either_platforms_error_as_a_sweep_only_when_the_tree_is_gone(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    error: type[OSError],
+) -> None:
+    # Each platform's error, forced on every platform: the CI legs
+    # meet only their own.
+    from livery.workshop import _submit
+
+    fake, _ = rig
+    tree = tmp_path / "wt-gone"
+    tree.mkdir()
+    gone = SubmitGit(tree, fake)
+
+    def present(*args: object) -> None:
+        raise error(2, "no such program: git")
+
+    # A tree that is still there turns the error into a fault: a missing
+    # executable, say. It raises.
+    monkeypatch.setattr(_submit, "_tidy_tree", present)
+    with pytest.raises(error, match="no such program"):
+        _submit._tidy_after_merge(  # pyright: ignore[reportPrivateUsage]
+            _repo(fake), gone, "feat/9-gone", "main", 1
+        )
+
+    def swept(*args: object) -> None:
+        tree.rmdir()
+        raise error(2, "the directory is gone")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_submit, "_tidy_tree", swept)
+    _submit._tidy_after_merge(  # pyright: ignore[reportPrivateUsage]
+        _repo(fake), gone, "feat/9-gone", "main", 1
+    )
+    assert f"the worktree {tree} is gone already" in capsys.readouterr().out
+
+
 def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
     rig: tuple[FakeForge, SubmitGit],
     tmp_path: Path,
