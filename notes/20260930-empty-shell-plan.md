@@ -994,4 +994,19 @@ Acceptance:
 
 ## Open
 
-None.
+1. **Phase 11's design.** Mapping footman's startup on 2026-10-01
+   found five facts the phase as written does not survive:
+   `tasks.py` is arbitrary python and its mount arguments are not
+   recorded, so the tree's shape exists only by running it;
+   `pre_tasks` hooks edit the whole live tree before any manifest is
+   built, and the workshop's `apply_cascade` may re-exec through
+   `handing_off()`; every global lifecycle hook and plugin option
+   needs its module imported on every call; the workshop's generated
+   verbs are closures no module and qualname can re-import; and the
+   `requires_*` gates are evaluated live. The options: (A) load less
+   by convention, moving the forge and tool store imports into the
+   functions that use them, pinned by a test that `fm commit --help`
+   loads neither, with no footman change; (B) manifest dispatch
+   redesigned around the five facts; (C) B as a plugin's opt-in. The
+   agent recommends A now and B only if A's measurement leaves too
+   much. Owner: Willem.
