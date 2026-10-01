@@ -16,9 +16,9 @@ from typing import Any
 
 import pytest
 
-from livery.cbor import CodecError, decode, encode
+from livery.strongroom.cbor import CodecError, decode, encode
 
-VECTORS = Path(__file__).resolve().parents[1] / "spec" / "vectors" / "codec.json"
+VECTORS = Path(__file__).resolve().parents[1] / "spec" / "vectors" / "cbor.json"
 
 
 def _load() -> dict[str, list[dict[str, Any]]]:

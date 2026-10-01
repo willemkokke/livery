@@ -9,7 +9,7 @@ not the deterministic encoding of a value in the subset, because a
 lenient decoder turns two byte sequences into one value, and one value
 with two byte sequences is one object with two names.
 
-Vectors: `vectors/codec.json`.
+Vectors: `vectors/cbor.json`.
 
 ## The subset
 

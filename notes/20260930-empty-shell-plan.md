@@ -4,6 +4,8 @@ Status: written 2026-09-30, rulings on the open items taken the same
 day; Willem's go on 2026-10-01. Phase 1 built (issue #998); phases 2
 to 14 not started. Fourteen phases, each gate-green and mergeable
 alone. It builds on the
+day; Willem's go on 2026-10-01. Phase 3 built (issue #1000). Fourteen phases, each
+gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
 loop plan (`notes/20260930-local-loop-plan.md`) and the toolchain plan
@@ -502,22 +504,41 @@ Acceptance:
 
 ### Phase 3: the codec becomes `livery.strongroom.cbor`
 
+Built (issue #1000).
+
 Deliverables:
 
-- `packages/cbor/src/livery/cbor/_codec.py` becomes the module
-  `livery.strongroom.cbor`, imported by that path, with its public
-  names in its `__all__`; `livery.strongroom.api` does not re-export
-  it. Its tests move into strongroom's suite at its coverage floor of
-  100.
-- `packages/cbor/` and its answers entry go; the `livery-cbor`
-  distribution retires. Its 0.0.0 release stays on the index as the
-  name's claim, recorded as debt in the table below.
+- The codec is the subpackage `livery.strongroom.cbor`
+  (`cbor/__init__.py` exporting `MAX_DEPTH`, `CodecError`, `Value`,
+  `decode`, `encode` from `cbor/_codec.py`), reached by its own path:
+  strongroom's root does not re-export it, and importing the store
+  does not load it. A subpackage, because strongroom keeps every
+  module beside its `__init__` underscore-private.
+- Its spec is `packages/strongroom/spec/cbor.md` with
+  `spec/vectors/cbor.json`, listed in the spec index and the standard
+  page; its docs page is `packages/strongroom/docs/cbor.md`, in the
+  nav.
+- Its tests are strongroom's: `test_strongroom_cbor_codec.py`,
+  `test_strongroom_cbor_vectors.py`, and the codec's own pins in
+  `test_strongroom_cbor_package.py` (stdlib-only imports, not loaded
+  by the store, the public surface, the spec beside the package).
+- `packages/cbor/`, its answers entry and every root configuration
+  line naming it are gone, and so is the `livery-cbor` distribution.
+  Its 0.0.0 release stays on the index as the name's claim.
 
-Acceptance:
+Acceptance, with the evidence of 2026-10-01:
 
-- `fm check` exits 0, strongroom's coverage floor unchanged.
-- `git grep -n "livery.cbor\|livery-cbor" -- packages` prints nothing.
-- `fm workflow.release --local` releases strongroom with the codec.
+- `fm check --fix` exits 0 (3m27s, the full gate: the answers file
+  changed). Strongroom reads 99.8% here against its floor of 100, the
+  CI union's to judge; the lines missed are in `_groups.py` and the
+  conformance kit, and the codec is covered whole.
+- `git grep -n "livery.cbor\|livery-cbor" -- packages` prints nothing
+  (exit 1).
+- `fm workflow.release --local packages/strongroom` exits 0 and builds
+  `livery_strongroom-0.3.0.dev36+...-py3-none-any.whl`, which carries
+  `livery/strongroom/cbor/__init__.py` and `cbor/_codec.py`.
+- The codec's pins pass in strongroom's suite, and strongroom's
+  vector-file pin now names `cbor.json`.
 
 ### Phase 4: the docs layer ships apart
 
@@ -910,6 +931,13 @@ Acceptance:
   python coverage pages, not the extractor and the examples runner
   the plan named. They became a field on the kind record, and the
   generator verb `docs.python-coverage` became `docs.coverage-pages`.
+- 2026-10-01, phase 3: the codec is a subpackage, not a module,
+  because strongroom pins every module beside its `__init__` as
+  underscore-private; the path is the ruled `livery.strongroom.cbor`.
+  `fm template.apply` could not drop the member: every verb syncs the
+  venv from the root `pyproject.toml` first, which still named
+  `livery-cbor`, so its lines were removed by hand and the render then
+  matched them. Filed as #1005.
 - 2026-09-30: the ecosystem half is the workshop's `Ecosystem`, and
   `livery.forge.Registry` stays the read-only probe with
   `SimpleRegistry` in the forge, as the kind hierarchy plan ruled on

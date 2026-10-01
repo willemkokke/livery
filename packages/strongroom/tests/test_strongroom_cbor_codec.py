@@ -11,7 +11,7 @@ import math
 
 import pytest
 
-from livery.cbor import MAX_DEPTH, CodecError, decode, encode
+from livery.strongroom.cbor import MAX_DEPTH, CodecError, decode, encode
 
 
 def test_refuses_a_type_outside_the_subset() -> None:

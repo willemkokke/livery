@@ -16,6 +16,7 @@ the repository, one page per format, each with golden vectors under
 | --- | --- |
 | `digest.md` | the digest string grammar and the algorithm registry: `sha256`, required and sole |
 | `canonical.md` | RFC 8785 canonical JSON, the one hashed form of every structured format, integers only |
+| `cbor.md` | deterministic CBOR, RFC 8949's core deterministic encoding over a restricted subset |
 | `tree.md` | the tree: a directory as a manifest, with the portable-name rules and the symlink entry |
 | `version.md` | the version: provenance over a tree, with a subject-shaped producer |
 | `records.md` | the ref record and the tombstone |

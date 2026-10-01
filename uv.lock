@@ -9,7 +9,6 @@ resolution-markers = [
 [manifest]
 members = [
     "livery",
-    "livery-cbor",
     "livery-footman",
     "livery-forge",
     "livery-strongroom",
@@ -796,7 +795,6 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "coverage", extra = ["toml"] },
-    { name = "livery-cbor" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
     { name = "livery-strongroom" },
@@ -820,7 +818,6 @@ docs = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.13" },
-    { name = "livery-cbor", editable = "packages/cbor" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
@@ -838,11 +835,6 @@ docs = [
     { name = "mkdocstrings-python", specifier = ">=1.11" },
     { name = "zensical", specifier = ">=0.0.50" },
 ]
-
-[[package]]
-name = "livery-cbor"
-version = "0.0.0"
-source = { editable = "packages/cbor" }
 
 [[package]]
 name = "livery-footman"
