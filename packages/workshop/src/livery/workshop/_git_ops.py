@@ -394,6 +394,24 @@ class GitOps:
                 names.append(ref.strip())
         return tuple(names)
 
+    def tracking_branches(self, prefix: str) -> tuple[str, ...]:
+        """Branch names under *prefix* among origin's remote-tracking refs.
+
+        Read locally, so no network and no wait, and as fresh as the
+        last fetch: a branch pushed since is missing, and one the forge
+        deleted lingers until a fetch prunes it. A caller that only
+        names a branch takes that; one that deletes or protects asks
+        origin through [livery.workshop._git_ops.GitOps.remote_branches][].
+        """
+        out = self._run(
+            "for-each-ref", "--format=%(refname)", f"refs/remotes/origin/{prefix}"
+        )
+        names = (
+            line.strip().removeprefix("refs/remotes/origin/")
+            for line in out.splitlines()
+        )
+        return tuple(name for name in names if name and name != "HEAD")
+
     def any_head(self, branch: str) -> str:
         """*branch*'s head sha: local when present, else the remote's, else empty."""
         result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(

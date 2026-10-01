@@ -28,7 +28,7 @@ from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Issue, Repository
 from livery.toolroom import tools
 from livery.workshop._contract import load_contract
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._submit import (
     merged_pull_request,
     only_local_work,
@@ -135,13 +135,19 @@ def _issue_kind(labels: tuple[str, ...], override: str) -> str:
     return "feat"
 
 
-def _find_branch(git: GitOps, number: int) -> str:
-    """The issue's branch, from the local then remote listings."""
+def _find_branch(git: GitOps, number: int, *, ask_origin: bool = True) -> str:
+    """The issue's branch, from the local listing, then origin's.
+
+    With *ask_origin* false, origin's branches are the remote-tracking
+    refs the last fetch left: no network and no wait, for a caller that
+    only names the branch.
+    """
     needle = f"/{number}-"
     for name in git.local_branches(""):
         if _BRANCH_RE.match(name) and needle in name:
             return name
-    for name in git.remote_branches(""):
+    remote = git.remote_branches("") if ask_origin else git.tracking_branches("")
+    for name in remote:
         if _BRANCH_RE.match(name) and needle in name:
             return name
     return ""
@@ -174,7 +180,11 @@ def issue_show(
 
     The body is the work order and the thread its continuation, so
     both print verbatim. The pull request on the issue's branch is
-    named when one is open, since that is where the work stands.
+    named when one is open, since that is where the work stands. The
+    branch is looked up among the local branches and the
+    remote-tracking refs, so the verb asks no remote of git; a lookup
+    git cannot answer is named in one line, and the body and the
+    thread still print.
     """
     root = _workspace()
     number, _ = parse_ref(ref)
@@ -188,7 +198,11 @@ def issue_show(
     labels = f"  [{', '.join(found.labels)}]" if found.labels else ""
     print(f"  #{found.number}  {found.title}{holders}{labels}")
     print(f"  {found.state}  {found.url}".rstrip())
-    branch = _find_branch(GitOps(root), number)
+    try:
+        branch = _find_branch(GitOps(root), number, ask_origin=False)
+    except GitError as error:
+        print(f"  the issue's branch could not be looked up: {error}")
+        branch = ""
     pull = repo.pr.find_by_head(branch) if branch else None
     if pull is not None and pull.state == "open":
         print(f"  open PR #{pull.number} on {branch}: {pull.title}")

@@ -10,7 +10,7 @@ import pytest
 
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._issue_tasks import (
     assignee_limit,
     branch_name,
@@ -102,6 +102,60 @@ def test_show_refuses_a_title_and_a_missing_number_then_prints_the_issue_whole(
     assert "open PR #1 on " + branch in out
     assert "the order\n\nin two paragraphs" in out
     assert "--- " in out and "the first reply" in out
+
+
+def test_show_prints_the_whole_issue_when_git_cannot_list_the_branches(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The branch only names an open pull request: a git that cannot
+    # answer costs that line, never the body or the thread.
+    _root, fake, _git_ops = rig
+    repo = fake.repository("willemkokke", "livery")
+    made = repo.issue.create("the work", body="the order")
+    repo.issue.comment(made.number, "the first reply")
+
+    def _down(self: GitOps, prefix: str) -> tuple[str, ...]:
+        raise GitError("git for-each-ref exited 128: fatal: not a git repository")
+
+    monkeypatch.setattr(GitOps, "local_branches", _down)
+    issue_show(str(made.number))
+    out = capsys.readouterr().out
+    assert (
+        "the issue's branch could not be looked up: git for-each-ref exited 128" in out
+    )
+    assert "the order" in out and "the first reply" in out
+    assert "open PR" not in out
+
+
+def test_show_finds_the_branch_among_the_tracking_refs_and_never_asks_origin(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, fake, git = rig
+    repo = fake.repository("willemkokke", "livery")
+    made = repo.issue.create("the work", body="the order")
+    branch = branch_name("feat", made.number, "the work")
+    git.create_branch(branch)
+    (root / "w.txt").write_text("w\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: w")
+    _git(root, "push", "-u", "origin", branch)
+    # Only the remote-tracking ref is left of the branch here.
+    _git(root, "checkout", "main")
+    _git(root, "branch", "-D", branch)
+    fake.push("willemkokke", "livery", branch)
+    repo.pr.open(branch, "main", "feat: the work", "")
+
+    def _asked(self: GitOps, prefix: str) -> tuple[str, ...]:
+        raise AssertionError("issue.show asked origin for its branches")
+
+    monkeypatch.setattr(GitOps, "remote_branches", _asked)
+    issue_show(str(made.number))
+    assert f"open PR #1 on {branch}" in capsys.readouterr().out
+    assert git.tracking_branches("feat/") == (branch,)
 
 
 def test_ref_parsing_and_branch_grammar() -> None:
