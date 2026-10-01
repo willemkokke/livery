@@ -1,4 +1,4 @@
-"""sync's bring-current ladder and integrate: parks and gates first."""
+"""sync's bring-current ladder, integrate, and the sweep of a package's leftovers."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ import pytest
 
 from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
+from livery.workshop._packages import discover_packages
 from livery.workshop._submit import prepare
-from livery.workshop._sync import bring_current, integrate
+from livery.workshop._sync import bring_current, integrate, sweep_residue
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -530,3 +531,210 @@ def test_integrate_matches_the_lock_when_the_move_touched_it(
     assert "matching the lock: the merge changed packages/x/pyproject.toml" in out
     assert "matched the lock" in out
     assert synced == [clone] and recorded == [clone]
+
+
+# A removed package's leftovers. What stays first: work git does not
+# ignore, a machine secret, a tracked directory, git failing.
+
+_IGNORED = "__pycache__/\ndist/\n*.env.local\n"
+
+
+def _repository(tmp_path: Path) -> Path:
+    """A repository with one commit, ignoring bytecode, built wheels and secrets."""
+    root = tmp_path / "repository"
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "me@livery.local")
+    _git(root, "config", "user.name", "Me")
+    (root / ".gitignore").write_text(_IGNORED)
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "chore: ignore")
+    return root
+
+
+def _leave_residue(root: Path, name: str) -> Path:
+    """Leave bytecode and a built wheel in ``packages/<name>``, both ignored."""
+    directory = root / "packages" / name
+    cache = directory / "src" / name / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "_codec.cpython-314.pyc").write_bytes(b"\0")
+    (directory / "dist").mkdir()
+    (directory / "dist" / f"{name}-0.1.0-py3-none-any.whl").write_bytes(b"PK")
+    return directory
+
+
+def _no_contract_named(root: Path) -> str:
+    with pytest.raises(ValueError, match="packages missing their contracts") as caught:
+        discover_packages(root)
+    return str(caught.value).splitlines()[-1].strip()
+
+
+def test_the_sweep_keeps_a_directory_holding_work_git_does_not_ignore(
+    tmp_path: Path,
+) -> None:
+    root = _repository(tmp_path)
+    directory = _leave_residue(root, "fresh")
+    (directory / "notes.md").write_text("a package being written\n")
+    assert sweep_residue(root) == [
+        "  packages/fresh: no workshop.toml, and it holds files git neither"
+        " tracks nor ignores (packages/fresh/notes.md); kept"
+    ]
+    assert (directory / "notes.md").is_file()
+    assert _no_contract_named(root) == "fresh: no workshop.toml"
+
+
+def test_the_sweep_keeps_leftovers_holding_a_machine_secret(tmp_path: Path) -> None:
+    root = _repository(tmp_path)
+    directory = _leave_residue(root, "gone")
+    (directory / ".repo.env.local").write_text("TOKEN=x\n")
+    assert sweep_residue(root) == [
+        "  packages/gone: no workshop.toml, and it holds a machine secret no"
+        " checkout restores (packages/gone/.repo.env.local); kept: move the"
+        " secret out, then delete the directory"
+    ]
+    assert (directory / ".repo.env.local").is_file()
+    assert _no_contract_named(root) == "gone: no workshop.toml"
+
+
+def test_the_sweep_leaves_a_tracked_directory_without_a_contract_to_discovery(
+    tmp_path: Path,
+) -> None:
+    root = _repository(tmp_path)
+    directory = _leave_residue(root, "half")
+    (directory / "README.md").write_text("half a package\n")
+    _git(root, "add", "packages/half/README.md")
+    assert sweep_residue(root) == []
+    assert directory.is_dir()
+    assert _no_contract_named(root) == "half: no workshop.toml"
+
+
+def test_the_sweep_names_git_failing_and_keeps_the_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repository(tmp_path)
+    directory = _leave_residue(root, "gone")
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "nowhere"))
+    [line] = sweep_residue(root)
+    assert line.startswith(
+        "  packages/gone: no workshop.toml, and git could not say what it holds ("
+    )
+    assert "not a git repository" in line and line.endswith("); kept")
+    assert directory.is_dir()
+    assert _no_contract_named(root) == "gone: no workshop.toml"
+
+
+def test_the_sweep_says_nothing_when_every_directory_has_its_contract(
+    tmp_path: Path,
+) -> None:
+    root = _repository(tmp_path)
+    assert sweep_residue(root) == []
+    member = root / "packages" / "kept"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text('kind = "python"\nname = "kept"\n')
+    (member / "pyproject.toml").write_text('[project]\nname = "kept"\n')
+    assert sweep_residue(root) == []
+    assert [package.name for package in discover_packages(root)] == ["kept"]
+
+
+def _removed_upstream(tmp_path: Path, clone: Path, origin: Path) -> Path:
+    """Push ``packages/gone``, leave its ignored files, then remove it on origin."""
+    (clone / ".gitignore").write_text(_IGNORED)
+    package = clone / "packages" / "gone"
+    package.mkdir(parents=True)
+    (package / "workshop.toml").write_text('kind = "python"\nname = "gone"\n')
+    (package / "pyproject.toml").write_text('[project]\nname = "gone"\n')
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-q", "-m", "feat: gone")
+    _git(clone, "push", "-q", "origin", "HEAD")
+    _leave_residue(clone, "gone")
+    other = _other(tmp_path, origin)
+    _git(other, "pull", "-q", "--ff-only", "origin", "main")
+    _git(other, "rm", "-r", "-q", "packages/gone")
+    _git(other, "commit", "-q", "-m", "feat!: gone goes")
+    _git(other, "push", "-q", "origin", "main")
+    return package
+
+
+def test_a_removed_packages_leftovers_go_once_the_checkout_moves_past_the_removal(
+    seeds: Seeds, tmp_path: Path
+) -> None:
+    import livery.footman as footman
+
+    clone, origin = _rig(seeds)
+    package = _removed_upstream(tmp_path, clone, origin)
+    bring_current(clone, GitOps(clone), interactive=False)
+    # Git took the tracked files and kept the ignored ones: discovery
+    # refuses the directory and names the sync that removes it.
+    assert not (package / "workshop.toml").exists() and package.is_dir()
+    assert _no_contract_named(clone) == (
+        "gone: no workshop.toml, and git tracks nothing under packages/gone:"
+        " it holds only ignored files, what a removed package leaves behind."
+        f" `{footman.prog()} sync` removes the directory"
+    )
+    assert sweep_residue(clone) == [
+        "  packages/gone: removed 2 ignored file(s) a removed package left behind"
+    ]
+    assert not package.exists()
+    assert discover_packages(clone) == ()
+    assert sweep_residue(clone) == []
+
+
+def test_integrate_sweeps_what_the_merge_left_behind(
+    seeds: Seeds,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _reconcile, _uv
+
+    clone, origin = _rig(seeds)
+    monkeypatch.setattr(
+        "livery.workshop._sync.workspace_root", lambda start=None: clone
+    )
+    # The merge deletes a member's manifest, so the lock match runs.
+    monkeypatch.setattr(_uv, "run_uv", lambda *args, root: None)
+    monkeypatch.setattr(_reconcile, "record_receipt", lambda at: None)
+    monkeypatch.chdir(clone)
+    package = _removed_upstream(tmp_path, clone, origin)
+    _git(clone, "checkout", "-q", "-b", "feat/1-work")
+    (clone / "mine.txt").write_text("m\n")
+    _git(clone, "add", "mine.txt")
+    _git(clone, "commit", "-q", "-m", "feat: mine")
+    integrate()
+    out = capsys.readouterr().out
+    assert "merged origin/main into feat/1-work" in out
+    assert (
+        "packages/gone: removed 2 ignored file(s) a removed package left behind" in out
+    )
+    assert not package.exists()
+
+
+def test_the_sync_sweeps_before_anything_discovers_packages(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _reconcile, _sync, _uv
+
+    root = _repository(tmp_path)
+    (root / "workshop.toml").write_text("[workspace]\n")
+    package = _leave_residue(root, "gone")
+    seen: list[tuple[str, ...]] = []
+
+    def deliver(at: Path) -> list[str]:
+        seen.append(tuple(package.name for package in discover_packages(at)))
+        return []
+
+    monkeypatch.setattr(_sync, "workspace_root", lambda start=None: root)
+    monkeypatch.setattr(_sync, "bring_current", lambda *args, **kwargs: None)
+    monkeypatch.setattr(_sync, "fetch_store_lines", lambda at: [])
+    monkeypatch.setattr(_sync, "sync_workspace", deliver)
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda at, **kwargs: None
+    )
+    monkeypatch.setattr(_uv, "run_uv", lambda *args, root: None)
+    monkeypatch.setattr(_reconcile, "record_receipt", lambda at: None)
+    _sync.sync()
+    assert seen == [()]
+    assert not package.exists()
+    assert "packages/gone: removed 2 ignored file(s)" in capsys.readouterr().out

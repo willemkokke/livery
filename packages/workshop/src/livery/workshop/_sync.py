@@ -447,9 +447,10 @@ def sync(
 
     The one-stop: fast-forward or rebase the current branch (asking
     before anything conflicted or shared; a branch started on another
-    with ``fm start --from`` follows its parent), fetch origin's state store
-    into the checkout's mirror for the gate to read, then every
-    layer's fragments, skills, and hooks, then the two locks. Both
+    with ``fm start --from`` follows its parent), remove what a removed
+    package left under ``packages/``, fetch origin's state store into
+    the checkout's mirror for the gate to read, then every layer's
+    fragments, skills, and hooks, then the two locks. Both
     halves match their lock the way uv does: `tools.sync` for the
     tools, ``uv sync`` for the environment, each writing its lock when
     there is none or the declarations have moved past it. Idempotent:
@@ -476,6 +477,10 @@ def sync(
     before = git.head_sha()
     bring_current(root, git, interactive=footman.attended())
     continue_on_moved_code(root, before, git.head_sha())
+    # Before anything discovers packages: a removed package's leftover
+    # directory refuses discovery until it goes.
+    for line in sweep_residue(root):
+        print(line)
     for line in fetch_store_lines(root):
         print(line)
     for line in sync_workspace(root):
@@ -495,6 +500,72 @@ def sync(
     from livery.workshop._reconcile import record_receipt
 
     record_receipt(root)
+
+
+def sweep_residue(root: Path) -> list[str]:
+    """Remove what removed packages left under ``packages/``; the lines.
+
+    A directory under ``packages/`` without a ``workshop.toml`` goes
+    when git tracks nothing under it and every file it holds is one git
+    ignores: the leftovers of a package the checkout moved past the
+    removal of ([livery.workshop._packages.Leftover][]). A directory
+    holding a file git neither tracks nor ignores, or a machine secret,
+    is named and kept; one where git tracks a file is a package missing
+    its contract, which discovery refuses by name. Says nothing when
+    there is nothing to sweep.
+    """
+    import shutil
+
+    from livery.workshop._packages import (
+        RESIDUE,
+        SECRET,
+        UNKNOWN,
+        UNTRACKED,
+        leftover,
+    )
+
+    packages_dir = root / "packages"
+    if not packages_dir.is_dir():
+        return []
+    lines: list[str] = []
+    for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
+        if (directory / "workshop.toml").is_file():
+            continue
+        found = leftover(root, directory)
+        name = f"packages/{directory.name}"
+        shown = ", ".join(found.paths[:3]) + (
+            f" and {len(found.paths) - 3} more" if len(found.paths) > 3 else ""
+        )
+        if found.state == RESIDUE:
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                lines.append(
+                    f"  {name}: what a removed package left behind could not be"
+                    f" removed ({error}); delete the directory by hand"
+                )
+                continue
+            lines.append(
+                f"  {name}: removed {len(found.paths)} ignored file(s) a removed"
+                " package left behind"
+            )
+        elif found.state == UNTRACKED:
+            lines.append(
+                f"  {name}: no workshop.toml, and it holds files git neither tracks"
+                f" nor ignores ({shown}); kept"
+            )
+        elif found.state == SECRET:
+            lines.append(
+                f"  {name}: no workshop.toml, and it holds a machine secret no"
+                f" checkout restores ({shown}); kept: move the secret out, then"
+                " delete the directory"
+            )
+        elif found.state == UNKNOWN:
+            lines.append(
+                f"  {name}: no workshop.toml, and git could not say what it holds"
+                f" ({found.reason}); kept"
+            )
+    return lines
 
 
 def fetch_store_lines(root: Path) -> list[str]:
@@ -628,6 +699,8 @@ def integrate() -> None:
         print("  already current with origin/main")
         return
     print(f"  merged origin/main into {branch}")
+    for line in sweep_residue(root):
+        print(line)
     match_lock(root, git, since=before)
 
 
