@@ -111,21 +111,27 @@ def _rebase_args(onto: str, upstream: str) -> tuple[str, ...]:
     return ("--onto", onto, upstream) if upstream else (onto,)
 
 
-def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> str:
-    """Attempt a rebase onto *onto*: ``clean`` or ``conflict``.
+def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> tuple[str, str]:
+    """Attempt a rebase onto *onto*; how it ended and, when it failed, git's words.
 
-    With *upstream*, only the commits after it move. A conflicted
-    attempt is aborted, so the branch is exactly as it was: the caller
-    decides whether a person resolves it.
+    The outcome is ``clean``, ``conflict`` or ``failed``.
+
+    With *upstream*, only the commits after it move. An attempt that
+    stops is aborted, so the branch is exactly as it was: the caller
+    decides whether a person resolves it. It stopped on a conflict when
+    paths are left unmerged. Anything else that stops it, a commit the
+    signer refused or a hook, is ``failed`` with git's own words: each
+    needs another next act, and only git's words say which.
     """
     from livery.workshop._git_ops import GitError
 
     try:
         git._run("rebase", *_rebase_args(onto, upstream))
-    except GitError:
+    except GitError as error:
+        unmerged = git._run("diff", "--name-only", "--diff-filter=U").strip()
         git._run("rebase", "--abort")
-        return "conflict"
-    return "clean"
+        return ("conflict", "") if unmerged else ("failed", str(error))
+    return "clean", ""
 
 
 def _rebase_step(
@@ -139,7 +145,8 @@ def _rebase_step(
     goes through ``fm integrate`` (a merge) unless a person says
     otherwise. A conflicted rebase is never entered silently: an
     interactive run may choose to resolve it now, everything else
-    parks with the teaching.
+    parks with the teaching. A rebase stopped by anything other than a
+    conflict leaves the branch as it was and prints git's words.
     """
     import livery.footman as footman
 
@@ -160,10 +167,19 @@ def _rebase_step(
                 f" Bring the base in by merge instead: `{footman.prog()} integrate`."
             )
             return False
-    outcome = _try_rebase(git, onto, upstream)
+    outcome, said = _try_rebase(git, onto, upstream)
     if outcome == "clean":
         print(f"  rebased {branch} onto {onto}")
         return True
+    if outcome == "failed":
+        print(
+            f"  left {branch} behind {onto}: the rebase stopped, and not on a"
+            " conflict. git said:"
+        )
+        for line in said.splitlines():
+            print(f"    {line}")
+        print(f"  Fix what git names, then run `{footman.prog()} sync` again.")
+        return False
     if interactive and footman.confirm(
         f"rebasing {branch} onto {onto} hits conflicts. Start the rebase"
         " and resolve them now?"

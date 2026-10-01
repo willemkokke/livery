@@ -68,6 +68,40 @@ def test_a_conflicted_rebase_parks_and_restores_the_branch(
     assert "rebase" not in _git(clone, "status")
 
 
+def test_a_rebase_a_refused_signature_stopped_prints_gits_words_not_conflicts(
+    seeds: Seeds,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clone, origin = _rig(seeds)
+    _git(clone, "checkout", "-b", "feat/1-work")
+    (clone / "mine.txt").write_text("m\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "feat: mine")
+    _advance_main(tmp_path, origin)
+    head = _git(clone, "rev-parse", "HEAD")
+    # The commit the rebase writes goes to a signer that cannot run:
+    # the merge is clean, and the rebase still stops.
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "4")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "true")
+    monkeypatch.setenv("GIT_CONFIG_KEY_2", "gpg.format")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_2", "openpgp")
+    monkeypatch.setenv("GIT_CONFIG_KEY_3", "gpg.program")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_3", str(tmp_path / "no-signer"))
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert (
+        "left feat/1-work behind origin/main: the rebase stopped, and not on a"
+        " conflict. git said:" in out
+    )
+    assert "gpg failed to sign the data" in out
+    assert "has conflicts" not in out
+    # Aborted: the branch is exactly as it was.
+    assert _git(clone, "rev-parse", "HEAD") == head
+    assert _git(clone, "status", "--porcelain") == ""
+
+
 def test_foreign_commits_gate_the_rebase_and_teach_integrate(
     seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
