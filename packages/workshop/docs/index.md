@@ -651,7 +651,12 @@ and writes that union back onto the branch's record; a suite no
 record can supply is red by name, never a smaller union. A branch's
 record outlives the branch by a day, because main's run for the
 squash that merged it carries the suites its legs skipped from that
-record, minutes after the merge deleted the branch. At the
+record, minutes after the merge deleted the branch. A row a write
+replaces at another closure, or removes, stays a day too, under its
+closure's name: a leg may skip a suite on main's row minutes before
+main's run for another merge moves that row on, and the run's union
+still finds the row at the closure the leg skipped on. A leg itself
+skips on current rows alone. At the
 merge main's run finds its tree on the verified record, which names
 the branch, skips the gate, and copies the branch's record into
 main's without measuring; a squash of a stale branch has another
@@ -726,7 +731,7 @@ per-run ref once, its timing row beside its measured suites.
 | `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the suites it measured with the scope it ran, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
+| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |

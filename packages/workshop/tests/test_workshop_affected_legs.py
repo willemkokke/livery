@@ -299,6 +299,36 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
 # --- the coverage store decides which skipped suites run anyway ---------------
 
 
+def test_a_leg_skips_a_suite_on_a_current_row_and_never_on_a_kept_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A kept row lives a day from the write that kept it. A leg that
+    # skipped on one could outlast it before the run's union reads, so a
+    # leg reads the current rows alone and the union finds the rest.
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    unit = _coverage_store.Unit("packages/y", "k" * 64, "5", "a" * 40, {})
+    kept = _coverage_store.Kept(
+        _coverage_store.kept_name("packages/y", "k" * 64),
+        unit,
+        "2026-10-01T02:05:00+00:00",
+    )
+    monkeypatch.setattr(
+        _coverage_store,
+        "recorded",
+        lambda root, *, leg, base="main": _coverage_store.Record({}, kept=(kept,)),
+    )
+    widened = _quality._with_unstored_suites(
+        root, _run("pull_request", "main"), (x, y), (x,)
+    )
+    assert widened == (x, y)
+    assert (
+        "coverage store: packages/y runs, nothing to reuse (on this leg main's"
+        " record holds no measurement of it)" in capsys.readouterr().out
+    )
+
+
 def test_a_leg_without_a_label_or_an_identity_runs_every_suite(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

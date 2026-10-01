@@ -473,3 +473,16 @@ a day, before 6 or after it.
   its current commit, and a write inside leases on that. Pinned by a
   clone made before the store's first write, since a local clone
   copies the whole object store and would hide the miss.
+- 2026-10-01, Willem (#900, option b): a coverage record keeps a row
+  a write replaces at another closure, or removes, for a day under its
+  closure's name, and the union looks for a suite a leg skipped at the
+  closure the leg skipped on, in the current rows and then the kept
+  ones. A pull request's leg read main's row minutes before main's run
+  for another merge moved it on (2026-09-29, twice) or dropped its
+  unit with the package (2026-10-01), and the union refused by name.
+  A leg still skips on current rows alone, so a row it relied on is
+  there for the day. Chosen over syncing and rerunning on the
+  refusal, which costs a CI run per occurrence, and over each leg
+  copying the rows it skipped onto its per-run ref, which costs the
+  copy on every run. The cost taken: a record carries the rows the
+  last day replaced, and a run that outlives the day still refuses.

@@ -13,7 +13,10 @@ half, with the scope its gate ran; the run's gate job unions the
 per-run refs with the rows it carries from the records, judges the
 floors on that union, and writes the union back: a pull request's run
 onto its branch's record, main's run onto main's, each replaced in
-place, the units that no longer exist removed. At the merge main's
+place, the units that no longer exist removed. A row a write replaces
+at another closure, or removes, stays for a day under its closure's
+name: a run whose leg skipped a suite on it, while another run moved
+the record on, still unions it. At the merge main's
 run finds its tree on the verified record, which names the branch,
 and copies the branch's rows into main's without measuring; a squash
 of a stale branch has another tree, and main pays the full gate. A
@@ -35,7 +38,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from operator import attrgetter
 from pathlib import Path
 from typing import Any
@@ -122,7 +125,9 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
 
 #: The family: one series per base and check leg, ``coverage/main/<leg>``
 #: for main and ``coverage/<branch>/<leg>`` for a branch, one row per
-#: unit, replaced in place by every write; a series of a branch gone
+#: unit, replaced in place by every write, the rows a write replaced
+#: or removed kept beside them for a day
+#: ([livery.workshop._coverage_store.KEPT_FOR][]); a series of a branch gone
 #: from origin, or of a leg the matrix no longer produces, is the
 #: janitor's to drop. A gone branch's record lingers a day first:
 #: main's run for the squash that merged it carries every suite its
@@ -141,6 +146,19 @@ RECORD = Keyed(
 #: A unit's measurer: coverage.py's arcs, or lines with their hit counts.
 ARCS = "arcs"
 LINES = "lines"
+
+#: How long a record keeps a row a write replaced at another closure, or
+#: removed. A leg skips a suite on the row it read, and the run's union
+#: reads the record minutes later, after main's run for another merge
+#: may have moved the row on or dropped its unit; a kept row is found
+#: at the closure the leg skipped on. A run that outlives the window
+#: refuses in its union, and a run of the full gate measures again.
+KEPT_FOR = timedelta(days=1)
+
+
+def kept_name(path: str, closure: str) -> str:
+    """The record's file for a kept row: the unit at *path*, measured at *closure*."""
+    return f"{slug(path)}.{closure}.json"
 
 
 @dataclass(frozen=True)
@@ -195,21 +213,71 @@ class Leg:
 
 
 @dataclass(frozen=True)
-class Record:
-    """Main's record on one leg, as read.
+class Kept:
+    """A row a write replaced at another closure, or removed, kept for a day.
 
     Attributes:
-        units: The recorded units by path.
+        name: The row's file on the ref, named by its unit and closure.
+        unit: The measurement, at the closure it was taken at.
+        when: When the write that kept it stamped it, ISO 8601.
+    """
+
+    name: str
+    unit: Unit
+    when: str
+
+
+@dataclass(frozen=True)
+class Record:
+    """A base's record on one leg, as read.
+
+    Attributes:
+        units: The recorded units by path: the current rows.
         skipped: The rows that are not units, named; printing one
             gives the line.
         failed: Whether the record could not be read at all.
         reason: Why it could not, in the store's wording.
+        kept: The rows writes replaced or removed within
+            [livery.workshop._coverage_store.KEPT_FOR][], by file name.
     """
 
     units: dict[str, Unit]
     skipped: tuple[Skipped, ...] = ()
     failed: bool = False
     reason: str = ""
+    kept: tuple[Kept, ...] = ()
+
+    def at(self, path: str, closure: str) -> Unit | None:
+        """The measurement of *path* at *closure*: the current row's, else a kept one's.
+
+        The union asks here for what a leg skipped: the leg read the
+        current row, and a write since may have kept it instead.
+        """
+        row = self.units.get(path)
+        if row is not None and row.closure == closure:
+            return row
+        for kept in self.kept:
+            if kept.unit.path == path and kept.unit.closure == closure:
+                return kept.unit
+        return None
+
+    def expired(self, now: datetime) -> list[str]:
+        """The names of the kept rows past their day at *now*.
+
+        A row is kept for [livery.workshop._coverage_store.KEPT_FOR][]
+        from the write that kept it. A row without a readable stamp
+        counts as expired: its age cannot be told.
+        """
+        names: list[str] = []
+        for kept in self.kept:
+            try:
+                when = datetime.fromisoformat(kept.when)
+            except ValueError:
+                names.append(kept.name)
+                continue
+            if now - when > KEPT_FOR:
+                names.append(kept.name)
+        return names
 
     def stale(self, current: Iterable[str]) -> list[str]:
         """The row names to drop: units outside *current*, and rows that are no unit.
@@ -443,8 +511,10 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
 
     An absent record is no units and no failure; a record the store
     could not read is a failure with its reason; a row that is not a
-    unit is skipped and named, and the rest stand. A leg without a
-    label, or an empty base, has no record to read.
+    unit is skipped and named, and the rest stand. A row named by its
+    unit and closure ([livery.workshop._coverage_store.kept_name][]) is
+    a kept one, read beside the current rows and never as one. A leg
+    without a label, or an empty base, has no record to read.
     """
     if not leg:
         return Record({}, failed=True, reason="this leg has no label")
@@ -454,14 +524,18 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
     if found.failed:
         return Record({}, failed=True, reason=found.reason)
     units: dict[str, Unit] = {}
+    kept: list[Kept] = []
     skipped = list(found.skipped)
     for row in found.rows:
         unit = _parse_unit(row.data)
         if unit is None:
             skipped.append(Skipped(row.name, "carries no unit"))
             continue
+        if row.name == kept_name(unit.path, unit.closure):
+            kept.append(Kept(row.name, unit, row.when))
+            continue
         units[unit.path] = unit
-    return Record(units, tuple(skipped))
+    return Record(units, tuple(skipped), kept=tuple(kept))
 
 
 def put_record(
@@ -472,6 +546,8 @@ def put_record(
     fresh: Mapping[str, Unit],
     remove: Iterable[str] = (),
     base: str = MAIN,
+    held: Record | None = None,
+    now: datetime | None = None,
 ) -> str:
     """Write the *fresh* units onto *base*'s record on *leg*; ``""`` or the reason.
 
@@ -482,6 +558,14 @@ def put_record(
     the carried measurement it is. Any other run is refused by name,
     so a pull request never writes what main's next run will skip on,
     and no branch writes another's record.
+
+    A current row that a fresh one replaces at another closure, or
+    that *remove* names, stays as a kept row under its closure's name,
+    and every kept row older than
+    [livery.workshop._coverage_store.KEPT_FOR][] at *now* goes. *held*
+    is the record as the caller read it; it is read here when absent,
+    and a record that cannot be read refuses the write, since what it
+    would keep is unknown.
     """
     if not leg:
         return "refusing: the leg has no label, so the record has no key"
@@ -498,10 +582,23 @@ def put_record(
             f" request run, not a {run.event or 'local'} run of"
             f" {run.head_ref or 'no branch'}"
         )
+    current = held if held is not None else recorded(root, leg=leg, base=base)
+    if current.failed:
+        return (
+            f"refusing: {base}'s record on {leg} could not be read"
+            f" ({current.reason}), so the rows it keeps are unknown"
+        )
+    removed = list(remove)
     rows = {row_name(path): _unit_fields(unit) for path, unit in sorted(fresh.items())}
+    for path, unit in sorted(current.units.items()):
+        replaced = path in fresh and fresh[path].closure != unit.closure
+        dropped = path not in fresh and row_name(path) in removed
+        if replaced or dropped:
+            rows[kept_name(path, unit.closure)] = _unit_fields(unit)
+    removed += current.expired(now or datetime.now(UTC))
     return RECORD.series(base, leg).put(
         root,
         rows,
         message=f"coverage: {base}'s record on {leg} by run {run.run_id}",
-        remove=remove,
+        remove=removed,
     )

@@ -948,23 +948,31 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         for suite in pending:
             key = keys[suite.path]
             states: list[str] = []
+            kept = ""
             for base in bases:
-                row = _read_record(root, held, base, leg.label).units.get(suite.path)
-                if row is not None and row.closure == key:
+                record = _read_record(root, held, base, leg.label)
+                row = record.at(suite.path, key)
+                current = record.units.get(suite.path)
+                if row is not None:
                     carried[suite.path] = (base, row)
+                    if row is not current:
+                        # The leg read the current row; a write since
+                        # moved it on and kept it at this closure.
+                        kept = ", a row kept after its record moved on"
                     break
                 states.append(
-                    f"{base} only at {row.closure[:12]}"
-                    if row is not None
+                    f"{base} only at {current.closure[:12]}"
+                    if current is not None
                     else f"{base} none"
                 )
             else:
                 fail(
                     f"leg {leg.label}: no record holds {suite.path} at closure"
                     f" {key[:12]} ({', '.join(states)}). A leg skips a suite"
-                    " only when a record holds it at the suite's closure, so"
-                    " this leg narrowed without the records, or they moved on"
-                    " since; a run of the full gate measures it again."
+                    " only when a record holds it at the suite's closure, and"
+                    " a record keeps a row it moved on from for a day, so this"
+                    " leg narrowed without the records, or the run outlived"
+                    " that day; a run of the full gate measures it again."
                 )
             base, row = carried[suite.path]
             if row.measurer == LINES:
@@ -982,7 +990,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 )
             print(
                 f"  coverage: {suite.path} on {leg.label}: reused from run"
-                f" {row.run} ({len(row.files)} files), {base}'s record"
+                f" {row.run} ({len(row.files)} files), {base}'s record{kept}"
             )
         if target:
             own = _read_record(root, held, target, leg.label)
@@ -1046,7 +1054,9 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 " carried"
             )
             continue
-        why = put_record(root, run, leg=label, fresh=rows, remove=stale, base=target)
+        why = put_record(
+            root, run, leg=label, fresh=rows, remove=stale, base=target, held=own
+        )
         if why:
             print(
                 f"  coverage record: {target}/{label} not written ({why}); the"

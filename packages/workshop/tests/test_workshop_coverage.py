@@ -713,6 +713,7 @@ def _union(
         fresh: dict[str, _coverage_store.Unit],
         remove: tuple[str, ...] = (),
         base: str = "main",
+        held: _coverage_store.Record | None = None,
     ) -> str:
         written.append((base, leg, sorted(fresh), sorted(remove)))
         return ""
@@ -805,6 +806,45 @@ def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
     ):
         _python.combine_union(tmp_path, (x,))
     assert not (tmp_path / ".coverage").exists()
+
+
+def test_a_suite_whose_row_moved_on_mid_run_is_unioned_from_the_kept_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The leg skipped x and y on main's rows at closure k. Before the
+    # union read, main's run for another merge moved x on to closure j
+    # and dropped y's unit; both rows stay a day, kept at k.
+    x = _suite(tmp_path, "x")
+    y = _suite(tmp_path, "y")
+    x_source = str(_source(tmp_path, "x"))
+    y_source = str(_source(tmp_path, "y"))
+    _in_ci(monkeypatch, "gate")
+    then_x = _unit("packages/x", {x_source: [1, 2, 3, 4]}, run="5")
+    then_y = _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")
+    stamp = "2026-10-01T02:05:00+00:00"
+    held = _coverage_store.Record(
+        {"packages/x": _unit("packages/x", {}, run="6", closure="j" * 64)},
+        kept=(
+            _coverage_store.Kept(
+                _coverage_store.kept_name("packages/x", "k" * 64), then_x, stamp
+            ),
+            _coverage_store.Kept(
+                _coverage_store.kept_name("packages/y", "k" * 64), then_y, stamp
+            ),
+        ),
+    )
+    _union(monkeypatch, [_leg("check-a", "verified")], held=held)
+    assert _python.combine_union(tmp_path, (x, y)) == (x, y)
+    out = capsys.readouterr().out
+    for path in ("packages/x", "packages/y"):
+        assert (
+            f"coverage: {path} on check-a: reused from run 5 (1 files), main's"
+            " record, a row kept after its record moved on" in out
+        )
+    assert _python.measured_coverage(tmp_path, (x, y)) == {
+        "packages/x": 100.0,
+        "packages/y": 100.0,
+    }
 
 
 def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branchs(
