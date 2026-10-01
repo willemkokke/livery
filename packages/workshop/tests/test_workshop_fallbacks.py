@@ -343,7 +343,7 @@ def test_a_refused_author_lookup_says_what_to_check(
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
     refused = Result(101, stderr="Could not get gitea metadata: Status(404)")
     with answers({("git-cliff",): refused}), pytest.raises(_FAILURES) as caught:
-        _cliff.bumped_version(root, package)
+        _cliff.unreleased_entry(root, package)
     message = str(caught.value)
     assert "FORGE_TOKEN" in message and "api_url" in message
 
@@ -361,7 +361,7 @@ def test_a_missing_git_cliff_names_the_dependency(
     # The seam every handle call leaves through, standalone or hosted.
     monkeypatch.setattr("livery.toolroom.tools._host.run", _absent)
     with pytest.raises(_FAILURES) as caught:
-        _cliff.bumped_version(root, package)
+        _cliff.unreleased_entry(root, package)
     assert "git-cliff" in str(caught.value) and "fm sync" in str(caught.value)
 
 
@@ -371,7 +371,7 @@ def test_a_package_without_the_contract_is_named(tmp_path: Path) -> None:
     root, package = _cliff_workspace(tmp_path, "github")
     (package.directory / "cliff.toml").unlink()
     with pytest.raises(_FAILURES) as caught:
-        _cliff.bumped_version(root, package)
+        _cliff.unreleased_entry(root, package)
     assert "cliff.toml" in str(caught.value)
 
 

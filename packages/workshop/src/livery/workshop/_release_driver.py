@@ -23,12 +23,12 @@ import livery.footman as footman
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
 from livery.toolroom import tools
-from livery.workshop import _cliff
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._release import prepare_release
+from livery.workshop._versions import derive_version
 from livery.workshop._workflow_engine import Submission, run_workflow
 from livery.workshop._workflow_state import WorkflowKind
 from livery.workshop._workflow_tasks import workflow
@@ -84,7 +84,7 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
     unchanged: list[str] = []
     for package in members:
         released = _last_released(root, package)
-        derived = _cliff.bumped_version(root, package)
+        derived = derive_version(root, package, released=released)
         if not derived or derived == released:
             unchanged.append(package.directory.name)
             continue

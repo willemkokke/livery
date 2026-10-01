@@ -230,7 +230,7 @@ def test_a_stamped_but_unreleased_version_still_releases(
     # stranded shape exactly.
     root = _workspace(seeds)
     monkeypatch.setattr(
-        "livery.workshop._cliff.bumped_version", lambda root, package: "0.2.0"
+        "livery.workshop._release.derive_version", lambda root, package: "0.2.0"
     )
     monkeypatch.setattr(
         "livery.workshop._cliff.unreleased_entry",

@@ -919,8 +919,8 @@ def test_derive_plans_judges_by_tags_not_the_stamp(
     _fake, _git, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     monkeypatch.setattr(
-        "livery.workshop._cliff.bumped_version",
-        lambda root, package: "0.9.0",
+        "livery.workshop._release_driver.derive_version",
+        lambda root, package, released="": "0.9.0",
     )
     plans = derive_plans(root, (packages["core"],))
     assert plans and plans[0].version == "0.9.0"
