@@ -136,9 +136,11 @@ def test_tombstone_bytes(case: dict[str, Any]) -> None:
 
 
 def test_every_vector_file_is_read() -> None:
-    # A vector file nobody parametrises over is a vector nobody runs.
+    # A vector file nobody parametrises over is a vector nobody runs;
+    # the codec's own file is read by test_strongroom_cbor_vectors.py.
     assert sorted(path.name for path in VECTORS.glob("*.json")) == [
         "canonical.json",
+        "cbor.json",
         "digest.json",
         "records.json",
         "tree.json",

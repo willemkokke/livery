@@ -11,5 +11,6 @@ nav = [
     { "Index" = "index.md" },
     { "Using the store" = "store.md" },
     { "The standard" = "standard.md" },
+    { "The CBOR codec" = "cbor.md" },
     { "Platforms" = "platforms.md" },
 ]

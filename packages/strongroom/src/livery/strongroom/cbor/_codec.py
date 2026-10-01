@@ -8,8 +8,9 @@ encoding, and the decoder refuses every other encoding of it, because
 a lenient decoder gives one value two byte sequences and so gives one
 object two names.
 
-Reach for [livery.cbor.encode][] and [livery.cbor.decode][]; a refusal
-raises [livery.cbor.CodecError][] with the rule in its message.
+Reach for [livery.strongroom.cbor.encode][] and
+[livery.strongroom.cbor.decode][]; a refusal raises
+[livery.strongroom.cbor.CodecError][] with the rule in its message.
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ def encode(value: Value) -> bytes:
     Args:
         value: an integer within 64 bits, a float, bytes, text, a list,
             a dict with text keys, a boolean, or None, nested at most
-            [livery.cbor.MAX_DEPTH][] deep.
+            [livery.strongroom.cbor.MAX_DEPTH][] deep.
 
     Returns:
         The one encoding of *value*.

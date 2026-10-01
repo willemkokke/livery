@@ -1,8 +1,11 @@
 # The strongroom redesign plan: livery-cbor, the spec rewritten, the freeze
 
 Status: phase 1 landed 2026-09-25 (issue #690, PR #692) and
-livery-cbor 0.0.0 shipped through the release train the same day;
-phases 2 to 11 wait for Willem's go one at a time. The plan executes
+livery-cbor 0.0.0 shipped through the release train the same day.
+On 2026-10-01 the codec moved into strongroom as
+`livery.strongroom.cbor` and the `livery-cbor` distribution retired
+(the empty shell plan's phase 3, issue #1000). Phases 2 to 11 wait for
+Willem's go one at a time. The plan executes
 the twelve rulings of
 [the design record](20260925-strongroom-redesign.md). Phases land one
 at a time, gate-green, each updating this note in the same change.
@@ -22,7 +25,7 @@ their sequence.
 
 ## Scope
 
-In: `packages/cbor/`, distribution `livery-cbor`, import `livery.cbor`,
+In: the codec, `livery.strongroom.cbor` inside `packages/strongroom/`,
 Python only for now. `packages/strongroom/` rewritten in place: the spec
 under `packages/strongroom/spec/` replaced, the Python replaced module
 by module, the conformance suite replaced, the docs rewritten. The
@@ -51,15 +54,15 @@ built by it.
    registry entry has a vector before it is admitted. A change to a
    vectored format after the freeze is a migration and stops for the
    human; before the freeze it is an edit and a vector.
-3. **The codec is `livery.cbor`** and nothing else: RFC 8949 core
+3. **The codec is `livery.strongroom.cbor`** and nothing else: RFC 8949 core
    deterministic encoding over the subset the design note fixes, floats
    under the IETF deterministic rules, no tags, no indefinite lengths,
    a decoder that refuses every non-deterministic encoding. The store's
    own schemas are integer-only. No third-party CBOR library anywhere
    in the workspace.
-4. **Dependencies point downward.** `livery.cbor` imports nothing
-   first-party and has no dependencies. `livery.strongroom` imports
-   `livery.cbor` and the standard library, plus `blake3` as an optional
+4. **Dependencies point downward.** The codec imports the standard
+   library and itself alone, and importing the store does not load it.
+   `livery.strongroom` imports its codec and the standard library, plus `blake3` as an optional
    extra and `backports.zstd` below Python 3.14. Nothing in the
    household imports strongroom except its declared consumers. Never
    create `livery/__init__.py`.
@@ -161,7 +164,7 @@ Deliverables:
 - `packages/strongroom/spec/` emptied and rewritten. The old vectors,
   conformance cases and pages are deleted, not marked superseded.
   Pages: `README.md`, `digest.md` (both entries, aliases), `codec.md`
-  (cites livery-cbor), `tree.md` (entries as arrays, aggregates, kind
+  (cites `cbor.md`, the codec's page), `tree.md` (entries as arrays, aggregates, kind
   codes reserved for blob, executable blob, tree, symlink, version,
   large directory, block device, character device, FIFO, socket,
   whiteout; the aliases map; the size rule for large directories
@@ -412,14 +415,13 @@ Acceptance:
 Deliverables:
 
 - `livery.strongroom.__init__` exports the new store; the old modules
-  and their tests deleted; the contract test now pins imports of
-  `livery.cbor` and the standard library only.
+  and their tests deleted; the contract test now pins imports of the
+  standard library only.
 - `packages/toolroom-store/`, `packages/toolroom-bench/` and the
   workshop's tools module moved to the new API: namespaces declared
   with profiles, refs as versions, `collect` and `view` as before.
 - `packages/strongroom/docs/` rewritten as the site: the standard, the
   API walk, the platforms, the policies.
-- `workshop.toml` and the lock: `[[depends]]` from strongroom to cbor.
 - The two live stores deleted and rebuilt: the tool cache by the next
   `fm` invocation, the tool record data by its replay.
 
@@ -436,16 +438,15 @@ Deliverables:
 - `spec/README.md` states the freeze: every vectored format is fixed
   from this release, a change is a migration, and the layout number is
   1. The design note's status line says the freeze happened.
-- `fm workflow.release cbor` then `fm workflow.release strongroom`,
-  the train's own acts, receipts `packages/cbor/v0.0.0` and
+- `fm workflow.release strongroom`, the train's own act, receipt
   `packages/strongroom/v0.1.0` (a break rides along before 1.0).
 
 Acceptance:
 
-- `git tag --list 'packages/cbor/v*'` and `'packages/strongroom/v*'`
-  list the receipts and `git cat-file -t` prints `tag` for each.
-- `uv pip download livery-cbor livery-strongroom --no-deps` succeeds
-  from a clean directory.
+- `git tag --list 'packages/strongroom/v*'` lists the receipt and
+  `git cat-file -t` prints `tag` for it.
+- `uv pip download livery-strongroom --no-deps` succeeds from a clean
+  directory.
 
 ## Temporary, replaced by
 
@@ -482,6 +483,14 @@ Acceptance:
   entry contract fails with a misleading CommandNotFound for `ruff`,
   since the tools left the venv; the gate ran after
   `eval "$(fm --quiet env.emit posix)"`.
+
+- 2026-10-01, Willem (ruled 2026-09-30): the codec becomes a
+  subpackage of strongroom, `livery.strongroom.cbor`, reached by its
+  own path and not re-exported from strongroom's root. Contract 3 now
+  names it; `packages/cbor/` and the `livery-cbor` distribution are
+  gone. The 0.0.0 release on the index and its receipt tag
+  `packages/cbor/v0.0.0` stay as the name's claim. Phase 1's
+  deliverables below name the paths as they were built.
 
 ## Open
 

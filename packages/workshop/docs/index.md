@@ -417,7 +417,7 @@ absence.
   check, generated from the check registry and run over the named
   paths or the workspace the way `fm check <paths>` runs them, with
   nothing recorded as proved; each offers exactly the flags its
-  checks read. `fm test.pytest packages/cbor` runs one package's
+  checks read. `fm test.pytest packages/strongroom` runs one package's
   suite.
 - The check legs run on every runner the contract names, with the
   newest Python of a derived matrix; the nightly point runs the whole

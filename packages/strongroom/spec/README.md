@@ -15,6 +15,7 @@ Bytes, each with golden vectors under `vectors/`:
 | --- | --- |
 | [digest.md](digest.md) | the digest string grammar and the algorithm registry |
 | [canonical.md](canonical.md) | the canonical JSON every structured format hashes |
+| [cbor.md](cbor.md) | deterministic CBOR: one encoding per value, the codec's subset and refusals |
 | [tree.md](tree.md) | the tree: a directory as a manifest, with the portable-name rules |
 | [version.md](version.md) | the version: provenance over a tree |
 | [records.md](records.md) | the ref record and the tombstone |

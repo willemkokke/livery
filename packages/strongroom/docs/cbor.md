@@ -1,23 +1,19 @@
-<!-- Seeded from the template channel (package-base kind) at
-     birth; this file is the workspace's own. Edit it directly:
-     the template never rewrites it.
--->
-# livery-cbor
+# The CBOR codec
 
 Deterministic CBOR: one value, one encoding, one name.
 
-`livery.cbor` encodes a value to the one byte sequence RFC 8949's
-core deterministic encoding requirements allow, over a restricted
-subset, and decodes only that byte sequence. Everything the store
-hashes and everything the fabric hashes goes through it, so an object
-has exactly one name and a call has exactly one key. The package has
-no dependencies and imports nothing first-party, because every other
-package imports it.
+`livery.strongroom.cbor` encodes a value to the one byte sequence RFC
+8949's core deterministic encoding requirements allow, over a
+restricted subset, and decodes only that byte sequence. Everything the
+store hashes and everything the fabric hashes goes through it, so an
+object has exactly one name and a call has exactly one key. The codec
+imports only the standard library, and importing the store does not
+load it: reach it by its own path.
 
 ## Using it
 
 ```python
-from livery.cbor import CodecError, decode, encode
+from livery.strongroom.cbor import CodecError, decode, encode
 
 data = encode({"name": "bun", "size": 41_943_040, "parts": [b"\x00", 1.5]})
 value = decode(data)
@@ -47,7 +43,14 @@ helps, the offset.
 | float | the shortest of half, single and double that is exact; one NaN, `f97e00` |
 
 No tags, no indefinite lengths, no other simple values. The full rules
-and the refusals are on the standard's page.
+and the refusals are in `spec/cbor.md` beside the package in the
+repository, and its vectors in `spec/vectors/cbor.json`. A vector
+case pins the one encoding of a value, with a `diagnostic` string in
+RFC 8949's notation and, where JSON can carry it, the `value`; a
+refusal pins an input or a value that must be refused, by a phrase the
+error must contain. A second implementation needs about two hundred
+lines and that file; a general CBOR library's canonical mode is not a
+substitute until the vectors check it.
 
 ## Three hazards at the boundary
 
