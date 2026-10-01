@@ -172,6 +172,11 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         (root / "packages" / member / "CHANGELOG.md").write_text(
             "# Changelog\n\n## [0.3.0]\n\n- x\n"
         )
+    (root / ".release-manifest.json").write_text(
+        '{"schema": 1, "members": ['
+        '{"dir": "geometry", "name": "acme-geometry", "version": "0.3.0"},'
+        ' {"dir": "ext", "name": "acme-ext", "version": "0.3.0"}]}\n'
+    )
     _git(root, "add", "-A")
     sha = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True

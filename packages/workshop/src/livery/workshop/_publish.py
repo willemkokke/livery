@@ -1,14 +1,13 @@
 """Publish, probe, tag: the release train's receipt-cutting half.
 
 Runs where the release PR's squash landed, discovery reads the ref
-and nothing else: the members are the ``packages/*/CHANGELOG.md``
-paths the squash touched, each version the top heading of that
-changelog as committed at the ref. Names and versions come from the
+and nothing else: the members and their versions are the release's
+member list as committed at the ref. Names and versions come from the
 same place on purpose: reading names from the commit and versions
 from the working tree would pair this release's members with
 whatever a later release left in the tree, and the ``--ref``
 recovery runs from exactly such a checkout. The squash title is
-presentation, rebuilt from the same changelogs, never parsed.
+presentation, rebuilt from the same list, never parsed.
 
 The wave: a member becomes eligible when every in-set dependency it
 floors on has its receipt tag cut, and every eligible member runs
@@ -36,21 +35,19 @@ from livery.toolroom import tools
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
-_CHANGELOG_RE = re.compile(r"^packages/([^/]+)/CHANGELOG\.md$")
-
 #: The release set's own record, committed on the release branch by
-#: prepare. Discovery reads it at the squash, so a recovery
-#: re-prepare whose stamps are already on the base (and so touch
-#: nothing) still names every member; the diff-derived discovery
-#: below stays as the fallback for squashes that predate it.
+#: prepare: every member's directory, name and version. Discovery,
+#: the title check and the recovery read it at the squash, so a
+#: recovery re-prepare whose stamps are already on the base (and so
+#: touch nothing else) still names every member.
 MANIFEST = ".release-manifest.json"
 
 
 def read_manifest(text: str) -> tuple[tuple[str, str], ...] | None:
     """(package dir, version) pairs from manifest *text*, or None.
 
-    None for unreadable content: the caller falls back to the
-    diff-derived discovery rather than failing a legacy squash.
+    None for unreadable content, which the caller refuses: without
+    the list there is no record of what the release contains.
     """
     import json
 
@@ -62,8 +59,6 @@ def read_manifest(text: str) -> tuple[tuple[str, str], ...] | None:
         return None
     return pairs or None
 
-
-_HEADING_RE = re.compile(r"^## \[?(\d+\.\d+\.\d+)\]?", re.M)
 
 #: How long a member waits for the index to serve its version.
 PROBE_TIMEOUT = 300.0
@@ -88,80 +83,43 @@ class Receipt:
     published: bool  # False when the duplicate tolerance skipped it
 
 
-def changelog_version(text: str) -> str:
-    """The top version heading of a changelog body; empty when none."""
-    match = _HEADING_RE.search(text)
-    return match.group(1) if match else ""
-
-
 def discover_release(
     root: Path, git: GitOps, ref: str
 ) -> tuple[tuple[Package, str], ...]:
     """What the squash at *ref* releases, in topological order.
 
-    Members are the ``packages/*/CHANGELOG.md`` paths the commit
-    touched; each version is the top heading of that changelog as
-    committed at the ref. A commit touching no member changelog is
-    not a release squash and fails teaching the recovery flag. A
-    rider file in the squash changes nothing here, which is what
-    makes hand-editing an entry on the release branch safe.
+    The members and their versions are the release's member list,
+    [livery.workshop._publish.MANIFEST][], as committed at *ref*: the
+    record the release branch writes when it prepares the set. A
+    commit without a readable list is not a release squash and fails
+    teaching the recovery flag. A rider file in the squash changes
+    nothing here, which is what makes hand-editing a release branch
+    safe.
     """
     from livery.workshop._graph import order_topologically
 
-    manifest_pairs: tuple[tuple[str, str], ...] | None = None
-    try:
-        manifest_pairs = read_manifest(git.file_at(ref, MANIFEST))
-    except Exception:
-        manifest_pairs = None
-    if manifest_pairs is not None:
-        listed = {p.directory.name: p for p in discover_packages(root)}
-        chosen: list[Package] = []
-        stated: dict[str, str] = {}
-        for name, version in manifest_pairs:
-            member = listed.get(name)
-            if member is None:
-                fail(
-                    f"the release manifest at {ref[:10]} names"
-                    f" packages/{name}, which is not a workspace package"
-                )
-            chosen.append(member)
-            stated[member.path] = version
-        in_order = order_topologically(tuple(chosen))
-        return tuple((member, stated[member.path]) for member in in_order)
-
-    names: list[str] = []
-    for path in git.files_in_commit(ref):
-        match = _CHANGELOG_RE.match(path)
-        if match:
-            names.append(match.group(1))
-    if not names:
+    pairs = read_manifest(git.file_at(ref, MANIFEST))
+    if pairs is None:
         fail(
-            "this commit is not a release squash: it touches no"
-            " packages/*/CHANGELOG.md. Publish runs on the merge commit"
-            " of a workflow.release PR; pass --ref=<squash sha> when"
-            " HEAD has moved past it."
+            f"this commit is not a release squash: it carries no readable"
+            f" {MANIFEST}, the member list a release branch commits. Publish"
+            " runs on the merge commit of a workflow.release PR; pass"
+            " --ref=<squash sha> when HEAD has moved past it."
         )
-    by_dir = {p.directory.name: p for p in discover_packages(root)}
-    members: list[Package] = []
-    versions: dict[str, str] = {}
-    for name in names:
-        package = by_dir.get(name)
-        if package is None:
+    listed = {p.directory.name: p for p in discover_packages(root)}
+    chosen: list[Package] = []
+    stated: dict[str, str] = {}
+    for name, version in pairs:
+        member = listed.get(name)
+        if member is None:
             fail(
-                f"the squash touches packages/{name}/CHANGELOG.md, but"
-                f" packages/{name} is not a workspace package"
+                f"the release manifest at {ref[:10]} names"
+                f" packages/{name}, which is not a workspace package"
             )
-        version = changelog_version(git.file_at(ref, f"packages/{name}/CHANGELOG.md"))
-        if not version:
-            fail(
-                f"packages/{name}/CHANGELOG.md at {ref[:10]} has no"
-                " `## <version>` heading, so the release it states is"
-                " unreadable"
-            )
-        members.append(package)
-        versions[package.path] = version
-    ordered = order_topologically(tuple(members))
-    return tuple((package, versions[package.path]) for package in ordered)
+        chosen.append(member)
+        stated[member.path] = version
+    in_order = order_topologically(tuple(chosen))
+    return tuple((member, stated[member.path]) for member in in_order)
 
 
 _MINED_AT_RE = re.compile(r"^Mined-At: ([0-9a-f]{7,40})$", re.M)

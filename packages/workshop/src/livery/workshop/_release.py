@@ -515,7 +515,7 @@ def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
     """
     from livery.workshop._compose import layer_template_tree
     from livery.workshop._layers import layer_entries
-    from livery.workshop._publish import discover_release
+    from livery.workshop._publish import MANIFEST, discover_release, read_manifest
 
     publisher = ""
     for layer, dist in layer_entries(root):
@@ -524,6 +524,9 @@ def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
     if not publisher:
         return "", False
     git = GitOps(root)
+    if read_manifest(git.file_at(ref or "HEAD", MANIFEST)) is None:
+        # No member list at the ref: nothing was released there.
+        return publisher, False
     released = {
         package.name for package, _version in discover_release(root, git, ref or "HEAD")
     }
