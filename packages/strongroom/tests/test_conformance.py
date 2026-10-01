@@ -7,14 +7,11 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import (
+from livery.strongroom import Namespace, Store, _lifecycle, _rungs
+from livery.strongroom.testing import (
     ConformanceFailure,
-    Namespace,
     PythonHooks,
     Scenario,
-    Store,
-    _lifecycle,
-    _rungs,
     load_scenarios,
     run_scenario,
 )

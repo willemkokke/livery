@@ -3,16 +3,16 @@
 A scenario is data: the namespaces a store is opened with and the
 steps run against it in order. The harness interprets the steps
 against any implementation that speaks the store's API, through
-[livery.strongroom.StoreLike][], and reaches the three seams a
+[livery.strongroom.testing.StoreLike][], and reaches the three seams a
 scenario needs (a lock written as if held, a platform that refuses
 symlinks, a publish that begins mid-sweep) through
-[livery.strongroom.Hooks][]. [livery.strongroom.PythonHooks][] is the
+[livery.strongroom.testing.Hooks][]. [livery.strongroom.testing.PythonHooks][] is the
 Python store's own. A failed step raises
-[livery.strongroom.ConformanceFailure][] naming the scenario, the
+[livery.strongroom.testing.ConformanceFailure][] naming the scenario, the
 step and what was found.
 
-Reach for [livery.strongroom.load_scenarios][] and
-[livery.strongroom.run_scenario][].
+Reach for [livery.strongroom.testing.load_scenarios][] and
+[livery.strongroom.testing.run_scenario][].
 """
 
 from __future__ import annotations
