@@ -5,9 +5,11 @@ subject) is ``type(scope): subject``, with ``!`` before the colon or
 a ``BREAKING CHANGE:`` footer marking a break. The submit verb
 enforces it here.
 
-Reading the convention back is git-cliff's work, per package, through
-the ``cliff.toml`` the template renders: it groups the entry, links
-the pull requests, credits the authors, and derives the next version.
+Two readers take the convention back. livery.workshop._versions
+derives a package's next version from it. git-cliff, per package
+through the ``cliff.toml`` the template renders, writes the changelog
+entry: it groups the commits, links the pull requests and credits the
+authors.
 """
 
 from __future__ import annotations

@@ -25,6 +25,7 @@ from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
 from livery.workshop._update import latest_released
+from livery.workshop._versions import derive_version
 
 #: The environment variable naming the custom index dev wheels go to.
 INDEX_VAR = "PYTHON_PUBLISH_INDEX"
@@ -110,13 +111,11 @@ def unchanged_since_release(root: Path, git: GitOps, package: Package) -> str:
 
     Content, not position, judged against the release tag: HEAD can
     be far past a package's tag with no commit touching it, and
-    git-cliff then answers the released version back. Empty for a
+    the derivation then answers the released version back. Empty for a
     package with unreleased changes, or one with no release yet.
     """
     released = latest_released(git.tags()).get(package.path, "")
-    derived = _cliff.bumped_version(root, package)
-    if not derived:
-        fail(f"git-cliff derived no version for {package.name}; see its output above.")
+    derived = derive_version(root, package, released=released)
     return released if released and derived == released else ""
 
 
@@ -125,8 +124,8 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
 
     The refusal is content, not position, and judged against the
     release *tag*, never the stamped file version: HEAD can be far
-    past a package's tag with no commit touching it, and git-cliff
-    then answers the released version back. Building that content
+    past a package's tag with no commit touching it, and the
+    derivation then answers the released version back. Building that content
     under ``<released>.devN`` mints a number that sorts below the
     release it repeats, so no floor naming the release can ever
     resolve it. A stamped-ahead ``pyproject.toml`` (a prepared bump
@@ -142,7 +141,7 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
     as another commit's.
     """
     released = unchanged_since_release(root, git, package)
-    derived = _cliff.bumped_version(root, package)
+    derived = derive_version(root, package)
     if released:
         fail(
             f"nothing unreleased touches {package.name}: a dev build here"

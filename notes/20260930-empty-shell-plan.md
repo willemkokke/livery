@@ -1,9 +1,9 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; Willem's go on 2026-10-01. Phases 1 and 3 built (issues #998
-and #1000); the others not started. Fourteen phases, each gate-green
-and mergeable alone. It builds on the
+day; Willem's go on 2026-10-01. Phases 1, 3 and 7a built (issues
+#998, #1000, #1006); the others not started. Fourteen phases, each
+gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
 loop plan (`notes/20260930-local-loop-plan.md`) and the toolchain plan
@@ -648,21 +648,51 @@ Acceptance:
 
 ### Phase 7: the base derives the version, and the member list is the record
 
-Deliverables:
+Two changes, mergeable apart: 7a derives the version, 7b makes the
+member list the only record.
 
-- `derive_version(package)` in the base from the conventional commits
-  since the receipt tag, under the package's paths; `_cliff.bumped_version`
-  goes. The pinning test compares both on this repository's history
-  for every member before the switch.
+**7a, built (issue #1006).**
+
+- `livery.workshop._versions.derive_version(root, package)`: the
+  commits since the package's newest receipt tag that touch its
+  directory, read with the commit grammar. Before 1.0 a break or a
+  feature bumps the minor and anything else the patch; from 1.0 a
+  break bumps the major, a feature the minor, anything else the
+  patch. A `chore(release)` commit earns nothing, and an
+  unconventional subject counts as a patch. A package with no receipt
+  releases at its `[release] baseline`, else at 0.0.0.
+- `derive_plans`, `prepare_release` and the dev release ask it;
+  `_cliff.bumped_version` is gone, and git-cliff writes only the
+  changelog entry.
+
+Acceptance of 7a, with the evidence of 2026-10-01:
+
+- `fm check --fix` exits 0 (1m55s).
+- Fourteen scenarios on throwaway repositories, each asking both
+  git-cliff and the derivation, agree:
+  `test_the_derivation_agrees_with_git_cliff`. They cover the
+  baseline, no baseline, nothing since the tag, a commit outside the
+  member, a release commit alone, an unconventional subject, a fix,
+  a feature and a break on each side of 1.0, a breaking footer, and
+  the strongest of several commits.
+- On this repository at d908a3db every member derives what git-cliff
+  answered: cbor 0.1.0, footman 0.55.0, forge 0.5.0, strongroom
+  0.3.0, toolroom 0.9.0, toolroom-bench 0.2.0, toolroom-store 0.1.0,
+  workshop 0.4.0.
+- `fm workflow.release --local packages/footman packages/workshop`
+  exits 0 and builds `0.55.0-dev...` and `0.4.0-dev...`. The build
+  leaves its docs copy in `src/.../_docs/`, which pyrefly then judges;
+  filed as #1010.
+
+**7b, not started.**
+
 - `discover_release` reads `.release-manifest.json` only; a squash
   without one refuses naming the recovery.
 - The release PR title check and the recovery read the member list.
 
-Acceptance:
+Acceptance of 7b:
 
 - `fm check` exits 0.
-- For every member, the derived version equals git-cliff's on this
-  history: `test_the_derived_version_matches_git_cliff_on_every_member`.
 - A squash without a member list refuses:
   `test_a_squash_without_a_member_list_refuses_naming_the_recovery`.
 - `fm workflow.release --local` prepares the same versions as before.
@@ -936,6 +966,11 @@ Acceptance:
   venv from the root `pyproject.toml` first, which still named
   `livery-cbor`, so its lines were removed by hand and the render then
   matched them. Filed as #1005.
+- 2026-10-01, phase 7a: the pin compares the derivation with git-cliff
+  over scenario repositories, not over this repository's history: a
+  CI checkout's history and tags are not guaranteed, and a scenario
+  states each rule it pins. The comparison over this repository's
+  members was run once and is recorded above.
 - 2026-09-30: the ecosystem half is the workshop's `Ecosystem`, and
   `livery.forge.Registry` stays the read-only probe with
   `SimpleRegistry` in the forge, as the kind hierarchy plan ruled on

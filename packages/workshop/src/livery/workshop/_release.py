@@ -32,6 +32,7 @@ from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._versions import derive_version
 
 release = group("release", help="The release train's CI entries")
 
@@ -148,9 +149,10 @@ def _last_released(root: Path, package: Package) -> str:
 def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     """Stamp a release into *path*'s places; what changed.
 
-    Without *version*, git-cliff derives it from the conventional
-    commits under the package's paths since its last release tag, and
-    writes the entry the package's ``cliff.toml`` shapes. A given
+    Without *version*, it is derived from the conventional commits
+    under the package's paths since its last release tag
+    (livery.workshop._versions), and git-cliff writes the entry the
+    package's ``cliff.toml`` shapes. A given
     *version* wins and gets an empty entry for the human to write.
     Idempotent either way: a place already carrying the version is
     left alone.
@@ -161,10 +163,10 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         fail(f"{path} is not a workspace package")
     entry_body = ""
     if not version:
-        derived = _cliff.bumped_version(root, package)
+        derived = derive_version(root, package)
         released = _last_released(root, package)
         if not derived or derived == released:
-            # git-cliff answers with the last tag's version when
+            # The derivation answers with the last tag's version when
             # nothing unreleased touches the package. The tag is the
             # receipt (never the stamped pyproject: a stamp can land
             # without its release cutting, and judging by it would
@@ -248,9 +250,9 @@ def release_prepare(
 ) -> None:
     """Stamp a release: version derived from the commits unless given.
 
-    The derived path asks git-cliff what the unreleased commits earn,
-    through the package's own ``cliff.toml``, and writes the entry
-    they make: sections grouped, pull requests linked, authors
+    The derived path reads what the unreleased commits earn, and
+    git-cliff writes the entry they make through the package's own
+    ``cliff.toml``: sections grouped, pull requests linked, authors
     credited, for review. A package with nothing unreleased is
     refused rather than given a new number. A given version wins and
     leaves the entry for the human. ``fm release.verify`` is the

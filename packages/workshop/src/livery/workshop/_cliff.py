@@ -2,10 +2,9 @@
 
 Each package carries a ``cliff.toml`` rendered from the template,
 which states its tag line, its paths, and the entry's shape. This
-module runs git-cliff against that config: what the next version
-would be, and the entry the commits since the last release earn.
-
-The release verbs call these; nothing else reads commit history.
+module runs git-cliff against that config for the entry the commits
+since the last release earn. The next version is not git-cliff's:
+livery.workshop._versions derives it from the same commits.
 """
 
 from __future__ import annotations
@@ -151,20 +150,6 @@ def _run(root: Path, package: Package, *args: str) -> str:
             )
         fail(f"git-cliff exited {result.code}:\n{detail}")
     return result.stdout
-
-
-def bumped_version(root: Path, package: Package) -> str:
-    """The version *package*'s unreleased commits earn, bare semver.
-
-    git-cliff answers with the whole tag (``packages/forge/v0.2.0``);
-    the tag line is the config's business, so only the version
-    crosses back. An empty answer means it could not decide, which
-    the caller reports as nothing to release.
-    """
-    raw = _run(root, package, "--bumped-version").strip()
-    if not raw:
-        return ""
-    return raw.rsplit("/", 1)[-1].removeprefix("v")
 
 
 def unreleased_entry(root: Path, package: Package, version: str = "") -> str:
