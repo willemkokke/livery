@@ -1,8 +1,9 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
 Status: written 2026-09-30, rulings on the open items taken the same
-day; Willem's go on 2026-10-01. Phases 1, 3 and 7a built (issues
-#998, #1000, #1006); the others not started. Fourteen phases, each
+day; Willem's go on 2026-10-01. Phases 1, 3 and 7 built (issues
+#998, #1000, #1006, #1011); phase 11 waits for a ruling on its
+design; the others not started. Fourteen phases, each
 gate-green and mergeable alone. It builds on the
 extensible gate plan (`notes/20260905-extensible-gate-plan.md`), the
 releases plan (`notes/20260927-releases-as-a-target.md`), the local
@@ -684,18 +685,33 @@ Acceptance of 7a, with the evidence of 2026-10-01:
   leaves its docs copy in `src/.../_docs/`, which pyrefly then judges;
   filed as #1010.
 
-**7b, not started.**
+**7b, built (issue #1011).**
 
-- `discover_release` reads `.release-manifest.json` only; a squash
-  without one refuses naming the recovery.
-- The release PR title check and the recovery read the member list.
+- `discover_release` reads `.release-manifest.json` at the ref and
+  nothing else; a commit without a readable list is not a release
+  squash and refuses, naming the `--ref` recovery. The changelog
+  fallback and `changelog_version` are gone.
+- `member_pairs_at(git, ref)` names each listed member from its
+  contract at the ref; the release PR's title check and the
+  recovery's rebuilt title read it.
+- The template publisher reads a ref without a list as one that
+  released nothing.
+- Every release squash on main since 2026-09-06 carries the list,
+  and the pending-wave scan reads only the last 50 commits, so no
+  existing history loses its discovery.
 
-Acceptance of 7b:
+Acceptance of 7b, with the evidence of 2026-10-01:
 
-- `fm check` exits 0.
-- A squash without a member list refuses:
-  `test_a_squash_without_a_member_list_refuses_naming_the_recovery`.
-- `fm workflow.release --local` prepares the same versions as before.
+- `fm check --fix` exits 0 (1m52s).
+- A squash without a member list refuses, naming the recovery:
+  `test_a_squash_without_a_member_list_refuses_naming_the_recovery`;
+  a garbled list and a list naming no package refuse too:
+  `test_discovery_refuses_a_garbled_member_list`,
+  `test_a_member_list_naming_no_package_refuses`.
+- The title check passes on a member list and refuses a drifted
+  title: `test_the_check_title_task_refuses_a_drifted_title`.
+- The versions are 7a's: 7b changes what a release contains, not how
+  a version is derived.
 
 ### Phase 8: the changelog layer
 
@@ -978,4 +994,19 @@ Acceptance:
 
 ## Open
 
-None.
+1. **Phase 11's design.** Mapping footman's startup on 2026-10-01
+   found five facts the phase as written does not survive:
+   `tasks.py` is arbitrary python and its mount arguments are not
+   recorded, so the tree's shape exists only by running it;
+   `pre_tasks` hooks edit the whole live tree before any manifest is
+   built, and the workshop's `apply_cascade` may re-exec through
+   `handing_off()`; every global lifecycle hook and plugin option
+   needs its module imported on every call; the workshop's generated
+   verbs are closures no module and qualname can re-import; and the
+   `requires_*` gates are evaluated live. The options: (A) load less
+   by convention, moving the forge and tool store imports into the
+   functions that use them, pinned by a test that `fm commit --help`
+   loads neither, with no footman change; (B) manifest dispatch
+   redesigned around the five facts; (C) B as a plugin's opt-in. The
+   agent recommends A now and B only if A's measurement leaves too
+   much. Owner: Willem.

@@ -72,12 +72,22 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
     )
 
 
+def _member_list(root: Path, members: tuple[str, ...], version: str = "0.3.0") -> None:
+    import json
+
+    entries = [{"dir": m, "name": f"livery-{m}", "version": version} for m in members]
+    (root / ".release-manifest.json").write_text(
+        json.dumps({"schema": 1, "members": entries}) + "\n"
+    )
+
+
 def _squash(root: Path, members: tuple[str, ...], *, mined_at: str = "") -> str:
     listed = ", ".join(f"livery-{m} v0.3.0" for m in members)
     for member in members:
         (root / "packages" / member / "CHANGELOG.md").write_text(
             "# Changelog\n\n## [0.3.0]\n\n- x\n"
         )
+    _member_list(root, members)
     _git(root, "add", "-A")
     point = mined_at or (
         subprocess.run(
@@ -269,9 +279,9 @@ def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
     assert "bad credentials" in str(caught.value)
 
 
-def test_a_garbled_manifest_falls_back_to_the_diff() -> None:
-    # The fallback first: unreadable content answers None and the
-    # caller keeps the diff-derived discovery for legacy squashes.
+def test_a_garbled_member_list_reads_as_none() -> None:
+    # The fallback first: unreadable content answers None, which every
+    # caller refuses or reports; nothing else records a release.
     from livery.workshop._publish import read_manifest
 
     assert read_manifest("not json") is None
@@ -291,16 +301,32 @@ def test_the_manifest_names_the_set_the_diff_cannot() -> None:
     assert pairs == (("core", "0.3.0"), ("tool", "0.3.0"))
 
 
-def test_discovery_refuses_what_is_not_a_release(train) -> None:
-    # The fallback first: a commit touching no member changelog is
-    # not a release squash, whatever its title says.
+def test_a_squash_without_a_member_list_refuses_naming_the_recovery(train) -> None:
+    # The fallback first: a commit carrying no member list is not a
+    # release squash, whatever its title or its changelogs say.
     root, git, _registry, _spans = train
     (root / "notes.txt").write_text("just notes\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): released livery-base v0.3.0")
+    (root / "packages" / "base" / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [0.3.0]\n\n- x\n"
+    )
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): released livery-base v0.3.0")
     with pytest.raises(_FAILURES) as caught:
         discover_release(root, git, git.head_sha())
     assert "not a release squash" in str(caught.value)
+    assert "--ref=<squash sha>" in str(caught.value)
+
+
+def test_a_member_list_naming_no_package_refuses(train) -> None:
+    root, git, _registry, _spans = train
+    _member_list(root, ("gone",))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): released livery-gone v0.3.0")
+    with pytest.raises(_FAILURES) as caught:
+        discover_release(root, git, git.head_sha())
+    assert "packages/gone, which is not a workspace package" in str(caught.value)
 
 
 def test_discovery_reads_members_from_the_squash_content(train) -> None:
@@ -417,11 +443,9 @@ def test_the_recovery_finds_the_requested_sets_own_uncut_squash(train) -> None:
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:
     # hse's shape: the title is presentation. A rider file in the
     # squash and a hand-mangled title change nothing about what the
-    # changed changelogs state.
+    # member list states.
     root, git, _registry, _spans = train
-    (root / "packages" / "base" / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## [0.3.0]\n\n- hand-edited entry\n"
-    )
+    _member_list(root, ("base",))
     (root / "rider.txt").write_text("a rider\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): the lock records something")
@@ -429,16 +453,31 @@ def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None
     assert [(p.directory.name, v) for p, v in discovered] == [("base", "0.3.0")]
 
 
-def test_discovery_refuses_an_unreadable_heading(train) -> None:
+def test_discovery_refuses_a_garbled_member_list(train) -> None:
     root, git, _registry, _spans = train
-    (root / "packages" / "base" / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## [Unreleased]\n\n- pending\n"
-    )
+    (root / ".release-manifest.json").write_text('{"members": [{"dir": "base"}]}\n')
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: mangle")
     with pytest.raises(_FAILURES) as caught:
         discover_release(root, git, git.head_sha())
-    assert "no" in str(caught.value) and "heading" in str(caught.value)
+    assert "no readable .release-manifest.json" in str(caught.value)
+
+
+def test_the_member_pairs_name_each_member_from_its_contract_at_the_ref(
+    train,
+) -> None:
+    from livery.workshop._release_driver import member_pairs_at
+
+    root, git, _registry, _spans = train
+    assert member_pairs_at(git, "HEAD") is None
+    _member_list(root, ("base", "nowhere"))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: list")
+    # A directory with no contract at the ref keeps its directory name.
+    assert member_pairs_at(git, "HEAD") == [
+        ("livery-base", "0.3.0"),
+        ("nowhere", "0.3.0"),
+    ]
 
 
 def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(

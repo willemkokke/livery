@@ -125,6 +125,33 @@ def _write_manifest(root: Path, plans: tuple[MemberPlan, ...]) -> None:
     (root / MANIFEST).write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
 
 
+def member_pairs_at(git: GitOps, ref: str) -> list[tuple[str, str]] | None:
+    """(distribution, version) for each member in the member list at *ref*.
+
+    Each name is read from the member's contract as committed at
+    *ref*, so the answer describes that commit alone. None when *ref*
+    carries no readable list.
+    """
+    import tomllib
+
+    from livery.workshop._publish import MANIFEST, read_manifest
+
+    recorded = read_manifest(git.file_at(ref, MANIFEST))
+    if recorded is None:
+        return None
+    pairs: list[tuple[str, str]] = []
+    for directory, version in recorded:
+        try:
+            contract = tomllib.loads(
+                git.file_at(ref, f"packages/{directory}/workshop.toml")
+            )
+            name = str(contract.get("name") or directory)
+        except tomllib.TOMLDecodeError:
+            name = directory
+        pairs.append((name, version))
+    return pairs
+
+
 def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     """Raise floors between co-released members; the files changed.
 
@@ -539,36 +566,17 @@ class ReleaseDriver:
         )
 
     def _submission_from_ref(self) -> Submission:
-        """The title and body the branch's changelogs state.
+        """The title and body the branch's member list states.
 
-        Recovery reads the branch's committed changelogs, never the
+        Recovery reads the branch's committed member list, never the
         working tree and never commit subjects: a checkout standing
-        elsewhere holds a different tree, a rider commit is not part
-        of what was prepared, and a hand-edited entry keeps its
-        member's heading, so the rebuilt title stays consistent with
-        the content the squash will carry.
+        elsewhere holds a different tree, and a rider commit is not
+        part of what was prepared, so the rebuilt title stays
+        consistent with the content the squash will carry.
         """
-        from livery.workshop._publish import changelog_version
-
         git = self._git
         mined_at = git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
-        pairs: list[tuple[str, str]] = []
-        for path in git._run("diff", "--name-only", mined_at, "HEAD").splitlines():
-            parts = path.split("/")
-            if (
-                len(parts) == 3
-                and parts[0] == "packages"
-                and parts[2] == "CHANGELOG.md"
-            ):
-                version = changelog_version(git.file_at("HEAD", path))
-                contract = git.file_at("HEAD", f"packages/{parts[1]}/workshop.toml")
-                name = ""
-                for line in contract.splitlines():
-                    if line.startswith("name = "):
-                        name = line.split("=", 1)[1].strip().strip('"')
-                        break
-                if name and version:
-                    pairs.append((name, version))
+        pairs = member_pairs_at(git, "HEAD") or []
         listed = ", ".join(f"{name} v{version}" for name, version in pairs)
         body = (
             "## Release summary\n"
@@ -1060,12 +1068,12 @@ def workflow_release_dispatch(
 def workflow_release_check_title(
     title: Annotated[str, doc("the PR title CI observed")] = "",
 ) -> None:
-    """Verify a release PR's title against the members' changelogs.
+    """Verify a release PR's title against the release's member list.
 
-    The publish wave discovers a release from the squash's changed
-    changelogs; the title is presentation. This job keeps the two
+    The publish wave discovers a release from the squash's member
+    list; the title is presentation. This job keeps the two
     consistent: the gate job runs this first, so a title that no
-    longer names what the changelogs prepared is refused before the
+    longer names what the list prepared is refused before the
     union and the verdict, and the merge waits for a person to fix
     the title. Without ``--title`` the title
     comes from the runner's event payload; a run that is not a pull
@@ -1092,51 +1100,20 @@ def workflow_release_check_title(
         if head_ref and not head_ref.startswith("workflow/release/"):
             print(f"  {head_ref} is not a release branch: nothing to check")
             return
-    from livery.workshop._publish import changelog_version
-
     git = GitOps(root)
     branch = git.current_branch()
-    base = git._run("merge-base", "HEAD", "origin/main").strip()
-    pairs: list[str] = []
-    from livery.workshop._publish import MANIFEST, read_manifest
-
-    try:
-        recorded = read_manifest(git.file_at("HEAD", MANIFEST))
-    except Exception:
-        recorded = None
-    if recorded is not None:
-        from livery.workshop._packages import discover_packages
-
-        named = {p.directory.name: p.name for p in discover_packages(root)}
-        pairs = [
-            f"{named.get(directory, directory)} v{version}"
-            for directory, version in recorded
-        ]
-    for path in (
-        []
-        if recorded is not None
-        else git._run("diff", "--name-only", base, "HEAD").splitlines()
-    ):
-        parts = path.split("/")
-        if len(parts) == 3 and parts[0] == "packages" and parts[2] == "CHANGELOG.md":
-            version = changelog_version(git.file_at("HEAD", path))
-            contract = git.file_at("HEAD", f"packages/{parts[1]}/workshop.toml")
-            for line in contract.splitlines():
-                if line.startswith("name = "):
-                    name = line.split("=", 1)[1].strip().strip('"')
-                    if name and version:
-                        pairs.append(f"{name} v{version}")
-                    break
-    if not pairs:
-        print(f"  {branch}: no changelog changes; nothing to check")
+    recorded = member_pairs_at(git, "HEAD")
+    if not recorded:
+        print(f"  {branch}: no release member list; nothing to check")
         return
+    pairs = [f"{name} v{version}" for name, version in recorded]
     expected = "chore(release): released " + ", ".join(pairs)
     if title and title != expected:
         fail(
-            f"the PR title does not match what the changelogs prepared:\n"
+            f"the PR title does not match what the member list prepared:\n"
             f"    title:    {title}\n    prepared: {expected}\n"
             "  The title is presentation rebuilt from the branch's"
-            " changelogs; restore it or re-run workflow.release."
+            " member list; restore it or re-run workflow.release."
         )
     print(f"  title matches the prepared release: {expected}")
 
