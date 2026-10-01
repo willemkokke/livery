@@ -3,8 +3,10 @@
 Each package carries a ``cliff.toml`` rendered from the template,
 which states its tag line, its paths, and the entry's shape. This
 module runs git-cliff against that config for the entry the commits
-since the last release earn. The next version is not git-cliff's:
-livery.workshop._versions derives it from the same commits.
+since the last release earn, and registers the provider that writes
+it into ``CHANGELOG.md`` (livery.workshop._release_notes). The next
+version is not git-cliff's: livery.workshop._versions derives it from
+the same commits.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.toolroom import tools
 from livery.workshop._packages import Package
+from livery.workshop._release_notes import register_release_notes
 
 #: Where a package's changelog contract lives.
 CONFIG_NAME = "cliff.toml"
@@ -163,3 +166,69 @@ def unreleased_entry(root: Path, package: Package, version: str = "") -> str:
     if version:
         args += ["--tag", f"packages/{package.directory.name}/v{version}"]
     return _run(root, package, *args).strip()
+
+
+class CliffChangelog:
+    """Release notes as git-cliff entries in each package's ``CHANGELOG.md``.
+
+    The provider [livery.workshop._release_notes.ReleaseNotes][] the
+    base registers until the changelog layer ships it: the entry is
+    git-cliff's, through the package's ``cliff.toml``; the history is
+    the package's ``CHANGELOG.md``, newest entry first.
+    """
+
+    def entry(self, root: Path, package: Package, version: str = "") -> str:
+        """The entry git-cliff writes for what is unreleased in *package*."""
+        return unreleased_entry(root, package, version)
+
+    def record(self, package: Package, version: str, entry: str) -> list[str]:
+        """Write *version*'s *entry* at the top of ``CHANGELOG.md``.
+
+        An entry already under *version*'s heading is replaced when a
+        new one is given: the stranded shape, a heading whose tag never
+        cut, regenerates rather than under-documenting what ships.
+        """
+        changelog = package.directory / "CHANGELOG.md"
+        text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
+        if f"## {version}" not in text and f"## [{version}]" not in text:
+            # A blank line on each side, so the new entry and the one it
+            # sits above stay separate blocks.
+            insert = "\n" + (entry or f"## [{version}]\n\n-").strip() + "\n"
+            first_entry = text.find("\n## ")
+            if first_entry == -1:
+                text = text.rstrip("\n") + "\n" + insert
+            else:
+                text = text[:first_entry] + insert + text[first_entry:]
+            changelog.write_text(text, encoding="utf-8")
+            return ["CHANGELOG.md (review the entry before tagging)"]
+        if entry:
+            rewritten = _replace_entry(text, version, entry)
+            if rewritten != text:
+                changelog.write_text(rewritten, encoding="utf-8")
+                return ["CHANGELOG.md (the stranded entry regenerated; review it)"]
+        return []
+
+    def verify(self, package: Package, version: str) -> list[str]:
+        """A missing ``## <version>`` entry in ``CHANGELOG.md``, or nothing."""
+        changelog = package.directory / "CHANGELOG.md"
+        body = changelog.read_text("utf-8") if changelog.is_file() else ""
+        if f"## {version}" in body or f"## [{version}]" in body:
+            return []
+        return [f"CHANGELOG.md has no '## {version}' entry"]
+
+
+def _replace_entry(text: str, version: str, entry_body: str) -> str:
+    """*text* with *version*'s entry block replaced by *entry_body*."""
+    import re
+
+    pattern = re.compile(
+        rf"^## \[?{re.escape(version)}\]?[^\n]*\n.*?(?=^## |\Z)",
+        flags=re.M | re.S,
+    )
+    replacement = entry_body.strip() + "\n\n"
+    rewritten, count = pattern.subn(lambda _m: replacement, text, count=1)
+    return rewritten if count else text
+
+
+# The base's provider until the changelog layer registers its own.
+register_release_notes(CliffChangelog(), layer="livery.workshop")

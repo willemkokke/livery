@@ -27,11 +27,15 @@ from typing import Annotated
 
 from livery.footman import Context, doc, fail, group
 from livery.toolroom import tools
-from livery.workshop import _cliff
+
+# Registers the base's release notes provider, git-cliff into
+# CHANGELOG.md, until the changelog layer ships it.
+from livery.workshop import _cliff as _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._release_notes import NO_PROVIDER, release_notes
 from livery.workshop._versions import derive_version
 
 release = group("release", help="The release train's CI entries")
@@ -70,7 +74,8 @@ def verify_release(
     The agreements checked: the tag names an existing package; the
     kind's own version homes (pyproject and one ``__version__`` for
     a python kind, the recipe's ``version`` for conan) carry the
-    tag's version; a ``## <version>`` changelog entry exists; and
+    tag's version; the release notes provider, when one is mounted,
+    finds the version's notes sound; and
     every ``[[depends]]`` floor names a version whose release tag
     exists, so nothing ships depending on an unreleased floor.
     """
@@ -88,10 +93,9 @@ def verify_release(
     declared = backend_for(package).current_version(package)
     if declared != version:
         problems.append(f"tag says {version}, the package declares {declared}")
-    changelog = package.directory / "CHANGELOG.md"
-    body = changelog.read_text("utf-8") if changelog.is_file() else ""
-    if f"## {version}" not in body and f"## [{version}]" not in body:
-        problems.append(f"CHANGELOG.md has no '## {version}' entry")
+    notes = release_notes()
+    if notes is not None:
+        problems += notes.verify(package, version)
     if requires_pyproject(package.kind):
         inits = list((package.directory / "src").rglob("__init__.py"))
         stamp = f'__version__ = "{version}"'
@@ -151,9 +155,10 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
 
     Without *version*, it is derived from the conventional commits
     under the package's paths since its last release tag
-    (livery.workshop._versions), and git-cliff writes the entry the
-    package's ``cliff.toml`` shapes. A given
-    *version* wins and gets an empty entry for the human to write.
+    (livery.workshop._versions), and the release notes provider
+    writes the entry the commits earn. A given *version* wins and
+    gets an empty entry for the human to write. With no provider
+    mounted, the version is stamped and no notes are written.
     Idempotent either way: a place already carrying the version is
     left alone.
     """
@@ -162,6 +167,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     if package is None:
         fail(f"{path} is not a workspace package")
     entry_body = ""
+    notes = release_notes()
     if not version:
         derived = derive_version(root, package)
         released = _last_released(root, package)
@@ -176,41 +182,22 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
             print(f"  nothing to release: no unreleased commits touch {path}")
             return []
         version = derived
-        entry_body = _cliff.unreleased_entry(root, package, version)
+        entry_body = notes.entry(root, package, version) if notes else ""
         since = released or "the beginning"
         print(f"  derived {version} from the commits since {since}")
     if not _SEMVER_RE.fullmatch(version):
         fail(f"version {version!r} is not <major>.<minor>.<patch>")
-    if not entry_body and version != _last_released(root, package):
+    if notes and not entry_body and version != _last_released(root, package):
         # An explicitly passed version regenerates a stranded entry
         # too: the driver hands prepare the derived version, and a
         # heading without its tag under-documents what actually
         # ships either way.
-        entry_body = _cliff.unreleased_entry(root, package, version)
+        entry_body = notes.entry(root, package, version)
     changed = backend_for(package).stamp_version(package).stamp(version)
-    changelog = package.directory / "CHANGELOG.md"
-    text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
-    heading_present = f"## {version}" in text or f"## [{version}]" in text
-    if not heading_present:
-        # A blank line on each side, so the new entry and the one it
-        # sits above stay separate blocks.
-        insert = "\n" + (entry_body or f"## [{version}]\n\n-").strip() + "\n"
-        first_entry = text.find("\n## ")
-        if first_entry == -1:
-            text = text.rstrip("\n") + "\n" + insert
-        else:
-            text = text[:first_entry] + insert + text[first_entry:]
-        changelog.write_text(text, encoding="utf-8")
-        changed.append("CHANGELOG.md (review the entry before tagging)")
-    elif entry_body:
-        # The stranded shape: the heading exists but the tag never
-        # cut, and this derived entry covers everything since the
-        # last receipt, so the stale entry regenerates rather than
-        # under-documenting what actually ships.
-        rewritten = _replace_entry(text, version, entry_body)
-        if rewritten != text:
-            changelog.write_text(rewritten, encoding="utf-8")
-            changed.append("CHANGELOG.md (the stranded entry regenerated; review it)")
+    if notes is not None:
+        changed += notes.record(package, version, entry_body)
+    else:
+        print(f"  {NO_PROVIDER}")
     lock = root / "uv.lock"
     if changed and lock.is_file():
         # The lock records every member's version, so a stamp without
@@ -230,19 +217,6 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     return changed
 
 
-def _replace_entry(text: str, version: str, entry_body: str) -> str:
-    """*text* with *version*'s entry block replaced by *entry_body*."""
-    import re as _re
-
-    pattern = _re.compile(
-        rf"^## \[?{_re.escape(version)}\]?[^\n]*\n.*?(?=^## |\Z)",
-        flags=_re.M | _re.S,
-    )
-    replacement = entry_body.strip() + "\n\n"
-    rewritten, count = pattern.subn(lambda _m: replacement, text, count=1)
-    return rewritten if count else text
-
-
 @release.task(name="prepare", hidden=True)
 def release_prepare(
     path: Annotated[str, doc("the package, e.g. packages/workshop")],
@@ -250,11 +224,10 @@ def release_prepare(
 ) -> None:
     """Stamp a release: version derived from the commits unless given.
 
-    The derived path reads what the unreleased commits earn, and
-    git-cliff writes the entry they make through the package's own
-    ``cliff.toml``: sections grouped, pull requests linked, authors
-    credited, for review. A package with nothing unreleased is
-    refused rather than given a new number. A given version wins and
+    The derived path reads what the unreleased commits earn, and the
+    release notes provider writes the entry they make, for review. A
+    package with nothing unreleased is refused rather than given a new
+    number. A given version wins and
     leaves the entry for the human. ``fm release.verify`` is the
     check that everything agrees before the tag is cut.
     """

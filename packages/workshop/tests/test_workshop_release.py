@@ -293,3 +293,39 @@ def test_prepare_leaves_a_lockless_workspace_alone(seeds: Seeds) -> None:
     changed = prepare_release(root, "packages/core", "0.3.0")
     assert not (root / "uv.lock").exists()
     assert "uv.lock" not in changed
+
+
+def test_without_a_notes_provider_prepare_stamps_and_writes_no_notes(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The fallback first: a workspace mounting no release notes layer
+    # still releases; the train stamps the version and says why no
+    # entry was written.
+    from livery.workshop import _release_notes
+
+    root = _workspace(seeds)
+    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
+    changelog = root / "packages" / "core" / "CHANGELOG.md"
+    before = changelog.read_text() if changelog.is_file() else None
+    changed = prepare_release(root, "packages/core", "0.3.0")
+    assert changed and not any("CHANGELOG" in line for line in changed)
+    assert (changelog.read_text() if changelog.is_file() else None) == before
+    assert _release_notes.NO_PROVIDER in capsys.readouterr().out
+
+
+def test_the_notes_provider_is_one_registration_withdrawn_by_its_layer() -> None:
+    from livery.workshop import _release_notes
+    from livery.workshop._cliff import CliffChangelog
+
+    saved = list(_release_notes._PROVIDER)
+    try:
+        assert isinstance(_release_notes.release_notes(), CliffChangelog)
+        other = CliffChangelog()
+        _release_notes.register_release_notes(other, layer="acme.notes")
+        assert _release_notes.release_notes() is other
+        _release_notes.unregister_release_notes(layer="livery.workshop")
+        assert _release_notes.release_notes() is other
+        _release_notes.unregister_release_notes(layer="acme.notes")
+        assert _release_notes.release_notes() is None
+    finally:
+        _release_notes._PROVIDER[:] = saved
