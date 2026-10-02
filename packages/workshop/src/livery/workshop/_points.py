@@ -38,7 +38,7 @@ import os
 import re
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -755,6 +755,51 @@ def points(root: Path | None) -> tuple[Point, ...]:
     everything = builtin + tuple(item.point for item in contributed(root))
     verify_points(everything)
     return everything
+
+
+def emitted_points(root: Path) -> tuple[Point, ...]:
+    """`points`, plus a job for each name only the contract's entries give.
+
+    A ``[[ci.schedule]]`` entry in the root contract may name a job its
+    point does not declare (`jobs_of` lists it); the shell needs that
+    job to call it. The job runs on one runner, the newest gate
+    Python, with the checkout depth, token and write grant of the
+    point's first job: the root contract is where a grant is decided,
+    so this widens nothing a package could reach.
+    """
+    everything = points(root)
+    entries = declared(root)
+    out: list[Point] = []
+    for point in everything:
+        names = {job.name for job in point.jobs} | {point.name}
+        names |= {job.name for job in inherited_jobs(point, everything)}
+        model = point.jobs[0] if point.jobs else Job(point.name)
+        added: list[Job] = []
+        for entry in entries:
+            if entry.point != point.name or entry.job in names:
+                continue
+            names.add(entry.job)
+            added.append(
+                Job(
+                    entry.job,
+                    fetch=model.fetch,
+                    token=model.token,
+                    writes=model.writes,
+                    note=(
+                        f"The {entry.job} job: the [[ci.schedule]] entries"
+                        " that name it, on one runner."
+                    ),
+                )
+            )
+        out.append(replace(point, jobs=(*point.jobs, *added)) if added else point)
+    return tuple(out)
+
+
+def inherited_jobs(point: Point, everything: tuple[Point, ...]) -> tuple[Job, ...]:
+    """The jobs *point* runs before its own, from the point it inherits."""
+    if not point.inherits:
+        return ()
+    return next(other for other in everything if other.name == point.inherits).jobs
 
 
 def point_by_name(root: Path | None) -> dict[str, Point]:

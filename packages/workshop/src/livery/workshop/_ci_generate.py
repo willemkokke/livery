@@ -26,7 +26,14 @@ from typing import Any
 
 import livery.footman as footman
 from livery.workshop._contract import load_contract
-from livery.workshop._points import EVENT_NAMES, Job, Point, points
+from livery.workshop._points import (
+    EVENT_NAMES,
+    Job,
+    Point,
+    emitted_points,
+    inherited_jobs,
+    points,
+)
 from livery.workshop._pythons import gate_pythons, python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
@@ -304,20 +311,13 @@ def _points_of(workflow: str, everything: tuple[Point, ...]) -> tuple[Point, ...
     return tuple(point for point in everything if point.workflow == workflow)
 
 
-def _inherited_jobs(point: Point, everything: tuple[Point, ...]) -> tuple[Job, ...]:
-    """The jobs *point* runs before its own, from the point it inherits."""
-    if not point.inherits:
-        return ()
-    return next(other for other in everything if other.name == point.inherits).jobs
-
-
 def _needs(
     point: Point, job: Job, answers: dict[str, Any], everything: tuple[Point, ...]
 ) -> list[str]:
     """The jobs *job* waits for that render for this workspace."""
     rendered = {
         other.name
-        for other in (*_inherited_jobs(point, everything), *point.jobs)
+        for other in (*inherited_jobs(point, everything), *point.jobs)
         if _renders(other, answers)
     }
     return [need for need in job.needs if need in rendered]
@@ -823,7 +823,7 @@ def generate(root: Path) -> dict[str, str]:
     facts = _facts(root)
     kind = str(facts["forge_kind"])
     header = generated_header("#")
-    everything = points(root)
+    everything = emitted_points(root)
     if kind in ("github", "gitea"):
         # One file per workflow: the gate and the merge point share
         # ci.yml, the nightly, the release and every contributed point

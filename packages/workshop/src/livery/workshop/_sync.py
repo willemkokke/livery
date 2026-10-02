@@ -316,8 +316,9 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
 
     ``main`` only ever fast-forwards. A reserved ``workflow/`` branch
     belongs to the engine until its pull request merges, after which
-    the checkout steps off it; a detached HEAD names no branch, and a
-    dirty tree is never moved: each skips with its note. A feature
+    the checkout steps off it; a detached HEAD names no branch, a
+    clone with no ``origin`` has nothing to follow, and a dirty tree
+    is never moved: each skips with its note. A feature
     branch fast-forwards onto its moved remote, rebases onto it when
     diverged, then rebases onto the base; a stacked branch follows its
     parent instead ([livery.workshop._sync.restack][]). A rebase of a
@@ -328,6 +329,9 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     branch = git.current_branch()
     if not branch:
         print("  detached HEAD: nothing to bring current")
+        return
+    if not git.has_remote("origin"):
+        print("  no origin remote: nothing to bring current")
         return
     git.fetch()
     if branch == "main":

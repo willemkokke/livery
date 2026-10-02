@@ -1113,9 +1113,36 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     """Render one *kind* package into *root* and wire it; the import path.
 
     The shared core of ``new.package`` and the birth verb's layer
-    arm: render, receipt, roster, project re-apply, lock and sync.
+    arm: `render_member`, then the project re-apply, lock and sync.
     Idempotent by refusal: an existing directory is named, never
     overwritten.
+    """
+    import_path = render_member(root, name, kind=kind)
+    for changed in apply_project(root):
+        print(f"  rendered: {changed}")
+    from livery.workshop._tool_tasks import sync_tools
+    from livery.workshop._uv import run_uv
+
+    run_uv("lock", root=root)
+    run_uv("sync", root=root)
+    # A kind brings tools of its own (a native kind's build tools and
+    # the checks that judge it), so the tool lock moves with the
+    # member and the store supplies what it names: the gate that
+    # follows finds them, as it does after a birth.
+    sync_tools(root)
+    print(f"  packages/{name}: rendered, wired, and installed")
+    return import_path
+
+
+def render_member(root: Path, name: str, *, kind: str = "package-python") -> str:
+    """Render one *kind* package into *root* and add it to the roster; the import path.
+
+    Renders the kind's template chain, writes the receipt and the
+    native files the records render, and appends the member to the
+    root answers. The project render, the lock and the install are
+    the caller's: `wire_package` runs them for one member, and a
+    caller adding many members runs them once after the last.
+    Refuses an existing directory, naming it.
     """
     template_dir, ref, _owners = render_source(root)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
@@ -1178,19 +1205,6 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
             "kind": kind,
         },
     )
-    for changed in apply_project(root):
-        print(f"  rendered: {changed}")
-    from livery.workshop._tool_tasks import sync_tools
-    from livery.workshop._uv import run_uv
-
-    run_uv("lock", root=root)
-    run_uv("sync", root=root)
-    # A kind brings tools of its own (a native kind's build tools and
-    # the checks that judge it), so the tool lock moves with the
-    # member and the store supplies what it names: the gate that
-    # follows finds them, as it does after a birth.
-    sync_tools(root)
-    print(f"  packages/{name}: rendered, wired, and installed")
     return f"{namespace}.{slug}" if namespace else slug
 
 

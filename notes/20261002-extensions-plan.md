@@ -1,7 +1,8 @@
 # Extensions: a base, and what a workspace lists
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
-2026-10-02. Phase 1a built (issue #1025); the others not started. It is the one plan from now until the end of
+2026-10-02. Phase 1a built (issue #1025); 1b built (issue #1028),
+its CI baseline owed; the others not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -613,20 +614,37 @@ Acceptance of 1a, with the evidence of 2026-10-02:
   `test_every_check_fragment_renders_the_same_in_minijinja` pass.
 - `fm template.check` exits 0 after the template change.
 
-**1b, the scale fixture: not started.** Deliverables:
+**1b, the scale fixture: built (issue #1028); the CI baseline is
+owed.**
 
-- A generated workspace of 300 packages across python, cpp-conan and
-  nanobind, with today's `fm sync`, `fm template.check` and
-  `fm check` timed cold, warm with nothing changed, and with one
-  package changed.
-- A scheduled CI point that runs it, so the rows are recorded in the
-  CI store's metrics.
+- `fm ci.scale` copies the committed tree at HEAD into a repository
+  of its own with no remote, removes the test modules of the copy's
+  own members (they test facts about this repository) and zeroes
+  their floors, then renders the generated members: 240 python, 40
+  cpp-conan and 20 nanobind by default, the python ones a binary
+  tree of runtime edges declared through the layering fix mode's
+  writer. It times `fm sync`, `fm template.check` and `fm check`
+  cold (no environment, no gate record, the gate whole), warm, and
+  after an edit to one leaf member, and prints every timing.
+- Inside CI the timings land on the `metrics` series as the run's
+  `scale` job, a task per verb and state, so `fm ci.timings` reads
+  them with no change to its reader.
+- A `[[ci.schedule]]` entry runs it weekly in a `scale` job of the
+  nightly point. A job only an entry names was listed by `jobs_of`
+  and never emitted; `emitted_points` now adds it to the shell, on
+  one runner, with the point's own checkout and credential.
+- `fm sync` in a clone with no `origin` (a `--local` birth, the
+  fixture's copy) stopped on a traceback; it now skips bringing the
+  checkout current and says so.
+- The generator and its verb sit beside `_e2e.py` and move with it.
 
 Acceptance of 1b:
 
 - `fm check` exits 0.
-- `fm store.show metrics` shows the fixture's baseline rows, quoted in
-  the decision record.
+- [ ] `fm store.show metrics` shows the fixture's baseline rows,
+  quoted in the decision record. Owed: a weekly entry runs on
+  Mondays, dispatched or scheduled, so the first row is the nightly
+  of 2026-10-05.
 
 ### Phase 2: strict contracts
 
@@ -1018,10 +1036,23 @@ Acceptance:
 | `[cpp.toolchain]` and `host_tools=("cc", "c++")` | `[toolchain.cpp]` (phase 12) |
 | `fm devenv.*`, `fm forge.dev.*` | `fm lodge.*` (phase 13) |
 | `_e2e.py` in the base | the e2e plugin (phase 14) |
+| `_scale.py` in the base | the e2e plugin (phase 14) |
 | `livery-cbor` 0.0.0 on the index | nothing: kept as the name's claim |
 
 ## Decision record
 
+- 2026-10-02, phase 1b: the fixture is a copy of this tree, not a
+  newborn project, because a newborn installs the published workshop
+  and the copy runs the one under test with no index. Its own
+  members keep their source and lose their test modules. The local
+  baseline on this machine, 300 members (240 python, 40 cpp-conan,
+  20 nanobind), every verb exit 0: generation 464.1s; `fm sync`
+  62.5s cold, 20.3s warm, 10.8s one changed; `fm template.check`
+  564.5s, 528.7s, 412.0s; `fm check` 595.2s cold and whole, 0.7s
+  warm, 454.1s one changed. The template render costs about 9
+  minutes at this size in every state, and the one-changed gate
+  pays most of it again; that is the cost phases 6b and 15 remove.
+  These are a local wall clock; the CI rows are the record.
 - 2026-10-02, phase 1a: phase 1 splits into the spike (1a) and the
   scale fixture (1b), which needs a CI point to record its timings
   in the store and so lands apart. The spike's one finding changed a
