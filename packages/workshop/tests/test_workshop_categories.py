@@ -68,16 +68,19 @@ def test_two_rules_of_one_specificity_claiming_one_path_refuse_naming_both(
 
 def test_a_categories_value_off_the_shape_refuses_naming_it(tmp_path: Path) -> None:
     _member(tmp_path, '[categories]\nvendored = "docs/vendor/**"\n')
-    with pytest.raises(ValueError, match=r"\[categories\] vendored must be a list"):
+    with pytest.raises(
+        BaseException,
+        match=r"categories.vendored is a string .*; it takes a list of strings",
+    ):
         discover_packages(tmp_path)
     _member(tmp_path, "categories = 3\n")
-    with pytest.raises(ValueError, match=r"\[categories\] is a table"):
+    with pytest.raises(BaseException, match=r"categories is an integer \(3\)"):
         discover_packages(tmp_path)
 
 
 def test_a_channels_table_in_a_package_refuses(tmp_path: Path) -> None:
     _member(tmp_path, '[channels]\nrendered = ["x"]\n')
-    with pytest.raises(ValueError, match=r"\[channels\] is not a package's to say"):
+    with pytest.raises(BaseException, match="the top level has no key 'channels'"):
         discover_packages(tmp_path)
 
 

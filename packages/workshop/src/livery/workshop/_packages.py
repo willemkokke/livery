@@ -213,12 +213,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             problems.append(_no_contract(root, directory))
             continue
         contract = load_contract(contract_file)
-        if "type" in contract:
-            problems.append(
-                f"{directory.name}: workshop.toml names the package kind under"
-                " `type`; rename `type` to `kind` in workshop.toml"
-            )
-            continue
         kind_name = str(contract.get("kind", ""))
         if (
             requires_pyproject(kind_name)
@@ -235,49 +229,13 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             for edge in contract.get("depends", [])
         )
         release = contract.get("release") or {}
-        if "channels" in contract:
-            raise ValueError(
-                f"{directory.name}: [channels] is not a package's to say; who"
-                " wrote a file is the workshop's answer, and a package"
-                " reassigns only its categories, under [categories]"
-            )
-        categories = contract.get("categories", {})
-        if not isinstance(categories, dict):
-            raise ValueError(
-                f"{directory.name}: [categories] is a table of category ="
-                " [patterns], not {categories!r}"
-            )
-        reassigned: list[tuple[str, tuple[str, ...]]] = []
-        for category, patterns in categories.items():
-            if not isinstance(patterns, list) or not all(
-                isinstance(pattern, str) for pattern in patterns
-            ):
-                raise ValueError(
-                    f"{directory.name}: [categories] {category} must be a list"
-                    f" of path patterns, not {patterns!r}"
-                )
-            reassigned.append((str(category), tuple(patterns)))
-        checks_table = contract.get("checks", {})
-        if not isinstance(checks_table, dict):
-            raise ValueError(
-                f"{directory.name}: [checks] holds one table per check,"
-                " [checks.<role>.<tool>] with the options the check declares"
-            )
+        # The contract's judge has held every table below to its shape.
+        reassigned = [
+            (str(category), tuple(patterns))
+            for category, patterns in contract.get("categories", {}).items()
+        ]
         options: list[tuple[str, tuple[tuple[str, object], ...]]] = []
-        for role, tools in checks_table.items():
-            if not isinstance(tools, dict):
-                raise ValueError(
-                    f"{directory.name}: [checks] sets {role} to {tools!r}; a"
-                    f" check's options live under [checks.{role}.<tool>], the"
-                    " check's own table"
-                )
-            loose = [key for key, value in tools.items() if not isinstance(value, dict)]
-            if loose:
-                raise ValueError(
-                    f"{directory.name}: [checks.{role}] sets {', '.join(loose)} on"
-                    f" the role {role}; a check's options live under"
-                    f" [checks.{role}.<tool>], the check's own table"
-                )
+        for role, tools in contract.get("checks", {}).items():
             for tool, table in tools.items():
                 options.append(
                     (
@@ -286,13 +244,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                     )
                 )
         options_by_check = tuple(options)
-        publish = release.get("publish", True) if isinstance(release, dict) else True
-        if not isinstance(publish, bool):
-            problems.append(
-                f"{directory.name}: [release] publish must be true or false,"
-                f" not {publish!r}"
-            )
-            continue
+        publish = bool(release.get("publish", True))
         packages.append(
             Package(
                 directory=directory,

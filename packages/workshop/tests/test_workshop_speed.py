@@ -85,7 +85,9 @@ def _contract(root: Path, ci: str) -> Path:
 def test_the_marks_are_off_unless_the_contract_declares_them(tmp_path: Path) -> None:
     # The refusal first: a string is not a switch. Then the default,
     # off, and the one spelling that turns it on.
-    with pytest.raises(_FAILURES, match=r"\[ci\] speed-marks must be true or false"):
+    with pytest.raises(
+        _FAILURES, match=r"ci.speed-marks is a string .*; it takes true or false"
+    ):
         _speed.enabled(_contract(tmp_path, 'speed-marks = "yes"\n'))
     assert _speed.enabled(_contract(tmp_path, 'runners = ["ubuntu-latest"]\n')) is False
     assert _speed.enabled(_contract(tmp_path, "speed-marks = false\n")) is False

@@ -4,11 +4,6 @@
 kind = "python"
 name = "livery-workshop"
 
-[verbs]
-check = "fm check"
-test = "fm test"
-build = "uv build --package livery-workshop"
-
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"

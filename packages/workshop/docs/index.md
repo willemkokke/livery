@@ -11,7 +11,14 @@ in precedence order, and that list is the whole of discovery: a
 package installed by accident never changes a repository.
 Contract keys are kebab-case, at the root and in every package's
 contract: a key spelled with underscores refuses on read, naming its
-spelling and the file to rename it in.
+spelling and the file to rename it in. Every key is declared by the
+layer that reads it, and a contract holds nothing else: a key no layer
+declares, a key of a layer the root contract does not list, a value of
+the wrong type and a value outside its allowed set each refuse on
+read, naming the file, the key, what the table takes, and the nearest
+spelling. A layer declares its keys in a data module named under the
+`workshop.contract` entry point group, which the read loads without
+the layer's tasks.
 
 - `livery.workshop` is the base layer. Importing its plugin registers
   the task surface and then mounts every further layer the contract

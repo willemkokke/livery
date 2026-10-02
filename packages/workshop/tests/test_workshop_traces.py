@@ -57,7 +57,7 @@ def work(seeds: Seeds, tmp_path: Path) -> Path:
 
 def _contract(root: Path, **keys: object) -> None:
     """Write a workspace contract naming *keys* under ``[ci]``."""
-    lines = ["[project]", 'name = "probe"', "", "[ci]"]
+    lines = ["[ci]"]
     for key, value in keys.items():
         spelled = str(value).lower() if isinstance(value, bool) else repr(value)
         lines.append(f"{key.replace('_', '-')} = {spelled}")
@@ -163,21 +163,23 @@ def test_the_sweep_keeps_the_newest_and_takes_the_rest(tmp_path: Path) -> None:
     assert len(lines) == 3
 
 
-def test_a_key_of_the_wrong_type_is_named_and_its_default_stands(work: Path) -> None:
-    """A typo must be visible and must not stop a job.
-
-    Whether a timeline is kept is not worth failing a leg over, and a
-    key that reads as false by accident would keep nothing at all and
-    say nothing about why.
-    """
+def test_a_key_of_the_wrong_type_refuses_and_one_out_of_range_is_named(
+    work: Path,
+) -> None:
     _contract(work, profile="yes", profile_window="lots", profile_into=17)
+    with pytest.raises(BaseException) as caught:
+        _traces.policy(work)
+    message = str(caught.value)
+    assert "ci.profile is a string ('yes'); it takes true or false" in message
+    assert "ci.profile-window is a string ('lots'); it takes an integer" in message
+    assert "ci.profile-into is an integer (17); it takes a string" in message
+    # The right type out of range: named, and the default stands.
+    _contract(work, profile_window=-1, profile_into="")
     kept, why = _traces.policy(work)
-    assert kept.legs is _traces.PROFILE_DEFAULT
     assert kept.window == _traces.WINDOW_DEFAULT
     assert kept.into == _traces.INTO_DEFAULT
-    assert "[ci] profile is 'yes'; it is true or false" in why
-    assert "[ci] profile-window is 'lots'; it is a whole number of runs" in why
-    assert "[ci] profile-into is 17; it is a path" in why
+    assert "[ci] profile-window is -1; it is a whole number of runs" in why
+    assert "[ci] profile-into is ''; it is a path" in why
 
 
 def test_a_contract_that_wants_no_traces_pushes_nothing_and_says_nothing(
@@ -811,7 +813,7 @@ def test_a_run_nobody_can_name_refuses_to_write_a_file(
     assert path is None
     assert lines == ["profile: the forge lists no run for abc123"]
     # And a contract that says something wrong stops before any of it.
-    _contract(work, profile_window="lots")
+    _contract(work, profile_window=-1)
     path, lines = _traces.write_run(work, repo, run_id="77")
     assert path is None and "profile-window" in lines[0]
 

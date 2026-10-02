@@ -174,7 +174,7 @@ def test_a_schedule_entry_with_junk_args_refuses_at_load(tmp_path: Path) -> None
     root = _root(
         tmp_path, '\n[[ci.schedule]]\npoint = "nightly"\ntask = "x"\nargs = [1]\n'
     )
-    with pytest.raises(_FAILURES, match="args must be strings"):
+    with pytest.raises(_FAILURES, match=r"ci\.schedule\[\]\.args is a list"):
         _points.declared(root)
 
 
@@ -184,7 +184,7 @@ def test_a_schedule_entry_with_an_unknown_cadence_refuses_at_load(
     root = _root(
         tmp_path, '\n[[ci.schedule]]\npoint = "nightly"\ntask = "x"\nevery = "3d"\n'
     )
-    with pytest.raises(_FAILURES, match=r"every '3d' is not a cadence"):
+    with pytest.raises(_FAILURES, match=r"ci\.schedule\[\]\.every is '3d'"):
         _points.declared(root)
 
 

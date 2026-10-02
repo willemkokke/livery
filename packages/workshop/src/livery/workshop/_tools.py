@@ -65,11 +65,12 @@ import sys
 import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from livery.footman import fail, prog
 from livery.footman.context import Failed, run
 from livery.workshop._contract import load_contract
+from livery.workshop._contract_keys import Declared, Type
 from livery.workshop._kinds import kind_chain
 from livery.workshop._packages import discover_packages
 
@@ -92,22 +93,38 @@ TYPINGS_PACKAGE = ("livery", "toolroom")
 """The namespace package the stubs and handles live under, beside the tools package."""
 
 
+def declared_keys() -> tuple[Declared, ...]:
+    """The ``[tools]`` keys a contract may hold, the modes taken from the store."""
+    from livery.toolroom.store import MODES
+
+    def root(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
+        return Declared("root", path, types, values)
+
+    return (
+        root("tools", "table"),
+        root("tools.requires", "strs"),
+        root("tools.host-allowed", "strs"),
+        root("tools.hosts", "strs"),
+        root("tools.index", "str"),
+        root("tools.modes", "table"),
+        root("tools.modes.*", "str", values=tuple(MODES)),
+        root("tools.sources", "strs"),
+        Declared("package", "tools", ("table",)),
+        Declared("package", "tools.requires", ("strs",)),
+    )
+
+
 def tools_table(path: Path) -> dict[str, object]:
     """The `[tools]` table of the contract at *path*; empty when absent."""
     if not path.is_file():
         return {}
-    table = load_contract(path).get(TOOLS) or {}
-    if not isinstance(table, dict):
-        fail(f"{path}: [tools] is not a table")
-    return dict(table)
+    return dict(load_contract(path).get(TOOLS) or {})
 
 
 def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
     from livery.toolroom.store import LockError, Requirement
 
-    declared = table.get("requires", [])
-    if not isinstance(declared, list) or not all(isinstance(r, str) for r in declared):
-        fail(f"{site}: [tools] requires is not a list of strings")
+    declared = cast("list[str]", table.get("requires", []))
     try:
         return [Requirement.parse(text, site=site) for text in declared]
     except LockError as error:
@@ -178,9 +195,9 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     from livery.workshop._checks import check_for, tools_for_kind
     from livery.workshop._kinds import kind_host_allowed
 
-    declared = tools_table(root / "workshop.toml").get("host-allowed", [])
-    if not isinstance(declared, list) or not all(isinstance(n, str) for n in declared):
-        fail("workshop.toml: [tools] host-allowed is not a list of strings")
+    declared = cast(
+        "list[str]", tools_table(root / "workshop.toml").get("host-allowed", [])
+    )
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     kinds = {package.kind for package in packages} or {"python"}
     names = tuple(sorted({*declared, *kind_host_allowed(kinds)}))
@@ -248,9 +265,7 @@ def locked_hosts(root: Path) -> tuple[str, ...]:
     declared = tools_table(root / "workshop.toml").get("hosts")
     if declared is None:
         return DEFAULT_HOSTS
-    if not isinstance(declared, list) or not all(isinstance(h, str) for h in declared):
-        fail("workshop.toml: [tools] hosts is not a list of strings")
-    return tuple(declared)
+    return tuple(cast("list[str]", declared))
 
 
 def index_source(root: Path) -> str:
@@ -1071,9 +1086,9 @@ def mode_of(
     """
     from livery.toolroom.store import MODES, default_mode
 
-    overrides = tools_table(root / "workshop.toml").get("modes", {})
-    if not isinstance(overrides, dict):
-        fail("workshop.toml: [tools] modes is not a table")
+    overrides = cast(
+        "dict[str, str]", tools_table(root / "workshop.toml").get("modes", {})
+    )
     chosen = overrides.get(name, declared) or default_mode(kind, paths)
     if chosen not in MODES:
         fail(
@@ -1087,9 +1102,7 @@ def sources(root: Path) -> tuple[Source, ...]:
     """The tiers consulted before an origin, `[tools] sources`: folders or URLs."""
     from livery.strongroom import FolderSource, HttpSource
 
-    declared = tools_table(root / "workshop.toml").get("sources", [])
-    if not isinstance(declared, list) or not all(isinstance(s, str) for s in declared):
-        fail("workshop.toml: [tools] sources is not a list of strings")
+    declared = cast("list[str]", tools_table(root / "workshop.toml").get("sources", []))
     found: list[Source] = []
     for entry in declared:
         if "://" in entry:

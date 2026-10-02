@@ -303,18 +303,13 @@ def coverage_policy(package: Package) -> FloorPolicy | None:
     raw = qa.get("coverage-floor")
     if raw is None:
         return None
-    raw_epsilon = qa.get("coverage-epsilon", DEFAULT_EPSILON)
-    if isinstance(raw_epsilon, bool) or not isinstance(raw_epsilon, int | float):
-        fail(
-            f"{package.path}: [qa] coverage-epsilon is a number of percentage"
-            f" points; found {raw_epsilon!r}"
-        )
-    epsilon = float(raw_epsilon)
+    # The contract's judge holds the epsilon to a number.
+    epsilon = float(qa.get("coverage-epsilon", DEFAULT_EPSILON))
     if epsilon < 0:
         fail(f"{package.path}: [qa] coverage-epsilon must not be negative")
     if raw == AUTO_RATCHET:
         return FloorPolicy(None, True, epsilon)
-    if isinstance(raw, bool) or not isinstance(raw, int | float):
+    if isinstance(raw, str):
         fail(
             f"{package.path}: [qa] coverage-floor is a percentage or"
             f' "{AUTO_RATCHET}"; found {raw!r}'

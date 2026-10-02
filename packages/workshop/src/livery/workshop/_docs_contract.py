@@ -16,6 +16,7 @@ from pathlib import Path
 
 from livery.footman import fail
 from livery.workshop._contract import load_contract
+from livery.workshop._contract_keys import Declared
 from livery.workshop._packages import Package, discover_packages
 
 #: Where package docs mount inside the site's tree, per package
@@ -30,6 +31,13 @@ GENERATED_DIR = "_generated"
 
 
 GENERATED = GENERATED_DIR + "/"
+
+
+#: Where the site may publish.
+SEAMS = ("pages", "container", "ssh", "none")
+
+#: The ``[docs] publish`` key, declared beside its reader.
+DECLARED: tuple[Declared, ...] = (Declared("root", "docs.publish", ("str",), SEAMS),)
 
 
 def docs_table(root: Path) -> dict[str, object]:
@@ -145,17 +153,13 @@ DEFAULT_SEAMS = {"github": "pages", "gitlab": "pages", "gitea": "container"}
 def publish_seam(root: Path) -> str:
     """The declared publish seam: pages, container, ssh, or none.
 
-    The contract's ``[docs] publish`` wins; without it the forge kind
-    picks its default. An unknown declaration fails naming the four.
+    The contract's ``[docs] publish`` wins, one of `SEAMS`, which the
+    contract's judge holds it to; without it the forge kind picks its
+    default.
     """
     table = docs_table(root)
     declared = str(table.get("publish", ""))
     if declared:
-        if declared not in ("pages", "container", "ssh", "none"):
-            fail(
-                f"[docs] publish = {declared!r} is not a seam: use"
-                " pages, container, ssh, or none"
-            )
         return declared
     contract = load_contract(root / "workshop.toml")
     kind = str((contract.get("forge") or {}).get("kind", ""))

@@ -61,7 +61,11 @@ def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
     assert _python.coverage_floor(ratchet) is None
     for name, extra, words in (
         ("odd", '[qa]\ncoverage-floor = "high"\n', "auto-ratchet"),
-        ("tight", '[qa]\ncoverage-floor = 90\ncoverage-epsilon = "tight"\n', "points"),
+        (
+            "tight",
+            '[qa]\ncoverage-floor = 90\ncoverage-epsilon = "tight"\n',
+            "it takes a number",
+        ),
         ("negative", "[qa]\ncoverage-floor = 90\ncoverage-epsilon = -1\n", "negative"),
     ):
         with pytest.raises(_FAILURES, match=words):

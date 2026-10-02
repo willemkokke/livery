@@ -107,8 +107,36 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
 
 
 def load_contract(path: Path) -> dict[str, Any]:
-    """Parse the contract at *path*; a refusal names the file."""
-    return parse_contract(path.read_text("utf-8"), where=str(path))
+    """Parse the contract at *path* and judge its keys; a refusal names the file.
+
+    A contract under ``packages/<name>/`` is a package's, judged
+    against the layers its workspace's root contract lists; any other
+    is a root contract, judged against the layers it lists itself.
+    Every problem is listed in one refusal
+    ([livery.workshop._contract_keys.judge][]).
+    """
+    from livery.workshop._contract_keys import judge, listed_layers
+
+    data = parse_contract(path.read_text("utf-8"), where=str(path))
+    if path.parent.parent.name == "packages":
+        root = path.parent.parent.parent / CONTRACT
+        listed = listed_layers(_root_tables(root)) if root.is_file() else None
+        problems = judge(data, contract="package", where=str(path), listed=listed)
+    else:
+        problems = judge(
+            data, contract="root", where=str(path), listed=listed_layers(data)
+        )
+    if problems:
+        fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
+    return data
+
+
+def _root_tables(path: Path) -> dict[str, Any]:
+    """The root contract's tables, unjudged: a package's read needs its layer list."""
+    try:
+        return tomllib.loads(path.read_text("utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
 
 
 def contract_paths(root: Path) -> list[Path]:

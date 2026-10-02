@@ -4,11 +4,6 @@
 kind = "python"
 name = "livery-forge"
 
-[verbs]
-check = "fm check"
-test = "fm test"
-build = "uv build --package livery-forge"
-
 # No [[depends]]: livery.forge is stdlib-only at runtime, and the root
 # contracts test enforces it.
 

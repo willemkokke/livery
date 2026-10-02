@@ -218,7 +218,7 @@ def test_a_contract_off_the_shape_refuses_naming_the_key(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = "ruff"\n')
     with pytest.raises(
-        Failed, match=r"workshop.toml: \[tools\] requires is not a list"
+        Failed, match=r"tools.requires is a string \('ruff'\); it takes a list of"
     ):
         _tools.requirements(root)
     (root / "workshop.toml").write_text(
@@ -229,7 +229,7 @@ def test_a_contract_off_the_shape_refuses_naming_the_key(
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[tools]\nindex = "records"\nhosts = "linux-x64"\n'
     )
-    with pytest.raises(Failed, match=r"\[tools\] hosts is not a list"):
+    with pytest.raises(Failed, match=r"tools.hosts is a string"):
         _tools.locked_hosts(root)
     (root / "workshop.toml").write_text("[workspace]\n")
     with pytest.raises(Failed, match=r"\[tools\] index names no source"):
@@ -1105,7 +1105,7 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
     ):
         _tools.write_lock(root)
     _contract(root, 'host-allowed = "tea"\n')
-    with pytest.raises(Failed, match=r"host-allowed is not a list of strings"):
+    with pytest.raises(Failed, match=r"tools.host-allowed is a string"):
         _tools.write_lock(root)
 
 

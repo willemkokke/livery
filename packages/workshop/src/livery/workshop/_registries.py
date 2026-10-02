@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, cast
 
 from livery.footman import fail
 from livery.workshop._contract import load_contract
+from livery.workshop._contract_keys import Declared
 
 if TYPE_CHECKING:
     from livery.forge import RegistryKind
@@ -40,6 +41,23 @@ _ENV_VARS = {
 _ECOSYSTEM = {
     "python": ("https://pypi.org/simple", "https://upload.pypi.org/legacy/"),
 }
+
+#: The ``[registries]`` keys the contract may hold: an address per
+#: kind, or a table naming the read and publish addresses; an index
+#: with an ecosystem default may also name its prerelease policy.
+DECLARED: tuple[Declared, ...] = (
+    Declared("root", "registries", ("table",)),
+    *(Declared("root", f"registries.{kind}", ("str", "table")) for kind in _ENV_VARS),
+    *(
+        Declared("root", f"registries.{kind}.{key}", ("str",))
+        for kind in _ENV_VARS
+        for key in ("url", "publish")
+    ),
+    *(
+        Declared("root", f"registries.{kind}.prerelease", ("str",))
+        for kind in _ECOSYSTEM
+    ),
+)
 
 #: The env cascade's credential variable, per kind. Read on every
 #: rung, because the credential is independent of where the address

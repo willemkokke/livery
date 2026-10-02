@@ -97,7 +97,7 @@ def test_a_cadence_that_is_not_one_is_refused(tmp_path: Path) -> None:
     text = _refusal(
         tmp_path, '\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\nevery = "3d"\n'
     )
-    assert "every '3d' is not a cadence; the cadences are 1w, 2w" in text
+    assert "ci.point[].every is '3d'; it takes one of 1w, 2w" in text
 
 
 def test_a_task_the_runner_does_not_mount_is_refused(tmp_path: Path) -> None:
@@ -113,7 +113,7 @@ def test_a_grant_a_secret_or_an_environment_is_refused(tmp_path: Path) -> None:
             tmp_path / key,
             f'\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\n{key} = "x"\n',
         )
-        assert f"declares {key!r}" in text and "a root decision" in text
+        assert f"[ci.point] has no key {key!r}" in text
 
 
 def test_a_point_without_a_task_and_junk_lists_are_refused(tmp_path: Path) -> None:
@@ -124,7 +124,7 @@ def test_a_point_without_a_task_and_junk_lists_are_refused(tmp_path: Path) -> No
     assert "runners must be a non-empty list of strings" in _refusal(
         tmp_path / "c", '\n[[ci.point]]\nname = "x"\ntask = "layers"\nrunners = []\n'
     )
-    assert "args must be strings" in _refusal(
+    assert "ci.point[].args is a list ([1]); it takes a list of strings" in _refusal(
         tmp_path / "d", '\n[[ci.point]]\nname = "x"\ntask = "layers"\nargs = [1]\n'
     )
 

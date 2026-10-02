@@ -51,14 +51,14 @@ def test_an_empty_or_malformed_list_refuses(tmp_path: Path) -> None:
         'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = "ubuntu-latest"\n'
     )
-    assert "must be a non-empty list" in _refusal(
+    assert "ci.wheel-platforms is a string ('ubuntu-latest')" in _refusal(
         lambda: _wheels.wheel_runners(tmp_path)
     )
     (tmp_path / "packages" / "ext" / "workshop.toml").write_text(
         'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest", 3]\n'
     )
-    assert "entry 3 is not a runner label" in _refusal(
+    assert "ci.wheel-platforms is a list" in _refusal(
         lambda: _wheels.wheel_runners(tmp_path)
     )
 

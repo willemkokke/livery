@@ -24,7 +24,7 @@ def _root(tmp_path: Path, ci: str = "", floor: str = "3.11") -> Path:
 
 def test_a_declaration_that_is_not_a_list_refuses(tmp_path: Path) -> None:
     with pytest.raises(
-        _FAILURES, match=r"\[ci\] python-versions must be a non-empty list"
+        _FAILURES, match=r"ci.python-versions is a string .*; it takes a list of"
     ):
         _pythons.python_matrix(_root(tmp_path, 'python-versions = "3.14"\n'))
 
@@ -37,7 +37,7 @@ def test_an_empty_declaration_refuses(tmp_path: Path) -> None:
 def test_a_value_that_is_not_a_version_refuses_naming_it(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES, match="entry 'py3' is not a python version"):
         _pythons.python_matrix(_root(tmp_path, 'python-versions = ["py3"]\n'))
-    with pytest.raises(_FAILURES, match="entry 3 is not a python version"):
+    with pytest.raises(_FAILURES, match=r"ci.python-versions is a list \(\[3\]\)"):
         _pythons.python_matrix(_root(tmp_path, "python-versions = [3]\n"))
 
 
