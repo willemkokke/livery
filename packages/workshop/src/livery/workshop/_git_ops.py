@@ -153,6 +153,13 @@ class GitOps:
         """Freshen ``origin/*``."""
         self._run("fetch", "origin")
 
+    def has_remote(self, name: str = "origin") -> bool:
+        """Whether this clone has a remote called *name*."""
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "remote", "get-url", name
+        )
+        return result.code == 0
+
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         """Whether *ancestor* reaches *descendant* in this clone.
 

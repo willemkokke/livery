@@ -554,6 +554,31 @@ def undeclared_references(
     return writable, refused
 
 
+def declare_edge(
+    package: Package, dependency: Package, *, kind: str, floor: str
+) -> list[str]:
+    """Declare *package*'s *kind* edge on *dependency* at *floor*; the files written.
+
+    The ``[[depends]]`` edge joins the package's contract, and for a
+    build or runtime edge the package's kind writes the native
+    requirement at the same floor, so the layering check finds the
+    two in agreement. The files are relative to the package.
+    """
+    from livery.workshop._kinds import backend_for
+
+    contract = package.directory / "workshop.toml"
+    text = contract.read_text("utf-8")
+    edge = (
+        f'\n[[depends]]\npath = "{dependency.path}"\nkind = "{kind}"\n'
+        f'floor = "{floor}"\n'
+    )
+    contract.write_text(text.rstrip("\n") + "\n" + edge, encoding="utf-8")
+    files = ["workshop.toml"]
+    if kind in ("build", "runtime"):
+        files += backend_for(package).declare_requirement(package, dependency, floor)
+    return files
+
+
 def write_edges(root: Path) -> list[str]:
     """Declare every sibling reference the graph already reaches; the lines written.
 
@@ -565,23 +590,10 @@ def write_edges(root: Path) -> list[str]:
     judge that follows: it is a new dependency, and a decision.
     Idempotent: a second call writes nothing.
     """
-    from livery.workshop._kinds import backend_for
-
     packages = discover_packages(root)
     written: list[str] = []
     for package, dependency, kind, floor in undeclared_references(packages)[0]:
-        contract = package.directory / "workshop.toml"
-        text = contract.read_text("utf-8")
-        edge = (
-            f'\n[[depends]]\npath = "{dependency.path}"\nkind = "{kind}"\n'
-            f'floor = "{floor}"\n'
-        )
-        contract.write_text(text.rstrip("\n") + "\n" + edge, encoding="utf-8")
-        files = ["workshop.toml"]
-        if kind in ("build", "runtime"):
-            files += backend_for(package).declare_requirement(
-                package, dependency, floor
-            )
+        files = declare_edge(package, dependency, kind=kind, floor=floor)
         written.append(
             f"  layering: {package.path} declares the {kind} edge on"
             f" {dependency.path} at floor {floor} ({', '.join(files)})"

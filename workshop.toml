@@ -100,3 +100,13 @@ point = "nightly"
 task = "tools.refresh"
 args = ["--submit"]
 every = "2w"
+
+# The scale fixture, weekly on the nightly point, in a job of its own:
+# sync, template.check and check timed over a generated workspace of
+# 300 members, the timings put on the metrics series as the run's
+# scale job, where the budgets of a sync and a gate are judged.
+[[ci.schedule]]
+point = "nightly"
+job = "scale"
+task = "ci.scale"
+every = "1w"

@@ -760,3 +760,34 @@ def test_a_workspace_that_keeps_no_traces_pays_nothing(
     _points.run_point(root, "merge", "govern", spawn=green)
     assert seen == [["fm", "workflow.configure", "--if-changed"]]
     assert boxed == ["<unset>"]
+
+
+def test_a_job_only_an_entry_names_is_emitted_on_one_runner(tmp_path: Path) -> None:
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\njob = "scale"\ntask = "ci.scale"\n'
+        '\n[[ci.schedule]]\npoint = "nightly"\njob = "scale"\ntask = "status"\n',
+    )
+    by_name = {point.name: point for point in _points.emitted_points(root)}
+    nightly = by_name["nightly"]
+    assert [job.name for job in nightly.jobs] == ["nightly", "scale"]
+    model, added = nightly.jobs
+    # One runner, no matrix; the point's own checkout and credential.
+    assert added.matrix == ""
+    assert (added.fetch, added.token, added.writes) == (
+        model.fetch,
+        model.token,
+        model.writes,
+    )
+    # The shell the job's call runs is the one `jobs_of` lists.
+    assert _points.jobs_of(root, "nightly") == ("nightly", "scale")
+
+
+def test_an_entry_on_a_declared_or_inherited_job_adds_no_job(tmp_path: Path) -> None:
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "gate"\njob = "docs"\ntask = "docs.links"\n'
+        '\n[[ci.schedule]]\npoint = "merge"\njob = "check"\ntask = "status"\n'
+        '\n[[ci.schedule]]\npoint = "release"\ntask = "status"\n',
+    )
+    assert _points.emitted_points(root) == _points.points(root)

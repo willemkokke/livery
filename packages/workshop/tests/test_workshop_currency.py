@@ -340,6 +340,21 @@ def test_the_untouchables_skip_with_their_notes(
     assert "detached" in capsys.readouterr().out
 
 
+def test_a_clone_with_no_origin_has_nothing_to_bring_current(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A local birth has no remote: sync's first act skips and the rest runs.
+    _git(tmp_path, "init", "--quiet", "--initial-branch=main")
+    _git(
+        tmp_path,
+        *("-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "commit.gpgsign=false"),
+        *("commit", "--quiet", "--allow-empty", "-m", "chore: root"),
+    )
+    assert not GitOps(tmp_path).has_remote("origin")
+    bring_current(tmp_path, GitOps(tmp_path), interactive=False)
+    assert "no origin remote: nothing to bring current" in capsys.readouterr().out
+
+
 def test_integrate_merges_the_base_in_and_teaches_on_conflict(
     seeds: Seeds,
     tmp_path: Path,
