@@ -61,6 +61,11 @@ dev = ["types-pyyaml", "minijinja>=2.24"]
 # The docs layer, a layer inside this wheel with a surface of its own.
 "livery.workshop.layers.docs" = "livery.workshop.layers.docs._tasks"
 
+# The contract keys each owner reads, by owner: the judge in
+# livery.workshop._contract_keys loads these data modules alone.
+[project.entry-points."workshop.contract"]
+"livery.workshop.layers.docs" = "livery.workshop.layers.docs._contract_keys:DECLARED"
+
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts
 # stays the machine owner's call through builtins.discovery_mode.

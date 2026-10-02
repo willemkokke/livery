@@ -124,17 +124,13 @@ AFFECTED_LEGS_KEY = "affected-legs"
 def affected_legs(root: Path) -> bool:
     """The contract's ``[ci] affected-legs``; false when undeclared.
 
-    Refuses a value that is not a boolean, naming the key: the legs
-    either narrow or they do not, and a stray string would read as
-    true by accident.
+    The contract's judge holds the value to a boolean: the legs either
+    narrow or they do not, and a stray string would read as true.
     """
     from livery.workshop._contract import load_contract
 
     ci = load_contract(root / "workshop.toml").get("ci") or {}
-    declared = ci.get(AFFECTED_LEGS_KEY, False) if isinstance(ci, dict) else False
-    if not isinstance(declared, bool):
-        fail(f"[ci] {AFFECTED_LEGS_KEY} must be true or false, not {declared!r}")
-    return declared
+    return bool(ci.get(AFFECTED_LEGS_KEY, False))
 
 
 def ci_affected_base(root: Path, run: RunContext | None) -> str:

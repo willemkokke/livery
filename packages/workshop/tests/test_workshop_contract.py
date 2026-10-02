@@ -19,6 +19,106 @@ def _refusal(action: Callable[[], object]) -> str:
 # --- refusals first ---------------------------------------------------------
 
 
+def _workspace(tmp_path: Path, root: str, package: str = "") -> Path:
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n' + root
+    )
+    if package:
+        member = tmp_path / "packages" / "member"
+        member.mkdir(parents=True)
+        (member / "workshop.toml").write_text(package)
+        return member / "workshop.toml"
+    return tmp_path / "workshop.toml"
+
+
+def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
+    path = _workspace(tmp_path, '\n[ci]\nrunner = ["ubuntu-latest"]\n')
+    message = _refusal(lambda: _contract.load_contract(path))
+    assert message.startswith(f"{path}:\n")
+    assert "[ci] has no key 'runner': it takes affected-legs, automerge" in message
+    assert "; did you mean 'runners'?" in message
+    # A package's dead table refuses the same way, at its top level.
+    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n[verbs]\n')
+    assert "the top level has no key 'verbs': it takes categories" in _refusal(
+        lambda: _contract.load_contract(member)
+    )
+
+
+def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
+    tmp_path: Path,
+) -> None:
+    path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
+    assert (
+        "docs.title is a key of livery.workshop.layers.docs, which [workspace]"
+        " layers does not list; list the layer, or remove the key"
+    ) in _refusal(lambda: _contract.load_contract(path))
+    # A package's key of that layer refuses against its root's list.
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n[docs]\nextra-css = []\n'
+    )
+    assert "docs.extra-css is a key of livery.workshop.layers.docs" in _refusal(
+        lambda: _contract.load_contract(member)
+    )
+    # Listed, the same keys load.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '\n[docs]\ntitle = "Site"\n'
+    )
+    assert _contract.load_contract(path)["docs"] == {"title": "Site"}
+    assert _contract.load_contract(member)["docs"] == {"extra-css": []}
+
+
+def test_a_wrong_type_refuses_naming_the_allowed_values(tmp_path: Path) -> None:
+    path = _workspace(
+        tmp_path,
+        '\n[forge]\nkind = "gitub"\nowner = 3\n\n[ci]\nrunners = "ubuntu"\n',
+    )
+    message = _refusal(lambda: _contract.load_contract(path))
+    # Every problem in one refusal, in the contract's order.
+    assert message.splitlines()[1:] == [
+        "  forge.kind is 'gitub'; it takes one of github, gitea, gitlab;"
+        " did you mean 'github'?",
+        "  forge.owner is an integer (3); it takes a string",
+        "  ci.runners is a string ('ubuntu'); it takes a list of strings",
+    ]
+
+
+def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> None:
+    path = _workspace(tmp_path, '\n[tools.modes]\nruff = "link"\nmypy = "copy"\n')
+    assert "tools.modes.mypy is 'copy'; it takes one of link, path, none" in (
+        _refusal(lambda: _contract.load_contract(path))
+    )
+
+
+def test_two_owners_declaring_one_key_refuse_naming_both(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _contract_keys
+
+    class _Entry:
+        name = "acme.layer"
+
+        @staticmethod
+        def load() -> tuple[_contract_keys.Declared, ...]:
+            return (_contract_keys.Declared("root", "forge.kind", ("str",)),)
+
+    monkeypatch.setattr("importlib.metadata.entry_points", lambda group: [_Entry()])
+    _contract_keys.declarations.cache_clear()
+    try:
+        assert (
+            "the root contract key forge.kind is declared by both livery.workshop"
+            " and acme.layer"
+        ) in _refusal(_contract_keys.declarations)
+    finally:
+        _contract_keys.declarations.cache_clear()
+
+
+def test_every_contract_of_this_repository_loads() -> None:
+    root = Path(__file__).resolve().parents[3]
+    for path in _contract.contract_paths(root):
+        _contract.load_contract(path)
+
+
 def test_an_underscore_key_refuses_naming_the_kebab_spelling_and_the_fix() -> None:
     message = _refusal(
         lambda: _contract.parse_contract(

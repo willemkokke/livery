@@ -640,7 +640,9 @@ def test_a_publish_key_that_is_not_a_boolean_refuses(tmp_path: Path) -> None:
         'kind = "python"\nname = "livery-tool"\n\n[release]\npublish = "never"\n'
     )
     (directory / "pyproject.toml").write_text('[project]\nname = "livery-tool"\n')
-    with pytest.raises(ValueError, match="publish must be true or false"):
+    with pytest.raises(
+        _FAILURES, match=r"release.publish is a string .*; it takes true or false"
+    ):
         discover_packages(tmp_path)
 
 

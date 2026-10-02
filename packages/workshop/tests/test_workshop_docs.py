@@ -32,7 +32,15 @@ _FAILURES = (SystemExit, Failed)
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root = tmp_path / "ws"
     root.mkdir()
-    (root / "workshop.toml").write_text(f"[workspace]\n{docs_table}")
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        + (
+            ""
+            if docs_table.startswith("layers")
+            else 'layers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        )
+        + docs_table
+    )
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (root / "docs").mkdir()
     (root / "docs" / "index.md").write_text("# Home\n")
@@ -444,7 +452,9 @@ def test_a_declared_seam_wins_and_garbage_refuses(tmp_path: Path) -> None:
     (root / "workshop.toml").write_text(
         '[workspace]\n[docs]\npublish = "carrier-pigeon"\n'
     )
-    with pytest.raises(BaseException, match="not a seam"):
+    with pytest.raises(
+        BaseException, match=r"docs\.publish is 'carrier-pigeon'; it takes one of pages"
+    ):
         publish_seam(root)
 
 
@@ -468,7 +478,8 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     (root / "workshop.toml").write_text(
-        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
     # GitHub folds the deploy into ci.yml's merge point: the pages
@@ -789,10 +800,10 @@ def test_a_broken_generator_declaration_refuses(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = "not-a-list"\n')
-    with pytest.raises(BaseException, match="must be a list"):
+    with pytest.raises(BaseException, match=r"docs\.generators is a string"):
         package_generators(_package(root, "core"))
     _declare_generators(root, "core", "generators = [3]\n")
-    with pytest.raises(BaseException, match="verb name"):
+    with pytest.raises(BaseException, match=r"docs.generators\[\] is an integer"):
         package_generators(_package(root, "core"))
     _declare_generators(root, "core", 'generators = [{ requires = ["zsh"] }]\n')
     with pytest.raises(BaseException, match="verb name"):
@@ -902,7 +913,8 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
         root, "core", 'generators = [{ verb = "docsgen.casts", requires = ["zsh"] }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
     gate = files[".github/workflows/ci.yml"]
@@ -1012,7 +1024,8 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
 
 
 def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+    # The docs layer alone: the base's own sheets stay out of the list.
+    root = _workspace(tmp_path, docs_table='layers = ["livery.workshop.layers.docs"]\n')
     # The fallback first: no layers, no sheet, no extra_css at all.
     assert "extra_css" not in zensical_config(root)
     assets = root / "docs" / "assets"
@@ -1215,7 +1228,7 @@ def test_broken_coverage_declarations_refuse(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'coverage = "not-a-list"\n')
-    with pytest.raises(BaseException, match="must be a list"):
+    with pytest.raises(BaseException, match=r"docs\.coverage is a string"):
         package_coverage_reports(_package(root, "core"))
     _declare_generators(root, "core", 'coverage = [{ label = "x" }]\n')
     with pytest.raises(BaseException, match="label"):
@@ -1509,7 +1522,8 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     (root / "docs" / "index.md").write_text("# Home\n")
     (root / "workshop.toml").write_text(
-        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
     # The fallback first: nothing declared, nothing plumbed, the
@@ -1527,7 +1541,8 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
     files = generate(root)

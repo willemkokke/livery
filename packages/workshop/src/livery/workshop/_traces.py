@@ -114,9 +114,9 @@ class Policy:
 def policy(root: Path) -> tuple[Policy, str]:
     """The contract's ``[ci] profile-*`` for *root*, and what it got wrong.
 
-    A key of the wrong type is named with what it must be, and the
-    default stands for it: this decides whether a timeline is kept, so
-    a typo must be visible and must not stop a job.
+    The contract's judge refuses a key of the wrong type. A count
+    below zero or an empty path is named with what it must be, and the
+    default stands for it.
     """
     from livery.workshop._contract import load_contract
 
@@ -172,18 +172,15 @@ def _flag(found: dict[str, Any], key: str, fallback: bool) -> tuple[bool, str]:
     value = found.get(key)
     if value is None:
         return fallback, ""
-    if isinstance(value, bool):
-        return value, ""
-    return fallback, f"[ci] {key} is {value!r}; it is true or false"
+    return bool(value), ""
 
 
 def _count(found: dict[str, Any], key: str, fallback: int) -> tuple[int, str]:
     value = found.get(key)
     if value is None:
         return fallback, ""
-    # A bool is an int in Python and not a count here.
-    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-        return value, ""
+    if int(value) >= 0:
+        return int(value), ""
     return fallback, f"[ci] {key} is {value!r}; it is a whole number of runs"
 
 
@@ -191,8 +188,8 @@ def _text(found: dict[str, Any], key: str, fallback: str) -> tuple[str, str]:
     value = found.get(key)
     if value is None:
         return fallback, ""
-    if isinstance(value, str) and value:
-        return value, ""
+    if value:
+        return str(value), ""
     return fallback, f"[ci] {key} is {value!r}; it is a path"
 
 

@@ -156,18 +156,18 @@ def test_a_mode_outside_the_three_and_a_receipt_off_its_shape_refuse(
         'modes = { tea = "float" }\n'
     )
     with pytest.raises(
-        Failed, match=r"modes names 'float' for tea; the modes are link, path, none"
+        Failed, match=r"tools.modes.tea is 'float'; it takes one of link, path, none"
     ):
         _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[tools]\nindex = "records"\nmodes = 1\n'
     )
-    with pytest.raises(Failed, match=r"\[tools\] modes is not a table"):
+    with pytest.raises(Failed, match=r"tools.modes is an integer \(1\)"):
         _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[tools]\nindex = "records"\nsources = "x"\n'
     )
-    with pytest.raises(Failed, match=r"\[tools\] sources is not a list"):
+    with pytest.raises(Failed, match=r"tools.sources is a string"):
         _tools.sources(root)
     receipts = _tools.receipts_dir(root)
     receipts.mkdir(parents=True)

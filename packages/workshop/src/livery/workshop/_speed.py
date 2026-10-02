@@ -67,16 +67,13 @@ def enabled(root: Path) -> bool:
     Off by default: a hosted runner's test time varies by tens of
     seconds between two runs of one tree, and a mark taken from such
     runs says nothing about the suite. A workspace whose runners keep
-    a steady clock declares the key. Refuses a value that is not a
-    boolean, naming the key.
+    a steady clock declares the key, which the contract's judge holds
+    to a boolean.
     """
     from livery.workshop._contract import load_contract
 
     ci = load_contract(root / "workshop.toml").get("ci") or {}
-    declared = ci.get(ENABLED_KEY, False) if isinstance(ci, dict) else False
-    if not isinstance(declared, bool):
-        fail(f"[ci] {ENABLED_KEY} must be true or false, not {declared!r}")
-    return declared
+    return bool(ci.get(ENABLED_KEY, False))
 
 
 #: The slowest tests a leg's row names, and a warning prints.

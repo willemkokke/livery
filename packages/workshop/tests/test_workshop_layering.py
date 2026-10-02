@@ -594,11 +594,7 @@ def test_a_contract_naming_the_kind_under_type_is_refused_with_the_migration(
     (directory / "workshop.toml").write_text('type = "python"\nname = "livery-old"\n')
     (directory / "pyproject.toml").write_text('[project]\nname = "livery-old"\n')
     with pytest.raises(
-        ValueError,
-        match=re.escape(
-            "old: workshop.toml names the package kind under `type`;"
-            " rename `type` to `kind` in workshop.toml"
-        ),
+        BaseException, match="the top level has no key 'type': it takes categories"
     ):
         discover_packages(tmp_path)
 

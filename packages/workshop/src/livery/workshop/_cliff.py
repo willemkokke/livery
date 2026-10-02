@@ -12,7 +12,6 @@ the same commits.
 from __future__ import annotations
 
 import os
-import tomllib
 from pathlib import Path
 
 import livery.footman as footman
@@ -37,8 +36,9 @@ TOKEN_VARIABLE = {
 
 def _forge_facts(root: Path) -> tuple[str, str]:
     """The contract's forge kind and url, empty when unstated."""
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
-    forge = contract.get("forge") or {}
+    from livery.workshop._contract import load_contract
+
+    forge = load_contract(root / "workshop.toml").get("forge") or {}
     return str(forge.get("kind", "")), str(forge.get("url", ""))
 
 

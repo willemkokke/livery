@@ -218,7 +218,9 @@ def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
         'kind = "python"\nname = "livery-x"\nchecks = 3\n'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
-    with pytest.raises(ValueError, match=r"\[checks\] holds one table per check"):
+    with pytest.raises(
+        _FAILURES, match=r"checks is an integer \(3\); it takes a table"
+    ):
         discover_packages(tmp_path)
     # A check's options live in its own table, never on its role: the
     # role's table holds one table per tool.
@@ -226,19 +228,15 @@ def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
         'kind = "python"\nname = "livery-x"\n[checks.test]\nparallel = false\n'
     )
     with pytest.raises(
-        ValueError,
-        match=(
-            r"x: \[checks.test\] sets parallel on the role test; a check's options"
-            r" live under \[checks.test.<tool>\], the check's own table"
-        ),
+        _FAILURES,
+        match=r"checks.test.parallel is a boolean \(False\); it takes a table",
     ):
         discover_packages(tmp_path)
     member.joinpath("workshop.toml").write_text(
         'kind = "python"\nname = "livery-x"\n[checks]\ntest = 3\n'
     )
     with pytest.raises(
-        ValueError,
-        match=r"x: \[checks\] sets test to 3; a check's options live under",
+        _FAILURES, match=r"checks.test is an integer \(3\); it takes a table"
     ):
         discover_packages(tmp_path)
 

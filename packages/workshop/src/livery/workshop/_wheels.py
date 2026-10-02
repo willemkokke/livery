@@ -59,12 +59,13 @@ def declared_wheel_platforms(package: Package) -> list[str]:
             ' that build its wheels, like ["ubuntu-latest", "macos-latest",'
             ' "windows-latest"]'
         )
-    if not isinstance(declared, list) or not declared:
+    # The contract's judge holds it to a list of strings.
+    if not declared:
         fail(
             f'{where} must be a non-empty list of runner labels, like ["ubuntu-latest"]'
         )
     for label in declared:
-        if not isinstance(label, str) or not label.strip():
+        if not label.strip():
             fail(f"{where} entry {label!r} is not a runner label")
     return [str(label) for label in declared]
 

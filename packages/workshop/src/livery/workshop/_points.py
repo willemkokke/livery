@@ -45,6 +45,7 @@ from pathlib import Path
 import livery.footman as footman
 from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
+from livery.workshop._contract_keys import Declared
 from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
 #: The events a point may run on, in the forges' words.
@@ -465,11 +466,6 @@ POINTS = tuple(point.name for point in DECLARED)
 #: name and a job name at once.
 POINT_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 
-#: The keys a contributed point may not carry: a scheduled workflow
-#: with a grant, a secret or an environment on a public repository is
-#: a foothold, and that stays a root decision.
-FORBIDDEN_POINT_KEYS = ("permissions", "secrets", "secret", "environment")
-
 
 #: The runner's merged task tree, kept by the workshop's ``pre_tasks``
 #: hook for the span of one invocation: discovery merges every layer's
@@ -562,13 +558,6 @@ def contributed(
                     f"{where}: {name!r} is already the point {found[name]}"
                     " declares; two packages cannot share one"
                 )
-            for key in FORBIDDEN_POINT_KEYS:
-                if key in item:
-                    fail(
-                        f"{where} ({name}): declares {key!r}; a contributed point"
-                        " runs with the job token and nothing more, and a grant,"
-                        " a secret or an environment is a root decision"
-                    )
             if not task:
                 fail(f"{where} ({name}): names no task")
             if not mounted(task):
@@ -577,14 +566,7 @@ def contributed(
                     " point runs a task some layer mounts"
                 )
             args = item.get("args", [])
-            if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
-                fail(f"{where} ({name}, {task}): args must be strings")
             every = str(item.get("every", ""))
-            if every and every not in CADENCES:
-                fail(
-                    f"{where} ({name}, {task}): every {every!r} is not a cadence;"
-                    f" the cadences are {', '.join(CADENCES)}"
-                )
             runners = item.get("runners", list(default_runners))
             pythons = item.get("pythons")
             if pythons is None:
@@ -592,11 +574,7 @@ def contributed(
                     default_pythons = (gate_pythons(root)[-1],)
                 pythons = list(default_pythons)
             for label, values in (("runners", runners), ("pythons", pythons)):
-                if (
-                    not isinstance(values, list)
-                    or not values
-                    or not all(isinstance(v, str) and v for v in values)
-                ):
+                if not values or not all(values):
                     fail(
                         f"{where} ({name}): {label} must be a non-empty list of strings"
                     )
@@ -1044,6 +1022,33 @@ BUILTIN: tuple[Entry, ...] = (
 )
 
 
+def contract_keys() -> tuple[Declared, ...]:
+    """The ``[[ci.schedule]]`` and ``[[ci.point]]`` keys a contract may hold.
+
+    A contributed point declares no grant, secret or environment: a
+    scheduled workflow with one on a public repository is a foothold,
+    so the key is unknown and refuses, and that stays a root decision.
+    """
+    cadences = tuple(CADENCES)
+    return (
+        Declared("root", "ci.schedule", ("list",)),
+        Declared("root", "ci.schedule[]", ("table",)),
+        Declared("root", "ci.schedule[].point", ("str",)),
+        Declared("root", "ci.schedule[].task", ("str",)),
+        Declared("root", "ci.schedule[].job", ("str",)),
+        Declared("root", "ci.schedule[].args", ("strs",)),
+        Declared("root", "ci.schedule[].every", ("str",), cadences),
+        Declared("package", "ci.point", ("list",)),
+        Declared("package", "ci.point[]", ("table",)),
+        Declared("package", "ci.point[].name", ("str",)),
+        Declared("package", "ci.point[].task", ("str",)),
+        Declared("package", "ci.point[].args", ("strs",)),
+        Declared("package", "ci.point[].every", ("str",), cadences),
+        Declared("package", "ci.point[].runners", ("strs",)),
+        Declared("package", "ci.point[].pythons", ("strs",)),
+    )
+
+
 def declared(root: Path) -> tuple[Entry, ...]:
     """The ``[[ci.schedule]]`` entries of *root*'s contract, refusing bad ones.
 
@@ -1071,17 +1076,10 @@ def declared(root: Path) -> tuple[Entry, ...]:
             )
         if not task:
             fail(f"[[ci.schedule]] entry {index} ({point}): names no task")
+        # The contract's judge holds the arguments to strings and the
+        # cadence to one of `CADENCES`.
         args = item.get("args", [])
-        if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
-            fail(
-                f"[[ci.schedule]] entry {index} ({point}, {task}): args must be strings"
-            )
         every = str(item.get("every", ""))
-        if every and every not in CADENCES:
-            fail(
-                f"[[ci.schedule]] entry {index} ({point}, {task}): every {every!r}"
-                f" is not a cadence; the cadences are {', '.join(CADENCES)}"
-            )
         entries.append(
             Entry(
                 point,

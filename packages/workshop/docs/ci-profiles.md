@@ -163,8 +163,9 @@ pushed channel, so it decides how far back a run can still be assembled;
 `profile-keep` governs this checkout's own disk, and the files it sweeps are
 output rather than input, so losing one strands nothing.
 
-A key of the wrong type is named on the leg that read it, and its default
-stands: whether a timeline is kept is not worth failing a run over.
+A key of the wrong type refuses when the contract is read, like any other
+contract key. A count below zero or an empty path is named on the leg that
+read it, and its default stands.
 
 `profile = false` means zero cost rather than less: no job runs anything
 profiled, nothing is written on a runner, and nothing is pushed. A run from

@@ -84,10 +84,11 @@ def declared_pythons(root: Path) -> list[str] | None:
     if PYTHONS_KEY not in ci:
         return None
     declared = ci[PYTHONS_KEY]
-    if not isinstance(declared, list) or not declared:
+    # The contract's judge holds it to a list of strings.
+    if not declared:
         fail(f'[ci] {PYTHONS_KEY} must be a non-empty list of versions, like ["3.14"]')
     for value in declared:
-        if not isinstance(value, str) or not _VERSION_RE.match(value):
+        if not _VERSION_RE.match(value):
             fail(
                 f"[ci] {PYTHONS_KEY} entry {value!r} is not a python version:"
                 ' spell the minor, like "3.14", or "3.14t" for a free-threaded build'

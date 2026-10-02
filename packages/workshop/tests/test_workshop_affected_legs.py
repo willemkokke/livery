@@ -58,7 +58,7 @@ def _refusal(action: Callable[[], object]) -> str:
 def test_a_non_boolean_key_refuses_naming_it(tmp_path: Path) -> None:
     root = _root(tmp_path, 'affected-legs = "yes"\n')
     message = _refusal(lambda: _quality.affected_legs(root))
-    assert "[ci] affected-legs must be true or false" in message
+    assert "ci.affected-legs is a string ('yes'); it takes true or false" in message
 
 
 def test_the_full_gate_outside_ci_without_the_key_or_off_a_pull_request(
