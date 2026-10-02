@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from livery.footman.context import Failed
-from livery.strongroom import digest_of
+from livery.strongroom.api import digest_of
 from livery.toolroom.bench import (
     _artifacts,
     _drivers,
@@ -20,7 +20,8 @@ from livery.toolroom.bench import (
     _toolfetch,
 )
 from livery.toolroom.bench import _tasks as tools
-from livery.toolroom.store import Home, Layout, Store, _engine
+from livery.toolroom.store import _engine
+from livery.toolroom.store.api import Home, Layout, Store
 from toolroom_bench_readings import history, isolate, save, with_flags
 
 LINUX, MAC, ARM, WIN = "linux-x64", "macos-arm", "linux-arm", "windows-x64"
@@ -379,7 +380,7 @@ def test_a_universal_asset_is_recorded_for_every_host_without_a_listing(
     """
     from livery.toolroom.bench import _provision
     from livery.toolroom.bench._drivers import Driver, Provision
-    from livery.toolroom.store import HOSTS
+    from livery.toolroom.store.api import HOSTS
 
     def no_listing(*_a, **_k):
         raise AssertionError("the forge was asked for a listing")

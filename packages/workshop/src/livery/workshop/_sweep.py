@@ -47,7 +47,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import livery.footman as footman
+import livery.footman.api as footman
 from livery.workshop._git_ops import GitError, GitOps
 
 #: The workshop's homes under the data directory.
@@ -322,7 +322,7 @@ def report_loop(home: Path) -> list[str]:
     if not home.is_dir():
         return []
     total = sum(p.stat().st_size for p in home.rglob("*") if p.is_file())
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     return [
         f"loop workspace: {total / 1e6:.0f} MB at {home};"

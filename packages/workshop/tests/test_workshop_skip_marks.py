@@ -9,8 +9,8 @@ from livery.footman.testing import Runner
 
 TASKS = textwrap.dedent(
     """
-    import livery.footman as footman
-    from livery.footman import task
+    import livery.footman.api as footman
+    from livery.footman.api import task
     from livery.footman.compose import plugin
 
     plugin("footman.profile")

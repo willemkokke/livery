@@ -12,8 +12,8 @@ from typing import Literal
 
 import pytest
 
-from livery.footman import Context, run, use_context
 from livery.footman._executor import EX_USAGE
+from livery.footman.api import Context, run, use_context
 from livery.footman.app import App
 from livery.footman.context import current
 from livery.footman.registry import Group
@@ -189,7 +189,7 @@ def test_children_share_the_script():
 def test_answers_cover_a_bridge_call_under_a_live_context():
     """Under a recording, host detection routes a toolroom handle through
     run(), so one table answers plain calls and handles alike."""
-    from livery.toolroom.tools import git
+    from livery.toolroom.tools.api import git
 
     with recording(answers={"git branch": "main\n"}) as steps:
         out = git.branch(show_current=True)
@@ -198,7 +198,7 @@ def test_answers_cover_a_bridge_call_under_a_live_context():
 
 
 def test_toolrooms_table_wins_when_both_are_nested():
-    from livery.toolroom.tools import git
+    from livery.toolroom.tools.api import git
     from livery.toolroom.tools.testing import answers
 
     with (
@@ -411,7 +411,7 @@ def test_runner_group_where_locates_source():
 # --- Runner against a project on disk ------------------------------------------
 
 TASKS = """
-from livery.footman import task, run
+from livery.footman.api import task, run
 
 @task
 def hi(name: str = "world"):
@@ -438,7 +438,7 @@ def test_runner_file_path_propagates_keyboard_interrupt(tmp_path):
 
     tasks = tmp_path / "tasks.py"
     tasks.write_text(
-        "from livery.footman import task\n@task\ndef boom():\n    raise KeyboardInterrupt\n"
+        "from livery.footman.api import task\n@task\ndef boom():\n    raise KeyboardInterrupt\n"
     )
     with pytest.raises(KeyboardInterrupt):
         Runner().invoke("boom", tasks=tasks, cwd=tmp_path)
@@ -469,7 +469,7 @@ def test_runner_branded_app_prefixes_errors(tmp_path):
 def test_fm_project_fixture_scaffolds_and_runs(fm_project):
     fm = fm_project(
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def ping():
@@ -485,7 +485,7 @@ def test_fm_project_fixture_scaffolds_and_runs(fm_project):
 def test_fm_project_fixture_custom_tasks_filename(fm_project):
     fm = fm_project(
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def jobs_only():

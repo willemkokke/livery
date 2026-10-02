@@ -24,8 +24,9 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import GlobalOption, matching
+import livery.footman.api as footman
+from livery.footman.params import matching
+from livery.footman.registry import GlobalOption
 
 ENV_FILE = GlobalOption(
     "env-file",

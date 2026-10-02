@@ -1,5 +1,5 @@
 # --8<-- [start:part-1]
-from livery.footman import task, run
+from livery.footman.api import task, run
 
 
 @task
@@ -18,7 +18,7 @@ def test(coverage: bool = False):
 # --8<-- [start:part-2]
 import shutil
 
-from livery.footman import step
+from livery.footman.api import step
 
 
 def write_fixtures(): ...  # stand-ins for your own helpers
@@ -53,7 +53,7 @@ def convert(images: list[Path]):
 # --8<-- [end:part-3]
 
 # --8<-- [start:part-4]
-from livery.footman import fail
+from livery.footman.api import fail
 
 
 @test.post_task
@@ -63,7 +63,7 @@ def budget(result):
 # --8<-- [end:part-4]
 
 # --8<-- [start:part-5]
-from livery import footman
+import livery.footman.api as footman
 
 db = footman.lane("database", reason="serialises the shared dev DB")
 

@@ -11,7 +11,7 @@ refused. `prefetch` warms everything one digest reaches, and `shed`
 evicts local copies a named source holds, except what a live view
 depends on.
 
-The functions here are the bodies of the [livery.strongroom.Store][]
+The functions here are the bodies of the [livery.strongroom.api.Store][]
 methods of the same names; reach for the methods.
 """
 

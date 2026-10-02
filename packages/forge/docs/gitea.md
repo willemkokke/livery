@@ -1,6 +1,6 @@
 # Gitea backend
 
-`livery.forge.GiteaForge`: the protocol over Gitea's REST v1 API.
+`livery.forge.api.GiteaForge`: the protocol over Gitea's REST v1 API.
 
 ## Construction and the token rule
 
@@ -9,14 +9,14 @@ wins, `GITEA_URL` is the configured default. The token defaults to
 `GITEA_TOKEN`; a missing token raises at connect time rather than
 failing later on the first write. `GITEA_TOKEN` belongs to the host
 `GITEA_URL` names and no other: test a foreign host with
-`livery.forge.gitea_is_configured_host` and read it anonymously
+`livery.forge.api.gitea_is_configured_host` and read it anonymously
 (`token=""`) instead of sending it a token it never issued.
 
 ## The server floor
 
 The 1.28 line. Everything except run cancellation works on earlier
 servers; `checks.cancel_run` probes the version once and raises
-`livery.forge.Unsupported` naming it when the server predates the
+`livery.forge.api.Unsupported` naming it when the server predates the
 cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
 `required_contexts`, `ci_secrets`, `min_approvals`, and
 `schedule_events` are all supported.

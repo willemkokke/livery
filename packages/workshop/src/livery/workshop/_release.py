@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from livery.footman import Context, doc, fail, group
-from livery.toolroom import tools
+import livery.toolroom.tools.api as tools
+from livery.footman.api import Context, doc, fail, group
 
 # Registers the base's release notes provider, git-cliff into
 # CHANGELOG.md, until the changelog layer ships it.
@@ -345,7 +345,7 @@ def release_replay(
     """
     import sys
 
-    from livery.forge import SimpleRegistry
+    from livery.forge.api import SimpleRegistry
     from livery.workshop._registries import resolve_registry
     from livery.workshop._replay import replay_flow
     from livery.workshop._state import run_context
@@ -468,7 +468,7 @@ def release_driver(
     checkout's workshop drives the wave and nothing is installed; a
     re-run then does what the first run did.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     if not workshop:
         print("  driver: the checkout's own workshop drives the wave")

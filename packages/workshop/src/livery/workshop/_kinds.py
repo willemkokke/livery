@@ -29,7 +29,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from livery.footman import fail
+from livery.footman.api import fail
 
 # The four builtin categories live beside the registry that answers
 # them and are re-exported here as the kind's vocabulary.

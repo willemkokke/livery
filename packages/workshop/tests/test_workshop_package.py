@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import livery.forge as forge_module
-import livery.workshop as workshop_module
+import livery.forge.api as forge_module
+import livery.workshop.api as workshop_module
 
 
 def test_imports_and_carries_a_version() -> None:
@@ -20,8 +20,8 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
     # livery/ in either wheel would break the other.
     import livery
 
-    assert forge_module.__name__ == "livery.forge"
-    assert workshop_module.__name__ == "livery.workshop"
+    assert forge_module.__name__ == "livery.forge.api"
+    assert workshop_module.__name__ == "livery.workshop.api"
     assert getattr(livery, "__file__", None) is None
 
 

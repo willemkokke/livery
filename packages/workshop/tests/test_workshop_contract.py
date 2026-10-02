@@ -49,19 +49,19 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
 ) -> None:
     path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
     assert (
-        "docs.title is a key of livery.workshop.layers.docs, which [workspace]"
+        "docs.title is a key of livery.extensions.docs, which [workspace]"
         " layers does not list; list the layer, or remove the key"
     ) in _refusal(lambda: _contract.load_contract(path))
     # A package's key of that layer refuses against its root's list.
     member = _workspace(
         tmp_path, "", 'kind = "python"\nname = "m"\n[docs]\nextra-css = []\n'
     )
-    assert "docs.extra-css is a key of livery.workshop.layers.docs" in _refusal(
+    assert "docs.extra-css is a key of livery.extensions.docs" in _refusal(
         lambda: _contract.load_contract(member)
     )
     # Listed, the same keys load.
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
         '\n[docs]\ntitle = "Site"\n'
     )
     assert _contract.load_contract(path)["docs"] == {"title": "Site"}

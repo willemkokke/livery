@@ -21,7 +21,7 @@ def test_fm_project_scaffolds_and_runs(pytester: pytest.Pytester):
         """
         def test_release(fm_project):
             fm = fm_project('''
-                from livery.footman import task, run
+                from livery.footman.api import task, run
 
                 @task
                 def release(version: str):
@@ -43,7 +43,7 @@ def test_fm_project_honours_a_custom_tasks_filename(pytester: pytest.Pytester):
         """
         def test_named(fm_project):
             fm = fm_project('''
-                from livery.footman import task
+                from livery.footman.api import task
 
                 @task
                 def ship():
@@ -60,7 +60,7 @@ def test_fm_record_captures_commands_without_running_them(pytester: pytest.Pytes
     commands it would issue are captured instead of executed."""
     pytester.makepyfile(
         """
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         @task
         def lint(fix: bool = False):
@@ -79,7 +79,7 @@ def test_fm_runner_targets_the_current_project(pytester: pytest.Pytester):
     """The bare `fm` fixture drives whatever project the test runs in."""
     pytester.makepyfile(
         tasks="""
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def hello():

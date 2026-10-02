@@ -74,7 +74,7 @@ def test_run_summaries_are_inert_on_a_malformed_chain(fm_project):
 
     fm = fm_project(
         """
-        from livery.footman import task, group
+        from livery.footman.api import task, group
 
         lint = group("lint")
 

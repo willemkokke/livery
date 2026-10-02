@@ -2,24 +2,17 @@
 
 The task surface arrives through the footman plugin
 (``plugin("livery.workshop")``); this module's own API is the layer
-walk (livery.workshop.layer_names, livery.workshop.mount_layers,
-livery.workshop.workspace_root), the package contracts
-(livery.workshop.discover_packages, livery.workshop.verify_workspace
-over livery.workshop.Package and livery.workshop.Edge), and the one
+walk (livery.workshop.api.layer_names, livery.workshop.api.mount_layers,
+livery.workshop.api.workspace_root), the package contracts
+(livery.workshop.api.discover_packages, livery.workshop.api.verify_workspace
+over livery.workshop.api.Package and livery.workshop.api.Edge), and the one
 helper a package's docs generator needs
-(livery.workshop.rewrite_nav_block). The forge lane belongs to
-livery.forge.Forge; the workshop orchestrates local, git, and forge
+(livery.workshop.api.rewrite_nav_block). The forge lane belongs to
+livery.forge.api.Forge; the workshop orchestrates local, git, and forge
 steps and never hands a raw forge verb to a user.
 """
 
 from __future__ import annotations
-
-from pkgutil import extend_path
-
-# Layers under livery.workshop.layers may ship as distributions of
-# their own: a tree that carries livery/workshop/layers/<name>/ and no
-# livery/workshop/__init__.py of its own joins this package's path.
-__path__ = extend_path(__path__, __name__)
 
 from livery.workshop._layers import layer_names, mount_layers, workspace_root
 from livery.workshop._navblocks import rewrite_nav_block

@@ -15,8 +15,9 @@ from typing import cast
 
 import pytest
 
-from livery.toolroom import tools
-from livery.toolroom.tools import Argv, Result, ToolError, _host
+import livery.toolroom.tools.api as tools
+from livery.toolroom.tools import _host
+from livery.toolroom.tools.api import Argv, Result, ToolError
 
 
 @pytest.fixture(autouse=True)

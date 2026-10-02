@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-import livery.footman as footman
+import livery.footman.api as footman
 from livery.footman import _app, _gc, _paths
 
 

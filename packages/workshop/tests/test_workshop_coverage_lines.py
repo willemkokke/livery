@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop import _coverage_lines as lines_
 from livery.workshop import _coverage_store
 from livery.workshop._backends import _python

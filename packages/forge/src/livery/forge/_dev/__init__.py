@@ -34,9 +34,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail, group
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail, group
 
 forge = group("forge", help="livery.forge development")
 dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")

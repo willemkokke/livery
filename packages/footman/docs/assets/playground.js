@@ -33,8 +33,8 @@ const REVISION_MARK = "example: revision";
 
 const DEFAULT_FILES = {
   "tasks.py": `from typing import Literal
-from livery.footman import fail, run, task
-from livery.toolroom.tools import pytest, ruff
+from livery.footman.api import fail, run, task
+from livery.toolroom.tools.api import pytest, ruff
 
 @task
 def lint(fix: bool = False):
@@ -264,7 +264,7 @@ def _fm_install_stubs(index_url, target=None):
     import hashlib
 
     try:
-        from livery.toolroom.store import Observation, render_observation
+        from livery.toolroom.store.api import Observation, render_observation
     except ImportError:
         return 0
 
@@ -272,7 +272,7 @@ def _fm_install_stubs(index_url, target=None):
     # under its stubs/, the handles beside them, never inside the tools
     # package's own directory.
     if target is None:
-        import livery.toolroom.tools as tools
+        import livery.toolroom.tools.api as tools
 
         target = Path(tools.__file__).resolve().parents[1]
     target = Path(target)
@@ -323,7 +323,7 @@ def _fm_install_stubs(index_url, target=None):
     def cls(name):
         return "".join(part.title() for part in name.replace("-", "_").split("_"))
 
-    index = ["from livery.toolroom.tools import Result"]
+    index = ["from livery.toolroom.tools.api import Result"]
     index += [
         "from livery.toolroom.stubs." + n + " import " + cls(n) + " as " + cls(n)
         for n in written
@@ -425,7 +425,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
-    import livery.footman as footman
+    import livery.footman.api as footman
     import livery.footman.context
 
     footman.parallel  # resolve the lazy re-export before overriding it
@@ -440,7 +440,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
         if failure is not None:
             raise failure
 
-    footman.context.parallel = _inline_parallel
+    livery.footman.context.parallel = _inline_parallel
     footman.__dict__["parallel"] = _inline_parallel
 
     # The browser has no shells to find, and the simulated child never
@@ -450,7 +450,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
     def _fm_resolve_shell(kind, policy="posix"):
         return ["/bin/sh", "-c"]
 
-    footman.context._resolve_shell = _fm_resolve_shell
+    livery.footman.context._resolve_shell = _fm_resolve_shell
 
     # include("module") in an example imports a sibling editor tab; make
     # the working directory importable the way a terminal's usually is.
@@ -505,9 +505,9 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     _fm_terminal_out = _FMTerminalOut()
     _fm_terminal_in = _FMStdin()
-    footman.context._stdin_is_tty = lambda: True
-    footman.context.real_stdin = lambda: _fm_terminal_in
-    footman.context.real_stderr = lambda: _fm_terminal_out
+    livery.footman.context._stdin_is_tty = lambda: True
+    livery.footman.context.real_stdin = lambda: _fm_terminal_in
+    livery.footman.context.real_stderr = lambda: _fm_terminal_out
 
     def _fm_getpass(prompt="", stream=None):
         # A secret prompt: the browser dialog cannot mask typing, so the

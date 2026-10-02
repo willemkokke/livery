@@ -3,7 +3,7 @@
 Users build their command tree in a tasks file (`tasks.py` by default):
 
 ```python
-from livery.footman import task, group
+from livery.footman.registry import task, group
 
 @task
 def lint(fix: bool = False):
@@ -1897,7 +1897,7 @@ class Group:
         comes back, and a handoff that waits for its replacement exits with
         its code. So a *normal* return means the replacement did not happen
         and whatever was written down should be taken back; an exception
-        means it did, and the state stands. `livery.footman.handing_off` is
+        means it did, and the state stands. `livery.footman.api.handing_off` is
         the composer a re-execing verb calls.
         """
         _check_hook_arity("pre_reexec", fn, 0)

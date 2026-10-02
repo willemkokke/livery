@@ -30,8 +30,8 @@ import time
 from collections.abc import Callable
 from typing import Literal
 
-from livery.forge import Forge, ForgeError, GithubForge, Repository, Run
 from livery.forge._http import JsonClient, Opener
+from livery.forge.api import Forge, ForgeError, GithubForge, Repository, Run
 from livery.forge.testing import Outcome
 
 #: The workflow every scratch repository is seeded with. The push

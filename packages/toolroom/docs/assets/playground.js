@@ -21,8 +21,8 @@ const REVISION_MARK = "example: revision";
 
 const DEFAULT_FILES = {
   "tasks.py": `from typing import Literal
-from livery.footman import fail, run, task
-from livery.toolroom.tools import docker, pytest, ruff
+from livery.footman.api import fail, run, task
+from livery.toolroom.tools.api import docker, pytest, ruff
 
 @task
 def lint(fix: bool = False):
@@ -279,7 +279,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
-    import livery.footman as footman
+    import livery.footman.api as footman
     import livery.footman.context
 
     footman.parallel  # resolve the lazy re-export before overriding it
@@ -294,7 +294,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
         if failure is not None:
             raise failure
 
-    footman.context.parallel = _inline_parallel
+    livery.footman.context.parallel = _inline_parallel
     footman.__dict__["parallel"] = _inline_parallel
 
 def _fm_sandbox_line(line):

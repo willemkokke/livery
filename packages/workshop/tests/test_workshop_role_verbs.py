@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Group
+from livery.footman.api import Group
 from livery.workshop import _checks, _quality
 from livery.workshop._checks import (
     CheckRecord,

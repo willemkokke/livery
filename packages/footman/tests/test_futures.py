@@ -35,7 +35,7 @@ def test_a_base_exception_answers_the_cell_it_claimed(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent("""
         import time
-        from livery.footman import task
+        from livery.footman.api import task
 
         class Abrupt(BaseException):
             pass
@@ -77,7 +77,7 @@ def test_a_body_callee_carries_only_its_own_sections():
     # The callee's context is its own birth, not a window onto the caller's:
     # its row must never snapshot sections the caller recorded before the
     # call, and the caller's row keeps its own either way.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
 
@@ -579,7 +579,7 @@ def test_two_threads_calling_one_task_share_a_single_execution():
 
     @reg.task
     def fan():
-        from livery.footman import parallel
+        from livery.footman.api import parallel
 
         def one() -> None:
             seen.append(slow())
@@ -912,7 +912,7 @@ def test_a_share_copies_what_a_body_claimed_execution_reported():
     # The claimed body call hands its sealed row to the cell BEFORE the
     # future resolves, so a later sharer copies the reviewed report — not a
     # bare value with the title lost.
-    from livery.footman import pre_record
+    from livery.footman.api import pre_record
 
     reg = Group("root")
 
@@ -1304,7 +1304,7 @@ def test_a_shared_body_call_is_a_unit_too():
 def test_parallel_task_children_count_once():
     # parallel(build) is one request: the machinery counts it; parallel()
     # counts only children it alone can see (plain thunks).
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1340,7 +1340,7 @@ def test_every_parallel_spelling_counts_the_same():
     # The regression this pins: a lambda wrapping a call used to count twice —
     # once as parallel()'s anonymous thunk, once as the request inside it.
 
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     for label, body in (
         ("handle", lambda w: parallel(w)),
@@ -1362,7 +1362,7 @@ def test_every_parallel_spelling_counts_the_same():
 def test_a_plain_thunk_keeps_its_own_unit():
     # Nothing claims it, so parallel()'s unit stands — a thunk that runs no
     # task is the only thing on the line for that child.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
     ran: list[str] = []
@@ -1381,7 +1381,7 @@ def test_a_plain_thunk_keeps_its_own_unit():
 def test_a_thunk_that_runs_two_tasks_counts_both():
     # The claim is one-shot: the first request takes the child's unit, the
     # second is its own piece of work.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1399,7 +1399,7 @@ def test_a_thunk_that_runs_two_tasks_counts_both():
 def test_the_claim_does_not_reach_the_callee():
     # A parallel child's task claims the unit; the calls that task then makes
     # are its own requests and count for themselves.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1423,7 +1423,7 @@ def test_the_claim_does_not_reach_the_callee():
 def test_a_shared_request_is_still_its_own_unit():
     # Two identical calls: one executes, one is satisfied by it. Both are
     # requests, so both count — the wait is visible.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1442,7 +1442,7 @@ def test_a_shared_request_is_still_its_own_unit():
 
 
 def test_a_block_runs_its_calls_together_and_hands_back_values():
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
     order: list[str] = []
@@ -1466,7 +1466,7 @@ def test_a_block_runs_its_calls_together_and_hands_back_values():
 
 
 def test_a_queued_value_cannot_be_used_inside_the_block():
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1489,7 +1489,7 @@ def test_an_item_built_in_the_block_but_never_handed_over_is_taught():
     # Building runs nothing, so an item born inside the block that never
     # reaches p() is a forgotten hand-off — the block refuses to run
     # rather than silently dropping the work.
-    from livery.footman import parallel, step
+    from livery.footman.api import parallel, step
 
     reg = Group("root")
     ran: list[str] = []
@@ -1515,7 +1515,7 @@ def test_an_item_built_in_the_block_but_never_handed_over_is_taught():
 
 
 def test_an_item_pumped_in_place_inside_the_block_is_not_dead():
-    from livery.footman import parallel, step
+    from livery.footman.api import parallel, step
 
     reg = Group("root")
     ran: list[str] = []
@@ -1538,7 +1538,7 @@ def test_an_item_pumped_in_place_inside_the_block_is_not_dead():
 def test_a_queued_call_is_a_real_request():
     # Queued or not, what runs is a task: it earns a row and shares with the
     # run, exactly as a call written outside the block would.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
     runs: list[str] = []
@@ -1560,7 +1560,7 @@ def test_a_queued_call_is_a_real_request():
 
 
 def test_a_failing_queued_call_fails_the_block():
-    from livery.footman import fail, parallel
+    from livery.footman.api import fail, parallel
 
     reg = Group("root")
 
@@ -1578,7 +1578,7 @@ def test_a_failing_queued_call_fails_the_block():
 
 
 def test_a_raising_block_body_runs_nothing():
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
     runs: list[str] = []
@@ -1601,7 +1601,7 @@ def test_a_raising_block_body_runs_nothing():
 def test_an_empty_splat_is_still_an_empty_list_of_codes():
     # `parallel(*thunks)` over an empty sequence is the documented dynamic
     # fan-out; it must not become a context manager.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     assert parallel(*[]) == []
 
@@ -1609,7 +1609,7 @@ def test_an_empty_splat_is_still_an_empty_list_of_codes():
 def test_also_queues_a_plain_callable_into_the_block():
     # The straggler case: one lambda or plain function alongside the tasks,
     # in the same fan-out, its value in the same results list.
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
     ran: list[str] = []
@@ -1632,7 +1632,7 @@ def test_also_queues_a_plain_callable_into_the_block():
 
 
 def test_queueing_an_item_outside_a_block_is_taught():
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     with pytest.raises(RuntimeError, match=r"inside the `with`"):
         parallel()(step(lambda: 0, title="x")())
@@ -1643,7 +1643,7 @@ def test_the_partial_footgun_is_a_taught_refusal():
     # tasks.py did it). Under the ban it teaches instead.
     import functools
 
-    from livery.footman import parallel
+    from livery.footman.api import parallel
 
     reg = Group("root")
 
@@ -1687,7 +1687,7 @@ def test_a_task_defined_in_a_body_runs_and_is_swept():
 def test_a_clashing_name_is_numbered_only_while_a_run_is_in_flight():
     # A duplicate written in a tasks file is a mistake and stays taught. One
     # made mid-run is not: the task is ad-hoc, and the name is incidental.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
     ran: list[str] = []
@@ -1715,7 +1715,7 @@ def test_a_clashing_name_is_numbered_only_while_a_run_is_in_flight():
 
 def test_anonymous_adhoc_tasks_in_a_loop_all_run():
     # Every lambda is `<lambda>`; numbering is what keeps them distinct.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
     seen: list[int] = []
@@ -1735,7 +1735,7 @@ def test_anonymous_adhoc_tasks_in_a_loop_all_run():
 def test_an_adhoc_task_from_a_plain_callable_joins_a_block():
     # `task(fn)(args)` makes a named callable into a real task for this run —
     # so it queues in a block like any other call, and is swept after.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
     ran: list[str] = []
@@ -1801,7 +1801,7 @@ def test_the_run_s_finished_rows_are_readable_from_inside_a_task(tmp_path):
 
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent("""
-        from livery.footman import task
+        from livery.footman.api import task
         from livery.footman import _schedule
 
         @task

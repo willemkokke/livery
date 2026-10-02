@@ -6,8 +6,8 @@ is the only entry; the registry exists so a successor is an entry and
 never a migration. One address space uses one algorithm, recorded in
 its root manifest.
 
-Reach for [livery.strongroom.Digest][] to parse a name and
-[livery.strongroom.digest_of][] to name bytes.
+Reach for [livery.strongroom.api.Digest][] to parse a name and
+[livery.strongroom.api.digest_of][] to name bytes.
 """
 
 from __future__ import annotations

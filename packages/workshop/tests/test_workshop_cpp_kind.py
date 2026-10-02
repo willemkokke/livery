@@ -941,7 +941,7 @@ def _msvc_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _FakeEngine
 ) -> tuple[Package, Path]:
     """A rendered package whose gate build says MSVC, one test executable, fakes in."""
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     package = _render_cpp(tmp_path)
     build_dir = package.directory / _cpp_conan.GATE_BUILD_DIR

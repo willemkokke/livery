@@ -1,6 +1,6 @@
 """What the base knows of a package's docs: its table, its layout, the site's reads.
 
-The site's assembly is a layer's (``livery.workshop.layers.docs``);
+The site's assembly is a layer's (``livery.extensions.docs``);
 these are the facts the base reads for its own reasons: the contract's
 ``[docs]`` table and the generators it declares, which the CI render
 installs requirements for; the layout of a package's ``docs/`` tree
@@ -14,7 +14,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from livery.footman import fail
+from livery.footman.api import fail
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared
 from livery.workshop._packages import Package, discover_packages

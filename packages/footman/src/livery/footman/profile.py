@@ -35,7 +35,7 @@ and writes its whole run there as a fragment, with its own process id,
 instead of a file of its own — so a verb that spawns a verb shows what it
 spawned from the inside, and the box is left for whoever opened it. A
 process about to replace itself does that inside
-[livery.footman.handing_off][], which reaches this plugin's own `pre_reexec`
+[livery.footman.api.handing_off][], which reaches this plugin's own `pre_reexec`
 block: it drops what the running task has recorded and hands the box to the
 successor, so the work before an exec is in the trace and the directory is
 consumed rather than leaked. A verb that re-execs knows none of that.
@@ -56,9 +56,11 @@ from collections.abc import Generator, Iterator
 from pathlib import Path
 from typing import Annotated, Any
 
-import livery.footman as footman
-from livery.footman import GlobalOption, _schedule, context, matching
+import livery.footman.api as footman
+from livery.footman import _schedule, context
 from livery.footman._executor import reported_state
+from livery.footman.params import matching
+from livery.footman.registry import GlobalOption
 
 PROFILE = GlobalOption(
     "profile",
@@ -690,7 +692,7 @@ def hand_the_trace_on() -> Generator[dict[str, str]]:
     """Give this run's trace to the process about to replace it.
 
     The `pre_reexec` moment, so a verb that re-runs its own command line
-    calls `livery.footman.handing_off` and knows nothing about traces. The
+    calls `livery.footman.api.handing_off` and knows nothing about traces. The
     block it wraps ends by not returning: an exec that works never comes
     back, and a handoff that waits for its replacement exits with its code.
     So returning normally means the replacement did not happen, and this

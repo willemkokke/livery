@@ -377,7 +377,7 @@ Acceptance:
 
 Deliverables:
 
-- `livery.strongroom.conformance`: a harness that takes an
+- `livery.strongroom.api.conformance`: a harness that takes an
   implementation through a small protocol (create, open, land, ref,
   publish, sweep, view) and runs every case under `spec/conformance/`
   against it. The Python implementation is its first subject; the

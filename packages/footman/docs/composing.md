@@ -144,7 +144,7 @@ imported-vs-imported clashes are loud.
 ## Mounting from your own modules: `include()`
 
 ```python
-from livery.footman import include
+from livery.footman.api import include
 
 include("shared_tasks")  # everything, at root
 include("shared_tasks", only=["lint", "fmt"])  # cherry-pick children
@@ -238,7 +238,7 @@ A package publishes a `Group` under the `footman.tasks` entry point:
 And a project **opts in** with a mount line in its tasks file:
 
 ```python
-from livery.footman import plugin
+from livery.footman.api import plugin
 
 plugin("acme.mkdocs")  # fm mkdocs.build, fm mkdocs.deploy
 plugin("acme.mkdocs", only=["build"])  # just one child

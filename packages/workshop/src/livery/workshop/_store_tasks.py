@@ -15,7 +15,7 @@ import json as _json
 from pathlib import Path
 from typing import Annotated, Any
 
-from livery.footman import doc, fail, group
+from livery.footman.api import doc, fail, group
 from livery.workshop._layers import workspace_root
 from livery.workshop._state import WHOLE, Keyed, Series, remote_snapshot
 

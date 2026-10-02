@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop import _metrics, _speed, _state
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 from workshop_spawns import counting_spawns

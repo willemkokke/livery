@@ -236,7 +236,7 @@ def test_a_location_that_does_not_apply_is_empty_not_absent(tool_env, capsys):
 
 
 def test_the_public_accessors_answer_the_same_places(tool_env):
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     assert footman.config_dir() == _paths.footman_config_dir()
     assert footman.config_file() == _paths.footman_config_file()
@@ -255,7 +255,7 @@ def test_the_group_answers_inside_a_project(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman.api import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
     runner = Runner(App(dist="footman", builtin=("footman.self",)))

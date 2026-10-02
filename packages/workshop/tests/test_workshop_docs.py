@@ -8,16 +8,11 @@ from pathlib import Path
 
 import pytest
 
-import livery.workshop
-
 # The site's jobs are the docs layer's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.workshop.layers.docs._tasks
-from livery.footman import Failed
-from livery.workshop._docs_contract import materialise_module_docs, module_docs_dir
-from livery.workshop._navblocks import NAV_BEGIN, NAV_END
-from livery.workshop._packages import discover_packages
-from livery.workshop.layers.docs._site import (
+import livery.extensions.docs._tasks
+import livery.workshop.api
+from livery.extensions.docs._site import (
     MEMBERS_SLOT,
     THEME_SLOT,
     mount_package_docs,
@@ -25,6 +20,10 @@ from livery.workshop.layers.docs._site import (
     scoped_config,
     zensical_config,
 )
+from livery.footman.api import Failed
+from livery.workshop._docs_contract import materialise_module_docs, module_docs_dir
+from livery.workshop._navblocks import NAV_BEGIN, NAV_END
+from livery.workshop._packages import discover_packages
 
 _FAILURES = (SystemExit, Failed)
 
@@ -37,7 +36,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
         + (
             ""
             if docs_table.startswith("layers")
-            else 'layers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+            else 'layers = ["livery.workshop", "livery.extensions.docs"]\n'
         )
         + docs_table
     )
@@ -139,8 +138,8 @@ def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
 
 def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> None:
     """The build assembles it; nothing committed enumerates the packages."""
+    from livery.extensions.docs._site import write_site_config
     from livery.workshop._ci_generate import generate
-    from livery.workshop.layers.docs._site import write_site_config
 
     root = _workspace(tmp_path)
     for kind in ("github", "gitea", "gitlab"):
@@ -161,7 +160,7 @@ def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> N
 def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
     import shutil
 
-    from livery.workshop.layers.docs._site import api_modules
+    from livery.extensions.docs._site import api_modules
 
     root = _workspace(tmp_path)
     bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
@@ -173,7 +172,7 @@ def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
 def test_api_modules_sort_public_first_and_skip_the_machinery(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import api_modules
+    from livery.extensions.docs._site import api_modules
 
     root = _workspace(tmp_path)
     core = next(p for p in discover_packages(root) if p.directory.name == "core")
@@ -200,8 +199,8 @@ def test_api_modules_sort_public_first_and_skip_the_machinery(
 
 
 def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
+    from livery.extensions.docs._site import API_DIR, generate_api_pages
     from livery.workshop._docs_contract import GENERATED_DIR
-    from livery.workshop.layers.docs._site import API_DIR, generate_api_pages
 
     root = _workspace(tmp_path)
     generated = root / "packages" / "core" / "docs" / GENERATED_DIR
@@ -351,7 +350,7 @@ def _tagged_workspace(tmp_path: Path) -> Path:
 def test_no_tags_still_serves_the_page_the_nav_points_at(tmp_path: Path) -> None:
     # A shallow clone has no tags, but the nav derives from committed
     # state alone, so the landing page must exist and say so.
-    from livery.workshop.layers.docs._site import RELEASES, generate_release_pages
+    from livery.extensions.docs._site import RELEASES, generate_release_pages
 
     root = _workspace(tmp_path)
     (root / "packages" / "core" / "CHANGELOG.md").write_text("# Changelog\n")
@@ -361,7 +360,7 @@ def test_no_tags_still_serves_the_page_the_nav_points_at(tmp_path: Path) -> None
 
 
 def test_no_changelogs_means_no_release_view(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import generate_release_pages
+    from livery.extensions.docs._site import generate_release_pages
 
     root = _workspace(tmp_path)
     assert generate_release_pages(root) == []
@@ -369,7 +368,7 @@ def test_no_changelogs_means_no_release_view(tmp_path: Path) -> None:
 
 
 def test_a_missing_entry_falls_back_to_the_receipt_line(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import _entry_body, _release_block
+    from livery.extensions.docs._site import _entry_body, _release_block
 
     root = _tagged_workspace(tmp_path)
     changelog = root / "packages" / "core" / "CHANGELOG.md"
@@ -381,7 +380,7 @@ def test_a_missing_entry_falls_back_to_the_receipt_line(tmp_path: Path) -> None:
 def test_a_changelog_page_survives_a_cliffless_package(tmp_path: Path) -> None:
     # The fallback: no cliff.toml, so the unreleased section cannot
     # derive; the page is the committed file alone, reason printed.
-    from livery.workshop.layers.docs._site import changelog_page
+    from livery.extensions.docs._site import changelog_page
 
     root = _tagged_workspace(tmp_path)
     core = next(p for p in discover_packages(root) if p.directory.name == "core")
@@ -390,7 +389,7 @@ def test_a_changelog_page_survives_a_cliffless_package(tmp_path: Path) -> None:
 
 
 def test_the_release_view_paginates_by_year(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         RELEASES,
         generate_release_pages,
         release_years,
@@ -463,7 +462,7 @@ def test_the_ssh_seam_skips_unconfigured(
     capsys: object,
     monkeypatch: object,
 ) -> None:
-    from livery.workshop.layers.docs._site import _publish_ssh
+    from livery.extensions.docs._site import _publish_ssh
 
     for name in ("DOCS_HOST", "DOCS_USER", "DOCS_ROOT"):
         monkeypatch.delenv(name, raising=False)  # type: ignore[attr-defined]
@@ -478,7 +477,7 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
@@ -541,7 +540,7 @@ def _nav(root: Path, package: str, body: str) -> Path:
 def test_a_broken_nav_toml_refuses_with_the_file_named(tmp_path: Path) -> None:
     import pytest
 
-    from livery.workshop.layers.docs._site import package_nav
+    from livery.extensions.docs._site import package_nav
 
     root = _workspace(tmp_path)
     _nav(root, "core", "nav = [broken\n")
@@ -562,7 +561,7 @@ def test_a_broken_nav_toml_refuses_with_the_file_named(tmp_path: Path) -> None:
 def test_nav_drift_refuses_both_directions_and_restores(tmp_path: Path) -> None:
     import pytest
 
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     # Forced red, direction one: an entry naming a missing page.
@@ -588,7 +587,7 @@ def test_nav_drift_refuses_both_directions_and_restores(tmp_path: Path) -> None:
 
 
 def test_generated_pages_are_exempt_both_ways(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     # A generator's page may be listed before it exists, and a
@@ -612,7 +611,7 @@ def test_a_glossary_under_includes_is_not_an_orphan(tmp_path: Path) -> None:
     # docs/includes/abbreviations.md is a source the extension set
     # auto-appends site-wide, never a standalone page, so the orphan
     # check must not demand a nav entry for it.
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     glossary = root / "packages/core/docs/includes"
@@ -625,7 +624,7 @@ def test_a_glossary_under_includes_is_not_an_orphan(tmp_path: Path) -> None:
 def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
     import tomllib as toml
 
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     (root / "packages/core/docs/deep").mkdir()
@@ -651,7 +650,7 @@ def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
 def test_a_navless_package_keeps_the_enumerated_fallback(tmp_path: Path) -> None:
     import tomllib as toml
 
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     parsed = toml.loads(zensical_config(root))
@@ -719,7 +718,7 @@ def test_the_block_rewrite_reindents_and_is_idempotent(tmp_path: Path) -> None:
 def test_an_unknown_preview_package_names_the_known(tmp_path: Path) -> None:
     import pytest
 
-    from livery.workshop.layers.docs._site import named_package
+    from livery.extensions.docs._site import named_package
 
     root = _workspace(tmp_path)
     with pytest.raises(BaseException, match="bare"):
@@ -729,7 +728,7 @@ def test_an_unknown_preview_package_names_the_known(tmp_path: Path) -> None:
 def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> None:
     import tomllib as toml
 
-    from livery.workshop.layers.docs._site import named_package, scoped_config
+    from livery.extensions.docs._site import named_package, scoped_config
 
     root = _workspace(
         tmp_path,
@@ -754,7 +753,7 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
 
 
 def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         generate_api_pages,
         generate_changelog_pages,
         materialise_preview,
@@ -846,8 +845,8 @@ def test_a_failing_generator_names_the_verb_and_package(
 
     import pytest
 
-    import livery.footman as footman
-    from livery.workshop.layers.docs._site import run_generators
+    import livery.footman.api as footman
+    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.broken"]\n')
@@ -864,7 +863,7 @@ def test_a_missing_runner_refuses_with_the_remedy(
 
     import pytest
 
-    from livery.workshop.layers.docs._site import run_generators
+    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.any"]\n')
@@ -878,8 +877,8 @@ def test_generators_run_in_declaration_order_at_the_root(
 ) -> None:
     import shutil as shutil_module
 
-    import livery.footman as footman
-    from livery.workshop.layers.docs._site import run_generators
+    import livery.footman.api as footman
+    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.one", "docsgen.two"]\n')
@@ -913,7 +912,7 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
         root, "core", 'generators = [{ verb = "docsgen.casts", requires = ["zsh"] }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
@@ -960,7 +959,7 @@ def test_the_docs_seeds_live_once_in_the_base_template() -> None:
 
 
 def test_a_duplicate_abbreviation_refuses_and_restores(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import abbreviation_files, zensical_config
+    from livery.extensions.docs._site import abbreviation_files, zensical_config
 
     root = _workspace(tmp_path)
     for package, definition in (("core", "One thing."), ("bare", "Another thing.")):
@@ -987,7 +986,7 @@ def test_a_duplicate_abbreviation_refuses_and_restores(tmp_path: Path) -> None:
 
 
 def test_broken_extras_declarations_refuse(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import package_docs_extras
+    from livery.extensions.docs._site import package_docs_extras
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'extra-css = "not-a-list"\n')
@@ -1004,7 +1003,7 @@ def test_broken_extras_declarations_refuse(tmp_path: Path) -> None:
 
 
 def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1025,7 +1024,7 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
 
 def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> None:
     # The docs layer alone: the base's own sheets stay out of the list.
-    root = _workspace(tmp_path, docs_table='layers = ["livery.workshop.layers.docs"]\n')
+    root = _workspace(tmp_path, docs_table='layers = ["livery.extensions.docs"]\n')
     # The fallback first: no layers, no sheet, no extra_css at all.
     assert "extra_css" not in zensical_config(root)
     assets = root / "docs" / "assets"
@@ -1071,8 +1070,8 @@ def layered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_a_layer_without_site_assets_stages_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.extensions.docs._site import layer_assets, stage_layer_assets
     from livery.workshop import _layers
-    from livery.workshop.layers.docs._site import layer_assets, stage_layer_assets
 
     root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
     monkeypatch.setattr(_layers, "layer_content", lambda layer: tmp_path / "none")
@@ -1088,7 +1087,7 @@ def test_a_layer_without_site_assets_stages_nothing(
 def test_layer_assets_are_staged_whole_and_listed_in_cascade_order(
     tmp_path: Path, layered: Path
 ) -> None:
-    from livery.workshop.layers.docs._site import stage_layer_assets
+    from livery.extensions.docs._site import stage_layer_assets
 
     root = layered
     (root / "docs" / "assets").mkdir(parents=True)
@@ -1128,8 +1127,8 @@ def theme_layers() -> Iterator[None]:
 def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
     theme_layers: None,
 ) -> None:
+    from livery.extensions.docs._site import theme_values
     from livery.workshop._slots import SlotError, contribute, withdraw
-    from livery.workshop.layers.docs._site import theme_values
 
     contribute(THEME_SLOT, {"font.body": "Lato"}, layer="acme.site", by="acme.site")
     with pytest.raises(
@@ -1167,7 +1166,7 @@ def test_a_theme_contribution_changes_the_fonts_and_keeps_the_rest(
 
 
 def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     config = zensical_config(root)
@@ -1183,7 +1182,7 @@ def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:
 
 
 def test_the_override_template_follows_the_committed_card(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import overrides_template
+    from livery.extensions.docs._site import overrides_template
 
     root = _workspace(
         tmp_path,
@@ -1207,7 +1206,7 @@ def test_the_override_template_follows_the_committed_card(tmp_path: Path) -> Non
 def test_the_scoped_preview_carries_the_surface_two_levels_up(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import named_package, scoped_config
+    from livery.extensions.docs._site import named_package, scoped_config
 
     root = _workspace(tmp_path)
     includes = root / "packages" / "core" / "docs" / "includes"
@@ -1224,7 +1223,7 @@ def test_the_scoped_preview_carries_the_surface_two_levels_up(
 
 
 def test_broken_coverage_declarations_refuse(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import package_coverage_reports
+    from livery.extensions.docs._site import package_coverage_reports
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'coverage = "not-a-list"\n')
@@ -1243,7 +1242,7 @@ def test_broken_coverage_declarations_refuse(tmp_path: Path) -> None:
 def test_a_missing_report_states_the_absence_and_stays_green(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import generate_coverage_pages
+    from livery.extensions.docs._site import generate_coverage_pages
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1258,7 +1257,7 @@ def test_a_missing_report_states_the_absence_and_stays_green(
 def test_a_kind_with_no_coverage_renderer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop.layers.docs import _site as _docs
+    from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1277,7 +1276,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
 ) -> None:
     from coverage import CoverageData
 
-    from livery.workshop.layers.docs import _site as _docs
+    from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1317,7 +1316,7 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
 ) -> None:
     from coverage import CoverageData
 
-    from livery.workshop.layers.docs import _site as _docs
+    from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1351,7 +1350,7 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
 def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import published_url
+    from livery.extensions.docs._site import published_url
 
     assert published_url("index.md") == ""
     assert published_url("api.md") == "api/"
@@ -1382,7 +1381,7 @@ def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
 
 
 def test_a_build_that_left_no_site_is_red(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import require_site
+    from livery.extensions.docs._site import require_site
 
     with pytest.raises(
         _FAILURES, match=r"left no .*site/index\.html: nothing to publish"
@@ -1398,7 +1397,7 @@ def test_a_build_that_left_no_site_is_red(tmp_path: Path) -> None:
 def test_a_checkout_without_the_site_sources_is_refused_before_the_build(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import require_sources, source_summary
+    from livery.extensions.docs._site import require_sources, source_summary
 
     with pytest.raises(_FAILURES, match=r"docs, workshop\.toml missing"):
         require_sources(tmp_path)
@@ -1417,7 +1416,7 @@ def test_a_checkout_without_the_site_sources_is_refused_before_the_build(
 
 
 def test_the_generators_output_is_printed_in_ci_only() -> None:
-    from livery.workshop.layers.docs._site import generator_lines
+    from livery.extensions.docs._site import generator_lines
 
     assert generator_lines("Build started\n", "", in_ci=False) == []
     assert generator_lines("", "", in_ci=True) == []
@@ -1464,7 +1463,7 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
 
 
 def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         generate_coverage_pages,
         mount_package_docs,
     )
@@ -1499,7 +1498,7 @@ def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
 def test_the_coverage_nav_entry_appends_like_the_changelog(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -1510,7 +1509,7 @@ def test_the_coverage_nav_entry_appends_like_the_changelog(
 
 
 def test_the_coverage_page_stays_out_of_the_context_file(tmp_path: Path) -> None:
-    from livery.workshop.layers.docs._llms import _machine_page
+    from livery.extensions.docs._llms import _machine_page
 
     assert _machine_page("packages/core/coverage.md")
     assert not _machine_page("packages/core/guide.md")
@@ -1522,7 +1521,7 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     (root / "docs" / "index.md").write_text("# Home\n")
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
@@ -1541,7 +1540,7 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
@@ -1595,7 +1594,7 @@ def test_the_mount_merges_the_generated_tree_and_keeps_every_link_true(
 
 def test_no_published_path_carries_generated(tmp_path: Path) -> None:
     """The scheme, pinned: the config's every path and the alias tree are clean."""
-    from livery.workshop.layers.docs._site import RELEASES, generate_release_pages
+    from livery.extensions.docs._site import RELEASES, generate_release_pages
 
     root = _workspace(tmp_path)
     (root / "packages/core/docs/_generated").mkdir()
@@ -1604,7 +1603,7 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
     parsed = tomllib.loads(config)
     # Every nav leaf and every asset path publishes clean; the snippet
     # base paths name the source tree, which is where the name lives.
-    from livery.workshop.layers.docs._site import _nav_leaves
+    from livery.extensions.docs._site import _nav_leaves
 
     assert not [
         leaf for leaf in _nav_leaves(parsed["project"]["nav"]) if "_generated" in leaf
@@ -1755,8 +1754,8 @@ def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api() -> None:
 def test_the_mount_keeps_an_unchanged_section_and_full_rebuilds_it(
     tmp_path: Path,
 ) -> None:
+    from livery.extensions.docs._site import BUILD_DIR
     from livery.workshop._docs_contract import MOUNT
-    from livery.workshop.layers.docs._site import BUILD_DIR
 
     root = _workspace(tmp_path)
     assert mount_package_docs(root) == ["core"]
@@ -1795,7 +1794,7 @@ def test_the_mount_keeps_an_unchanged_section_and_full_rebuilds_it(
 def test_the_workshops_pages_land_in_the_packages_generated_tree(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         emit_section_navs,
         generate_api_pages,
         generate_changelog_pages,
@@ -1823,7 +1822,7 @@ def test_the_workshops_pages_land_in_the_packages_generated_tree(
 
 
 def _nav_leaves_of(entries: list[object]) -> list[str]:
-    from livery.workshop.layers.docs._site import _nav_leaves
+    from livery.extensions.docs._site import _nav_leaves
 
     return _nav_leaves(entries)
 
@@ -1832,7 +1831,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     """Contract 2: everything a build writes is gitignored."""
     import subprocess
 
-    from livery.workshop.layers.docs import _site as _docs
+    from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
@@ -1840,7 +1839,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     # output the template forgets fails here instead of dirtying every
     # checkout; the two header lines with template variables are comments.
     template = (
-        Path(livery.workshop.__file__ or ".").resolve().parent
+        Path(livery.workshop.api.__file__ or ".").resolve().parent
         / "templates/project/.gitignore.jinja"
     )
     rules = [
@@ -1888,12 +1887,12 @@ def stone_kind() -> Iterator[None]:
 def test_a_kind_without_an_extractor_names_the_absence_never_an_empty_page(
     tmp_path: Path, stone_kind: None
 ) -> None:
-    from livery.workshop._docs_contract import GENERATED_DIR
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         API_DIR,
         api_modules,
         generate_api_pages,
     )
+    from livery.workshop._docs_contract import GENERATED_DIR
 
     root = _workspace(tmp_path)
     bare = root / "packages" / "bare"
@@ -1970,11 +1969,11 @@ def test_a_second_extractor_reaches_the_config_through_the_kind_record(
 def test_without_human_fragments_the_development_section_is_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _layers, _prose
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         development_nav_lines,
         generate_development_pages,
     )
+    from livery.workshop import _layers, _prose
 
     root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
     monkeypatch.setattr(_layers, "layer_content", lambda layer: None)
@@ -1988,11 +1987,11 @@ def test_without_human_fragments_the_development_section_is_absent(
 def test_the_development_section_renders_one_page_per_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _layers, _prose
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         development_nav_lines,
         generate_development_pages,
     )
+    from livery.workshop import _layers, _prose
 
     root = _workspace(tmp_path, docs_table='layers = ["acme.prose"]\n')
     content = tmp_path / "acme-prose-content"

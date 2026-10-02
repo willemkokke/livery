@@ -15,8 +15,8 @@ import pytest
 
 # The site's jobs are the docs layer's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.workshop.layers.docs._tasks  # noqa: F401
-from livery.footman import Failed
+import livery.extensions.docs._tasks  # noqa: F401
+from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
@@ -333,7 +333,7 @@ def test_forge_lane_reads_the_contract_and_the_remote(
         (root / "workshop.toml").write_text(
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
-        import livery.forge as forge
+        import livery.forge.api as forge
 
         for cls_name in ("GithubForge", "GiteaForge", "GitlabForge"):
             monkeypatch.setattr(
@@ -377,7 +377,7 @@ def test_ci_run_spawns_the_jobs_entries(
 ) -> None:
     from types import SimpleNamespace
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     seen: list[list[str]] = []
 
@@ -388,9 +388,7 @@ def test_ci_run_spawns_the_jobs_entries(
     monkeypatch.setattr(footman, "run", green)
     _ci_tasks.ci_run(point="gate", job="docs")
     assert seen == [["fm", "--profile=fm-profile-docs-build.json", "docs.build"]]
-    assert (
-        "gate/docs: docs.build (livery.workshop.layers.docs)" in capsys.readouterr().out
-    )
+    assert "gate/docs: docs.build (livery.extensions.docs)" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="has no job 'nope'"):
         _ci_tasks.ci_run(point="gate", job="nope")
 
@@ -435,7 +433,7 @@ def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
 def test_superseded_runs_are_cancelled_and_a_refusal_is_named(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
 
     fake, _root = rig
     repo = fake.repository(OWNER, NAME)

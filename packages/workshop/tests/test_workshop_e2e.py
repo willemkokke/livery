@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.forge import Repository
+from livery.forge.api import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -51,7 +51,7 @@ def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
     monkeypatch.setenv("GITLAB_TOKEN", "the-lane-token")
     fake = FakeForge()
     monkeypatch.setattr(
-        "livery.forge.GitlabForge.connect",
+        "livery.forge.api.GitlabForge.connect",
         staticmethod(lambda url, token: fake),
     )
     calls: list[tuple[str, str, object]] = []
@@ -166,7 +166,7 @@ def test_provisioning_creates_then_reuses_and_writes_the_secret(
     monkeypatch.setenv("GITEA_TOKEN", "the-lane-token")
     fake = FakeForge()
     monkeypatch.setattr(
-        "livery.forge.GiteaForge.connect",
+        "livery.forge.api.GiteaForge.connect",
         staticmethod(lambda url, token: fake),
     )
     _e2e.provision("gitea")
@@ -231,7 +231,7 @@ def test_the_runner_probe_refuses_a_missing_runner_and_a_missing_socket(
     # socket passes quietly.
     from types import SimpleNamespace
 
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     answer = {"code": 1, "stdout": ""}
     seen: list[tuple[str, ...]] = []
@@ -267,7 +267,7 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     # refused delete holds on every forge.
     from types import SimpleNamespace
 
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     pushes: list[tuple[str, ...]] = []
     deny = {"code": 0}
@@ -320,7 +320,7 @@ def test_the_tree_reset_keeps_what_sync_materialises(
     """A reset cleans a pass's residue and never the stubs, receipts or venv."""
     from types import SimpleNamespace
 
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     calls: list[tuple[str, ...]] = []
 
@@ -347,7 +347,7 @@ def test_the_serving_probe_asks_each_member_s_own_registry(
     """A python member is probed on the simple index, the conan member on its target."""
     from types import SimpleNamespace
 
-    import livery.forge as forge_package
+    import livery.forge.api as forge_package
     from livery.workshop import _registries
     from livery.workshop._backends import _cpp_conan
 
@@ -527,7 +527,9 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         lambda root, git, package: "0.3.0" if package.name == "livery-forge" else "",
     )
     ran: list[list[str]] = []
-    monkeypatch.setattr("livery.footman.run", lambda argv, **kwargs: ran.append(argv))
+    monkeypatch.setattr(
+        "livery.footman.api.run", lambda argv, **kwargs: ran.append(argv)
+    )
     purged: list[tuple[str, object]] = []
 
     def _purge(base: str, owner: str, **kwargs: object) -> list[str]:
@@ -663,7 +665,7 @@ class _SlowDeleteForge(FakeForge):
     finishes = True
 
     def delete_repo(self, owner: str, name: str) -> None:
-        from livery.forge import ForgeError
+        from livery.forge.api import ForgeError
 
         if self.finishes:
             super().delete_repo(owner, name)
@@ -673,7 +675,7 @@ class _SlowDeleteForge(FakeForge):
 def test_a_delete_that_outruns_the_client_is_waited_for_or_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
 
     monkeypatch.setattr(
         "livery.forge._registry.purge_packages",

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop import _scale
 from livery.workshop._metrics import _metrics  # pyright: ignore[reportPrivateUsage]
 
@@ -74,7 +74,7 @@ def test_a_verb_that_fails_is_timed_and_its_output_printed(
         stdout = "the child's words\n"
         stderr = ""
 
-    monkeypatch.setattr("livery.footman.run", lambda *a, **k: _Result())
+    monkeypatch.setattr("livery.footman.api.run", lambda *a, **k: _Result())
     timing = _scale.run_verb(tmp_path, ("sync",), name="sync cold")
     assert timing.code == 3 and timing.name == "sync cold"
     out = capsys.readouterr().out

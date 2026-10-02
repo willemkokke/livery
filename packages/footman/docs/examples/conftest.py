@@ -2,7 +2,7 @@
 
 Every example defines tasks as a tasks file would, so it runs inside a
 fresh [livery.footman.registry.capture][], and a top-level run or tool
-call records instead of executing, under [livery.footman.recording][].
+call records instead of executing, under [livery.footman.api.recording][].
 """
 
 from __future__ import annotations
@@ -11,7 +11,8 @@ from collections.abc import Generator
 
 import pytest
 
-from livery.footman import recording, registry
+from livery.footman import registry
+from livery.footman.api import recording
 
 
 @pytest.hookimpl(hookwrapper=True)

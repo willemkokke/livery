@@ -4,7 +4,7 @@ Cheapest first: clone (copy-on-write), hardlink, link, copy. Each rung
 is one function with the same shape, and the platform-specific ones
 sit behind seams so a test forces every fallback without the
 filesystem's cooperation. The reference rung is
-[livery.strongroom.Store.path][]: a path into the tier itself, with
+[livery.strongroom.api.Store.path][]: a path into the tier itself, with
 nothing created.
 
 Which rung a view reaches on a platform is not conformance material;

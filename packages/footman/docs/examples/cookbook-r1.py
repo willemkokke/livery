@@ -1,7 +1,7 @@
 # The page shows the part below. The lines above it give the part the
 # names the page's earlier examples defined.
-from livery.footman import task
-from livery.toolroom.tools import pytest
+from livery.footman.api import task
+from livery.toolroom.tools.api import pytest
 
 
 # --8<-- [start:part-1]

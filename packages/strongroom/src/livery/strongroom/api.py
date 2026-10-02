@@ -9,29 +9,29 @@ record beside each, and hands a real path to a program that needs
 one. It knows no tool, no call and no dataset: a consumer composes
 the formats and owns its namespaces.
 
-This release carries the formats: [livery.strongroom.canonical][] for
-the one hashed encoding, [livery.strongroom.Digest][] for names,
-[livery.strongroom.Tree][] and [livery.strongroom.Version][] for the
-two objects with structure, and [livery.strongroom.RefRecord][] and
-[livery.strongroom.Tombstone][] for the two records beside names. The
+This release carries the formats: [livery.strongroom.api.canonical][] for
+the one hashed encoding, [livery.strongroom.api.Digest][] for names,
+[livery.strongroom.api.Tree][] and [livery.strongroom.api.Version][] for the
+two objects with structure, and [livery.strongroom.api.RefRecord][] and
+[livery.strongroom.api.Tombstone][] for the two records beside names. The
 standard they implement is the `spec/` directory beside this package,
 with the golden vectors the tests run.
 
-[livery.strongroom.Store][] is the local store over those formats:
+[livery.strongroom.api.Store][] is the local store over those formats:
 objects landed by digest and verified, refs moved by compare-and-swap
 under a per-ref lock with a record beside each, and a mutation class
 per namespace. Its refusals are the classes under
-[livery.strongroom.StoreError][]. A store opened with sources
-([livery.strongroom.FolderSource][], [livery.strongroom.HttpSource][],
-[livery.strongroom.OriginHint][]) fetches what it lacks through them,
-verified and in order, with [livery.strongroom.Store.fetch][], and
-builds a mirror with [livery.strongroom.Store.fill][]. The lifecycle
-is the store's too: [livery.strongroom.Store.publish_begin][] and
-[livery.strongroom.Store.publish_commit][] for the fail-closed
-publish, [livery.strongroom.Store.sweep][] for reachability, and
-[livery.strongroom.Store.erase][] for the tombstone. The materialiser
-is [livery.strongroom.Store.view][], [livery.strongroom.Store.collect][]
-and [livery.strongroom.Store.drop_view][]: the only route from a digest
+[livery.strongroom.api.StoreError][]. A store opened with sources
+([livery.strongroom.api.FolderSource][], [livery.strongroom.api.HttpSource][],
+[livery.strongroom.api.OriginHint][]) fetches what it lacks through them,
+verified and in order, with [livery.strongroom.api.Store.fetch][], and
+builds a mirror with [livery.strongroom.api.Store.fill][]. The lifecycle
+is the store's too: [livery.strongroom.api.Store.publish_begin][] and
+[livery.strongroom.api.Store.publish_commit][] for the fail-closed
+publish, [livery.strongroom.api.Store.sweep][] for reachability, and
+[livery.strongroom.api.Store.erase][] for the tombstone. The materialiser
+is [livery.strongroom.api.Store.view][], [livery.strongroom.api.Store.collect][]
+and [livery.strongroom.api.Store.drop_view][]: the only route from a digest
 to a path, by the cheapest safe rung, under a doctrine about what may
 be removed. [livery.strongroom.testing][] runs the conformance
 scenarios under `spec/conformance` against any implementation of the

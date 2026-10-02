@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from livery.toolroom.bench import _surfaces, _tasks
-from livery.toolroom.store import Option, Record, ToolSpec, Verb
+from livery.toolroom.store.api import Option, Record, ToolSpec, Verb
 
 RECORDS = pathlib.Path(__file__).resolve().parents[3] / "records"
 """The repository's records, found from this file: the suite's own position."""

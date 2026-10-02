@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import discover_packages, verify_workspace
 from livery.workshop._packages import write_edges
+from livery.workshop.api import discover_packages, verify_workspace
 
 _FAILURES = (BaseException,)
 
@@ -199,32 +199,34 @@ def test_only_a_declared_plugin_module_may_import_what_the_runner_brings(
     inside = tmp_path / "packages" / "forge" / "src" / "livery" / "forge"
     plugin_dir = inside / "_dev"
     plugin_dir.mkdir(parents=True)
-    plugin_dir.joinpath("__init__.py").write_text("from livery import footman\n")
+    plugin_dir.joinpath("__init__.py").write_text(
+        "import livery.footman.api as footman\n"
+    )
     # The refusals first. Nothing declares this module, so its import of
     # the runner is the ordinary violation however it is spelled.
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman\.api'"):
         verify_workspace(tmp_path)
     # A module outside it is refused the same way when one is declared.
     _forge_stub_replace(tmp_path, plugin="livery.forge._dev")
     bad = inside / "_bad.py"
-    bad.write_text("from livery import footman\n")
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+    bad.write_text("import livery.footman.api as footman\n")
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman\.api'"):
         verify_workspace(tmp_path)
     bad.unlink()
     # The exemption covers what the runner brings, not a third party.
     plugin_dir.joinpath("__init__.py").write_text(
-        "from livery import footman\nimport requests\n"
+        "import livery.footman.api as footman\nimport requests\n"
     )
     with pytest.raises(ValueError, match="stdlib-only at import time"):
         verify_workspace(tmp_path)
     plugin_dir.joinpath("__init__.py").write_text(
-        "from livery import footman\nfrom livery.toolroom import tools\n"
-        "from livery.forge import Forge\n"
+        "import livery.footman.api as footman\nfrom livery.toolroom import tools\n"
+        "from livery.forge.api import Forge\n"
     )
     verify_workspace(tmp_path)
     # The metadata decides: name another module and this one is refused.
     _forge_stub_replace(tmp_path, plugin="livery.forge._other")
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman\.api'"):
         verify_workspace(tmp_path)
 
 
@@ -351,7 +353,7 @@ def test_a_literal_program_name_is_caught(tmp_path: Path) -> None:
     # none of them names a program this tree could have resolved.
     (tmp_path / "bad.py").write_text(
         "import sys\nimport livery.footman as footman\n"
-        "from livery.toolroom import tools\n\n"
+        "import livery.toolroom.tools.api as tools\n\n"
         "def go() -> None:\n"
         '    tools.git.opts(nofail=True)("status")\n'
         '    footman.run([sys.executable, "-c", "pass"])\n'
@@ -809,7 +811,6 @@ def test_the_layering_check_parses_each_source_once(
 def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop import discover_packages
     from livery.workshop._ast_rules import (
         AstRule,
         ParsedModule,
@@ -818,6 +819,7 @@ def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
         unregister_ast_rule,
     )
     from livery.workshop._checks import GateContext, check_for
+    from livery.workshop.api import discover_packages
 
     seen: list[str] = []
 

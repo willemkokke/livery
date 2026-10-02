@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop._dev_release import (
     DevPlan,
     build_dev,

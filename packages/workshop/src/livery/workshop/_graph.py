@@ -18,7 +18,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from livery.footman import group
+from livery.footman.api import group
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 

@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-import livery.footman as footman
+import livery.footman.api as footman
 from livery.footman import _complete
 from livery.footman._complete import complete_cli
 
@@ -190,7 +190,7 @@ def test_refresh_cwd_rebuilds_the_manifest(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\n')
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n@task\ndef hi(): ...\n"
+        "from livery.footman.api import task\n@task\ndef hi(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -209,7 +209,7 @@ def test_refresh_cwd_drops_the_manifest_when_the_cascade_empties(tmp_path, monke
 
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\n')
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n@task\ndef hi(): ...\n"
+        "from livery.footman.api import task\n@task\ndef hi(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -228,12 +228,12 @@ def test_refresh_cwd_keeps_the_manifest_while_a_rung_survives(tmp_path, monkeypa
 
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\n')
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n@task\ndef hi(): ...\n"
+        "from livery.footman.api import task\n@task\ndef hi(): ...\n"
     )
     sub = tmp_path / "sub"
     sub.mkdir()
     (sub / "tasks.py").write_text(
-        "from livery.footman import task\n@task\ndef sub(): ...\n"
+        "from livery.footman.api import task\n@task\ndef sub(): ...\n"
     )
     monkeypatch.chdir(sub)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -255,7 +255,7 @@ def test_refresh_source_rebuilds_the_manifest(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\n')
     (tmp_path / "other.py").write_text(
-        "from livery.footman import task\n@task\ndef ship(): ...\n"
+        "from livery.footman.api import task\n@task\ndef ship(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -303,7 +303,7 @@ def test_main_takes_its_own_file_as_the_tasks_file(tmp_path, monkeypatch, capsys
     # is its own command, and reads its own tasks whatever the directory.
     script = tmp_path / "deploy.py"
     script.write_text(
-        'from livery.footman import task\n\n@task\ndef ship():\n    """Ship."""\n'
+        'from livery.footman.api import task\n\n@task\ndef ship():\n    """Ship."""\n'
         '    print("shipped")\n',
         encoding="utf-8",
     )
@@ -321,13 +321,13 @@ def test_main_takes_its_own_file_as_the_tasks_file(tmp_path, monkeypatch, capsys
 def test_an_explicit_tasks_file_still_wins(tmp_path, monkeypatch, capsys):
     theirs = tmp_path / "theirs.py"
     theirs.write_text(
-        'from livery.footman import task\n\n@task\ndef ship():\n    """Ship."""\n'
+        'from livery.footman.api import task\n\n@task\ndef ship():\n    """Ship."""\n'
         '    print("theirs")\n',
         encoding="utf-8",
     )
     mine = tmp_path / "mine.py"
     mine.write_text(
-        'from livery.footman import task\n\n@task\ndef ship():\n    """Ship."""\n'
+        'from livery.footman.api import task\n\n@task\ndef ship():\n    """Ship."""\n'
         '    print("mine")\n',
         encoding="utf-8",
     )
@@ -350,7 +350,7 @@ def test_a_closed_stdout_means_discard_not_a_traceback(tmp_path):
     import subprocess
 
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n\n\n@task\ndef hello():\n    print('hi')\n"
+        "from livery.footman.api import task\n\n\n@task\ndef hello():\n    print('hi')\n"
     )
     env = {
         **os.environ,
@@ -383,7 +383,7 @@ def test_a_reader_hanging_up_is_a_calm_cut_not_a_traceback(tmp_path):
     import subprocess
 
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n\n\n@task\ndef lines():\n"
+        "from livery.footman.api import task\n\n\n@task\ndef lines():\n"
         "    for i in range(5000):\n"
         "        print('line', i, 'x' * 80)\n"
     )
@@ -424,7 +424,7 @@ def test_a_printed_line_reaches_a_file_before_the_run_ends(tmp_path) -> None:
     import time
 
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import task\n\n\n@task\ndef follow():\n"
+        "from livery.footman.api import task\n\n\n@task\ndef follow():\n"
         "    import pathlib, time\n"
         "    print('the first line')\n"
         "    stop = pathlib.Path('stop')\n"
@@ -489,7 +489,7 @@ def test_the_tree_survives_a_non_utf8_stdout(tmp_path, monkeypatch):
     _ascii_project(
         tmp_path,
         monkeypatch,
-        "from livery.footman import group\n\n"
+        "from livery.footman.api import group\n\n"
         "sub = group('sub', help='Sub tasks')\n\n"
         "@sub.task\ndef one():\n    'Do one.'\n\n"
         "@sub.task\ndef two():\n    'Do two.'\n",
@@ -511,7 +511,7 @@ def test_the_listing_survives_non_ascii_task_help(tmp_path, monkeypatch):
     _ascii_project(
         tmp_path,
         monkeypatch,
-        "from livery.footman import task\n\n"
+        "from livery.footman.api import task\n\n"
         "@task\ndef build():\n    'Baké the café.'\n\n"
         "@task\ndef ship():\n    'Ship it.'\n",
     )

@@ -23,11 +23,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from livery.toolroom.store import HOSTS
+from livery.toolroom.store.api import HOSTS
 
 if TYPE_CHECKING:
     from livery.toolroom.bench._drivers import Driver
-    from livery.toolroom.store import Record, Store
+    from livery.toolroom.store.api import Record, Store
 
 FORGE_TIERS = ("github", "gitlab", "gitea", "bun")
 """The provision tiers whose releases publish per-host assets on a forge."""
@@ -110,7 +110,7 @@ def record_version(
             host, or a host whose deployment does not resolve whole.
     """
     from livery.toolroom.bench import _provision
-    from livery.toolroom.store import Artifact, RecordError
+    from livery.toolroom.store.api import Artifact, RecordError
 
     if not lists_assets(driver):
         raise ArtifactError(

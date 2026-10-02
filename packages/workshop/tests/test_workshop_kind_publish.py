@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop import _publish
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._git_ops import GitOps
@@ -258,7 +258,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     dies leaves a tag with nothing under it, and the re-run has to
     finish the job rather than read the tag as a receipt.
     """
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.forge.testing import FakeForge
 
     root, git = cross_train

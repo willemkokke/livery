@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import (
+from livery.strongroom.api import (
     Digest,
     FormatError,
     RefRecord,

@@ -13,7 +13,6 @@ import contextlib
 import importlib
 import re
 import tomllib
-from importlib import resources
 from pathlib import Path
 from types import ModuleType
 
@@ -113,9 +112,31 @@ def layer_content(layer: str) -> Path | None:
         module = importlib.import_module(layer)
     except ModuleNotFoundError:
         return None
-    root = resources.files(module)
-    content = Path(str(root)) / "content"
-    return content if content.is_dir() else None
+    # A namespace root has no single directory: every portion is a
+    # candidate, and the first that ships content is the layer's.
+    for portion in getattr(module, "__path__", ()):
+        content = Path(portion) / "content"
+        if content.is_dir():
+            return content
+    return None
+
+
+def layer_module(layer: str) -> ModuleType:
+    """The module that holds *layer*'s declarations: its ``api`` when it has one.
+
+    A layer whose root is a namespace keeps its public names, the
+    plugin API version among them, in ``<root>.api``; a root that is
+    a regular package keeps them in itself.
+
+    Raises:
+        ModuleNotFoundError: When the layer itself is not installed.
+    """
+    try:
+        return importlib.import_module(f"{layer}.api")
+    except ModuleNotFoundError as error:
+        if error.name not in (f"{layer}.api", layer):
+            raise
+    return importlib.import_module(layer)
 
 
 def layer_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
@@ -165,10 +186,8 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     """
     # footman does not expose the brand's builtin set publicly yet;
     # the private read retires when footman joins the workspace.
-    from livery.footman import (
-        _paths,  # pyright: ignore[reportPrivateUsage]
-        plugin,
-    )
+    from livery.footman import _paths
+    from livery.footman.api import plugin
 
     global MOUNTED
     MOUNTED = True
@@ -188,7 +207,7 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
             continue
         # An absent layer is refused by the mount below, which names the install.
         with contextlib.suppress(ModuleNotFoundError):
-            check_api_version(layer, importlib.import_module(layer))
+            check_api_version(layer, layer_module(layer))
         try:
             plugin(layer)
         except Exception as error:
@@ -277,7 +296,7 @@ def _plugin_module(layer: str) -> ModuleType | None:
     if layer == SELF:
         return None
     try:
-        return importlib.import_module(layer)
+        return layer_module(layer)
     except ModuleNotFoundError:
         return None
 
@@ -350,7 +369,7 @@ def contributions(start: Path | None = None) -> dict[str, dict[str, str]]:
             raise RuntimeError(
                 f"layer {layer!r} declares {FOR_ATTRIBUTE} as {declared!r}; it"
                 " is a map from a target layer's import path to the module"
-                ' carrying the registrations for it, {"livery.workshop.python":'
+                ' carrying the registrations for it, {"livery.workshop.api.python":'
                 ' "acme.house.python"}'
             )
         found[layer] = dict(declared)

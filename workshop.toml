@@ -8,7 +8,7 @@
 layers = [
     "livery.workshop",
     # The site's assembly and verbs: a layer inside the workshop wheel.
-    { import = "livery.workshop.layers.docs", dist = "livery-workshop" },
+    { import = "livery.extensions.docs", dist = "livery-workshop" },
     "livery.forge",
     # The bench mounts the tool verbs and depends on the handles, so
     # livery-toolroom rides in with it and contributes no verbs of its own.

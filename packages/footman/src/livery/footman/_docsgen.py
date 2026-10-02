@@ -23,7 +23,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from livery.footman import fail, group, run
+from livery.footman.context import fail, run
+from livery.footman.registry import group
 
 # packages/footman, wherever the checkout lives: the generator runs at
 # the workspace root, but anchoring on this file keeps it honest.
@@ -71,7 +72,7 @@ def _write_tasks_page(out: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="footman-docsgen-") as scratch:
         probe = Path(scratch) / "tasks.py"
         probe.write_text(
-            'from livery.footman import plugin\n\nplugin("footman.docs")\n',
+            'from livery.footman.api import plugin\n\nplugin("footman.docs")\n',
             encoding="utf-8",
         )
         # cwd is the scratch directory on purpose: the child must not
@@ -137,11 +138,11 @@ def _write_latest_changes(out: Path) -> None:
 
 # --- The API reference page is generated: correct by construction --------
 # Input: the typechecked TYPE_CHECKING export table in
-# src/livery/footman/__init__.py (a wrong module path there fails
+# src/livery/footman/api.py (a wrong module path there fails
 # basedpyright). Presentation: the declaration below. The build refuses
 # on divergence in either direction, naming the name: a new export
 # cannot ship undocumented, and a stale entry cannot outlive its
-# export. Directives use PUBLIC paths (`::: livery.footman.run`), so
+# export. Directives use PUBLIC paths (`::: livery.footman.api.run`), so
 # anchors and the objects.inv inventory carry the contract spelling,
 # not the defining module.
 
@@ -154,7 +155,7 @@ _API_INTRO = """\
 Auto-generated from the source via
 [mkdocstrings](https://mkdocstrings.github.io/). Everything here is importable
 straight from the `livery.footman` package
-(`from livery.footman import task, run, App`).
+(`from livery.footman.api import task, run, App`).
 """
 
 # (section title, intro prose or "", entries). An entry is a dotted path
@@ -342,7 +343,7 @@ def _api_markdown() -> str:
     # The module beside this one, not a checkout path: the release
     # legs run the suite against the installed copy, where src/ does
     # not exist.
-    src = (Path(__file__).resolve().parent / "__init__.py").read_text("utf-8")
+    src = (Path(__file__).resolve().parent / "api.py").read_text("utf-8")
     exported: set[str] = set()
     for node in ast.walk(ast.parse(src)):
         if (
@@ -391,5 +392,5 @@ def _api_markdown() -> str:
         if intro:
             parts.append(f"\n{intro}\n")
         for name in names:
-            parts.append(f"\n::: livery.footman.{name}\n")
+            parts.append(f"\n::: livery.footman.api.{name}\n")
     return "".join(parts)

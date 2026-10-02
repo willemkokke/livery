@@ -24,35 +24,35 @@ Capability: TypeAlias = Literal[
     "pages_config",
     "pipeline_schedules",
 ]
-"""What livery.forge.Forge.supports answers for, by name.
+"""What livery.forge.api.Forge.supports answers for, by name.
 
 - ``auto_merge``: the forge can schedule a merge that fires when the
-  checks go green (livery.forge.PullRequests.arm).
+  checks go green (livery.forge.api.PullRequests.arm).
 - ``force_cancel``: the forge can cancel a run whose runner stopped
-  answering (``force=True`` on livery.forge.Checks.cancel_run).
+  answering (``force=True`` on livery.forge.api.Checks.cancel_run).
 - ``required_contexts``: branch protection can name the check contexts
   that must pass before a merge.
-- ``ci_secrets``: livery.forge.RepoConfig.secrets can be stored
+- ``ci_secrets``: livery.forge.api.RepoConfig.secrets can be stored
   through the backend. GitHub's backend declines: its secrets API
   demands sealed-box encryption the standard library cannot provide,
   and no workflow stores a secret there, because trusted publishing
   replaces tokens on GitHub.
 - ``min_approvals``: protection can require a number of approving
   reviews (and a codeowner's), applied by
-  livery.forge.Repository.configure. GitLab ties required approval
+  livery.forge.api.Repository.configure. GitLab ties required approval
   rules to paid tiers, so its backend declines; the decline is what
   keeps a one-assignee, one-approver policy honest there.
 - ``schedule_events``: the merge-scheduling history of a pull request
-  can be read back (livery.forge.PullRequests.schedule_events).
+  can be read back (livery.forge.api.PullRequests.schedule_events).
   GitLab's backend declines: its system notes carry no reliable
   scheduling record.
 - ``pages_config``: the forge's static-site hosting can be enabled
-  through the API (livery.forge.Repository.ensure_pages). Only
+  through the API (livery.forge.api.Repository.ensure_pages). Only
   GitHub has one to configure: Gitea ships no Pages, and GitLab
   Pages exists implicitly through pipeline artifacts.
 - ``pipeline_schedules``: the forge keeps the clock outside the
   workflow file, as a project setting the API creates
-  (livery.forge.Repository.schedule). GitLab's pipeline schedules
+  (livery.forge.api.Repository.schedule). GitLab's pipeline schedules
   are that; GitHub and Gitea decline, since their clock is the
   ``schedule`` trigger in the file.
 """
@@ -64,7 +64,7 @@ RegistryKind: TypeAlias = Literal["python", "conan", "container"]
 is a conan 2 remote; ``container`` is an OCI distribution registry.
 The handles that speak these protocols are host-generic: any server
 or folder speaking the protocol works. A forge answers which of
-them it hosts through livery.forge.Forge.registry_url.
+them it hosts through livery.forge.api.Forge.registry_url.
 """
 
 CheckState: TypeAlias = Literal["none", "pending", "success", "failure"]
@@ -91,7 +91,7 @@ ItemState: TypeAlias = Literal["open", "closed"]
 
 @dataclass(frozen=True)
 class RepoInfo:
-    """What livery.forge.Forge.get_repo reports about an existing repository.
+    """What livery.forge.api.Forge.get_repo reports about an existing repository.
 
     Attributes:
         owner: The user, organisation, or group path that owns the
@@ -127,7 +127,7 @@ class Label:
 
 @dataclass(frozen=True)
 class RepoConfig:
-    """The desired repository settings livery.forge.Repository.configure asserts.
+    """The desired repository settings livery.forge.api.Repository.configure asserts.
 
     Every field defaults to None, which means "leave this setting as it
     is". Configure applies only the fields a caller states, so one
@@ -144,7 +144,7 @@ class RepoConfig:
         required_contexts: The check contexts the default branch's
             protection requires before a merge. Setting this on a
             forge without the ``required_contexts`` capability raises
-            livery.forge.Unsupported.
+            livery.forge.api.Unsupported.
         require_pipeline_success: True makes the server refuse
             merges while the head's checks are not green, for
             everyone, the forge's own UI included. GitHub and Gitea
@@ -180,7 +180,7 @@ class RepoConfig:
         secrets: CI secrets to store, by name. Write-only: no protocol
             operation reads a secret back. Setting this on a forge
             without the ``ci_secrets`` capability raises
-            livery.forge.Unsupported.
+            livery.forge.api.Unsupported.
         variables: Plain CI variables to store, by name.
         labels: The labels the repository must offer. Labels already
             present keep their issues; labels absent from this tuple
@@ -216,12 +216,12 @@ class PullRequest:
         head_branch: The branch the pull request proposes. May be empty
             on a merged pull request whose head branch was deleted;
             find a merged pull request by
-            livery.forge.PullRequests.find_by_head_sha instead.
+            livery.forge.api.PullRequests.find_by_head_sha instead.
         head_sha: The head commit. Persists after the branch is gone.
         base_branch: The branch the pull request targets.
         url: The pull request's page, for printing to a person.
         author: The login of whoever opened it; empty when the forge
-            does not say. Compare with livery.forge.Forge.whoami, the
+            does not say. Compare with livery.forge.api.Forge.whoami, the
             same namespace.
         merged_sha: The commit the merge produced, empty until it has
             merged. On a squash-only repository this is the squash, and
@@ -255,7 +255,7 @@ class CombinedStatus:
     Attributes:
         state: The combined verdict. ``none`` when nothing has
             reported for the commit, which is not ``pending``: see
-            livery.forge.CheckState.
+            livery.forge.api.CheckState.
         contexts: How many checks the verdict aggregates. Zero exactly
             when ``state`` is ``none``.
     """
@@ -269,7 +269,7 @@ class Run:
     """One CI run: a workflow run on GitHub or Gitea, a pipeline on GitLab.
 
     Attributes:
-        id: The identifier every ``livery.forge.Checks`` method takes.
+        id: The identifier every ``livery.forge.api.Checks`` method takes.
             Backends that also number runs per repository translate;
             the protocol speaks one handle.
         workflow: The workflow that ran, as the forge names it. A
@@ -333,7 +333,7 @@ class Job:
     """One job of a run.
 
     Attributes:
-        id: The identifier livery.forge.Checks.job_log takes.
+        id: The identifier livery.forge.api.Checks.job_log takes.
         name: The job name as the workflow declares it.
         status: Where the job is in its life.
         conclusion: How the job ended. Empty until ``status`` is
@@ -440,8 +440,8 @@ class Review:
 
     Attributes:
         author: The login of the reviewer, the same namespace as
-            livery.forge.Forge.whoami.
-        state: The verdict, per livery.forge.ReviewState.
+            livery.forge.api.Forge.whoami.
+        state: The verdict, per livery.forge.api.ReviewState.
     """
 
     author: str
@@ -454,7 +454,7 @@ class Comment:
 
     Attributes:
         author: The login of who wrote it, the same namespace as
-            livery.forge.Forge.whoami.
+            livery.forge.api.Forge.whoami.
         created_at: When it was posted, as the forge reports it;
             empty when the forge does not say.
         body: The comment text, in full.
@@ -506,7 +506,7 @@ class Codeowners:
 class Protection:
     """The branch protection a forge reports for one branch.
 
-    The read side of livery.forge.RepoConfig, normalised and honest:
+    The read side of livery.forge.api.RepoConfig, normalised and honest:
     a field a forge cannot express reads as its inert value, so a
     caller gating on a flag never invents a blocker the forge would
     not enforce.
@@ -543,7 +543,7 @@ class Schedule:
     Attributes:
         id: The forge's identifier of the schedule.
         description: The name a caller addresses it by; unique per
-            repository as livery.forge.Schedules keeps it.
+            repository as livery.forge.api.Schedules keeps it.
         ref: The branch the scheduled pipeline runs on.
         cron: When it runs, in cron's five fields, UTC.
         active: Whether the clock is on.
@@ -568,7 +568,7 @@ class ScheduleEvent:
     history (the ``schedule_events`` capability).
 
     Attributes:
-        kind: What happened, per livery.forge.ScheduleEventKind.
+        kind: What happened, per livery.forge.api.ScheduleEventKind.
         actor: The login that caused it; empty when the forge does
             not say.
         created: When it happened, the forge's own timestamp string.

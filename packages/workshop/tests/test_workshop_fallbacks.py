@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
@@ -290,7 +290,7 @@ def test_the_changelog_credits_with_the_token_the_lane_connects_with(
     # has none, and the entry goes offline as before.
     from types import SimpleNamespace
 
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.workshop import _cliff
 
     root, _package = _cliff_workspace(tmp_path, "github")
@@ -345,7 +345,7 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
 def test_a_refused_author_lookup_says_what_to_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.toolroom.tools import Result
+    from livery.toolroom.tools.api import Result
     from livery.toolroom.tools.testing import answers
     from livery.workshop import _cliff
 

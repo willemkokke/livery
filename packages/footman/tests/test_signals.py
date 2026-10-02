@@ -24,7 +24,7 @@ from livery.footman import _app, _paths, _signals
 STOPPER = '''
 import signal
 
-from livery.footman import task
+from livery.footman.api import task
 
 @task
 def stop(sig: str = "SIGTERM"):
@@ -161,7 +161,7 @@ def test_sigterm_reaps_the_child_a_task_was_waiting_on(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(f"""
         import sys
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         @task
         def slow():
@@ -219,7 +219,7 @@ def test_an_interrupt_reaps_the_scheduler_pools_children(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(f"""
         import sys
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         def _spawn(pidfile):
             run([sys.executable, "-c",
@@ -288,7 +288,7 @@ def test_sigterm_spares_an_atomic_child(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(f"""
         import sys
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         @task(atomic=True)
         def protected():
@@ -321,7 +321,7 @@ DUMPEE = """
 import time
 from pathlib import Path
 
-from livery.footman import task
+from livery.footman.api import task
 
 @task
 def wait():

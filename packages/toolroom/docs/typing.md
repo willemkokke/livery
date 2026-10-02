@@ -64,7 +64,7 @@ Positionals are `str | PathLike[str]` for the same reason:
 `ruff.check(Path("src"))` is exactly the call the bridge makes.
 
 ```python
-from livery.toolroom.tools import Flag, Value, ruff
+from livery.toolroom.tools.api import Flag, Value, ruff
 
 
 def lint(fix: Flag = None, select: Value = None):
@@ -84,7 +84,7 @@ handle answers in `Result`; `.argv` re-parameterises the same class
 over `Argv`, so a *built* call keeps the same flag checking as a run:
 
 ```python
-from livery.toolroom.tools import git
+from livery.toolroom.tools.api import git
 
 sha_cmd = git.rev_parse.argv("HEAD")  # Argv, same completions, same checks
 ```

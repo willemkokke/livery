@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.strongroom import Entry, Store, Tree, Value, canonical
-from livery.toolroom.store import Lock, Locked, Record, RecordDelta, Surface
+from livery.strongroom.api import Entry, Store, Tree, Value, canonical
+from livery.toolroom.store.api import Lock, Locked, Record, RecordDelta, Surface
 from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
 from workshop_hosts import (  # noqa: F401
     HOSTS,
@@ -192,7 +192,7 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     assert _tools.handles_path(root).read_text() == (
         "# Rendered by `fm tools.restub`: the handles this workspace\n"
         "# locks. Do not edit by hand.\n"
-        "from livery.toolroom.tools import Result\n"
+        "from livery.toolroom.tools.api import Result\n"
         "from livery.toolroom.stubs.ruff import Ruff as Ruff\n"
         "\n"
         "ruff: Ruff[Result]\n"

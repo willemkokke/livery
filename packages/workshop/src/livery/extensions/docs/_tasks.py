@@ -9,11 +9,11 @@ and the merge point's deploy. The base's plugin never imports it.
 
 from __future__ import annotations
 
+from livery.extensions.docs._site import docs_group, overrides_template
 from livery.workshop._points import Entry, Job, contribute_job
 from livery.workshop._site_files import register_site_file
-from livery.workshop.layers.docs._site import docs_group, overrides_template
 
-LAYER = "livery.workshop.layers.docs"
+LAYER = "livery.extensions.docs"
 
 register_site_file("overrides/main.html", overrides_template, layer=LAYER)
 

@@ -59,12 +59,12 @@ dev = ["types-pyyaml", "minijinja>=2.24"]
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._tasks"
 # The docs layer, a layer inside this wheel with a surface of its own.
-"livery.workshop.layers.docs" = "livery.workshop.layers.docs._tasks"
+"livery.extensions.docs" = "livery.extensions.docs._tasks"
 
 # The contract keys each owner reads, by owner: the judge in
 # livery.workshop._contract_keys loads these data modules alone.
 [project.entry-points."workshop.contract"]
-"livery.workshop.layers.docs" = "livery.workshop.layers.docs._contract_keys:DECLARED"
+"livery.extensions.docs" = "livery.extensions.docs._contract_keys:DECLARED"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts
@@ -104,4 +104,7 @@ Repository = "https://github.com/willemkokke/livery"
 [tool.uv.build-backend]
 # PEP 420 namespace: the importable package is livery.workshop and
 # there is no livery/__init__.py anywhere in this repository.
-module-name = "livery.workshop"
+# The wheel carries the base and the docs extension, both namespaces:
+# the base's public names live in livery.workshop.api.
+module-name = ["livery.workshop", "livery.extensions.docs"]
+namespace = true

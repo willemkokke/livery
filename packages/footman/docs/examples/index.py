@@ -2,8 +2,8 @@
 # tasks.py
 from typing import Annotated, Literal
 
-from livery.footman import doc, suggest, task
-from livery.toolroom.tools import git
+from livery.footman.api import doc, suggest, task
+from livery.toolroom.tools.api import git
 
 
 def branches() -> list[str]:
@@ -39,7 +39,7 @@ def test(watch: bool = False):
 # --8<-- [end:part-1]
 
 # --8<-- [start:part-2]
-from livery.footman import task, group
+from livery.footman.api import task, group
 
 
 @task

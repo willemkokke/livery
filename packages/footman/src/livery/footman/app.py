@@ -7,7 +7,7 @@ project's names and version, and every message the user sees — errors,
 
 ```python
 # acme/cli.py
-from livery.footman import App
+from livery.footman.app import App
 
 app = App(name="Acme", prog="acme", version="1.4.0")
 
@@ -36,7 +36,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from livery.footman import __version__
+from livery.footman.api import __version__
 
 
 def _prefix_from(prog: str) -> str:

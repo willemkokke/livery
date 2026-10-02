@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import livery.forge as package
+import livery.forge.api as package
 
 
 def _loaded_after(statement: str) -> list[str]:
@@ -22,12 +22,13 @@ def _loaded_after(statement: str) -> list[str]:
 
 
 def test_importing_the_root_loads_no_module_of_the_package() -> None:
-    assert _loaded_after("import livery.forge") == []
+    assert _loaded_after("import livery.forge.api") == ["livery.forge.api"]
 
 
 def test_one_name_loads_only_the_module_that_defines_it() -> None:
-    assert _loaded_after("from livery.forge import ForgeError") == [
-        "livery.forge._errors"
+    assert _loaded_after("from livery.forge.api import ForgeError") == [
+        "livery.forge._errors",
+        "livery.forge.api",
     ]
 
 

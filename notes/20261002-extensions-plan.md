@@ -1,8 +1,8 @@
 # Extensions: a base, and what a workspace lists
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
-2026-10-02. Phases 1 and 2 built (issues #1025, #1028, #1032); the
-others not started. It is the one plan from now until the end of
+2026-10-02. Phases 1 to 3 built (issues #1025, #1028, #1032, #1034);
+the others not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -670,6 +670,8 @@ Acceptance, refusals first:
 
 ### Phase 3: namespaces, `api`, and `livery.extensions`
 
+**Built (issue #1034).**
+
 Carried from the empty shell plan's phase 2, extended by the
 namespace ruling.
 
@@ -1041,6 +1043,23 @@ Acceptance:
 
 ## Decision record
 
+- 2026-10-02, phase 3: seven roots became namespaces with an `api`
+  module: footman, forge, strongroom, workshop, and toolroom's store,
+  bench and `tools`, whose house spelling is now
+  `import livery.toolroom.tools.api as tools`, like
+  `import livery.footman.api as footman`, so every call site reads as
+  before. A module inside a distribution imports a name from the
+  module that defines it, never from its own `api`, so `api` imports
+  nothing that imports it back. `module_roots` takes the topmost
+  `api.py` or `__init__.py` as a root, and the version stamp writes
+  either, so a project born from the templates keeps a regular
+  package: the `api` layout is this repository's convention, pinned
+  by `tests/test_namespaces.py`, not a workshop rule. The docs
+  extension moved to `livery.extensions.docs` inside the workshop
+  wheel (`module-name` lists both); it is a namespace with no public
+  names, so the typecomplete check verifies each root's `api` and
+  skips it. A footman plugin entry naming a root's `api` stands for
+  the root in the layering check's plugin exemption.
 - 2026-10-02, phase 2: the declarations are data, `Declared(contract,
   path, types, values)`, a dotted path with `*` for a user-named key
   and `[]` for a list's entries. The base's live in

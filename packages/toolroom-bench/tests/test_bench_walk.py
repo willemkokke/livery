@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom.store import Option, ToolSpec, Verb
+from livery.toolroom.store.api import Option, ToolSpec, Verb
 from toolroom_bench_readings import (
     chain_of,
     gathered,
@@ -437,7 +437,7 @@ def test_an_index_the_store_cannot_read_is_unreachable_naming_it(monkeypatch):
     never as an empty listing.
     """
     from livery.toolroom.bench import _toolfetch
-    from livery.toolroom.store import FetchError
+    from livery.toolroom.store.api import FetchError
 
     def spent(url, **_kw):
         raise FetchError(f"{url}: HTTP 504", status=504)
@@ -735,7 +735,7 @@ def test_an_unreadable_index_is_not_an_empty_one(monkeypatch):
     to *choose* to, which is the point of raising.
     """
     from livery.toolroom.bench import _drivers, _toolfetch
-    from livery.toolroom.store import FetchError
+    from livery.toolroom.store.api import FetchError
 
     def boom(*a, **k):
         raise FetchError("no network")

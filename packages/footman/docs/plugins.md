@@ -15,8 +15,8 @@ One module, three kinds of contribution:
 ```python
 # acme_devkit/footman_tasks.py
 from pathlib import Path
-from livery import footman
-from livery.footman import GlobalOption, task
+import livery.footman.api as footman
+from livery.footman.api import GlobalOption, task
 
 REGION = GlobalOption("region", str, default="eu", help="deployment region")
 

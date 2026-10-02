@@ -43,7 +43,7 @@ from livery.workshop._state import (
 from livery.workshop._state import read as state_read
 
 if TYPE_CHECKING:
-    from livery.forge import Job, Repository
+    from livery.forge.api import Job, Repository
     from livery.workshop._git_ops import GitOps
 
 #: The one file a leg puts on its trace ref: the trace as its writer

@@ -1,10 +1,10 @@
-"""The GitHub backend: livery.forge.Forge over REST v3 plus one GraphQL pair.
+"""The GitHub backend: livery.forge.api.Forge over REST v3 plus one GraphQL pair.
 
 REST carries everything except auto-merge, which GitHub exposes only
 as the GraphQL mutations ``enablePullRequestAutoMerge`` and
 ``disablePullRequestAutoMerge``.
 
-Construction and the token rule: livery.forge.GithubForge.connect
+Construction and the token rule: livery.forge.api.GithubForge.connect
 resolves the server once (github.com unless a GitHub Enterprise URL is
 given) and the token as ``GITHUB_TOKEN`` first, then ``gh auth token``,
 so a machine with a signed-in gh CLI needs no configuration. The token
@@ -137,9 +137,9 @@ def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
 
 
 class GithubForge:
-    """One GitHub server, spoken to through livery.forge.Forge's verbs.
+    """One GitHub server, spoken to through livery.forge.api.Forge's verbs.
 
-    Build with livery.forge.GithubForge.connect; the constructor takes
+    Build with livery.forge.api.GithubForge.connect; the constructor takes
     the resolved values and applies no environment fallbacks.
 
     Args:
@@ -372,7 +372,7 @@ class GithubForge:
 
         GraphQL failures answer 200 with an ``errors`` array, so the
         HTTP layer cannot see them; this is where they become
-        livery.forge.ForgeError.
+        livery.forge.api.ForgeError.
         """
         data = self._client.request(
             "/graphql", method="POST", data={"query": query, "variables": variables}
@@ -391,7 +391,7 @@ class GithubForge:
 
 
 class _GithubRepository:
-    """The livery.forge.Repository view onto one GitHub repository."""
+    """The livery.forge.api.Repository view onto one GitHub repository."""
 
     def __init__(
         self, forge: GithubForge, client: JsonClient, owner: str, name: str
@@ -1300,7 +1300,7 @@ class _GithubIssues:
     """The issue operations of one GitHub repository.
 
     GitHub's issue endpoints serve pull requests too; listings filter
-    them out and livery.forge.Issues.get answers None for a number
+    them out and livery.forge.api.Issues.get answers None for a number
     that names a pull request, so the two spaces never mix.
     """
 

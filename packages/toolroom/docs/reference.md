@@ -9,25 +9,25 @@ implementation — it moves without notice.
 
 ## The handles
 
-::: livery.toolroom.tools.Tool
+::: livery.toolroom.tools.api.Tool
 
 ## The vocabulary
 
-::: livery.toolroom.tools.Argv
+::: livery.toolroom.tools.api.Argv
 
-::: livery.toolroom.tools.Result
+::: livery.toolroom.tools.api.Result
 
-::: livery.toolroom.tools.ToolError
+::: livery.toolroom.tools.api.ToolError
 
 ## Flag control
 
-::: livery.toolroom.tools.off
+::: livery.toolroom.tools.api.off
 
 ## Versions
 
-::: livery.toolroom.tools.read_version
+::: livery.toolroom.tools.api.read_version
 
-::: livery.toolroom.tools.version_tuple
+::: livery.toolroom.tools.api.version_tuple
 
 ## Testing
 

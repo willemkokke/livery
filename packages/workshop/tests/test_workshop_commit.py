@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop import _commit
 from livery.workshop._commit import commit, scope_of
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401

@@ -8,7 +8,7 @@ Typed surfaces for command-line tools, generated from the tools
 themselves.
 
 ```python
-from livery.toolroom.tools import cmake, git
+from livery.toolroom.tools.api import cmake, git
 
 git.switch("-c", "release/v1.4")
 cmake.build("build", parallel=8)

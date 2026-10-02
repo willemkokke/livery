@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.toolroom.store import (
+from livery.toolroom.store import _engine
+from livery.toolroom.store.api import (
     Artifact,
     Home,
     Layout,
@@ -16,7 +17,6 @@ from livery.toolroom.store import (
     RecordDelta,
     Store,
     StoreError,
-    _engine,
     unpack,
 )
 from toolroom_store_archives import make_zip, sha

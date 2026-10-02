@@ -38,8 +38,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-from livery.footman import doc, fail, group
-from livery.toolroom import tools
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail, group
 from livery.workshop import _layers, _slots
 from livery.workshop._contract import load_contract
 from livery.workshop._docs_contract import (
@@ -193,7 +193,7 @@ def run_generators(root: Path) -> list[str]:
     """
     import shutil as _shutil
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     ran: list[str] = []
     runner = ""
@@ -1604,8 +1604,8 @@ def _publish_ssh(root: Path) -> None:
     """
     import os
 
-    import livery.footman as footman
-    from livery.toolroom import tools
+    import livery.footman.api as footman
+    import livery.toolroom.tools.api as tools
 
     host = os.environ.get("DOCS_HOST", "")
     user = os.environ.get("DOCS_USER", "")
@@ -1815,7 +1815,7 @@ def docs_build(
     in_ci = run_context() is not None
     for line in generator_lines(result.stdout, result.stderr, in_ci=in_ci):
         print(line)
-    from livery.workshop.layers.docs._llms import write_llms_files
+    from livery.extensions.docs._llms import write_llms_files
 
     written = write_llms_files(root)
     print(f"  agent files: {', '.join(written)}")
@@ -1870,7 +1870,7 @@ def require_site(root: Path) -> None:
     with nothing on disk, and the publish that followed was the one
     to fail; the build is the one that knows, so it says so.
     """
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     index = root / "site" / "index.html"
     if not index.is_file():
@@ -1931,7 +1931,7 @@ def docs_task_reference() -> None:
     tree the runner's ``docs_url`` links through refreshed.
     Idempotent: re-rendering the same tree rewrites the same pages.
     """
-    from livery.workshop.layers.docs._taskref import generate_task_reference
+    from livery.extensions.docs._taskref import generate_task_reference
 
     root = _root()
     rendered = generate_task_reference(root)

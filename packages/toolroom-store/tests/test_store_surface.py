@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom.store import (
+from livery.toolroom.store.api import (
     Artifact,
     Layout,
     Observation,

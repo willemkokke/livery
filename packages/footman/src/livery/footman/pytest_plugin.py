@@ -46,7 +46,8 @@ def fm_project(
     ```python
     def test_release(fm_project):
         fm = fm_project('''
-            from livery.footman import task, run
+            from livery.footman.registry import task
+            from livery.footman.context import run
 
             @task
             def release(version: str):

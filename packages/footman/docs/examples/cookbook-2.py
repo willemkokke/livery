@@ -1,7 +1,7 @@
 # --8<-- [start:part-1]
 from pathlib import Path
 from typing import Annotated
-from livery.footman import task, run
+from livery.footman.api import task, run
 from livery.footman.params import between, check, env, isfile
 
 
@@ -25,7 +25,7 @@ def deploy(
 
 # --8<-- [start:part-2]
 from typing import Annotated
-from livery.footman import task
+from livery.footman.api import task
 from livery.footman.params import check
 
 
@@ -47,9 +47,9 @@ def release(name: str, version: Annotated[str, check(newer_than_current)]):
 
 # --8<-- [start:part-3]
 from typing import Annotated
-from livery.footman import task, run
+from livery.footman.api import task, run
 from livery.footman.params import suggest
-from livery.toolroom.tools import docker
+from livery.toolroom.tools.api import docker
 
 
 def branches() -> list[str]:

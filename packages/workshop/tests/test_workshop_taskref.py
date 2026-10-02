@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop._packages import discover_packages
-from livery.workshop.layers.docs._taskref import (
+from livery.extensions.docs._taskref import (
     advertised_providers,
     committed_nav_block,
     generate_task_reference,
     provider_tree,
 )
+from livery.workshop._packages import discover_packages
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -78,7 +78,7 @@ def test_a_failing_probe_names_the_provider(
 ) -> None:
     import shutil as shutil_module
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     monkeypatch.setattr(footman, "run", lambda *a, **k: 3)
@@ -91,7 +91,7 @@ def test_the_probe_mounts_only_the_provider(
 ) -> None:
     import shutil as shutil_module
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     probes: list[str] = []
@@ -109,13 +109,13 @@ def test_the_probe_mounts_only_the_provider(
 
     monkeypatch.setattr(footman, "run", _record)
     provider_tree(tmp_path, "acme.core")
-    assert probes == ['from livery.footman import plugin\n\nplugin("acme.core")\n']
+    assert probes == ['from livery.footman.api import plugin\n\nplugin("acme.core")\n']
 
 
 def test_missing_markers_refuse_naming_the_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop.layers.docs import _taskref
+    from livery.extensions.docs import _taskref
 
     root = _workspace(tmp_path)
     (root / "packages/core/docs/nav.toml").write_text(
@@ -136,7 +136,7 @@ def test_missing_markers_refuse_naming_the_file(
 def test_a_missing_marker_pair_refuses_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop.layers.docs import _taskref
+    from livery.extensions.docs import _taskref
 
     root = _workspace(tmp_path)
     tree: dict[str, object] = {"help": "", "groups": {}, "tasks": {"sync": _row()}}
@@ -156,8 +156,8 @@ def test_the_block_is_emitted_beside_the_pages_and_the_nav_file_stays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Nothing committed changes when the tree does: the block is generated."""
-    from livery.workshop.layers.docs import _taskref
-    from livery.workshop.layers.docs._site import zensical_config
+    from livery.extensions.docs import _taskref
+    from livery.extensions.docs._site import zensical_config
 
     root = _workspace(tmp_path)
     tree: dict[str, object] = {
@@ -191,7 +191,7 @@ def test_the_block_is_emitted_beside_the_pages_and_the_nav_file_stays(
 def test_the_reference_renders_the_advertised_tree_whole(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop.layers.docs import _taskref
+    from livery.extensions.docs import _taskref
 
     root = _workspace(tmp_path)
     tree: dict[str, object] = {
@@ -236,8 +236,8 @@ def test_a_shared_verb_declared_twice_runs_once(
 ) -> None:
     import shutil as shutil_module
 
-    import livery.footman as footman
-    from livery.workshop.layers.docs._site import run_generators
+    import livery.footman.api as footman
+    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     for name in ("core", "bare"):

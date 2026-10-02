@@ -515,7 +515,7 @@ def test_a_completer_runs_only_where_its_values_are_wanted(tmp_path, monkeypatch
         "from __future__ import annotations\n"
         "from typing import Annotated\n"
         "from pathlib import Path\n"
-        "from livery.footman import task\n"
+        "from livery.footman.api import task\n"
         "from livery.footman.params import suggest\n\n"
         f"LOG = Path({str(calls)!r})\n\n\n"
         "def branches() -> list[str]:\n"
@@ -554,7 +554,7 @@ def test_help_shows_dynamic_values_and_says_they_are_dynamic(tmp_path, monkeypat
     src.write_text(
         "from __future__ import annotations\n"
         "from typing import Annotated\n"
-        "from livery.footman import task\n"
+        "from livery.footman.api import task\n"
         "from livery.footman.params import suggest\n\n\n"
         "def branches() -> list[str]:\n"
         "    return ['main', 'dev']\n\n\n"

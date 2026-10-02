@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
-from livery.forge import RepoConfig, Repository
+from livery.footman.api import Failed
+from livery.forge.api import RepoConfig, Repository
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._governance import (
@@ -277,7 +277,7 @@ def test_the_check_title_task_refuses_a_drifted_title(
 def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import Protection
+    from livery.forge.api import Protection
     from livery.workshop._verdict import classify
 
     root, git = _reconcile_rig(seeds)
@@ -348,14 +348,14 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
     fake.push("acme", "ws", "feat/2-work", sha=sha)
     fake.settle("acme", "ws", sha)
     repo.pr.open("feat/2-work", "main", "feat: work")
-    from livery.forge import Protection
+    from livery.forge.api import Protection
     from livery.forge.testing import _fake as fake_module
 
     fake.set_protection("acme", "ws", "main", Protection(required_approvals=1))
     repo.pr.arm(1, title="feat: work")
 
     def _unreadable(self: object, branch: str) -> object:
-        from livery.forge import ForgeError
+        from livery.forge.api import ForgeError
 
         raise ForgeError("admin required to read protection", status=403)
 
@@ -493,7 +493,7 @@ def test_configure_degrades_required_contexts_like_gitlab(
 def test_configure_teaches_the_ladder_on_a_refused_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.workshop._workflow_tasks import workflow_configure
 
     _root, _fake, repo = _configure_rig(tmp_path, monkeypatch)
@@ -512,7 +512,7 @@ def test_configure_teaches_the_ladder_on_a_refused_write(
 def test_configure_names_an_unpredicted_decline_verbatim(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import Unsupported
+    from livery.forge.api import Unsupported
     from livery.workshop._workflow_tasks import workflow_configure
 
     _root, _fake, repo = _configure_rig(tmp_path, monkeypatch)

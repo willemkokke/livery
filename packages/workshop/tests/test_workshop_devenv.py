@@ -126,7 +126,7 @@ def machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Machine:
             return _Result("reg-xyz\n")
         return _Result("")
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(footman, "run", cli)
     monkeypatch.setattr(_devenv, "free_port", lambda: 43210)

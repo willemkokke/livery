@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver
-from livery.toolroom.store import HOSTS, fetch_file, fetch_json, npm_cli
+from livery.toolroom.store.api import HOSTS, fetch_file, fetch_json, npm_cli
 
 
 class ProvisionError(Exception):
@@ -420,7 +420,7 @@ def _node_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
     of them; a package whose driver names bun is installed by the
     provisioned bun as well.
     """
-    from livery.toolroom.store import bun_global_project
+    from livery.toolroom.store.api import bun_global_project
 
     if not drivers:
         return []
@@ -677,7 +677,7 @@ def _platform_tokens(host: str = "") -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, str]:
     """The one asset for *host*, or this OS and CPU; archives before bare binaries."""
-    from livery.toolroom.store import ARCHIVE_SUFFIXES
+    from livery.toolroom.store.api import ARCHIVE_SUFFIXES
 
     os_aliases, arch_aliases = _platform_tokens(host)
 
@@ -737,7 +737,7 @@ def _get_json(url: str) -> Any:
     Raises:
         ProvisionError: when the URL cannot be read or answers no JSON.
     """
-    from livery.toolroom.store import FetchError
+    from livery.toolroom.store.api import FetchError
 
     try:
         return fetch_json(url)
@@ -751,7 +751,7 @@ def _download(url: str, prefix: Path) -> Path:
     Raises:
         ProvisionError: when the URL cannot be read after the store's tries.
     """
-    from livery.toolroom.store import FetchError
+    from livery.toolroom.store.api import FetchError
 
     try:
         return fetch_file(url, prefix / ".cache")
@@ -785,7 +785,7 @@ def place_binary(
         ProvisionError: when the archive will not unpack or holds no
             such file.
     """
-    from livery.toolroom.store import ARCHIVE_SUFFIXES, UnpackError, unpack
+    from livery.toolroom.store.api import ARCHIVE_SUFFIXES, UnpackError, unpack
 
     if windows is None:
         windows = os.name == "nt"

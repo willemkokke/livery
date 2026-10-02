@@ -42,8 +42,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail, group
+import livery.footman.api as footman
+from livery.footman.api import doc, fail, group
 
 devenv = group("devenv", help="Local development environments by name")
 
@@ -97,7 +97,7 @@ def cache_dir() -> Path:
 
 def this_host() -> str:
     """This machine's host key, `macos-arm`."""
-    from livery.toolroom.store import host_key
+    from livery.toolroom.store.api import host_key
 
     return host_key(platform.system(), platform.machine())
 
@@ -358,7 +358,7 @@ def binary(name: str, version: str, *, offline: bool = False) -> Path:
     record's digest; a second call finds it present and downloads
     nothing.
     """
-    from livery.toolroom.store import Store
+    from livery.toolroom.store.api import Store
     from livery.workshop._layers import workspace_root
     from livery.workshop._tools import catalogue, sources, store_home
 

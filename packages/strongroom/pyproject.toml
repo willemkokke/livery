@@ -33,3 +33,5 @@ Repository = "https://github.com/willemkokke/livery"
 # PEP 420 namespace: the importable package is livery.strongroom and
 # there is no livery/__init__.py anywhere in this repository.
 module-name = "livery.strongroom"
+# The root is a namespace too: its public names live in livery.strongroom.api.
+namespace = true

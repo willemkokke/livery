@@ -1,12 +1,12 @@
 """What a command-line tool accepts, as data: the spec a stub is rendered from.
 
-An [livery.toolroom.store.Option][] is one option of one verb as the
-tool describes it, a [livery.toolroom.store.Verb][] a subcommand with
-its options and positional shape, and a [livery.toolroom.store.ToolSpec][]
+An [livery.toolroom.store.api.Option][] is one option of one verb as the
+tool describes it, a [livery.toolroom.store.api.Verb][] a subcommand with
+its options and positional shape, and a [livery.toolroom.store.api.ToolSpec][]
 the tool whole. The bench extracts these from the tools themselves and
 records them; a consumer rebuilds them from a record or from the index
-with [livery.toolroom.store.spec_from][] and renders a stub with
-[livery.toolroom.store.render][]. Nothing here runs a tool.
+with [livery.toolroom.store.api.spec_from][] and renders a stub with
+[livery.toolroom.store.api.render][]. Nothing here runs a tool.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """An in-memory forge that answers from tables and injects faults on demand.
 
-livery.forge.testing.FakeForge implements livery.forge.Forge without a
+livery.forge.testing.FakeForge implements livery.forge.api.Forge without a
 server: every operation reads and writes plain dictionaries, so a test
 that would take minutes against a container runs in microseconds. The
 fake is verified, not trusted: the same conformance suite the real
@@ -82,13 +82,13 @@ class Faults:
 
     Attributes:
         lose_arm_schedule: The next N calls to
-            livery.forge.PullRequests.arm succeed silently without
+            livery.forge.api.PullRequests.arm succeed silently without
             recording a schedule, so the pull request reads unarmed
             afterwards. The lost-auto-merge-schedule quirk.
         merge_405_window: The next N calls to
-            livery.forge.PullRequests.merge_now or
-            livery.forge.PullRequests.arm raise
-            livery.forge.ForgeError with status 405, as a forge does
+            livery.forge.api.PullRequests.merge_now or
+            livery.forge.api.PullRequests.arm raise
+            livery.forge.api.ForgeError with status 405, as a forge does
             while a mergeability recompute is in flight; the arm
             shares the merge endpoint, so the window refuses both.
         wedge_status_queue: While True, runs never leave the queued
@@ -96,12 +96,12 @@ class Faults:
             status stays pending forever. Cancelling the run is the
             relief, as it is on a real wedged queue.
         slow_status_reads: The next N calls to
-            livery.forge.Checks.status answer as if nothing had
+            livery.forge.api.Checks.status answer as if nothing had
             reported for the commit, as a forge does in the window
             after a push before statuses appear.
         drop_connections: The next N calls to
-            livery.forge.Checks.status or livery.forge.Checks.runs
-            raise livery.forge.ForgeError with no status, as the
+            livery.forge.api.Checks.status or livery.forge.api.Checks.runs
+            raise livery.forge.api.ForgeError with no status, as the
             client does when the server closes the connection
             without a response mid-poll. The next call answers.
     """
@@ -207,7 +207,7 @@ class _RepoState:
 
 
 class FakeForge:
-    """A livery.forge.Forge that keeps everything in memory.
+    """A livery.forge.api.Forge that keeps everything in memory.
 
     The protocol half behaves as the conformance suite demands. The
     driver half simulates the world around the protocol: pushes, tags,
@@ -218,9 +218,9 @@ class FakeForge:
     keeps them, so code that mixes the two fails here first.
 
     Args:
-        user: What livery.forge.Forge.whoami answers.
-        version: What livery.forge.Forge.server_version answers.
-        capabilities: What livery.forge.Forge.supports answers True
+        user: What livery.forge.api.Forge.whoami answers.
+        version: What livery.forge.api.Forge.server_version answers.
+        capabilities: What livery.forge.api.Forge.supports answers True
             for. Defaults to every known capability; pass a subset to
             model a forge that declines some by name.
     """
@@ -607,7 +607,7 @@ class FakeForge:
 
 
 class _FakeRepository:
-    """The livery.forge.Repository view onto one FakeForge repository."""
+    """The livery.forge.api.Repository view onto one FakeForge repository."""
 
     def __init__(self, fake: FakeForge, owner: str, name: str) -> None:
         self._owner = owner

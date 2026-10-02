@@ -17,11 +17,10 @@ from typing import Any
 import pytest
 import yaml
 
-import livery.footman as footman
-
 # The site's jobs are the docs layer's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.workshop.layers.docs._tasks  # noqa: F401
+import livery.extensions.docs._tasks  # noqa: F401
+import livery.footman.api as footman
 from livery.workshop._ci_generate import generate
 
 KINDS = ("github", "gitea")

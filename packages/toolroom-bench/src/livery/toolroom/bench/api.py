@@ -10,8 +10,8 @@ footman's plugin loading is the only way in.
 
 The package exposes its one group, `tasks`, the `tools` verbs, which
 is what the plugin loader adopts; and the refresh's data,
-[livery.toolroom.bench.Refreshed][] and
-[livery.toolroom.bench.submit_refresh][], for a scheduled job that
+[livery.toolroom.bench.api.Refreshed][] and
+[livery.toolroom.bench.api.submit_refresh][], for a scheduled job that
 reads the release decision.
 """
 

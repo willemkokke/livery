@@ -62,8 +62,8 @@ The trace subdivides further wherever a task says so. Three primitives, all
 recorded on the run's clock and carried on the task's row:
 
 ```python
-from livery import footman
-from livery.footman import task
+import livery.footman.api as footman
+from livery.footman.api import task
 
 
 @task
@@ -171,7 +171,7 @@ replaces its own process wraps the replacing in footman's own handoff:
 
 
 ```python
-import livery.footman as footman
+import livery.footman.api as footman
 
 with footman.handing_off() as handed:
     os.execve(uv, cmd, {**os.environ, **handed})

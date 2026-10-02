@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 
 import pytest
 
+import livery.toolroom.tools.api as tools
 from livery.footman import _manifest
 from livery.footman._executor import run_chain
 from livery.footman._split import split_chain
@@ -26,7 +27,6 @@ from livery.footman.context import (
 )
 from livery.footman.params import Many, Secret, ask, between, suggest
 from livery.footman.registry import Group
-from livery.toolroom import tools
 
 
 def drive(build, line, **cfg):
@@ -688,7 +688,7 @@ def test_run_callable_unmanaged_skips_the_check(tmp_path):
 
 
 def test_footman_cwd_is_concrete(tmp_path):
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     with use_context(Context(cwd=tmp_path)):
         assert footman.cwd() == tmp_path
@@ -1287,7 +1287,7 @@ def test_parallel_systemexit_zero_is_success():
 
 
 def test_fail_raises_failed_with_reason_and_code():
-    from livery.footman import Failed, fail
+    from livery.footman.api import Failed, fail
 
     with pytest.raises(Failed) as caught:
         fail("boom", code=3)
@@ -1305,7 +1305,7 @@ def test_pre_record_reviews_the_draft_and_the_verdict_follows():
     # wants that green. The reviewer reads what was captured, sets title and
     # code; the record, the receipt, and the raise decision all read what
     # the review left — no nofail= at the call site.
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     def reformatted_is_fine(view):
         assert "changed 3 files" in view.stdout  # review sees the capture
@@ -1329,7 +1329,7 @@ def test_pre_record_reviews_the_draft_and_the_verdict_follows():
 def test_pre_record_can_fail_a_green_run():
     # The other direction: review reads the post-review code too, so a
     # reviewer may decide a zero exit was a failure by this gate's rules.
-    from livery.footman import Context, RunFailed, run, use_context
+    from livery.footman.api import Context, RunFailed, run, use_context
 
     def zero_is_sus(view):
         view.code = 3
@@ -1342,7 +1342,7 @@ def test_pre_record_can_fail_a_green_run():
 def test_a_raising_reviewer_fails_the_call_with_its_own_error():
     # A broken reviewer is a broken gate, not a shrug — and the record keeps
     # what the work honestly produced, because review never finished.
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     def broken(view):
         raise KeyError("oops")
@@ -1360,7 +1360,7 @@ def test_pre_record_is_a_note_on_an_off_the_record_call(capsys):
     # .opts() merges along a chain, so a shared tool may carry a reviewer
     # while one call site goes off the record — a note, not an error, and
     # the reviewer never fires.
-    from livery.footman import Context, ResultView, run, use_context
+    from livery.footman.api import Context, ResultView, run, use_context
 
     fired: list[ResultView] = []
     with use_context(Context()):
@@ -1373,7 +1373,7 @@ def test_pre_record_is_a_note_on_an_off_the_record_call(capsys):
 
 
 def test_pre_record_with_capture_off_reviews_the_code_alone():
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     seen = {}
 
@@ -1391,7 +1391,7 @@ def test_pre_record_with_capture_off_reviews_the_code_alone():
 
 
 def test_every_step_carries_its_body_audit_entry():
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     with use_context(Context()):
         result = run([sys.executable, "-c", "print('hi')"])
@@ -1404,7 +1404,7 @@ def test_every_step_carries_its_body_audit_entry():
 def test_the_audit_tells_the_whole_verdict_story():
     # The exhibit from the design page: raw 1, reviewed green — and the
     # derived readings answer the common questions without scanning.
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     def reformatted_is_fine(view):
         view.title = "fmt: reformatted"
@@ -1423,7 +1423,7 @@ def test_the_audit_tells_the_whole_verdict_story():
 
 
 def test_a_green_run_failed_in_review_keeps_its_work_code():
-    from livery.footman import Context, RunFailed, run, use_context
+    from livery.footman.api import Context, RunFailed, run, use_context
 
     def zero_is_sus(view):
         view.code = 3
@@ -1436,7 +1436,7 @@ def test_a_green_run_failed_in_review_keeps_its_work_code():
 
 
 def test_a_title_only_reviewer_is_involved_but_writes_no_verdict():
-    from livery.footman import Context, run, use_context
+    from livery.footman.api import Context, run, use_context
 
     def rename_only(view):
         view.title = "tidy"
@@ -1452,7 +1452,7 @@ def test_fail_refuses_code_zero_everywhere():
     # rejected in the task-failure design, and the old verbatim honouring
     # produced an incoherent row (ok=True with an error attached). The
     # refusal teaches the honest spelling: return 0, or a plain return.
-    from livery.footman import Failed, fail
+    from livery.footman.api import Failed, fail
 
     with pytest.raises(ValueError, match=r"fail\(\) means failure") as caught:
         fail("looks fine", code=0)
@@ -1471,7 +1471,7 @@ def test_fail_is_a_function_so_it_is_lint_clean_for_consumers(tmp_path):
         pytest.skip("ruff not on PATH")
     snippet = tmp_path / "consumer_task.py"
     snippet.write_text(
-        "from livery import footman\n\n\ndef t() -> None:\n    footman.fail('a literal reason')\n"
+        "import livery.footman.api as footman\n\n\ndef t() -> None:\n    footman.fail('a literal reason')\n"
     )
     proc = subprocess.run(
         [ruff, "check", "--isolated", "--select", "EM,TRY", str(snippet)],
@@ -1502,7 +1502,7 @@ def test_step_lines_carry_an_aligned_name_column(capsys):
 
 
 def test_progress_and_track_report_to_the_status_line():
-    from livery.footman import progress, track
+    from livery.footman.api import progress, track
     from livery.footman.context import Context, set_status, use_context
 
     class FakeStatus:
@@ -1554,7 +1554,7 @@ def test_progress_and_track_report_to_the_status_line():
 
 
 def test_progress_outside_a_run_is_a_noop():
-    from livery.footman import progress, track
+    from livery.footman.api import progress, track
 
     progress(1, 2)  # no status line: costs nothing, raises nothing
     assert list(track([1, 2, 3])) == [1, 2, 3]
@@ -2048,9 +2048,9 @@ def test_prompt_layer_is_unattended_under_dry_run():
     # with no default fails loudly instead of hanging on input.
     import pytest as _pytest
 
-    from livery.footman import confirm as fm_confirm
-    from livery.footman import prompt as fm_prompt
-    from livery.footman import select as fm_select
+    from livery.footman.api import confirm as fm_confirm
+    from livery.footman.api import prompt as fm_prompt
+    from livery.footman.api import select as fm_select
     from livery.footman.context import Context, use_context
 
     ctx = Context(dry_run=True, interactive=True, in_task=True)
@@ -2860,7 +2860,7 @@ def test_to_argv_returns_what_ran_as_requotable_tokens():
     # the tokens themselves, which serialise for whichever shell will parse
     # them — the one that matters when the string is going somewhere else.
     from livery.footman.testing import recording
-    from livery.toolroom.tools import git
+    from livery.toolroom.tools.api import git
 
     with recording():
         result = git.commit(m="a message")
@@ -2883,7 +2883,7 @@ def test_to_argv_teaches_when_no_argv_was_recorded():
 def test_run_takes_a_built_command_line_as_its_argv():
     # An Argv IS run()'s input type — no adapter between building and running.
     from livery.footman.testing import recording
-    from livery.toolroom.tools import docker
+    from livery.toolroom.tools.api import docker
 
     payload = docker.compose.up.argv(detach=True)
     with recording() as steps:
@@ -2895,7 +2895,7 @@ def test_run_serialised_payloads_spell_the_boundary():
     # A payload inside a hand-written list crosses a machine boundary as one
     # quoted token, named at the call site.
     from livery.footman.testing import recording
-    from livery.toolroom.tools import docker
+    from livery.toolroom.tools.api import docker
 
     payload = docker.compose.up.argv(detach=True)
     with recording() as steps:
@@ -2907,7 +2907,7 @@ def test_run_refuses_a_bare_container_in_its_list():
     # Stringified it becomes the one token "['a', 'b']", which fails late at
     # the tool; `*` and `.posix()` are the two meant spellings, and the
     # refusal names them.
-    from livery.toolroom.tools import docker
+    from livery.toolroom.tools.api import docker
 
     payload = docker.compose.up.argv(detach=True)
     with pytest.raises(TypeError, match=r"splat it \(`\*cmd`\)"):
@@ -2996,7 +2996,7 @@ def test_an_unexpected_exception_places_itself_in_the_users_code(fm_project):
     # so this is the log-destined path: the whole stack, with footman's own
     # leading frames off the front so the first line is one somebody wrote.
     fm = fm_project("""
-        from livery.footman import task
+        from livery.footman.api import task
 
         def helper(n):
             return 10 // n
@@ -3017,7 +3017,7 @@ def test_a_step_and_a_task_report_an_exception_the_same_way(fm_project):
     # The two halves of the runner answering one question two ways is how this
     # started: a task said only the type, a step printed footman's frames.
     fm = fm_project("""
-        from livery.footman import step, task
+        from livery.footman.api import step, task
 
         def helper(n):
             return 10 // n
@@ -3050,7 +3050,7 @@ def test_an_expected_failure_carries_no_stack(fm_project):
     # would point at the line that ran it as though it were the fault.
     fm = fm_project("""
         import sys
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         @task
         def failing():
@@ -3071,7 +3071,7 @@ def test_the_json_row_carries_a_stack_only_for_a_real_bug(fm_project):
 
     fm = fm_project("""
         import sys
-        from livery.footman import fail, run, task
+        from livery.footman.api import fail, run, task
 
         def helper(n):
             return 10 // n
@@ -3146,7 +3146,7 @@ def test_ctrl_c_reaps_the_child_a_task_was_waiting_on(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(f"""
         import sys
-        from livery.footman import run, task
+        from livery.footman.api import run, task
 
         @task
         def slow():
@@ -3225,7 +3225,7 @@ def test_ctrl_c_does_not_wait_out_an_in_body_parallel(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(f"""
         import sys
-        from livery.footman import parallel, run, step, task
+        from livery.footman.api import parallel, run, step, task
 
         HERE = {str(tmp_path)!r}
 

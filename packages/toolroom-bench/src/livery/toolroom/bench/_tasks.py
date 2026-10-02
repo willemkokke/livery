@@ -45,20 +45,15 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from livery.toolroom.bench import _provision, _toolfetch
-    from livery.toolroom.store import (
-        Ensured,
-        Record,
-        Store,
-        ToolSpec,
-    )
+    from livery.toolroom.store.api import Ensured, Record, Store, ToolSpec
 
-import livery.toolroom.tools as _tools
-from livery.footman import fail
+import livery.toolroom.tools.api as _tools
 from livery.footman._describe import bold, cyan, wants_color
+from livery.footman.api import fail
 from livery.footman.context import current, data_dir, project_root
 from livery.footman.params import doc
 from livery.footman.registry import Group
-from livery.toolroom.tools import version_tuple as _version_tuple
+from livery.toolroom.tools.api import version_tuple as _version_tuple
 
 tasks: Group = Group("tools", help="Keep the tool records honest")
 
@@ -92,7 +87,7 @@ class _Ambiguous(Exception):
 
 
 def _record_path(key: str) -> Path:
-    from livery.toolroom.store import RECORD_SUFFIX
+    from livery.toolroom.store.api import RECORD_SUFFIX
 
     return _records_dir() / f"{key}{RECORD_SUFFIX}"
 
@@ -373,7 +368,7 @@ def _stub_from(
     this machine's: the file says what was read, and a prime run elsewhere
     must not rewrite that claim.
     """
-    from livery.toolroom.store import render
+    from livery.toolroom.store.api import render
 
     newest = _surfaces.versions(record)[0]
     spec = _surfaces.union(record, name=driver.name, in_process=in_process)
@@ -456,7 +451,7 @@ def _today() -> str:
 
 
 def _render(driver: _drivers.Driver, spec: ToolSpec) -> str:
-    from livery.toolroom.store import render
+    from livery.toolroom.store.api import render
 
     return render(
         spec,
@@ -472,7 +467,7 @@ def _mode(driver: _drivers.Driver, spec: ToolSpec) -> str:
 
 
 def _class_name(key: str) -> str:
-    from livery.toolroom.store import class_name
+    from livery.toolroom.store.api import class_name
 
     return class_name(key)
 
@@ -704,7 +699,7 @@ def audit(
 def _audit(
     only: str, fix: bool, strict: bool, root: Path | None = None
 ) -> dict[str, object]:
-    from livery.toolroom import tools as _bridge
+    import livery.toolroom.tools.api as _bridge
 
     stale, skipped, wrong, checked = [], [], [], 0
     for driver in _drivers.DRIVERS:
@@ -804,7 +799,7 @@ def _color_probe_and_write(
     only: str, write: bool, on: bool, root: Path | None = None
 ) -> None:
     from livery.toolroom.bench import _colorprobe
-    from livery.toolroom.store import ToolSpec
+    from livery.toolroom.store.api import ToolSpec
 
     installed: list[tuple[str, str, str, ToolSpec]] = []
     for driver in _drivers.DRIVERS:
@@ -935,7 +930,7 @@ def verify_host(
     """
     import subprocess
 
-    from livery.toolroom.store import DOWNLOAD_KINDS, StoreError
+    from livery.toolroom.store.api import DOWNLOAD_KINDS, StoreError
 
     engine = store or _bench_store()
     checks: list[HostCheck] = []
@@ -1443,7 +1438,7 @@ def _report_gather(found: Gathered) -> None:
     on it would teach a weekly job's readers to ignore the exit code. Holes
     in the majority mean the machine, not the tools.
     """
-    from livery.footman import fail
+    from livery.footman.api import fail
 
     seen = sum(len(v) for v in found.observations.values())
     missed = sum(len(v) for v in found.holes.values())
@@ -1602,7 +1597,7 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
         found = replace(found, wrote_changelog=_write_changelog(entries))
     _report_refresh(found)
     if found.unreachable:
-        from livery.footman import fail
+        from livery.footman.api import fail
 
         fail(
             f"{len(found.unreachable)} index(es) would not answer: "
@@ -1614,7 +1609,7 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
 
 def _read_document(name: str) -> dict[str, Any]:
     """One observation document, refused rather than guessed at when wrong."""
-    from livery.footman import fail
+    from livery.footman.api import fail
 
     try:
         payload: dict[str, Any] = json.loads(
@@ -1909,7 +1904,7 @@ def submit_refresh(
     Returns:
         The lines to print, one per step.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     if not found.release:
         return ["  nothing moved: no branch, no pull request"]
@@ -1949,7 +1944,7 @@ def submit_refresh(
         argv.append("--armed")
     code = (submit or _run_submit)(argv)
     if code != 0:
-        from livery.footman import fail
+        from livery.footman.api import fail
 
         fail(f"the refresh's submit exited {code}; the branch {branch} stands")
     return [
@@ -1960,13 +1955,13 @@ def submit_refresh(
 
 def _bench_store() -> Store:
     """The bench's own store, under its room in the runner's data directory."""
-    from livery.toolroom.store import Home, Store
+    from livery.toolroom.store.api import Home, Store
 
     return Store(Home(default_prefix() / "store"))
 
 
 def _prog() -> str:
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     return footman.prog()
 
@@ -2189,7 +2184,8 @@ def _bounce_bare_call(task: str) -> None:
     is exactly the cross-contamination this engine exists to remove. One
     implementation, and a bouncer — never a degraded twin.
     """
-    from livery.footman import _globals, fail
+    from livery.footman import _globals
+    from livery.footman.api import fail
 
     if not _globals.active():
         fail(
@@ -2258,7 +2254,7 @@ def _list_phase(
     tools that could be read still deserve their walk, and the caller
     decides what an unreadable index costs.
     """
-    from livery.footman import parallel, step
+    from livery.footman.api import parallel, step
 
     listings: dict[str, list[_toolfetch.Release]] = {}
     unreachable: dict[str, str] = {}
@@ -2423,7 +2419,7 @@ def _refuse_a_broken_environment(scratch: Path) -> None:
     """
     import shutil as _shutil
 
-    from livery.footman import fail
+    from livery.footman.api import fail
 
     try:
         free = _shutil.disk_usage(scratch).free
@@ -2484,7 +2480,7 @@ def _gather(
     reports, which reads as a hole exactly like a release that would not
     install, with the traceback in the wave's output.
     """
-    from livery.footman import parallel, step
+    from livery.footman.api import parallel, step
     from livery.footman.context import current
 
     surfaces: dict[str, dict[str, dict[str, Any] | None]] = {}
@@ -2634,7 +2630,7 @@ def tools_verify(
 
 
 def _record_names() -> list[str]:
-    from livery.toolroom.store import records_in
+    from livery.toolroom.store.api import records_in
 
     return [path.stem for path in records_in(_records_dir())]
 
@@ -2764,7 +2760,7 @@ def goldens(
     test, so it moves here too. `--check` names what would move and
     writes nothing.
     """
-    from livery.toolroom.store import Catalogue, export_schema
+    from livery.toolroom.store.api import Catalogue, export_schema
 
     wrote: list[str] = []
     unchanged: list[str] = []
@@ -2840,7 +2836,7 @@ def provision(
     outcomes = _provision.provision(_drivers.DRIVERS, prefix, only=only)
     _print_outcomes(outcomes)
     if strict:
-        from livery.footman import fail
+        from livery.footman.api import fail
 
         # A person at a terminal reads the table and decides what to do
         # next, so a failed tier is named and the rest carries on. A step
@@ -2898,7 +2894,7 @@ icon: lucide/layout-grid
 
 # Tools
 
-Import a tool by name — `from livery.toolroom.tools import git` — and call it,
+Import a tool by name — `from livery.toolroom.tools.api import git` — and call it,
 `git.commit(…)`. No declaration needed: [the bridge](../../usage.md)
 translates keyword arguments into flags mechanically, and every tool on
 your PATH already works. These pages document the **stubs**: what each

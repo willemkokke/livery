@@ -318,7 +318,7 @@ def test_ctx_named_params_and_varargs_together():
 
 
 def test_passthrough_without_varargs_reaches_context():
-    from livery.footman import passthrough
+    from livery.footman.api import passthrough
 
     seen = {}
 
