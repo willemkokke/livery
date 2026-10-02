@@ -15,33 +15,46 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_a_contract_without_extensions_refuses_printing_the_line(
-    tmp_path: Path,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.footman import registry
+    from livery.workshop._extensions import closure_problems
+
     (tmp_path / "workshop.toml").write_text('[workspace]\n\n[forge]\nkind = "github"\n')
-    # A reader has nothing to read; the mount refuses with the line to add.
+    # The gate refuses it, printing the line to add.
+    (problem,) = closure_problems(tmp_path)
+    assert "[workspace] extensions is required" in problem
+    assert "\n  extensions = []\n" in problem
+    # The mount names it and goes on: every command mounts, the sync
+    # that repairs an environment among them.
     assert extension_names(tmp_path) == ()
-    with pytest.raises(BaseException) as caught:
-        mount_extensions(tmp_path)
-    text = str(caught.value)
-    assert "[workspace] extensions is required" in text
-    assert "\n  extensions = []\n" in text
+    with registry.capture():
+        assert mount_extensions(tmp_path) == ()
+    assert "[workspace] extensions is required" in capsys.readouterr().err
 
 
-def test_an_uninstalled_extension_refuses_naming_its_distribution(
-    tmp_path: Path,
+def test_an_uninstalled_extension_is_named_and_skipped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.footman import registry
+    from livery.workshop._extensions import closure_problems
+
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["acme.missing"]\n'
     )
-    with pytest.raises(BaseException) as caught:
-        mount_extensions(tmp_path)
-    text = str(caught.value)
-    assert "'acme.missing'" in text and "workshop.extensions" in text
-    assert "(acme-missing by its name)" in text
+    with registry.capture():
+        assert mount_extensions(tmp_path) == ()
+    err = capsys.readouterr().err
+    assert "'acme.missing'" in err and "workshop.extensions" in err
+    assert "(acme-missing by its name)" in err
+    assert closure_problems(tmp_path) == [
+        "[workspace] extensions lists acme.missing, which no installed"
+        " distribution declares in workshop.extensions"
+    ]
 
 
 def test_a_branded_builtin_extension_is_the_apps_to_mount(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A brand mounts its builtin set as the cascade's base rung, and
     # mount_extensions runs inside that very mount, so re-mounting a
@@ -55,10 +68,11 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
     )
     monkeypatch.setattr(_paths, "_builtin", ("livery.workshop", "acme.missing"))
     assert mount_extensions(tmp_path) == ()
-    # Off the builtin set, the same absent extension still refuses.
+    assert capsys.readouterr().err == ""
+    # Off the builtin set, the same absent extension is named.
     monkeypatch.setattr(_paths, "_builtin", ())
-    with pytest.raises(BaseException, match=r"acme\.missing"):
-        mount_extensions(tmp_path)
+    assert mount_extensions(tmp_path) == ()
+    assert "acme.missing" in capsys.readouterr().err
 
 
 # Then the walk.
