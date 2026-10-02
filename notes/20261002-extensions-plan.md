@@ -1,7 +1,7 @@
 # Extensions: a base, and what a workspace lists
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
-2026-10-02; not started. It is the one plan from now until the end of
+2026-10-02. Phase 1a built (issue #1025); the others not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -583,24 +583,50 @@ its own change. Exceptional paths are tested before happy paths.
 
 ### Phase 1: measure first
 
-Deliverables:
+**1a, the minijinja spike: built (issue #1025).**
 
-- The minijinja spike: every current template and fragment rendered
-  by `minijinja` and by jinja2 over the same data, compared byte for
-  byte, every difference listed with its cause; the subset of
-  contract 14 written down from what the files use.
-- The scale fixture: a generated workspace of 300 packages across
-  python, cpp-conan and nanobind, with today's `fm sync`,
-  `fm template.check` and `fm check` timed cold, warm with nothing
-  changed, and with one package changed, the rows recorded in the CI
-  store's metrics.
+- Every template file and every check fragment, rendered through
+  copier's jinja2 and through `minijinja` 2.24 over the data copier
+  renders them with: 155 renders byte-identical.
+- The one construct minijinja refused was list mutation, a
+  `py.append(member)` in the project's `pyproject.toml.jinja`; it is
+  now `selectattr` and `rejectattr`, with the same rendered bytes.
+- Copier's own answers file is the only file left that differs, for
+  copier's reasons: its name comes from copier's configuration object
+  and its body uses copier's `to_nice_yaml` filter. It goes with
+  copier in phase 8.
+- minijinja joins the workshop's `dev` extra;
+  `test_workshop_minijinja_parity.py` keeps the two engines in
+  agreement until the templates go.
 
-Acceptance:
+The subset of contract 14, as the files use it: variables, `if`,
+`for`, `set`, the filters both engines ship (`selectattr`,
+`rejectattr`, `list`, `default` among them), and the python-style
+methods minijinja implements on strings and maps (`.get`, `.split`,
+`.replace`). Changing a value in place (`.append`, `.update`) is
+outside it, and so is any filter only copier provides.
+
+Acceptance of 1a, with the evidence of 2026-10-02:
+
+- `fm check --fix` exits 0 (2m00s).
+- `test_every_template_renders_the_same_in_minijinja` and
+  `test_every_check_fragment_renders_the_same_in_minijinja` pass.
+- `fm template.check` exits 0 after the template change.
+
+**1b, the scale fixture: not started.** Deliverables:
+
+- A generated workspace of 300 packages across python, cpp-conan and
+  nanobind, with today's `fm sync`, `fm template.check` and
+  `fm check` timed cold, warm with nothing changed, and with one
+  package changed.
+- A scheduled CI point that runs it, so the rows are recorded in the
+  CI store's metrics.
+
+Acceptance of 1b:
 
 - `fm check` exits 0.
-- The spike's report is quoted in the decision record: the files
-  that differ and why, or none.
-- `fm store.show metrics` shows the fixture's baseline rows.
+- `fm store.show metrics` shows the fixture's baseline rows, quoted in
+  the decision record.
 
 ### Phase 2: strict contracts
 
@@ -996,6 +1022,10 @@ Acceptance:
 
 ## Decision record
 
+- 2026-10-02, phase 1a: phase 1 splits into the spike (1a) and the
+  scale fixture (1b), which needs a CI point to record its timings
+  in the store and so lands apart. The spike's one finding changed a
+  template line, with no change to any rendered byte.
 - 2026-10-02: this plan written. It supersedes the extensible gate
   plan, the empty shell plan and the local loop plan, and takes in
   the toolchain plan's phases 2 to 4. The rulings below were taken
