@@ -17,7 +17,7 @@ from pathlib import Path
 from livery.footman.api import fail
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package, discover_packages, root_marks
 
 #: Where package docs mount inside the site's tree, per package
 #: directory name. Gitignored; rebuilt on every docs verb.
@@ -108,19 +108,20 @@ def declines_api(package: Package) -> bool:
 
 
 def module_root(package: Package) -> Path | None:
-    """The importable module's root: the shallowest ``__init__.py``."""
+    """The importable module's root: the shallowest ``api.py`` or ``__init__.py``."""
     src = package.directory / "src"
     if not src.is_dir():
         return None
-    inits = sorted(src.rglob("__init__.py"), key=lambda p: len(p.parts))
-    return inits[0].parent if inits else None
+    marks = root_marks(src)
+    return marks[0].parent if marks else None
 
 
 def module_docs_dir(package: Package) -> Path | None:
     """Where *package*'s wheel-embedded ``_docs`` lives; None without src.
 
-    The module root is the shallowest ``__init__.py`` under ``src``,
-    which is the importable package uv_build ships.
+    The module root is the shallowest root mark under ``src``
+    ([livery.workshop._packages.root_marks][]), the importable package
+    uv_build ships.
     """
     found = module_root(package)
     return None if found is None else found / "_docs"

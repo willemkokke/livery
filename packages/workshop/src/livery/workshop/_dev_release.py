@@ -176,19 +176,15 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     processes read its metadata.
     """
     package = plan.package
-    touched = [package.directory / "pyproject.toml"]
-    src = package.directory / "src"
-    if src.is_dir():
-        touched += sorted(src.rglob("__init__.py"))
+    stamper = backend_for(package).stamp_version(package)
+    touched = [path for path in stamper.homes() if path.is_file()]
     readme = package.directory / "README.md"
     if readme.is_file():
         touched.append(readme)
     snapshots = {path: path.read_bytes() for path in touched}
     stamps = {path: path.stat() for path in touched}
     try:
-        backend_for(package).stamp_version(package).stamp(
-            semver_to_pep440(plan.version)
-        )
+        stamper.stamp(semver_to_pep440(plan.version))
         notes = release_notes()
         excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():

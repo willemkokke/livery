@@ -185,6 +185,17 @@ def _no_contract(root: Path, directory: Path) -> str:
     )
 
 
+def root_marks(src: Path) -> list[Path]:
+    """The files that mark an importable root under *src*, shallowest first.
+
+    A namespace root carries an ``api.py``, a regular package an
+    ``__init__.py``; the topmost of either on a branch is that
+    branch's root.
+    """
+    marks = [*src.rglob("__init__.py"), *src.rglob("api.py")]
+    return sorted(marks, key=lambda path: (len(path.parts), path))
+
+
 def discover_packages(root: Path) -> tuple[Package, ...]:
     """Every package the workspace carries, by its contract, sorted by path.
 

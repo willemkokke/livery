@@ -193,6 +193,10 @@ class _Stamper:
     def __init__(self, package: Package) -> None:
         self._package = package
 
+    def homes(self) -> list[Path]:
+        """The recipe, the one file the version lives in."""
+        return [self._package.directory / "conanfile.py"]
+
     def stamp(self, version: str) -> list[str]:
         """Write *version* into ``conanfile.py``; what changed."""
         import re

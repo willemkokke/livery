@@ -246,6 +246,18 @@ class _Stamper:
     def __init__(self, package: Package) -> None:
         self._package = package
 
+    def homes(self) -> list[Path]:
+        """``pyproject.toml``, and every module that may carry ``__version__``.
+
+        That is a namespace root's ``api.py`` or a regular package's
+        ``__init__.py``.
+        """
+        src = self._package.directory / "src"
+        modules = (
+            [*src.rglob("__init__.py"), *src.rglob("api.py")] if src.is_dir() else []
+        )
+        return [self._package.directory / "pyproject.toml", *sorted(modules)]
+
     def stamp(self, version: str) -> list[str]:
         """Write *version* into pyproject and ``__version__``; what changed."""
         import re as _re
@@ -265,10 +277,7 @@ class _Stamper:
         if stamped != text:
             pyproject.write_text(stamped, encoding="utf-8")
             changed.append("pyproject.toml")
-        # The version lives in a root's api module, or in a regular
-        # package's __init__.
-        src = self._package.directory / "src"
-        for init in sorted([*src.rglob("__init__.py"), *src.rglob("api.py")]):
+        for init in self.homes()[1:]:
             text = init.read_text("utf-8")
             stamped, count = _re.subn(
                 r'^__version__ = "[^"]+"$',
@@ -1606,8 +1615,9 @@ def module_roots(package: Package) -> tuple[str, ...]:
     if not src.is_dir():
         return ()
     roots: list[str] = []
-    marks = [*src.rglob("__init__.py"), *src.rglob("api.py")]
-    for init in sorted(marks, key=lambda path: len(path.parts)):
+    from livery.workshop._packages import root_marks
+
+    for init in root_marks(src):
         dotted = ".".join(init.relative_to(src).parts[:-1])
         if not dotted:
             continue

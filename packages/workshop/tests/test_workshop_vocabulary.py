@@ -53,7 +53,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_checks", "python"): 2,
     ("_checks", "python-nanobind"): 1,
     ("_ci_generate", "conanfile.py"): 1,
-    ("_dev_release", "pyproject.toml"): 1,
     ("_devenv", "conan"): 2,
     ("_e2e", BACKEND_IMPORT): 1,
     ("_e2e", "conan"): 4,

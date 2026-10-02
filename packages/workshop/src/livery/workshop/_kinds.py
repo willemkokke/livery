@@ -69,6 +69,10 @@ class Stamper(Protocol):
         """Write *version* into the kind's homes; the files changed."""
         ...
 
+    def homes(self) -> list[Path]:
+        """Every file `stamp` may write, so a caller can snapshot and restore them."""
+        ...
+
 
 class Backend(Protocol):
     """The callables every kind's backend module exposes.
