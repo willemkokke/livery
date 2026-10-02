@@ -7,7 +7,7 @@ from asyncio import CancelledError  # a BaseException, unlike futures' namesake
 
 import pytest
 
-from livery.footman import Context, fail, parallel, step, use_context
+from livery.footman.api import Context, fail, parallel, step, use_context
 from livery.footman.context import Failed, RunTimeout
 
 

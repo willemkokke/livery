@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
-from livery.forge import ForgeError, Repository, Run
+from livery.forge.api import ForgeError, Repository, Run
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e, _runs, _submit
 from livery.workshop._ci_tasks import verdict_flow

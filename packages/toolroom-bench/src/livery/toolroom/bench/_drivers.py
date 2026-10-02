@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store import ToolSpec
+    from livery.toolroom.store.api import ToolSpec
 
 import os
 import re
@@ -158,7 +158,7 @@ RECORD_KINDS = {
     "gitea": "download",
     "deferred": "download",
 }
-"""Each provision tier's installer kind, one of [livery.toolroom.store.KINDS][]."""
+"""Each provision tier's installer kind, one of [livery.toolroom.store.api.KINDS][]."""
 
 
 @dataclass(frozen=True)
@@ -860,7 +860,7 @@ def _read_version(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
     say which teaches nothing when it trips (the CI flake that motivated
     this reported `gh (—)` and left every hypothesis standing).
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     # A suite tool may name a sibling that answers for it: ssh-keygen has no
     # version output at all, and ssh speaks for the OpenSSH release both
@@ -935,7 +935,7 @@ def in_process_capable(name: str) -> bool:
     list to maintain, and it answers correctly for a tool footman has never
     heard of.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     return tools._console_entrypoint(name) is not None
 
@@ -951,7 +951,7 @@ def extract(driver: Driver, home: Path | None = None) -> ToolSpec:
     mention it in prose. So structure wins when it is available, and the
     help text covers everyone else.
     """
-    from livery.toolroom.store import ToolSpec
+    from livery.toolroom.store.api import ToolSpec
 
     spec = ToolSpec(name=driver.name)
     if driver.source in {"auto", "click"}:
@@ -1077,7 +1077,7 @@ def _rebase(spec: ToolSpec, base: tuple[str, ...]) -> ToolSpec:
     So that verb's options become the stub's `__call__`, and the rest of
     the tool is somebody else's stub.
     """
-    from livery.toolroom.store import ToolSpec, Verb
+    from livery.toolroom.store.api import ToolSpec, Verb
 
     wanted = ".".join(base).replace("-", "_")
     for verb in spec.verbs:
@@ -1104,7 +1104,7 @@ def _from_click(driver: Driver) -> ToolSpec | None:
     a binary whose version cannot be read) falls through to the help path,
     which always asks the binary itself.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     entry = tools._console_entrypoint(driver.name)
     if entry is None:
@@ -1125,7 +1125,7 @@ def _from_click(driver: Driver) -> ToolSpec | None:
 
 def _select(spec: ToolSpec, verbs: tuple[str, ...]) -> ToolSpec:
     """Keep the verbs the driver asked for, plus the tool's own options."""
-    from livery.toolroom.store import ToolSpec
+    from livery.toolroom.store.api import ToolSpec
 
     if not verbs:
         return spec

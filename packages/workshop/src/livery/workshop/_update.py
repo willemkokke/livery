@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery.footman import fail
-from livery.toolroom import tools
+import livery.toolroom.tools.api as tools
+from livery.footman.api import fail
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 

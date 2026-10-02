@@ -9,7 +9,7 @@ whose message names what was found and what to do.
 ```python
 from pathlib import Path
 
-from livery.strongroom import FolderSource, Namespace, Store
+from livery.strongroom.api import FolderSource, Namespace, Store
 
 store = Store.create(
     Path("~/.cache/mystore").expanduser(),
@@ -50,7 +50,7 @@ source holds, except what a live view depends on.
 ## Refs
 
 ```python
-from livery.strongroom import Subject
+from livery.strongroom.api import Subject
 
 me = Subject("person", "willem")
 record = store.set_ref("tools", "bun@1.3", tree, previous=None, by=me)

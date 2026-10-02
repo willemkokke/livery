@@ -24,9 +24,9 @@ kind, per host an artifact with a mandatory digest, and the layout; it
 never runs a command. A version with no artifact is tracked for its
 surface alone: it has no host and nothing installs it.
 
-Reach for [livery.toolroom.store.Record.load][] to read a record,
-[livery.toolroom.store.resolve][] for one host's deployment at one
-version, and [livery.toolroom.store.surface_at][] for one version's
+Reach for [livery.toolroom.store.api.Record.load][] to read a record,
+[livery.toolroom.store.api.resolve][] for one host's deployment at one
+version, and [livery.toolroom.store.api.surface_at][] for one version's
 whole surface; the rest is what a load validates.
 """
 
@@ -39,8 +39,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom import Digest, canonical, digest_of
-from livery.toolroom.tools import version_tuple
+from livery.strongroom.api import Digest, canonical, digest_of
+from livery.toolroom.tools.api import version_tuple
 
 PLATFORMS = ("windows", "macos", "linux")
 """The operating systems a record may name."""
@@ -115,7 +115,7 @@ VERSION_VAR = "{version}"
 An archive whose top directory is named after its version
 (`git-cliff-2.14.2/`) declares `root = "git-cliff{version}"` once on
 the tool, instead of a layout override restating the version on every
-version line. [livery.toolroom.store.resolve][] substitutes it, so a
+version line. [livery.toolroom.store.api.resolve][] substitutes it, so a
 deployment always carries the concrete directory.
 """.replace("git-cliff{version}", "git-cliff-{version}")
 
@@ -336,16 +336,16 @@ class Deployment:
     Attributes:
         url: Where the artifact downloads from.
         sha256: The artifact's sha256.
-        root: See [livery.toolroom.store.Layout][].
-        file: See [livery.toolroom.store.Layout][].
-        format: See [livery.toolroom.store.Layout][]; empty when the URL
+        root: See [livery.toolroom.store.api.Layout][].
+        file: See [livery.toolroom.store.api.Layout][].
+        format: See [livery.toolroom.store.api.Layout][]; empty when the URL
             suffix decides.
-        entry_points: See [livery.toolroom.store.Layout][]; empty for a
+        entry_points: See [livery.toolroom.store.api.Layout][]; empty for a
             download reached through its env alone.
-        paths: See [livery.toolroom.store.Layout][]; empty likewise.
-        env: See [livery.toolroom.store.Layout][].
-        shims: See [livery.toolroom.store.Layout][].
-        exclude: See [livery.toolroom.store.Layout][].
+        paths: See [livery.toolroom.store.api.Layout][]; empty likewise.
+        env: See [livery.toolroom.store.api.Layout][].
+        shims: See [livery.toolroom.store.api.Layout][].
+        exclude: See [livery.toolroom.store.api.Layout][].
     """
 
     url: str
@@ -571,7 +571,7 @@ class Observation:
         help: The tool's own description at this version.
         verbs: Every verb whole, in name order, each in `VERB_KEYS` shape
             with its options in name order; treat it as read-only.
-        absent: See [livery.toolroom.store.Surface][].
+        absent: See [livery.toolroom.store.api.Surface][].
     """
 
     version: str

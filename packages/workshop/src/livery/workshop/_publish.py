@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-import livery.footman as footman
-from livery.footman import fail
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import fail
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
@@ -66,7 +66,7 @@ PROBE_POLL = 5.0
 
 
 class Registry(Protocol):
-    """The one probe the wave needs; livery.forge.SimpleRegistry fits."""
+    """The one probe the wave needs; livery.forge.api.SimpleRegistry fits."""
 
     def versions(self, name: str) -> tuple[str, ...]:
         """The published versions of *name*."""

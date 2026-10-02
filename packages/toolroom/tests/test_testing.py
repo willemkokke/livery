@@ -15,8 +15,9 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom import tools
-from livery.toolroom.tools import Result, ToolError, _host
+import livery.toolroom.tools.api as tools
+from livery.toolroom.tools import _host
+from livery.toolroom.tools.api import Result, ToolError
 from livery.toolroom.tools.testing import UnservedAnswers, answers
 
 
@@ -226,7 +227,7 @@ def test_the_process_cache_cannot_preempt_a_canned_version(monkeypatch):
 
 
 def test_hosted_simulation_speaks_footman_vocabulary():
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     with answers({("git", "push"): 1}, hosted=True) as calls:
         ok = tools.git.status()
@@ -267,7 +268,7 @@ def test_answers_wins_inside_a_recording():
 
 
 def test_from_toolroom_import_testing_is_the_module():
-    # `from livery.toolroom.tools import X` consults the package's __getattr__ before the
+    # `from livery.toolroom.tools.api import X` consults the package's __getattr__ before the
     # import system tries the submodule — without the redirect this would be
     # Tool("testing").
     from livery.toolroom.tools import testing as mod

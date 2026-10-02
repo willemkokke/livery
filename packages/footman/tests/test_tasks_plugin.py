@@ -19,7 +19,7 @@ from livery.footman._executor import TaskResult
 def plugin_project(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman import group, plugin, task\n"
+        "from livery.footman.api import group, plugin, task\n"
         "# mounted FIRST on purpose: the local group() below adopts the\n"
         "# mounted docs group — order must not matter\n"
         "plugin('footman.docs')\n"
@@ -114,7 +114,7 @@ def test_site_writes_indexes_and_pages(plugin_project, capsys):
 def test_branded_cli_documents_itself(plugin_project):
     # A branded CLI's pages carry its own name with no flag at all: the
     # invoking brand rides the task context, and --prog stays the override.
-    from livery.footman import App
+    from livery.footman.api import App
     from livery.footman.testing import Runner
 
     acme = Runner(App(name="Acme", prog="acme", version="1.0"))
@@ -325,7 +325,7 @@ def test_page_follows_the_sort_setting(plugin_project, capsys):
         "[project]\nname='x'\n[tool.footman]\nsort = true\n"
     )
     (plugin_project / "tasks.py").write_text(
-        "from livery.footman import plugin, task\n"
+        "from livery.footman.api import plugin, task\n"
         "plugin('footman.docs')\n"
         "@task\n"
         "def zebra(): ...\n"

@@ -17,8 +17,8 @@ The lock is a file in the repository, `tools.lock`, so every checkout
 and every runner installs the same version; it moves only through a
 lock or an upgrade, never on its own.
 
-Reach for [livery.toolroom.store.Requirement][],
-[livery.toolroom.store.resolve_lock][] and [livery.toolroom.store.Lock][].
+Reach for [livery.toolroom.store.api.Requirement][],
+[livery.toolroom.store.api.resolve_lock][] and [livery.toolroom.store.api.Lock][].
 """
 
 from __future__ import annotations
@@ -30,10 +30,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom import Digest
+from livery.strongroom.api import Digest
 from livery.toolroom.store._catalogue import Catalogue, CatalogueError, Listed
 from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, PLATFORMS, version_key
-from livery.toolroom.tools import version_tuple
+from livery.toolroom.tools.api import version_tuple
 
 LOCK_FILE = "tools.lock"
 """The lock's name at the repository root."""

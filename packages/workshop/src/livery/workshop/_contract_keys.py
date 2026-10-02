@@ -24,7 +24,7 @@ import functools
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from livery.footman import fail
+from livery.footman.api import fail
 
 #: The two kinds of contract: the workspace's at the root, a package's
 #: in its directory.

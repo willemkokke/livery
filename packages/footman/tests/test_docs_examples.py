@@ -167,7 +167,7 @@ def test_playground_path_requirements_pass(tmp_path: Path):
     tasks = """\
 from pathlib import Path
 from typing import Annotated
-from livery.footman import task
+from livery.footman.api import task
 from livery.footman.params import check, isfile
 
 def semver(value: str) -> None:
@@ -330,7 +330,7 @@ def test_playground_simulated_child_honours_the_bytes_contract(tmp_path: Path):
     files = {
         "tasks.py": (
             "import subprocess\n"
-            "from livery.footman import task\n"
+            "from livery.footman.api import task\n"
             "\n"
             "@task\n"
             "def contract():\n"
@@ -357,8 +357,8 @@ def test_playground_completes_the_homepages_git_branches(tmp_path: Path):
     files = {
         "tasks.py": (
             "from typing import Annotated\n"
-            "from livery.footman import suggest, task\n"
-            "from livery.toolroom.tools import git\n"
+            "from livery.footman.api import suggest, task\n"
+            "from livery.toolroom.tools.api import git\n"
             "\n"
             "def branches() -> list[str]:\n"
             '    return git.branch(format="%(refname:short)").stdout.split()\n'
@@ -504,7 +504,7 @@ def stubbed_toolroom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The probes import a copy of the tools package, and write into it the
     newest ruff stub of an index built here. Returns the copy.
     """
-    import livery.toolroom.tools as tools
+    import livery.toolroom.tools.api as tools
 
     pkg = tmp_path / "pkg"
     target = pkg / "livery" / "toolroom" / "tools"
@@ -556,7 +556,7 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     assert "class Ruff(ToolBase[_R]):" in text and "def __call__(" in text
     assert (target / "stubs" / "__init__.pyi").read_text() == ""
     assert (target / "handles.pyi").read_text() == (
-        "from livery.toolroom.tools import Result\n"
+        "from livery.toolroom.tools.api import Result\n"
         "from livery.toolroom.stubs.ruff import Ruff as Ruff\n"
         "\n"
         "ruff: Ruff[Result]\n"
@@ -621,7 +621,7 @@ def test_playground_editor_completion_carries_docstrings(
     assert "info" in dump and "obj" in dump["info"], dump
 
     got, err = _editor_complete(
-        tmp_path, "from livery.toolroom.tools import ruff\nruff.che", 2, 8
+        tmp_path, "from livery.toolroom.tools.api import ruff\nruff.che", 2, 8
     )
     labels = [c["label"] for c in got]
     assert "check" in labels, (labels, err)
@@ -654,7 +654,10 @@ def test_playground_editor_completion_ranks_like_an_ide(
     in the user's own buffer outranks an import, and builtins sink."""
     prefix = 'ruff.check("src", '
     got, err = _editor_complete(
-        tmp_path, "from livery.toolroom.tools import ruff\n" + prefix, 2, len(prefix)
+        tmp_path,
+        "from livery.toolroom.tools.api import ruff\n" + prefix,
+        2,
+        len(prefix),
     )
     labels = [c["label"] for c in got]
     assert "fix=" in labels, (labels, err)
@@ -665,7 +668,7 @@ def test_playground_editor_completion_ranks_like_an_ide(
     rest = [c for c in got if not c["label"].endswith("=")]
     assert any(c.get("boost") == -1 for c in rest), rest
 
-    src = "from livery.footman import task\n\n@task\ndef build_wheels():\n    pass\n\nbui\n"
+    src = "from livery.footman.api import task\n\n@task\ndef build_wheels():\n    pass\n\nbui\n"
     got, err = _editor_complete(tmp_path, src, 7, 3)
     own = next((c for c in got if c["label"] == "build_wheels"), None)
     assert own is not None, (got, err)
@@ -720,7 +723,7 @@ def test_playground_hover_help_answers_signatures(
     assert help_ is not None, err
     assert "dumps(" in help_["label"], help_
 
-    on_name = "from livery.toolroom.tools import ruff\nruff.check"
+    on_name = "from livery.toolroom.tools.api import ruff\nruff.check"
     help_, err = _editor_help(tmp_path, on_name, 2, 7)
     assert help_ is not None, err
     # The stub's signature line, not a bare name — a Name's docstring()
@@ -746,7 +749,7 @@ def test_playground_hover_help_answers_signatures(
     # annotation says it is (Willem's screenshot: hovering `test` showed
     # TaskFn(*args, **kwargs) and the protocol's prose).
     own = (
-        "from livery.footman import task\n"
+        "from livery.footman.api import task\n"
         "\n"
         "@task\n"
         "def build(target: str = 'app'):\n"
@@ -757,7 +760,9 @@ def test_playground_hover_help_answers_signatures(
     assert help_["label"].startswith("build("), help_
     assert "Compile the thing" in help_["doc"], help_
 
-    on_keyword = "from livery.toolroom.tools import ruff\nruff.check('src', fix=True)"
+    on_keyword = (
+        "from livery.toolroom.tools.api import ruff\nruff.check('src', fix=True)"
+    )
     col = on_keyword.split("\n")[1].index("fix=") + 1
     help_, err = _editor_help(tmp_path, on_keyword, 2, col)
     assert help_ is not None, err
@@ -793,7 +798,7 @@ def test_playground_hover_needs_a_symbol(tmp_path: Path, stubbed_toolroom: Path)
     Hover answers about a SYMBOL — no identifier under the pointer means
     no tooltip, the way every IDE behaves. Which call the cursor sits in
     is the parameter-hints panel's question now."""
-    src = "from livery.toolroom.tools import ruff\nfix = False\nruff.check('src', fix=fix)"
+    src = "from livery.toolroom.tools.api import ruff\nfix = False\nruff.check('src', fix=fix)"
     line = src.split("\n")[2]
 
     # A position adjacent to an identifier still belongs to it — the
@@ -862,7 +867,7 @@ def test_playground_parameter_hints_track_the_cursor(
     highlight. A variadic positional rides on the summary line."""
     pre = "ruff.check("
     help_, err = _editor_sighelp(
-        tmp_path, "from livery.toolroom.tools import ruff\n" + pre, 2, len(pre)
+        tmp_path, "from livery.toolroom.tools.api import ruff\n" + pre, 2, len(pre)
     )
     assert help_ is not None, err
     assert help_["label"].startswith("check("), help_
@@ -880,7 +885,7 @@ def test_playground_parameter_hints_track_the_cursor(
     assert help_["sig"] == ["deploy(target, ", 'region="eu"', ")"], help_
     pre = 'ruff.check("src", fix='
     help_, err = _editor_sighelp(
-        tmp_path, "from livery.toolroom.tools import ruff\n" + pre, 2, len(pre)
+        tmp_path, "from livery.toolroom.tools.api import ruff\n" + pre, 2, len(pre)
     )
     assert help_ is not None, err
     assert help_["active"] == "fix", help_
@@ -915,6 +920,6 @@ def test_playground_parameter_hints_track_the_cursor(
     assert help_ is None, help_
     pre = 'run("git commit -m foo, bar'
     help_, err = _editor_sighelp(
-        tmp_path, "from livery.footman import run\n" + pre, 2, len(pre)
+        tmp_path, "from livery.footman.api import run\n" + pre, 2, len(pre)
     )
     assert help_ is None, help_

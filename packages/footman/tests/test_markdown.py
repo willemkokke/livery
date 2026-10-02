@@ -6,7 +6,8 @@ from typing import Annotated, Literal
 
 import pytest
 
-from livery.footman import _manifest, markdown, registry, task
+from livery.footman import _manifest, markdown, registry
+from livery.footman.api import task
 from livery.footman.params import doc
 from livery.footman.registry import group
 

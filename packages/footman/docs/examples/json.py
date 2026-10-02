@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 from pathlib import Path
-from livery.footman import task
+from livery.footman.api import task
 
 
 @task
@@ -12,7 +12,7 @@ def coverage() -> dict:
 
 # --8<-- [start:part-2]
 from dataclasses import dataclass
-from livery.footman import task
+from livery.footman.api import task
 
 
 @dataclass
@@ -33,7 +33,7 @@ def affected() -> Affected:
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.footman import Stdout, task
+from livery.footman.api import Stdout, task
 
 
 @task

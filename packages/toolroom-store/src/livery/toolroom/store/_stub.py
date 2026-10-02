@@ -134,10 +134,10 @@ def _imports(body: str, aliases: str = "") -> str:
         lines.append("from os import PathLike")
     lines.append(f"from typing import {', '.join(typing)}")
     lines.append("")
-    lines.append(f"from livery.toolroom.tools import {', '.join(sorted(names))}")
+    lines.append(f"from livery.toolroom.tools.api import {', '.join(sorted(names))}")
     # The aliased import on its own line, as the import sorter lays it
     # out, so a rendered stub is already in the shape the linter wants.
-    lines.append("from livery.toolroom.tools import Tool as ToolBase")
+    lines.append("from livery.toolroom.tools.api import Tool as ToolBase")
     return "\n".join(lines)
 
 

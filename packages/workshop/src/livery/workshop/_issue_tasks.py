@@ -23,10 +23,10 @@ import re
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import Arg, ask, doc, fail, group, suggest
-from livery.forge import ForgeError, Issue, Repository
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import Arg, ask, doc, fail, group, suggest
+from livery.forge.api import ForgeError, Issue, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._submit import (

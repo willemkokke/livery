@@ -104,7 +104,7 @@ def test_a_birth_test_that_reaches_the_network_refuses_naming_the_host() -> None
     # The fallback before the births: a fetch the fakes miss fails here,
     # by name, rather than passing or failing with whatever the live
     # site answers at that moment.
-    from livery.strongroom import fetch_url
+    from livery.strongroom.api import fetch_url
 
     with (
         pytest.raises(
@@ -256,7 +256,7 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
     assert (
-        'layers = ["livery.workshop", { import = "livery.workshop.layers.docs",'
+        'layers = ["livery.workshop", { import = "livery.extensions.docs",'
         ' dist = "livery-workshop" }, "acme_tools.brand"]'
     ) in contract
     pyproject = (member / "pyproject.toml").read_text()

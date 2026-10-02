@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
@@ -999,7 +999,7 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     # under test with its argv recorded.
     from types import SimpleNamespace
 
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
     from livery.workshop._backends import _python
 
     _fake, _git_seam, root = workspace

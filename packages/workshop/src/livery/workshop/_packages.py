@@ -2,7 +2,7 @@
 
 A directory under ``packages/`` is a package exactly when it carries a
 ``workshop.toml``; everything the workshop knows about a package it
-learns there. livery.workshop.verify_workspace is the layering lint:
+learns there. livery.workshop.api.verify_workspace is the layering lint:
 contracts present, declared edges agreeing with the native manifests
 in both directions, the graph acyclic, and the one package-specific
 invariant (the forge's stdlib rule) kept.
@@ -130,7 +130,7 @@ class Leftover:
 
 def _ls_files(root: Path, relative: str, *args: str) -> tuple[tuple[str, ...], str]:
     """The files ``git ls-files`` lists under *relative*; git's words if it fails."""
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
         "ls-files", "-z", *args, "--", relative
@@ -176,13 +176,24 @@ def _no_contract(root: Path, directory: Path) -> str:
     """
     if leftover(root, directory).state != RESIDUE:
         return f"{directory.name}: no workshop.toml"
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     return (
         f"{directory.name}: no workshop.toml, and git tracks nothing under"
         f" packages/{directory.name}: it holds only ignored files, what a removed"
         f" package leaves behind. `{footman.prog()} sync` removes the directory"
     )
+
+
+def root_marks(src: Path) -> list[Path]:
+    """The files that mark an importable root under *src*, shallowest first.
+
+    A namespace root carries an ``api.py``, a regular package an
+    ``__init__.py``; the topmost of either on a branch is that
+    branch's root.
+    """
+    marks = [*src.rglob("__init__.py"), *src.rglob("api.py")]
+    return sorted(marks, key=lambda path: (len(path.parts), path))
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:
@@ -279,7 +290,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       import time, plus its one declared lazy extra (PyNaCl), because
       the whole ecosystem stands on it being dependency-free. The one
       exception is the dev plugin under ``_dev``, which may also
-      import livery.footman as footman and toolroom: its only loader is footman's
+      import livery.footman.api as footman and toolroom: its only loader is footman's
       ``plugin()``, and only a workshop workspace mounts layers, so
       both are present whenever it loads.
     """
@@ -645,7 +656,7 @@ def _terminal_is_asked_through_the_runner(
 ) -> list[str]:
     """Violations of the one-answer rule: ask the runner, never the terminal.
 
-    A module that imports the runner has [livery.footman.attended][]
+    A module that imports the runner has [livery.footman.api.attended][]
     in reach, which knows ``--no-input`` and ``--dry-run`` as well as
     the terminal, where asking the terminal ignores both in silence.
     The runner's own sources implement that answer and are exempt, and
@@ -666,7 +677,7 @@ def _terminal_is_asked_through_the_runner(
         problems.extend(
             f"{source.relative_to(root)} asks the terminal with {spelling}():"
             " a module that imports the runner asks"
-            " livery.footman.attended() instead, which knows --no-input"
+            " livery.footman.api.attended() instead, which knows --no-input"
             " and --dry-run as well"
             for spelling in _terminal_calls(parsed.tree)
         )
@@ -782,24 +793,22 @@ def _write_edges_fix(
     return write_edges(context.root)
 
 
-#: The base's own import path, and the namespace its in-wheel layers live under.
+#: The base's own import path, and the namespace extensions live under.
 BASE_MODULE = "livery.workshop"
-LAYERS_NAMESPACE = "livery.workshop.layers"
+LAYERS_NAMESPACE = "livery.extensions"
 
 
 def layer_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
     """Each base module that imports a layer, with the layer named.
 
-    The base (``livery.workshop`` outside ``livery.workshop.layers``)
-    imports no layer: what a layer needs of the base it takes through
+    The base (``livery.workshop``) imports no layer under
+    ``livery.extensions``: what a layer needs of the base it takes through
     the base's seams, and the base reaches a layer only through the
     registries the layer fills at mount.
     """
     problems: list[str] = []
     for module in modules:
         if not module.dotted.startswith(BASE_MODULE + "."):
-            continue
-        if module.dotted.startswith(LAYERS_NAMESPACE + "."):
             continue
         for imported in module.imports:
             if imported == LAYERS_NAMESPACE or imported.startswith(
@@ -813,51 +822,12 @@ def layer_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
     return problems
 
 
-def layers_namespace_inits(root: Path) -> list[str]:
-    """Each layers ``__init__.py`` under *root* carrying more than the path extension.
-
-    The layers directory spans distributions the pkgutil way: every
-    tree's ``__init__.py`` there carries the path extension and
-    nothing else, so the copies never disagree, and the API extractor,
-    which collects nothing under a bare directory, sees a package.
-    """
-    import ast
-
-    problems: list[str] = []
-    for path in sorted(root.glob("packages/*/src/livery/workshop/layers/__init__.py")):
-        tree = ast.parse(path.read_text("utf-8"))
-        body = [node for node in tree.body if not _is_docstring(node)]
-        shape = [type(node).__name__ for node in body]
-        extends = any(
-            isinstance(node, ast.Assign)
-            and any(
-                isinstance(t, ast.Name) and t.id == "__path__" for t in node.targets
-            )
-            for node in body
-        )
-        if shape != ["ImportFrom", "Assign"] or not extends:
-            problems.append(
-                f"{path.relative_to(root).as_posix()}: livery.workshop.layers carries"
-                " the path extension alone (`from pkgutil import extend_path` and"
-                " `__path__ = extend_path(__path__, __name__)`), so a layer from"
-                " another distribution can join it; put nothing else there"
-            )
-    return problems
-
-
-def _is_docstring(node: ast.stmt) -> bool:
-    return (
-        isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Constant)
-        and isinstance(node.value.value, str)
-    )
-
-
 def _base_imports_no_layer(
     modules: tuple[ParsedModule, ...], context: RuleContext
 ) -> list[str]:
-    """The base-imports-no-layer rule with the namespace check beside it."""
-    return layer_imports_in_the_base(modules) + layers_namespace_inits(context.root)
+    """The base-imports-no-layer rule."""
+    del context
+    return layer_imports_in_the_base(modules)
 
 
 # The builtin rules, registered at import the way the builtin checks

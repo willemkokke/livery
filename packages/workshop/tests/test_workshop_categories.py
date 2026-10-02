@@ -226,7 +226,7 @@ def test_site_reads_the_docs_and_the_readme_and_not_the_notes(tmp_path: Path) ->
 def test_the_docs_job_skips_a_notes_only_change_and_builds_otherwise(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop.layers.docs._site import unread_by_the_site
+    from livery.extensions.docs._site import unread_by_the_site
 
     changed: list[str] = ["notes/musings.md"]
 

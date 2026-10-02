@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import textwrap
 
-from livery.footman import Context, parallel, run, step, use_context
+from livery.footman.api import Context, parallel, run, step, use_context
 from livery.footman.params import Secret
 from livery.footman.testing import Runner
 
@@ -49,7 +49,7 @@ def test_rows_and_body_calls_carry_the_request_path(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import task
+            from livery.footman.api import task
 
             @task
             def child() -> int:
@@ -73,7 +73,7 @@ def test_split_nodes_are_distinct_by_ordinal(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import Forward, task
+            from livery.footman.api import Forward, task
 
             @task
             def shared(fix: bool = False): ...
@@ -139,7 +139,7 @@ def test_a_row_that_never_ran_still_has_its_address(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import task
+            from livery.footman.api import task
 
             @task
             def build():
@@ -166,7 +166,7 @@ def test_the_envelope_carries_task_output_and_not_footman_chrome(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import run, task
+            from livery.footman.api import run, task
 
             @task
             def build():
@@ -195,7 +195,7 @@ def test_a_lifted_steps_receipt_stays_out_of_the_envelope_too(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import step, task
+            from livery.footman.api import step, task
 
             @step
             def bundle():

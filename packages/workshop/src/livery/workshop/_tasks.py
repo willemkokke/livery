@@ -3,7 +3,7 @@
 Advertised as the ``footman.tasks`` entry point named
 ``livery.workshop``; a repository's ``tasks.py`` starts with
 ``plugin("livery.workshop")`` and then calls
-[livery.workshop.mount_layers][] itself. Importing this module
+[livery.workshop.api.mount_layers][] itself. Importing this module
 registers the base layer's tree alone (the quality family, the
 content sync, the agent hooks); mounting the further layers from
 inside this import would deliver their tasks under this layer's
@@ -16,7 +16,7 @@ invoked there.
 
 from __future__ import annotations
 
-from livery.footman import fail, task
+from livery.footman.api import fail, task
 
 # Importing registers each module's tasks with footman.
 from livery.workshop import _checks as _checks_module

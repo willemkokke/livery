@@ -9,8 +9,8 @@
       "files": {
         "tasks.py": [
           "from typing import Literal",
-          "from livery.footman import fail, run, task",
-          "from livery.toolroom.tools import pytest, ruff",
+          "from livery.footman.api import fail, run, task",
+          "from livery.toolroom.tools.api import pytest, ruff",
           "",
           "@task",
           "def lint(fix: bool = False):",
@@ -94,7 +94,7 @@
         "tasks.py": [
           "from enum import Enum",
           "from pathlib import Path",
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "",
           "class Colour(Enum):",
           "    RED = \"red\"",
@@ -136,7 +136,7 @@
         "tasks.py": [
           "from pathlib import Path",
           "from typing import Annotated",
-          "from livery.footman import run, task",
+          "from livery.footman.api import run, task",
           "from livery.footman.params import between, check, env, isfile",
           "",
           "def semver(value: str) -> None:",
@@ -184,7 +184,7 @@
       "blurb": "A defaulted option in front, *args behind: bare words and everything after -- land in the variadic tail.",
       "files": {
         "tasks.py": [
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "",
           "@task",
           "def bench(runs: int = 3, *pytest_args):",
@@ -214,7 +214,7 @@
       "blurb": "pre=[…] declares what must happen first; independent prerequisites may run in parallel, and a chain runs left to right.",
       "files": {
         "tasks.py": [
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "",
           "@task",
           "def build(target: str = \"app\"):",
@@ -260,7 +260,7 @@
       "blurb": "run() executes a command; shell=True buys a real pipeline. In the page every child is simulated — the plumbing is real.",
       "files": {
         "tasks.py": [
-          "from livery.footman import run, task",
+          "from livery.footman.api import run, task",
           "",
           "@task",
           "def sizes():",
@@ -303,7 +303,7 @@
         "tasks.py": [
           "from dataclasses import dataclass",
           "from typing import Annotated",
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "from livery.footman.params import Stdout, stdin",
           "",
           "@dataclass",
@@ -343,7 +343,7 @@
       "blurb": "footman.toml rides with the project; sort=true here re-orders --list. Delete the line and definition order returns.",
       "files": {
         "tasks.py": [
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "",
           "@task",
           "def zulu():",
@@ -387,7 +387,7 @@
       "blurb": "include() grafts another module's tasks into this tree — the shared file stays one file, every project mounts it.",
       "files": {
         "tasks.py": [
-          "from livery.footman import include, task",
+          "from livery.footman.api import include, task",
           "",
           "include(\"ci\")",
           "",
@@ -397,7 +397,7 @@
           "    print(\"dev loop\")"
         ],
         "ci.py": [
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "",
           "@task",
           "def lint():",
@@ -428,7 +428,7 @@
       "files": {
         "tasks.py": [
           "from typing import Annotated",
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "from livery.footman.params import ask",
           "",
           "@task",
@@ -465,7 +465,7 @@
         "tasks.py": [
           "from pathlib import Path",
           "from typing import Annotated, Literal",
-          "from livery.footman import task",
+          "from livery.footman.api import task",
           "from livery.footman.params import suggest",
           "",
           "@task",

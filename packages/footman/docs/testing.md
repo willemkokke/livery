@@ -126,7 +126,7 @@ Under the hood this is `Context(dry_run=True, quiet=True)` installed with
 ```python
 import os
 
-from livery.footman import Context, use_context
+from livery.footman.api import Context, use_context
 
 with use_context(Context(env={**os.environ, "CI": "1"})) as ctx:
     deploy()  # runs for real, with CI=1 in its env

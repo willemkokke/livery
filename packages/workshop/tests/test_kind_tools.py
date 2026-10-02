@@ -10,7 +10,7 @@ from typing import ClassVar
 import pytest
 
 from livery.footman.context import Failed
-from livery.toolroom.store import (
+from livery.toolroom.store.api import (
     Artifact,
     Deployment,
     Graph,
@@ -465,7 +465,7 @@ def test_a_graph_is_written_once_and_kept_until_its_version_moves(
     installs the same graph. A file edited or gone since is resolved
     again, and a tool that leaves takes its graph with it.
     """
-    from livery.strongroom import digest_of
+    from livery.strongroom.api import digest_of
 
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
     _records(
@@ -510,7 +510,7 @@ def test_relock_writes_a_graph_again_though_its_version_stands(
     and a lock moves when a person says so: naming the tool is that
     saying, and the tools beside it keep the graphs they had.
     """
-    from livery.strongroom import digest_of
+    from livery.strongroom.api import digest_of
 
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell", "eslint"]\n')
     _records(
@@ -741,7 +741,7 @@ def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
 def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.toolroom.store import StoreError
+    from livery.toolroom.store.api import StoreError
     from workshop_hosts import HERE
 
     elsewhere = "linux-x64" if HERE != "linux-x64" else "macos-arm"
@@ -762,7 +762,7 @@ def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
             supplied.append(name)
             raise StoreError(f"{name}: stood in for")
 
-    monkeypatch.setattr("livery.toolroom.store.Store", _Store)
+    monkeypatch.setattr("livery.toolroom.store.api.Store", _Store)
     # Named outright, the tool refuses: it is locked for another host.
     with pytest.raises(
         Failed, match=rf"tea is locked for {elsewhere} and not for this host"
@@ -784,7 +784,7 @@ def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A host outside the lock's set meets a download it lacks: named, never fatal."""
-    from livery.toolroom.store import StoreError
+    from livery.toolroom.store.api import StoreError
     from workshop_hosts import HERE
 
     elsewhere = "linux-x64" if HERE != "linux-x64" else "macos-arm"
@@ -805,7 +805,7 @@ def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
             supplied.append(name)
             raise StoreError(f"{name}: stood in for")
 
-    monkeypatch.setattr("livery.toolroom.store.Store", _Store)
+    monkeypatch.setattr("livery.toolroom.store.api.Store", _Store)
     # Strict, the refusal names the tool and the host.
     with pytest.raises(Failed, match=rf"tea 1.0.0: not locked for {HERE}"):
         _tools.materialise(root, ("tea",))
@@ -821,7 +821,7 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A consumer names an index, not records; the lock resolves the same."""
-    from livery.strongroom import Entry, Store, Tree, canonical
+    from livery.strongroom.api import Entry, Store, Tree, canonical
 
     root = _workspace(tmp_path, monkeypatch)
     index = root / "index"
@@ -1176,7 +1176,8 @@ class _Probing:
         min_version: str = "",
         **kwargs: object,
     ) -> object:
-        from livery.toolroom.store import Ensured, _engine
+        from livery.toolroom.store import _engine
+        from livery.toolroom.store.api import Ensured
 
         self.calls.append((name, kind, min_version))
         if kind == "system-check":
@@ -1206,7 +1207,7 @@ def _allowing_tea(
     _tools.write_lock(root)
     _Probing.answers = {}
     _Probing.calls = []
-    monkeypatch.setattr("livery.toolroom.store.Store", _Probing)
+    monkeypatch.setattr("livery.toolroom.store.api.Store", _Probing)
     return root
 
 
@@ -1229,7 +1230,7 @@ def test_a_host_copy_absent_or_below_the_floor_is_passed_over_for_the_stores(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The allowance is permission: with no satisfying copy the store serves."""
-    from livery.toolroom.store import StoreError
+    from livery.toolroom.store.api import StoreError
 
     root = _allowing_tea(tmp_path, monkeypatch, floor="1.0")
     _Probing.answers = {
@@ -1265,7 +1266,8 @@ def test_a_satisfying_host_copy_serves_and_a_fresh_receipt_is_reused_without_a_p
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The receipt says host, the version that answered, and the file it found."""
-    from livery.toolroom.store import Ensured, _engine
+    from livery.toolroom.store import _engine
+    from livery.toolroom.store.api import Ensured
     from livery.workshop import _env_tasks
 
     root = _allowing_tea(tmp_path, monkeypatch)

@@ -84,7 +84,7 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     # either way — which is exactly the invariant.
     probe = (
         "import json, sys\n"
-        "from livery.footman import main\n"
+        "from livery.footman.api import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"
@@ -154,7 +154,7 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
 
     probe = (
         "import json, sys\n"
-        "from livery.footman import main\n"
+        "from livery.footman.api import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"

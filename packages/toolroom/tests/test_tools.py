@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+import livery.toolroom.tools.api as tools
 from livery.footman.testing import recording
-from livery.toolroom import tools
 
 
 def _one(call) -> str:
@@ -203,7 +203,7 @@ def test_verb_scoped_colour_flag_rides_with_the_flags(monkeypatch):
 
 
 def test_off_sentinel_emits_the_negation():
-    from livery.toolroom.tools import off
+    from livery.toolroom.tools.api import off
 
     # `off` disables a default-on flag; equivalent to naming it directly.
     assert _one(lambda: tools.zensical.build(clean=True, strict=off)) == (
@@ -215,7 +215,7 @@ def test_off_sentinel_emits_the_negation():
 
 
 def test_off_can_be_variable_driven():
-    from livery.toolroom.tools import off
+    from livery.toolroom.tools.api import off
 
     def render(directory_urls: bool):
         return _one(lambda: tools.mkdocs.build(directory_urls=directory_urls or off))
@@ -804,7 +804,7 @@ def test_off_uses_the_tools_own_negation():
     flag is `--dirty`. The exceptions are extracted from the tools, not
     guessed.
     """
-    from livery.toolroom.tools import _flags, off
+    from livery.toolroom.tools.api import _flags, off
 
     assert _flags({"clean": off}, "mkdocs") == ["--dirty"]
     assert _flags({"use_directory_urls": off}, "mkdocs") == ["--no-directory-urls"]
@@ -848,7 +848,7 @@ def test_in_process_call_shows_the_command_not_the_flattened_title():
 
 
 def test_show_parts_tag_each_token_with_its_role():
-    from livery.toolroom.tools import _show_parts
+    from livery.toolroom.tools.api import _show_parts
 
     parts = _show_parts("ruff", ["check"], ("src",), {"fix": True, "select": ["E"]})
     assert parts == (
@@ -864,7 +864,7 @@ def test_show_parts_tag_each_token_with_its_role():
 def test_the_shown_form_is_separated_the_executed_form_is_attached():
     # `_emit` is the single source both draw from. `_flags` (executed)
     # attaches long values; `_show_parts` (shown) keeps them separated.
-    from livery.toolroom.tools import _emit, _flags, _show_parts
+    from livery.toolroom.tools.api import _emit, _flags, _show_parts
 
     kwargs = {"select": ["E", "F"], "fix": True}
     assert list(_emit(kwargs, "ruff")) == [
@@ -878,7 +878,7 @@ def test_the_shown_form_is_separated_the_executed_form_is_attached():
 
 
 def test_execution_attaches_only_where_a_space_would_break():
-    from livery.toolroom.tools import _flags, _show_parts
+    from livery.toolroom.tools.api import _flags, _show_parts
 
     def shown(**kw):
         return " ".join(t for _, t in _show_parts("git", ["log"], (), kw))
@@ -1297,7 +1297,7 @@ def test_a_flag_treats_an_argv_as_the_plain_list_it_is():
 
 
 def test_a_secret_option_value_is_redacted_in_the_shown_line():
-    from livery.footman import Secret
+    from livery.footman.api import Secret
 
     cmd = _one(lambda: tools.git.commit(message="x", author=Secret("hunter2")))
     assert "hunter2" not in cmd
@@ -1305,7 +1305,7 @@ def test_a_secret_option_value_is_redacted_in_the_shown_line():
 
 
 def test_a_secret_positional_is_redacted_in_the_shown_line():
-    from livery.footman import Secret
+    from livery.footman.api import Secret
 
     cmd = _one(lambda: tools.git.add(Secret("s3cret")))
     assert "s3cret" not in cmd
@@ -1313,7 +1313,7 @@ def test_a_secret_positional_is_redacted_in_the_shown_line():
 
 
 def test_a_secret_global_bound_via_flags_is_redacted_wholesale():
-    from livery.footman import Secret
+    from livery.footman.api import Secret
 
     # `.flags()` lands in the chain's base as an attached token; the whole
     # token redacts — hiding the flag name too errs in the safe direction.
@@ -1323,7 +1323,7 @@ def test_a_secret_global_bound_via_flags_is_redacted_wholesale():
 
 
 def test_a_stringified_secret_passes_in_the_clear():
-    from livery.footman import Secret
+    from livery.footman.api import Secret
 
     cmd = _one(lambda: tools.git.commit(message=f"by {Secret('alice')}"))
     assert "alice" in cmd

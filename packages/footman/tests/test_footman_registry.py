@@ -6,7 +6,8 @@ import types
 
 import pytest
 
-from livery.footman import Context, registry
+from livery.footman import registry
+from livery.footman.api import Context
 from livery.footman.params import Forward
 from livery.footman.registry import Group, RegistrationError
 

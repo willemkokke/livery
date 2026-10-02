@@ -294,11 +294,12 @@ def _whole_gate(
     """
     import contextlib
 
+    import livery.toolroom.tools.api as tools
+
     # The block from its owner, not through the gate's re-export: the
     # name patched below is the gate's, the behaviour wrapped is
     # footman's own.
-    from livery.footman import parallel as real_parallel
-    from livery.toolroom import tools
+    from livery.footman.api import parallel as real_parallel
 
     ran: list[str] = []
     trees: list[str] = []

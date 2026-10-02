@@ -11,7 +11,7 @@ from livery.footman.testing import Runner
 TASKS = textwrap.dedent(
     """
     import os
-    from livery.footman import task
+    from livery.footman.api import task
     from livery.footman.compose import plugin
 
     plugin("footman.env_files")

@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.strongroom import (
+from livery.strongroom import _groups, _lifecycle
+from livery.strongroom.api import (
     Digest,
     Entry,
     FormatError,
@@ -24,8 +25,6 @@ from livery.strongroom import (
     UnknownNamespace,
     Version,
     WriteOnceRefused,
-    _groups,
-    _lifecycle,
     digest_of,
 )
 

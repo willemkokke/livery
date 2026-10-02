@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
-from livery.forge import Forge, Registry, Repository
+from livery.forge.api import Forge, Registry, Repository
 from livery.forge.testing import SCENARIOS, FakeDriver, FakeForge, ForgeDriver, Scenario
 
 

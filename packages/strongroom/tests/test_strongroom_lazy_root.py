@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import livery.strongroom as package
+import livery.strongroom.api as package
 
 
 def _loaded_after(statement: str) -> list[str]:
@@ -22,12 +22,13 @@ def _loaded_after(statement: str) -> list[str]:
 
 
 def test_importing_the_root_loads_no_module_of_the_package() -> None:
-    assert _loaded_after("import livery.strongroom") == []
+    assert _loaded_after("import livery.strongroom.api") == ["livery.strongroom.api"]
 
 
 def test_one_name_loads_only_the_module_that_defines_it() -> None:
-    assert _loaded_after("from livery.strongroom import FormatError") == [
-        "livery.strongroom._canonical"
+    assert _loaded_after("from livery.strongroom.api import FormatError") == [
+        "livery.strongroom._canonical",
+        "livery.strongroom.api",
     ]
 
 

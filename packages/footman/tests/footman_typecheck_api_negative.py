@@ -10,7 +10,7 @@ and BOTH checkers turn the line red — mypy through `warn_unused_ignores`,
 basedpyright through the line-1 pragma. The ignore is the assertion.
 """
 
-from livery.footman import Runner, parallel, run, select, task, track
+from livery.footman.api import Runner, parallel, run, select, task, track
 from livery.footman.registry import requires_tool
 
 

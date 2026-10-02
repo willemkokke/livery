@@ -1,7 +1,7 @@
 """The HTTP plumbing every REST backend shares.
 
 One JSON client over urllib: authenticated requests, refusal of
-redirects, error translation into livery.forge.ForgeError with the
+redirects, error translation into livery.forge.api.ForgeError with the
 server's words attached, and pagination that is complete or raises.
 The network seam is the opener, anything satisfying
 livery.forge.testing.UrlOpener, so a backend records and replays its
@@ -53,7 +53,7 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
     misconfigured or hostile server could collect the token, and a
     write could silently become a read. Returning None makes urllib
     raise the 3xx as an HTTPError, which the client renders as a
-    livery.forge.ForgeError naming the location.
+    livery.forge.api.ForgeError naming the location.
     """
 
     def redirect_request(
@@ -122,7 +122,7 @@ class JsonClient:
 
         Returns the parsed JSON body ({} for an empty one). Statuses in
         *none_on* return None instead of raising; every other HTTP
-        error raises livery.forge.ForgeError with the status as a
+        error raises livery.forge.api.ForgeError with the status as a
         number and the body verbatim in ``detail``. An unreachable
         server raises the same type with no status. A redirect is
         refused rather than followed and raises with the 3xx status.
@@ -357,7 +357,7 @@ class JsonClient:
         *fetch* takes a 1-based page number and returns that page's
         items; a batch shorter than livery.forge._http.PAGE_SIZE ends
         the walk. Hitting livery.forge._http.PAGE_CAP with a full last
-        page raises livery.forge.ForgeError naming *subject*: the
+        page raises livery.forge.api.ForgeError naming *subject*: the
         listing is not complete, and a prefix is never the answer.
         """
         items: list[Any] = []

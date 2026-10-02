@@ -32,9 +32,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ParamSpec
 
-import livery.footman as footman
-from livery.footman import Arg, doc, fail, group
-from livery.forge import ForgeError, PullRequest, Repository, Unsupported
+import livery.footman.api as footman
+from livery.footman.api import Arg, doc, fail, group
+from livery.forge.api import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
@@ -195,7 +195,7 @@ def _follow_merge_state(
     """Drive *act* to a decided state; merge means as soon as possible.
 
     A 405, or the 422 GitLab answers while its mergeability recompute
-    runs, classifies through [livery.forge.classify_merge_refusal][]
+    runs, classifies through [livery.forge.api.classify_merge_refusal][]
     with the pull request, its combined status and the forge's
     published hold fetched fresh.
     In-progress states follow through to completion, the task's own
@@ -205,7 +205,7 @@ def _follow_merge_state(
     state first verifies every required context has a reporter,
     because a context nothing reports never settles.
     """
-    from livery.forge import classify_merge_refusal
+    from livery.forge.api import classify_merge_refusal
 
     settling_checked = False
     last_state = ""
@@ -679,7 +679,7 @@ def _heal_context_rename(
         spelled = required_context_string(kind, ours)
         if protection is not None and spelled in protection.required_contexts:
             return  # already applied: the re-run is quietly green
-        from livery.forge import RepoConfig
+        from livery.forge.api import RepoConfig
 
         try:
             admin_repo.configure(RepoConfig(required_contexts=(spelled,)))
@@ -1360,7 +1360,7 @@ def submit_merge(
 
     Waits for a running CI's verdict and follows the forge's own
     holds to completion; refuses red or behind-base at once, saying
-    why. Idempotent through livery.forge.PullRequests.merge_now.
+    why. Idempotent through livery.forge.api.PullRequests.merge_now.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository

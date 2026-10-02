@@ -11,8 +11,8 @@ never every version of every tool. Either way a deployment's digest is the diges
 its canonical JSON, so a lock written against the records names the
 same deployment a consumer fetches from the index.
 
-Reach for [livery.toolroom.store.Catalogue.of_records][] and
-[livery.toolroom.store.Catalogue.of_index][].
+Reach for [livery.toolroom.store.api.Catalogue.of_records][] and
+[livery.toolroom.store.api.Catalogue.of_index][].
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from livery.strongroom import Digest, Entry, FolderSource, HttpSource, Source, Tree
-from livery.strongroom import Store as ObjectStore
+from livery.strongroom.api import Digest, Entry, FolderSource, HttpSource, Source, Tree
+from livery.strongroom.api import Store as ObjectStore
 from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import Home
 from livery.toolroom.store._record import (

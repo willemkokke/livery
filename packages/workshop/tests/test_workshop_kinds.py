@@ -25,6 +25,9 @@ _FAILURES = (BaseException,)
 class _FakeStamper:
     """A stamper that changes nothing; the fakes' version home."""
 
+    def homes(self) -> list[Path]:
+        return []
+
     def stamp(self, version: str) -> list[str]:
         return []
 

@@ -1,6 +1,6 @@
 """The layering lint, run over this workspace.
 
-The engine lives in livery.workshop.verify_workspace; this test keeps
+The engine lives in livery.workshop.api.verify_workspace; this test keeps
 the whole workspace honest on every gate run: contracts present,
 declared edges agreeing with the native manifests both ways, the
 graph acyclic, and livery.forge stdlib-only at import time. The
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from livery.workshop import verify_workspace
+from livery.workshop.api import verify_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 

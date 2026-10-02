@@ -43,7 +43,7 @@ test = [
 ]
 
 [project.entry-points."footman.tasks"]
-"livery.toolroom.bench" = "livery.toolroom.bench"
+"livery.toolroom.bench" = "livery.toolroom.bench.api"
 
 [project.entry-points.pytest11]
 # Every test session with the bench installed runs apart from the

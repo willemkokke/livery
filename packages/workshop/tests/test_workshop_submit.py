@@ -17,8 +17,8 @@ from typing import Any, cast
 
 import pytest
 
-from livery.footman import Failed
-from livery.forge import ForgeError, StateFilter
+from livery.footman.api import Failed
+from livery.forge.api import ForgeError, StateFilter
 from livery.forge.testing import FakeForge, Outcome
 from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, status_flow
 from livery.workshop._git_ops import GitOps
@@ -888,7 +888,7 @@ def test_rerun_runs_the_whole_run_when_only_the_verdict_job_failed(
 def test_rerun_keeps_failed_only_when_a_leg_failed(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import Job
+    from livery.forge.api import Job
 
     fake, git = rig
     git.outcome = "failure"
@@ -1290,7 +1290,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import Protection
+    from livery.forge.api import Protection
 
     fake, git = rig
     _contract(git.root, "gate")
@@ -1341,7 +1341,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
 def test_a_refused_admin_write_teaches_instead_of_half_healing(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
 
     fake, git = rig
     _contract(git.root, "gate")
@@ -1484,7 +1484,7 @@ def test_the_gate_skips_a_tree_this_machines_check_proved(
     from livery.workshop import _gate_record
 
     fake, git = rig
-    monkeypatch.setattr("livery.footman.data_dir", lambda: git.root.parent / "home")
+    monkeypatch.setattr("livery.footman.api.data_dir", lambda: git.root.parent / "home")
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
     _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
@@ -1946,7 +1946,7 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
 
     fake, git = rig
     repo = _repo(fake)
@@ -2049,7 +2049,7 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.workshop._verdict import EXIT_CI_FAILED, JobWatch, elapsed_label, follow
 
     assert [elapsed_label(s) for s in (0, 37, 65, 3725)] == [

@@ -10,7 +10,7 @@ import pytest
 
 # The site's jobs are the docs layer's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.workshop.layers.docs._tasks  # noqa: F401
+import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop import _points
 
 _FAILURES = (BaseException,)
@@ -137,8 +137,8 @@ def test_each_point_names_its_workflow_and_events() -> None:
     # The base declares the check and the verdict; the docs job is the
     # docs layer's, in place once its tasks module is imported.
     assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "gate"]
+    from livery.extensions.docs import _tasks as docs_tasks
     from livery.workshop._points import point_by_name
-    from livery.workshop.layers.docs import _tasks as docs_tasks
 
     del docs_tasks
     assert [job.name for job in point_by_name(None)["gate"].jobs] == [
@@ -353,7 +353,7 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
 def test_the_runner_spawns_each_entry_with_the_legs_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -523,7 +523,7 @@ def test_a_dispatched_points_inputs_reach_its_entries(
 ) -> None:
     import json
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -575,7 +575,7 @@ def test_a_dispatched_points_inputs_reach_its_entries(
 def test_the_nightly_point_runs_the_whole_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -694,7 +694,7 @@ def test_a_job_that_went_red_still_keeps_its_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A red job's timeline is the one most worth having."""
-    from livery.footman import Failed
+    from livery.footman.api import Failed
     from livery.workshop import _traces
 
     root = _root(tmp_path)

@@ -24,10 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import livery.footman as footman
-from livery.footman import fail
-from livery.toolroom import tools
-from livery.toolroom.tools import (
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import fail
+from livery.toolroom.tools.api import (
     basedpyright,
     mypy,
     pyrefly,
@@ -145,7 +145,7 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
     one checker, ``basedpyright``, ``mypy``, ``ty`` or ``pyrefly``,
     the way each is a check of the typecheck role.
     """
-    from livery.footman import parallel, step
+    from livery.footman.api import parallel, step
 
     def based() -> None:
         basedpyright(*paths, warnings=True)
@@ -182,12 +182,18 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
 def run_typecomplete(packages: tuple[Package, ...]) -> None:
     """Verify each package's public API is 100% type-complete.
 
-    The importable module is derived from the distribution name
-    (``livery-forge`` is ``livery.forge``); the exit code is the
-    verdict, 0 only when every public symbol has a fully known type.
+    Each of the package's roots ([livery.workshop._backends._python.module_roots][])
+    is verified, through its ``api`` module where the root is a
+    namespace; a package with no src tree is verified under the module
+    its distribution name spells. The exit code is the verdict, 0 only
+    when every public symbol has a fully known type.
     """
     for package in packages:
-        basedpyright(verifytypes=module_for(package), ignoreexternal=True)
+        src = package.directory / "src"
+        for root in module_roots(package) or (module_for(package),):
+            api = src.joinpath(*root.split("."), "api.py")
+            target = f"{root}.api" if api.is_file() else root
+            basedpyright(verifytypes=target, ignoreexternal=True)
 
 
 def module_for(package: Package) -> str:
@@ -240,6 +246,18 @@ class _Stamper:
     def __init__(self, package: Package) -> None:
         self._package = package
 
+    def homes(self) -> list[Path]:
+        """``pyproject.toml``, and every module that may carry ``__version__``.
+
+        That is a namespace root's ``api.py`` or a regular package's
+        ``__init__.py``.
+        """
+        src = self._package.directory / "src"
+        modules = (
+            [*src.rglob("__init__.py"), *src.rglob("api.py")] if src.is_dir() else []
+        )
+        return [self._package.directory / "pyproject.toml", *sorted(modules)]
+
     def stamp(self, version: str) -> list[str]:
         """Write *version* into pyproject and ``__version__``; what changed."""
         import re as _re
@@ -259,7 +277,7 @@ class _Stamper:
         if stamped != text:
             pyproject.write_text(stamped, encoding="utf-8")
             changed.append("pyproject.toml")
-        for init in (self._package.directory / "src").rglob("__init__.py"):
+        for init in self.homes()[1:]:
             text = init.read_text("utf-8")
             stamped, count = _re.subn(
                 r'^__version__ = "[^"]+"$',
@@ -1586,7 +1604,8 @@ def module_roots(package: Package) -> tuple[str, ...]:
     """The import prefixes *package* owns, read from its src tree.
 
     A prefix is the topmost directory under ``src`` holding an
-    ``__init__.py`` on its branch. Read from the tree rather than
+    ``api.py`` (a namespace root) or an ``__init__.py`` (a regular
+    package) on its branch. Read from the tree rather than
     derived from the distribution name: three distributions share the
     ``livery.toolroom`` namespace, so a transformed name would
     attribute two of them to the third. A package with no python
@@ -1596,14 +1615,16 @@ def module_roots(package: Package) -> tuple[str, ...]:
     if not src.is_dir():
         return ()
     roots: list[str] = []
-    for init in sorted(src.rglob("__init__.py")):
+    from livery.workshop._packages import root_marks
+
+    for init in root_marks(src):
         dotted = ".".join(init.relative_to(src).parts[:-1])
         if not dotted:
             continue
         if any(dotted == root or dotted.startswith(root + ".") for root in roots):
             continue
         roots.append(dotted)
-    return tuple(roots)
+    return tuple(sorted(roots))
 
 
 def plugin_modules(package: Package) -> tuple[str, ...]:
@@ -1613,7 +1634,8 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     construction, and whatever the layer stack mounts with it, so its
     imports of either are not dependencies of the distribution. The
     fact lives in the package's own metadata; nothing here needs to
-    be told a second time.
+    be told a second time. An entry naming a namespace root's ``api``
+    stands for the root.
     """
     pyproject = package.directory / "pyproject.toml"
     if not pyproject.is_file():
@@ -1623,7 +1645,10 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     modules = []
     for group in ("footman.tasks", "footman.builtin"):
         for target in (groups.get(group) or {}).values():
-            modules.append(str(target).partition(":")[0])
+            module = str(target).partition(":")[0]
+            # A root's api module is the root's face: a plugin named
+            # there is the whole root, as a regular package's root was.
+            modules.append(module.removesuffix(".api"))
     return tuple(modules)
 
 

@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
-from livery.footman import task, parallel
-from livery.toolroom.tools import basedpyright, pytest, ruff
+from livery.footman.api import task, parallel
+from livery.toolroom.tools.api import basedpyright, pytest, ruff
 
 
 @task

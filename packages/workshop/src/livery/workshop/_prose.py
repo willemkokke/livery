@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-import livery.footman as footman
+import livery.footman.api as footman
 from livery.workshop._materialise import (
     materialise_bytes,
     materialise_file,

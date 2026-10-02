@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from _pytest.outcomes import Skipped  # the skip a fixture raises
 
-from livery.toolroom import tools
+import livery.toolroom.tools.api as tools
 from livery.workshop._backends import _python, _python_nanobind
 from livery.workshop._kinds import (
     is_python_kind,
@@ -454,7 +454,7 @@ def test_the_build_rig_skips_where_the_native_tools_are_not_here(
 def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.toolroom.store import Home
+    from livery.toolroom.store.api import Home
     from livery.workshop import _tools
 
     home = Home(tmp_path / "toolroom")

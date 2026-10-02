@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import livery.footman as footman
-from livery.footman import fail
+import livery.footman.api as footman
+from livery.footman.api import fail
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
@@ -176,19 +176,15 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     processes read its metadata.
     """
     package = plan.package
-    touched = [package.directory / "pyproject.toml"]
-    src = package.directory / "src"
-    if src.is_dir():
-        touched += sorted(src.rglob("__init__.py"))
+    stamper = backend_for(package).stamp_version(package)
+    touched = [path for path in stamper.homes() if path.is_file()]
     readme = package.directory / "README.md"
     if readme.is_file():
         touched.append(readme)
     snapshots = {path: path.read_bytes() for path in touched}
     stamps = {path: path.stat() for path in touched}
     try:
-        backend_for(package).stamp_version(package).stamp(
-            semver_to_pep440(plan.version)
-        )
+        stamper.stamp(semver_to_pep440(plan.version))
         notes = release_notes()
         excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():
@@ -218,10 +214,10 @@ def dev_release(
     refusal costs nothing. With ``local`` (or with no custom index
     configured, which degrades to the same run and says so) nothing
     leaves the machine and nothing is asked. A publish always confirms
-    per member. Where nobody can answer, ``livery.footman.confirm``
+    per member. Where nobody can answer, ``livery.footman.api.confirm``
     takes its default no and the refusal teaches the explicit
     ``--yes``: a decline and an unanswered question are told apart by
-    [livery.footman.attended][], which knows about ``--no-input`` and
+    [livery.footman.api.attended][], which knows about ``--no-input`` and
     ``--dry-run`` as well as the terminal, so silence never publishes
     under any of them.
     """

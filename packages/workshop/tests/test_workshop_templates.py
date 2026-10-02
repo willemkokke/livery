@@ -15,7 +15,7 @@ import pytest
 
 # The site's jobs are the docs layer's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.workshop.layers.docs._tasks  # noqa: F401
+import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import (
     apply_packages,
@@ -198,7 +198,7 @@ def test_a_render_is_made_once_per_input_and_again_after_an_edit(
 ) -> None:
     import time
 
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
     from livery.workshop._templates import render
 
     template = tmp_path / "template"
@@ -334,7 +334,7 @@ def test_the_emitters_call_the_running_brand(
 ) -> None:
     import re
 
-    import livery.footman as footman
+    import livery.footman.api as footman
     from livery.workshop._ci_generate import generate
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -690,7 +690,7 @@ def test_the_shell_and_completion_lines_run_the_brand() -> None:
 def test_the_pipe_guard_recognises_the_brand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import livery.footman as footman
+    import livery.footman.api as footman
     from livery.workshop._hooks import _runs_runner
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -718,7 +718,7 @@ def _build_instance_from_git_template(base: Path) -> None:
     import shutil
     import subprocess
 
-    from livery.workshop import __version__
+    from livery.workshop.api import __version__
 
     repo = base / "template-repo"
     shutil.copytree(TEMPLATES, repo)
@@ -755,7 +755,7 @@ def test_the_remote_update_arm_brands_and_reemits(
     # The arm every instance takes: no local template directory, the
     # source is a git repository, and rebranding is exactly this run
     # under the branded CLI.
-    import livery.footman as footman
+    import livery.footman.api as footman
     from livery.workshop import _templates
     from livery.workshop._update import _align_answers_source, refresh_rendered
 

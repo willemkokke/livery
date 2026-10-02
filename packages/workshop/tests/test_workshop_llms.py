@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery.workshop.layers.docs._llms import (
+from livery.extensions.docs._llms import (
     first_sentence,
     llms_files,
     page_url,
@@ -25,7 +25,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root.mkdir()
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop", "livery.workshop.layers.docs"]\n'
+        'layers = ["livery.workshop", "livery.extensions.docs"]\n'
         f"{docs_table}"
     )
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
@@ -43,7 +43,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
 
 
 def _mounted(root: Path) -> Path:
-    from livery.workshop.layers.docs._site import (
+    from livery.extensions.docs._site import (
         generate_api_pages,
         generate_changelog_pages,
         mount_package_docs,

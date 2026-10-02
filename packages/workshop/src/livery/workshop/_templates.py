@@ -28,9 +28,9 @@ from typing import Annotated, Any
 
 import yaml
 
-import livery.footman as footman
-from livery.footman import doc, fail, group
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail, group
 from livery.workshop._contract import load_contract
 from livery.workshop._layers import layer_entries, workspace_root
 from livery.workshop._materialise import write_lf
@@ -445,7 +445,7 @@ def _probe_ref(source: str, ref: str) -> None:
     """
     # copier spells an explicit git source with a `git+` prefix; git
     # itself does not understand it.
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     listing = tools.git.opts(
         # ls-remote never reads the working directory; the explicit

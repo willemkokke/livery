@@ -1265,7 +1265,7 @@ def errors(
     """
     import ast
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     def template(node: ast.expr) -> str | None:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):

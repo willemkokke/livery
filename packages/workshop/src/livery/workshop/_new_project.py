@@ -23,15 +23,15 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail
-from livery.forge import Forge, ForgeError, Repository
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail
+from livery.forge.api import Forge, ForgeError, Repository
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import new as new_group
 
 if TYPE_CHECKING:
-    from livery.toolroom.tools import Result
+    from livery.toolroom.tools.api import Result
 
 #: The web host each kind means when the contract carries no URL.
 _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
@@ -214,7 +214,7 @@ def new_project(
             # The site's layer rides in the workshop wheel: listed by
             # its import path, its distribution the workshop's own.
             spelled += (
-                ', { import = "livery.workshop.layers.docs", dist = "livery-workshop" }'
+                ', { import = "livery.extensions.docs", dist = "livery-workshop" }'
             )
         lines = [
             "[workspace]",

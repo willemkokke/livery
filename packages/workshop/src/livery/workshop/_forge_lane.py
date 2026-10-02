@@ -13,8 +13,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery.footman import fail
-from livery.forge import (
+import livery.toolroom.tools.api as tools
+from livery.footman.api import fail
+from livery.forge.api import (
     Forge,
     ForgeError,
     GiteaForge,
@@ -22,7 +23,6 @@ from livery.forge import (
     GitlabForge,
     Repository,
 )
-from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._tokens import admin_token, forge_token, host_qualifier
 
@@ -83,7 +83,7 @@ def this_forge(root: Path) -> Forge:
     set, the backend's own documented fallback decides.
 
     Returns:
-        The connected [livery.forge.Forge][].
+        The connected [livery.forge.api.Forge][].
     """
     contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}

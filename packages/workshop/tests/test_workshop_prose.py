@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import livery.workshop
+import livery.workshop.api
 from livery.workshop import _checks, _prose, _tools
 from livery.workshop._checks import CheckRecord, GateContext, register_check
 from livery.workshop._prose import (
@@ -31,7 +31,7 @@ from livery.workshop._prose import (
 )
 from livery.workshop._sync import sync_workspace
 
-WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
+WORKSHOP_CONTENT = Path(livery.workshop.api.__file__).resolve().parent / "content"
 
 
 @pytest.fixture

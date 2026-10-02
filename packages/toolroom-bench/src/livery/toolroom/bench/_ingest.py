@@ -35,11 +35,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store import (
-        Deployment,
-        Record,
-        Store,
-    )
+    from livery.toolroom.store.api import Deployment, Record, Store
 
 import fnmatch
 import stat
@@ -154,7 +150,7 @@ def verify(
     Raises:
         RecordError: when the record does not track *version*.
     """
-    from livery.toolroom.store import StoreError, resolve
+    from livery.toolroom.store.api import StoreError, resolve
 
     delta = record.delta_for(version)
     before = previous_with_hosts(record, version) if previous is None else previous
@@ -226,7 +222,7 @@ def _check_tree(
     into: Path,
 ) -> list[Finding]:
     """The checks over one host's unpacked tree, exclusions applied."""
-    from livery.toolroom.store import PACKAGE_VAR
+    from livery.toolroom.store.api import PACKAGE_VAR
 
     found: list[Finding] = []
     windows = host.startswith("windows")

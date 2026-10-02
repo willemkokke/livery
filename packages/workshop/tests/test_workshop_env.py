@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop._clean import CleanPlan, clean_tree, plan_clean, render_plan
 from livery.workshop._env_tasks import (
     EnvDelta,
@@ -46,7 +46,7 @@ def _isolated_shared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     home = tmp_path / "shared-home"
     home.mkdir(exist_ok=True)
-    monkeypatch.setattr("livery.footman.config_dir", lambda: home)
+    monkeypatch.setattr("livery.footman.api.config_dir", lambda: home)
 
 
 # --- the cascade: refusals and edge rows first ---
@@ -110,7 +110,7 @@ def test_the_shared_dir_defaults_to_the_runners_config_dir(
     home = tmp_path / "runner-config"
     home.mkdir()
     (home / ".repo.shared.env").write_text("FROM_SHARED=yes\n")
-    monkeypatch.setattr("livery.footman.config_dir", lambda: home)
+    monkeypatch.setattr("livery.footman.api.config_dir", lambda: home)
     stack = load_cascade(root, root, environ={})
     assert stack.values["FROM_SHARED"] == "yes"
 
@@ -627,7 +627,7 @@ def test_the_cascade_hook_enters_the_environment_for_the_process(
 ) -> None:
     from typing import cast
 
-    import livery.footman as footman
+    import livery.footman.api as footman
     from livery.workshop import _env_tasks
 
     ruff = str(tmp_path / "store" / "ruff")
@@ -661,7 +661,7 @@ def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     monkeypatch.delenv("CASCADE_FLAG", raising=False)
     from typing import cast
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     _env_tasks.apply_cascade(cast(footman.Invocation, None))
     try:
@@ -991,7 +991,7 @@ def test_an_absent_rung_cannot_mask_the_committed_value(tmp_path: Path) -> None:
 def test_env_set_ci_writes_through_the_protocol(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge import RepoConfig, Unsupported
+    from livery.forge.api import RepoConfig, Unsupported
     from livery.workshop._env_tasks import env_set
 
     stored: dict[str, str] = {}
@@ -1051,8 +1051,8 @@ def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner
 def test_ci_run_sweeps_the_tool_store_only_on_a_github_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.strongroom import LockTimeout, Subject
-    from livery.toolroom.store import Home
+    from livery.strongroom.api import LockTimeout, Subject
+    from livery.toolroom.store.api import Home
     from livery.workshop._ci_tasks import sweep_tool_store
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path))

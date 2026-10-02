@@ -7,8 +7,8 @@ go, and the fact is kept in every tier. Both are canonical JSON, and
 neither is an object in the store: a record lives beside the ref, a
 tombstone under the object's path.
 
-Reach for [livery.strongroom.RefRecord][] and
-[livery.strongroom.Tombstone][].
+Reach for [livery.strongroom.api.RefRecord][] and
+[livery.strongroom.api.Tombstone][].
 """
 
 from __future__ import annotations

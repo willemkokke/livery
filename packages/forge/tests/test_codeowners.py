@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from livery.forge import CodeownersEntry, GiteaForge, GithubForge, GitlabForge
+from livery.forge.api import CodeownersEntry, GiteaForge, GithubForge, GitlabForge
 from livery.forge.testing import Cassette, Exchange, FakeForge, ReplayOpener
 
 ENTRIES = (

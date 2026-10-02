@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated
 
-from livery.footman import doc, fail, group, prog
+from livery.footman.api import doc, fail, group, prog
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.toolroom.store import Lock
+    from livery.toolroom.store.api import Lock
 
 tools = group(
     "tools", help="The tools the workspace requires: declare, lock, upgrade, restub"
@@ -33,7 +33,7 @@ def _root() -> Path:
 
 
 def _report(lock: Lock, moved: tuple[str, ...] = ()) -> None:
-    from livery.toolroom.store import LOCK_FILE
+    from livery.toolroom.store.api import LOCK_FILE
 
     for name in sorted(lock.tools):
         mark = "  moved" if name in moved else ""
@@ -77,7 +77,7 @@ def tools_lock(
     what an install asks for when it refuses because the runtime has no
     build for what the graph pins.
     """
-    from livery.toolroom.store import LOCK_FILE
+    from livery.toolroom.store.api import LOCK_FILE
     from livery.workshop._tools import (
         current_lock,
         lock_is_current,
@@ -131,7 +131,7 @@ def tools_add(
     written. A spelling that is not a requirement refuses before
     anything is written.
     """
-    from livery.toolroom.store import Requirement
+    from livery.toolroom.store.api import Requirement
     from livery.workshop._tools import declare, materialise, stub_lines, write_lock
 
     root = _root()
@@ -194,7 +194,7 @@ def sync_tools(
     task, and a task may not change the process directory, so the
     root travels as a value. The flags mean what the task's do.
     """
-    from livery.toolroom.store import LOCK_FILE
+    from livery.toolroom.store.api import LOCK_FILE
     from livery.workshop._sync import materialise_tools
     from livery.workshop._tools import lock_is_current, write_lock
 

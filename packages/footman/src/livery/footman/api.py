@@ -9,7 +9,8 @@ background rebuild once the cache goes stale.
 The console-script entry lives here and is deliberately thin: completion must
 dispatch to the stdlib-only hot path before importing the framework or the
 user's tasks, so `main` checks `--complete` first and everything else is
-imported lazily. A bare `from livery import footman` pays for nothing but this module.
+imported lazily. A bare `import livery.footman.api as footman` pays for
+nothing but this module.
 """
 
 from __future__ import annotations
@@ -326,8 +327,8 @@ def main(tasks_file: str | None = None) -> None:
 
 
 def __getattr__(name: str) -> object:
-    # Lazy re-export: `from livery.footman import task, group` works without paying the
-    # registry import on a bare `import footman` (the completion hot path).
+    # Lazy re-export: `from livery.footman.api import task, group` works without
+    # paying the registry import on a bare import (the completion hot path).
     if name in (
         "task",
         "group",

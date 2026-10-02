@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from forge_github_driver import GithubConformanceDriver
-from livery.forge import Unsupported
 from livery.forge._github import _resolve_token
+from livery.forge.api import Unsupported
 from livery.forge.testing import (
     SCENARIOS,
     Cassette,

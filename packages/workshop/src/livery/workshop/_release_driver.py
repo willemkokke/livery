@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail
-from livery.forge import ForgeError, Repository, Run
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail
+from livery.forge.api import ForgeError, Repository, Run
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
@@ -1145,7 +1145,7 @@ def workflow_release_publish(
     """
     import os
 
-    from livery.forge import SimpleRegistry
+    from livery.forge.api import SimpleRegistry
     from livery.workshop._kinds import kind_for
     from livery.workshop._layers import workspace_root
     from livery.workshop._publish import Registry, publish_release

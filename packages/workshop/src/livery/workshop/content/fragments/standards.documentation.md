@@ -154,7 +154,7 @@ shape, and names the fix that would let someone simplify.
   RST anywhere, in docstrings or comments.
 - The plain-language and voice rules apply to docstrings unchanged.
 - Refer to other objects by their full public import path, wrapped
-  as a reference: `[livery.forge.Forge][]`. The renderer links the
+  as a reference: `[livery.forge.api.Forge][]`. The renderer links the
   path across packages and ecosystems; a bare dotted path renders as
   plain text and links nothing.
 

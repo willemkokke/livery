@@ -13,9 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail, group, suggest
-from livery.forge import Forge, RepoConfig, Repository
+import livery.footman.api as footman
+from livery.footman.api import doc, fail, group, suggest
+from livery.forge.api import Forge, RepoConfig, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
@@ -293,7 +293,7 @@ def workflow_configure(
 
 def assert_configuration(root: Path) -> None:
     """The configure flow, root-taking so birth can call it too."""
-    from livery.forge import ForgeError, Unsupported
+    from livery.forge.api import ForgeError, Unsupported
     from livery.workshop._forge_lane import admin_forge, admin_repository
     from livery.workshop._governance import unknown_owners
 

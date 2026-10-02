@@ -19,7 +19,7 @@ can't use — it would map to `--help`, which is always intercepted (see
 ## Decorator surface
 
 ```python
-from livery.footman import task, group, pre_tasks
+from livery.footman.api import task, group, pre_tasks
 
 
 @task  # bare

@@ -21,9 +21,10 @@ import time
 
 import pytest
 
-from livery.footman import _manifest, _schedule, parallel, run
+from livery.footman import _manifest, _schedule
 from livery.footman._split import split_chain
 from livery.footman._step import step
+from livery.footman.api import parallel, run
 from livery.footman.context import RunTimeout, TimedOut
 from livery.footman.registry import Group
 
@@ -417,7 +418,7 @@ def test_a_late_body_reports_what_it_actually_did():
 def test_a_late_body_that_also_failed_keeps_its_own_reason():
     """The deadline is the verdict, but the body's reason is what the author
     needs to read — so it rides along rather than being replaced."""
-    from livery.footman import fail
+    from livery.footman.api import fail
 
     def build(reg):
         @reg.task(timeout=0.3)
@@ -468,7 +469,7 @@ def test_an_ordinary_failure_under_a_timeout_still_retries():
     """Ruling 3 stands: footman has no theory about which *failures* deserve
     another chance. The unstoppable-timeout rule is not about failure kinds —
     it is footman observing it cannot coherently start another attempt."""
-    from livery.footman import fail
+    from livery.footman.api import fail
 
     calls: list[int] = []
 

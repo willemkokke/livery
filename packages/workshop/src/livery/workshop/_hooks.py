@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import RunFailed, fail, run, stdin
+import livery.footman.api as footman
+from livery.footman.api import RunFailed, fail, run, stdin
 from livery.workshop._tree import agent_hooks
 
 

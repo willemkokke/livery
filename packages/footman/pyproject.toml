@@ -64,8 +64,8 @@ test = [
 Repository = "https://github.com/willemkokke/livery"
 
 [project.scripts]
-footman = "livery.footman:main"
-fm = "livery.footman:main"
+footman = "livery.footman.api:main"
+fm = "livery.footman.api:main"
 
 # Auto-loaded pytest fixtures (fm, fm_project, fm_record) for testing tasks.
 # Zero runtime cost: only pytest itself ever imports the module.
@@ -91,6 +91,8 @@ footman = "livery.footman.pytest_plugin"
 # PEP 420 namespace: the importable package is livery.footman and
 # there is no livery/__init__.py anywhere in this repository.
 module-name = "livery.footman"
+# The root is a namespace too: its public names live in livery.footman.api.
+namespace = true
 
 [tool.ruff]
 extend = "../../pyproject.toml"

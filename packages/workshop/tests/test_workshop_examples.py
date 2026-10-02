@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop._packages import Package
 from livery.workshop._pytest_examples import MARKER, is_example
 

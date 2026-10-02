@@ -92,7 +92,7 @@ def test_the_lane_names_its_own_variables_after_the_backends_refusal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One refusal voice: the backend's words, then FORGE_TOKEN and its host form."""
-    from livery.forge import ForgeError, GithubForge
+    from livery.forge.api import ForgeError, GithubForge
     from livery.workshop._forge_lane import _connect
 
     def refusing(**kwargs: object) -> object:
@@ -115,7 +115,7 @@ def test_the_lane_names_its_own_variables_after_the_backends_refusal(
     def no_server(**kwargs: object) -> object:
         raise ForgeError("no GitLab server to connect to: pass url= or set GITLAB_URL")
 
-    from livery.forge import GitlabForge
+    from livery.forge.api import GitlabForge
 
     monkeypatch.setattr(GitlabForge, "connect", no_server)
     with pytest.raises(ForgeError, match=r"GITLAB_URL$"):

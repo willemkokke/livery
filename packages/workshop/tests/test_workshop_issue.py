@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._issue_tasks import (
@@ -68,7 +68,7 @@ def rig(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
     monkeypatch.setattr("livery.workshop._issue_tasks._me", lambda _repo: "fake-user")
-    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
     return root, fake, git
 
@@ -181,7 +181,7 @@ def test_the_worktree_lives_under_the_runners_home(
 ) -> None:
     # The home is the runner's own data directory, asked of footman:
     # a footman plugin owns no home of its own.
-    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "runner")
+    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "runner")
     path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
     assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
 
@@ -271,7 +271,7 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
 
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
 
     def _uv(*args: str) -> SimpleNamespace:
         provisioned.append("uv " + " ".join(args))
@@ -342,7 +342,7 @@ def test_start_of_a_plain_branch_files_nothing_and_opens_its_worktree(
     root, fake, git = rig
     repo = fake.repository("willemkokke", "livery")
     before = len(repo.issue.list(state="all"))
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
 
     monkeypatch.setattr(
         "livery.workshop._issue_tasks.tools",
@@ -635,7 +635,7 @@ def test_create_falls_back_when_the_label_is_refused(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     real_create = fake_module._FakeIssues.create
@@ -879,7 +879,7 @@ def test_start_with_a_title_survives_a_label_refusal(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     real_create = fake_module._FakeIssues.create
@@ -900,7 +900,7 @@ def test_the_fail_opens_note_and_continue(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     root, fake, git = rig
@@ -970,7 +970,7 @@ def test_open_code_missing_binary_is_a_note(
 ) -> None:
     from types import SimpleNamespace
 
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
     from livery.workshop._issue_tasks import _open_work
 
     def _missing(*_a: object, **_k: object) -> object:

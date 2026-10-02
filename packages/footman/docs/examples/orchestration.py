@@ -1,5 +1,5 @@
 # --8<-- [start:part-1]
-from livery.footman import task
+from livery.footman.api import task
 
 
 @task
@@ -23,7 +23,7 @@ def notify(): ...
 # --8<-- [end:part-1]
 
 # --8<-- [start:part-2]
-from livery.footman import task, fail
+from livery.footman.api import task, fail
 
 
 def open_pr() -> bool: ...  # your own lookup

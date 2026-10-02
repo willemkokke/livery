@@ -41,8 +41,8 @@ class Unsupported(Exception):
 
     The message says why: a server version that predates the
     operation, or a capability the forge declines by name. Kept apart
-    from livery.forge.ForgeError because retrying cannot change the
+    from livery.forge.api.ForgeError because retrying cannot change the
     answer: the forge is reachable, and the operation is one it does
-    not offer. Probe with livery.forge.Forge.supports before relying
+    not offer. Probe with livery.forge.api.Forge.supports before relying
     on a capability-gated operation.
     """

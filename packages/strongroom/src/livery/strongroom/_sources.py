@@ -7,10 +7,10 @@ object. Every source is verified and none is trusted: a hit is hashed
 on arrival, an unreachable source is skipped after a short connect
 timeout and reported, and `offline` means never an origin.
 
-Reach for [livery.strongroom.FolderSource][],
-[livery.strongroom.HttpSource][] and [livery.strongroom.OriginHint][]
-to declare sources at [livery.strongroom.Store.open][], and
-[livery.strongroom.Store.fetch][] to consult them.
+Reach for [livery.strongroom.api.FolderSource][],
+[livery.strongroom.api.HttpSource][] and [livery.strongroom.api.OriginHint][]
+to declare sources at [livery.strongroom.api.Store.open][], and
+[livery.strongroom.api.Store.fetch][] to consult them.
 """
 
 from __future__ import annotations

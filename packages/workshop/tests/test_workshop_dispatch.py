@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import Failed
-from livery.forge import ForgeError
+from livery.footman.api import Failed
+from livery.forge.api import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._publish import MANIFEST

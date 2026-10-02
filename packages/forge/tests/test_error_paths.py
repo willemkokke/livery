@@ -16,14 +16,14 @@ from typing import Any
 
 import pytest
 
-from livery.forge import (
+from livery.forge._http import PAGE_CAP, PAGE_SIZE, JsonClient, _RefuseRedirect
+from livery.forge.api import (
     ForgeError,
     GiteaForge,
     GithubForge,
     GitlabForge,
     Unsupported,
 )
-from livery.forge._http import PAGE_CAP, PAGE_SIZE, JsonClient, _RefuseRedirect
 from livery.forge.testing import Cassette, CassetteError, Exchange, ReplayOpener
 
 
@@ -178,7 +178,7 @@ def test_gitlab_token_resolution_walks_its_ladder_and_gitea_has_no_cli(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The three refusals share one shape: no <forge> credential, then the ways in."""
-    from livery.forge import GiteaForge, GitlabForge
+    from livery.forge.api import GiteaForge, GitlabForge
 
     monkeypatch.delenv("GITLAB_TOKEN", raising=False)
     asked: list[list[str]] = []

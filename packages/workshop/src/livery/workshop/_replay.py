@@ -25,10 +25,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from livery.footman import fail
+from livery.footman.api import fail
 
 if TYPE_CHECKING:
-    from livery.forge import Repository
+    from livery.forge.api import Repository
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
@@ -39,7 +39,7 @@ _RELEASE_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class Registry(Protocol):
-    """The one probe the replay needs; livery.forge.SimpleRegistry fits."""
+    """The one probe the replay needs; livery.forge.api.SimpleRegistry fits."""
 
     def versions(self, name: str) -> tuple[str, ...]:
         """The published versions of *name*."""
@@ -112,7 +112,7 @@ def run_url() -> str:
 
 def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
     """File or extend the marker issue; the line saying which, or the refusal."""
-    from livery.forge import ForgeError
+    from livery.forge.api import ForgeError
 
     evidence = f"{replay.requirement} failed its replay" + (f": {url}" if url else "")
     try:
@@ -145,7 +145,7 @@ def install(venv: Path, python: str, requirement: str, index: str) -> int:
     a plain one outside the workspace: no lock, no editable members,
     so the package can only come from the index.
     """
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
 
     made = toolroom.uv.opts(nofail=True)("venv", str(venv), "--python", python)
     if made.code != 0:
@@ -159,14 +159,16 @@ def install(venv: Path, python: str, requirement: str, index: str) -> int:
 
 def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
     """Prove the import comes from site-packages, then run the member's tests."""
-    from livery.footman import run
+    from livery.footman.api import run
 
     python = str(venv / "bin" / "python")
     probe = run(
         [
             python,
             "-c",
-            f"import {module} as m, pathlib; p = pathlib.Path(m.__file__);"
+            # The first portion of the package's path: a namespace root
+            # has no __file__, a regular package's path is its directory.
+            f"import {module} as m, pathlib; p = pathlib.Path(list(m.__path__)[0]);"
             " assert 'site-packages' in str(p), p; print('testing', p)",
         ],
         cwd=tree,
@@ -208,7 +210,7 @@ def replay_flow(
     an index or an interpreter. With *repo*, a red replay files or
     extends the marker issue before failing.
     """
-    from livery.toolroom import tools as toolroom
+    import livery.toolroom.tools.api as toolroom
 
     member = package.directory.name
     replay = Replay(

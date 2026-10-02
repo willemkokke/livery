@@ -39,12 +39,12 @@ listed before it and its `--fix` adds; `WORKSHOP_TOOLS`, the tools
 its own verbs need, `("docker>=27",)`, the fourth site the tool
 profile reads; and `WORKSHOP_FOR`, a map from a target layer to the
 module carrying the registrations for that target,
-`{"livery.workshop.python": "acme.house.python"}`. The mount imports
+`{"livery.workshop.api.python": "acme.house.python"}`. The mount imports
 a contribution module once both its owner and its target are
 mounted, so a house with opinions on several languages contributes
 to each only where the language is listed, and no mount code
 branches. The layering check's `--fix` writes the resolved targets
-into the entry once, `{ import = "acme.house", for = ["livery.workshop.python"] }`;
+into the entry once, `{ import = "acme.house", for = ["livery.workshop.api.python"] }`;
 from then on `for` is the truth: a name deleted from it stays
 deleted, which is a project's opt-out from that target's opinions,
 and a name the list does not carry refuses. A name the layer declares
@@ -153,7 +153,7 @@ file to read is named and never started. The workshop's own kinds and
 checks pass the same clauses in its test suite.
 
 The documentation site is a layer inside the workshop wheel,
-`livery.workshop.layers.docs`, listed in `[workspace] layers` as a
+`livery.extensions.docs`, listed in `[workspace] layers` as a
 table naming `livery-workshop` as its distribution. It owns the site's
 assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots
 and the staged layer css, and it arrives through its own task entry
@@ -161,9 +161,8 @@ point. The base keeps what it reads of a package's docs for its own
 reasons (the `[docs]` table and its generators, the layout of the
 `docs/` tree, the publish seam, the categories the site reads) and
 the nav blocks generators write; it imports no layer, which the
-layering check enforces, and `livery.workshop.layers` spans
-distributions the pkgutil way, its `__init__.py` carrying the path
-extension alone, so a layer can ship as a distribution of its own.
+layering check enforces. It lives under `livery.extensions`, a
+namespace any distribution can add an extension to.
 The site's two CI jobs come with the layer: at mount it contributes
 the gate point's `docs` job, which the verdict waits for, and the
 merge point's `deploy` job, each with the entries it runs, through

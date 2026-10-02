@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
-import livery.footman as footman
-from livery.footman import Arg, Stdout, doc, fail, group, pre_tasks
-from livery.forge import RepoConfig
-from livery.toolroom import tools as toolroom
+import livery.footman.api as footman
+import livery.toolroom.tools.api as toolroom
+from livery.footman.api import Arg, Stdout, doc, fail, group, pre_tasks
+from livery.forge.api import RepoConfig
 from livery.workshop._envfile import (
     Source,
     cascade_dirs,
@@ -59,7 +59,7 @@ def _workspace() -> tuple[Path, Path]:
 
 def _shared_dir() -> Path:
     """Where ``.repo.shared.env`` lives: the runner's config directory."""
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     return footman.config_dir()
 
@@ -178,7 +178,7 @@ def _warn_unmounted_layers(root: Path) -> None:
     declared = [name for name in _layers.layer_names(root) if name != _layers.SELF]
     if not declared:
         return
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     sys.stderr.write(
         f"{footman.prog()}: the contract declares layers"
@@ -766,7 +766,7 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
     The protocol's secret store is write-only and carries no delete,
     so an empty value is a refusal naming the forge's own controls.
     """
-    from livery.forge import Unsupported
+    from livery.forge.api import Unsupported
     from livery.workshop._forge_lane import admin_repository
 
     if not value:

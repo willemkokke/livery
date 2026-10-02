@@ -10,8 +10,8 @@
 from os import PathLike
 from typing import Any, TypeVar
 
-from livery.toolroom.tools import Argv, Flag
-from livery.toolroom.tools import Tool as ToolBase
+from livery.toolroom.tools.api import Argv, Flag
+from livery.toolroom.tools.api import Tool as ToolBase
 
 _R = TypeVar("_R")
 

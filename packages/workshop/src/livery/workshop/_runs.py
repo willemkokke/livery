@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from livery.forge import ForgeError, Repository, Run, Unsupported
+from livery.forge.api import ForgeError, Repository, Run, Unsupported
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-import livery.strongroom as package
+import livery.strongroom.api as package
 
 PACKAGE = Path(__file__).resolve().parents[1]
 SOURCE = PACKAGE / "src" / "livery" / "strongroom"
@@ -190,8 +190,8 @@ def test_importing_the_store_loads_no_part_of_the_conformance_kit() -> None:
         assert hasattr(package, name), name
 
 
-def test_every_module_is_underscore_private_except_the_init() -> None:
+def test_every_module_is_underscore_private_except_the_api() -> None:
     public = [
         path.name for path in SOURCE.glob("*.py") if not path.name.startswith("_")
     ]
-    assert public == []
+    assert public == ["api.py"]

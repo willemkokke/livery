@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.strongroom import ManifestError
-from livery.toolroom.store import TOOLS, URLS, Home
+from livery.strongroom.api import ManifestError
+from livery.toolroom.store.api import TOOLS, URLS, Home
 
 
 def test_a_home_whose_store_is_another_layout_is_refused(tmp_path: Path) -> None:

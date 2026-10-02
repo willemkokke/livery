@@ -1,7 +1,7 @@
 # --8<-- [start:part-1]
 # repo/tasks.py
-from livery import footman
-from livery.footman import task
+import livery.footman.api as footman
+from livery.footman.api import task
 
 
 @task
@@ -24,7 +24,7 @@ def gate_infra(inv):
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.footman import fail, task
+from livery.footman.api import fail, task
 
 
 @task
@@ -48,7 +48,7 @@ def budget(result):
 
 # --8<-- [start:part-4]
 from pathlib import Path
-from livery.footman import GlobalOption
+from livery.footman.api import GlobalOption
 
 ENV_FILE = GlobalOption("env-file", Path, help="load this .env file first")
 AUDIT = GlobalOption("audit", help="report, change nothing")  # bool → a flag

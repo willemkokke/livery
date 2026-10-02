@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.toolroom.store import (
+from livery.toolroom.store.api import (
     HOSTS,
     OPTION_KEYS,
     VERB_KEYS,
@@ -176,7 +176,7 @@ def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
 def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     tmp_path: Path,
 ) -> None:
-    from livery.toolroom.store import MODES, default_mode
+    from livery.toolroom.store.api import MODES, default_mode
 
     with pytest.raises(RecordError, match=r"tool: mode 'float' is not one of link"):
         _record(mode="float")
@@ -421,7 +421,7 @@ def test_a_record_must_be_named_as_its_file(tmp_path: Path) -> None:
     (tmp_path / "tool.jsonl").rename(tmp_path / "other.jsonl")
     with pytest.raises(RecordError, match=r"named 'tool', its file 'other'"):
         Record.load(tmp_path / "other.jsonl")
-    from livery.toolroom.store import records_in
+    from livery.toolroom.store.api import records_in
 
     (tmp_path / "notes").mkdir()
     (tmp_path / "README.md").write_text("records")
@@ -585,7 +585,7 @@ def test_the_schema_names_the_three_lines_and_exports(tmp_path: Path) -> None:
 def test_every_host_of_every_version_of_every_record_resolves_whole() -> None:
     if not RECORDS.is_dir():
         pytest.skip("the checked-in records are a checkout fact")
-    from livery.toolroom.store import records_in
+    from livery.toolroom.store.api import records_in
 
     paths = records_in(RECORDS)
     names = [path.stem for path in paths]

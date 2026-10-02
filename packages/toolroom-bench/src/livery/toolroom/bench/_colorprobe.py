@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store import ToolSpec
+    from livery.toolroom.store.api import ToolSpec
 
 import contextlib
 import os

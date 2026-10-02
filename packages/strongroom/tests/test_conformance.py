@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import Namespace, Store, _lifecycle, _rungs
+from livery.strongroom import _lifecycle, _rungs
+from livery.strongroom.api import Namespace, Store
 from livery.strongroom.testing import (
     ConformanceFailure,
     PythonHooks,

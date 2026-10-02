@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import layer_names, mount_layers, workspace_root
+from livery.workshop.api import layer_names, mount_layers, workspace_root
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -15,7 +15,7 @@ def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
     assert layer_names(ROOT) == (
         "livery.workshop",
-        "livery.workshop.layers.docs",
+        "livery.extensions.docs",
         "livery.forge",
         "livery.toolroom.bench",
         "livery.footman",

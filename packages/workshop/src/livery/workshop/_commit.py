@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import Arg, doc, fail
+import livery.footman.api as footman
+from livery.footman.api import Arg, doc, fail
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root

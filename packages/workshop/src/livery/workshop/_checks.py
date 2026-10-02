@@ -41,7 +41,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
-from livery.footman import Group, context, doc, fail, group, prog
+from livery.footman import context
+from livery.footman.api import Group, doc, fail, group, prog
 from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
 
@@ -549,7 +550,7 @@ def _package_files(package: Package) -> tuple[str, ...]:
     package is ignored, so no claim reaches it; a tracked file deleted
     from the tree is left out.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
 
     listing = tools.git.opts(cwd=package.directory, recorded=False)(
         "ls-files", "--cached", "--others", "--exclude-standard", "-z"
@@ -1045,7 +1046,7 @@ def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None
     root and categorised by the workspace's table. None when the root
     is not a git checkout, and then every check that applies runs.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
     from livery.workshop._categories import category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._provenance import unit_of

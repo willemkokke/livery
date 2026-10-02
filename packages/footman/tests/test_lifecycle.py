@@ -25,8 +25,8 @@ def test_a_hook_edits_the_merged_tree(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def audit(): ...
@@ -52,8 +52,8 @@ def test_a_hook_reaches_a_subfolder_task(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def audit(): ...
@@ -67,7 +67,7 @@ def test_a_hook_reaches_a_subfolder_task(tmp_path):
     sub = _write(
         tmp_path / "svc" / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def ship(): ...
@@ -83,8 +83,8 @@ def test_hooks_run_in_cascade_order_specific_last(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def x(): ...
@@ -98,7 +98,7 @@ def test_hooks_run_in_cascade_order_specific_last(tmp_path):
     sub = _write(
         tmp_path / "svc" / "tasks.py",
         """
-        import livery.footman as footman
+        import livery.footman.api as footman
 
         @footman.pre_tasks
         def f(inv):
@@ -114,7 +114,7 @@ def test_a_hook_that_raises_is_named(tmp_path):
     bad = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
+        import livery.footman.api as footman
 
         @footman.pre_tasks
         def boom(inv):
@@ -129,7 +129,7 @@ def test_tasks_view_iterates_nested_tasks(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task, group
+        from livery.footman.api import task, group
 
         @task
         def a(): ...
@@ -150,8 +150,8 @@ def test_a_hook_disable_reaches_the_manifest(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def x(): ...
@@ -170,8 +170,8 @@ def test_task_view_add_post_and_read_post(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def deploy(): ...
@@ -195,8 +195,8 @@ def test_task_view_disabled_reads_the_reason(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def a(): ...
@@ -218,7 +218,7 @@ def test_task_view_reads_policy_flags(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task(keep_going=False, atomic=True, confirm="sure?")
         def gated(): ...
@@ -245,7 +245,7 @@ def test_task_view_infinite_is_untimed(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task(infinite=True)
         def serve(): ...
@@ -264,7 +264,7 @@ def test_task_view_address_is_the_whole_spelling(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task, group
+        from livery.footman.api import task, group
 
         @task
         def top(): ...
@@ -292,7 +292,7 @@ def test_lookup_is_by_address_not_leaf(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task, group
+        from livery.footman.api import task, group
 
         docs = group("docs")
         web = group("web")
@@ -325,7 +325,7 @@ def test_a_runnable_group_answers_at_its_bare_address(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import group
+        from livery.footman.api import group
 
         lint = group("lint")
 
@@ -344,7 +344,7 @@ def test_a_runnable_group_answers_at_its_bare_address(tmp_path):
     src2 = _write(
         tmp_path / "plain" / "tasks.py",
         """
-        from livery.footman import group
+        from livery.footman.api import group
 
         docs = group("docs")
 
@@ -360,7 +360,7 @@ def test_task_view_owning_group(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task, group
+        from livery.footman.api import task, group
 
         @task
         def top(): ...
@@ -384,7 +384,7 @@ def test_task_view_provenance_single_file(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def x(): ...
@@ -405,7 +405,7 @@ def test_task_view_mounted_from_names_the_provider(tmp_path, monkeypatch):
     (tmp_path / "provkit.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman import task, group
+            from livery.footman.api import task, group
 
             lint = group("lint")
 
@@ -417,7 +417,7 @@ def test_task_view_mounted_from_names_the_provider(tmp_path, monkeypatch):
     src = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task, include
+        from livery.footman.api import task, include
 
         include("provkit")
 
@@ -438,7 +438,7 @@ def test_task_view_shadow_chain_across_cascade(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def x():
@@ -448,7 +448,7 @@ def test_task_view_shadow_chain_across_cascade(tmp_path):
     sub = _write(
         tmp_path / "svc" / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def x():
@@ -468,8 +468,8 @@ def test_task_view_set_opts_is_permanent(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def x(): ...
@@ -490,8 +490,8 @@ def test_task_view_set_opts_rejects_a_task_parameter(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def x(): ...
@@ -513,8 +513,8 @@ def test_a_hook_uses_defining_dir_for_a_cascade_decision(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def audit(): ...
@@ -530,7 +530,7 @@ def test_a_hook_uses_defining_dir_for_a_cascade_decision(tmp_path):
     infra = _write(
         tmp_path / "infra" / "tasks.py",
         """
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def deploy(): ...
@@ -553,8 +553,8 @@ def test_a_hook_sets_the_environment_every_task_sees(tmp_path, monkeypatch):
         textwrap.dedent(
             """
             import os
-            import livery.footman as footman
-            from livery.footman import task, requires_env
+            import livery.footman.api as footman
+            from livery.footman.api import task, requires_env
 
             @footman.pre_tasks
             def supply(inv):
@@ -579,8 +579,8 @@ def test_the_invocation_carries_what_the_line_asked(tmp_path):
         textwrap.dedent(
             """
             import json, pathlib
-            import livery.footman as footman
-            from livery.footman import task
+            import livery.footman.api as footman
+            from livery.footman.api import task
 
             @footman.pre_tasks
             def record(inv):
@@ -623,7 +623,7 @@ def test_a_hook_with_the_wrong_arity_is_refused_at_registration():
 def test_finalize_is_gone():
     # Removed outright rather than kept as a refusing shim: the lifecycle has
     # one name per moment, and a retired alias is a second one.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
     assert not hasattr(reg, "finalize")
@@ -814,7 +814,7 @@ def test_set_returned_rewrites_the_report_never_the_value():
     # body call still receives it, while the report and `--json` carry the
     # rewrite. The write lives in the review window now — reviewed and
     # attributed — never in observation.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
 
@@ -968,8 +968,8 @@ def test_the_ladder_reaches_a_cascade_file(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @footman.pre_task
         def opened(inv, task):
@@ -1572,7 +1572,7 @@ def test_the_run_end_hook_reads_sealed_records_and_review_owns_the_rewrite():
     # attributed. The envelope carries what the review left.
     import json as json_mod
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
     seen: list[object] = []
@@ -1781,8 +1781,8 @@ def test_a_task_call_from_pre_tasks_is_refused(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def helper():
@@ -1807,8 +1807,8 @@ def test_a_task_call_from_post_tasks_is_refused(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def helper():
@@ -1834,8 +1834,8 @@ def test_the_refusal_names_a_task_that_declares_ctx(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def ctxhelper(ctx, word: str = "plain"): ...
@@ -1863,9 +1863,9 @@ def test_a_manifest_rebuild_never_runs_a_task(tmp_path, monkeypatch):
     _write(
         tmp_path / "tasks.py",
         f"""
-        import livery.footman as footman
+        import livery.footman.api as footman
         from pathlib import Path
-        from livery.footman import task
+        from livery.footman.api import task
 
         @task
         def deploy():
@@ -1886,8 +1886,8 @@ def test_the_per_task_moments_still_call_tasks(tmp_path):
     src = _write(
         tmp_path / "tasks.py",
         """
-        import livery.footman as footman
-        from livery.footman import task
+        import livery.footman.api as footman
+        from livery.footman.api import task
 
         @task
         def helper() -> str:
@@ -1930,8 +1930,8 @@ def test_a_stacked_reviewer_amends_the_row_verdict(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman as footman
-            from livery.footman import task
+            import livery.footman.api as footman
+            from livery.footman.api import task
 
             def reformatted_is_fine(view):
                 view.title = "fmt: reformatted"
@@ -1957,8 +1957,8 @@ def test_row_reviewers_run_inside_out_and_the_use_site_wins(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman as footman
-            from livery.footman import task
+            import livery.footman.api as footman
+            from livery.footman.api import task
 
             def outer(view):
                 view.title = view.title + "+outer"
@@ -1985,8 +1985,8 @@ def test_a_raising_row_reviewer_fails_the_task_with_its_own_error(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman as footman
-            from livery.footman import task
+            import livery.footman.api as footman
+            from livery.footman.api import task
 
             def broken(view):
                 raise KeyError("oops")
@@ -2009,8 +2009,8 @@ def test_a_green_row_vetoed_in_review_keeps_its_earned_code(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman as footman
-            from livery.footman import task
+            import livery.footman.api as footman
+            from livery.footman.api import task
 
             def too_easy(view):
                 view.code = 3
@@ -2032,7 +2032,7 @@ def test_an_observer_vetoes_with_fail_and_the_audit_tells_the_story():
     # The veto: an observer cannot rewrite a sealed record, but it can fail
     # the task — loudly, with its own code, attributed to the observe
     # moment. The work's earned green stays visible in the audit.
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
 
@@ -2089,7 +2089,7 @@ def test_the_task_handle_carries_its_own_lifecycle():
 
 
 def test_the_handle_attached_observer_vetoes_like_any_other():
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     reg = Group("root")
 
@@ -2197,7 +2197,7 @@ def _handoff_run(*hooks: Any) -> None:
 
 def test_nothing_subscribed_hands_nothing_on():
     """The ordinary case: a verb re-execs and no plugin wants anything kept."""
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     _executor.clear_lifecycle()
     with footman.handing_off() as handed:
@@ -2213,7 +2213,7 @@ def test_a_hook_that_fails_on_the_way_in_is_named_and_skipped(capsys):
     """
     import contextlib
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     @contextlib.contextmanager
     def broken() -> Any:
@@ -2242,7 +2242,7 @@ def test_what_every_subscriber_yields_is_merged_and_taken_back_on_return():
     """
     import contextlib
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     undone: list[str] = []
 
@@ -2274,7 +2274,7 @@ def test_a_replacement_that_happened_leaves_every_hook_holding_its_state():
     """
     import contextlib
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     undone: list[str] = []
 

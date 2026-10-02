@@ -323,7 +323,7 @@ project at all: drop it in any directory and run it:
 # requires-python = ">=3.11"
 # dependencies = ["livery-footman", "httpx"]
 # ///
-from livery.footman import task
+from livery.footman.api import task
 
 
 @task
@@ -369,8 +369,8 @@ Two touches make it a command in its own right:
 # /// script
 # dependencies = ["livery-footman", "httpx"]
 # ///
-from livery import footman
-from livery.footman import task
+import livery.footman.api as footman
+from livery.footman.api import task
 
 
 @task
@@ -534,7 +534,7 @@ asserts *which commands would run* without running them, and the pytest
 fixtures scaffold whole projects:
 
 ```python
-from livery.footman import recording
+from livery.footman.api import recording
 from tasks import deploy
 
 
@@ -547,7 +547,7 @@ def test_deploy_passes_the_workers_flag():
 def test_release_refuses_bad_versions(fm_project):
     fm = fm_project("""
         from typing import Annotated
-        from livery.footman import task
+        from livery.footman.api import task
         from livery.footman.params import check
 
         def semver(v):

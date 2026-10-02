@@ -1,8 +1,8 @@
 # The protocol
 
-One interface to GitHub, Gitea, and GitLab: `livery.forge.Forge` for
-one server, `livery.forge.Repository` for one repository on it, and
-`livery.forge.Registry` for one package index. The protocols are
+One interface to GitHub, Gitea, and GitLab: `livery.forge.api.Forge` for
+one server, `livery.forge.api.Repository` for one repository on it, and
+`livery.forge.api.Registry` for one package index. The protocols are
 frozen: every backend, the verified fake included, passes the one
 conformance suite in `livery.forge.testing`, and a change to a verb
 now is a compatibility event.
@@ -21,7 +21,7 @@ and discovery joins the protocol only when a workflow demands it.
   issue numbers count in separate spaces: never use one as the other.
 - **Listings are complete or they raise.** A method that returns a
   sequence returns everything the query matches, or raises
-  `livery.forge.ForgeError`. A truncated prefix is never returned as
+  `livery.forge.api.ForgeError`. A truncated prefix is never returned as
   the answer, because "not in this list" is an answer callers act on.
 - **Probe before acting.** Re-running a workflow is its recovery
   procedure. Where a server operation is not idempotent (creating a
@@ -30,7 +30,7 @@ and discovery joins the protocol only when a workflow demands it.
 - **Capabilities, not pretence.** Where forges differ, the
   difference is a named capability. `forge.supports(name)` answers
   honestly, and an operation a forge declines raises
-  `livery.forge.Unsupported` naming the capability.
+  `livery.forge.api.Unsupported` naming the capability.
 - **Failures carry the server's words.** Every `ForgeError` message
   quotes what the server said; `status`, `method`, and `endpoint`
   attributes carry what a caller branches on. No failure is reduced
@@ -69,10 +69,10 @@ and discovery joins the protocol only when a workflow demands it.
 
 | Verb | Does |
 | --- | --- |
-| `configure(config)` | idempotent drift repair; None fields untouched; see `livery.forge.RepoConfig` |
+| `configure(config)` | idempotent drift repair; None fields untouched; see `livery.forge.api.RepoConfig` |
 | `tags()` | every tag name; the release train's existence probe |
 | `branch_exists(branch)` | existence |
-| `protection(branch)` | the branch's `livery.forge.Protection`, or None; what a backend cannot read reads as inert |
+| `protection(branch)` | the branch's `livery.forge.api.Protection`, or None; what a backend cannot read reads as inert |
 | `delete_branch(branch)` | idempotent; the abort path's cleanup (merge-path deletion is configuration) |
 | `web_url()` | the repository's home page |
 | `pr_url(number)` | the pull request's address |

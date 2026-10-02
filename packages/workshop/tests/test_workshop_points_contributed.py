@@ -174,7 +174,7 @@ def test_the_runner_runs_a_contributed_points_task_on_its_day(
 ) -> None:
     from datetime import date
 
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _workspace(tmp_path, "github", AUDIT)

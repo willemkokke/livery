@@ -1,4 +1,4 @@
-"""The GitLab backend: livery.forge.Forge over REST v4.
+"""The GitLab backend: livery.forge.api.Forge over REST v4.
 
 The odd one out, and the reason several protocol rules exist: merge
 requests and issues are addressed by their per-project iid (which is
@@ -8,7 +8,7 @@ answer rather than commit statuses, and the owner may be a group or
 subgroup path. The full endpoint mapping is the package's
 ``docs/gitlab.md``.
 
-Construction and the token rule: livery.forge.GitlabForge.connect
+Construction and the token rule: livery.forge.api.GitlabForge.connect
 resolves the server once, an explicit ``url`` beating the configured
 ``GITLAB_URL``, and reads ``GITLAB_TOKEN``, then the token ``glab``
 holds for the host, unless a token is passed.
@@ -151,9 +151,9 @@ def _resolve_token(web: str) -> str:
 
 
 class GitlabForge:
-    """One GitLab server, spoken to through livery.forge.Forge's verbs.
+    """One GitLab server, spoken to through livery.forge.api.Forge's verbs.
 
-    Build with livery.forge.GitlabForge.connect; the constructor takes
+    Build with livery.forge.api.GitlabForge.connect; the constructor takes
     the resolved values and applies no environment fallbacks.
 
     Args:
@@ -509,7 +509,7 @@ def _path(owner: str, name: str) -> str:
 
 
 class _GitlabRepository:
-    """The livery.forge.Repository view onto one GitLab project."""
+    """The livery.forge.api.Repository view onto one GitLab project."""
 
     def __init__(
         self, forge: GitlabForge, client: JsonClient, owner: str, name: str
@@ -757,7 +757,7 @@ class _GitlabRepository:
         many approvals a merge needs (the highest count over the
         rules; an unlicensed server has none and reads as zero).
         What cannot be read reads as inert, per
-        livery.forge.Protection.
+        livery.forge.api.Protection.
         """
         record = self._client.request(
             f"{self._base}/protected_branches/{quote(branch, safe='')}",
@@ -955,7 +955,7 @@ class _GitlabPullRequests:
         every other refusal passes through verbatim, the 422 "Branch
         cannot be merged" it answers while the mergeability recompute
         runs after a pipeline included; a caller classifies that one
-        through livery.forge.PullRequests.merge_hold. The head sha rides
+        through livery.forge.api.PullRequests.merge_hold. The head sha rides
         along: newer GitLab refuses a merge without one ("SHA must be
         provided when merging"), and pinning it also means the merge
         takes exactly the head this call read, never a racing push.
@@ -997,7 +997,7 @@ class _GitlabPullRequests:
         405), so arming a just-pushed merge request can race the
         pipeline's creation; the refusal passes through verbatim for
         the caller to act on. The head sha rides along, as on
-        livery.forge.PullRequests.merge_now.
+        livery.forge.api.PullRequests.merge_now.
         """
         squash_message = f"{title}\n\n{message}" if message else title
         current = self.get(number)

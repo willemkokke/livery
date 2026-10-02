@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from livery.footman import Failed
+from livery.footman.api import Failed
 from livery.workshop._points import (
     DECLARED,
     Entry,
@@ -108,7 +108,7 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
 
 
 def test_the_docs_layer_contributes_the_build_and_the_deploy() -> None:
-    from livery.workshop.layers.docs import _tasks as docs_tasks
+    from livery.extensions.docs import _tasks as docs_tasks
 
     del docs_tasks
     gate = point_by_name(None)["gate"]
@@ -124,7 +124,7 @@ def test_the_docs_layer_contributes_the_build_and_the_deploy() -> None:
     verdict = next(entry for entry in entries if entry.task == "ci.verdict")
     assert verdict.args == ("--needs=check,docs",)
     assert all(
-        entry.source == "livery.workshop.layers.docs"
+        entry.source == "livery.extensions.docs"
         for entry in entries
         if entry.task.startswith("docs.")
     )

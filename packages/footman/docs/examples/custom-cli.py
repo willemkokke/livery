@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 # acme/cli.py
-from livery.footman import App
+from livery.footman.api import App
 
 app = App(
     name="Acme",  # long / display name  → the --version banner
@@ -41,8 +41,8 @@ app = App(
 # --8<-- [end:part-4]
 
 # --8<-- [start:part-5]
-from livery import footman
-from livery.footman import task
+import livery.footman.api as footman
+from livery.footman.api import task
 
 
 @task

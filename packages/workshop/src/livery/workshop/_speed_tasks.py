@@ -15,8 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail, group, requires
+import livery.footman.api as footman
+from livery.footman.api import doc, fail, group, requires
 from livery.workshop import _speed
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import discover_packages

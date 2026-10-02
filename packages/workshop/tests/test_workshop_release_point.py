@@ -171,7 +171,7 @@ def test_the_publisher_is_read_from_the_wave_at_the_ref(
 def test_the_driver_pin_installs_nothing_on_an_empty_input(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
     from livery.workshop._release import release_driver
 
     seen: list[tuple[str, ...]] = []

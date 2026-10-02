@@ -16,9 +16,9 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import livery.footman as footman
-from livery.footman import fail
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import fail
 from livery.workshop._backends import _python
 
 if TYPE_CHECKING:

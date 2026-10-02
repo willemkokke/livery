@@ -27,10 +27,10 @@ import time
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman as footman
-from livery.footman import doc, fail
-from livery.forge import Repository
-from livery.toolroom import tools
+import livery.footman.api as footman
+import livery.toolroom.tools.api as tools
+from livery.footman.api import doc, fail
+from livery.forge.api import Repository
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._update import bump_floors, refresh_rendered

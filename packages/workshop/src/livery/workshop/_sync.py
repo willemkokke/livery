@@ -29,8 +29,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-import livery.footman as footman
-from livery.footman import doc, fail, task
+import livery.footman.api as footman
+from livery.footman.api import doc, fail, task
 from livery.footman.params import Forward
 
 if TYPE_CHECKING:
@@ -148,7 +148,7 @@ def _rebase_step(
     parks with the teaching. A rebase stopped by anything other than a
     conflict leaves the branch as it was and prints git's words.
     """
-    import livery.footman as footman
+    import livery.footman.api as footman
 
     branch = git.current_branch()
     foreign = _foreign_authors(git, upstream or onto)
@@ -625,7 +625,7 @@ def conan_editables(root: Path) -> list[str]:
     sync is how conan arrives, so failing on its absence would make
     the fix unreachable.
     """
-    from livery.toolroom import tools
+    import livery.toolroom.tools.api as tools
     from livery.workshop._packages import discover_packages
 
     members = [p for p in discover_packages(root) if p.kind == "cpp-conan"]

@@ -1,5 +1,5 @@
 # --8<-- [start:part-1]
-from livery.footman import task
+from livery.footman.api import task
 
 
 @task
@@ -16,7 +16,7 @@ def stamp(
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.footman import task
+from livery.footman.api import task
 
 
 @task
@@ -24,7 +24,7 @@ def scale(factor: int | float): ...
 # --8<-- [end:part-3]
 
 # --8<-- [start:part-4]
-from livery.footman import Many
+from livery.footman.api import Many
 
 
 @task
@@ -44,7 +44,7 @@ def release(tags: list[str] = []): ...  # fm release --tags=a,b,c  -> ["a", "b",
 # --8<-- [end:part-6]
 
 # --8<-- [start:part-7]
-from livery.footman import NoSplit
+from livery.footman.api import NoSplit
 
 
 @task
@@ -61,7 +61,7 @@ def env(vars: dict[str, int | str]): ...  # fm env --vars=port=8080 --vars=name=
 
 # --8<-- [start:part-9]
 from typing import NamedTuple
-from livery.footman import task
+from livery.footman.api import task
 
 
 class Size(NamedTuple):
@@ -114,7 +114,7 @@ def record(id: UUID, amount: Decimal, when: datetime): ...
 # --8<-- [start:part-13]
 from pathlib import Path
 from typing import Annotated
-from livery.footman import task, between, check, doc, env, isfile
+from livery.footman.api import task, between, check, doc, env, isfile
 
 
 def semver(value: str) -> None: ...  # your validator: raise ValueError to refuse
@@ -134,7 +134,7 @@ def deploy(
 
 # --8<-- [start:part-14]
 from typing import Annotated
-from livery.footman import task
+from livery.footman.api import task
 from livery.footman.params import hidden
 
 
@@ -145,7 +145,7 @@ def publish(target: str, legacy: Annotated[str, hidden] = ""):
 
 # --8<-- [start:part-15]
 from typing import Annotated
-from livery.footman import task, suggest
+from livery.footman.api import task, suggest
 
 
 def shares() -> list[str]:
