@@ -1,5 +1,12 @@
 # Toolchains: the host's, a floor, or an exact version
 
+Phases 2 to 4 moved on 2026-10-02 to the extensions plan
+(`notes/20261002-extensions-plan.md`, its phase 12), where the
+toolchain engine becomes the base's and the C and C++ families the
+`cpp` extension's, with `[toolchain.cpp]` in place of
+`[cpp.toolchain]`. Phase 1 below stays as built. What follows is the
+record as it stood.
+
 Status: written 2026-09-30 from Willem's rulings of 2026-09-29 and
 2026-09-30. Phase 1 (the host allowance for store tools) is built in
 the base (issue #937, Willem's go of 2026-09-30). Phases 2 to 4 belong to

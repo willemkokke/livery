@@ -1,5 +1,10 @@
 # The base is an empty shell: what a workspace does not mount costs nothing
 
+Superseded on 2026-10-02 by the extensions plan
+(`notes/20261002-extensions-plan.md`), which carries this plan's
+remaining work, its contracts and its open items; read that plan for
+what is next. What follows is the record as it stood.
+
 Status: written 2026-09-30, rulings on the open items taken the same
 day; Willem's go on 2026-10-01. Phases 1, 3, 7, 8a and 11a built
 (issues #998, #1000, #1006, #1011, #1022, #1018); manifest dispatch
