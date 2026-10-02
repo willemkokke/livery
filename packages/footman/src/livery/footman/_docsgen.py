@@ -392,5 +392,8 @@ def _api_markdown() -> str:
         if intro:
             parts.append(f"\n{intro}\n")
         for name in names:
-            parts.append(f"\n::: livery.footman.api.{name}\n")
+            # An exported name lives in the api module; a dotted one
+            # names a public module's own attribute.
+            where = "livery.footman" if "." in name else "livery.footman.api"
+            parts.append(f"\n::: {where}.{name}\n")
     return "".join(parts)

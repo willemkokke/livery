@@ -9,7 +9,7 @@ scenario needs through [livery.strongroom.testing.Hooks][], and
 failed step raises [livery.strongroom.testing.ConformanceFailure][]
 naming the scenario, the step and what was found.
 
-A module of its own, so importing [livery.strongroom][] to use a store
+A module of its own, so importing [livery.strongroom.api][] to use a store
 never loads the kit.
 """
 
