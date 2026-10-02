@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs layer's: importing its task module
+# The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop import _points
@@ -18,7 +18,7 @@ _FAILURES = (BaseException,)
 
 def _root(tmp_path: Path, schedule: str = "") -> Path:
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\n'
         'owner = "owner"\n' + schedule
     )
     return tmp_path
@@ -135,7 +135,7 @@ def test_each_point_names_its_workflow_and_events() -> None:
 
     assert INHERITS == {"merge": "gate"}
     # The base declares the check and the verdict; the docs job is the
-    # docs layer's, in place once its tasks module is imported.
+    # docs extension's, in place once its tasks module is imported.
     assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "gate"]
     from livery.extensions.docs import _tasks as docs_tasks
     from livery.workshop._points import point_by_name
@@ -250,7 +250,7 @@ def _rendered(tmp_path: Path, kind: str) -> dict[str, str]:
     root = tmp_path / kind
     root.mkdir()
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\n'
+        "[workspace]\nextensions = []\n\n[forge]\n"
         f'kind = "{kind}"\nowner = "owner"\n\n[ci]\nrunners = ["ubuntu-latest"]\n'
         "affected-legs = true\n"
     )

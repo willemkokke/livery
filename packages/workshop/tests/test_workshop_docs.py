@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs layer's: importing its task module
+# The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks
 import livery.workshop.api
@@ -33,11 +33,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root.mkdir()
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        + (
-            ""
-            if docs_table.startswith("layers")
-            else 'layers = ["livery.workshop", "livery.extensions.docs"]\n'
-        )
+        + ("" if docs_table.startswith("extensions") else 'extensions = ["docs"]\n')
         + docs_table
     )
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
@@ -231,7 +227,7 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     assert api["API"][0] == {"acme.core": "packages/core/api/index.md"}
 
 
-# The private-members policy, a slot the layers fill: the refusal
+# The private-members policy, a slot the extensions fill: the refusal
 # first, then the default, then a contribution and the nearest rule.
 
 
@@ -246,8 +242,8 @@ def _python_options(config: str) -> dict[str, object]:
 
 
 @pytest.fixture
-def members_layers() -> Iterator[None]:
-    """Withdraw what the test layers contributed to the members slot."""
+def members_extensions() -> Iterator[None]:
+    """Withdraw what the test extensions contributed to the members slot."""
     from livery.workshop._slots import withdraw
 
     yield
@@ -256,7 +252,7 @@ def members_layers() -> Iterator[None]:
 
 
 def test_a_members_policy_outside_public_and_all_refuses_naming_them(
-    members_layers: None,
+    members_extensions: None,
 ) -> None:
     from livery.workshop._slots import SlotError, contribute
 
@@ -265,7 +261,7 @@ def test_a_members_policy_outside_public_and_all_refuses_naming_them(
         match=r"acme\.site contributes 'some' to slot 'docs\.members', whose values"
         r" are 'public', 'all'",
     ):
-        contribute(MEMBERS_SLOT, "some", layer="acme.site", by="acme.site")
+        contribute(MEMBERS_SLOT, "some", extension="acme.site", by="acme.site")
 
 
 def test_without_a_contribution_the_handler_keeps_its_default_filter(
@@ -277,19 +273,19 @@ def test_without_a_contribution_the_handler_keeps_its_default_filter(
     assert "filters" not in _python_options(preview)
 
 
-def test_all_members_writes_an_empty_filter_and_the_nearest_layer_wins(
-    tmp_path: Path, members_layers: None
+def test_all_members_writes_an_empty_filter_and_the_nearest_extension_wins(
+    tmp_path: Path, members_extensions: None
 ) -> None:
     from livery.workshop._slots import contribute, withdraw
 
     root = _workspace(tmp_path)
-    contribute(MEMBERS_SLOT, "all", layer="acme.base", by="acme.base")
+    contribute(MEMBERS_SLOT, "all", extension="acme.base", by="acme.base")
     assert _python_options(zensical_config(root))["filters"] == []
     preview = scoped_config(root, named_package(root, "core"))
     assert _python_options(preview)["filters"] == []
-    # The nearest layer decides: a later contribution wins over an
+    # The nearest extension decides: a later contribution wins over an
     # earlier one, and its withdrawal restores the earlier one.
-    contribute(MEMBERS_SLOT, "public", layer="acme.site", by="acme.site")
+    contribute(MEMBERS_SLOT, "public", extension="acme.site", by="acme.site")
     assert "filters" not in _python_options(zensical_config(root))
     withdraw(MEMBERS_SLOT, by="acme.site")
     assert _python_options(zensical_config(root))["filters"] == []
@@ -477,8 +473,7 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
-        '[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
     # GitHub folds the deploy into ci.yml's merge point: the pages
@@ -912,8 +907,7 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
         root, "core", 'generators = [{ verb = "docsgen.casts", requires = ["zsh"] }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
-        '[forge]\nkind = "github"\nowner = "acme"\n'
+        '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
     gate = files[".github/workflows/ci.yml"]
@@ -934,7 +928,7 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
 def test_the_docs_seeds_live_once_in_the_base_template() -> None:
     # Every package template chains from package-base, the one home
     # of the docs seeds; a copy in a kind template would shadow the
-    # base's and rot separately. The chain once caught a layer-born
+    # base's and rot separately. The chain once caught an extension-born
     # package arriving seedless from exactly that duplication.
     from livery.workshop._kinds import template_chain
 
@@ -1023,10 +1017,12 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
 
 
 def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> None:
-    # The docs layer alone: the base's own sheets stay out of the list.
-    root = _workspace(tmp_path, docs_table='layers = ["livery.extensions.docs"]\n')
-    # The fallback first: no layers, no sheet, no extra_css at all.
-    assert "extra_css" not in zensical_config(root)
+    root = _workspace(tmp_path, docs_table='extensions = ["docs"]\n')
+    # The fallback first: no workspace sheet, the base's own alone.
+    base = tomllib.loads(zensical_config(root))["project"]["extra_css"]
+    assert base and all(
+        sheet.startswith("_extensions/livery.workshop/") for sheet in base
+    )
     assets = root / "docs" / "assets"
     assets.mkdir(parents=True)
     (assets / "site.css").write_text("/* mine */\n")
@@ -1036,6 +1032,7 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
     config = tomllib.loads(zensical_config(root))
     # A package's declared sheet comes before the workspace's own.
     assert config["project"]["extra_css"] == [
+        *base,
         "packages/core/extra.css",
         "assets/site.css",
     ]
@@ -1044,79 +1041,79 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
     assert "site.css" not in zensical_config(root)
 
 
-# The layers' site assets. The layer without any first.
+# The extensions' site assets. The extension without any first.
 
 
 @pytest.fixture
-def layered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A workspace listing the base and a theme layer whose content is faked."""
-    from livery.workshop import _layers
+def extensioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A workspace listing the base and a theme extension whose content is faked."""
+    from livery.workshop import _extensions
 
-    root = _workspace(
-        tmp_path, docs_table='layers = ["livery.workshop", "acme.theme"]\n'
-    )
+    root = _workspace(tmp_path, docs_table='extensions = ["acme.theme"]\n')
     content = tmp_path / "acme-theme-content"
     (content / "docs" / "assets").mkdir(parents=True)
     (content / "docs" / "assets" / "theme.css").write_text("body { color: red }\n")
-    real = _layers.layer_content
+    real = _extensions.extension_content
 
-    def faked(layer: str) -> Path | None:
-        return content if layer == "acme.theme" else real(layer)
+    def faked(extension: str) -> Path | None:
+        return content if extension == "acme.theme" else real(extension)
 
-    monkeypatch.setattr(_layers, "layer_content", faked)
+    monkeypatch.setattr(_extensions, "extension_content", faked)
     return root
 
 
-def test_a_layer_without_site_assets_stages_nothing(
+def test_a_extension_without_site_assets_stages_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.docs._site import layer_assets, stage_layer_assets
-    from livery.workshop import _layers
+    from livery.extensions.docs._site import extension_assets, stage_extension_assets
+    from livery.workshop import _extensions
 
-    root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
-    monkeypatch.setattr(_layers, "layer_content", lambda layer: tmp_path / "none")
-    assert layer_assets(root) == []
-    assert stage_layer_assets(root) == []
-    assert not (root / "docs" / "_layers").exists()
-    # An uninstalled layer ships nothing either.
-    monkeypatch.setattr(_layers, "layer_content", lambda layer: None)
-    assert layer_assets(root) == []
+    root = _workspace(tmp_path, docs_table='extensions = ["acme.bare"]\n')
+    monkeypatch.setattr(
+        _extensions, "extension_content", lambda extension: tmp_path / "none"
+    )
+    assert extension_assets(root) == []
+    assert stage_extension_assets(root) == []
+    assert not (root / "docs" / "_extensions").exists()
+    # An uninstalled extension ships nothing either.
+    monkeypatch.setattr(_extensions, "extension_content", lambda extension: None)
+    assert extension_assets(root) == []
     assert "extra_css" not in zensical_config(root)
 
 
-def test_layer_assets_are_staged_whole_and_listed_in_cascade_order(
-    tmp_path: Path, layered: Path
+def test_extension_assets_are_staged_whole_and_listed_in_cascade_order(
+    tmp_path: Path, extensioned: Path
 ) -> None:
-    from livery.extensions.docs._site import stage_layer_assets
+    from livery.extensions.docs._site import stage_extension_assets
 
-    root = layered
+    root = extensioned
     (root / "docs" / "assets").mkdir(parents=True)
     (root / "docs" / "assets" / "site.css").write_text("")
-    assert stage_layer_assets(root) == ["livery.workshop", "acme.theme"]
-    staged = root / "docs" / "_layers"
+    assert stage_extension_assets(root) == ["livery.workshop", "acme.theme"]
+    staged = root / "docs" / "_extensions"
     theme = staged / "acme.theme" / "assets" / "theme.css"
     assert theme.read_text() == "body { color: red }\n"
     assert (staged / "livery.workshop" / "assets" / "palette.css").is_file()
     config = tomllib.loads(zensical_config(root))
     assert config["project"]["extra_css"] == [
-        "_layers/livery.workshop/assets/palette.css",
-        "_layers/livery.workshop/assets/type.css",
-        "_layers/acme.theme/assets/theme.css",
+        "_extensions/livery.workshop/assets/palette.css",
+        "_extensions/livery.workshop/assets/type.css",
+        "_extensions/acme.theme/assets/theme.css",
         "assets/site.css",
     ]
-    # Rebuilt whole: a sheet the layer no longer ships leaves no copy.
+    # Rebuilt whole: a sheet the extension no longer ships leaves no copy.
     (tmp_path / "acme-theme-content" / "docs" / "assets" / "theme.css").unlink()
-    assert stage_layer_assets(root) == ["livery.workshop", "acme.theme"]
+    assert stage_extension_assets(root) == ["livery.workshop", "acme.theme"]
     assert not theme.exists()
     assert "theme.css" not in zensical_config(root)
 
 
-# The theme block, a slot a theme layer fills. Refusals first.
+# The theme block, a slot a theme extension fills. Refusals first.
 
 
 @pytest.fixture
-def theme_layers() -> Iterator[None]:
-    """Withdraw what the test layers contributed to the theme slot."""
+def theme_extensions() -> Iterator[None]:
+    """Withdraw what the test extensions contributed to the theme slot."""
     from livery.workshop._slots import withdraw
 
     yield
@@ -1125,12 +1122,12 @@ def theme_layers() -> Iterator[None]:
 
 
 def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
-    theme_layers: None,
+    theme_extensions: None,
 ) -> None:
     from livery.extensions.docs._site import theme_values
     from livery.workshop._slots import SlotError, contribute, withdraw
 
-    contribute(THEME_SLOT, {"font.body": "Lato"}, layer="acme.site", by="acme.site")
+    contribute(THEME_SLOT, {"font.body": "Lato"}, extension="acme.site", by="acme.site")
     with pytest.raises(
         SlotError,
         match=r"unknown key 'font\.body'; the keys are language, font\.text,"
@@ -1138,20 +1135,20 @@ def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
     ):
         theme_values()
     withdraw(THEME_SLOT, by="acme.site")
-    contribute(THEME_SLOT, "Lato", layer="acme.site", by="acme.site")
+    contribute(THEME_SLOT, "Lato", extension="acme.site", by="acme.site")
     with pytest.raises(SlotError, match="a table of the theme's keys, not 'Lato'"):
         theme_values()
 
 
 def test_a_theme_contribution_changes_the_fonts_and_keeps_the_rest(
-    tmp_path: Path, theme_layers: None
+    tmp_path: Path, theme_extensions: None
 ) -> None:
     from livery.workshop._slots import contribute, withdraw
 
     root = _workspace(tmp_path)
     theme = tomllib.loads(zensical_config(root))["project"]["theme"]
     assert theme["font"] == {"text": "Inter", "code": "Fira Code"}
-    contribute(THEME_SLOT, {"font.text": "Lato"}, layer="acme.site", by="acme.site")
+    contribute(THEME_SLOT, {"font.text": "Lato"}, extension="acme.site", by="acme.site")
     theme = tomllib.loads(zensical_config(root))["project"]["theme"]
     assert theme["font"] == {"text": "Lato", "code": "Fira Code"}
     assert theme["language"] == "en" and len(theme["palette"]) == 3
@@ -1521,7 +1518,7 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     (root / "docs" / "index.md").write_text("# Home\n")
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
+        '[workspace]\nextensions = ["docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
@@ -1540,7 +1537,7 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
+        '[workspace]\nextensions = ["docs"]\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
         '[docs]\npublish = "pages"\n'
     )
@@ -1973,10 +1970,10 @@ def test_without_human_fragments_the_development_section_is_absent(
         development_nav_lines,
         generate_development_pages,
     )
-    from livery.workshop import _layers, _prose
+    from livery.workshop import _extensions, _prose
 
-    root = _workspace(tmp_path, docs_table='layers = ["acme.bare"]\n')
-    monkeypatch.setattr(_layers, "layer_content", lambda layer: None)
+    root = _workspace(tmp_path, docs_table='extensions = ["acme.bare"]\n')
+    monkeypatch.setattr(_extensions, "extension_content", lambda extension: None)
     monkeypatch.setattr(_prose, "_RENDERED", {})
     assert generate_development_pages(root) == []
     assert not (root / "docs" / "development").exists()
@@ -1991,9 +1988,9 @@ def test_the_development_section_renders_one_page_per_section(
         development_nav_lines,
         generate_development_pages,
     )
-    from livery.workshop import _layers, _prose
+    from livery.workshop import _extensions, _prose
 
-    root = _workspace(tmp_path, docs_table='layers = ["acme.prose"]\n')
+    root = _workspace(tmp_path, docs_table='extensions = ["acme.prose"]\n')
     content = tmp_path / "acme-prose-content"
     fragments = content / "fragments"
     fragments.mkdir(parents=True)
@@ -2005,9 +2002,9 @@ def test_the_development_section_renders_one_page_per_section(
         "# Agent only\n\nNever on a page.\n"
     )
     monkeypatch.setattr(
-        _layers,
-        "layer_content",
-        lambda layer: content if layer == "acme.prose" else None,
+        _extensions,
+        "extension_content",
+        lambda extension: content if extension == "acme.prose" else None,
     )
     monkeypatch.setattr(_prose, "_RENDERED", {})
     # The nav reads the fragments, not a page an earlier build wrote.

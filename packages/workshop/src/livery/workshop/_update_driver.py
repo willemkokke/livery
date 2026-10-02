@@ -290,8 +290,8 @@ def _drive(
     armed: bool,
     names: tuple[str, ...] = (),
 ) -> None:
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_repository
-    from livery.workshop._layers import workspace_root
 
     root = workspace_root()
     if root is None:

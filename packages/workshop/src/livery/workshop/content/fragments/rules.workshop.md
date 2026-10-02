@@ -1,17 +1,17 @@
-<!-- Shipped as livery.workshop layer content, delivered to the workspace
-     by the sync verb. Edit this copy in the layer and release it;
+<!-- Shipped as livery.workshop extension content, delivered to the workspace
+     by the sync verb. Edit this copy in the extension and release it;
      an edited delivered copy is a local override, kept and named.
 -->
 # The workshop's rules
 
-The base layer's fragment: only the rules the workshop itself
+The base extension's fragment: only the rules the workshop itself
 enforces. A repository's own facts (identity, intent, layout beyond
 the workspace shape) live in its `CLAUDE.project.md`, which always
 loads last and wins.
 
 ## The gate
 
-`fm check` runs every check the mounted layers register, in parallel;
+`fm check` runs every check the mounted extensions register, in parallel;
 the gate section below names them for this workspace. Run it before
 every commit; CI runs the same command. On a machine it gates what the
 working tree changed since the nearest tree its record proves, and
@@ -152,4 +152,4 @@ This is the final form; there are no typing clean-up passes later.
 - `packages/<name>/docs/`: plain markdown, the seed of the rendered
   per-package site. Write it as that site, never as scratch.
 - `tasks.py`: `plugin("livery.workshop")`, the whole dev loop.
-- `workshop.toml`: the workspace contract (layers, forge, runners).
+- `workshop.toml`: the workspace contract (extensions, forge, runners).

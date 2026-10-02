@@ -39,8 +39,8 @@ from livery.forge.api import (
     Unsupported,
 )
 from livery.workshop._contract import load_contract
+from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
-from livery.workshop._layers import workspace_root
 from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_PENDING,
@@ -59,7 +59,7 @@ ci = group("ci", help="The head commit's CI runs")
 def remember_mounted_tasks(inv: footman.Invocation) -> None:
     """Keep this run's merged task tree for the declared points' task check.
 
-    A ``[[ci.point]]`` names a task some layer mounts; the check reads
+    A ``[[ci.point]]`` names a task some extension mounts; the check reads
     the tree discovery merged for this invocation, which the
     module-level registry no longer holds by the time a task runs.
     """
@@ -982,7 +982,7 @@ def ci_timings(
 
 def doctor_flow(forge: Forge) -> None:
     """Print identity, server, and capabilities for *forge*."""
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is not None:
@@ -1049,12 +1049,12 @@ def doctor() -> None:
     ]
     if hosted:
         print(f"  tools: served by the host: {', '.join(hosted)}")
-    from livery.workshop._layers import available_layers, layer_names
+    from livery.workshop._extensions import available_extensions, extension_names
 
-    for module, dist in available_layers(layer_names(root)):
+    for module, dist in available_extensions(extension_names(root)):
         named = f" ({dist})" if dist else ""
         print(
-            f"  layers: {module}{named} is installed and not listed; it does"
-            " nothing until [workspace] layers names it"
+            f"  extensions: {module}{named} is installed and not listed; it does"
+            " nothing until [workspace] extensions names it"
         )
     doctor_flow(this_forge(root))

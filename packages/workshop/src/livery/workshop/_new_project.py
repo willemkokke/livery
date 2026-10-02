@@ -1,7 +1,7 @@
 """``fm new.project``: birth, end to end, one idempotent verb.
 
 Seed the contract, render the project kind, lock and sync, deliver
-the layer content, generate the CI files, initialise git, then the
+the extension content, generate the CI files, initialise git, then the
 forge half: create the repository, assert its configuration, push,
 and open the unarmed setup pull request. Every step detects done
 and walks past it, so re-running is the recovery procedure and a
@@ -9,8 +9,8 @@ kill between any two steps costs nothing. ``--local`` is everything
 that stays on the machine and nothing that leaves it.
 
 The task is ``expose="global_only"``: it lives above any repository,
-so the workspace it makes never needed one. The default layer stack
-is the base layer; a branded App's stack arrives with the layer
+so the workspace it makes never needed one. The default extension stack
+is the base extension; a branded App's stack arrives with the extension
 axis.
 """
 
@@ -37,9 +37,9 @@ if TYPE_CHECKING:
 _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
 
 
-#: The catalogue a newborn resolves its tools against: this layer's own
+#: The catalogue a newborn resolves its tools against: this extension's own
 #: published index, a strongroom store served as static files under the
-#: site the layer publishes. Hardcoded, and it moves when the site does.
+#: site the extension publishes. Hardcoded, and it moves when the site does.
 PUBLISHED_INDEX = "https://docs.willem.net/livery/tools/"
 
 
@@ -155,11 +155,11 @@ def new_project(
     author: Annotated[str, doc("the authors entry's name (default: git config)")] = "",
     email: Annotated[str, doc("the authors entry's email (default: git config)")] = "",
     namespace: Annotated[str, doc("dotted namespace packages live in")] = "",
-    layer: Annotated[
+    extension: Annotated[
         str,
         doc(
-            "also scaffold this named layer package and self-host it:"
-            " the workspace becomes the layer's home"
+            "also scaffold this named extension package and self-host it:"
+            " the workspace becomes the extension's home"
         ),
     ] = "",
     local: Annotated[
@@ -193,32 +193,29 @@ def new_project(
     root.mkdir(exist_ok=True)
 
     # The contract: a birth-time seed the render never touches. The
-    # default stack is the running App's own layers (contract 19):
-    # its builtin entry points minus footman's, the base first, so a
-    # branded App's children carry its stack and stock fm's carry
-    # the base alone.
+    # list is the running App's own builtin providers, minus footman's
+    # and the base, which is never listed (contract 19): a branded App's
+    # children carry its extensions. Stock fm's carry the site's
+    # extension, which rides in the workshop wheel.
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
     # runtime accessor is footman#536's family).
     from livery.footman import _paths
 
-    stack = [
+    builtin = [
         entry for entry in _paths.builtin() if not entry.startswith("footman.")
     ] or ["livery.workshop"]
+    stack = [entry for entry in builtin if entry != "livery.workshop"]
+    if "livery.workshop" in builtin:
+        stack.append("docs")
     contract = root / "workshop.toml"
     if contract.is_file():
         print("  workshop.toml: already seeded")
     else:
         spelled = ", ".join(f'"{entry}"' for entry in stack)
-        if "livery.workshop" in stack:
-            # The site's layer rides in the workshop wheel: listed by
-            # its import path, its distribution the workshop's own.
-            spelled += (
-                ', { import = "livery.extensions.docs", dist = "livery-workshop" }'
-            )
         lines = [
             "[workspace]",
-            f"layers = [{spelled}]",
+            f"extensions = [{spelled}]",
         ]
         if templates:
             lines.append(f"templates = {toml_string(templates)}")
@@ -293,8 +290,8 @@ def new_project(
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
 
-    if layer:
-        _add_layer(root, layer)
+    if extension:
+        _add_extension(root, extension)
 
     if not (root / ".git").is_dir():
         _git(root, "init", "-q", "--initial-branch=main")
@@ -387,34 +384,37 @@ def new_project(
     )
 
 
-def _add_layer(root: Path, layer: str) -> None:
-    """Scaffold *layer* and self-host it: contract 19's home shape.
+def _add_extension(root: Path, extension: str) -> None:
+    """Scaffold *extension* and self-host it: contract 19's home shape.
 
-    The layer package renders from the ``package-layer``
+    The extension package renders from the ``package-extension``
     kind; the contract's stack gains its import path last, so the
     home composes with its own overlay at HEAD from the first
-    commit. Idempotent: an already-listed layer walks past.
+    commit. Idempotent: an already-listed extension walks past.
     """
     from livery.workshop._sync import sync_workspace
     from livery.workshop._templates import wire_package
 
-    if (root / "packages" / layer).exists():
-        print(f"  layer: packages/{layer} already scaffolded")
+    if (root / "packages" / extension).exists():
+        print(f"  extension: packages/{extension} already scaffolded")
         return
-    import_path = wire_package(root, layer, kind="package-layer")
+    import_path = wire_package(root, extension, kind="package-extension")
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")
     if f'"{import_path}"' not in text:
-        match = re.search(r"^layers = \[(.*)\]$", text, flags=re.M)
+        match = re.search(r"^extensions = \[(.*)\]$", text, flags=re.M)
         if match is None:
             fail(
                 f"cannot self-host {import_path}: the contract has no"
-                " layers line; add it by hand, last"
+                " extensions line; add it by hand, last"
             )
-        appended = f'layers = [{match.group(1)}, "{import_path}"]'
+        listed = [item for item in (match.group(1).strip(),) if item]
+        appended = (
+            f"extensions = [{', '.join([*listed, f'{chr(34)}{import_path}{chr(34)}'])}]"
+        )
         text = text[: match.start()] + appended + text[match.end() :]
         contract.write_text(text, encoding="utf-8")
-        print(f"  layers: {import_path} self-hosted, last in the stack")
+        print(f"  extensions: {import_path} self-hosted, last in the stack")
     # The stack changed: re-deliver content and re-render through the
     # composed source, so the home's files carry its own overlay.
     from livery.workshop._templates import apply_project as reapply

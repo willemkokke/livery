@@ -21,7 +21,7 @@ from livery.footman.api import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._checks import GateContext
-from livery.workshop._layers import workspace_root
+from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._state import RunContext
 

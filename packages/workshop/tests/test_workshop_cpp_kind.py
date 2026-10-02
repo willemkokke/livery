@@ -455,7 +455,7 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     assert is_python_kind("python")
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
-    assert record_for_template("package-layer") is None
+    assert record_for_template("package-extension") is None
     # The build tools are the kind's; clang-format and clang-tidy ride
     # their check records, which is where the profile reads them.
     assert kind_for("cpp-conan").tools == (

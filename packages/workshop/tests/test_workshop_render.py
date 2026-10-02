@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 import yaml
 
-# The site's jobs are the docs layer's: importing its task module
+# The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 import livery.footman.api as footman
@@ -30,7 +30,7 @@ def _root(tmp_path: Path, kind: str) -> Path:
     root = tmp_path / kind
     root.mkdir()
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\n'
+        "[workspace]\nextensions = []\n\n[forge]\n"
         f'kind = "{kind}"\nowner = "owner"\n\n[ci]\n'
         'runners = ["ubuntu-latest", "macos-latest"]\n'
         'python-versions = ["3.13", "3.14"]\naffected-legs = true\n'

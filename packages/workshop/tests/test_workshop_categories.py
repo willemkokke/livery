@@ -41,25 +41,25 @@ def _member(root: Path, contract: str) -> Path:
 
 
 @pytest.fixture
-def brand_layer():
+def brand_extension():
     yield
     for kind in ("python", "base"):
-        unregister_categories(kind, layer="acme.brand")
-        unregister_categories(kind, layer="acme.other")
-    unregister_channels(layer="acme.brand")
+        unregister_categories(kind, extension="acme.brand")
+        unregister_categories(kind, extension="acme.other")
+    unregister_channels(extension="acme.brand")
 
 
 # The refusals first.
 
 
 def test_two_rules_of_one_specificity_claiming_one_path_refuse_naming_both(
-    brand_layer,
+    brand_extension,
 ) -> None:
     register_categories(
-        "python", [("src/**/*_vendor.py", "vendored")], layer="acme.brand"
+        "python", [("src/**/*_vendor.py", "vendored")], extension="acme.brand"
     )
     register_categories(
-        "python", [("src/**/*_vendor.py", "generated")], layer="acme.other"
+        "python", [("src/**/*_vendor.py", "generated")], extension="acme.other"
     )
     with pytest.raises(CategoryError, match="two rules of one specificity") as caught:
         category_of(_package(), "src/livery/x/lib_vendor.py")
@@ -85,7 +85,7 @@ def test_a_channels_table_in_a_package_refuses(tmp_path: Path) -> None:
 
 
 def test_two_channel_rules_of_one_rank_refuse_naming_both(
-    tmp_path: Path, brand_layer
+    tmp_path: Path, brand_extension
 ) -> None:
     def claim(root: Path, relative: Path, emitted: frozenset[str] | None) -> Provenance:
         del root, relative, emitted
@@ -104,11 +104,11 @@ def test_two_channel_rules_of_one_rank_refuse_naming_both(
 # Then what the registries answer, and who supplied it.
 
 
-def test_a_layers_rule_answers_with_its_name_and_the_more_specific_wins(
-    brand_layer,
+def test_a_extensions_rule_answers_with_its_name_and_the_more_specific_wins(
+    brand_extension,
 ) -> None:
     register_categories(
-        "python", [("src/livery/x/_vendor/**", "vendored")], layer="acme.brand"
+        "python", [("src/livery/x/_vendor/**", "vendored")], extension="acme.brand"
     )
     found = category_of(_package(), "src/livery/x/_vendor/lib.py")
     assert (found.name, found.supplier) == ("vendored", "acme.brand")
@@ -146,7 +146,9 @@ def test_the_workspace_unit_answers_for_the_roots_own_files(tmp_path: Path) -> N
     assert {path: category_of(unit, path).name for path in expected} == expected
 
 
-def test_a_layers_channel_rule_answers_at_its_rank(tmp_path: Path, brand_layer) -> None:
+def test_a_extensions_channel_rule_answers_at_its_rank(
+    tmp_path: Path, brand_extension
+) -> None:
     def seed(
         root: Path, relative: Path, emitted: frozenset[str] | None
     ) -> Provenance | None:

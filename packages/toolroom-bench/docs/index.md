@@ -47,7 +47,7 @@ which platform lacks an option, are derived at render time from those
 observations and never written down.
 
 A consumer of the handles installs `livery-toolroom` alone. A
-workspace that keeps the handles current names the bench as a layer,
+workspace that keeps the handles current names the bench as an extension,
 and its verbs mount under `fm tools.*`:
 
 - `fm tools.refresh` observes what is new on this platform and folds

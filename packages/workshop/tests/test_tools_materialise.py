@@ -103,7 +103,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     mirror = ObjectStore.create(root / "mirror")
     mirror.put(payload)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
 

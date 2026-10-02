@@ -40,7 +40,7 @@ members = [{% for package in py %}"packages/{{ package.dir }}"{% if not loop.las
 {% for package in py %}{{ package.name }} = { workspace = true }
 {% endfor %}
 [dependency-groups]
-# The docs toolchain, workshop-rendered so one layer release moves
+# The docs toolchain, workshop-rendered so one extension release moves
 # every project's generator together.
 docs = [
     "zensical>=0.0.50",
@@ -56,16 +56,16 @@ dev = [
 {% endif %}    # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
 {% for package in py %}    "{{ package.dev }}",
-{% endfor %}    # Every contract layer that is not already a member above, so a
+{% endfor %}    # Every contract extension that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
-{% for requirement in layer_requirements %}    "{{ requirement }}",
+{% for requirement in extension_requirements %}    "{{ requirement }}",
 {% endfor %}{% if packages | selectattr('kind', 'defined') | selectattr('kind', 'equalto', 'python-nanobind') | list %}    # An extension member's editor configure asks this interpreter
     # where nanobind's cmake directory is, so the venv carries it
     # beside the build's own isolated copy.
     "nanobind>=2.7",
 {% endif %}    # What the registered checks need in the venv: each line is a
     # check record's contribution to the `python.dev-group` slot, so a
-    # check a layer withdraws takes its line with it, and the record
+    # check an extension withdraws takes its line with it, and the record
     # is where its floor and its reason live.
 {% for requirement in slots['python.dev-group'] %}    "{{ requirement }}",
 {% endfor %}]
@@ -78,7 +78,7 @@ docs-url = "{{ docs_site_url }}tasks/{slug}/"
 
 {% endif %}# The tables the registered checks own, each a check record's
 # fragment for this file, composed in check-name order; a check a
-# layer withdraws takes its tables with it.
+# extension withdraws takes its tables with it.
 {{ fragments['pyproject.toml'] }}
 [tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or

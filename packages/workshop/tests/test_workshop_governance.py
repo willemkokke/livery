@@ -172,7 +172,7 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
 
     root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     # A branch that never touched a governance path.
@@ -206,7 +206,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
 
     root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     _git(root, "checkout", "-b", "feat/2-gov")
@@ -251,7 +251,7 @@ def test_the_check_title_task_refuses_a_drifted_title(
 
     root, _git_seam = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     _git(root, "checkout", "-b", "workflow/release/core")
@@ -289,7 +289,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     _git(root, "commit", "-m", "chore: owners")
     _git(root, "push", "origin", "main")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     fake = FakeForge()
@@ -333,7 +333,7 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
 
     root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     fake = FakeForge()
@@ -373,7 +373,7 @@ def _configure_rig(
     """workflow.configure against the fake through the admin seams."""
     root = _workspace(tmp_path)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     fake = FakeForge()
@@ -542,7 +542,7 @@ def _contract_root(
     root.mkdir(exist_ok=True)
     lines = [
         "[workspace]",
-        'layers = ["livery.workshop"]',
+        "extensions = []",
         "",
         "[forge]",
         f'kind = "{kind}"',
@@ -634,7 +634,7 @@ def test_doctor_prints_the_ladder_and_the_owner_verdicts(
 
     root = _workspace(tmp_path)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ADMIN_TOKEN", raising=False)
@@ -715,7 +715,7 @@ def test_a_lagging_pr_head_stays_in_flight(
 
     root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     fake = FakeForge()
@@ -762,7 +762,7 @@ def test_a_disarmed_behind_pr_teaches_integrate(
 
     root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     fake = FakeForge()

@@ -25,37 +25,37 @@ from livery.workshop._categories import (
     matches,
 )
 from livery.workshop._checks import (
-    BASE_LAYER,
+    BASE_EXTENSION,
     WORKSPACE,
     CheckRecord,
     GateContext,
     answering,
     checks_by_name,
 )
+from livery.workshop._extensions import FOR_ATTRIBUTE
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
-from livery.workshop._layers import FOR_ATTRIBUTE
 from livery.workshop._packages import Package
 
 
 @dataclass(frozen=True)
 class Subject:
-    """What a layer registers, as the kit judges it.
+    """What an extension registers, as the kit judges it.
 
-    The records are the ones the layer registered, and the kit reads
-    the registries as they stand, so the layer's registrations run
+    The records are the ones the extension registered, and the kit reads
+    the registries as they stand, so the extension's registrations run
     before the kit does.
 
     Attributes:
-        layer: The layer's import path, ``acme.layer``: its plugin
-            module, where the kit reads what the layer declares, its
-            contributions to other layers among them.
-        kinds: The kinds the layer registers, and the kinds whose
+        extension: The extension's import path, ``acme.extension``: its plugin
+            module, where the kit reads what the extension declares, its
+            contributions to other extensions among them.
+        kinds: The kinds the extension registers, and the kinds whose
             category tables it extends.
-        checks: The checks the layer registers.
+        checks: The checks the extension registers.
     """
 
-    layer: str
+    extension: str
     kinds: tuple[KindRecord, ...] = ()
     checks: tuple[CheckRecord, ...] = ()
 
@@ -82,7 +82,7 @@ class Violation:
 
 @dataclass(frozen=True)
 class Clause:
-    """One thing the gate relies on of what a layer registers.
+    """One thing the gate relies on of what an extension registers.
 
     Attributes:
         name: The clause's name, ``backend-protocol``.
@@ -299,7 +299,7 @@ def _documented_answer(kind: str, path: str) -> list[CategoryRule]:
 
     The most specific pattern wins; between kinds of equal specificity
     the nearer kind wins; two rules of one kind and one specificity
-    claiming *path* for different categories or layers tie.
+    claiming *path* for different categories or extensions tie.
     """
     nearest_first = [record.name for record in reversed(kind_chain(kind))]
     matching = [rule for rule in category_rules(kind) if matches(rule.pattern, path)]
@@ -311,7 +311,7 @@ def _documented_answer(kind: str, path: str) -> list[CategoryRule]:
     at_nearest = [rule for rule in best if nearest_first.index(rule.kind) == depth]
     first = at_nearest[0]
     if any(
-        rule.category != first.category or rule.layer != first.layer
+        rule.category != first.category or rule.extension != first.extension
         for rule in at_nearest
     ):
         return at_nearest
@@ -334,8 +334,8 @@ def _category_table(subject: Subject) -> list[Violation]:
                     Violation(
                         CATEGORY_TABLE,
                         where,
-                        f"{first.pattern!r} ({first.category}, {first.layer}) and"
-                        f" {second.pattern!r} ({second.category}, {second.layer})"
+                        f"{first.pattern!r} ({first.category}, {first.extension}) and"
+                        f" {second.pattern!r} ({second.category}, {second.extension})"
                         " claim it at one specificity for one kind; one of them"
                         " names the file more closely",
                     )
@@ -369,7 +369,7 @@ def _category_table(subject: Subject) -> list[Violation]:
     return list(dict.fromkeys(violations))
 
 
-# The order of a layer's checks.
+# The order of an extension's checks.
 
 
 def _loop(start: str) -> list[str]:
@@ -424,7 +424,7 @@ def _check_order(subject: Subject) -> list[Violation]:
     return violations
 
 
-# A layer's contributions to other layers.
+# An extension's contributions to other extensions.
 
 
 def _imports(module: str) -> bool:
@@ -438,10 +438,10 @@ def _imports(module: str) -> bool:
 
 
 def _contribution_modules(subject: Subject) -> list[Violation]:
-    if not _imports(subject.layer):
+    if not _imports(subject.extension):
         return []
     declared: object = getattr(
-        importlib.import_module(subject.layer), FOR_ATTRIBUTE, {}
+        importlib.import_module(subject.extension), FOR_ATTRIBUTE, {}
     )
     if not isinstance(declared, dict) or not all(
         isinstance(target, str) and isinstance(module, str)
@@ -450,15 +450,15 @@ def _contribution_modules(subject: Subject) -> list[Violation]:
         return [
             Violation(
                 CONTRIBUTION_MODULES,
-                f"layer {subject.layer}",
-                f"{FOR_ATTRIBUTE} is not a map from a target layer's import path"
-                " to a module; the mount refuses the layer",
+                f"extension {subject.extension}",
+                f"{FOR_ATTRIBUTE} is not a map from a target extension's import path"
+                " to a module; the mount refuses the extension",
             )
         ]
     return [
         Violation(
             CONTRIBUTION_MODULES,
-            f"layer {subject.layer} for {target}",
+            f"extension {subject.extension} for {target}",
             f"names {module}, which does not import; the mount refuses once"
             f" {target} is listed",
         )
@@ -467,11 +467,11 @@ def _contribution_modules(subject: Subject) -> list[Violation]:
     ]
 
 
-# A layer's configuration files, through the workshop's own render.
+# An extension's configuration files, through the workshop's own render.
 
 
 def _probe_answers(kind: str = "") -> dict[str, Any]:
-    """The answers the kit renders a layer's fragments with.
+    """The answers the kit renders an extension's fragments with.
 
     A workspace of one python member and one native member, so a
     fragment's loops over either run, rendering *kind*'s package files.
@@ -625,7 +625,7 @@ def _withdrawn_file(subject: Subject) -> list[Violation]:
     return violations
 
 
-# The gate's walk over a layer's checks.
+# The gate's walk over an extension's checks.
 
 
 class _Recorder:
@@ -777,25 +777,28 @@ def _gate_lines(subject: Subject) -> list[Violation]:
         if record.name not in checks_by_name():
             continue
         where = f"check {record.name}"
-        if subject.layer != BASE_LAYER and record.layer != subject.layer:
-            violations.append(
-                Violation(
-                    GATE_LINES,
-                    where,
-                    f"names {record.layer} as its layer; the gate says who"
-                    f" registered a check by it, and {subject.layer} registered"
-                    " this one",
-                )
-            )
-        elif (
-            record.layer != BASE_LAYER
-            and f"  {record.name}: registered by {record.layer}" not in lines
+        if (
+            subject.extension != BASE_EXTENSION
+            and record.extension != subject.extension
         ):
             violations.append(
                 Violation(
                     GATE_LINES,
                     where,
-                    f"the gate does not name {record.layer} as the layer that"
+                    f"names {record.extension} as its extension; the gate says who"
+                    f" registered a check by it, and {subject.extension} registered"
+                    " this one",
+                )
+            )
+        elif (
+            record.extension != BASE_EXTENSION
+            and f"  {record.name}: registered by {record.extension}" not in lines
+        ):
+            violations.append(
+                Violation(
+                    GATE_LINES,
+                    where,
+                    f"the gate does not name {record.extension} as the extension that"
                     " registered it",
                 )
             )
@@ -844,8 +847,8 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         CONTRIBUTION_MODULES,
-        "A layer declares its contributions to other layers as a map from a"
-        " target layer's import path to a module that imports.",
+        "An extension declares its contributions to other extensions as a map from a"
+        " target extension's import path to a module that imports.",
         _contribution_modules,
     ),
     Clause(
@@ -869,7 +872,7 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         GATE_LINES,
-        "Every check names the layer that registered it, which the gate prints,"
+        "Every check names the extension that registered it, which the gate prints,"
         " and a check with no file to read is named and never started.",
         _gate_lines,
     ),
@@ -885,9 +888,11 @@ def judge(subject: Subject) -> list[Violation]:
 def builtin_subject() -> Subject:
     """The workshop's own kinds and checks as a subject, for its own suite."""
     return Subject(
-        BASE_LAYER,
+        BASE_EXTENSION,
         kinds=all_kinds(),
         checks=tuple(
-            record for record in checks_by_name().values() if record.layer == BASE_LAYER
+            record
+            for record in checks_by_name().values()
+            if record.extension == BASE_EXTENSION
         ),
     )

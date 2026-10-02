@@ -62,7 +62,7 @@ def rig(
     repo = fake.repository("willemkokke", "livery")
     git = GitOps(root)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
@@ -959,7 +959,7 @@ def test_completion_offline_costs_the_suggestions_never_the_command(
     def _broken() -> object:
         raise RuntimeError("offline")
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", _broken)
+    monkeypatch.setattr("livery.workshop._extensions.workspace_root", _broken)
     assert _open_numbers() == []
 
 

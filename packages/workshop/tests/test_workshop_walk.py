@@ -270,13 +270,13 @@ def test_the_fixers_only_walk_judges_nothing(
             "format",
             judge,
             fix=fix,
-            layer="acme.layer",
+            extension="acme.extension",
             claims=(Claim("configuration", suffixes=(".py",)),),
         )
     )
     _quality.fix_files((str(root / "tasks.py"),))
     # Every fixer the file's claims reach ran, in its in-flight mode, and
-    # nothing judged: no type check, no test, not the layer's judge.
+    # nothing judged: no type check, no test, not the extension's judge.
     assert "run_format:True" in ran and "run_lint:True" in ran
     assert "acme-fixed" in ran
     assert "acme-judged" not in ran

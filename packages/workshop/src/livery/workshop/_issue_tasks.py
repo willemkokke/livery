@@ -43,7 +43,7 @@ issue = group("issue", help="Issues: the shared work pool")
 
 
 def _workspace() -> Path:
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -516,8 +516,8 @@ def _assign(root: Path, repo: Repository, work: Issue) -> None:
 
 def _me(repo: Repository) -> str:
     try:
+        from livery.workshop._extensions import workspace_root
         from livery.workshop._forge_lane import this_forge
-        from livery.workshop._layers import workspace_root
 
         root = workspace_root()
         return this_forge(root).whoami() if root is not None else ""

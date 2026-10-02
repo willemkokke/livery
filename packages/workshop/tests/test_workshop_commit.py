@@ -24,8 +24,7 @@ def _git(cwd: Path, *args: str) -> str:
 def _workspace(root: Path) -> None:
     """A workspace with one python package, the shape commit's scope reads."""
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
-        'owner = "owner"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "owner"\n'
     )
     package = root / "packages" / "x"
     package.mkdir(parents=True)

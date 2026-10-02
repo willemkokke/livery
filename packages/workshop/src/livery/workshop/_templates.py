@@ -32,7 +32,11 @@ import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
 from livery.workshop._contract import load_contract
-from livery.workshop._layers import layer_entries, workspace_root
+from livery.workshop._extensions import (
+    extension_entries,
+    stack_entries,
+    workspace_root,
+)
 from livery.workshop._materialise import write_lf
 from livery.workshop._pythons import python_floor
 
@@ -51,7 +55,7 @@ def templates_artifact(root: Path) -> str:
 
     ``[workspace] templates-artifact`` in ``workshop.toml``: the git
     remote a home's release pushes its (composed) template tree to,
-    tagged with the publishing layer's version. Empty means this
+    tagged with the publishing extension's version. Empty means this
     workspace publishes no templates, which is every ordinary
     instance.
     """
@@ -64,7 +68,7 @@ def template_source(root: Path) -> str:
     """The workspace's declared template source.
 
     ``[workspace] templates`` in ``workshop.toml``: a directory relative
-    to the root (the monorepo names the base layer's own tree under
+    to the root (the monorepo names the base extension's own tree under
     ``packages/workshop``), or a git URL (a fork, at its own risk).
     Silent means the published artifact repository.
     """
@@ -96,26 +100,26 @@ def redacted_source(source: str) -> str:
 def template_ref(root: Path) -> str:
     """The tag a remote template source renders at.
 
-    The publishing layer's installed version, ``v`` prefixed: the
-    topmost layer in the stack that ships a template tree, because
-    that layer's home published the composed artifact the contract
+    The publishing extension's installed version, ``v`` prefixed: the
+    topmost extension in the stack that ships a template tree, because
+    that extension's home published the composed artifact the contract
     points at. A plain instance's topmost tree-shipper is the base
-    layer; "topmost layer" alone would be wrong, since a layer may
+    extension; "topmost extension" alone would be wrong, since an extension may
     own no templates at all.
     """
     from importlib.metadata import PackageNotFoundError, version
 
-    from livery.workshop._compose import layer_template_tree
+    from livery.workshop._compose import extension_template_tree
 
-    entries = layer_entries(root)
+    entries = stack_entries(root)
     if not entries:
         fail(
-            "workshop.toml declares no [workspace] layers: the template"
-            " ref is the publishing layer's version and there is none"
+            "workshop.toml declares no [workspace] extensions: the template"
+            " ref is the publishing extension's version and there is none"
         )
     publisher = ""
-    for layer, dist in entries:
-        if layer_template_tree(root, layer) is not None:
+    for extension, dist in entries:
+        if extension_template_tree(root, extension) is not None:
             publisher = dist
     if not publisher:
         publisher = entries[0][1]
@@ -123,7 +127,7 @@ def template_ref(root: Path) -> str:
         return "v" + version(publisher)
     except PackageNotFoundError:
         fail(
-            f"the publishing layer's distribution {publisher} is not"
+            f"the publishing extension's distribution {publisher} is not"
             " installed, so the template ref is unknowable: `uv sync`"
             " installs the dev group"
         )
@@ -153,9 +157,9 @@ def resolve_source(root: Path) -> tuple[str, str | None]:
 
 
 def render_source(root: Path) -> tuple[str, str | None, dict[str, str]]:
-    """The render's source, its ref, and each file's owning layer.
+    """The render's source, its ref, and each file's owning extension.
 
-    A self-hosting layer home composes: a workspace layer above the
+    A self-hosting extension home composes: a workspace extension above the
     base that ships a template tree turns the source into the stack,
     composed bottom to top into ``.workshop/composed-templates``,
     regenerated on every call so the home's gate judges the local
@@ -167,12 +171,11 @@ def render_source(root: Path) -> tuple[str, str | None, dict[str, str]]:
     """
     import shutil
 
-    from livery.workshop._compose import compose_source, layer_template_tree
-    from livery.workshop._layers import layer_entries
+    from livery.workshop._compose import compose_source, extension_template_tree
 
     def _member_overlay() -> bool:
-        for layer, _dist in layer_entries(root)[1:]:
-            tree = layer_template_tree(root, layer)
+        for extension, _dist in extension_entries(root):
+            tree = extension_template_tree(root, extension)
             if tree is not None and tree.is_relative_to(root):
                 return True
         return False
@@ -237,22 +240,22 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
 
     Identity is answered, configuration is declared: the runner's
     name belongs to the process, the Python floor to the root
-    ``pyproject.toml``, the layers and the registry to
+    ``pyproject.toml``, the extensions and the registry to
     ``workshop.toml``. Every project render mixes these in, so the
     answers hold identity and the ``packages`` roster alone.
     """
-    entries = layer_entries(root)
+    entries = stack_entries(root)
     if not entries:
         fail(
-            "workshop.toml declares no [workspace] layers: the render"
-            " needs the stack (the base layer is livery.workshop)"
+            "workshop.toml declares no [workspace] extensions: the render"
+            " needs the stack (the base extension is livery.workshop)"
         )
     members = {
         _requirement_name(str(entry.get("dev", "")))
         for entry in answers.get("packages", [])
         if isinstance(entry, dict)
     }
-    from livery.workshop._checks import extensions
+    from livery.workshop._checks import editor_extensions
     from livery.workshop._docs_contract import docs_table
     from livery.workshop._provenance import PROJECT_RENDERED
     from livery.workshop._regions import contents
@@ -269,15 +272,18 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # whole bytes.
         "regions": {name: contents(root / name) for name in PROJECT_RENDERED},
         # The slots the check records fill: the dev group's tool lines,
-        # pytest's addopts. A layer's contribution lands here, and a
+        # pytest's addopts. An extension's contribution lands here, and a
         # withdrawn check takes its line with it.
         "slots": all_composed(),
-        "layer_imports": [import_path for import_path, _ in entries],
-        "layer_requirements": [
-            dist for _, dist in entries if _requirement_name(dist) not in members
-        ],
+        "extension_imports": [import_path for import_path, _ in entries],
+        # One line per distribution: a wheel may ship several extensions.
+        "extension_requirements": list(
+            dict.fromkeys(
+                dist for _, dist in entries if _requirement_name(dist) not in members
+            )
+        ),
         # The editor extension ids the registered checks carry.
-        "extensions": list(extensions()),
+        "extensions": list(editor_extensions()),
         **registry_injections(root),
     }
     injected["fragments"] = compose_fragments({**answers, **injected})
@@ -564,7 +570,7 @@ def project_drift(root: Path) -> list[str]:
             owner = owners.get(f"project/{relative}.jinja") or owners.get(
                 f"project/{relative}"
             )
-            named = f" (the {owner} layer owns it)" if owner else ""
+            named = f" (the {owner} extension owns it)" if owner else ""
             if not committed.is_file():
                 drift.append(
                     f"{relative}: rendered, but missing from the repository{named}"
@@ -1112,7 +1118,7 @@ def _render_kind(
 def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     """Render one *kind* package into *root* and wire it; the import path.
 
-    The shared core of ``new.package`` and the birth verb's layer
+    The shared core of ``new.package`` and the birth verb's extension
     arm: `render_member`, then the project re-apply, lock and sync.
     Idempotent by refusal: an existing directory is named, never
     overwritten.
@@ -1179,7 +1185,7 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     members = list(answers.get("packages", []))
     if record is None or is_python_kind(record.name):
         # A python member joins the uv workspace and the dev group.
-        # An unmapped template (package-layer) is a python
+        # An unmapped template (package-extension) is a python
         # variant, so it takes the same wiring. A chained kind rides
         # along by name so the CI emitters can see it (the wheels
         # matrix exists only where a platform-wheel kind lives).

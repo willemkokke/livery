@@ -193,14 +193,14 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
 
 
 def test_unregistering_the_ruff_checks_removes_every_trace(restored_checks) -> None:
-    from livery.workshop._checks import extensions, tools_for_kind
+    from livery.workshop._checks import editor_extensions, tools_for_kind
 
     unregister_check("format.ruff", by="acme.brand")
     unregister_check("lint.ruff", by="acme.brand")
     composed = compose_project(_data())
     assert "[tool.ruff" not in composed["pyproject.toml"]
     assert "ruff" not in composed[".vscode/settings.json"]
-    assert "charliermarsh.ruff" not in extensions()
+    assert "charliermarsh.ruff" not in editor_extensions()
     assert "ruff" not in {tool for tool, _ in tools_for_kind("python")}
     assert "[tool.basedpyright]" in composed["pyproject.toml"]
 
@@ -214,7 +214,7 @@ def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None
     assert cpp is not None and nano is not None
     assert "for the cpp-conan kind" in cpp and "for the python-nanobind kind" in nano
     assert package_fragment("python", ".clang-tidy") is None
-    # A layer's fragment for one kind differs from the other kind's.
+    # An extension's fragment for one kind differs from the other kind's.
     register_check(
         CheckRecord(
             "acme-tidy",
@@ -222,7 +222,7 @@ def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None
             _noop,
             scope="package",
             kinds=("python-nanobind",),
-            layer="acme.brand",
+            extension="acme.brand",
             fragments=(
                 Fragment(".clang-tidy", "Checks: acme-*\n", kind="python-nanobind"),
             ),
@@ -239,11 +239,15 @@ def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None
 def test_the_extension_ids_come_from_the_records_and_are_well_formed() -> None:
     import re
 
-    from livery.workshop._checks import checks_by_name, extensions
+    from livery.workshop._checks import checks_by_name, editor_extensions
 
     carried = {
-        record.extension for record in checks_by_name().values() if record.extension
+        record.editor_extension
+        for record in checks_by_name().values()
+        if record.editor_extension
     }
-    assert set(extensions()) == carried
-    assert all(re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", name) for name in extensions())
-    assert json.dumps(list(extensions()))  # what the rendered list carries
+    assert set(editor_extensions()) == carried
+    assert all(
+        re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", name) for name in editor_extensions()
+    )
+    assert json.dumps(list(editor_extensions()))  # what the rendered list carries

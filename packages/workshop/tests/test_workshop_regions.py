@@ -42,8 +42,8 @@ def test_an_edit_outside_a_region_is_drift_naming_the_region() -> None:
 
 
 def test_a_file_without_regions_keeps_the_plain_line() -> None:
-    assert _drift_line("f.toml", b"b\n", b"a\n", " (the x layer owns it)") == [
-        "f.toml: differs from its render (the x layer owns it)"
+    assert _drift_line("f.toml", b"b\n", b"a\n", " (the x extension owns it)") == [
+        "f.toml: differs from its render (the x extension owns it)"
     ]
     assert _drift_line("f.toml", b"a\n", b"a\n") == []
 

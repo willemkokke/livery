@@ -1,8 +1,8 @@
 # Extensions: a base, and what a workspace lists
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
-2026-10-02. Phases 1 to 3 built (issues #1025, #1028, #1032, #1034);
-the others not started. It is the one plan from now until the end of
+2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
+#1036); the others not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -698,6 +698,8 @@ Acceptance:
 
 ### Phase 4: extensions
 
+**Built (issue #1036).**
+
 Deliverables:
 
 - The `workshop.extensions` entry point group; the mount reads it,
@@ -1026,7 +1028,7 @@ Acceptance:
 
 | Temporary | Replaced by |
 | --- | --- |
-| `[workspace] layers` and `mount_layers()` | `[workspace] extensions` and the entry point group (phase 4) |
+| `livery.forge`, `livery.toolroom.bench` and `livery.footman` listed as extensions | plugins mounted by the project builtin rung (phase 5) |
 | `plugin("livery.workshop")` in the rendered `tasks.py` | the project builtin rung (phase 5) |
 | check-owned fragments, prose, skills, hooks, settings and CSS as separate channels | one fragment engine (phase 6) |
 | copier, the templates, the answers file, the template channel | seeds and fragments from wheels (phases 7, 8) |
@@ -1043,6 +1045,24 @@ Acceptance:
 
 ## Decision record
 
+- 2026-10-03, phase 4: an extension's declaring module carries
+  `API_VERSION`, `LEVELS`, `PLUGIN`, `REQUIRES`, `TOOLS`, `FOR` and
+  `CONTRACT_KEYS`; the `workshop.contract` group folded into
+  `workshop.extensions`. The base is never listed: `stack_entries()`
+  puts it first for the readers that walk the whole stack (content,
+  templates, the site's assets). A list entry is a name or
+  `{ name, for }`: `import` and `dist` went, since the entry point
+  names both, and `for` stays as the project's opt-out from an
+  extension's contributions. The docs extension is listed as `docs`;
+  forge, the bench and footman add verbs alone, so they are plugins
+  listed under their module names until phase 5. A missing
+  `[workspace] extensions` refuses at mount and in `fm extensions`,
+  printing the line; a reader of the list finds it empty, so a
+  contract written by a test or a tool before its list is not refused
+  on every read. "Layer" left the code and the docs; "layering", the
+  package dependency check, is another word and stays. The editor's
+  marketplace ids, which the check records also called `extension`,
+  are `editor_extension` now.
 - 2026-10-02, phase 3: seven roots became namespaces with an `api`
   module: footman, forge, strongroom, workshop, and toolroom's store,
   bench and `tools`, whose house spelling is now

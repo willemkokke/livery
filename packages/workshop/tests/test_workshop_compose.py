@@ -16,12 +16,12 @@ _FAILURES = (BaseException,)
 
 
 def _home(tmp_path: Path) -> Path:
-    """A layer home: the base stack plus a member overlay layer."""
+    """An extension home: the base stack plus a member overlay extension."""
     root = tmp_path / "home"
     (root / "packages" / "brand").mkdir(parents=True)
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop", "acme.brand"]\n'
+        'extensions = ["acme.brand"]\n'
         "\n"
         '[forge]\nkind = "github"\nowner = "acme"\n'
         "\n"
@@ -60,7 +60,7 @@ def test_add_and_declared_replace_compose(tmp_path: Path) -> None:
     assert composed.owners["project/README.md.jinja"] == "acme.brand"
     assert composed.owners["project/pyproject.toml.jinja"] == "livery.workshop"
     config = (composed.path / "copier.yml").read_text()
-    assert "Contributed by the acme.brand layer" in config
+    assert "Contributed by the acme.brand extension" in config
     assert "brand_motto" in config
 
 
@@ -83,7 +83,7 @@ def test_an_unknown_kind_names_the_kinds_the_stack_has(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES) as caught:
         compose_source(root, tmp_path / "out")
     text = str(caught.value)
-    assert "maya-plugin" in text and "package-layer" in text
+    assert "maya-plugin" in text and "package-extension" in text
 
 
 def test_a_stale_replace_declaration_is_refused(tmp_path: Path) -> None:
@@ -95,7 +95,7 @@ def test_a_stale_replace_declaration_is_refused(tmp_path: Path) -> None:
     )
     with pytest.raises(_FAILURES) as caught:
         compose_source(root, tmp_path / "out")
-    assert "no lower layer ships" in str(caught.value)
+    assert "no lower extension ships" in str(caught.value)
 
 
 def test_an_undefaulted_overlay_question_is_refused(tmp_path: Path) -> None:
@@ -131,8 +131,8 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
     contract = (root / "workshop.toml").read_text()
     (root / "workshop.toml").write_text(
         contract.replace(
-            'layers = ["livery.workshop", "acme.brand"]',
-            'layers = ["livery.workshop", "acme.brand"]\ntemplates = "templates"',
+            'extensions = ["acme.brand"]',
+            'extensions = ["acme.brand"]\ntemplates = "templates"',
         )
     )
     overlay = _overlay(root)
@@ -160,13 +160,13 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
     assert ".gitignore" in changed
     assert "brand-extra/" in (root / ".gitignore").read_text()
     assert project_drift(root) == []
-    # A doctored composed file names the layer that owns it. Doctored
+    # A doctored composed file names the extension that owns it. Doctored
     # wholesale, it has also lost its `rules` region's markers, which
     # the line names first.
     (root / ".gitignore").write_text("# doctored\n")
     drift = project_drift(root)
     assert any(
         ".gitignore: the `rules` region's markers are rendered; restore them,"
-        " `fm template.apply` rewrites them (the acme.brand layer owns it)" in line
+        " `fm template.apply` rewrites them (the acme.brand extension owns it)" in line
         for line in drift
     )

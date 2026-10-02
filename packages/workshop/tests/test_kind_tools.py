@@ -137,7 +137,7 @@ def _workspace(
     )
     _records(root, *_python_tools("1.0.0", "1.1.0"))
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     return root
 
@@ -433,7 +433,7 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
 
 def test_the_verbs_refuse_outside_a_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: None
+        "livery.workshop._extensions.workspace_root", lambda start=None: None
     )
     with pytest.raises(Failed, match=r"no workspace"):
         _tool_tasks.tools_lock()
@@ -860,7 +860,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     """
     root = tmp_path / "newborn"
     root.mkdir()
-    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told
@@ -879,7 +879,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     # A lock answers the question, so nothing is said.
     _records(root, *_python_tools("1.0.0"))
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
     _tool_tasks.tools_lock()

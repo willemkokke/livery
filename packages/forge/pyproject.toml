@@ -31,9 +31,14 @@ test = [
     "livery-toolroom>=0.7.0",
 ]
 
+# A workshop extension until the workshop mounts a project's plugins by
+# its dependencies: the data module that declares it.
+[project.entry-points."workshop.extensions"]
+"livery.forge" = "livery.forge._extension"
+
 [project.entry-points."footman.tasks"]
 # The dev-container tasks (livery.forge._dev), mounted only by a
-# workspace that lists livery.forge in its layers. The module imports
+# workspace that lists livery.forge in its extensions. The module imports
 # footman, which is not a dependency: the only loader is footman's own
 # plugin(), so footman is present by construction.
 "livery.forge" = "livery.forge._dev"

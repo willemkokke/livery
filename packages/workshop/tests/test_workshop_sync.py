@@ -16,9 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _workspace(tmp_path: Path) -> Path:
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n'
-    )
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     return tmp_path
 
 
@@ -221,7 +219,7 @@ def test_a_stale_settings_copy_refreshes(tmp_path: Path) -> None:
     sync_workspace(root)
     target = root / ".claude" / "settings.json"
     # An older ship: the copy and its record agree with each other and
-    # disagree with what the layer ships now.
+    # disagree with what the extension ships now.
     stale = b'{"hooks": {"old": true}}\n'
     target.write_bytes(stale)
     digest = hashlib.sha256(stale).hexdigest()
@@ -257,7 +255,7 @@ def test_a_settings_link_is_replaced_by_a_copy(tmp_path: Path) -> None:
 def test_the_sweep_reaches_no_further_than_the_fragments(tmp_path: Path) -> None:
     """The refusal first: the sweep walks its own directory and no other.
 
-    `.workshop/` holds this checkout's state beside the layers'
+    `.workshop/` holds this checkout's state beside the extensions'
     fragments. While the two shared a top level the sweep could not
     tell them apart, and deleted the stub receipt that the same sync
     reads a few steps later, so the fast path it exists for had never
@@ -277,7 +275,7 @@ def test_the_sweep_reaches_no_further_than_the_fragments(tmp_path: Path) -> None
     assert lines == []
 
 
-def test_a_fragment_a_layer_stopped_shipping_is_removed(tmp_path: Path) -> None:
+def test_a_fragment_a_extension_stopped_shipping_is_removed(tmp_path: Path) -> None:
     """And inside its own directory the sweep still does its job."""
     root = _workspace(tmp_path)
     sync_workspace(root)
@@ -305,11 +303,11 @@ def test_the_workshop_directory_holds_only_directories(tmp_path: Path) -> None:
 def test_explain_tells_a_fragment_from_this_checkout_s_own_state(
     tmp_path: Path,
 ) -> None:
-    """A path under `.workshop/` is no longer a layer fragment by default."""
+    """A path under `.workshop/` is no longer an extension fragment by default."""
     from livery.workshop._provenance import _materialised
 
     fragment = _materialised(tmp_path, Path(".workshop/fragments/voice.md"))
-    assert fragment is not None and fragment.channel == "layer fragment"
+    assert fragment is not None and fragment.channel == "extension fragment"
     state = _materialised(tmp_path, Path(".workshop/state/stubs.json"))
     assert state is not None and state.channel == "checkout state"
     receipts = _materialised(tmp_path, Path(".workshop/receipts/conan.json"))

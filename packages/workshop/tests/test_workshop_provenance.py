@@ -41,11 +41,11 @@ def test_frontmatter_keeps_its_place(tmp_path: Path) -> None:
 def test_a_stale_header_is_replaced_not_stacked(tmp_path: Path) -> None:
     target = tmp_path / "notes.sh"
     target.write_text("echo hi\n")
-    inject(target, content_header("old.layer", "#"))
-    inject(target, content_header("new.layer", "#"))
+    inject(target, content_header("old.extension", "#"))
+    inject(target, content_header("new.extension", "#"))
     text = target.read_text()
-    assert "old.layer" not in text
-    assert text.count("layer content") == 1
+    assert "old.extension" not in text
+    assert text.count("extension content") == 1
     assert text.endswith("echo hi\n")
 
 
@@ -66,18 +66,21 @@ def test_comment_hostile_types_have_no_style() -> None:
 
 
 def test_the_content_lint_is_red_then_fix_writes(tmp_path: Path) -> None:
-    content = tmp_path / "packages" / "brand" / "src" / "brand" / "layer" / "content"
+    content = (
+        tmp_path / "packages" / "brand" / "src" / "brand" / "extension" / "content"
+    )
     (content / "fragments").mkdir(parents=True)
     (content / "fragments" / "rules.md").write_text("# Rules\n")
     (content / "settings.json").write_text("{}\n")  # comment-hostile: exempt
     findings = content_lint(tmp_path)
     assert findings == [
-        "packages/brand/src/brand/layer/content/fragments/rules.md: missing its header"
+        "packages/brand/src/brand/extension/content/fragments/rules.md:"
+        " missing its header"
     ]
     fixed = content_lint(tmp_path, fix=True)
     assert any("header written" in line for line in fixed)
     text = (content / "fragments" / "rules.md").read_text()
-    assert text.startswith("<!-- Shipped as brand.layer layer content")
+    assert text.startswith("<!-- Shipped as brand.extension extension content")
     assert content_lint(tmp_path) == []  # green, and idempotent
 
 
@@ -93,12 +96,12 @@ def test_the_gate_arm_fails_without_fix(
 ) -> None:
     from livery.workshop._provenance import provenance_check
 
-    content = tmp_path / "packages" / "brand" / "src" / "brand" / "layer" / "content"
+    content = (
+        tmp_path / "packages" / "brand" / "src" / "brand" / "extension" / "content"
+    )
     content.mkdir(parents=True)
     (content / "rules.md").write_text("# Rules\n")
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n'
-    )
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr(
         "livery.workshop._provenance.workspace_root", lambda start=None: tmp_path
     )

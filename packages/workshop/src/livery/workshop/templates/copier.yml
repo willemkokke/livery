@@ -3,7 +3,7 @@
 # carries a default or `when: false`, so an existing instance updates
 # without a prompt.
 #
-# Only identity is asked. Contract facts (layers, forge, owners, CI)
+# Only identity is asked. Contract facts (extensions, forge, owners, CI)
 # live in workshop.toml; environment facts live in the committed
 # .repo.env. The `when: false` entries below are injected at render
 # time from the contract by the workshop, never asked and never
@@ -19,7 +19,7 @@ _envops:
 kind:
   type: str
   help: "What to render: a workspace root, or one Python package"
-  choices: [project, package-base, package-python, package-layer, package-cpp-conan, package-python-nanobind]
+  choices: [project, package-base, package-python, package-extension, package-cpp-conan, package-python-nanobind]
   default: project
 
 project_name:
@@ -84,20 +84,20 @@ slots:
     injected at render time from the registry, so a withdrawn check
     takes its lines with it
 
-layer_imports:
+extension_imports:
   type: yaml
   default: [livery.workshop]
   when: false
   help: >-
-    the contract's layers as import paths; injected at render time
+    the contract's extensions as import paths; injected at render time
     from workshop.toml
 
-layer_requirements:
+extension_requirements:
   type: yaml
   default: []
   when: false
   help: >-
-    the dev-group requirement for each layer that is not already a
+    the dev-group requirement for each extension that is not already a
     workspace member; injected at render time from workshop.toml
 
 docs_site_url:

@@ -26,7 +26,7 @@ from livery.workshop._kinds import Backend, KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
 from livery.workshop.testing import CLAUSES, Subject, builtin_subject, judge
 
-LAYER = "acme.layer"
+EXTENSION = "acme.extension"
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def acme() -> Iterator[None]:
     _kinds._KINDS.update(kinds)  # pyright: ignore[reportPrivateUsage]
     _checks.restore(checks)
     for kind in ("acme-parent", "acme-child"):
-        _categories.unregister_categories(kind, layer=LAYER)
+        _categories.unregister_categories(kind, extension=EXTENSION)
 
 
 def _idle(ctx: GateContext) -> None:
@@ -92,7 +92,7 @@ def test_a_backend_missing_a_method_or_taking_the_wrong_call_breaks_the_protocol
     # way the gate reads a module, by attribute.
     broken = cast("Backend", types.SimpleNamespace(**members))
     kind = replace(python, name="acme-broken", backend=broken)
-    found = _names(Subject(LAYER, kinds=(kind,)), "backend-protocol")
+    found = _names(Subject(EXTENSION, kinds=(kind,)), "backend-protocol")
     assert any("defines no gate_build()" in line for line in found)
     assert any(
         "build(): takes (package) where the protocol passes (package, root)" in line
@@ -110,7 +110,7 @@ def test_a_backend_missing_a_method_or_taking_the_wrong_call_breaks_the_protocol
     concrete = replace(python, name="acme-none", backend=None)
     assert any(
         "kind acme-none: names no backend" in line
-        for line in _names(Subject(LAYER, kinds=(concrete,)), "backend-protocol")
+        for line in _names(Subject(EXTENSION, kinds=(concrete,)), "backend-protocol")
     )
 
 
@@ -126,11 +126,11 @@ def test_two_checks_carrying_one_file_for_one_kind_break_the_nearest_fragment(
                 _idle,
                 scope=PACKAGE,
                 kinds=("acme-child",),
-                layer=LAYER,
+                extension=EXTENSION,
                 fragments=(Fragment(".clang-tidy", f"# {name}\n", kind="acme-child"),),
             )
         )
-    found = _names(Subject(LAYER, kinds=(child,)), "nearest-fragment")
+    found = _names(Subject(EXTENSION, kinds=(child,)), "nearest-fragment")
     assert found == [
         "nearest-fragment: kind acme-child .clang-tidy: lint.acme-tidy and"
         " lint.acme-tidy-too both carry it for the kind; the render would pick one"
@@ -143,12 +143,14 @@ def test_two_rules_of_one_kind_at_one_specificity_break_the_category_table(
 ) -> None:
     _parent, child = _family()
     _categories.register_categories(
-        "acme-child", [("lib/*.py", "source"), ("lib/x*.p*", "test")], layer=LAYER
+        "acme-child",
+        [("lib/*.py", "source"), ("lib/x*.p*", "test")],
+        extension=EXTENSION,
     )
-    found = _names(Subject(LAYER, kinds=(child,)), "category-table")
+    found = _names(Subject(EXTENSION, kinds=(child,)), "category-table")
     assert any(
-        "kind acme-child lib/x.py: 'lib/*.py' (source, acme.layer) and 'lib/x*.p*'"
-        " (test, acme.layer) claim it at one specificity for one kind" in line
+        "kind acme-child lib/x.py: 'lib/*.py' (source, acme.extension) and 'lib/x*.p*'"
+        " (test, acme.extension) claim it at one specificity for one kind" in line
         for line in found
     )
 
@@ -157,12 +159,16 @@ def test_a_check_after_nothing_or_after_itself_breaks_the_check_order(
     acme: None,
 ) -> None:
     register_check(
-        CheckRecord("late", "lint", _idle, after=("lint.gone",), layer=LAYER)
+        CheckRecord("late", "lint", _idle, after=("lint.gone",), extension=EXTENSION)
     )
-    register_check(CheckRecord("a", "lint", _idle, after=("lint.b",), layer=LAYER))
-    register_check(CheckRecord("b", "lint", _idle, after=("lint.a",), layer=LAYER))
+    register_check(
+        CheckRecord("a", "lint", _idle, after=("lint.b",), extension=EXTENSION)
+    )
+    register_check(
+        CheckRecord("b", "lint", _idle, after=("lint.a",), extension=EXTENSION)
+    )
     checks = tuple(check_for(name) for name in ("lint.late", "lint.a", "lint.b"))
-    found = _names(Subject(LAYER, checks=checks), "check-order")
+    found = _names(Subject(EXTENSION, checks=checks), "check-order")
     assert found == [
         "check-order: check lint.late: runs after lint.gone, which no registered"
         " check answers to; the gate stops there",
@@ -176,27 +182,27 @@ def test_a_check_after_nothing_or_after_itself_breaks_the_check_order(
 def test_a_contribution_off_the_shape_or_naming_a_missing_module_breaks_the_clause(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    layer = types.ModuleType("acme_kit_layer")
-    monkeypatch.setitem(sys.modules, "acme_kit_layer", layer)
-    layer.WORKSHOP_FOR = ["acme.python"]  # type: ignore[attr-defined]
-    assert _names(Subject("acme_kit_layer"), "contribution-modules") == [
-        "contribution-modules: layer acme_kit_layer: WORKSHOP_FOR is not a map"
-        " from a target layer's import path to a module; the mount refuses the"
-        " layer"
+    extension = types.ModuleType("acme_kit_extension")
+    monkeypatch.setitem(sys.modules, "acme_kit_extension", extension)
+    extension.FOR = ["acme.python"]  # type: ignore[attr-defined]
+    assert _names(Subject("acme_kit_extension"), "contribution-modules") == [
+        "contribution-modules: extension acme_kit_extension: FOR is not a map"
+        " from a target extension's import path to a module; the mount refuses the"
+        " extension"
     ]
-    layer.WORKSHOP_FOR = {  # type: ignore[attr-defined]
-        "acme.python": "acme_kit_layer_absent.python",
+    extension.FOR = {  # type: ignore[attr-defined]
+        "acme.python": "acme_kit_extension_absent.python",
         "acme.cpp": "json",
     }
-    assert _names(Subject("acme_kit_layer"), "contribution-modules") == [
-        "contribution-modules: layer acme_kit_layer for acme.python: names"
-        " acme_kit_layer_absent.python, which does not import; the mount refuses"
+    assert _names(Subject("acme_kit_extension"), "contribution-modules") == [
+        "contribution-modules: extension acme_kit_extension for acme.python: names"
+        " acme_kit_extension_absent.python, which does not import; the mount refuses"
         " once acme.python is listed"
     ]
 
 
 def _tidy(text: str = "Checks: acme-*\n") -> Subject:
-    """A layer whose check carries a .clang-tidy for the child kind."""
+    """An extension whose check carries a .clang-tidy for the child kind."""
     _parent, child = _family()
     register_check(
         CheckRecord(
@@ -205,11 +211,11 @@ def _tidy(text: str = "Checks: acme-*\n") -> Subject:
             _idle,
             scope=PACKAGE,
             kinds=("acme-child",),
-            layer=LAYER,
+            extension=EXTENSION,
             fragments=(Fragment(".clang-tidy", text, kind="acme-child"),),
         )
     )
-    return Subject(LAYER, kinds=(child,), checks=(check_for("lint.acme-tidy"),))
+    return Subject(EXTENSION, kinds=(child,), checks=(check_for("lint.acme-tidy"),))
 
 
 TIDY = "check lint.acme-tidy .clang-tidy for acme-child"
@@ -224,7 +230,7 @@ def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_
             "acme-table",
             "lint",
             _idle,
-            layer=LAYER,
+            extension=EXTENSION,
             fragments=(Fragment("pyproject.toml", "[tool.ruff]\nline-length = 100\n"),),
         )
     )
@@ -242,7 +248,7 @@ def test_a_file_that_drifts_from_its_render_or_hides_an_edit_breaks_the_drift(
     acme: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The render and the drift judge are the workshop's; the clause
-    # names the layer's file wherever the two disagree about it.
+    # names the extension's file wherever the two disagree about it.
     from livery.workshop import _templates
 
     subject = _tidy()
@@ -294,14 +300,14 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
 
 
 def _walkers() -> Subject:
-    """A layer with a check that fixes and one that judges, both reading python."""
+    """An extension with a check that fixes and one that judges, both reading python."""
     register_check(
         CheckRecord(
             "acme-fixer",
             "format",
             _idle,
             fix=_idle,
-            layer=LAYER,
+            extension=EXTENSION,
             claims=(Claim("source", suffixes=(".py",)),),
         )
     )
@@ -312,22 +318,24 @@ def _walkers() -> Subject:
             _idle,
             scope=PACKAGE,
             kinds=("python",),
-            layer=LAYER,
+            extension=EXTENSION,
             claims=(Claim("source", suffixes=(".py",)),),
         )
     )
     checks = (check_for("format.acme-fixer"), check_for("lint.acme-judge"))
-    return Subject(LAYER, checks=checks)
+    return Subject(EXTENSION, checks=checks)
 
 
-def test_a_check_registered_without_its_layer_breaks_the_gate_lines(
+def test_a_check_registered_without_its_extension_breaks_the_gate_lines(
     acme: None,
 ) -> None:
     register_check(CheckRecord("acme-quiet", "lint", _idle))
-    found = _names(Subject(LAYER, checks=(check_for("lint.acme-quiet"),)), "gate-lines")
+    found = _names(
+        Subject(EXTENSION, checks=(check_for("lint.acme-quiet"),)), "gate-lines"
+    )
     assert found == [
-        "gate-lines: check lint.acme-quiet: names livery.workshop as its layer; the"
-        " gate says who registered a check by it, and acme.layer registered this"
+        "gate-lines: check lint.acme-quiet: names livery.workshop as its extension; the"
+        " gate says who registered a check by it, and acme.extension registered this"
         " one"
     ]
 
@@ -347,13 +355,13 @@ def test_a_walk_that_starts_a_check_with_nothing_to_read_breaks_the_gate_lines(
 
     monkeypatch.setattr(_quality, "walk", careless)
     assert _names(subject, "gate-lines") == [
-        "gate-lines: check format.acme-fixer: the gate does not name acme.layer as"
-        " the layer that registered it",
+        "gate-lines: check format.acme-fixer: the gate does not name acme.extension as"
+        " the extension that registered it",
         "gate-lines: check format.acme-fixer: not named when it had no file to"
         ' read; the gate says "no file it reads" and starts nothing',
         "gate-lines: check format.acme-fixer: started with no file to read",
-        "gate-lines: check lint.acme-judge: the gate does not name acme.layer as"
-        " the layer that registered it",
+        "gate-lines: check lint.acme-judge: the gate does not name acme.extension as"
+        " the extension that registered it",
         "gate-lines: check lint.acme-judge: not named when it had no file to read;"
         ' the gate says "no file it reads" and starts nothing',
         "gate-lines: check lint.acme-judge: started with no file to read",
@@ -412,7 +420,7 @@ def test_the_nearest_kinds_fragment_renders(acme: None) -> None:
                 _idle,
                 scope=PACKAGE,
                 kinds=(kind,),
-                layer=LAYER,
+                extension=EXTENSION,
                 fragments=(Fragment(".clang-tidy", f"# {kind}\n", kind=kind),),
             )
         )
@@ -424,21 +432,23 @@ def test_the_nearest_kinds_fragment_renders(acme: None) -> None:
         "# acme-parent\n",
         "lint.acme-parent-tidy",
     )
-    assert _names(Subject(LAYER, kinds=(parent, child)), "nearest-fragment") == []
+    assert _names(Subject(EXTENSION, kinds=(parent, child)), "nearest-fragment") == []
 
 
 def test_the_nearer_kinds_rule_wins_a_tie_between_kinds(acme: None) -> None:
     parent, child = _family()
     _categories.register_categories(
-        "acme-parent", [("gen/**", "generated")], layer=LAYER
+        "acme-parent", [("gen/**", "generated")], extension=EXTENSION
     )
-    _categories.register_categories("acme-child", [("gen/**", "source")], layer=LAYER)
+    _categories.register_categories(
+        "acme-child", [("gen/**", "source")], extension=EXTENSION
+    )
     probe = _checks_package("acme-child")
     assert _categories.category_of(probe, "gen/a").name == "source"
     assert _categories.category_of(_checks_package("acme-parent"), "gen/a").name == (
         "generated"
     )
-    assert _names(Subject(LAYER, kinds=(parent, child)), "category-table") == []
+    assert _names(Subject(EXTENSION, kinds=(parent, child)), "category-table") == []
     # The table lists the kind's own rules first, then each ancestor's.
     rules = _categories.category_rules("acme-child")
     assert rules[0].kind == "acme-child"

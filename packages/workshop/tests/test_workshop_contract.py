@@ -20,9 +20,7 @@ def _refusal(action: Callable[[], object]) -> str:
 
 
 def _workspace(tmp_path: Path, root: str, package: str = "") -> Path:
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n' + root
-    )
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n" + root)
     if package:
         member = tmp_path / "packages" / "member"
         member.mkdir(parents=True)
@@ -49,20 +47,19 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
 ) -> None:
     path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
     assert (
-        "docs.title is a key of livery.extensions.docs, which [workspace]"
-        " layers does not list; list the layer, or remove the key"
+        "docs.title is a key of docs, which [workspace]"
+        " extensions does not list; list the extension, or remove the key"
     ) in _refusal(lambda: _contract.load_contract(path))
-    # A package's key of that layer refuses against its root's list.
+    # A package's key of that extension refuses against its root's list.
     member = _workspace(
         tmp_path, "", 'kind = "python"\nname = "m"\n[docs]\nextra-css = []\n'
     )
-    assert "docs.extra-css is a key of livery.extensions.docs" in _refusal(
+    assert "docs.extra-css is a key of docs" in _refusal(
         lambda: _contract.load_contract(member)
     )
     # Listed, the same keys load.
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop", "livery.extensions.docs"]\n'
-        '\n[docs]\ntitle = "Site"\n'
+        '[workspace]\nextensions = ["docs"]\n\n[docs]\ntitle = "Site"\n'
     )
     assert _contract.load_contract(path)["docs"] == {"title": "Site"}
     assert _contract.load_contract(member)["docs"] == {"extra-css": []}
@@ -96,18 +93,22 @@ def test_two_owners_declaring_one_key_refuse_naming_both(
     from livery.workshop import _contract_keys
 
     class _Entry:
-        name = "acme.layer"
+        name = "acme.extension"
 
         @staticmethod
-        def load() -> tuple[_contract_keys.Declared, ...]:
-            return (_contract_keys.Declared("root", "forge.kind", ("str",)),)
+        def load() -> object:
+            from types import SimpleNamespace
+
+            return SimpleNamespace(
+                CONTRACT_KEYS=(_contract_keys.Declared("root", "forge.kind", ("str",)),)
+            )
 
     monkeypatch.setattr("importlib.metadata.entry_points", lambda group: [_Entry()])
     _contract_keys.declarations.cache_clear()
     try:
         assert (
             "the root contract key forge.kind is declared by both livery.workshop"
-            " and acme.layer"
+            " and acme.extension"
         ) in _refusal(_contract_keys.declarations)
     finally:
         _contract_keys.declarations.cache_clear()

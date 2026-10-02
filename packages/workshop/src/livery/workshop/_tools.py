@@ -2,7 +2,7 @@
 
 A tool requirement is a name with a floor, `ruff` or `ruff>=0.16`, and
 four sites declare them: a package kind, in its record, for the tools
-its checks run; a listed layer, as `WORKSHOP_TOOLS` on its plugin
+its checks run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
 `workshop.toml` under `[tools] requires`, for what its kind cannot
 know; and the project, in the root contract's `[tools] requires`, for
@@ -137,13 +137,13 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     A workspace with no package types requires what the python kind
     does: its own `tasks.py` runs on python. A kind's checks bring the
     tools they run, each requirement naming `check <name>` as its
-    site. A layer's site is
-    `layer <import path>`, read from its plugin module's
-    `WORKSHOP_TOOLS`; an unlisted layer declares nothing here, since
+    site. An extension's site is
+    `extension <import path>`, read from its plugin module's
+    `WORKSHOP_TOOLS`; an unlisted extension declares nothing here, since
     listing is the only activation channel.
     """
     from livery.toolroom.store.api import LockError, Requirement
-    from livery.workshop._layers import layer_tools
+    from livery.workshop._extensions import extension_tools
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     kinds = {package.kind for package in packages} or {"python"}
@@ -160,13 +160,14 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         for tool, check in tools_for_kind(kind_name):
             found.append(Requirement.parse(tool, site=f"check {check}"))
     try:
-        declared_by_layer = layer_tools(root)
+        declared_by_extension = extension_tools(root)
     except RuntimeError as error:
         fail(str(error))
-    for layer, declared in declared_by_layer.items():
+    for extension, declared in declared_by_extension.items():
         try:
             found += [
-                Requirement.parse(text, site=f"layer {layer}") for text in declared
+                Requirement.parse(text, site=f"extension {extension}")
+                for text in declared
             ]
         except LockError as error:
             fail(str(error))

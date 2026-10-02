@@ -1,7 +1,7 @@
-"""Overlay composition: the layer stack becomes one template source.
+"""Overlay composition: the extension stack becomes one template source.
 
-The contract's layers list is a template stack, rendered bottom to
-top into one source tree: an upper layer adds files to any kind, or
+The contract's extensions list is a template stack, rendered bottom to
+top into one source tree: an upper extension adds files to any kind, or
 replaces a base file wholesale, never edits one. A replace is
 declared in the overlay's ``overlay.toml`` with a reason, because
 jinja-patched content is indistinguishable from a replace and a
@@ -9,8 +9,8 @@ wholesale replace ends inheritance for that file. The composed
 ``copier.yml`` is generated: the base questions plus each overlay's
 declared questions, every one defaulted so an update never prompts.
 
-Each layer's template tree lives inside its package module, beside
-``content/``: the workspace's own member tree when the layer is
+Each extension's template tree lives inside its package module, beside
+``content/``: the workspace's own member tree when the extension is
 self-hosting (a home edits at HEAD), the installed wheel's data
 otherwise, so composition never touches the network.
 """
@@ -26,7 +26,7 @@ from typing import Any
 import yaml
 
 from livery.footman.api import fail
-from livery.workshop._layers import layer_entries
+from livery.workshop._extensions import extension_entries, stack_entries
 
 #: The overlay's declaration file, at its template tree's root.
 OVERLAY_MANIFEST = "overlay.toml"
@@ -38,7 +38,7 @@ class ComposedSource:
 
     Attributes:
         path: The composed tree, rendered as one copier source.
-        owners: Each relative file's owning layer, the later layer
+        owners: Each relative file's owning extension, the later extension
             winning for a declared replace.
     """
 
@@ -46,17 +46,20 @@ class ComposedSource:
     owners: dict[str, str]
 
 
-def layer_template_tree(root: Path, layer: str) -> Path | None:
-    """*layer*'s template tree, or None when it ships none.
+def extension_template_tree(root: Path, extension: str) -> Path | None:
+    """*extension*'s template tree, or None when it ships none.
 
-    A layer that is a member of this workspace serves its tree from
+    An extension that is a member of this workspace serves its tree from
     the working copy (a home edits at HEAD, contract 12); an
-    installed layer serves the wheel's data. A layer without a
+    installed extension serves the wheel's data. An extension without a
     ``templates/`` directory contributes nothing, which is legal.
     Membership is a path probe, not the layering lint: a package
     mid-birth (rendered, not yet wired) must not stop a render.
     """
-    module_path = Path(*layer.split("."))
+    from livery.workshop._extensions import extension_package
+
+    package = extension_package(extension)
+    module_path = Path(*package.split("."))
     for src in sorted(root.glob("packages/*/src")):
         candidate = src / module_path / "templates"
         if candidate.is_dir():
@@ -64,7 +67,7 @@ def layer_template_tree(root: Path, layer: str) -> Path | None:
     try:
         from importlib.resources import files
 
-        resource = files(layer) / "templates"
+        resource = files(package) / "templates"
     except (ImportError, ModuleNotFoundError):
         return None
     installed = Path(str(resource))
@@ -95,7 +98,7 @@ def read_overlay_manifest(tree: Path) -> tuple[dict[str, str], dict[str, Any]]:
 
 
 def _copy_tree(
-    tree: Path, destination: Path, owners: dict[str, str], layer: str
+    tree: Path, destination: Path, owners: dict[str, str], extension: str
 ) -> None:
     """Lay *tree* into *destination* as the base, recording ownership."""
     for path in sorted(tree.rglob("*")):
@@ -105,14 +108,14 @@ def _copy_tree(
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
-        owners[relative.as_posix()] = layer
+        owners[relative.as_posix()] = extension
 
 
 def _apply_overlay(
     tree: Path,
     destination: Path,
     owners: dict[str, str],
-    layer: str,
+    extension: str,
     base_kinds: set[str],
 ) -> dict[str, Any]:
     """Apply one overlay: add or declared replace, never an edit."""
@@ -126,13 +129,13 @@ def _apply_overlay(
         if kind and kind not in base_kinds:
             listed = ", ".join(sorted(base_kinds))
             fail(
-                f"{layer}'s overlay targets the {kind!r} kind, which the"
+                f"{extension}'s overlay targets the {kind!r} kind, which the"
                 f" stack does not have: the kinds here are {listed}"
             )
         target = destination / relative
         if target.exists() and posix not in replaces:
             fail(
-                f"{layer}'s overlay ships {posix}, which"
+                f"{extension}'s overlay ships {posix}, which"
                 f" {owners.get(posix, 'the base')} already owns: an"
                 " overlay adds or replaces wholesale, never edits."
                 " Declare the replace, with its reason, in"
@@ -140,13 +143,13 @@ def _apply_overlay(
             )
         if not target.exists() and posix in replaces:
             fail(
-                f"{layer}'s {OVERLAY_MANIFEST} declares a replace of"
-                f" {posix}, which no lower layer ships: a stale"
+                f"{extension}'s {OVERLAY_MANIFEST} declares a replace of"
+                f" {posix}, which no lower extension ships: a stale"
                 " declaration hides a real edit later; remove it"
             )
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
-        owners[posix] = layer
+        owners[posix] = extension
     return questions
 
 
@@ -163,18 +166,18 @@ def _compose_questions(
     config = destination / "copier.yml"
     text = config.read_text("utf-8")
     additions: list[str] = []
-    for layer, questions in contributions.items():
+    for extension, questions in contributions.items():
         for name, spec in questions.items():
             if not isinstance(spec, dict) or (
                 "default" not in spec and spec.get("when") is not False
             ):
                 fail(
-                    f"{layer}'s question {name!r} has no default and is"
+                    f"{extension}'s question {name!r} has no default and is"
                     " not when = false: an instance must update without"
                     " a prompt"
                 )
             additions.append("")
-            additions.append(f"# Contributed by the {layer} layer.")
+            additions.append(f"# Contributed by the {extension} extension.")
             additions.append(yaml.safe_dump({name: spec}, sort_keys=False).rstrip())
     if additions:
         text = text.rstrip("\n") + "\n" + "\n".join(additions) + "\n"
@@ -184,37 +187,39 @@ def _compose_questions(
 def compose_source(root: Path, destination: Path) -> ComposedSource:
     """Compose the contract's template stack into *destination*.
 
-    Bottom to top per the layers list; the base layer must ship a
-    tree, upper layers may. Returns the composed source and the
+    Bottom to top per the extensions list; the base extension must ship a
+    tree, upper extensions may. Returns the composed source and the
     per-file owners the drift gate names.
     """
-    entries = layer_entries(root)
+    entries = stack_entries(root)
     if not entries:
-        fail("workshop.toml declares no [workspace] layers: nothing to compose")
+        fail("workshop.toml declares no [workspace] extensions: nothing to compose")
     stack: list[tuple[str, Path]] = []
-    for layer, _dist in entries:
-        tree = layer_template_tree(root, layer)
+    for extension, _dist in entries:
+        tree = extension_template_tree(root, extension)
         if tree is not None:
-            stack.append((layer, tree))
+            stack.append((extension, tree))
     if not stack:
         fail(
-            "no layer in the stack ships a template tree: the base"
-            " layer's wheel carries one, so `uv sync` is the likely fix"
+            "no extension in the stack ships a template tree: the base"
+            " extension's wheel carries one, so `uv sync` is the likely fix"
         )
     owners: dict[str, str] = {}
-    base_layer, base_tree = stack[0]
-    _copy_tree(base_tree, destination, owners, base_layer)
+    base_extension, base_tree = stack[0]
+    _copy_tree(base_tree, destination, owners, base_extension)
     base_kinds = {child.name for child in base_tree.iterdir() if child.is_dir()}
     contributions: dict[str, dict[str, Any]] = {}
-    for layer, tree in stack[1:]:
-        questions = _apply_overlay(tree, destination, owners, layer, base_kinds)
+    for extension, tree in stack[1:]:
+        questions = _apply_overlay(tree, destination, owners, extension, base_kinds)
         if questions:
-            contributions[layer] = questions
+            contributions[extension] = questions
     _compose_questions(destination, contributions)
     return ComposedSource(destination, owners)
 
 
 def stack_has_overlays(root: Path) -> bool:
-    """Whether any layer above the base ships a template tree."""
-    entries = layer_entries(root)
-    return any(layer_template_tree(root, layer) is not None for layer, _ in entries[1:])
+    """Whether any extension above the base ships a template tree."""
+    return any(
+        extension_template_tree(root, extension) is not None
+        for extension, _ in extension_entries(root)
+    )

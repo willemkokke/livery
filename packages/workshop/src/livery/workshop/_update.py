@@ -116,7 +116,7 @@ def refresh_rendered(root: Path) -> list[str]:
     )
 
     # The injected values ride as render data, never answers: the
-    # runner's name belongs to the process, the floor and the layers
+    # runner's name belongs to the process, the floor and the extensions
     # to the contract, so rebranding or re-layering an instance is
     # exactly this run under the new contract.
     answers = read_answers(root / ".copier-answers.yml")

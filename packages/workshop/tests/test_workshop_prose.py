@@ -43,15 +43,15 @@ def restored():
     _checks.restore(checks)
 
 
-def _workspace(tmp_path: Path, *layers: str) -> Path:
-    listed = ", ".join(f'"{layer}"' for layer in ("livery.workshop", *layers))
-    (tmp_path / "workshop.toml").write_text(f"[workspace]\nlayers = [{listed}]\n")
+def _workspace(tmp_path: Path, *extensions: str) -> Path:
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    (tmp_path / "workshop.toml").write_text(f"[workspace]\nextensions = [{listed}]\n")
     return tmp_path
 
 
-def _layer(tmp_path: Path, name: str, **files: str) -> Path:
-    """A fake layer's content directory, its fragments written from *files*."""
-    content = tmp_path / "layers" / name / "content"
+def _extension(tmp_path: Path, name: str, **files: str) -> Path:
+    """A fake extension's content directory, its fragments written from *files*."""
+    content = tmp_path / "extensions" / name / "content"
     for filename, text in files.items():
         name = (
             filename
@@ -89,9 +89,9 @@ def test_a_name_outside_the_convention_refuses_naming_the_file(tmp_path: Path) -
             ProseError, match=f"{filename}: a fragment is named <section>"
         ):
             parse_name(filename)
-    content = _layer(tmp_path, "acme.brand", **{"notes.md": "# Notes\n"})
+    content = _extension(tmp_path, "acme.brand", **{"notes.md": "# Notes\n"})
     with pytest.raises(
-        ProseError, match=r"layers/acme\.brand/content/fragments/notes\.md: a"
+        ProseError, match=r"extensions/acme\.brand/content/fragments/notes\.md: a"
     ):
         shipped("acme.brand", content)
 
@@ -120,16 +120,20 @@ def test_an_unknown_section_or_kind_refuses_naming_the_file() -> None:
 
 def test_two_fragments_of_one_name_refuse_naming_both_files(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    first = shipped("acme.brand", _layer(tmp_path, "acme.brand", rules__house="# A\n"))
-    second = shipped("acme.house", _layer(tmp_path, "acme.house", rules__house="# B\n"))
+    first = shipped(
+        "acme.brand", _extension(tmp_path, "acme.brand", rules__house="# A\n")
+    )
+    second = shipped(
+        "acme.house", _extension(tmp_path, "acme.house", rules__house="# B\n")
+    )
     with pytest.raises(
         ProseError, match=r"two fragments deliver as rules\.house\.md"
     ) as caught:
         fragments(root, first + second, AGENT)
-    assert "layers/acme.brand/content/fragments/rules.house.md (acme.brand)" in str(
+    assert "extensions/acme.brand/content/fragments/rules.house.md (acme.brand)" in str(
         caught.value
     )
-    assert "layers/acme.house/content/fragments/rules.house.md (acme.house)" in str(
+    assert "extensions/acme.house/content/fragments/rules.house.md (acme.house)" in str(
         caught.value
     )
     # The repository's own fragment collides the same way, at sync.
@@ -146,7 +150,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
     root = _workspace(tmp_path)
     both_and_agent = shipped(
         "acme.brand",
-        _layer(
+        _extension(
             tmp_path, "one", rules__house="# both\n", rules__house__agent="# agent\n"
         ),
     )
@@ -155,7 +159,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
     # The reader's set is validated at the same delivery.
     both_and_human = shipped(
         "acme.brand",
-        _layer(
+        _extension(
             tmp_path, "two", rules__house="# both\n", rules__house__human="# human\n"
         ),
     )
@@ -164,7 +168,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
     # One file per reader is the pair the convention exists for.
     pair = shipped(
         "acme.brand",
-        _layer(
+        _extension(
             tmp_path,
             "three",
             rules__house__agent="# agent\n",
@@ -179,16 +183,16 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
 
 
 def test_a_section_registered_twice_or_after_an_unknown_one_refuses(restored) -> None:
-    register_section("brand", after="rules", layer="acme.brand")
+    register_section("brand", after="rules", extension="acme.brand")
     assert sections()[3:5] == ("rules", "brand")
     with pytest.raises(
         ProseError, match=r"registers section 'brand', which acme\.brand already"
     ):
-        register_section("brand", after="rules", layer="acme.house")
+        register_section("brand", after="rules", extension="acme.house")
     with pytest.raises(
-        ProseError, match="after 'nope', which no layer registered; the sections"
+        ProseError, match="after 'nope', which no extension registered; the sections"
     ):
-        register_section("more", after="nope", layer="acme.brand")
+        register_section("more", after="nope", extension="acme.brand")
     with pytest.raises(
         ProseError, match="withdraws section 'rules', which is the base's"
     ):
@@ -198,11 +202,11 @@ def test_a_section_registered_twice_or_after_an_unknown_one_refuses(restored) ->
     ):
         unregister_section("brand", by="acme.house")
     with pytest.raises(
-        ProseError, match="withdraws section 'lore', which no layer registered"
+        ProseError, match="withdraws section 'lore', which no extension registered"
     ):
         unregister_section("lore", by="acme.brand")
     register_fragment(
-        "brand", "thing", lambda root, audience: "# T\n", layer="acme.brand"
+        "brand", "thing", lambda root, audience: "# T\n", extension="acme.brand"
     )
     with pytest.raises(ProseError, match=r"while brand\.thing\.md still belongs to it"):
         unregister_section("brand", by="acme.brand")
@@ -217,29 +221,29 @@ def test_a_rendered_fragment_outside_the_vocabulary_or_registered_twice_refuses(
     def render(root: Path, audience: str | None) -> str:
         return "# R\n"
 
-    register_fragment("rules", "acme", render, layer="acme.brand")
+    register_fragment("rules", "acme", render, extension="acme.brand")
     with pytest.raises(
         ProseError, match=r"registers fragment rules\.acme\.md, which acme\.brand"
     ):
-        register_fragment("rules", "acme", render, layer="acme.house")
+        register_fragment("rules", "acme", render, extension="acme.house")
     with pytest.raises(
         ProseError, match="section 'lore' is not one the registry knows"
     ):
-        register_fragment("lore", "acme", render, layer="acme.brand")
+        register_fragment("lore", "acme", render, extension="acme.brand")
     with pytest.raises(
         ProseError, match="kind 'rust' is not a registered package kind"
     ):
-        register_fragment("rules", "cargo", render, kind="rust", layer="acme.brand")
+        register_fragment("rules", "cargo", render, kind="rust", extension="acme.brand")
     with pytest.raises(
         ProseError, match="a topic is never named 'agent', an audience is"
     ):
-        register_fragment("rules", "agent", render, layer="acme.brand")
+        register_fragment("rules", "agent", render, extension="acme.brand")
     with pytest.raises(
         ProseError, match=r"withdraws fragment rules\.acme\.md, which acme\.brand"
     ):
         unregister_fragment("rules.acme.md", by="acme.house")
     with pytest.raises(
-        ProseError, match=r"withdraws fragment rules\.none\.md, which no layer"
+        ProseError, match=r"withdraws fragment rules\.none\.md, which no extension"
     ):
         unregister_fragment("rules.none.md", by="acme.brand")
     unregister_fragment("rules.acme.md", by="acme.brand")
@@ -251,7 +255,7 @@ def test_a_kind_gated_fragment_is_delivered_only_while_the_kind_is_present(
     root = _workspace(tmp_path)
     listed = shipped(
         "acme.brand",
-        _layer(
+        _extension(
             tmp_path,
             "acme.brand",
             **{
@@ -281,10 +285,10 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
     tmp_path: Path, restored
 ) -> None:
     root = _workspace(tmp_path, "acme.brand")
-    register_section("brand", after="rules", layer="acme.brand")
+    register_section("brand", after="rules", extension="acme.brand")
     listed = shipped("livery.workshop", WORKSHOP_CONTENT) + shipped(
         "acme.brand",
-        _layer(
+        _extension(
             tmp_path,
             "acme.brand",
             voice__tone__agent="# terse\n",
@@ -295,7 +299,7 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
         ),
     )
     # Sections in the base's order, the registered one after its anchor,
-    # the mounted layers in mount order inside a section.
+    # the mounted extensions in mount order inside a section.
     assert _names(root, listed, AGENT) == [
         "identity.acme.md",
         "voice.interaction.md",
@@ -320,11 +324,11 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
     root = _workspace(tmp_path)
     register_check(
         CheckRecord(
-            "acme-native", "lint", _noop, kinds=("cpp-conan",), layer="acme.test"
+            "acme-native", "lint", _noop, kinds=("cpp-conan",), extension="acme.test"
         )
     )
     # Without a package only the workspace's own checks are in the gate:
-    # neither the test layer's nor ruff, which judges no kind present.
+    # neither the test extension's nor ruff, which judges no kind present.
     agent = render_gate(root, AGENT)
     assert "acme-native" not in agent and "format" not in agent
     assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
@@ -380,9 +384,11 @@ def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
         "rules",
         "acme",
         lambda root, audience: f"# Acme\n\nfor {audience}\n",
-        layer="acme.brand",
+        extension="acme.brand",
     )
-    register_fragment("rules", "quiet", lambda root, audience: "", layer="acme.brand")
+    register_fragment(
+        "rules", "quiet", lambda root, audience: "", extension="acme.brand"
+    )
     sync_workspace(root)
     delivered = root / ".workshop" / "fragments" / "rules.acme.md"
     text = delivered.read_text()
@@ -396,7 +402,9 @@ def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
     unregister_fragment("rules.acme.md", by="acme.brand")
     unregister_fragment("rules.quiet.md", by="acme.brand")
     lines = sync_workspace(root)
-    assert any("removed rules.acme.md (no layer ships it)" in line for line in lines)
+    assert any(
+        "removed rules.acme.md (no extension ships it)" in line for line in lines
+    )
     assert not delivered.exists()
     manifest = (delivered.parent / ".workshop-materialised").read_text()
     assert "rules.acme.md" not in manifest
@@ -425,7 +433,7 @@ def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(
     monkeypatch.setattr(_prose, "composed_tree", lambda root: tree)
     agent = render_verbs(root, AGENT)
     lines = [line for line in agent.splitlines() if line.startswith("- ")]
-    # The mounted layer first, then a provider outside the mount, the
+    # The mounted extension first, then a provider outside the mount, the
     # repository's own last; a hidden task or group is not a verb.
     assert lines == [
         "- livery.workshop: check",
@@ -484,7 +492,7 @@ def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
     own.mkdir()
     (own / "identity.acme.md").write_text("# Acme\n")
     register_fragment(
-        "workflow", "acme", lambda root, audience: "# W\n", layer="acme.brand"
+        "workflow", "acme", lambda root, audience: "# W\n", extension="acme.brand"
     )
     sync_workspace(root)
     imports = [

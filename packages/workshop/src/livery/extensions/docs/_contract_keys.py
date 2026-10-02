@@ -1,8 +1,8 @@
-"""The contract keys the docs layer reads, declared for the contract's judge.
+"""The contract keys the docs extension reads, declared for the contract's judge.
 
 Named under the ``workshop.contract`` entry point group, so the judge
 ([livery.workshop._contract_keys][]) loads this data alone and never
-the layer's tasks.
+the extension's tasks.
 """
 
 from __future__ import annotations

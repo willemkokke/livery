@@ -4,59 +4,67 @@ The devkit: what every repository in the livery ecosystem runs. A
 repository's whole `tasks.py` is `plugin("livery.workshop")`; every
 verb below arrives through that line.
 
-## The layer model
+## The extension model
 
-The workspace contract (`workshop.toml` at the root) names the layers
-in precedence order, and that list is the whole of discovery: a
-package installed by accident never changes a repository.
+The workspace contract (`workshop.toml` at the root) lists the
+extensions in `[workspace] extensions`, in precedence order, and that
+list is the whole of discovery: a package installed by accident never
+changes a repository. The list is required; a contract without it
+refuses at mount and prints the line to add. The base,
+`livery.workshop`, is never listed: importing its plugin registers
+its task surface and then mounts every listed extension, in order.
+The instance always wins last: its own files (`CLAUDE.project.md`,
+anything below the plugin line in `tasks.py`) are seeded once and
+never rewritten.
+
 Contract keys are kebab-case, at the root and in every package's
 contract: a key spelled with underscores refuses on read, naming its
 spelling and the file to rename it in. Every key is declared by the
-layer that reads it, and a contract holds nothing else: a key no layer
-declares, a key of a layer the root contract does not list, a value of
-the wrong type and a value outside its allowed set each refuse on
-read, naming the file, the key, what the table takes, and the nearest
-spelling. A layer declares its keys in a data module named under the
-`workshop.contract` entry point group, which the read loads without
-the layer's tasks.
+extension that reads it, and a contract holds nothing else: a key no
+extension declares, a key of an extension the root contract does not
+list, a value of the wrong type and a value outside its allowed set
+each refuse on read, naming the file, the key, what the table takes,
+and the nearest spelling.
 
-- `livery.workshop` is the base layer. Importing its plugin registers
-  the task surface and then mounts every further layer the contract
-  names, in order.
-- A further layer is any package advertising a `footman.tasks` entry
-  point; `livery.forge` ships its dev containers this way, and a
-  workspace gets them exactly when its list says so.
-- The instance always wins last. Its own files (`CLAUDE.project.md`,
-  anything below the plugin line in `tasks.py`) are seeded once and
-  never rewritten.
+An extension is declared by an entry point in the `workshop.extensions`
+group, mapping the name a contract lists to a data module the mount
+and the contract judge load without the extension's tasks. That
+module declares:
 
-A layer declares what the mount needs to know as attributes of its
-plugin module, read at mount and never from a wheel's metadata:
-`WORKSHOP_API_VERSION`, the plugin API it was written for, refused
-at mount when it is not this workshop's; `WORKSHOP_DEPENDS`, the
-layers it needs mounted before it, which the layering check keeps
-listed before it and its `--fix` adds; `WORKSHOP_TOOLS`, the tools
-its own verbs need, `("docker>=27",)`, the fourth site the tool
-profile reads; and `WORKSHOP_FOR`, a map from a target layer to the
-module carrying the registrations for that target,
-`{"livery.workshop.api.python": "acme.house.python"}`. The mount imports
-a contribution module once both its owner and its target are
-mounted, so a house with opinions on several languages contributes
-to each only where the language is listed, and no mount code
-branches. The layering check's `--fix` writes the resolved targets
-into the entry once, `{ import = "acme.house", for = ["livery.workshop.api.python"] }`;
-from then on `for` is the truth: a name deleted from it stays
-deleted, which is a project's opt-out from that target's opinions,
-and a name the list does not carry refuses. A name the layer declares
-no contribution for mounts nothing, and the layering check names the
-entry. `fm layers` prints each layer, who requires it, its tools and
-its targets.
+- `API_VERSION`, the extension API it was written for, refused at
+  mount when it is not this workshop's;
+- `LEVELS`, where it may be listed: `"workspace"` in
+  `[workspace] extensions`, `"package"` in a package's own
+  `extensions`; a listing at another level refuses;
+- `PLUGIN`, the footman plugin carrying its verbs, mounted in list
+  order;
+- `REQUIRES`, the extensions it needs listed before it, which the
+  layering check keeps listed and its `--fix` writes at the level each
+  declares;
+- `TOOLS`, the tools its own verbs need, `("docker>=27",)`, the
+  fourth site the tool profile reads;
+- `CONTRACT_KEYS`, the contract keys it reads;
+- `FOR`, a map from a target extension to the module carrying the
+  registrations for that target, `{"python": "acme.house.python"}`.
+
+A footman plugin that declares no extension is never offered as one.
+The mount imports a contribution module once both its owner and its
+target are listed, so a house with opinions on several languages
+contributes to each only where the language is listed. The layering
+check's `--fix` writes the resolved targets into the entry once,
+`{ name = "acme.house", for = ["python"] }`; from then on `for` is
+the truth: a name deleted from it stays deleted, which is a project's
+opt-out from that target's opinions, and a name the list does not
+carry refuses. A name the extension declares no contribution for
+mounts nothing, and the layering check names the entry.
+`fm extensions` prints the base, then each extension, who requires
+it, its tools and its targets.
 
 The workshop asks two questions about a path, and `fm explain <path>`
-prints both answers with the layer that supplied each. Its
+prints both answers with the extension that supplied each. Its
 **category** says what the file is to its package, `source`, `test`,
-`test-support`, `configuration`, and what a layer adds (`prose`,
-`example`, `asset`, `nav`); a kind or a layer registers a pattern
+`test-support`, `configuration`, and what an extension adds (`prose`,
+`example`, `asset`, `nav`); a kind or an extension registers a pattern
 table for a kind, `register_categories("python", [("src/**",
 "source"), ...])` in `livery.workshop._categories`, a derived kind
 inherits its parents' tables, the most specific pattern wins, and two
@@ -69,7 +77,7 @@ vendored = ["docs/assets/vendor/**"]
 ```
 
 Its **channel** says who wrote the file and where to edit it,
-answered by ranked rules a layer may add to. The workspace root is a
+answered by ranked rules an extension may add to. The workspace root is a
 unit of its own, with `notes/`, the site's files and `README.md`
 categorised beside its tests, and a `src/` at the root refuses in the
 layering check, since the root is never a package. The site build
@@ -91,14 +99,14 @@ site's private-members policy is the third, `docs.members`: `public`
 keeps each extractor's default filter, `all` documents every member,
 and any other value refuses naming both. The theme block is the
 fourth, `docs.theme`: a table of the block's values (`language`,
-`font.text`, `font.code`, `features`, `palette`) a theme layer
+`font.text`, `font.code`, `features`, `palette`) a theme extension
 contributes in part, merged key by key in contribution order over the
-base's block, an unknown key refusing. A layer's site css ships in
+base's block, an unknown key refusing. An extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
-`docs/_layers/` and lists it in `extra_css` in layer order, before
+`docs/_extensions/` and lists it in `extra_css` in extension order, before
 the packages' declared sheets and the workspace's own
 `docs/assets/site.css`, which loads last. A
-check a layer withdraws takes its lines with it.
+check an extension withdraws takes its lines with it.
 
 A check is named by its role and its tool, `test.pytest`, and that
 name is everything a person types: every role is a verb and every
@@ -129,17 +137,17 @@ An option a check does not declare, a check that does not exist, an
 option set on a role rather than on one of its checks, and a value of
 the wrong type each refuse, naming the vocabulary.
 
-A layer's kinds and checks are judged by the conformance kit,
-`livery.workshop.testing`: a `Subject` names what the layer registers,
+An extension's kinds and checks are judged by the conformance kit,
+`livery.workshop.testing`: a `Subject` names what the extension registers,
 each clause in `CLAUSES` returns the violations the subject commits,
-each naming its clause, and a layer's own suite runs every clause on
+each naming its clause, and an extension's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
 call of the backend protocol; a per-package configuration file resolves
 to the nearest kind's fragment, one owner per kind and file; a path's
 category is the most specific rule's, the nearer kind winning a tie
 between kinds and two rules of one kind never tying; every check a
 check runs `after` is registered, and following them never leads back
-to it; a layer's `WORKSHOP_FOR` maps each target to a module that
+to it; an extension's `WORKSHOP_FOR` maps each target to a module that
 imports; a check's fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
@@ -148,29 +156,29 @@ file for the kind, an unedited copy is removed and an edited one kept;
 and in the gate's walk over a probe workspace, with the check bodies
 recording instead of running, every check that can fix rewrites
 before any judge starts and is not judged again, every check names the
-layer that registered it, which the gate prints, and a check with no
+extension that registered it, which the gate prints, and a check with no
 file to read is named and never started. The workshop's own kinds and
 checks pass the same clauses in its test suite.
 
-The documentation site is a layer inside the workshop wheel,
-`livery.extensions.docs`, listed in `[workspace] layers` as a
+The documentation site is an extension inside the workshop wheel,
+`livery.extensions.docs`, listed in `[workspace] extensions` as a
 table naming `livery-workshop` as its distribution. It owns the site's
 assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots
-and the staged layer css, and it arrives through its own task entry
+and the staged extension css, and it arrives through its own task entry
 point. The base keeps what it reads of a package's docs for its own
 reasons (the `[docs]` table and its generators, the layout of the
 `docs/` tree, the publish seam, the categories the site reads) and
-the nav blocks generators write; it imports no layer, which the
+the nav blocks generators write; it imports no extension, which the
 layering check enforces. It lives under `livery.extensions`, a
 namespace any distribution can add an extension to.
-The site's two CI jobs come with the layer: at mount it contributes
+The site's two CI jobs come with the extension: at mount it contributes
 the gate point's `docs` job, which the verdict waits for, and the
 merge point's `deploy` job, each with the entries it runs, through
 `contribute_job` in `livery.workshop._points`; a workspace that does
-not list the layer renders neither job. A contributed job sits before
-the point's verdict job, or last on a point without one. The layer
+not list the extension renders neither job. A contributed job sits before
+the point's verdict job, or last on a point without one. The extension
 renders the site's development section from the prose fragments
-the mounted layers ship for a human reader, one page per section
+the mounted extensions ship for a human reader, one page per section
 under `development/`, and renders each kind's API extractor from its
 data: the handler's name, a package's pages and search paths, the
 inventories, and the handler's options as a table.
@@ -200,7 +208,7 @@ A check record also owns its configuration. Its `fragments`, one per
 rendered file, are what the render writes for it: the format, lint,
 typecheck and test records carry every `[tool.*]` table of the root
 `pyproject.toml`, composed in check-name order where the base template
-leaves the `fragments` block, and a check a layer withdraws takes its
+leaves the `fragments` block, and a check an extension withdraws takes its
 tables with it. A tool that reads one file per project gets its
 section there; a tool that searches upward from each file, clang-format
 and clang-tidy in a native package, gets a managed file where it looks,
@@ -224,10 +232,10 @@ the lint check's category-shaped per-file ignores render from the
 claims over the present kinds' tables, so the docstring rules stop at
 the tests of every kind without a table typed by hand.
 
-A layer's prose, its voice, its standards, its rules, is a set of
+An extension's prose, its voice, its standards, its rules, is a set of
 fragments in sections the base orders: identity, voice, standards,
 rules, workflow, gate, verbs, kinds, tools. A fragment is a file in the
-layer's `content/fragments/` named
+extension's `content/fragments/` named
 `<section>.[<kind>.]<topic>[.<audience>].md`, or a registration with a
 render that answers each audience from the registries; a kind in the
 name delivers it only while a package of that kind, or one deriving
@@ -240,7 +248,7 @@ tools sections render from the registries, so no fragment names a
 checker by hand.
 
 The layering check parses every python source once per gate and
-memoises the parse by the file's bytes, and a kind or a layer may
+memoises the parse by the file's bytes, and a kind or an extension may
 register a rule over that parse beside the builtin three (the
 runner's one-answer rule, the forge's stdlib rule, the sibling
 references): `register_ast_rule(AstRule(name, judge, fix=...))` in
@@ -248,7 +256,7 @@ references): `register_ast_rule(AstRule(name, judge, fix=...))` in
 rewrite and its judgment inside the check's judge, and each problem
 it reports carries the rule's name.
 
-Each layer may carry a `content/` directory; `fm sync` delivers it:
+Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into
 `.claude/` as links (a local override is kept and named), and the
 managed `CLAUDE.md` stub whose imports end at the instance's own
@@ -279,7 +287,7 @@ meaning every locked host of it and a host key itself: a package
 kind, in its record, for what
 operates it, uv for the python kind; the checks that judge a kind,
 each naming its tools, which is how ruff, pytest and the checkers
-reach a python workspace; a listed layer, as `WORKSHOP_TOOLS` on its plugin
+reach a python workspace; a listed extension, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
 `workshop.toml` under `[tools] requires`, for what its kind cannot
 know; and the project, in the root contract's `[tools] requires`, for
@@ -465,7 +473,7 @@ absence.
   drive, keyed by the recipes with the OS and architecture and
   falling back under its prefix, so a third-party package from Conan
   Center is compiled once per key and downloaded from the cache
-  afterwards; the cache is the speed layer and Conan Center the
+  afterwards; the cache is the speed extension and Conan Center the
   origin, so a miss costs time, never a red leg. The other lanes
   cache nothing until they have a cache action.
   Tests are namespaced by their path (pytest's importlib mode, set by
@@ -579,7 +587,7 @@ point runs on the clock and by hand, one job on those runners and
 Pythons calling the task through `fm ci.run`, with the job token and
 nothing more: a permission, a secret or an environment in the table
 refuses, as does a builtin name, a name two packages claim, a cadence
-that is not one, or a task no layer mounts. Removing the package
+that is not one, or a task no extension mounts. Removing the package
 removes its workflow: `fm template.check` reports the file as retired
 and `fm template.apply` deletes it.
 On GitLab the clock is a pipeline schedule, a project setting rather

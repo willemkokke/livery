@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from livery.footman.api import doc, fail, group
-from livery.workshop._layers import workspace_root
+from livery.workshop._extensions import workspace_root
 from livery.workshop._state import WHOLE, Keyed, Series, remote_snapshot
 
 store = group("store", help="The state store, read by hand")

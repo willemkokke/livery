@@ -242,10 +242,10 @@ def test_a_bad_name_refuses() -> None:
     assert "lowercase" in str(caught.value)
 
 
-def test_the_layer_arm_scaffolds_a_self_hosting_home(
+def test_the_extension_arm_scaffolds_a_self_hosting_home(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _birth(local=True, owner="", layer="brand")
+    _birth(local=True, owner="", extension="brand")
     root = tmp_path / "acme-tools"
     member = root / "packages" / "brand"
     assert (member / "src" / "acme_tools" / "brand" / "_tasks.py").is_file()
@@ -255,10 +255,8 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
     fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
-    assert (
-        'layers = ["livery.workshop", { import = "livery.extensions.docs",'
-        ' dist = "livery-workshop" }, "acme_tools.brand"]'
-    ) in contract
+    # The base is never listed; the site's extension rides in its wheel.
+    assert 'extensions = ["docs", "acme_tools.brand"]' in contract
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
     assert '"acme_tools.brand" = "acme_tools.brand._tasks"' in pyproject
@@ -269,7 +267,7 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
     out = capsys.readouterr().out
     assert "self-hosted, last in the stack" in out
     # The second run walks past the scaffold.
-    _birth(local=True, owner="", layer="brand")
+    _birth(local=True, owner="", extension="brand")
     out = capsys.readouterr().out
     assert "already scaffolded" in out
 

@@ -515,7 +515,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         )
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "t"))
     monkeypatch.setattr(
@@ -584,7 +584,7 @@ def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
 
 CONTRACT = (
     "[workspace]\n"
-    'layers = ["livery.workshop"]\n'
+    "extensions = []\n"
     'templates = "/old/worktree/packages/workshop/src/livery/workshop/templates"\n'
     "\n"
     "[forge]\n"
@@ -593,7 +593,7 @@ CONTRACT = (
 
 
 def test_point_templates_refuses_a_contract_without_a_source() -> None:
-    bare = '[workspace]\nlayers = ["livery.workshop"]\n'
+    bare = "[workspace]\nextensions = []\n"
     with pytest.raises(_FAILURES, match="names no template source"):
         _e2e._point_templates(bare, Path("/new/templates"))
 
@@ -602,7 +602,7 @@ def test_point_templates_rewrites_the_source_and_settles() -> None:
     pointed = _e2e._point_templates(CONTRACT, Path("/new/templates"))
     assert 'templates = "/new/templates"\n' in pointed
     assert "/old/worktree" not in pointed
-    assert pointed.startswith('[workspace]\nlayers = ["livery.workshop"]\n')
+    assert pointed.startswith("[workspace]\nextensions = []\n")
     assert pointed.endswith('[forge]\nkind = "gitea"\n')
     assert _e2e._point_templates(pointed, Path("/new/templates")) == pointed
 

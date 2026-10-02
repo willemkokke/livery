@@ -105,7 +105,7 @@ def is_cli_process() -> bool:
 class Reconciled:
     """What the reconcile decided: the testable surface.
 
-    The reporting layer only prints from this, so a test asserts the
+    The reporting extension only prints from this, so a test asserts the
     decisions without string-matching English.
     """
 

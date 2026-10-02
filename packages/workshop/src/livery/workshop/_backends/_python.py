@@ -1185,7 +1185,7 @@ def stored_union(
 def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str]:
     """Render an htmlcov tree for each of *packages* from the measured data.
 
-    The python kind's coverage pages: the site's layer hands over the
+    The python kind's coverage pages: the site's extension hands over the
     packages that declare an ``htmlcov`` report, and each gets its
     tree rendered from the workspace's measured data, scoped to its
     own files. In
@@ -1631,7 +1631,7 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     """The modules *package* declares as footman task entry points.
 
     A module the runner loads as a plugin has the runner present by
-    construction, and whatever the layer stack mounts with it, so its
+    construction, and whatever the extension stack mounts with it, so its
     imports of either are not dependencies of the distribution. The
     fact lives in the package's own metadata; nothing here needs to
     be told a second time. An entry naming a namespace root's ``api``

@@ -1,0 +1,18 @@
+"""{{ import_path }}'s task surface, mounted through the extensions list.
+
+The workspace contract's ``[workspace] extensions`` entry is the whole
+of discovery, and the branded App mounts the same module. The group
+below is this extension's namespace: hang the extension's own verbs on it,
+or leave it empty while the extension ships content alone.
+"""
+
+from livery.footman.api import group
+
+{{ project_slug }} = group(
+    "{{ project_slug }}", help="the {{ project_slug }} extension's verbs"
+)
+
+# @{{ project_slug }}.task(name="hello")
+# def hello() -> None:
+#     """Say which extension answered."""
+#     print("{{ import_path }}")

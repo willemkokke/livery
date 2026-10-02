@@ -3,11 +3,11 @@
 Every python source the layering check judges is parsed once for a
 given content: the parse is memoised by the file's path, size and
 modification time, so the rules that walk their own file lists and a
-rule a kind or a layer registers all read the same tree. A registered
+rule a kind or an extension registers all read the same tree. A registered
 rule receives every parsed module once and returns its problems; a
 rule may carry a fix, which the layering check runs inside its own
 rewrite, and the judgments run inside the check's judge, so the gate
-walk sees one check whatever a layer registers.
+walk sees one check whatever an extension registers.
 """
 
 from __future__ import annotations
@@ -165,14 +165,14 @@ class AstRule:
             returns the problems, empty when the rule holds.
         fix: Runs inside the layering check's rewrite, before the
             judge; returns the lines it wrote, printed as the check's.
-        layer: The layer that registered the rule; empty for a
+        extension: The extension that registered the rule; empty for a
             builtin one.
     """
 
     name: str
     judge: Judge
     fix: Judge | None = None
-    layer: str = ""
+    extension: str = ""
 
 
 _RULES: dict[str, AstRule] = {}

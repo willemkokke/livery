@@ -98,7 +98,7 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
             "lint",
             _noop,
             kinds=("python",),
-            layer="acme.brand",
+            extension="acme.brand",
             claims=(Claim("source", suffixes=(".py",)), Claim("example")),
         )
     )
@@ -173,7 +173,7 @@ def test_two_checks_claiming_one_category_under_different_rules_share_one_entry(
             "lint",
             _noop,
             kinds=("python",),
-            layer="acme.brand",
+            extension="acme.brand",
             claims=(Claim("test", ignore=("E501",)),),
         )
     )

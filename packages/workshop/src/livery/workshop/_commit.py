@@ -16,8 +16,8 @@ from typing import Annotated
 import livery.footman.api as footman
 from livery.footman.api import Arg, doc, fail
 from livery.workshop._conventional import TITLE_RE, TYPES
+from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._layers import workspace_root
 
 
 def scope_of(root: Path, paths: list[str]) -> str:

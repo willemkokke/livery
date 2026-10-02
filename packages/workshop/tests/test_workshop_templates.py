@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs layer's: importing its task module
+# The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop._contract import toml_string
@@ -37,7 +37,7 @@ def _template_instance(tmp_path: Path) -> Path:
     shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         'templates = "templates"\n'
         "\n"
         "[forge]\n"
@@ -64,7 +64,7 @@ def _contract_root(
     root.mkdir(exist_ok=True)
     lines = [
         "[workspace]",
-        'layers = ["livery.workshop"]',
+        "extensions = []",
         "",
         "[forge]",
         f'kind = "{kind}"',
@@ -612,10 +612,10 @@ def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     # ignored like the coverage data beside it.
     rendered = _render_kind(tmp_path, "github")
     tasks = (rendered / "tasks.py").read_text()
-    layer = tasks.index('plugin("livery.workshop")')
+    extension = tasks.index('plugin("livery.workshop")')
     profiler = tasks.index('plugin("footman.profile")')
-    mount = tasks.index("mount_layers()")
-    assert layer < profiler < mount
+    mount = tasks.index("mount_extensions()")
+    assert extension < profiler < mount
     # One trace per entry, so the rule is a pattern.
     ignored = (rendered / ".gitignore").read_text()
     assert "fm-profile*.json" in ignored
@@ -735,7 +735,7 @@ def _build_instance_from_git_template(base: Path) -> None:
     # fixture stands in for the birth verb.
     (instance / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
@@ -868,7 +868,7 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
     root.mkdir()
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         f"templates = {toml_string(str(source))}\n"
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
@@ -1055,7 +1055,7 @@ def test_the_rewrite_keeps_copiers_commit_receipt(tmp_path: Path) -> None:
 
     root = tmp_path
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\ntemplates = "templates"\n'
+        '[workspace]\nextensions = []\ntemplates = "templates"\n'
     )
     (root / ".copier-answers.yml").write_text(
         "_commit: v0.0.2\n_src_path: whatever\nproject_name: x\n"
@@ -1092,16 +1092,16 @@ def test_the_registry_injections_read_the_contract_or_stay_empty(
 
     empty = {"python_registry": "", "python_prerelease": ""}
     root = tmp_path
-    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     assert registry_injections(root) == empty
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n[registries]\nconan = "x"\n'
+        '[workspace]\nextensions = []\n[registries]\nconan = "x"\n'
     )
     assert registry_injections(root) == empty
     # The string form declares the read index alone.
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         "[registries]\n"
         'python = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
     )
@@ -1112,7 +1112,7 @@ def test_the_registry_injections_read_the_contract_or_stay_empty(
     # The table form carries the prerelease policy beside the index.
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         "[registries.python]\n"
         'url = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
         'prerelease = "allow"\n'

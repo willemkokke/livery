@@ -1,9 +1,9 @@
 """The base names no package kind: the vocabulary test of contract 10.
 
 The workshop's base (``livery.workshop`` outside ``_backends`` and
-``layers``) reaches a kind through the kind registry, never by
+``extensions``) reaches a kind through the kind registry, never by
 importing a backend or by spelling the kind's words. This test scans
-the base's sources for both, and for every layer's import of a
+the base's sources for both, and for every extension's import of a
 backend.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
@@ -130,9 +130,9 @@ def _word_of(value: str, words: set[str]) -> str:
 
 
 def scan(src: Path, words: set[str]) -> tuple[Counter[tuple[str, str]], list[str]]:
-    """The base's findings by (module, word), and every layer's backend import."""
+    """The base's findings by (module, word), and every extension's backend import."""
     base: Counter[tuple[str, str]] = Counter()
-    layers: list[str] = []
+    extensions: list[str] = []
     for path in sorted(src.rglob("*.py")):
         relative = path.relative_to(src)
         if "templates" in relative.parts:
@@ -144,8 +144,8 @@ def scan(src: Path, words: set[str]) -> tuple[Counter[tuple[str, str]], list[str
         if module.startswith("_backends"):
             continue
         tree = ast.parse(path.read_text("utf-8"))
-        if module.startswith("layers."):
-            layers += [
+        if module.startswith("extensions."):
+            extensions += [
                 f"{module}:{node.lineno}"
                 for node in ast.walk(tree)
                 if isinstance(node, (ast.Import, ast.ImportFrom))
@@ -163,7 +163,7 @@ def scan(src: Path, words: set[str]) -> tuple[Counter[tuple[str, str]], list[str
                 and (word := _word_of(node.value, words))
             ):
                 base[(module, word)] += 1
-    return base, layers
+    return base, extensions
 
 
 def judge(
@@ -203,9 +203,9 @@ def test_the_base_names_no_kind_beyond_its_allowance() -> None:
     assert judge(found, RUNTIME, ALLOWANCE) == []
 
 
-def test_no_layer_imports_a_backend() -> None:
-    _, layers = scan(SRC, _words())
-    assert layers == []
+def test_no_extension_imports_a_backend() -> None:
+    _, extensions = scan(SRC, _words())
+    assert extensions == []
 
 
 def _base_module(tmp_path: Path, name: str, text: str) -> Path:
@@ -279,14 +279,14 @@ def test_every_runtime_entry_states_its_reason(key: tuple[str, str]) -> None:
     assert reason
 
 
-def test_a_layer_importing_a_backend_is_named(tmp_path: Path) -> None:
+def test_a_extension_importing_a_backend_is_named(tmp_path: Path) -> None:
     src = _base_module(
         tmp_path,
-        "layers/site/_pages.py",
+        "extensions/site/_pages.py",
         "def f():\n    from livery.workshop._backends._python import x\n",
     )
-    _, layers = scan(src, set())
-    assert layers == ["layers.site._pages:2"]
+    _, extensions = scan(src, set())
+    assert extensions == ["extensions.site._pages:2"]
 
 
 def _loaded_by(statement: str, prefixes: tuple[str, ...]) -> list[str]:

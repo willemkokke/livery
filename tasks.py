@@ -1,12 +1,12 @@
 # Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `fm template.apply`; an edit here is drift.
-"""The dev loop: the workspace's layers, mounted.
+"""The dev loop: the workspace's extensions, mounted.
 
 Run with ``fm <task>``. ``fm check`` is the whole local gate;
-CI runs the same command. The tree comes from the mounted layers, and
+CI runs the same command. The tree comes from the mounted extensions, and
 the render owns this file above the mount: the gate keeps that part
-matching the template, and a workspace adds tasks through the layers
+matching the template, and a workspace adds tasks through the extensions
 its contract names, or in the region below the mount, which is its
 own.
 """
@@ -21,15 +21,15 @@ plugin("livery.workshop")
 # run, a CI leg included, can be profiled with one flag.
 plugin("footman.profile")
 
-# Every further layer the contract names mounts here, each under its
+# Every further extension the contract names mounts here, each under its
 # own identity, so a task's provenance names its real provider.
 # Composition belongs to the workspace's own file, never to a
-# layer's import side effects. The late import is load-bearing:
-# plugin() above must be the layer's first importer, so its task
+# extension's import side effects. The late import is load-bearing:
+# plugin() above must be the extension's first importer, so its task
 # registration lands inside footman's capture.
-from livery.workshop.api import mount_layers  # noqa: E402
+from livery.workshop.api import mount_extensions  # noqa: E402
 
-mount_layers()
+mount_extensions()
 
 # The repository's own tasks, below the mount.
 # -- workshop: region tasks, yours to edit; the render keeps it --

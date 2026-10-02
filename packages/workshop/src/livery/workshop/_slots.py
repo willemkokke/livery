@@ -1,17 +1,17 @@
-"""Slots: a hole one layer cuts in a rendered file, and the values others fill it with.
+"""Slots: a hole one extension cuts in a rendered file, and the values filling it.
 
-A line the base template writes that a layer needs different is never
+A line the base template writes that an extension needs different is never
 overridden whole and never deleted by a fragment; the template splits
-until that line is a slot, and the records fill it. The owning layer
+until that line is a slot, and the records fill it. The owning extension
 declares the slot with its composition rule,
-[livery.workshop._slots.register_slot][]; any layer or record
+[livery.workshop._slots.register_slot][]; any extension or record
 contributes, [livery.workshop._slots.contribute][]; the render reads
 the composed value, [livery.workshop._slots.composed][]. A list slot
 composes as the union in contribution order. A scalar slot takes the
 nearest contribution, the last one made, and two claims from one
-layer refuse naming both. A slot declared with its values refuses any
+extension refuse naming both. A slot declared with its values refuses any
 other contribution, naming the contributor and the values. A
-contribution to a slot nobody declared refuses naming the layer, which
+contribution to a slot nobody declared refuses naming the extension, which
 the dependency closure makes rare: the owner is listed before whoever
 contributes.
 """
@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-#: The layer the builtin declarations and contributions belong to.
+#: The extension the builtin declarations and contributions belong to.
 _BASE = "livery.workshop"
 
 #: The composition rules a slot may name.
@@ -36,16 +36,16 @@ class SlotError(ValueError):
 
 @dataclass(frozen=True)
 class Contribution:
-    """One value a layer or a record put into a slot.
+    """One value an extension or a record put into a slot.
 
     Attributes:
         value: The contribution.
-        layer: The layer that made it.
-        by: What made it, a check's name or a layer's, for a refusal.
+        extension: The extension that made it.
+        by: What made it, a check's name or an extension's, for a refusal.
     """
 
     value: object
-    layer: str
+    extension: str
     by: str
 
 
@@ -58,7 +58,7 @@ class Slot:
         compose: ``union`` for a list, ``nearest`` for a scalar, or a
             callable over the contributed values.
         default: What the slot composes to with no contribution.
-        layer: The layer that declared it.
+        extension: The extension that declared it.
         contributions: Every contribution so far.
         values: The only values a contribution may carry, or None
             for any value.
@@ -67,7 +67,7 @@ class Slot:
     name: str
     compose: str | Compose
     default: object
-    layer: str
+    extension: str
     contributions: list[Contribution] = field(default_factory=list)
     values: tuple[object, ...] | None = None
 
@@ -80,7 +80,7 @@ def register_slot(
     *,
     compose: str | Compose = UNION,
     default: object = None,
-    layer: str = _BASE,
+    extension: str = _BASE,
     values: tuple[object, ...] | None = None,
 ) -> None:
     """Declare *name* with its composition rule; a declared name is replaced.
@@ -96,7 +96,7 @@ def register_slot(
     if default is None and compose == UNION:
         default = []
     kept = _SLOTS[name].contributions if name in _SLOTS else []
-    _SLOTS[name] = Slot(name, compose, default, layer, kept, values=values)
+    _SLOTS[name] = Slot(name, compose, default, extension, kept, values=values)
 
 
 def unregister_slot(name: str) -> None:
@@ -104,25 +104,28 @@ def unregister_slot(name: str) -> None:
     _SLOTS.pop(name, None)
 
 
-def contribute(name: str, value: object, *, layer: str = _BASE, by: str = "") -> None:
+def contribute(
+    name: str, value: object, *, extension: str = _BASE, by: str = ""
+) -> None:
     """Add *value* to the slot *name*.
 
     Raises:
-        SlotError: when no layer declared *name*, or the slot declares
+        SlotError: when no extension declared *name*, or the slot declares
             its values and *value* is not one of them.
     """
     slot = _SLOTS.get(name)
     if slot is None:
         raise SlotError(
-            f"{by or layer} contributes to slot {name!r}, which no layer declares;"
+            f"{by or extension} contributes to slot {name!r},"
+            " which no extension declares;"
             f" the slots are {', '.join(sorted(_SLOTS)) or 'none'}"
         )
     if slot.values is not None and value not in slot.values:
         raise SlotError(
-            f"{by or layer} contributes {value!r} to slot {name!r}, whose values"
+            f"{by or extension} contributes {value!r} to slot {name!r}, whose values"
             f" are {', '.join(repr(known) for known in slot.values)}"
         )
-    slot.contributions.append(Contribution(value, layer, by or layer))
+    slot.contributions.append(Contribution(value, extension, by or extension))
 
 
 def withdraw(name: str, *, by: str) -> None:
@@ -142,7 +145,7 @@ def composed(name: str) -> object:
 
     Raises:
         SlotError: when *name* is undeclared, or a scalar slot has two
-            claims from one layer.
+            claims from one extension.
     """
     slot = _SLOTS.get(name)
     if slot is None:
@@ -169,13 +172,15 @@ def composed(name: str) -> object:
         return slot.default
     nearest = slot.contributions[-1]
     rivals = [
-        c for c in slot.contributions if c.layer == nearest.layer and c is not nearest
+        c
+        for c in slot.contributions
+        if c.extension == nearest.extension and c is not nearest
     ]
     if rivals:
         rival = rivals[-1]
         raise SlotError(
             f"slot {name!r}: two claims at one level, {rival.by} ({rival.value!r})"
-            f" and {nearest.by} ({nearest.value!r}), both from {nearest.layer};"
+            f" and {nearest.by} ({nearest.value!r}), both from {nearest.extension};"
             " one of them yields"
         )
     return nearest.value

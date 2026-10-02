@@ -127,7 +127,7 @@ def test_a_registered_check_runs_narrows_and_is_replaced_by_name(
     run_check("lint.spy", fixing, fix=True)
     assert seen == [("fix", None)]
     assert "lint.spy" not in judges(fixing)
-    # Re-registering the name replaces the record: how a layer swaps a tool.
+    # Re-registering the name replaces the record: how an extension swaps a tool.
     register_check(CheckRecord("spy", "lint", _noop))
     assert check_for("lint.spy").narrowing == NONE
     unregister_check("lint.spy")

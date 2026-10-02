@@ -115,7 +115,7 @@ def test_every_template_renders_the_same_in_minijinja() -> None:
         for kind in template_chain(str(data.get("kind", ""))):
             differences += _template_differences(source, kind, data)
     # The kinds no member here uses, rendered over the last member's data.
-    for kind in ("package-cpp-conan", "package-python-nanobind", "package-layer"):
+    for kind in ("package-cpp-conan", "package-python-nanobind", "package-extension"):
         differences += _template_differences(source, kind, data)
     assert differences == []
 

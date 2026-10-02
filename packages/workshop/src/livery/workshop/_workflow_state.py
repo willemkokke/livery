@@ -4,7 +4,7 @@ A workflow lives on a reserved branch whose name is its identity:
 ``workflow/release/<members>`` (the set's directory names, sorted,
 joined with ``+``) or ``workflow/update/<slug>``. Different names
 coexist; this reader tells the truth per branch and never arbitrates
-between them, which is the decision layer's job
+between them, which is the decision extension's job
 (livery.workshop._workflow_decision.workflow_decision).
 
 Classification is a pure function (``classify``) of gathered

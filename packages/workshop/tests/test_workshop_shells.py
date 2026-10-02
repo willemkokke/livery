@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs layer's: importing its task module
+# The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 from livery.footman.api import Failed
@@ -34,7 +34,7 @@ def _git(cwd: Path, *args: str) -> None:
 
 def _workspace(root: Path) -> None:
     """One python package in a workspace, the shape the ci verbs read."""
-    (root / "workshop.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     package = root / "packages" / "thing"
     (package / "src" / "livery" / "thing").mkdir(parents=True)
     (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
@@ -292,15 +292,15 @@ def test_coverage_enforce_reads_the_workspace(
     assert seen == [root]
 
 
-def test_the_layers_task_prints_the_walk(
+def test_the_extensions_task_prints_the_walk(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.footman import registry
-    from livery.workshop._tasks import layers
+    from livery.workshop._tasks import extensions
 
     _, _root = rig
     with registry.capture():
-        layers()
+        extensions()
     out = capsys.readouterr().out
     assert "no workspace" in out or "instance's own files" in out
 
@@ -346,7 +346,7 @@ def test_forge_lane_reads_the_contract_and_the_remote(
     (root / "workshop.toml").write_text('[workspace]\n[forge]\nkind = "svn"\n')
     with pytest.raises(_FAILURES):
         _forge_lane.this_forge(root)
-    (root / "workshop.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     with pytest.raises(_FAILURES):
         _forge_lane.this_repository(root)
 

@@ -29,9 +29,7 @@ def _refusal(action: Callable[[], object]) -> str:
 
 @pytest.fixture
 def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Package]:
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n'
-    )
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     members = []
     for name, floor in (("x", '"auto-ratchet"'), ("y", "90")):
         directory = tmp_path / "packages" / name

@@ -29,11 +29,11 @@ import livery.toolroom.tools.api as tools
 from livery.footman.api import Context, doc, fail, group
 
 # Registers the base's release notes provider, git-cliff into
-# CHANGELOG.md, until the changelog layer ships it.
+# CHANGELOG.md, until the changelog extension ships it.
 from livery.workshop import _cliff as _cliff
 from livery.workshop._backends import backend_for
+from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
-from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._release_notes import NO_PROVIDER, release_notes
 from livery.workshop._versions import derive_version
@@ -483,16 +483,16 @@ def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
     """The home's template publisher, and whether the wave at *ref* released it.
 
     The wave at *ref* is the manifest the release squash stamped; the
-    publisher is the last layer in the stack that ships a template
+    publisher is the last extension in the stack that ships a template
     tree. A home whose stack ships none answers ``("", False)``.
     """
-    from livery.workshop._compose import layer_template_tree
-    from livery.workshop._layers import layer_entries
+    from livery.workshop._compose import extension_template_tree
+    from livery.workshop._extensions import stack_entries
     from livery.workshop._publish import MANIFEST, discover_release, read_manifest
 
     publisher = ""
-    for layer, dist in layer_entries(root):
-        if layer_template_tree(root, layer) is not None:
+    for extension, dist in stack_entries(root):
+        if extension_template_tree(root, extension) is not None:
             publisher = dist
     if not publisher:
         return "", False
@@ -509,7 +509,7 @@ def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
 @release.task(name="templates", hidden=True)
 def release_templates(
     version: Annotated[
-        str, doc("the publishing layer's version (default: its installed one)")
+        str, doc("the publishing extension's version (default: its installed one)")
     ] = "",
     remote: Annotated[
         str, doc("artifact repository url (default: the contract's)")
@@ -523,20 +523,20 @@ def release_templates(
     Runs from the released checkout in the release workflow, after the
     wave. With ``--ref`` it decides for itself: the manifest at the
     squash names the wave's members, and a wave that did not release
-    the publishing layer has no artifact to publish, so the verb says
-    so and exits green. A layer home publishes its composed tree (base
+    the publishing extension has no artifact to publish, so the verb says
+    so and exits green. An extension home publishes its composed tree (base
     at the pinned installed version plus its overlay), with the
     composition recorded in the artifact; the base home publishes its
     own tree unchanged, the degenerate case. The tag is
-    ``v<version>``, the publishing layer's version, in lockstep with
-    that layer's release tag. Same version, different content
+    ``v<version>``, the publishing extension's version, in lockstep with
+    that extension's release tag. Same version, different content
     refuses: a released tag is immutable.
     """
     import tempfile as _tempfile
     from importlib.metadata import version as installed
 
-    from livery.workshop._compose import layer_template_tree
-    from livery.workshop._layers import layer_entries
+    from livery.workshop._compose import extension_template_tree
+    from livery.workshop._extensions import stack_entries
     from livery.workshop._templates import render_source, templates_artifact
 
     root = _root()
@@ -555,16 +555,16 @@ def release_templates(
             " only a template home publishes; declare the artifact"
             " repository in workshop.toml"
         )
-    entries = layer_entries(root)
+    entries = stack_entries(root)
     publisher = ""
-    publisher_layer = ""
-    for layer, dist in entries:
-        if layer_template_tree(root, layer) is not None:
-            publisher, publisher_layer = dist, layer
+    publisher_extension = ""
+    for extension, dist in entries:
+        if extension_template_tree(root, extension) is not None:
+            publisher, publisher_extension = dist, extension
     if not publisher:
         fail(
-            "no layer in the stack ships a template tree: nothing to"
-            " publish; `uv sync` installs the base layer's"
+            "no extension in the stack ships a template tree: nothing to"
+            " publish; `uv sync` installs the base extension's"
         )
     version = version or installed(publisher)
     source, remote_ref, owners = render_source(root)
@@ -581,7 +581,7 @@ def release_templates(
             # A composed tree records what it was composed from: the
             # base and its pinned version, so a reader of the artifact
             # knows which improvements it already carries.
-            _base_layer, base_dist = entries[0]
+            _base_extension, base_dist = entries[0]
             lines = [
                 "# Generated by the workshop's composed release; the",
                 "# artifact states its own composition.",
@@ -589,7 +589,9 @@ def release_templates(
                 f'base = "{base_dist}"',
                 f'base_version = "{installed(base_dist)}"',
                 f'publisher = "{publisher}"',
-                "layers = [" + ", ".join(f'"{layer}"' for layer, _ in entries) + "]",
+                "extensions = ["
+                + ", ".join(f'"{extension}"' for extension, _ in entries)
+                + "]",
             ]
             record = "\n".join(lines) + "\n"
             (staged / "composition.toml").write_text(record, encoding="utf-8")
@@ -597,6 +599,6 @@ def release_templates(
             staged,
             version,
             remote,
-            author=f"{publisher_layer} release train <release@{publisher}.invalid>",
+            author=f"{publisher_extension} release train <release@{publisher}.invalid>",
         )
     print(f"  {outcome}")

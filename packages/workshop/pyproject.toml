@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "livery-workshop"
 version = "0.3.0"
-description = "The livery ecosystem's devkit: the task surface, layers, templates, and content."
+description = "The livery ecosystem's devkit: the task surface, extensions, templates, and content."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -58,13 +58,14 @@ dev = ["types-pyyaml", "minijinja>=2.24"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._tasks"
-# The docs layer, a layer inside this wheel with a surface of its own.
+# The docs extension, an extension inside this wheel with a surface of its own.
 "livery.extensions.docs" = "livery.extensions.docs._tasks"
 
-# The contract keys each owner reads, by owner: the judge in
-# livery.workshop._contract_keys loads these data modules alone.
-[project.entry-points."workshop.contract"]
-"livery.extensions.docs" = "livery.extensions.docs._contract_keys:DECLARED"
+# The workshop extensions this wheel ships, by the name a workspace
+# lists: each maps to the data module that declares it, which the mount
+# and the contract judge load without the extension's tasks.
+[project.entry-points."workshop.extensions"]
+docs = "livery.extensions.docs._extension"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts

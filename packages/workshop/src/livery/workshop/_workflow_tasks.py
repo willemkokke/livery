@@ -17,8 +17,8 @@ import livery.footman.api as footman
 from livery.footman.api import doc, fail, group, suggest
 from livery.forge.api import Forge, RepoConfig, Repository
 from livery.workshop._contract import load_contract
+from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
-from livery.workshop._layers import workspace_root
 from livery.workshop._workflow_state import (
     TEARDOWN_SAFE,
     WorkflowState,

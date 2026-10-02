@@ -190,7 +190,7 @@ def test_only_a_declared_plugin_module_may_import_what_the_runner_brings(
     """The exemption follows the entry point, never a path spelled twice.
 
     A module the runner loads as a plugin has the runner present by
-    construction, and the mounted layers with it. The package's own
+    construction, and the mounted extensions with it. The package's own
     metadata is where that is declared, so a module at the same path
     with no entry point naming it is not exempt, and renaming the
     module in the metadata moves the exemption with it.
@@ -253,9 +253,9 @@ def test_a_clean_tree_passes(tmp_path: Path) -> None:
 
 
 def test_the_task_tree_imports_no_pytest() -> None:
-    """A CLI built from this layer runs where pytest is not installed.
+    """A CLI built from this extension runs where pytest is not installed.
 
-    A brand's tool venv carries the layer and its runtime dependencies,
+    A brand's tool venv carries the extension and its runtime dependencies,
     never the test toolchain. One import of a pytest plugin module on
     the path a verb takes turns every command on that CLI into a
     ModuleNotFoundError, which is how it was found: the descendant
@@ -774,7 +774,7 @@ def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
         _cpp_conan.declare_requirement(bare, low, "0.3.0")
 
 
-# The one parse, and the rules a layer registers into it.
+# The one parse, and the rules an extension registers into it.
 
 
 def test_the_layering_check_parses_each_source_once(
@@ -834,7 +834,7 @@ def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
         (context.root / "fixed.marker").write_text("")
         return ["  acme-rule: wrote fixed.marker"]
 
-    register_ast_rule(AstRule("acme-rule", judge, fix=fix, layer="acme.brand"))
+    register_ast_rule(AstRule("acme-rule", judge, fix=fix, extension="acme.brand"))
     try:
         _package(tmp_path, "tool")
         _module(tmp_path, "tool", "a.py", "import json\n")
