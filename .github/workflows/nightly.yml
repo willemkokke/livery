@@ -45,26 +45,3 @@ jobs:
         run: >-
           fm ci.run --point=nightly --job=nightly
           --python="${{ matrix.python }}"
-  # The scale job: the [[ci.schedule]] entries that name it, on one
-  # runner.
-  scale:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          enable-cache: false
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
-          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
-      - name: Enter the workspace
-        run: bash setup.sh github
-      - name: Scale
-        env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: fm ci.run --point=nightly --job=scale

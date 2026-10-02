@@ -1,8 +1,8 @@
 # Extensions: a base, and what a workspace lists
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
-2026-10-02. Phase 1a built (issue #1025); 1b built (issue #1028),
-its CI baseline owed; the others not started. It is the one plan from now until the end of
+2026-10-02. Phases 1 and 2 built (issues #1025, #1028, #1032); the
+others not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -614,8 +614,7 @@ Acceptance of 1a, with the evidence of 2026-10-02:
   `test_every_check_fragment_renders_the_same_in_minijinja` pass.
 - `fm template.check` exits 0 after the template change.
 
-**1b, the scale fixture: built (issue #1028); the CI baseline is
-owed.**
+**1b, the scale fixture: built (issue #1028).**
 
 - `fm ci.scale` copies the committed tree at HEAD into a repository
   of its own with no remote, removes the test modules of the copy's
@@ -629,10 +628,11 @@ owed.**
 - Inside CI the timings land on the `metrics` series as the run's
   `scale` job, a task per verb and state, so `fm ci.timings` reads
   them with no change to its reader.
-- A `[[ci.schedule]]` entry runs it weekly in a `scale` job of the
-  nightly point. A job only an entry names was listed by `jobs_of`
-  and never emitted; `emitted_points` now adds it to the shell, on
-  one runner, with the point's own checkout and credential.
+- No schedule runs it: the baseline is the local run in the decision
+  record, and a later phase re-runs `fm ci.scale` to compare. A job
+  only a `[[ci.schedule]]` entry names was listed by `jobs_of` and
+  never emitted; `emitted_points` now adds it to the shell, on one
+  runner, with the point's own checkout and credential.
 - `fm sync` in a clone with no `origin` (a `--local` birth, the
   fixture's copy) stopped on a traceback; it now skips bringing the
   checkout current and says so.
@@ -641,12 +641,12 @@ owed.**
 Acceptance of 1b:
 
 - `fm check` exits 0.
-- [ ] `fm store.show metrics` shows the fixture's baseline rows,
-  quoted in the decision record. Owed: a weekly entry runs on
-  Mondays, dispatched or scheduled, so the first row is the nightly
-  of 2026-10-05.
+- The baseline is quoted in the decision record, from a local run;
+  no CI row is recorded (Willem's ruling of 2026-10-02).
 
 ### Phase 2: strict contracts
+
+**Built (issue #1032).**
 
 Deliverables:
 
@@ -1041,6 +1041,24 @@ Acceptance:
 
 ## Decision record
 
+- 2026-10-02, phase 2: the declarations are data, `Declared(contract,
+  path, types, values)`, a dotted path with `*` for a user-named key
+  and `[]` for a list's entries. The base's live in
+  `livery.workshop._contract_keys` and beside the readers that own a
+  vocabulary (`_registries`, `_docs_contract`, `_tools`, `_points`),
+  so an allowed set is written once; a layer names a data module under
+  the `workshop.contract` entry point group, loaded without its tasks,
+  since `plugin()` must stay a layer's first importer. Phase 4 folds
+  the group into `workshop.extensions`. Every check a reader made of
+  a type or an allowed value the judge now makes went, the `type` and
+  `channels` refusals and the contributed point's grant refusal among
+  them (an unknown key now). One behaviour reverses: a `[ci]
+  profile-*` key of the wrong type stopped nothing and kept its
+  default; it now refuses like every key, and only a value of the
+  right type out of range keeps the default. `_layers` still reads
+  `[workspace] layers` raw at mount, so a broken contract never stops
+  the verb that fixes it. The weekly `scale` entry from phase 1b
+  leaves the nightly in the same change, per Willem's ruling.
 - 2026-10-02, phase 1b: the fixture is a copy of this tree, not a
   newborn project, because a newborn installs the published workshop
   and the copy runs the one under test with no index. Its own
@@ -1052,7 +1070,11 @@ Acceptance:
   warm, 454.1s one changed. The template render costs about 9
   minutes at this size in every state, and the one-changed gate
   pays most of it again; that is the cost phases 6b and 15 remove.
-  These are a local wall clock; the CI rows are the record.
+  These are a local wall clock, kept for comparison as the phases
+  land. Willem ruled the same day that no weekly CI job runs it:
+  most of what it measures changes before a first Monday run, so
+  the local numbers are the record, and `fm ci.scale` is re-run by
+  hand to compare.
 - 2026-10-02, phase 1a: phase 1 splits into the spike (1a) and the
   scale fixture (1b), which needs a CI point to record its timings
   in the store and so lands apart. The spike's one finding changed a
