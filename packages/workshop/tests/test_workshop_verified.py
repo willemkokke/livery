@@ -197,7 +197,7 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
     assert _quality.verified_already(work)
     assert "proved green by run 1013" in capsys.readouterr().out
     # The gate itself: a verified tree ends the run before any step, marker left.
-    (work / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (work / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: RUN)
     monkeypatch.setattr(

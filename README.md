@@ -6,7 +6,7 @@ The livery ecosystem monorepo. The working record lives in
 | Package | Distribution | What it is |
 | --- | --- | --- |
 | `packages/forge` | `livery-forge` | One interface to GitHub, Gitea, and GitLab |
-| `packages/workshop` | `livery-workshop` | The devkit: the task surface, layers, content, templates, and the forge lane |
+| `packages/workshop` | `livery-workshop` | The devkit: the task surface, extensions, content, templates, and the forge lane |
 
 The workshop's template snapshots publish to
 [workshop-templates](https://github.com/willemkokke/workshop-templates),

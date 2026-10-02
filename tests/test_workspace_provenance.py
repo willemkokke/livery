@@ -56,7 +56,7 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
         (
             "packages/workshop/src/livery/workshop/content/"
             "fragments/interaction-voice.md"
-        ): "layer content",
+        ): "extension content",
     }
     emitted = emitted_paths(ROOT)
     for path, channel in expect.items():

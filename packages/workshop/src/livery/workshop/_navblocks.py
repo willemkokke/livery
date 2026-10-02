@@ -3,8 +3,8 @@
 A markdown convention the base keeps: a generator emits a block's
 entries into the package's generated tree, and the authored
 ``docs/nav.toml`` places the block with a marker pair. The site
-assembly, a layer, renders the block where the markers sit; the base
-needs only the format, so a generator in any layer can write one.
+assembly, an extension, renders the block where the markers sit; the base
+needs only the format, so a generator in any extension can write one.
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ from livery.workshop import _points
 
 _FAILURES = (BaseException,)
 
-MOUNTED = ("layers", "doctor", "tools.refresh")
+MOUNTED = ("extensions", "doctor", "tools.refresh")
 
 
 def _mounted(task: str) -> bool:
@@ -31,7 +31,7 @@ def _workspace(tmp_path: Path, kind: str = "github", *members: tuple[str, str]) 
     root = tmp_path / kind
     (root / "packages").mkdir(parents=True)
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\n'
+        "[workspace]\nextensions = []\n\n[forge]\n"
         f'kind = "{kind}"\nowner = "acme"\n\n[ci]\nrunners = ["ubuntu-latest"]\n'
         'python-versions = ["3.13", "3.14"]\n'
     )
@@ -52,7 +52,7 @@ def _workspace(tmp_path: Path, kind: str = "github", *members: tuple[str, str]) 
 
 AUDIT = (
     "audit",
-    '\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\nevery = "2w"\n'
+    '\n[[ci.point]]\nname = "host-audit"\ntask = "extensions"\nevery = "2w"\n'
     'runners = ["ubuntu-latest", "windows-latest"]\npythons = ["3.12", "3.14"]\n',
 )
 
@@ -73,18 +73,20 @@ def _refusal(tmp_path: Path, tail: str) -> str:
 
 
 def test_a_builtin_name_is_refused(tmp_path: Path) -> None:
-    text = _refusal(tmp_path, '\n[[ci.point]]\nname = "gate"\ntask = "layers"\n')
+    text = _refusal(tmp_path, '\n[[ci.point]]\nname = "gate"\ntask = "extensions"\n')
     assert "packages/audit [[ci.point]] entry 1" in text
     assert "'gate' is a builtin point" in text and "adds no job to the gate" in text
 
 
 def test_a_name_that_is_not_a_filename_is_refused(tmp_path: Path) -> None:
-    text = _refusal(tmp_path, '\n[[ci.point]]\nname = "Host Audit"\ntask = "layers"\n')
+    text = _refusal(
+        tmp_path, '\n[[ci.point]]\nname = "Host Audit"\ntask = "extensions"\n'
+    )
     assert "'Host Audit' is not a point name" in text
 
 
 def test_a_name_two_packages_claim_is_refused(tmp_path: Path) -> None:
-    tail = '\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\n'
+    tail = '\n[[ci.point]]\nname = "host-audit"\ntask = "extensions"\n'
     root = _workspace(tmp_path, "github", ("audit", tail), ("bench", tail))
     with pytest.raises(_FAILURES) as caught:
         _points.contributed(root, mounted=_mounted)
@@ -95,7 +97,8 @@ def test_a_name_two_packages_claim_is_refused(tmp_path: Path) -> None:
 
 def test_a_cadence_that_is_not_one_is_refused(tmp_path: Path) -> None:
     text = _refusal(
-        tmp_path, '\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\nevery = "3d"\n'
+        tmp_path,
+        '\n[[ci.point]]\nname = "host-audit"\ntask = "extensions"\nevery = "3d"\n',
     )
     assert "ci.point[].every is '3d'; it takes one of 1w, 2w" in text
 
@@ -111,7 +114,7 @@ def test_a_grant_a_secret_or_an_environment_is_refused(tmp_path: Path) -> None:
     for key in ("permissions", "secrets", "environment"):
         text = _refusal(
             tmp_path / key,
-            f'\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\n{key} = "x"\n',
+            f'\n[[ci.point]]\nname = "host-audit"\ntask = "extensions"\n{key} = "x"\n',
         )
         assert f"[ci.point] has no key {key!r}" in text
 
@@ -119,13 +122,14 @@ def test_a_grant_a_secret_or_an_environment_is_refused(tmp_path: Path) -> None:
 def test_a_point_without_a_task_and_junk_lists_are_refused(tmp_path: Path) -> None:
     assert "names no task" in _refusal(tmp_path / "a", '\n[[ci.point]]\nname = "x"\n')
     assert "names no point" in _refusal(
-        tmp_path / "b", '\n[[ci.point]]\ntask = "layers"\n'
+        tmp_path / "b", '\n[[ci.point]]\ntask = "extensions"\n'
     )
     assert "runners must be a non-empty list of strings" in _refusal(
-        tmp_path / "c", '\n[[ci.point]]\nname = "x"\ntask = "layers"\nrunners = []\n'
+        tmp_path / "c",
+        '\n[[ci.point]]\nname = "x"\ntask = "extensions"\nrunners = []\n',
     )
     assert "ci.point[].args is a list ([1]); it takes a list of strings" in _refusal(
-        tmp_path / "d", '\n[[ci.point]]\nname = "x"\ntask = "layers"\nargs = [1]\n'
+        tmp_path / "d", '\n[[ci.point]]\nname = "x"\ntask = "extensions"\nargs = [1]\n'
     )
 
 
@@ -138,7 +142,7 @@ def test_a_contributed_point_joins_the_workspace_with_its_defaults(
     root = _workspace(
         tmp_path,
         "github",
-        ("audit", '\n[[ci.point]]\nname = "host-audit"\ntask = "layers"\n'),
+        ("audit", '\n[[ci.point]]\nname = "host-audit"\ntask = "extensions"\n'),
     )
     everything = _points.points(root)
     assert [point.name for point in everything] == [*_points.POINTS, "host-audit"]
@@ -156,7 +160,7 @@ def test_a_contributed_point_joins_the_workspace_with_its_defaults(
     assert _points.jobs_of(root, "host-audit") == ("host-audit",)
     (entry,) = _points.entries_for(root, "host-audit", "host-audit")
     assert entry == _points.Entry(
-        "host-audit", "host-audit", "layers", (), source="packages/audit"
+        "host-audit", "host-audit", "extensions", (), source="packages/audit"
     )
     # A root [[ci.schedule]] may attach to the contributed point too.
     (root / "workshop.toml").write_text(
@@ -164,7 +168,7 @@ def test_a_contributed_point_joins_the_workspace_with_its_defaults(
         + '\n[[ci.schedule]]\npoint = "host-audit"\ntask = "doctor"\n'
     )
     assert [e.task for e in _points.entries_for(root, "host-audit", "host-audit")] == [
-        "layers",
+        "extensions",
         "doctor",
     ]
 
@@ -206,8 +210,10 @@ def test_the_runner_runs_a_contributed_points_task_on_its_day(
         python="3.12",
         spawn=green,
     )
-    assert seen == [["hse", "--profile=fm-profile-layers.json", "layers"]]
-    assert "host-audit/host-audit: layers (packages/audit)" in capsys.readouterr().out
+    assert seen == [["hse", "--profile=fm-profile-extensions.json", "extensions"]]
+    assert (
+        "host-audit/host-audit: extensions (packages/audit)" in capsys.readouterr().out
+    )
 
 
 # --- the rendering, one declaration for every forge ----------------------------------

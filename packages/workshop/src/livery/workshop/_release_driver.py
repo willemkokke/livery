@@ -965,8 +965,8 @@ def workflow_release(
     squash's own workshop.
     """
     from livery.workshop._dev_release import dev_release
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_repository
-    from livery.workshop._layers import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -1052,8 +1052,8 @@ def workflow_release_dispatch(
     past; ``--workshop`` names a released driver for a wave whose own
     workshop was the fault.
     """
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_repository
-    from livery.workshop._layers import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -1080,7 +1080,7 @@ def workflow_release_check_title(
     request, or a pull request off a release branch, is green here
     and says so.
     """
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -1146,8 +1146,8 @@ def workflow_release_publish(
     import os
 
     from livery.forge.api import SimpleRegistry
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._kinds import kind_for
-    from livery.workshop._layers import workspace_root
     from livery.workshop._publish import Registry, publish_release
     from livery.workshop._registries import resolve_registry
 

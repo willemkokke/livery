@@ -7,7 +7,7 @@ merge. This module runs that shared lifecycle; a
 ``WorkflowDriver`` plugs in only ``prepare`` (do the work) and
 ``on_merged`` (a release publishes and tags; an update does
 nothing). Re-running the engine at any point is the recovery: the
-decision layer reads the state and does the right thing.
+decision extension reads the state and does the right thing.
 """
 
 from __future__ import annotations
@@ -273,8 +273,8 @@ def _forge_user(repo: Repository) -> str:
     decision treats as "cannot compare", never as a refusal.
     """
     try:
+        from livery.workshop._extensions import workspace_root
         from livery.workshop._forge_lane import this_forge
-        from livery.workshop._layers import workspace_root
 
         root = workspace_root()
         if root is None:

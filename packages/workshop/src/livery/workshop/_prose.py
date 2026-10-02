@@ -1,9 +1,9 @@
-"""Prose fragments: what the layers say to the agent and to a reader, in sections.
+"""Prose fragments: what the extensions say to the agent and to a reader, in sections.
 
-A layer's prose, its voice, its standards, what a kind's package looks
+An extension's prose, its voice, its standards, what a kind's package looks
 like, is a set of fragments, and one set writes the agent's entry file
 and the site's development pages. A fragment is a markdown file in the
-layer's ``content/fragments/`` named
+extension's ``content/fragments/`` named
 ``<section>.[<kind>.]<topic>[.<audience>].md``, or a registration with
 [livery.workshop._prose.register_fragment][] and a render that takes
 the audience. The base defines the sections and their order;
@@ -41,7 +41,7 @@ from livery.workshop._materialise import (
     sweep_files,
 )
 
-BASE_LAYER = "livery.workshop"
+BASE_EXTENSION = "livery.workshop"
 AGENT = "agent"
 HUMAN = "human"
 AUDIENCES = (AGENT, HUMAN)
@@ -65,11 +65,11 @@ BASE_SECTIONS = (
 #: directories beside it.
 DELIVERED = ".workshop/fragments"
 
-#: The fragments directory: a layer's under its content, the repository's
+#: The fragments directory: an extension's under its content, the repository's
 #: own at the root.
 OWN = "fragments"
 
-#: The layer name of the repository's own fragments.
+#: The extension name of the repository's own fragments.
 REPOSITORY = ""
 
 #: A render: the workspace root and the audience, ``agent``, ``human``
@@ -84,7 +84,7 @@ class ProseError(ValueError):
 
 @dataclass(frozen=True)
 class Prose:
-    """One prose fragment: a file a layer ships, or a render from the registries.
+    """One prose fragment: a file an extension ships, or a render from the registries.
 
     Attributes:
         section: The section it belongs to, one the registry knows.
@@ -94,7 +94,7 @@ class Prose:
         audience: ``agent`` or ``human`` for a file that serves one
             reader, empty for both; a rendered fragment is empty here
             and answers per audience.
-        layer: The layer that ships or registers it; empty for the
+        extension: The extension that ships or registers it; empty for the
             repository's own.
         source: The shipped file, or None for a rendered fragment.
         render: The render, or None for a shipped fragment.
@@ -104,7 +104,7 @@ class Prose:
     topic: str
     kind: str = ""
     audience: str = ""
-    layer: str = BASE_LAYER
+    extension: str = BASE_EXTENSION
     source: Path | None = None
     render: Render | None = None
 
@@ -116,10 +116,10 @@ class Prose:
 
     @property
     def origin(self) -> str:
-        """Where it comes from, for a refusal: the file in posix form, or the layer."""
+        """Where it comes from, for a refusal: the posix file, or the extension."""
         if self.source is not None:
-            return f"{self.source.as_posix()} ({self.layer or 'this repository'})"
-        return f"the render {self.layer} registered"
+            return f"{self.source.as_posix()} ({self.extension or 'this repository'})"
+        return f"the render {self.extension} registered"
 
     def text(self, root: Path, audience: str | None) -> str:
         """The markdown for *audience*: the shipped text, or the render's answer."""
@@ -131,7 +131,7 @@ class Prose:
 
 
 _SECTIONS: list[str] = list(BASE_SECTIONS)
-_SECTION_LAYERS: dict[str, str] = dict.fromkeys(BASE_SECTIONS, BASE_LAYER)
+_SECTION_EXTENSIONS: dict[str, str] = dict.fromkeys(BASE_SECTIONS, BASE_EXTENSION)
 #: The rendered fragments by delivered name.
 _RENDERED: dict[str, Prose] = {}
 
@@ -141,35 +141,37 @@ def sections() -> tuple[str, ...]:
     return tuple(_SECTIONS)
 
 
-def register_section(name: str, *, after: str, layer: str) -> None:
+def register_section(name: str, *, after: str, extension: str) -> None:
     """Add the section *name* right after *after*.
 
-    Refuses a name a layer already registered, naming that layer, and
-    an anchor no layer registered, naming the sections.
+    Refuses a name an extension already registered, naming that extension, and
+    an anchor no extension registered, naming the sections.
     """
-    if name in _SECTION_LAYERS:
+    if name in _SECTION_EXTENSIONS:
         raise ProseError(
-            f"{layer} registers section {name!r}, which"
-            f" {_SECTION_LAYERS[name]} already registered"
+            f"{extension} registers section {name!r}, which"
+            f" {_SECTION_EXTENSIONS[name]} already registered"
         )
-    if after not in _SECTION_LAYERS:
+    if after not in _SECTION_EXTENSIONS:
         raise ProseError(
-            f"{layer} registers section {name!r} after {after!r}, which no"
-            f" layer registered; the sections are {', '.join(_SECTIONS)}"
+            f"{extension} registers section {name!r} after {after!r}, which no"
+            f" extension registered; the sections are {', '.join(_SECTIONS)}"
         )
     _SECTIONS.insert(_SECTIONS.index(after) + 1, name)
-    _SECTION_LAYERS[name] = layer
+    _SECTION_EXTENSIONS[name] = extension
 
 
 def unregister_section(name: str, *, by: str) -> None:
     """Drop the section *name*.
 
-    Refuses the base's own, an unknown one, another layer's, and one a
+    Refuses the base's own, an unknown one, another extension's, and one a
     rendered fragment still belongs to.
     """
-    owner = _SECTION_LAYERS.get(name)
+    owner = _SECTION_EXTENSIONS.get(name)
     if owner is None:
-        raise ProseError(f"{by} withdraws section {name!r}, which no layer registered")
+        raise ProseError(
+            f"{by} withdraws section {name!r}, which no extension registered"
+        )
     if name in BASE_SECTIONS:
         raise ProseError(f"{by} withdraws section {name!r}, which is the base's")
     if owner != by:
@@ -181,11 +183,11 @@ def unregister_section(name: str, *, by: str) -> None:
             " belongs to it"
         )
     _SECTIONS.remove(name)
-    del _SECTION_LAYERS[name]
+    del _SECTION_EXTENSIONS[name]
 
 
 def _check_section(where: str, section: str) -> None:
-    if section not in _SECTION_LAYERS:
+    if section not in _SECTION_EXTENSIONS:
         raise ProseError(
             f"{where}: section {section!r} is not one the registry knows; the"
             f" sections are {', '.join(_SECTIONS)}"
@@ -210,7 +212,7 @@ def register_fragment(
     render: Render,
     *,
     kind: str = "",
-    layer: str = BASE_LAYER,
+    extension: str = BASE_EXTENSION,
 ) -> None:
     """Register a rendered fragment.
 
@@ -218,46 +220,48 @@ def register_fragment(
     ``human`` or None for no particular reader, and returns the
     markdown; an empty answer leaves the fragment out for that reader.
     Refuses an unknown section or kind, a topic spelling an audience,
-    and a name a layer already registered, naming that layer.
+    and a name an extension already registered, naming that extension.
     """
-    prose = Prose(section, topic, kind, "", layer, render=render)
-    where = f"{layer} registers fragment {prose.name}"
+    prose = Prose(section, topic, kind, "", extension, render=render)
+    where = f"{extension} registers fragment {prose.name}"
     _check_section(where, section)
     _check_kind(where, kind)
     if topic in AUDIENCES:
         raise ProseError(f"{where}: a topic is never named {topic!r}, an audience is")
     existing = _RENDERED.get(prose.name)
     if existing is not None:
-        raise ProseError(f"{where}, which {existing.layer} already registered")
+        raise ProseError(f"{where}, which {existing.extension} already registered")
     _RENDERED[prose.name] = prose
 
 
 def unregister_fragment(name: str, *, by: str) -> None:
     """Drop the rendered fragment delivered as *name*.
 
-    Refuses an unknown one, and one another layer registered.
+    Refuses an unknown one, and one another extension registered.
     """
     prose = _RENDERED.get(name)
     if prose is None:
-        raise ProseError(f"{by} withdraws fragment {name}, which no layer registered")
-    if prose.layer != by:
         raise ProseError(
-            f"{by} withdraws fragment {name}, which {prose.layer} registered"
+            f"{by} withdraws fragment {name}, which no extension registered"
+        )
+    if prose.extension != by:
+        raise ProseError(
+            f"{by} withdraws fragment {name}, which {prose.extension} registered"
         )
     del _RENDERED[name]
 
 
 def snapshot() -> tuple[list[str], dict[str, str], dict[str, Prose]]:
     """The registry's state, for [livery.workshop._prose.restore][] to put back."""
-    return list(_SECTIONS), dict(_SECTION_LAYERS), dict(_RENDERED)
+    return list(_SECTIONS), dict(_SECTION_EXTENSIONS), dict(_RENDERED)
 
 
 def restore(state: tuple[list[str], dict[str, str], dict[str, Prose]]) -> None:
     """Put the registry back to *state*."""
-    ordered, layers, rendered = state
+    ordered, extensions, rendered = state
     _SECTIONS[:] = ordered
-    _SECTION_LAYERS.clear()
-    _SECTION_LAYERS.update(layers)
+    _SECTION_EXTENSIONS.clear()
+    _SECTION_EXTENSIONS.update(extensions)
     _RENDERED.clear()
     _RENDERED.update(rendered)
 
@@ -288,12 +292,12 @@ def parse_name(filename: str, *, where: str = "") -> tuple[str, str, str, str]:
     return section, kind, topic, audience
 
 
-def shipped(layer: str, content: Path) -> list[Prose]:
-    """The fragments *layer* ships under ``content/fragments/``, in name order.
+def shipped(extension: str, content: Path) -> list[Prose]:
+    """The fragments *extension* ships under ``content/fragments/``, in name order.
 
     Every file there is a fragment, so a name outside the convention
     refuses naming the file. The repository's own come from its root
-    with the empty layer name.
+    with the empty extension name.
     """
     directory = content / OWN
     if not directory.is_dir():
@@ -303,7 +307,7 @@ def shipped(layer: str, content: Path) -> list[Prose]:
         if not path.is_file():
             continue
         section, kind, topic, audience = parse_name(path.name, where=path.as_posix())
-        found.append(Prose(section, topic, kind, audience, layer, source=path))
+        found.append(Prose(section, topic, kind, audience, extension, source=path))
     return found
 
 
@@ -328,16 +332,16 @@ def present_kinds(root: Path) -> frozenset[str]:
 def fragments(
     root: Path, shipped: Iterable[Prose], audience: str | None
 ) -> list[Prose]:
-    """The fragments *audience* reads, in section order, then layer order, then name.
+    """The fragments *audience* reads: by section, then extension, then name.
 
     A shipped fragment for the other reader is left out, as is one
     gated on a kind no present package is or derives from; a rendered
     fragment is always in and answers for itself when rendered. The
-    mounted layers come in mount order, a layer outside the mount
+    mounted extensions come in mount order, an extension outside the mount
     after them, and the repository's own last. Two fragments of one
     name in the set refuse naming both.
     """
-    from livery.workshop._layers import layer_names
+    from livery.workshop._extensions import stack_names
 
     present = present_kinds(root)
     chosen: list[Prose] = []
@@ -347,15 +351,15 @@ def fragments(
         if prose.audience and prose.audience != audience:
             continue
         chosen.append(prose)
-    mounted = list(layer_names(root))
+    mounted = list(stack_names(root))
 
     def rank(prose: Prose) -> tuple[int, int, int, str, str]:
-        if prose.layer == REPOSITORY:
+        if prose.extension == REPOSITORY:
             tier, index, name = 2, 0, ""
-        elif prose.layer in mounted:
-            tier, index, name = 0, mounted.index(prose.layer), ""
+        elif prose.extension in mounted:
+            tier, index, name = 0, mounted.index(prose.extension), ""
         else:
-            tier, index, name = 1, 0, prose.layer
+            tier, index, name = 1, 0, prose.extension
         return (_SECTIONS.index(prose.section), tier, index, name, prose.name)
 
     chosen.sort(key=rank)
@@ -388,7 +392,7 @@ class Delivery:
 def _rendered_header(prose: Prose) -> str:
     return (
         f"<!-- Rendered by `{footman.prog()} sync` from the registries"
-        f" {prose.layer} fills;\n"
+        f" {prose.extension} fills;\n"
         "     the source is the code. An edited copy is a local override,\n"
         "     kept and named until it is deleted. -->\n"
     )
@@ -412,7 +416,7 @@ def deliver(root: Path, shipped: Iterable[Prose]) -> Delivery:
     delivered: list[str] = []
     own: list[str] = []
     for prose in chosen:
-        if prose.layer == REPOSITORY:
+        if prose.extension == REPOSITORY:
             own.append(prose.name)
             continue
         relative = f"{DELIVERED}/{prose.name}"
@@ -426,7 +430,7 @@ def deliver(root: Path, shipped: Iterable[Prose]) -> Delivery:
             lines += materialise_file(root, prose.source, relative)
         delivered.append(prose.name)
     for name in sweep_files(root / DELIVERED, set(delivered)):
-        lines.append(f"  fragments: removed {name} (no layer ships it)")
+        lines.append(f"  fragments: removed {name} (no extension ships it)")
     return Delivery(lines, tuple(delivered), tuple(own))
 
 
@@ -451,7 +455,7 @@ def render_gate(root: Path, audience: str | None) -> str:
     if audience == HUMAN:
         lines += [
             f"`{prog} check` runs every check below, each registered by a"
-            f" layer; the package kinds present are {kinds}.",
+            f" extension; the package kinds present are {kinds}.",
             "",
             "| check | tools | kinds | rewrites under `--fix` |",
             "| --- | --- | --- | --- |",
@@ -505,9 +509,12 @@ def composed_tree(root: Path) -> dict[str, Any] | None:
 
 
 def _collect(
-    node: dict[str, Any], prefix: str, inherited: str, by_layer: dict[str, list[str]]
+    node: dict[str, Any],
+    prefix: str,
+    inherited: str,
+    by_extension: dict[str, list[str]],
 ) -> None:
-    """Every visible task under *node* by the layer that mounted it.
+    """Every visible task under *node* by the extension that mounted it.
 
     Addresses carry *prefix*; a group's ``default`` task is the group's
     own address, the way it is run.
@@ -517,50 +524,55 @@ def _collect(
         for name, task in tasks.items():
             if not isinstance(task, dict) or task.get("hidden") is True:
                 continue
-            layer = str(task.get("mounted_from") or inherited)
+            extension = str(task.get("mounted_from") or inherited)
             address = prefix[:-1] if name == "default" and prefix else f"{prefix}{name}"
-            by_layer.setdefault(layer, []).append(address)
+            by_extension.setdefault(extension, []).append(address)
     groups = node.get("groups")
     if isinstance(groups, dict):
         for name, sub in groups.items():
             if not isinstance(sub, dict) or sub.get("hidden") is True:
                 continue
-            layer = str(sub.get("mounted_from") or inherited)
-            _collect(sub, f"{prefix}{name}.", layer, by_layer)
+            extension = str(sub.get("mounted_from") or inherited)
+            _collect(sub, f"{prefix}{name}.", extension, by_extension)
 
 
 def render_verbs(root: Path, audience: str | None) -> str:
-    """The verbs by the layer that provides them, the repository's own last."""
-    from livery.workshop._layers import layer_names
+    """The verbs by the extension that provides them, the repository's own last."""
+    from livery.workshop._extensions import stack_names
 
     tree = composed_tree(root)
     if tree is None:
         return ""
-    by_layer: dict[str, list[str]] = {}
-    _collect(tree, "", REPOSITORY, by_layer)
-    if not by_layer:
+    by_extension: dict[str, list[str]] = {}
+    _collect(tree, "", REPOSITORY, by_extension)
+    if not by_extension:
         return ""
-    mounted = [layer for layer in layer_names(root) if layer in by_layer]
+    mounted = [
+        extension for extension in stack_names(root) if extension in by_extension
+    ]
     others = sorted(
-        layer for layer in by_layer if layer not in mounted and layer != REPOSITORY
+        extension
+        for extension in by_extension
+        if extension not in mounted and extension != REPOSITORY
     )
-    ordered = [*mounted, *others, *([REPOSITORY] if REPOSITORY in by_layer else [])]
+    ordered = [*mounted, *others, *([REPOSITORY] if REPOSITORY in by_extension else [])]
     prog = footman.prog()
-    lines = ["# The verbs by layer", ""]
+    lines = ["# The verbs by extension", ""]
     if audience == HUMAN:
         lines.append(
-            f"`{prog}` composes these verbs from the mounted layers and the"
+            f"`{prog}` composes these verbs from the mounted extensions and the"
             f" repository's own tasks file; `{prog} <verb> --help` describes one."
         )
     else:
         lines.append(
-            f"Every job goes through `{prog}`; these are its verbs, by the layer"
+            f"Every job goes through `{prog}`; these are its verbs, by the extension"
             " that provides them:"
         )
     lines.append("")
-    for layer in ordered:
+    for extension in ordered:
         lines.append(
-            f"- {layer or 'this repository'}: {', '.join(sorted(by_layer[layer]))}"
+            f"- {extension or 'this repository'}:"
+            f" {', '.join(sorted(by_extension[extension]))}"
         )
     return "\n".join(lines) + "\n"
 
@@ -645,7 +657,7 @@ def render_tools(root: Path, audience: str | None) -> str:
 def _register_builtin() -> None:
     """The base's rendered fragments: what the registries say, never written by hand."""
     register_fragment("gate", "checks", render_gate)
-    register_fragment("verbs", "layers", render_verbs)
+    register_fragment("verbs", "extensions", render_verbs)
     register_fragment("kinds", "present", render_kinds)
     register_fragment("tools", "locked", render_tools)
 

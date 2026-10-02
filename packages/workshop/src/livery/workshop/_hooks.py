@@ -175,7 +175,7 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
         return
     # Through the gate's walk, never a tool: every fixer whose claims
     # reach the file runs over it, ruff's for python, clang-format's
-    # for C++, a layer's for its own files; a file no claim reaches is
+    # for C++, an extension's for its own files; a file no claim reaches is
     # the walk's no-op, not the hook's business.
     with (
         contextlib.suppress(Exception, SystemExit),

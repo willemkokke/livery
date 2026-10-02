@@ -1,8 +1,8 @@
 """The livery ecosystem's devkit.
 
 The task surface arrives through the footman plugin
-(``plugin("livery.workshop")``); this module's own API is the layer
-walk (livery.workshop.api.layer_names, livery.workshop.api.mount_layers,
+(``plugin("livery.workshop")``); this module's own API is the extension
+walk (livery.workshop.api.extension_names, livery.workshop.api.mount_extensions,
 livery.workshop.api.workspace_root), the package contracts
 (livery.workshop.api.discover_packages, livery.workshop.api.verify_workspace
 over livery.workshop.api.Package and livery.workshop.api.Edge), and the one
@@ -14,7 +14,11 @@ steps and never hands a raw forge verb to a user.
 
 from __future__ import annotations
 
-from livery.workshop._layers import layer_names, mount_layers, workspace_root
+from livery.workshop._extensions import (
+    extension_names,
+    mount_extensions,
+    workspace_root,
+)
 from livery.workshop._navblocks import rewrite_nav_block
 from livery.workshop._packages import (
     Edge,
@@ -30,8 +34,8 @@ __all__ = [
     "Package",
     "__version__",
     "discover_packages",
-    "layer_names",
-    "mount_layers",
+    "extension_names",
+    "mount_extensions",
     "rewrite_nav_block",
     "verify_workspace",
     "workspace_root",

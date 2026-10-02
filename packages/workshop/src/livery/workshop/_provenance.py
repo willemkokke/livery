@@ -8,7 +8,7 @@ generated file with theirs, so the answer rides the file wherever
 comments are possible. Materialised copies are never injected:
 override detection depends on the copy staying byte-identical to
 its source, so those files, and comment-hostile ones, are explain's
-territory alone. Shipped layer content carries its header through
+territory alone. Shipped extension content carries its header through
 the provenance lint, whose ``--fix`` writes the computed text.
 """
 
@@ -27,7 +27,7 @@ from livery.workshop._categories import (
     channel_of,
     register_channels,
 )
-from livery.workshop._layers import layer_names, workspace_root
+from livery.workshop._extensions import stack_names, workspace_root
 from livery.workshop._packages import Package
 
 #: The project render's managed names, judged by the drift gate. The
@@ -74,7 +74,7 @@ _MARKERS = (
     "the template channel",
     "the workshop from workshop.toml",
     "Seeded from",
-    "layer content",
+    "extension content",
 )
 
 
@@ -97,11 +97,11 @@ def generated_header(style: str) -> str:
     return format_header(lines, style)
 
 
-def content_header(layer: str, style: str) -> str:
-    """The header shipped layer content carries, lint-enforced."""
+def content_header(extension: str, style: str) -> str:
+    """The header shipped extension content carries, lint-enforced."""
     lines = (
-        f"Shipped as {layer} layer content, delivered to the workspace",
-        "by the sync verb. Edit this copy in the layer and release it;",
+        f"Shipped as {extension} extension content, delivered to the workspace",
+        "by the sync verb. Edit this copy in the extension and release it;",
         "an edited delivered copy is a local override, kept and named.",
     )
     return format_header(lines, style)
@@ -167,16 +167,16 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
     if parts[0] == ".workshop":
         if parts[1:2] == ("fragments",):
             return Provenance(
-                "layer fragment",
-                f"a mounted layer's content/fragments/{relative.name}, or a"
+                "extension fragment",
+                f"a mounted extension's content/fragments/{relative.name}, or a"
                 " render from its registries",
-                f"edit the layer's copy; an edit here is a local override"
+                f"edit the extension's copy; an edit here is a local override"
                 f" `{prog} sync` keeps and names",
             )
         # Everything else under .workshop is this checkout's own: the
-        # tool receipts, the stub receipt, the linked binaries, a layer
+        # tool receipts, the stub receipt, the linked binaries, an extension
         # home's composed templates. None of them has an edit path, and
-        # calling them layer fragments was a lie the directory's older
+        # calling them extension fragments was a lie the directory's older
         # shape made easy to tell.
         return Provenance(
             "checkout state",
@@ -186,7 +186,7 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
     if parts[0] == "CLAUDE.md" and len(parts) == 1:
         return Provenance(
             "sync stub",
-            f"written by `{prog} sync` from the mounted layers' fragments",
+            f"written by `{prog} sync` from the mounted extensions' fragments",
             "edit CLAUDE.project.md, never this file",
         )
     if parts[0] != ".claude" or len(parts) < 2:
@@ -198,8 +198,8 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
         if _is_link(entry) or parts[2] in manifest:
             return Provenance(
                 "materialised",
-                f"a mounted layer's content/{parts[1]}/{parts[2]}",
-                "edit the layer's copy; an edit here becomes a local"
+                f"a mounted extension's content/{parts[1]}/{parts[2]}",
+                "edit the extension's copy; an edit here becomes a local"
                 " override on the next sync",
             )
         return Provenance(
@@ -212,8 +212,8 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
         if "settings.json" in manifest:
             return Provenance(
                 "materialised",
-                "a mounted layer's content/settings.json",
-                "edit the layer's copy; an edit here becomes a local"
+                "a mounted extension's content/settings.json",
+                "edit the extension's copy; an edit here becomes a local"
                 " override on the next sync",
             )
         return Provenance(
@@ -225,11 +225,11 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
 
 
 def _shipped(subdir: str, name: str) -> bool:
-    """Whether any mounted layer ships this content entry."""
-    from livery.workshop._layers import layer_content
+    """Whether any mounted extension ships this content entry."""
+    from livery.workshop._extensions import extension_content
 
-    for layer in layer_names():
-        content = layer_content(layer)
+    for extension in stack_names():
+        content = extension_content(extension)
         if content is None:
             continue
         candidate = content / subdir / name if subdir else content / name
@@ -267,7 +267,7 @@ def classify(
     [livery.workshop._provenance.emitted_paths][]; a caller with many
     paths passes one set rather than paying an emission per path.
     The answer comes from the channel registry, the builtin ladder
-    below and whatever a layer registered beside it, highest rank
+    below and whatever an extension registered beside it, highest rank
     first.
     """
     found = channel_of(root, relative, emitted=emitted)
@@ -421,8 +421,8 @@ def _rule_member(
         )
     if "/content/" in rest:
         return Provenance(
-            "layer content",
-            f"{member.as_posix()}: what this layer ships; the"
+            "extension content",
+            f"{member.as_posix()}: what this extension ships; the"
             " provenance lint keeps its header",
             f"edit directly here; `{prog} sync` delivers it",
         )
@@ -433,7 +433,7 @@ def _rule_member(
     )
 
 
-# The builtin ladder as ranked rules: a layer registers its own beside
+# The builtin ladder as ranked rules: an extension registers its own beside
 # them, at the rank that says where it stands.
 register_channels(
     [
@@ -574,7 +574,7 @@ def owned_lines(root: Path, relative: Path) -> list[str]:
 
 
 def _content_trees(root: Path) -> list[tuple[str, Path]]:
-    """Each workspace package's shipped content tree, with its layer name."""
+    """Each workspace package's shipped content tree, with its extension name."""
     trees = []
     for src in sorted(root.glob("packages/*/src")):
         for content in sorted(src.rglob("content")):
@@ -582,27 +582,27 @@ def _content_trees(root: Path) -> list[tuple[str, Path]]:
                 continue
             if "templates" in content.relative_to(src).parts:
                 continue  # a template kind's content seeds render later
-            layer = ".".join(content.parent.relative_to(src).parts)
-            trees.append((layer, content))
+            extension = ".".join(content.parent.relative_to(src).parts)
+            trees.append((extension, content))
     return trees
 
 
 def content_lint(root: Path, *, fix: bool = False) -> list[str]:
-    """Layer content files missing their computed header; ``fix`` writes it.
+    """Extension content files missing their computed header; ``fix`` writes it.
 
     Only the workspace's own packages are linted: an installed
-    layer's content is its home repository's to keep. Files without
+    extension's content is its home repository's to keep. Files without
     a comment syntax are exempt; explain still answers for them.
     """
     problems = []
-    for layer, content in _content_trees(root):
+    for extension, content in _content_trees(root):
         for path in sorted(content.rglob("*")):
             if not path.is_file() or "__pycache__" in path.parts:
                 continue
             style = comment_style(path)
             if not style:
                 continue
-            header = content_header(layer, style)
+            header = content_header(extension, style)
             if has_header(path, header):
                 continue
             if fix:
@@ -619,7 +619,7 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
 def provenance_check(
     fix: Annotated[bool, doc("write the computed headers in place")] = False,
 ) -> None:
-    """Check shipped layer content opens with its provenance header.
+    """Check shipped extension content opens with its provenance header.
 
     Part of the gate. Nobody composes a header by hand: ``--fix``
     writes the computed text, and the render and emitters inject
@@ -633,6 +633,6 @@ def provenance_check(
         print(f"  {line}")
     if findings and not fix:
         fail(
-            "layer content is missing provenance headers: run"
+            "extension content is missing provenance headers: run"
             f" `{footman.prog()} check --fix` to write them"
         )

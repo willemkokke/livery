@@ -41,8 +41,7 @@ def _workspace(tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     (root / "packages").mkdir(parents=True)
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
-        'owner = "acme"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     for name, kind in (("pure", "python"), ("native", "python-nanobind")):
         member = root / "packages" / name
@@ -120,11 +119,11 @@ def test_the_templates_verb_skips_a_wave_that_did_not_release_the_publisher(
     monkeypatch.setattr(
         "livery.workshop._release.workspace_root", lambda start=None: root
     )
-    # The base layer ships the template tree, so it is every plain
+    # The base extension ships the template tree, so it is every plain
     # workspace's publisher, and the birth commit released neither it
     # nor anything named for it.
     assert publisher_in_wave(root, "HEAD") == ("livery-workshop", False)
-    # The publisher is the layer shipping a tree; the wave at the ref
+    # The publisher is the extension shipping a tree; the wave at the ref
     # says whether it was released.
     monkeypatch.setattr(
         _release, "publisher_in_wave", lambda root, ref: ("acme-pure", False)
@@ -151,12 +150,12 @@ def test_the_publisher_is_read_from_the_wave_at_the_ref(
 
     root = _workspace(tmp_path)
     monkeypatch.setattr(
-        "livery.workshop._layers.layer_entries",
+        "livery.workshop._extensions.extension_entries",
         lambda root=None: (("acme.pure", "acme-pure"),),
     )
     monkeypatch.setattr(
-        "livery.workshop._compose.layer_template_tree",
-        lambda root, layer: root / "packages" / "pure",
+        "livery.workshop._compose.extension_template_tree",
+        lambda root, extension: root / "packages" / "pure",
     )
     assert publisher_in_wave(root, _stamp(root, "native")) == ("acme-pure", False)
     assert publisher_in_wave(root, _stamp(root, "pure", "native")) == (

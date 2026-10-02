@@ -251,7 +251,7 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
     shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         'templates = "templates"\n'
         "\n"
         "[forge]\n"

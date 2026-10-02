@@ -9,11 +9,11 @@ Every verb is idempotent: re-running it is the recovery procedure, and
 every seed probes before acting.
 
 This module is the `footman.tasks` entry point named ``livery.forge``.
-A workspace mounts it by listing ``livery.forge`` in its layers; a
+A workspace mounts it by listing ``livery.forge`` in its extensions; a
 repository that does not is never offered these tasks. Unlike the rest
 of livery.forge it imports footman and toolroom, which are present by
 construction: the only loader is footman's own ``plugin()``, and only
-a workshop workspace mounts layers, so livery-forge still declares no
+a workshop workspace mounts extensions, so livery-forge still declares no
 dependency.
 
 ``fm forge.fixtures.record`` re-records the conformance cassettes and

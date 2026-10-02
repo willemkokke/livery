@@ -401,8 +401,8 @@ def _eligible_reviewers(git: GitOps, base: str) -> set[str]:
     message falls back to naming the declared owners collectively.
     """
     try:
+        from livery.workshop._extensions import workspace_root
         from livery.workshop._governance import governance_entries
-        from livery.workshop._layers import workspace_root
 
         root = workspace_root()
         if root is None:

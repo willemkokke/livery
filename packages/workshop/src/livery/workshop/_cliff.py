@@ -172,7 +172,7 @@ class CliffChangelog:
     """Release notes as git-cliff entries in each package's ``CHANGELOG.md``.
 
     The provider [livery.workshop._release_notes.ReleaseNotes][] the
-    base registers until the changelog layer ships it: the entry is
+    base registers until the changelog extension ships it: the entry is
     git-cliff's, through the package's ``cliff.toml``; the history is
     the package's ``CHANGELOG.md``, newest entry first.
     """
@@ -230,5 +230,5 @@ def _replace_entry(text: str, version: str, entry_body: str) -> str:
     return rewritten if count else text
 
 
-# The base's provider until the changelog layer registers its own.
-register_release_notes(CliffChangelog(), layer="livery.workshop")
+# The base's provider until the changelog extension registers its own.
+register_release_notes(CliffChangelog(), extension="livery.workshop")

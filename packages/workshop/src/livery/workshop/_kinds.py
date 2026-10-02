@@ -9,7 +9,7 @@ apply, so a verb that does not apply skips saying so and never
 passes vacuously).
 
 Adding a kind means one call: ``register_kind`` with the record.
-The workshop registers ``base`` and ``python`` at import; a layer's
+The workshop registers ``base`` and ``python`` at import; an extension's
 plugin registers its own kinds at mount, which is how a brand ships
 a kind the way it ships fragments. An unknown declared kind refuses
 naming the vocabulary: a typo that silently builds the wrong kind
@@ -77,7 +77,7 @@ class Stamper(Protocol):
 class Backend(Protocol):
     """The callables every kind's backend module exposes.
 
-    The dispatch layer absorbs a new kind automatically: call sites
+    The dispatch extension absorbs a new kind automatically: call sites
     ask the registry, never a module by name.
     """
 
@@ -193,7 +193,7 @@ class CiContract:
 
 #: The private-members policies an extractor applies: ``public``
 #: documents what its handler's default filter keeps, ``all`` every
-#: member. The docs assembly composes the policy from the layers.
+#: member. The docs assembly composes the policy from the extensions.
 PUBLIC_MEMBERS = "public"
 ALL_MEMBERS = "all"
 MEMBERS_POLICIES = (PUBLIC_MEMBERS, ALL_MEMBERS)
@@ -320,9 +320,9 @@ _KINDS: dict[str, KindRecord] = {}
 def register_kind(record: KindRecord) -> None:
     """Register *record*; a parent must already be registered.
 
-    Layers call this from their plugin at mount. Re-registering a
+    Extensions call this from their plugin at mount. Re-registering a
     name replaces it, which is how a test injects a fake and how a
-    layer deliberately overrides a kind it owns.
+    extension deliberately overrides a kind it owns.
     """
     if record.parent and record.parent not in _KINDS:
         fail(
@@ -427,7 +427,7 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     registry: the record whose template is *template_kind* chains
     through its parents' templates, and the ``base`` kind heads every
     chain, so the base template comes first. A template the registry
-    does not map (a variant such as ``package-layer``) renders
+    does not map (a variant such as ``package-extension``) renders
     over the base alone.
     """
     by_template = {r.template: r for r in _KINDS.values() if r.template}
@@ -436,7 +436,7 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
         chain: tuple[str, ...] = (template_kind,)
     else:
         chain = tuple(r.template for r in kind_chain(record.name) if r.template)
-    # A kind registered without the base as its parent (a fake, a layer's
+    # A kind registered without the base as its parent (a fake, an extension's
     # own) still renders the base first: the docs seeds live there alone.
     if template_kind.startswith("package-") and chain[0] != BASE_TEMPLATE:
         chain = (BASE_TEMPLATE, *chain)
@@ -532,7 +532,7 @@ def requires_pyproject(kind_name: str) -> bool:
 def record_for_template(template_kind: str) -> KindRecord | None:
     """The record whose template is *template_kind*; None when unmapped.
 
-    A template variant (``package-layer``) maps to no record
+    A template variant (``package-extension``) maps to no record
     and the caller falls back to the python wiring.
     """
     for record in _KINDS.values():
@@ -547,7 +547,7 @@ def _register_builtin() -> None:
     # The base every kind derives from: abstract, the record behind the
     # package-base template. Every kind releases, so the changelog
     # engine and the cliff.toml it reads are declared once, here, and
-    # a kind a layer adds gets them by naming its parent. A tool is
+    # a kind an extension adds gets them by naming its parent. A tool is
     # named as its record and its handle are (`git_cliff`), which is
     # how the catalogue lists it.
     register_kind(
@@ -561,8 +561,8 @@ def _register_builtin() -> None:
             abstract=True,
         )
     )
-    # Two contract kinds exist today. The layer package template
-    # (package-layer) is a template variant of python, not
+    # Two contract kinds exist today. The extension package template
+    # (package-extension) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
     # The python kind's tools: uv makes the venv the checkers run in,
     # and the checkers, the formatter and the test runner are what the

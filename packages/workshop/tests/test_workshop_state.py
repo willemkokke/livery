@@ -392,7 +392,7 @@ def test_a_ci_run_may_write_a_ci_only_series(
     assert _state.put(work, REF, {"a.json": "1"}, message="one", ci_only=True) == ""
 
 
-# --- the row layer: refusals first --------------------------------------------
+# --- the row extension: refusals first --------------------------------------------
 
 ROWS = _state.Series("rows", window=3, ci_only=False, schema=2)
 

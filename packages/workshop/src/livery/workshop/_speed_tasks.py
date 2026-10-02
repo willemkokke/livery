@@ -18,7 +18,7 @@ from typing import Annotated
 import livery.footman.api as footman
 from livery.footman.api import doc, fail, group, requires
 from livery.workshop import _speed
-from livery.workshop._layers import workspace_root
+from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import discover_packages
 from livery.workshop._state import RunContext, run_context
 

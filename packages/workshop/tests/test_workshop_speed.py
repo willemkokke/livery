@@ -76,8 +76,7 @@ def _history(
 
 def _contract(root: Path, ci: str) -> Path:
     (root / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
-        f"\n[ci]\n{ci}"
+        f'[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\n\n[ci]\n{ci}'
     )
     return root
 

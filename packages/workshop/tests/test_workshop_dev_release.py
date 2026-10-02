@@ -355,7 +355,7 @@ def test_the_branch_routes_the_act(
 
     root = _workspace(tmp_path)
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     routed: list[str] = []
     monkeypatch.setattr(

@@ -37,8 +37,8 @@ from livery.footman.api import Arg, doc, fail, group
 from livery.forge.api import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
+from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._layers import workspace_root
 from livery.workshop._traces import drop_run
 from livery.workshop._verdict import (
     EXIT_BEHIND,
@@ -637,8 +637,8 @@ def _heal_context_rename(
     theirs = _required_context_at(git, f"origin/{plan.base}")
     if not ours or not theirs or ours == theirs:
         return
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_forge
-    from livery.workshop._layers import workspace_root
 
     heal_root = workspace_root()
     if heal_root is not None and not this_forge(heal_root).supports(
@@ -653,8 +653,8 @@ def _heal_context_rename(
         )
         return
     if fix:
+        from livery.workshop._extensions import workspace_root
         from livery.workshop._forge_lane import admin_repository
-        from livery.workshop._layers import workspace_root
 
         root = workspace_root()
         if root is None:

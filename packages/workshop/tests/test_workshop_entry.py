@@ -45,7 +45,7 @@ def _contract_root(tmp_path: Path, kind: str, *, lock: str = LOCK) -> Path:
     root.mkdir(exist_ok=True)
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         "\n[forge]\n"
         f'kind = "{kind}"\n'
         'owner = "owner"\n'

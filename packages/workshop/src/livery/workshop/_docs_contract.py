@@ -1,6 +1,6 @@
 """What the base knows of a package's docs: its table, its layout, the site's reads.
 
-The site's assembly is a layer's (``livery.extensions.docs``);
+The site's assembly is an extension's (``livery.extensions.docs``);
 these are the facts the base reads for its own reasons: the contract's
 ``[docs]`` table and the generators it declares, which the CI render
 installs requirements for; the layout of a package's ``docs/`` tree
@@ -180,7 +180,7 @@ def site_reads(root: Path, packages: tuple[Package, ...], path: str) -> bool:
     A package's docs pages, nav, assets and examples, and the root's
     site files and README, are what the build reads; a note under
     ``notes/``, a source file or a contract is not. The answer comes
-    from the category registry, so a layer that adds a category the
+    from the category registry, so an extension that adds a category the
     site reads names it here.
     """
     from livery.workshop._categories import category_of

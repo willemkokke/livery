@@ -359,7 +359,7 @@ def binary(name: str, version: str, *, offline: bool = False) -> Path:
     nothing.
     """
     from livery.toolroom.store.api import Store
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._tools import catalogue, sources, store_home
 
     root = workspace_root()

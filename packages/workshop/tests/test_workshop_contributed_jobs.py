@@ -1,4 +1,4 @@
-"""Jobs a layer contributes to a builtin point: the refusals, then the composition."""
+"""Jobs an extension contributes to a builtin point: refusals, then composition."""
 
 from __future__ import annotations
 
@@ -35,19 +35,19 @@ def test_a_contribution_to_an_unknown_point_names_the_points(acme_jobs: None) ->
     with pytest.raises(
         _FAILURES, match=r"'weekly', which is not a builtin point; the points are gate"
     ):
-        contribute_job("weekly", Job("lint-prose"), layer="acme.prose")
+        contribute_job("weekly", Job("lint-prose"), extension="acme.prose")
 
 
-def test_a_job_the_point_declares_or_another_layer_contributed_refuses(
+def test_a_job_the_point_declares_or_another_extension_contributed_refuses(
     acme_jobs: None,
 ) -> None:
     with pytest.raises(_FAILURES, match=r"the gate point, which declares it already"):
-        contribute_job("gate", Job("check"), layer="acme.prose")
-    contribute_job("gate", Job("lint-prose"), layer="acme.prose")
+        contribute_job("gate", Job("check"), extension="acme.prose")
+    contribute_job("gate", Job("lint-prose"), extension="acme.prose")
     with pytest.raises(_FAILURES, match=r"which acme.prose contributed already"):
-        contribute_job("gate", Job("lint-prose"), layer="acme.other")
-    # The same layer may restate its own job.
-    contribute_job("gate", Job("lint-prose", fetch="2"), layer="acme.prose")
+        contribute_job("gate", Job("lint-prose"), extension="acme.other")
+    # The same extension may restate its own job.
+    contribute_job("gate", Job("lint-prose", fetch="2"), extension="acme.prose")
     assert contributed_jobs("gate")[-1].job.fetch == "2"
 
 
@@ -57,7 +57,7 @@ def test_an_entry_naming_another_job_refuses(acme_jobs: None) -> None:
             "gate",
             Job("lint-prose"),
             entries=(Entry("merge", "deploy", "acme.publish"),),
-            layer="acme.prose",
+            extension="acme.prose",
         )
 
 
@@ -74,7 +74,7 @@ def test_a_gating_job_sits_before_the_verdict_and_joins_its_needs(
         Job("lint-prose", fetch="2"),
         entries=(Entry("gate", "lint-prose", "acme.prose.lint"),),
         gates=True,
-        layer="acme.prose",
+        extension="acme.prose",
     )
     gate = point_by_name(None)["gate"]
     names = [job.name for job in gate.jobs]
@@ -99,7 +99,7 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
         "nightly",
         Job("publish-book", needs=("nightly",)),
         entries=(Entry("nightly", "publish-book", "acme.book.publish"),),
-        layer="acme.prose",
+        extension="acme.prose",
     )
     nightly = point_by_name(None)["nightly"]
     assert nightly.jobs[-1].name == "publish-book"
@@ -107,7 +107,7 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
     assert nightly.name == composed_points()[2].name
 
 
-def test_the_docs_layer_contributes_the_build_and_the_deploy() -> None:
+def test_the_docs_extension_contributes_the_build_and_the_deploy() -> None:
     from livery.extensions.docs import _tasks as docs_tasks
 
     del docs_tasks

@@ -1,6 +1,6 @@
 """The engine's edge table, forced: state, decision, abort, bundles.
 
-The decision layer and the classifier are pure functions, so their
+The decision extension and the classifier are pure functions, so their
 whole tables run with no I/O. The engine and abort run against
 livery.forge.testing.FakeForge with a real temporary repository, the
 same rig the submit suite uses. Refusals and fallbacks come first,

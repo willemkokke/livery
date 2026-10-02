@@ -130,7 +130,7 @@ def test_quote_value_round_trips_and_refuses_line_breaks(tmp_path: Path) -> None
     assert path.read_text().count("PLAIN=") == 1
 
 
-def test_member_keys_enumerates_every_layer(
+def test_member_keys_enumerates_every_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Under CI the rung points WORKSHOP_SHARED_ENV_FILE at its own
@@ -298,7 +298,7 @@ def test_the_github_emission_persists_the_moved_temp(
 
     root = _contract(tmp_path, "github")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.chdir(root)
     monkeypatch.setattr(sys, "platform", "win32")
@@ -497,7 +497,7 @@ def test_env_check_red_prints_the_breakdown_and_the_remedy(
     from livery.workshop import _env_tasks
 
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda _tool: None)
     assert _env_tasks.env_check() == 1
@@ -633,7 +633,7 @@ def test_the_cascade_hook_enters_the_environment_for_the_process(
     ruff = str(tmp_path / "store" / "ruff")
     _receipt(tmp_path, "ruff", paths=(ruff,))
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: False)
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
@@ -653,7 +653,7 @@ def test_apply_cascade_defaults_absent_keys_and_never_overrides(
 
     (tmp_path / ".repo.env").write_text("CASCADE_FLAG=file\nPRESET=file\n")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
     monkeypatch.setenv("PRESET", "shell")
@@ -787,7 +787,7 @@ def test_env_set_shadow_warnings_are_honest(
     from livery.workshop import _env_tasks
 
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".repo.env").write_text("CASCADE_KEY=from-file\n")
@@ -817,7 +817,7 @@ def test_env_set_delete_is_confirmed(
     from livery.workshop import _env_tasks
 
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.chdir(tmp_path)
     local = tmp_path / ".repo.env.local"
@@ -843,7 +843,7 @@ def test_env_show_keeps_file_provenance_and_flags_stale(
     from livery.workshop import _env_tasks
 
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".repo.env").write_text("SHOWN_KEY=file-value\nOLD_KEY=new-value\n")
@@ -884,7 +884,7 @@ def test_emit_appends_the_dialects_own_completion_hook(
     from livery.workshop import _env_tasks
 
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.chdir(tmp_path)
     posix = _env_tasks.env_emit("posix")
@@ -1003,7 +1003,7 @@ def test_env_set_ci_writes_through_the_protocol(
 
     root = tmp_path / "ws"
     root.mkdir()
-    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr("livery.workshop._env_tasks._workspace", lambda: (root, root))
     monkeypatch.setattr(
         "livery.workshop._forge_lane.admin_repository",

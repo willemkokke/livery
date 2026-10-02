@@ -54,7 +54,7 @@ def _build(base: Path) -> None:
     # tests stand in for the birth verb and write it whole.
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop"]\n'
+        "extensions = []\n"
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
@@ -105,7 +105,7 @@ def _wire_drive(
 ) -> None:
     """Point ``_drive``'s discovery at the toy instance and its fake."""
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo

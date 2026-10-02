@@ -202,7 +202,7 @@ def clean(
     at any depth under any flag: a machine secret exists in no git
     history, so removing one cannot be undone.
     """
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:

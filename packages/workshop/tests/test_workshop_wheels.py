@@ -115,7 +115,7 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
     from livery.workshop._ci_generate import _actions_workflow, _facts
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
         'owner = "owner"\n\n[ci]\nrunners = ["ubuntu-latest", "macos-latest"]\n'
         'required-context = "gate"\n'
     )
@@ -184,7 +184,7 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     from livery.workshop._release import release_wheels
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
     )
     _member(
         tmp_path,
@@ -251,7 +251,7 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     from livery.workshop._release import release_wheels
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
     )
     _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
     _member(

@@ -1,7 +1,7 @@
 """The two questions the workshop asks about a path, one store, two axes.
 
 A path's **category** says what it is to its package: source, test,
-test support, configuration, and whatever a layer adds, prose,
+test support, configuration, and whatever an extension adds, prose,
 example, asset, nav. Its **channel** says who wrote it and where to
 edit it: rendered, generated, materialised, seed, contract, yours.
 Neither answer can be read off the other, so the vocabularies stay
@@ -11,7 +11,7 @@ and [livery.workshop._categories.category_of][],
 [livery.workshop._categories.register_channels][] and
 [livery.workshop._categories.channel_of][].
 
-A category rule is a pattern table a kind or a layer registers, since
+A category rule is a pattern table a kind or an extension registers, since
 nothing a category needs reads state, and the table renders into the
 documentation. A channel rule is a callable with a rank, since it
 reads the delivery manifest, the emitted set and the template source.
@@ -21,7 +21,7 @@ checkouts of one commit answer alike and nothing is settled by
 registration order in silence. A package's contract may reassign its
 own paths among the categories, ``[categories] vendored =
 ["docs/assets/vendor/**"]``, and that table wins over every kind's
-rule, since the package is the innermost layer over its kind.
+rule, since the package is the innermost extension over its kind.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 #: What a path is to its kind: a change to a test runs that test
 #: alone; a change to anything else runs the package's suite and its
-#: dependents'. A layer adds labels beside these.
+#: dependents'. An extension adds labels beside these.
 SOURCE = "source"
 TEST = "test"
 TEST_SUPPORT = "test-support"
@@ -50,7 +50,7 @@ EXAMPLE = "example"
 #: files beside them; the base registers its category rules.
 WORKSPACE = "workspace"
 
-#: The layer the builtin rules belong to.
+#: The extension the builtin rules belong to.
 _BASE = "livery.workshop"
 
 
@@ -68,14 +68,14 @@ class CategoryRule:
         pattern: A path pattern relative to the package, ``src/**``,
             ``tests/**/test_*.py``, ``**``.
         category: The label the pattern claims.
-        layer: The layer that registered the rule; the base's own is
+        extension: The extension that registered the rule; the base's own is
             ``livery.workshop``.
     """
 
     kind: str
     pattern: str
     category: str
-    layer: str
+    extension: str
 
     @property
     def specificity(self) -> tuple[int, int]:
@@ -89,7 +89,7 @@ class Category:
 
     Attributes:
         name: The category.
-        supplier: The layer whose rule answered, or ``the package`` for
+        supplier: The extension whose rule answered, or ``the package`` for
             its own contract's exception.
         pattern: The pattern that matched.
     """
@@ -128,13 +128,13 @@ class ChannelRule:
             emitted set when the caller computed one.
         rank: Higher ranks answer first; two rules of one rank both
             answering refuse naming both.
-        layer: The layer that registered the rule.
+        extension: The extension that registered the rule.
     """
 
     name: str
     judge: ChannelJudge
     rank: int
-    layer: str
+    extension: str
 
 
 @dataclass(frozen=True)
@@ -143,7 +143,7 @@ class Channel:
 
     Attributes:
         provenance: The answer.
-        supplier: The layer whose rule answered.
+        supplier: The extension whose rule answered.
     """
 
     provenance: Provenance
@@ -191,28 +191,28 @@ def matches(pattern: str, path: str) -> bool:
 
 
 def register_categories(
-    kind: str, rules: Iterable[tuple[str, str]], *, layer: str = _BASE
+    kind: str, rules: Iterable[tuple[str, str]], *, extension: str = _BASE
 ) -> None:
     """Register *rules*, ``(pattern, category)`` pairs, for *kind*.
 
     A derived kind inherits them through the kind chain, its own rules
     winning a tie. Registering the same pattern for the same kind from
-    the same layer replaces the earlier claim.
+    the same extension replaces the earlier claim.
     """
     table = _CATEGORIES.setdefault(kind, [])
     for pattern, category in rules:
         table[:] = [
             rule
             for rule in table
-            if not (rule.pattern == pattern and rule.layer == layer)
+            if not (rule.pattern == pattern and rule.extension == extension)
         ]
-        table.append(CategoryRule(kind, pattern, category, layer))
+        table.append(CategoryRule(kind, pattern, category, extension))
 
 
-def unregister_categories(kind: str, *, layer: str) -> None:
-    """Withdraw every rule *layer* registered for *kind*."""
+def unregister_categories(kind: str, *, extension: str) -> None:
+    """Withdraw every rule *extension* registered for *kind*."""
     table = _CATEGORIES.get(kind, [])
-    table[:] = [rule for rule in table if rule.layer != layer]
+    table[:] = [rule for rule in table if rule.extension != extension]
 
 
 def category_rules(kind: str) -> tuple[CategoryRule, ...]:
@@ -243,7 +243,7 @@ def category_of(package: Package, path: str) -> Category:
     Raises:
         CategoryError: when two rules of one specificity and one kind
             claim *path* for different categories or from different
-            layers.
+            extensions.
     """
     for category, patterns in package.categories:
         for pattern in patterns:
@@ -270,19 +270,20 @@ def category_of(package: Package, path: str) -> Category:
     nearest = min(depth for depth, _ in best)
     at_nearest = [rule for depth, rule in best if depth == nearest]
     if len(at_nearest) > 1 and any(
-        rule.category != at_nearest[0].category or rule.layer != at_nearest[0].layer
+        rule.category != at_nearest[0].category
+        or rule.extension != at_nearest[0].extension
         for rule in at_nearest
     ):
         first, second = at_nearest[0], at_nearest[1]
         raise CategoryError(
             f"{package.path}/{path}: two rules of one specificity claim it,"
-            f" {first.pattern!r} as {first.category} ({first.layer}) and"
-            f" {second.pattern!r} as {second.category} ({second.layer});"
+            f" {first.pattern!r} as {first.category} ({first.extension}) and"
+            f" {second.pattern!r} as {second.category} ({second.extension});"
             " the more specific pattern wins, so one of them names the file"
             " more closely"
         )
     rule = at_nearest[0]
-    return Category(rule.category, rule.layer, rule.pattern)
+    return Category(rule.category, rule.extension, rule.pattern)
 
 
 def register_channels(rules: Iterable[ChannelRule]) -> None:
@@ -292,9 +293,9 @@ def register_channels(rules: Iterable[ChannelRule]) -> None:
         _CHANNELS.append(rule)
 
 
-def unregister_channels(*, layer: str) -> None:
-    """Withdraw every channel rule *layer* registered."""
-    _CHANNELS[:] = [rule for rule in _CHANNELS if rule.layer != layer]
+def unregister_channels(*, extension: str) -> None:
+    """Withdraw every channel rule *extension* registered."""
+    _CHANNELS[:] = [rule for rule in _CHANNELS if rule.extension != extension]
 
 
 def channel_rules() -> tuple[ChannelRule, ...]:
@@ -323,12 +324,12 @@ def channel_of(
             (first, _), (second, _) = answers[0], answers[1]
             raise CategoryError(
                 f"{relative.as_posix()}: two channel rules of rank {rank} claim"
-                f" it, {first.name} ({first.layer}) and {second.name}"
-                f" ({second.layer}); give one the higher rank"
+                f" it, {first.name} ({first.extension}) and {second.name}"
+                f" ({second.extension}); give one the higher rank"
             )
         if answers:
             rule, answer = answers[0]
-            return Channel(answer, rule.layer)
+            return Channel(answer, rule.extension)
     return None
 
 
@@ -343,6 +344,6 @@ def known_categories() -> frozenset[str]:
 def table(kind: str) -> list[str]:
     """The category table for *kind* as lines, one rule each, for documentation."""
     return [
-        f"{rule.pattern}: {rule.category} ({rule.layer})"
+        f"{rule.pattern}: {rule.category} ({rule.extension})"
         for rule in category_rules(kind)
     ]

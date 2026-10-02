@@ -2,8 +2,8 @@
 name: create-plan
 description: Write an implementation plan as a dated note in notes/, in the house format with ground-truth contracts and per-phase acceptance.
 ---
-<!-- Shipped as livery.workshop layer content, delivered to the workspace
-     by the sync verb. Edit this copy in the layer and release it;
+<!-- Shipped as livery.workshop extension content, delivered to the workspace
+     by the sync verb. Edit this copy in the extension and release it;
      an edited delivered copy is a local override, kept and named.
 -->
 

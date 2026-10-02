@@ -265,9 +265,9 @@ def test_template_chain_orders_parent_first(restored_registry) -> None:
     )
     # A template variant the registry does not map still renders
     # over the shared base, so its package ships the docs seeds.
-    assert template_chain("package-layer") == (
+    assert template_chain("package-extension") == (
         "package-base",
-        "package-layer",
+        "package-extension",
     )
     # The base itself renders alone: no recursion, no doubling.
     assert template_chain("package-base") == ("package-base",)

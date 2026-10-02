@@ -1,5 +1,5 @@
-<!-- Shipped as livery.workshop layer content, delivered to the workspace
-     by the sync verb. Edit this copy in the layer and release it;
+<!-- Shipped as livery.workshop extension content, delivered to the workspace
+     by the sync verb. Edit this copy in the extension and release it;
      an edited delivered copy is a local override, kept and named.
 -->
 # Interaction voice
@@ -9,7 +9,7 @@ the work: commit messages, pull request titles and bodies, issue
 reports, review comments, on our repositories and on third-party ones.
 Documentation has its own file; the language rules are shared.
 
-Imported from hse's guidance; becomes the workshop base layer's
+Imported from hse's guidance; becomes the workshop base extension's
 fragment when the workshop materialises it.
 
 ## Shape

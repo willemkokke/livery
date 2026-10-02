@@ -628,8 +628,8 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     """
     from livery.footman.api import run
     from livery.workshop._dev_release import unchanged_since_release
+    from livery.workshop._extensions import workspace_root
     from livery.workshop._git_ops import GitOps
-    from livery.workshop._layers import workspace_root
     from livery.workshop._packages import discover_packages
 
     root = workspace_root()
@@ -1469,7 +1469,7 @@ def _ensure_members(root: Path) -> None:
                 + "\n\n# A point of this member's own, run by hand in the loop.\n"
                 + "[[ci.point]]\n"
                 + f'name = "{CONTRIBUTED_POINT}"\n'
-                + 'task = "layers"\n'
+                + 'task = "extensions"\n'
                 + 'runners = ["ubuntu-latest"]\n'
             )
         member.write_text(body, "utf-8")
@@ -2142,7 +2142,7 @@ def _prove_contributed_point(root: Path, kind: str) -> None:
         jobs,
         CONTRIBUTED_POINT,
         (
-            f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: layers"
+            f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: extensions"
             f" (packages/{CONTRIBUTING_MEMBER})",
         ),
     )
@@ -2693,7 +2693,7 @@ if _WORKSHOP_TESTS.is_dir():
         import os
 
         from livery.workshop import _devenv
-        from livery.workshop._layers import workspace_root
+        from livery.workshop._extensions import workspace_root
 
         chosen = scenarios_for(scenario)
         if forge != "gitea":

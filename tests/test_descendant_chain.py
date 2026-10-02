@@ -1,6 +1,6 @@
 """The proof chain (contract 22): create, customise, inherit.
 
-The dummy descendant, end to end on the local Gitea: a layer home is
+The dummy descendant, end to end on the local Gitea: an extension home is
 born and self-hosts, populates its overlay and content, releases its
 composed artifact; the branded App begets a child from that
 artifact; a core improvement dev-ships as a base wheel bump and
@@ -282,7 +282,7 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     # Nor the runner's loop belt. A global `fm` that handed this suite
     # to `uv run --project` set it, and a child `fm` that inherits it
     # skips its own handoff and runs this workspace's footman against
-    # the born project's tasks file, where that project's layers are
+    # the born project's tasks file, where that project's extensions are
     # not importable (livery#865).
     for belt in ("FOOTMAN_UV_REEXEC", "FOOTMAN_NO_UV"):
         base_env.pop(belt, None)
@@ -346,7 +346,7 @@ def _chain(
             fm,
             "new.project",
             "dummy",
-            f"--layer={BRAND}",
+            f"--extension={BRAND}",
             "--forge=gitea",
             f"--owner={OWNER}",
             f"--url={GITEA}",
@@ -362,7 +362,7 @@ def _chain(
         assert "already scaffolded" in birth.stdout
         assert "workshop.toml: already seeded" in birth.stdout
     contract = (home / "workshop.toml").read_text()
-    assert 'layers = ["livery.workshop", "dummy.brandx"]' in contract
+    assert 'extensions = ["dummy.brandx"]' in contract
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
     assert (home / "docs" / "index.md").is_file()
@@ -389,13 +389,14 @@ def _chain(
         skill = member / "src" / "dummy" / BRAND / "content" / "skills" / "hello"
         skill.mkdir(parents=True, exist_ok=True)
         (skill / "SKILL.md").write_text(
-            "<!-- Shipped as dummy.brandx layer content, delivered to the workspace\n"
-            "     by the sync verb. Edit this copy in the layer and release it;\n"
+            "<!-- Shipped as dummy.brandx extension content, delivered to the"
+            " workspace\n"
+            "     by the sync verb. Edit this copy in the extension and release it;\n"
             "     an edited delivered copy is a local override, kept and named.\n"
             "-->\n# hello\n\nSay hello.\n"
         )
         # The generator seam's in-repo consumer: the member declares
-        # a docs generator (a task its layer plugin already ships the
+        # a docs generator (a task its extension plugin already ships the
         # group for) that writes a page and rewrites its nav block.
         with (member / "src" / "dummy" / BRAND / "_tasks.py").open("a") as handle:
             handle.write(
@@ -516,7 +517,7 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
-    assert 'layers = ["livery.workshop", "dummy.brandx"]' in child_contract
+    assert 'extensions = ["dummy.brandx"]' in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's overlay reached the child's managed render.
@@ -558,7 +559,7 @@ def _chain(
     assert "RUNG_PYTHON_PUBLISH_INDEX" in rendered_gate
 
     # -- 5b. the docs toolchain, through the gradient -----------------
-    # The layer at its installed version renders the child's site
+    # The extension at its installed version renders the child's site
     # config and builds the site; no template re-render happens, and
     # the site speaks the child's name, never the base's.
     docs_build = _run([str(brand_cli), "docs.build"], child, _hermetic(env, tool))
@@ -817,7 +818,7 @@ def _chain(
     # brand's declared replace, and the base's new line stays out.
     assert "brandx-build/" in ignored
     assert "core-scratch/" not in ignored
-    # No layer-owned line changed: the brand's overlay content stands.
+    # No extension-owned line changed: the brand's overlay content stands.
     assert (
         "Always speak plainly."
         in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()

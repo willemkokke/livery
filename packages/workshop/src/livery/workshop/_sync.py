@@ -1,10 +1,10 @@
-"""``fm sync``: deliver every mounted layer's content to the repository.
+"""``fm sync``: deliver every mounted extension's content to the repository.
 
-Three channels, walked in layer order so a later layer's same-named
+Three channels, walked in extension order so a later extension's same-named
 file wins and the instance always wins last:
 
 - prose fragments into ``.workshop/fragments/`` (gitignored): the
-  agent's set from every layer's ``content/fragments/*`` and the
+  agent's set from every extension's ``content/fragments/*`` and the
   registries' renders, in section order, each through the
   materialiser so an edited copy is kept and named; the registry is
   [livery.workshop._prose][]. Their own directory, so the sweep that
@@ -13,7 +13,7 @@ file wins and the instance always wins last:
   beside it.
 - skills and hooks into ``.claude/skills`` and ``.claude/hooks``
   through the materialiser: links where possible, copies where not,
-  local overrides kept and named. A layer's ``settings.json`` lands
+  local overrides kept and named. An extension's ``settings.json`` lands
   at ``.claude/settings.json`` the same way, always as a copy:
   settings editors write the file in place.
 - the managed ``CLAUDE.md`` stub itself: one import line per
@@ -36,7 +36,11 @@ from livery.footman.params import Forward
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
 
-from livery.workshop._layers import layer_content, layer_names, workspace_root
+from livery.workshop._extensions import (
+    extension_content,
+    stack_names,
+    workspace_root,
+)
 from livery.workshop._materialise import materialise, materialise_file, write_lf
 
 # Formatted at write time: a module-level f-string would freeze the
@@ -50,29 +54,31 @@ _STUB_HEADER = (
 
 
 def sync_workspace(root: Path) -> list[str]:
-    """Deliver every layer's content into *root*; the summary lines.
+    """Deliver every extension's content into *root*; the summary lines.
 
     The engine behind ``fm sync``, separated so tests drive it against
     temporary trees.
     """
     lines: list[str] = []
-    layers = layer_names(root)
+    extensions = stack_names(root)
     contents = [
-        (layer, content)
-        for layer in layers
-        if (content := layer_content(layer)) is not None
+        (extension, content)
+        for extension in extensions
+        if (content := extension_content(extension)) is not None
     ]
 
     from livery.workshop import _prose
 
     listed = [
-        prose for layer, content in contents for prose in _prose.shipped(layer, content)
+        prose
+        for extension, content in contents
+        for prose in _prose.shipped(extension, content)
     ]
     listed += _prose.repository_fragments(root)
     delivery = _prose.deliver(root, listed)
     lines += delivery.lines
 
-    for _layer, content in contents:
+    for _extension, content in contents:
         lines += materialise(root, content / "skills", "skills")
         lines += materialise(root, content / "hooks", "hooks")
         settings = content / "settings.json"
@@ -472,7 +478,7 @@ def sync(
     before anything conflicted or shared; a branch started on another
     with ``fm start --from`` follows its parent), remove what a removed
     package left under ``packages/``, fetch origin's state store into
-    the checkout's mirror for the gate to read, then every layer's
+    the checkout's mirror for the gate to read, then every extension's
     fragments, skills, and hooks, then the two locks. Both
     halves match their lock the way uv does: `tools.sync` for the
     tools, ``uv sync`` for the environment, each writing its lock when

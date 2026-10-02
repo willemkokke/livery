@@ -75,7 +75,7 @@ def sweep(
     working directory, or the ``root`` among *facts* when one is
     given, ``None`` for no checkout at all.
     """
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = facts["root"] if "root" in facts else workspace_root()
     lines = sweep_worktrees(data_dir / WORKTREES, dry_run=dry_run)

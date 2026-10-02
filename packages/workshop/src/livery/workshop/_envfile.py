@@ -13,7 +13,7 @@ Every ``.repo.env`` in the wild is written against these rules:
 - **Substitution**: ``$VAR`` and ``${VAR}`` resolve from the stack
   first, then the pre-existing environment, else empty; ``\$``
   stays a literal dollar; iterated until stable.
-- **Provenance** is tracked per key (which layer supplied the
+- **Provenance** is tracked per key (which extension supplied the
   value); the display and the agent emission select on it.
 """
 
@@ -153,7 +153,7 @@ def _substitute(value: str, lookup: dict[str, str], environ: dict[str, str]) -> 
     return "".join(out)
 
 
-def load_layer(
+def load_extension(
     path: Path,
     source: Source,
     stack: EnvStack,
@@ -269,10 +269,10 @@ def load_cascade(
 
     stack = EnvStack()
     for path in committed:
-        load_layer(path, Source.repo, stack, env)
-    load_layer(shared_file(shared_dir, env), Source.shared, stack, env)
+        load_extension(path, Source.repo, stack, env)
+    load_extension(shared_file(shared_dir, env), Source.shared, stack, env)
     for path in local:
-        load_layer(path, Source.local, stack, env)
+        load_extension(path, Source.local, stack, env)
     resolve_all(stack, env)
     return stack
 

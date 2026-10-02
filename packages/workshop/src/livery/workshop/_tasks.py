@@ -1,12 +1,12 @@
-"""The workshop's footman plugin: what mounting the base layer runs.
+"""The workshop's footman plugin: what mounting the base extension runs.
 
 Advertised as the ``footman.tasks`` entry point named
 ``livery.workshop``; a repository's ``tasks.py`` starts with
 ``plugin("livery.workshop")`` and then calls
-[livery.workshop.api.mount_layers][] itself. Importing this module
-registers the base layer's tree alone (the quality family, the
-content sync, the agent hooks); mounting the further layers from
-inside this import would deliver their tasks under this layer's
+[livery.workshop.api.mount_extensions][] itself. Importing this module
+registers the base extension's tree alone (the quality family, the
+content sync, the agent hooks); mounting the further extensions from
+inside this import would deliver their tasks under this extension's
 identity, so composition belongs to the workspace's own file. A
 repository's own tasks go below the mount lines, in its own file.
 
@@ -47,25 +47,31 @@ from livery.workshop import (  # noqa: F401
     _update_driver,
     _workflow_tasks,
 )
-from livery.workshop._layers import layer_names
 
 
 @task
-def layers() -> None:
-    """Print the workspace's layers in precedence order.
+def extensions() -> None:
+    """Print the workspace's extensions in precedence order.
 
     The list is the whole of discovery: what shapes this repository
     is exactly what it prints, and the instance's own files always
     win last.
     """
-    names = layer_names()
-    if not names:
+    from livery.workshop._extensions import (
+        describe_extensions,
+        missing_list,
+        workspace_root,
+    )
+
+    root = workspace_root()
+    if root is None:
         print("  no workspace: no workshop.toml above the working directory")
         return
-    from livery.workshop._layers import describe_layers
+    if why := missing_list(root):
+        fail(why)
 
     try:
-        lines = describe_layers()
+        lines = describe_extensions()
     except RuntimeError as error:
         fail(str(error))
     for line in lines:

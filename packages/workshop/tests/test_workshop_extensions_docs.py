@@ -1,4 +1,4 @@
-"""The docs layer inside the wheel: the namespace, the entry point, the base's seam."""
+"""The docs extension inside the wheel: its namespace, entry point and seam."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._ast_rules import ParsedModule
-from livery.workshop._packages import layer_imports_in_the_base
+from livery.workshop._packages import extension_imports_in_the_base
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-# The refusal first: a base module importing a layer.
+# The refusal first: a base module importing an extension.
 
 
 def _module(dotted: str, imports: tuple[str, ...]) -> ParsedModule:
@@ -32,23 +32,23 @@ def _module(dotted: str, imports: tuple[str, ...]) -> ParsedModule:
     )
 
 
-def test_a_base_module_importing_a_layer_refuses_naming_both() -> None:
+def test_a_base_module_importing_a_extension_refuses_naming_both() -> None:
     modules = (
         _module("livery.workshop._quality", ("livery.extensions.docs._site",)),
         _module("livery.extensions.docs._site", ("livery.workshop._packages",)),
         _module("livery.workshop._packages", ("livery.footman",)),
     )
-    problems = layer_imports_in_the_base(modules)
+    problems = extension_imports_in_the_base(modules)
     assert len(problems) == 1
-    assert "livery/workshop/_quality.py: the base imports the layer" in problems[0]
+    assert "livery/workshop/_quality.py: the base imports the extension" in problems[0]
     assert "livery.extensions.docs._site" in problems[0]
 
 
-# Then the shape: a second tree's layer joins the namespace, and the
-# docs layer arrives through its own entry point.
+# Then the shape: a second tree's extension joins the namespace, and the
+# docs extension arrives through its own entry point.
 
 
-def test_a_layer_from_another_tree_joins_the_namespace(tmp_path: Path) -> None:
+def test_a_extension_from_another_tree_joins_the_namespace(tmp_path: Path) -> None:
     """A tree with livery/extensions/<name>/ and no __init__ above it imports."""
     portion = tmp_path / "livery" / "extensions" / "acme"
     portion.mkdir(parents=True)
@@ -70,7 +70,7 @@ def test_a_layer_from_another_tree_joins_the_namespace(tmp_path: Path) -> None:
     assert run.stdout.strip() == "acme livery.extensions.docs"
 
 
-def test_the_docs_layer_has_its_own_entry_point_and_the_docs_group() -> None:
+def test_the_docs_extension_has_its_own_entry_point_and_the_docs_group() -> None:
     found = {
         entry.name: entry.value
         for entry in importlib.metadata.entry_points(group="footman.tasks")
@@ -90,7 +90,7 @@ def test_the_docs_layer_has_its_own_entry_point_and_the_docs_group() -> None:
 
 def test_the_base_task_module_does_not_import_the_site() -> None:
     source = (ROOT / "packages/workshop/src/livery/workshop/_tasks.py").read_text()
-    assert "_docs" not in source and "layers.docs" not in source
+    assert "_docs" not in source and "extensions.docs" not in source
 
 
 @pytest.mark.parametrize(

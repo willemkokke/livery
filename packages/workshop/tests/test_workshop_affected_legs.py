@@ -19,8 +19,7 @@ from livery.workshop._verified import read_marker
 def _root(tmp_path: Path, ci: str) -> Path:
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
-        f"\n[ci]\n{ci}"
+        f'[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\n\n[ci]\n{ci}'
     )
     return tmp_path
 

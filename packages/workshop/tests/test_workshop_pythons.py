@@ -13,7 +13,7 @@ _FAILURES = (BaseException,)
 
 def _root(tmp_path: Path, ci: str = "", floor: str = "3.11") -> Path:
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\n'
         'owner = "owner"\n\n[ci]\nrunners = ["ubuntu-latest"]\n' + ci
     )
     (tmp_path / "pyproject.toml").write_text(

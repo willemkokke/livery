@@ -8,7 +8,7 @@ generated tree. Nothing committed enumerates the packages. Authors
 write ``packages/<name>/docs/`` and the root ``docs/`` tree; every
 underscore path this module writes is machine territory, refreshed by
 the verbs and never edited by a person. Whether private members are
-documented is the layers' decision through the ``docs.members`` slot:
+documented is the extensions' decision through the ``docs.members`` slot:
 ``public`` keeps each extractor's default filter, ``all`` documents
 every member.
 
@@ -40,7 +40,7 @@ from typing import Annotated
 
 import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
-from livery.workshop import _layers, _slots
+from livery.workshop import _extensions, _slots
 from livery.workshop._contract import load_contract
 from livery.workshop._docs_contract import (
     GENERATED,
@@ -467,11 +467,11 @@ def _authored_nav_lines(
 #: instance-owned file, born from the template as an empty sheet,
 #: written by the instance and removable by deleting it.
 WORKSPACE_CSS = ("assets/site.css",)
-#: Where the build stages the layers' site assets, relative to the
-#: docs tree, one directory per layer: machine territory, rebuilt
+#: Where the build stages the extensions' site assets, relative to the
+#: docs tree, one directory per extension: machine territory, rebuilt
 #: whole by every build and gitignored.
-LAYER_ASSETS = "_layers"
-#: The directory of a layer's content that holds its site assets.
+EXTENSION_ASSETS = "_extensions"
+#: The directory of an extension's content that holds its site assets.
 CONTENT_ASSETS = "docs/assets"
 #: The link-preview card image's committed home; the image tags are
 #: emitted only while it exists.
@@ -514,8 +514,8 @@ def abbreviation_files(root: Path) -> list[str]:
 
 #: The slot deciding whether private members are documented: ``public``
 #: keeps each extractor's default filter, ``all`` documents every
-#: member. A scalar the nearest layer decides; the base contributes
-#: nothing, so its default stands until a layer says otherwise.
+#: member. A scalar the nearest extension decides; the base contributes
+#: nothing, so its default stands until an extension says otherwise.
 MEMBERS_SLOT = "docs.members"
 
 
@@ -577,51 +577,51 @@ def _js_line(entry: object, prefix: str) -> str:
     return "    { " + ", ".join(parts) + " },"
 
 
-def layer_assets(root: Path) -> list[tuple[str, Path]]:
-    """Each mounted layer that ships site assets, with its assets directory.
+def extension_assets(root: Path) -> list[tuple[str, Path]]:
+    """Each mounted extension that ships site assets, with its assets directory.
 
-    In the workspace's layer order. A layer ships site assets under
-    ``content/docs/assets/`` in its wheel; a layer without that
+    In the workspace's extension order. An extension ships site assets under
+    ``content/docs/assets/`` in its wheel; an extension without that
     directory, or not installed, ships none and is not listed.
     """
     found: list[tuple[str, Path]] = []
-    for layer in _layers.layer_names(root):
-        content = _layers.layer_content(layer)
+    for extension in _extensions.stack_names(root):
+        content = _extensions.extension_content(extension)
         if content is None:
             continue
         assets = content / CONTENT_ASSETS
         if assets.is_dir():
-            found.append((layer, assets))
+            found.append((extension, assets))
     return found
 
 
-def stage_layer_assets(root: Path) -> list[str]:
-    """Copy every layer's site assets under ``docs/_layers/``; the layers staged.
+def stage_extension_assets(root: Path) -> list[str]:
+    """Copy every extension's site assets under ``docs/_extensions/``; those staged.
 
-    Rebuilt whole: a file a layer no longer ships leaves no stale
-    copy, and a layer that left the workspace loses its directory.
+    Rebuilt whole: a file an extension no longer ships leaves no stale
+    copy, and an extension that left the workspace loses its directory.
     """
-    base = root / "docs" / LAYER_ASSETS
+    base = root / "docs" / EXTENSION_ASSETS
     shutil.rmtree(base, ignore_errors=True)
     staged: list[str] = []
-    for layer, assets in layer_assets(root):
-        shutil.copytree(assets, base / layer / "assets")
-        staged.append(layer)
+    for extension, assets in extension_assets(root):
+        shutil.copytree(assets, base / extension / "assets")
+        staged.append(extension)
     return staged
 
 
 def _extra_asset_lines(root: Path) -> list[str]:
     """``extra_css`` and ``extra_javascript`` for the whole site.
 
-    The css in cascade order: every layer's staged sheets in layer
+    The css in cascade order: every extension's staged sheets in extension
     order, then each package's declared entries at its mounted paths,
     then the workspace's own sheet while it exists, so the instance's
     rules win. Top-level ``[project]`` keys, so they render before
     any subtable.
     """
     css = [
-        f"{LAYER_ASSETS}/{layer}/assets/{sheet.name}"
-        for layer, assets in layer_assets(root)
+        f"{EXTENSION_ASSETS}/{extension}/assets/{sheet.name}"
+        for extension, assets in extension_assets(root)
         for sheet in sorted(assets.glob("*.css"))
     ]
     js: list[str] = []
@@ -644,9 +644,9 @@ def _extra_asset_lines(root: Path) -> list[str]:
 
 
 #: The slot deciding the theme block's values. The base's block is
-#: the default; a theme layer contributes a table of the keys it
+#: the default; a theme extension contributes a table of the keys it
 #: changes, and contributions merge key by key in contribution order,
-#: so the nearest layer's keys win.
+#: so the nearest extension's keys win.
 THEME_SLOT = "docs.theme"
 #: The base's theme: the stock fonts, and a palette that follows the
 #: OS with a manual light/dark/auto toggle cycle.
@@ -1674,7 +1674,7 @@ docs_group = group("docs", help="The workspace's documentation site")
 
 
 def _root() -> Path:
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -1758,9 +1758,9 @@ def _generate_all(root: Path, *, full: bool = False) -> None:
         print(f"  mounted docs for {', '.join(mounted)}")
     else:
         print("  mounts current: no package's docs moved")
-    staged = stage_layer_assets(root)
+    staged = stage_extension_assets(root)
     if staged:
-        print(f"  layer assets for {', '.join(staged)}")
+        print(f"  extension assets for {', '.join(staged)}")
     print(f"  assembled {write_site_config(root).name}")
 
 
@@ -2000,7 +2000,7 @@ def unread_by_the_site(root: Path) -> str:
 
 
 def _register_builtin() -> None:
-    """Declare the docs assembly's slots, until the docs layer declares them."""
+    """Declare the docs assembly's slots, until the docs extension declares them."""
     from livery.workshop._kinds import MEMBERS_POLICIES, PUBLIC_MEMBERS
 
     _slots.register_slot(
@@ -2016,18 +2016,18 @@ _register_builtin()
 
 
 #: The development section: one page per prose section, from the
-#: human-audience fragments the mounted layers ship and the repository's
+#: human-audience fragments the mounted extensions ship and the repository's
 #: own, under the root ``docs/`` tree. Gitignored, rebuilt whole.
 DEVELOPMENT = "docs/development"
 
 
 def _shipped_prose(root: Path) -> list[Prose]:
-    """Every fragment in play: the mounted layers' shipped sets, then the own."""
+    """Every fragment in play: the mounted extensions' shipped sets, then the own."""
     listed: list[Prose] = []
-    for layer in _layers.layer_names(root):
-        content = _layers.layer_content(layer)
+    for extension in _extensions.stack_names(root):
+        content = _extensions.extension_content(extension)
         if content is not None:
-            listed += shipped(layer, content)
+            listed += shipped(extension, content)
     listed += repository_fragments(root)
     return listed
 

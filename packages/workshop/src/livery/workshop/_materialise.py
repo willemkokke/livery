@@ -2,8 +2,8 @@
 
 The contract is sync-materialised wheel content: after ``fm sync``,
 ``.claude/skills/<name>`` and ``.claude/hooks/<script>`` match what
-the mounted layers ship. Links are the zero-drift way to honour it (a
-layer upgrade moves every repository at once, nothing to re-copy) but
+the mounted extensions ship. Links are the zero-drift way to honour it (a
+extension upgrade moves every repository at once, nothing to re-copy) but
 they are an optimisation, not the contract: where a link cannot be
 made, the same content is copied and refreshed on every sync. Nothing
 here ever fails a reconcile; the worst case is a printed line.
@@ -58,7 +58,7 @@ next refresh upgrades it.
 
 _GITIGNORE_HEADER = (
     "# Managed by `{prog} sync` - the entries below are materialised from the\n"
-    "# mounted layers' wheels. This list is deliberately self-scoped: a\n"
+    "# mounted extensions' wheels. This list is deliberately self-scoped: a\n"
     "# skill you add yourself is NOT ignored and commits normally.\n"
 )
 
@@ -356,7 +356,7 @@ def case_insensitive(directory: Path) -> bool:
 
 
 def _prune(root: Path, shipped: set[str], source: Path, copies: set[str]) -> list[str]:
-    """Drop links we made for content the layers no longer ship.
+    """Drop links we made for content the extensions no longer ship.
 
     Membership is case-folded where the filesystem is, so a shipped
     entry renamed by case alone is not read as gone and deleted.
@@ -444,7 +444,7 @@ def materialise(repo_root: Path, source: Path, subdir: str) -> list[str]:
         # files out of the working tree. Never do that silently.
         lines.append(
             f"  {subdir}: reclaimed {len(reclaimed)} committed copies now"
-            " shipped by a layer; commit the deletions"
+            " shipped by an extension; commit the deletions"
         )
     if modes - {"linked"}:
         lines.append(f"  {subdir}: materialised via {', '.join(sorted(modes))}")

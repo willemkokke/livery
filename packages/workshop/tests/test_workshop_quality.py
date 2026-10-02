@@ -143,7 +143,7 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     assert rewrites["format.ruff"]["check"] is False
     assert rewrites["lint.ruff"]["fix"] is True
     # Every fixer that applies rewrites before any judge, the layering
-    # fix and a layer's own included, and none of them is judged after:
+    # fix and an extension's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
     from livery.workshop import _checks
     from livery.workshop._checks import CheckRecord, GateContext, register_check
@@ -160,7 +160,9 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
 
     try:
         register_check(
-            CheckRecord("acme", "format", acme_judge, fix=acme_fix, layer="acme.layer")
+            CheckRecord(
+                "acme", "format", acme_judge, fix=acme_fix, extension="acme.extension"
+            )
         )
         ran.clear()
         between: list[list[str]] = []
@@ -346,9 +348,7 @@ def _whole_gate(
         return tree + "-after"
 
     monkeypatch.setattr(_quality, "_rewritten_tree", rewritten)
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nlayers = ["livery.workshop"]\n'
-    )
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     if python:
         member = tmp_path / "packages" / "one"
         (member / "src" / "one").mkdir(parents=True)

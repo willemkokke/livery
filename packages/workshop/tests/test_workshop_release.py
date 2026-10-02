@@ -298,7 +298,7 @@ def test_prepare_leaves_a_lockless_workspace_alone(seeds: Seeds) -> None:
 def test_without_a_notes_provider_prepare_stamps_and_writes_no_notes(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # The fallback first: a workspace mounting no release notes layer
+    # The fallback first: a workspace mounting no release notes extension
     # still releases; the train stamps the version and says why no
     # entry was written.
     from livery.workshop import _release_notes
@@ -313,7 +313,7 @@ def test_without_a_notes_provider_prepare_stamps_and_writes_no_notes(
     assert _release_notes.NO_PROVIDER in capsys.readouterr().out
 
 
-def test_the_notes_provider_is_one_registration_withdrawn_by_its_layer() -> None:
+def test_the_notes_provider_is_one_registration_withdrawn_by_its_extension() -> None:
     from livery.workshop import _release_notes
     from livery.workshop._cliff import CliffChangelog
 
@@ -321,11 +321,11 @@ def test_the_notes_provider_is_one_registration_withdrawn_by_its_layer() -> None
     try:
         assert isinstance(_release_notes.release_notes(), CliffChangelog)
         other = CliffChangelog()
-        _release_notes.register_release_notes(other, layer="acme.notes")
+        _release_notes.register_release_notes(other, extension="acme.notes")
         assert _release_notes.release_notes() is other
-        _release_notes.unregister_release_notes(layer="livery.workshop")
+        _release_notes.unregister_release_notes(extension="livery.workshop")
         assert _release_notes.release_notes() is other
-        _release_notes.unregister_release_notes(layer="acme.notes")
+        _release_notes.unregister_release_notes(extension="acme.notes")
         assert _release_notes.release_notes() is None
     finally:
         _release_notes._PROVIDER[:] = saved

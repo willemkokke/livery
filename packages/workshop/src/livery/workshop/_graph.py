@@ -215,7 +215,7 @@ def graph_affected(base: str = "main") -> None:
     Args:
         base: the branch the change will merge into
     """
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:

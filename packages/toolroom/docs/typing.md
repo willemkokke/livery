@@ -44,7 +44,7 @@ completer reads a stub only from inside the package.
 Each stub's header records the tool version and the platforms it was
 read on. The records, their readings and the index that renders them
 are `livery-toolroom-bench`, the bench package beside this one; a
-workspace that keeps the records current names it as a layer, and a
+workspace that keeps the records current names it as an extension, and a
 consumer of the handles never installs it.
 
 ## The vocabulary of a signature

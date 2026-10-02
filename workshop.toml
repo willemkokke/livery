@@ -2,17 +2,19 @@
 # nothing else is authoritative about workspace shape.
 
 [workspace]
-# The layers, in precedence order. Discovery is this list and nothing
-# else: a layer not named here is not mounted, however it got
-# installed.
-layers = [
-    "livery.workshop",
-    # The site's assembly and verbs: a layer inside the workshop wheel.
-    { import = "livery.extensions.docs", dist = "livery-workshop" },
+# The extensions, in precedence order, each by the name its
+# distribution declares in the workshop.extensions entry point group.
+# Discovery is this list and nothing else: an extension not named here
+# is not mounted, however it got installed. The base is never listed.
+extensions = [
+    # The site's assembly and verbs, shipped in the workshop wheel.
+    "docs",
+    # forge, the bench and footman add verbs alone: plugins, listed
+    # here until the workshop mounts a project's plugins by its
+    # dependencies. The bench depends on the handles, so
+    # livery-toolroom rides in with it.
     "livery.forge",
-    # The bench mounts the tool verbs and depends on the handles, so
-    # livery-toolroom rides in with it and contributes no verbs of its own.
-    { import = "livery.toolroom.bench", dist = "livery-toolroom-bench" },
+    "livery.toolroom.bench",
     "livery.footman",
 ]
 # Where the rendered files come from: a directory relative to this

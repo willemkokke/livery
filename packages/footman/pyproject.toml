@@ -79,6 +79,11 @@ footman = "livery.footman.pytest_plugin"
 # ecosystem identities and keep their `footman.` spelling; only the
 # targets live under the livery namespace. Metadata only: a family
 # imports when pulled, never on a bare `import livery.footman`.
+# A workshop extension until the workshop mounts a project's plugins by
+# its dependencies: the data module that declares it.
+[project.entry-points."workshop.extensions"]
+"livery.footman" = "livery.footman._extension"
+
 [project.entry-points."footman.tasks"]
 "footman.docs" = "livery.footman.tasks.docs:tasks"
 "livery.footman" = "livery.footman._docsgen"

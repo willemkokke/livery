@@ -1,14 +1,14 @@
 """Which keys a contract may hold, who owns each, and the judge that refuses the rest.
 
 Every key of a ``workshop.toml`` is declared by its owner: the base
-declares its own here, and a layer declares the keys it reads in a
-data module it names under the ``workshop.contract`` entry point
-group, as ``<layer import name> = "<module>:DECLARED"``. Loading a
-declaration imports that module alone, never the layer's tasks.
+declares its own here, and an extension declares the keys it reads
+as ``CONTRACT_KEYS`` in the data module its ``workshop.extensions``
+entry point names. Loading a declaration imports that module alone,
+never the extension's tasks.
 
 [livery.workshop._contract.load_contract][] judges every contract it
 reads against the declarations: a key no owner declares, a key whose
-owner the root's ``[workspace] layers`` does not list, a value of the
+owner the root's ``[workspace] extensions`` does not list, a value of the
 wrong type and a value outside its allowed set each refuse, naming
 the file, the key, what the table takes, and the nearest match.
 
@@ -36,7 +36,7 @@ ContractKind = Literal["root", "package"]
 #: the reader judges itself, nothing beneath it declared here.
 Type = Literal["str", "int", "number", "bool", "strs", "list", "table", "any"]
 
-#: The base layer's name, always mounted.
+#: The base extension's name, always mounted.
 BASE = "livery.workshop"
 
 
@@ -78,15 +78,14 @@ def _base() -> tuple[Declared, ...]:
     )
 
 
-#: The base layer's keys, but for those declared beside their readers.
+#: The base extension's keys, but for those declared beside their readers.
 DECLARED: tuple[Declared, ...] = (
     # The workspace.
     _root("workspace", "table"),
-    _root("workspace.layers", "list"),
-    _root("workspace.layers[]", "str", "table"),
-    _root("workspace.layers[].import", "str"),
-    _root("workspace.layers[].dist", "str"),
-    _root("workspace.layers[].for", "strs"),
+    _root("workspace.extensions", "list"),
+    _root("workspace.extensions[]", "str", "table"),
+    _root("workspace.extensions[].name", "str"),
+    _root("workspace.extensions[].for", "strs"),
     _root("workspace.templates", "str"),
     _root("workspace.templates-artifact", "str"),
     _root("forge", "table"),
@@ -119,6 +118,7 @@ DECLARED: tuple[Declared, ...] = (
     _root("docs.site-url", "str"),
     # A package.
     _package("kind", "str"),
+    _package("extensions", "strs"),
     _package("name", "str"),
     _package("depends", "list"),
     _package("depends[]", "table"),
@@ -166,9 +166,9 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     """Every installed owner's declarations, by contract and path.
 
     The base's come from this module and the readers it names; every
-    other owner's through the
-    ``workshop.contract`` entry point group, installed or not listed
-    alike, so a key of an unlisted owner is named as that owner's.
+    extension's from the ``CONTRACT_KEYS`` of its declaration, installed
+    or not listed alike, so a key of an unlisted extension is named as
+    that extension's.
     Two owners declaring one path refuse, naming both.
     """
     from importlib.metadata import entry_points
@@ -186,11 +186,9 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
             found[key] = _Owned(item, owner)
 
     take(BASE, _base())
-    for entry in entry_points(group="workshop.contract"):
-        if entry.name == BASE:
-            continue
+    for entry in entry_points(group="workshop.extensions"):
         loaded: Any = entry.load()
-        take(entry.name, tuple(loaded))
+        take(entry.name, tuple(getattr(loaded, "CONTRACT_KEYS", ())))
     return found
 
 
@@ -298,8 +296,8 @@ class _Judge:
                 continue
             if self.listed is not None and owned.owner not in self.listed:
                 self.problems.append(
-                    f"{path} is a key of {owned.owner}, which [workspace] layers"
-                    " does not list; list the layer, or remove the key"
+                    f"{path} is a key of {owned.owner}, which [workspace] extensions"
+                    " does not list; list the extension, or remove the key"
                 )
                 continue
             self.value(value, path, owned.declared)
@@ -352,7 +350,7 @@ def judge(
         data: The parsed contract.
         contract: Which contract it is.
         where: The file, for the caller's message.
-        listed: The layers the root lists, the base among them;
+        listed: The extensions the root lists, the base among them;
             ``None`` takes every installed owner as listed.
 
     Returns:
@@ -363,14 +361,14 @@ def judge(
     return judged.problems
 
 
-def listed_layers(root_data: dict[str, Any]) -> frozenset[str]:
-    """The layers a root contract lists, by import name, the base always among them."""
+def listed_extensions(root_data: dict[str, Any]) -> frozenset[str]:
+    """The extensions a root contract lists, by name, the base always among them."""
     names = {BASE}
     workspace = root_data.get("workspace")
-    layers = workspace.get("layers", []) if isinstance(workspace, dict) else []  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    for entry in layers if isinstance(layers, list) else []:  # pyright: ignore[reportUnknownVariableType]
+    extensions = workspace.get("extensions", []) if isinstance(workspace, dict) else []  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    for entry in extensions if isinstance(extensions, list) else []:  # pyright: ignore[reportUnknownVariableType]
         if isinstance(entry, str):
             names.add(entry)
-        elif isinstance(entry, dict) and isinstance(entry.get("import"), str):  # pyright: ignore[reportUnknownMemberType]
-            names.add(entry["import"])  # pyright: ignore[reportUnknownArgumentType]
+        elif isinstance(entry, dict) and isinstance(entry.get("name"), str):  # pyright: ignore[reportUnknownMemberType]
+            names.add(entry["name"])  # pyright: ignore[reportUnknownArgumentType]
     return frozenset(names)

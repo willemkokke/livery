@@ -2,8 +2,8 @@
 name: phase-audit
 description: Audit a completed plan phase - re-run acceptance, check contracts intact, record the audit with evidence in the plan.
 ---
-<!-- Shipped as livery.workshop layer content, delivered to the workspace
-     by the sync verb. Edit this copy in the layer and release it;
+<!-- Shipped as livery.workshop extension content, delivered to the workspace
+     by the sync verb. Edit this copy in the extension and release it;
      an edited delivered copy is a local override, kept and named.
 -->
 

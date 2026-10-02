@@ -1267,7 +1267,7 @@ def test_a_context_rename_refuses_teaching_fix_armed(
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     # The title is decided before anything else, so the two-commit
@@ -1303,7 +1303,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     monkeypatch.setattr(
@@ -1354,7 +1354,7 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
 
@@ -1422,7 +1422,7 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
         )
     )
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: limited)
     number = _submit(fake, git, armed=False, title="feat: rename the gate")

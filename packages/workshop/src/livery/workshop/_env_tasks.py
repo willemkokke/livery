@@ -49,7 +49,7 @@ _APPLIED: dict[str, str] = {}
 
 
 def _workspace() -> tuple[Path, Path]:
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     root = workspace_root()
     if root is None:
@@ -75,7 +75,7 @@ def apply_cascade(inv: footman.Invocation) -> None:
     later load, and the emitters must not misread them as the
     shell's own.
     """
-    from livery.workshop._layers import workspace_root
+    from livery.workshop._extensions import workspace_root
 
     _ = inv
     _APPLIED.clear()
@@ -93,7 +93,7 @@ def apply_cascade(inv: footman.Invocation) -> None:
     # re-exec after a drift sync inherits it and the sync's own spawns
     # resolve: whatever launched this process, it runs entered.
     apply_entry(root)
-    _warn_unmounted_layers(root)
+    _warn_unmounted_extensions(root)
     # Belt and braces around the whole self-healing step: this hook
     # is the last thing standing between a surprise in the reconcile
     # and every command failing, so nothing short of a deliberate
@@ -161,28 +161,30 @@ def apply_entry(root: Path) -> tuple[str, ...]:
     return added
 
 
-def _warn_unmounted_layers(root: Path) -> None:
-    """Teach when declared layers never mounted this process.
+def _warn_unmounted_extensions(root: Path) -> None:
+    """Teach when declared extensions never mounted this process.
 
-    Layers mount from the rendered ``tasks.py``; a workspace whose
-    file predates that shape imports the base layer and nothing
-    else, and every further layer's tasks silently vanish. Loud,
+    Extensions mount from the rendered ``tasks.py``; a workspace whose
+    file predates that shape imports the base extension and nothing
+    else, and every further extension's tasks silently vanish. Loud,
     once per command, with the repair named.
     """
     import sys
 
-    from livery.workshop import _layers
+    from livery.workshop import _extensions
 
-    if _layers.MOUNTED or not (root / "workshop.toml").is_file():
+    if _extensions.MOUNTED or not (root / "workshop.toml").is_file():
         return
-    declared = [name for name in _layers.layer_names(root) if name != _layers.SELF]
+    declared = [
+        name for name in _extensions.extension_names(root) if name != _extensions.SELF
+    ]
     if not declared:
         return
     import livery.footman.api as footman
 
     sys.stderr.write(
-        f"{footman.prog()}: the contract declares layers"
-        f" ({', '.join(declared)}) that this run never mounted; layers"
+        f"{footman.prog()}: the contract declares extensions"
+        f" ({', '.join(declared)}) that this run never mounted; extensions"
         f" mount from tasks.py now, so run `{footman.prog()}"
         " template.apply` to re-render it\n"
     )

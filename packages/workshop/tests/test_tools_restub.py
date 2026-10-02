@@ -115,7 +115,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
         KindRecord(name="bare", backend=python.backend, template=python.template)
     )
     monkeypatch.setattr(
-        "livery.workshop._layers.workspace_root", lambda start=None: root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
     return root

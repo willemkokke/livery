@@ -7,7 +7,7 @@ registered through [livery.workshop._checks.register_check][], and
 the gate is the walk over the registry: every applicable check
 green, the exit code the verdict. The workshop registers the
 builtin records at import, in the order the gate runs its
-rewriters; a layer's plugin registers its own at mount, the way it
+rewriters; an extension's plugin registers its own at mount, the way it
 registers a kind, and re-registering a name replaces the record.
 
 Kinds gate on roles, never on tools. A kind's
@@ -58,8 +58,8 @@ PATHS = "paths"
 PACKAGES = "packages"
 NONE = "none"
 
-#: The layer the builtin records belong to.
-BASE_LAYER = "livery.workshop"
+#: The extension the builtin records belong to.
+BASE_EXTENSION = "livery.workshop"
 
 
 @dataclass(frozen=True)
@@ -208,7 +208,7 @@ class CheckRecord:
             after its configure, a ctest after its build. Each runs
             through its task before this one's body, once per gate
             whoever asks first.
-        layer: The layer that registered the check, named when a
+        extension: The extension that registered the check, named when a
             narrowing is printed.
         tools: The tools the check runs, as the tool profile names
             them, ``("ruff",)``; each reaches the profile for every kind
@@ -223,7 +223,7 @@ class CheckRecord:
             check, one per rendered file it has something to say in;
             composed in check-name order, judged by the drift gate,
             gone from the next render with the record.
-        extension: The editor extension's marketplace id, when the
+        editor_extension: The editor extension's marketplace id, when the
             record carries a verified one; the rendered
             recommendations list names these and nothing else.
         claims: The categories the check judges, each with the rules
@@ -250,12 +250,12 @@ class CheckRecord:
     tests_only: bool = False
     in_scoped: bool = True
     after: tuple[str, ...] = ()
-    layer: str = BASE_LAYER
+    extension: str = BASE_EXTENSION
     tools: tuple[str, ...] = ()
     options: tuple[Option, ...] = ()
     contributions: tuple[tuple[str, object], ...] = ()
     fragments: tuple[Fragment, ...] = ()
-    extension: str = ""
+    editor_extension: str = ""
     claims: tuple[Claim, ...] = ()
     roles: tuple[str, ...] = ()
     flags: tuple[str, ...] = ()
@@ -268,7 +268,7 @@ class CheckRecord:
 
 _CHECKS: dict[str, CheckRecord] = {}
 
-#: Builtin checks a layer withdrew, name to the layer that did: the
+#: Builtin checks an extension withdrew, name to the extension that did: the
 #: gate names them, so a lighter gate is a legible decision.
 _WITHDRAWN: dict[str, str] = {}
 
@@ -280,8 +280,8 @@ FLAGS = ("point",)
 def register_check(record: CheckRecord) -> None:
     """Register *record*; a name already registered is replaced.
 
-    Layers call this from their plugin at mount. Replacing is how a
-    layer swaps a tool under a role, and how a test injects a fake;
+    Extensions call this from their plugin at mount. Replacing is how a
+    extension swaps a tool under a role, and how a test injects a fake;
     a package check names at least one kind, since a check that
     judges packages and applies to none never runs. Each address the
     check answers to, ``<role>.<tool>`` under its role and each
@@ -352,7 +352,7 @@ def register_check(record: CheckRecord) -> None:
 def _contribute(record: CheckRecord) -> None:
     _slots_withdraw(record.name)
     for slot, value in record.contributions:
-        _slots.contribute(slot, value, layer=record.layer, by=record.name)
+        _slots.contribute(slot, value, extension=record.extension, by=record.name)
 
 
 def _slots_withdraw(name: str) -> None:
@@ -473,29 +473,31 @@ def tools_for_kind(kind_name: str) -> tuple[tuple[str, str], ...]:
 def unregister_check(name: str, *, by: str = "") -> None:
     """Drop the check *name*; unknown names refuse naming the registry.
 
-    *by* names the layer withdrawing a check it did not register, so
+    *by* names the extension withdrawing a check it did not register, so
     the gate can print who narrowed it.
     """
     if name not in _CHECKS:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
     record = _CHECKS.pop(name)
     _slots_withdraw(name)
-    if by and record.layer != by:
+    if by and record.extension != by:
         _WITHDRAWN[name] = by
 
 
 def narrowings() -> tuple[str, ...]:
-    """The gate's lines naming what a layer added, replaced or withdrew.
+    """The gate's lines naming what an extension added, replaced or withdrew.
 
-    A check the base did not register names its layer; a builtin a
-    layer withdrew names the layer too. Empty for the base alone.
+    A check the base did not register names its extension; a builtin a
+    extension withdrew names the extension too. Empty for the base alone.
     """
     lines = [
-        f"  {record.name}: registered by {record.layer}"
+        f"  {record.name}: registered by {record.extension}"
         for record in _CHECKS.values()
-        if record.layer != BASE_LAYER
+        if record.extension != BASE_EXTENSION
     ]
-    lines += [f"  {name}: withdrawn by {layer}" for name, layer in _WITHDRAWN.items()]
+    lines += [
+        f"  {name}: withdrawn by {extension}" for name, extension in _WITHDRAWN.items()
+    ]
     return tuple(lines)
 
 
@@ -640,9 +642,11 @@ def checks_by_name() -> dict[str, CheckRecord]:
     return dict(_CHECKS)
 
 
-def extensions() -> tuple[str, ...]:
+def editor_extensions() -> tuple[str, ...]:
     """The editor extension ids the registered checks carry, sorted, each once."""
-    return tuple(sorted({r.extension for r in _CHECKS.values() if r.extension}))
+    return tuple(
+        sorted({r.editor_extension for r in _CHECKS.values() if r.editor_extension})
+    )
 
 
 def answering(address: str) -> str | None:
@@ -912,7 +916,7 @@ def _prune(target: Group, tree: Mapping[str, Mapping[str, CheckRecord]]) -> None
     """Remove the verbs the generator made whose checks are gone.
 
     A role with no check left loses its verb, and its group when that
-    leaves the group empty; a task another layer put there stays.
+    leaves the group empty; a task another extension put there stays.
     """
     for role, parent in list(target.groups.items()):
         tools = tree.get(role, {})
@@ -933,7 +937,7 @@ def generate_verbs(into: Group | None = None) -> None:
     the one, each offering exactly the flags its checks read. A role
     or a sub-task whose address a verb already holds is served by that
     verb, ``fm template.check`` and ``fm provenance``, and nothing is
-    made there. Run again after layers registered or withdrew checks,
+    made there. Run again after extensions registered or withdrew checks,
     it makes what is new, remakes a verb whose flags changed, and
     removes a verb whose check is gone.
     """
@@ -1377,11 +1381,11 @@ def _register_builtin() -> None:
 
     def layering_fix(ctx: GateContext) -> None:
         from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
-        from livery.workshop._layers import write_layers
+        from livery.workshop._extensions import write_extensions
         from livery.workshop._packages import verify_workspace
         from livery.workshop._uv import run_uv
 
-        for line in write_layers(ctx.root):
+        for line in write_extensions(ctx.root):
             print(line)
         # Every rule's fix runs here, inside the one rewrite and over
         # the one parse; the judgments follow in the check's judge.
@@ -1434,7 +1438,7 @@ def _register_builtin() -> None:
 
     # The slots the python records fill: the dev group's tool lines
     # and pytest's options, lines the base template no longer writes
-    # by hand. The python layer declares both once it exists.
+    # by hand. The python extension declares both once it exists.
     _slots.register_slot("python.dev-group")
     _slots.register_slot("python.test.addopts")
 
@@ -1461,7 +1465,7 @@ def _register_builtin() -> None:
                 Fragment("pyproject.toml", _fragments.RUFF_BASE),
                 Fragment(".vscode/settings.json", _fragments.RUFF_SETTINGS),
             ),
-            extension="charliermarsh.ruff",
+            editor_extension="charliermarsh.ruff",
             claims=tuple(
                 Claim(category, suffixes=py)
                 for category in (
@@ -1498,7 +1502,7 @@ def _register_builtin() -> None:
             kinds=ruffed,
             tools=("ruff",),
             fragments=(Fragment("pyproject.toml", _fragments.RUFF_LINT),),
-            extension="charliermarsh.ruff",
+            editor_extension="charliermarsh.ruff",
             # Test bodies explain themselves by name and assertion, so
             # the docstring rules stop at the tests.
             claims=(
@@ -1535,7 +1539,7 @@ def _register_builtin() -> None:
             kinds=python,
             tools=("basedpyright",),
             fragments=(Fragment("pyproject.toml", _fragments.BASEDPYRIGHT),),
-            extension="detachedfork.basedpyright",
+            editor_extension="detachedfork.basedpyright",
             claims=typed_claims,
         ),
         CheckRecord(

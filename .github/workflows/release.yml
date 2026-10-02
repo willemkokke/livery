@@ -61,7 +61,7 @@ jobs:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: fm ci.run --point=release --job=publish
   # The home's release aftermath: the (composed) template artifact, tagged
-  # in lockstep with the publishing layer's receipt.
+  # in lockstep with the publishing extension's receipt.
   templates:
     needs: [publish]
     runs-on: ubuntu-latest

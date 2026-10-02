@@ -1,6 +1,6 @@
-"""The docs layer's task surface, loaded through the layer's entry point.
+"""The docs extension's task surface, loaded through the extension's entry point.
 
-Importing this module registers the ``docs`` group under the layer's
+Importing this module registers the ``docs`` group under the extension's
 identity, declares the site's override template as a file the CI
 render writes, and contributes the site's two jobs to the builtin
 points: the gate point's strict build, which its verdict waits for,
@@ -13,9 +13,9 @@ from livery.extensions.docs._site import docs_group, overrides_template
 from livery.workshop._points import Entry, Job, contribute_job
 from livery.workshop._site_files import register_site_file
 
-LAYER = "livery.extensions.docs"
+EXTENSION = "livery.extensions.docs"
 
-register_site_file("overrides/main.html", overrides_template, layer=LAYER)
+register_site_file("overrides/main.html", overrides_template, extension=EXTENSION)
 
 contribute_job(
     "gate",
@@ -28,9 +28,9 @@ contribute_job(
             " inside the local check."
         ),
     ),
-    entries=(Entry("gate", "docs", "docs.build", source=LAYER),),
+    entries=(Entry("gate", "docs", "docs.build", source=EXTENSION),),
     gates=True,
-    layer=LAYER,
+    extension=EXTENSION,
 )
 contribute_job(
     "merge",
@@ -49,10 +49,10 @@ contribute_job(
         ),
     ),
     entries=(
-        Entry("merge", "deploy", "docs.build", source=LAYER),
-        Entry("merge", "deploy", "docs.publish", source=LAYER),
+        Entry("merge", "deploy", "docs.build", source=EXTENSION),
+        Entry("merge", "deploy", "docs.publish", source=EXTENSION),
     ),
-    layer=LAYER,
+    extension=EXTENSION,
 )
 
 __all__ = ["docs_group"]

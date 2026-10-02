@@ -24,9 +24,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root = tmp_path / "ws"
     root.mkdir()
     (root / "workshop.toml").write_text(
-        "[workspace]\n"
-        'layers = ["livery.workshop", "livery.extensions.docs"]\n'
-        f"{docs_table}"
+        f'[workspace]\nextensions = ["docs"]\n{docs_table}'
     )
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (root / "docs").mkdir()

@@ -14,14 +14,14 @@ _FAILURES = (BaseException,)
 
 
 def _home(tmp_path: Path) -> Path:
-    """A layer home with one overlay addition and a declared replace."""
+    """An extension home with one overlay addition and a declared replace."""
     root = tmp_path / "home"
     member = root / "packages" / "brand"
     overlay = member / "src" / "acme" / "brand" / "templates"
     (overlay / "project").mkdir(parents=True)
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop", "acme.brand"]\n'
+        'extensions = ["acme.brand"]\n'
         'templates-artifact = ""\n'
         "\n"
         '[forge]\nkind = "gitea"\nowner = "acme"\nurl = "https://forge.acme.example"\n'
@@ -63,7 +63,7 @@ def _versions(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("importlib.metadata.version", fake_version)
 
 
-def test_template_ref_is_the_topmost_tree_shipping_layer(
+def test_template_ref_is_the_topmost_tree_shipping_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._templates import template_ref
@@ -71,10 +71,10 @@ def test_template_ref_is_the_topmost_tree_shipping_layer(
     root = _home(tmp_path)
     # In the home the brand ships its tree from the workspace.
     assert template_ref(root) == "v0.5.0"
-    # A plain instance's topmost tree-shipper is the base layer.
+    # A plain instance's topmost tree-shipper is the base extension.
     plain = tmp_path / "plain"
     plain.mkdir()
-    (plain / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (plain / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     from importlib.metadata import version
 
     assert template_ref(plain) == "v" + version("livery-workshop")
@@ -125,7 +125,7 @@ def test_an_ordinary_instance_refuses_to_publish(
 
     plain = tmp_path / "plain"
     plain.mkdir()
-    (plain / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (plain / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr(
         "livery.workshop._release.workspace_root", lambda start=None: plain
     )
@@ -176,7 +176,7 @@ def test_a_child_renders_from_the_composed_artifact(
     child.mkdir()
     (child / "workshop.toml").write_text(
         "[workspace]\n"
-        'layers = ["livery.workshop", "acme.brand"]\n'
+        'extensions = ["acme.brand"]\n'
         f'templates = "git+{repo.as_uri()}"\n'
         "\n"
         '[forge]\nkind = "gitea"\nowner = "kid"\nurl = "https://forge.acme.example"\n'
@@ -191,16 +191,16 @@ def test_a_child_renders_from_the_composed_artifact(
         "author_name: A\nauthor_email: a@e\ncopyright_year: '2026'\n"
         "namespace_package: kid\npackages: []\n"
     )
-    # The child's brand layer arrives installed, not as a member: the
+    # The child's brand extension arrives installed, not as a member: the
     # wheel arm of the tree probe answers for it.
     from livery.workshop import _compose
 
-    real_tree = _compose.layer_template_tree
+    real_tree = _compose.extension_template_tree
 
-    def wheel_arm(root: Path, layer: str) -> Path | None:
-        if layer == "acme.brand" and root == child:
+    def wheel_arm(root: Path, extension: str) -> Path | None:
+        if extension == "acme.brand" and root == child:
             return tmp_path / "not-a-member"  # any non-member path
-        return real_tree(root, layer)
+        return real_tree(root, extension)
 
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: child
@@ -209,7 +209,7 @@ def test_a_child_renders_from_the_composed_artifact(
     monkeypatch.setattr(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
-    monkeypatch.setattr("livery.workshop._compose.layer_template_tree", wheel_arm)
+    monkeypatch.setattr("livery.workshop._compose.extension_template_tree", wheel_arm)
     new_package("thing")
     assert (child / "packages" / "thing" / "cliff.toml").is_file()
     # The anchor was the brand's tag, never the base's.

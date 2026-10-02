@@ -291,7 +291,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       the whole ecosystem stands on it being dependency-free. The one
       exception is the dev plugin under ``_dev``, which may also
       import livery.footman.api as footman and toolroom: its only loader is footman's
-      ``plugin()``, and only a workshop workspace mounts layers, so
+      ``plugin()``, and only a workshop workspace mounts extensions, so
       both are present whenever it loads.
     """
     from livery.workshop._kinds import is_python_kind, kind_for, kind_names
@@ -362,7 +362,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
                     )
 
     problems.extend(_cycles(packages))
-    from livery.workshop._layers import closure_problems
+    from livery.workshop._extensions import closure_problems
 
     problems.extend(closure_problems(root))
     from livery.workshop._checks import option_problems
@@ -689,7 +689,7 @@ def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str
 
     A module the package declares as a footman task entry point is
     exempt: its only loader is footman's own ``plugin()``, so the
-    runner is present by construction and the mounted layers with it,
+    runner is present by construction and the mounted extensions with it,
     and the distribution still declares no dependency on either. The
     entry point is where that fact already lives, so nothing here
     repeats the module's path.
@@ -795,45 +795,45 @@ def _write_edges_fix(
 
 #: The base's own import path, and the namespace extensions live under.
 BASE_MODULE = "livery.workshop"
-LAYERS_NAMESPACE = "livery.extensions"
+EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
-def layer_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
-    """Each base module that imports a layer, with the layer named.
+def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
+    """Each base module that imports an extension, with the extension named.
 
-    The base (``livery.workshop``) imports no layer under
-    ``livery.extensions``: what a layer needs of the base it takes through
-    the base's seams, and the base reaches a layer only through the
-    registries the layer fills at mount.
+    The base (``livery.workshop``) imports no extension under
+    ``livery.extensions``: what an extension needs of the base it takes through
+    the base's seams, and the base reaches an extension only through the
+    registries the extension fills at mount.
     """
     problems: list[str] = []
     for module in modules:
         if not module.dotted.startswith(BASE_MODULE + "."):
             continue
         for imported in module.imports:
-            if imported == LAYERS_NAMESPACE or imported.startswith(
-                LAYERS_NAMESPACE + "."
+            if imported == EXTENSIONS_NAMESPACE or imported.startswith(
+                EXTENSIONS_NAMESPACE + "."
             ):
                 problems.append(
-                    f"{module.relative}: the base imports the layer {imported}; the"
-                    " base reaches a layer through a registry it fills at mount,"
+                    f"{module.relative}: the base imports the extension {imported}; the"
+                    " base reaches an extension through a registry it fills at mount,"
                     " never by import"
                 )
     return problems
 
 
-def _base_imports_no_layer(
+def _base_imports_no_extension(
     modules: tuple[ParsedModule, ...], context: RuleContext
 ) -> list[str]:
-    """The base-imports-no-layer rule."""
+    """The base-imports-no-extension rule."""
     del context
-    return layer_imports_in_the_base(modules)
+    return extension_imports_in_the_base(modules)
 
 
 # The builtin rules, registered at import the way the builtin checks
-# and kinds are; a layer registers its own beside them.
+# and kinds are; an extension registers its own beside them.
 register_ast_rule(AstRule("runner-terminal", _runner_terminal))
-register_ast_rule(AstRule("base-imports-no-layer", _base_imports_no_layer))
+register_ast_rule(AstRule("base-imports-no-extension", _base_imports_no_extension))
 register_ast_rule(AstRule("forge-stdlib-only", _forge_stdlib))
 register_ast_rule(
     AstRule("sibling-references", _sibling_references, fix=_write_edges_fix)

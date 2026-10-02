@@ -64,19 +64,19 @@ def _facts(root: Path) -> dict[str, Any]:
     minor; the uv pin from the lock. Nothing here is an answer: the
     answers hold identity alone.
     """
-    from livery.workshop._compose import layer_template_tree
+    from livery.workshop._compose import extension_template_tree
     from livery.workshop._docs_contract import docs_requirements, publish_seam
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
-    from livery.workshop._layers import layer_entries
+    from livery.workshop._extensions import stack_entries
     from livery.workshop._templates import templates_artifact
     from livery.workshop._wheels import member_roster, wheel_runners
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
     publisher = ""
-    for layer, dist in layer_entries(root):
-        tree = layer_template_tree(root, layer)
+    for extension, dist in stack_entries(root):
+        tree = extension_template_tree(root, extension)
         if tree is not None and tree.is_relative_to(root):
             publisher = dist
     return {
@@ -102,7 +102,7 @@ def _facts(root: Path) -> dict[str, Any]:
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
         # The publish side: where this home ships its template
-        # artifact, and which member layer's release triggers it.
+        # artifact, and which member extension's release triggers it.
         "templates_artifact": templates_artifact(root),
         "templates_publisher": publisher,
         # The members with their kinds, and the runner labels the
@@ -203,7 +203,7 @@ def _conan_cache_step() -> str:
     cache afterwards. The recipes are the key because they carry the
     requirements; a range that resolves to a newer version inside an
     unchanged recipe reuses the entry and builds that one package.
-    The cache is the speed layer and Conan Center the origin, so a
+    The cache is the speed extension and Conan Center the origin, so a
     miss costs time, never a red leg.
     """
     recipes = "packages/*/conanfile.py"
@@ -813,7 +813,7 @@ def generate(root: Path) -> dict[str, str]:
     no configuration. The emitted ``setup.sh`` at the root is the
     entry every workflow's jobs share. The template-artifact job is
     emitted only for a home: the contract declares where to publish
-    and a member layer ships the tree; an ordinary instance's
+    and a member extension ships the tree; an ordinary instance's
     release has no templates to publish.
     """
     from livery.workshop._entry import entry_script
@@ -846,7 +846,7 @@ def generate(root: Path) -> dict[str, str]:
         + "".join("  " + line.removeprefix("# ") + "\n" for line in header.splitlines())
         + "#}\n"
     )
-    # A mounted layer's own rendered files, the site's override
+    # A mounted extension's own rendered files, the site's override
     # template for one, carry the same header in Jinja's comment form.
     for path, render in site_files().items():
         rendered[path] = jinja_header + render(root)
