@@ -360,45 +360,9 @@ EXPORTS: dict[str, list[str]] = {
         "Value",
         "ValuedFlag",
         "annotations",
-        "basedpyright",
-        "bash",
-        "build",
-        "bun",
-        "claude",
-        "cmake",
-        "cmd",
-        "coverage",
-        "cspell",
-        "djlint",
-        "docker",
-        "eclint",
-        "fish",
-        "gh",
-        "git",
-        "git_changelog",
-        "git_cliff",
-        "markdownlint",
-        "mkdocs",
-        "mypy",
-        "ninja",
-        "nu",
         "off",
-        "prek",
-        "pwsh",
-        "pytest",
-        "python",
         "read_version",
-        "ruff",
-        "ruff_format",
-        "ssh",
-        "ssh_keygen",
-        "ssh_keyscan",
-        "twine",
-        "ty",
-        "uv",
         "version_tuple",
-        "zensical",
-        "zsh",
     ],
     "livery.workshop": [
         "Edge",
@@ -432,7 +396,15 @@ def _public(module: object) -> list[str]:
     declared = getattr(module, "__all__", None)
     if declared is not None:
         return sorted(declared)
-    return sorted(name for name in vars(module) if not name.startswith("_"))
+    # A tool handle is made on first use and kept on the module, so
+    # which handles exist depends on what ran before: the module's own
+    # names are the surface.
+    tool = getattr(module, "Tool", None)
+    return sorted(
+        name
+        for name, value in vars(module).items()
+        if not name.startswith("_") and not (tool and isinstance(value, tool))
+    )
 
 
 def test_api_exports_what_the_package_exported() -> None:
