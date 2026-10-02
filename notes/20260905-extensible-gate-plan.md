@@ -1,5 +1,10 @@
 # The extensible gate: checks opened to layers, the vocabulary bound
 
+Superseded on 2026-10-02 by the extensions plan
+(`notes/20261002-extensions-plan.md`), which carries this plan's
+remaining work, its contracts and its open items; read that plan for
+what is next. What follows is the record as it stood.
+
 Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's

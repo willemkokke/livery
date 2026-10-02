@@ -1,5 +1,11 @@
 # The local loop: fast by default, scenarios and setups by choice
 
+Superseded on 2026-10-02 by the extensions plan
+(`notes/20261002-extensions-plan.md`): its environments become the
+lodge (that plan's phase 13) and its scenarios, bench, layer under
+test and images become the e2e plugin (its phase 14). What follows
+is the record as it stood.
+
 Status: written 2026-09-30 from Willem's rulings on the loop runner's
 seven decisions (issues #930 and #931). Phase 1 (scenarios by name)
 is built (issue #942, 2026-09-30); phase 2's first slice, host-mode
