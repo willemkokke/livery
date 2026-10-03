@@ -119,6 +119,9 @@ DECLARED: tuple[Declared, ...] = (
     _root("ci.profile-window", "int"),
     _root("ci.profile-keep", "int"),
     _root("ci.profile-into", "str"),
+    # The release train: whether the floor leg proves every floor.
+    _root("release", "table"),
+    _root("release.prove-floors", "bool"),
     # The site's address, which the rendered project files carry; where
     # it publishes is declared beside its reader.
     _root("docs", "table"),
@@ -135,6 +138,7 @@ DECLARED: tuple[Declared, ...] = (
     _package("release", "table"),
     _package("release.publish", "bool"),
     _package("release.baseline", "str"),
+    _package("release.prove-floors", "bool"),
     _package("categories", "table"),
     _package("categories.*", "strs"),
     # A check's options, [checks.<role>.<tool>]: the check registry

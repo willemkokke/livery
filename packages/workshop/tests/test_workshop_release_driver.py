@@ -169,6 +169,71 @@ def test_rollback_restores_exactly_what_prepare_writes(
     assert git.is_clean()
 
 
+def test_rollback_restores_a_namespace_packages_api_version(
+    workspace: tuple[FakeForge, GitOps, Path],
+) -> None:
+    # A namespace package keeps __version__ in its api.py, not in an
+    # __init__.py; the rollback restores what the stamper wrote there.
+    _fake, git, root = workspace
+    api = root / "packages" / "core" / "src" / "livery" / "core" / "api.py"
+    api.write_text('"""The API."""\n\n__version__ = "0.2.0"\n')
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: an api module")
+    members = resolve_set(root, ("core",))
+    from livery.workshop._release import prepare_release
+
+    prepare_release(root, "packages/core", "9.9.9")
+    assert '__version__ = "9.9.9"' in api.read_text()
+    rollback_prepare(root, members)
+    assert '__version__ = "0.2.0"' in api.read_text()
+    assert git.is_clean()
+
+
+def test_the_floor_leg_follows_prove_floors_package_over_workspace(
+    workspace: tuple[FakeForge, GitOps, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._release_driver import proves_floors, validate_member
+
+    _fake, _git_seam, root = workspace
+    core = resolve_set(root, ("core",))[0]
+    ran: list[str] = []
+
+    def _leg(
+        package: object, root: Path, *, release_dirs: object, resolution: str
+    ) -> dict[str, str]:
+        ran.append(resolution)
+        return {}
+
+    monkeypatch.setattr("livery.workshop._backends._python.run_isolated_test", _leg)
+    # The fallback first: neither contract says, so the floors are proved.
+    assert proves_floors(root, core) == (True, "")
+    contract = core.directory / "workshop.toml"
+    package_text = contract.read_text()
+    # The workspace turns it off for every member.
+    (root / "workshop.toml").write_text(
+        "[workspace]\n\n[release]\nprove-floors = false\n"
+    )
+    assert proves_floors(root, core) == (False, "workshop.toml")
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    assert ran == ["highest"]
+    assert (
+        "livery-core floor leg: skipped, `[release] prove-floors = false` in"
+        " workshop.toml" in capsys.readouterr().out
+    )
+    # A package turns it back on for itself.
+    contract.write_text(package_text + "\n[release]\nprove-floors = true\n")
+    assert proves_floors(root, core) == (True, "packages/core/workshop.toml")
+    ran.clear()
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    assert ran == ["lowest-direct", "highest"]
+    # And off for itself while the workspace proves.
+    (root / "workshop.toml").write_text("[workspace]\n")
+    contract.write_text(package_text + "\n[release]\nprove-floors = false\n")
+    assert proves_floors(root, core) == (False, "packages/core/workshop.toml")
+
+
 def test_the_base_gate_refuses_red_and_teaches(
     workspace: tuple[FakeForge, GitOps, Path],
 ) -> None:
