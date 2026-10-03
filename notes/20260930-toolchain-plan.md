@@ -511,6 +511,11 @@ Deliverables:
   `fm tools.sync --frozen` is 1.2 s for 18 receipts and spawns no
   tool; a probe runs only for an absent or stale receipt, and a CI
   job probes once at entry. Contract 2 pins it.
+- 2026-10-03, Willem: clang-format and clang-tidy come from their
+  own `pypi` records on every host, never from `llvm`; `edit-only`
+  goes and `slim` and `full` exclude both tools. This replaces the
+  ruling above and open item 4; the extensions plan's decision record
+  has the reasons.
 
 ## Open
 
@@ -522,8 +527,7 @@ Deliverables:
    at once. Contract 11.
 3. `zig` as a fifth family: one archive per host, MinGW ABI on
    Windows, no coverage reader inside. Owner: Willem, after phase 2.
-4. Resolved 2026-09-30: clang-format and clang-tidy come from the
-   `llvm` record's smallest profile; no separate records. Decision
-   record.
+4. Resolved 2026-10-03: clang-format and clang-tidy come from their
+   own `pypi` records, never from `llvm`. Decision record.
 5. The CycloneDX rendering of the release rows. Owner: Willem, after
    phase 3.
