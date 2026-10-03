@@ -642,6 +642,34 @@ def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
     assert "notes/**/*.md merge=union" in attributes
 
 
+def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
+    tmp_path: Path,
+) -> None:
+    """Git for Windows' autocrlf default would check out CRLF; the attributes win."""
+    import subprocess
+
+    rendered = _render_kind(tmp_path, "github")
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "core.autocrlf", "true")
+    git("config", "commit.gpgsign", "false")
+    (repo / ".gitattributes").write_bytes((rendered / ".gitattributes").read_bytes())
+    (repo / "a.py").write_bytes(b"one\ntwo\n")
+    (repo / "run.cmd").write_bytes(b"@echo off\n")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    for name in ("a.py", "run.cmd"):
+        (repo / name).unlink()
+    git("checkout", "--", ".")
+    assert (repo / "a.py").read_bytes() == b"one\ntwo\n"
+    assert (repo / "run.cmd").read_bytes() == b"@echo off\r\n"
+
+
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     from livery.workshop._templates import render
 
