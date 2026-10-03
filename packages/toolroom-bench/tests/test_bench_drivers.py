@@ -108,6 +108,13 @@ PYTHON_ON_PYPI = (
     "zensical",
 )
 
+#: Not Python and read from PyPI on purpose. LLVM publishes no release
+#: per tool, and the third-party static builds cover four hosts; the
+#: ssciwr wheels repackage LLVM's own binaries, one build per release,
+#: for every host but windows-arm (Willem, 2026-10-03). Adding a tool
+#: here is a reviewed edit with its reason.
+NATIVE_ON_PYPI = ("clang_format", "clang_tidy")
+
 #: Not Python and still read from PyPI: nothing, since every tool with a
 #: release of its own moved to it (`notes/20260925-direct-downloads.md`).
 #: A tool that must pass through PyPI on its way in names its phase here
@@ -124,5 +131,5 @@ def test_the_pypi_tier_carries_python_programs_alone():
         for driver in _drivers.DRIVERS
         if driver.provision.kind == "uv" and driver.source != "manual"
     )
-    assert on_pypi == sorted(PYTHON_ON_PYPI + LEAVING_PYPI)
+    assert on_pypi == sorted(PYTHON_ON_PYPI + NATIVE_ON_PYPI + LEAVING_PYPI)
     assert not set(PYTHON_ON_PYPI) & set(LEAVING_PYPI)

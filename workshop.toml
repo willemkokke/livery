@@ -50,8 +50,8 @@ requires = [
     "cmake",
     "conan",
     "cmake_conan",
-    "clang_format@!linux-arm,!windows-arm",
-    "clang_tidy@!linux-arm,!windows-arm",
+    "clang_format@!windows-arm",
+    "clang_tidy@!windows-arm",
     # Microsoft's coverage engine, the measurer of a cpp-conan package
     # built with MSVC, which the workshop's own tests prove on the
     # Windows leg; the .NET SDK it runs on rides as its runtime, on

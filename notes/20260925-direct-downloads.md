@@ -414,6 +414,13 @@ Acceptance:
   to the old tree, and no verb clears it yet (livery#682). The asset
   picker learned `universal`, arch-less builds and ninja's `winarm64`;
   ninja's newest release has all six hosts through it.
+- 2026-10-03, Willem: clang-format and clang-tidy are the named
+  exception, installed from PyPI (the ssciwr wheels). LLVM publishes no
+  release per tool, and the third-party static builds the records named
+  cover four hosts; the wheels repackage LLVM's own binaries, one build
+  per release for every host but windows-arm. `NATIVE_ON_PYPI` in the
+  bench's driver test lists them, so another native tool on PyPI is
+  still a reviewed edit.
 
 ## Open
 
