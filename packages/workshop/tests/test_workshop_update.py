@@ -13,9 +13,9 @@ from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import arming_reason, ci_automerge
 from livery.workshop._templates import new_package
-from livery.workshop._update import _align_answers_source
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
+from workshop_composed import IDENTITY
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 # Bound before the autouse no-op fixture patches the module attribute,
@@ -49,12 +49,10 @@ def _build(base: Path) -> None:
     import shutil
 
     shutil.copytree(TEMPLATES, root / "templates")
-    shutil.copy(ROOT / ".copier-answers.yml", root / ".copier-answers.yml")
     # The contract is a birth-time seed the render never touches; the
     # tests stand in for the birth verb and write it whole.
     (root / "workshop.toml").write_text(
-        "[workspace]\n"
-        "extensions = []\n"
+        "[workspace]\n" + IDENTITY + "extensions = []\n"
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
@@ -336,12 +334,18 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
     tasks.write_text(tasks.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
-    # The real run_gate over a stub subprocess: exit 1 is the verdict.
+    # The real run_gate over a stub `uv run fm check`: exit 1 is the
+    # verdict. A real one would build the workspace's venv and run its
+    # gate; the sync before it is its neighbour's subject.
+    red = SimpleNamespace(code=1, stdout="red\n", stderr="")
     monkeypatch.setattr(
-        "livery.workshop._update_driver.subprocess",
-        SimpleNamespace(run=lambda *a, **k: SimpleNamespace(returncode=1)),
+        "livery.workshop._update_driver.tools",
+        SimpleNamespace(uv=SimpleNamespace(opts=lambda **_k: lambda *_a: red)),
     )
     monkeypatch.setattr("livery.workshop._update_driver.run_gate", _REAL_GATE)
+    monkeypatch.setattr(
+        "livery.workshop._update_driver.run_uv", lambda *args, root: None
+    )
     driver = UpdateDriver(root, git, "templates", armed=False)
     with pytest.raises(_FAILURES) as caught:
         driver.prepare()
@@ -558,16 +562,6 @@ def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
     assert resumed is not None and resumed.merged
 
 
-def test_align_answers_source_follows_the_contract(tmp_path: Path) -> None:
-    answers = tmp_path / ".copier-answers.yml"
-    answers.write_text("_src_path: templates\nkind: project\n")
-    notes = _align_answers_source(tmp_path, "https://example.com/fork")
-    assert notes and "follows the contract" in notes[0]
-    assert "_src_path: https://example.com/fork" in answers.read_text()
-    assert _align_answers_source(tmp_path, "https://example.com/fork") == []
-    assert _align_answers_source(tmp_path / "absent", "x") == []
-
-
 def test_the_arming_ladder_names_its_level(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -609,6 +603,6 @@ def test_new_package_renders_and_wires(
     new_package("scratch")
     assert (root / "packages" / "scratch" / "workshop.toml").is_file()
     assert "livery-scratch" in (root / "pyproject.toml").read_text()
-    assert "dir: scratch" in (root / ".copier-answers.yml").read_text()
+    assert '"packages/scratch"' in (root / "pyproject.toml").read_text()
     with pytest.raises(_FAILURES):
         new_package("scratch")  # already exists

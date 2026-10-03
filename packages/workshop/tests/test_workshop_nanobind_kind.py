@@ -12,6 +12,7 @@ from _pytest.outcomes import Skipped  # the skip a fixture raises
 
 import livery.toolroom.tools.api as tools
 from livery.workshop._backends import _python, _python_nanobind
+from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
     is_python_kind,
     kind_for,
@@ -20,7 +21,8 @@ from livery.workshop._kinds import (
     template_chain,
 )
 from livery.workshop._packages import Package
-from livery.workshop._templates import read_answers, render
+from livery.workshop._templates import render
+from workshop_composed import IDENTITY
 
 _FAILURES = (BaseException,)
 
@@ -74,7 +76,7 @@ needs_clang_format = pytest.mark.skipif(
 
 def _render_named(tmp_path: Path, package_name: str) -> Path:
     """The nanobind template rendered for *package_name*, native configs composed."""
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     destination = tmp_path / "packages" / "native"
     render(
         str(TEMPLATES),
@@ -138,7 +140,7 @@ def test_the_rendered_member_passes_its_own_format_checks_whatever_its_name(
 def _render_chain(tmp_path: Path) -> Package:
     """A rendered python-nanobind package, parent then leaf."""
     destination = tmp_path / "packages" / "ext"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     for kind in template_chain("package-python-nanobind"):
         render(
             str(TEMPLATES),
@@ -239,9 +241,8 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
     pyproject = (directory / "pyproject.toml").read_text()
     assert 'build-backend = "scikit_build_core.build"' in pyproject
     assert 'version = "0.0.0"' in pyproject
-    # The contract and the receipt record the leaf kind.
+    # The contract records the leaf kind.
     assert 'kind = "python-nanobind"' in (directory / "workshop.toml").read_text()
-    assert "package-python-nanobind" in (directory / ".copier-answers.yml").read_text()
     # The leaf's __init__ re-exports the compiled surface.
     init = (directory / "src" / "acme" / "ext" / "__init__.py").read_text()
     assert "native_hello" in init
@@ -251,10 +252,8 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
     from livery.workshop._templates import apply_packages, apply_project
 
     shutil.copytree(TEMPLATES, tmp_path / "templates")
-    shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
     (tmp_path / "workshop.toml").write_text(
-        "[workspace]\n"
-        "extensions = []\n"
+        "[workspace]\n" + IDENTITY + "extensions = []\n"
         'templates = "templates"\n'
         "\n"
         "[forge]\n"
@@ -264,12 +263,10 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
     apply_project(tmp_path)
     package = tmp_path / "packages" / "ext"
     package.mkdir(parents=True)
-    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
-    answers["package_name"] = "livery-ext"
-    answers["kind"] = "package-python-nanobind"
-    (package / ".copier-answers.yml").write_text(
-        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
+    (package / "workshop.toml").write_text(
+        'kind = "python-nanobind"\nname = "livery-ext"\n'
     )
+    (package / "pyproject.toml").write_text('[project]\nname = "livery-ext"\n')
     # cliff.toml is the parent's managed file: the leaf render alone
     # cannot produce it, so this forces the chain through the loop.
     assert "packages/ext/cliff.toml" in apply_packages(tmp_path)
@@ -284,7 +281,7 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
 def _render_library(tmp_path: Path) -> Package:
     """A rendered cpp-conan library beside the extension, named acme-geometry."""
     destination = tmp_path / "packages" / "geometry"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     render(
         str(TEMPLATES),
         destination,

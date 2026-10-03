@@ -143,15 +143,15 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
         '[[replace]]\npath = "project/tasks.py.jinja"\n'
         'reason = "the brand mounts its own tasks"\n'
     )
-    (root / ".copier-answers.yml").write_text(
-        "_src_path: templates\n"
-        "kind: project\n"
-        "project_name: home\n"
-        "author_name: A\n"
-        "author_email: a@example.com\n"
-        "copyright_year: '2026'\n"
-        "namespace_package: acme\n"
-        "packages: []\n"
+    contract = (root / "workshop.toml").read_text()
+    (root / "workshop.toml").write_text(
+        contract.replace(
+            "[workspace]\n",
+            '[workspace]\nname = "home"\nnamespace = "acme"\n'
+            'authors = [{ name = "A", email = "a@example.com" }]\n'
+            'copyright-year = "2026"\n',
+            1,
+        )
     )
     source, _ref, owners = render_source(root)
     assert source.endswith("composed-templates")

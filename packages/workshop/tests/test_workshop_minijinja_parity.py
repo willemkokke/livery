@@ -28,20 +28,17 @@ from copier._main import Worker  # pyright: ignore[reportPrivateUsage]
 
 from livery.workshop import _fragments
 from livery.workshop._checks import checks_by_name
+from livery.workshop._identity import package_facts, project_facts
 from livery.workshop._kinds import template_chain
 from livery.workshop._templates import (
     _package_regions,  # pyright: ignore[reportPrivateUsage]
     _release_baseline,  # pyright: ignore[reportPrivateUsage]
     package_injections,
-    read_answers,
     render_injections,
     render_source,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
-
-#: copier's own answers file, which goes with copier.
-COPIER_ONLY = "{{ _copier_conf.answers_file }}"
 
 
 def _plain(value: Any) -> Any:
@@ -85,8 +82,6 @@ def _template_differences(source: Path, kind: str, data: dict[str, Any]) -> list
         environment = worker.jinja_env
         for path in sorted((source / kind).rglob("*.jinja")):
             relative = path.relative_to(source).as_posix()
-            if COPIER_ONLY in relative:
-                continue
             text = path.read_text("utf-8")
             expected = environment.from_string(text).render(**context)
             got = _minijinja(text, context)
@@ -97,16 +92,17 @@ def _template_differences(source: Path, kind: str, data: dict[str, Any]) -> list
 
 def test_every_template_renders_the_same_in_minijinja() -> None:
     source = Path(render_source(ROOT)[0])
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     differences = _template_differences(
         source, "project", {**answers, **render_injections(ROOT, answers)}
     )
-    members = sorted((ROOT / "packages").glob("*/.copier-answers.yml"))
+    members = sorted(
+        path.parent for path in (ROOT / "packages").glob("*/workshop.toml")
+    )
     data: dict[str, Any] = {}
-    for answers_path in members:
-        directory = answers_path.parent
+    for directory in members:
         data = {
-            **read_answers(answers_path),
+            **package_facts(ROOT, directory),
             **package_injections(ROOT),
             "package_dir": directory.name,
             "release_baseline": _release_baseline(directory),
@@ -121,7 +117,7 @@ def test_every_template_renders_the_same_in_minijinja() -> None:
 
 
 def test_every_check_fragment_renders_the_same_in_minijinja() -> None:
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     data = {**answers, **render_injections(ROOT, answers)}
     differences: list[str] = []
     for name, record in sorted(checks_by_name().items()):

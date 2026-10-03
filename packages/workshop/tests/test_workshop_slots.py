@@ -124,10 +124,11 @@ def test_the_records_fill_the_dev_group_and_addopts_and_a_withdrawn_check_leaves
 
 
 def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
-    from livery.workshop._templates import read_answers, render_injections
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
-    injected = render_injections(root, read_answers(root / ".copier-answers.yml"))
+    injected = render_injections(root, project_facts(root))
     slots = injected["slots"]
     assert "pytest-xdist>=3.6" in slots["python.dev-group"]
     text = (root / "pyproject.toml").read_text()

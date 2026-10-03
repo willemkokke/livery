@@ -344,17 +344,17 @@ def _rule_seed(
     )
 
 
-def _rule_answers(
+def _rule_receipts(
     root: Path, relative: Path, emitted: frozenset[str] | None
 ) -> Provenance | None:
     del root, emitted
-    if relative.as_posix() != ".copier-answers.yml":
+    if relative.as_posix() != ".workshop-rendered":
         return None
     prog = footman.prog()
     return Provenance(
         "receipts",
-        "machine-managed identity and template provenance",
-        f"never by hand; `{prog} new.package` and the update wave write it",
+        "what the fragment engine last wrote into the workspace's files",
+        f"never by hand; `{prog} sync` keeps it",
     )
 
 
@@ -416,12 +416,6 @@ def _rule_member(
             f"the template channel ({template_source(root)}, package-python kind)",
             f"edit the template source and run `{prog} template.apply`",
         )
-    if rest == ".copier-answers.yml":
-        return Provenance(
-            "receipts",
-            "machine-managed package identity",
-            "never by hand; the render wrote it",
-        )
     if rest == ".workshop-rendered":
         return Provenance(
             "receipts",
@@ -458,7 +452,7 @@ register_channels(
         ChannelRule("composed", _rule_composed, 85, "livery.workshop"),
         ChannelRule("rendered", _rule_rendered, 80, "livery.workshop"),
         ChannelRule("seed", _rule_seed, 70, "livery.workshop"),
-        ChannelRule("answers", _rule_answers, 60, "livery.workshop"),
+        ChannelRule("receipts", _rule_receipts, 60, "livery.workshop"),
         ChannelRule("contract", _rule_contract, 50, "livery.workshop"),
         ChannelRule("environment", _rule_environment, 40, "livery.workshop"),
         ChannelRule("toolchain", _rule_toolchain, 30, "livery.workshop"),

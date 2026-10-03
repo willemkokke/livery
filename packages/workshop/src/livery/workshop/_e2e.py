@@ -939,12 +939,11 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
     _fresh_branch(root, _SETUP_BRANCH)
     lane = _lane(kind)
     host_url = os.environ.get(lane.url_var, "")
-    for name in ("workshop.toml", ".copier-answers.yml"):
-        f = root / name
-        if f.is_file():
-            body = f.read_text("utf-8")
-            if host_url and host_url in body:
-                f.write_text(body.replace(host_url, lane.alias), "utf-8")
+    contract = root / "workshop.toml"
+    if contract.is_file():
+        body = contract.read_text("utf-8")
+        if host_url and host_url in body:
+            contract.write_text(body.replace(host_url, lane.alias), "utf-8")
     loop_index, loop_publish = lane.index(), lane.publish()
     # The registry lives in the contract, and the template renders it
     # into pyproject from there: every re-render preserves the wiring

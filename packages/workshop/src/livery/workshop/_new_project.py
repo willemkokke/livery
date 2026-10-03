@@ -213,8 +213,21 @@ def new_project(
         print("  workshop.toml: already seeded")
     else:
         spelled = ", ".join(f'"{entry}"' for entry in stack)
+        year = str(datetime.datetime.now(tz=datetime.UTC).year)
+        author_name = author or _git_config("user.name") or f"{name} authors"
+        author_email = email or _git_config("user.email")
+        person = f"{{ name = {toml_string(author_name)}"
+        if author_email:
+            person += f", email = {toml_string(author_email)}"
+        person += " }"
         lines = [
             "[workspace]",
+            f"name = {toml_string(name)}",
+            "description = "
+            + toml_string(description or f"The {name} monorepo (virtual root)."),
+            f"namespace = {toml_string(namespace or name.replace('-', '_'))}",
+            f"authors = [{person}]",
+            f'copyright-year = "{year}"',
             f"extensions = [{spelled}]",
         ]
         if templates:
@@ -236,40 +249,30 @@ def new_project(
         contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("  workshop.toml: seeded")
 
-    if (root / ".copier-answers.yml").is_file():
+    if (root / "tasks.py").is_file():
         print("  render: already born")
     else:
+        from livery.workshop._identity import project_facts
         from livery.workshop._templates import (
-            read_answers,
             render,
             render_injections,
             resolve_source,
         )
 
         source, ref = resolve_source(root)
-        year = str(datetime.datetime.now(tz=datetime.UTC).year)
-        answers = {
-            "kind": "project",
-            "project_name": name,
-            "project_description": description
-            or f"The {name} monorepo (virtual root).",
-            "author_name": author or _git_config("user.name") or f"{name} authors",
-            "author_email": email or _git_config("user.email"),
-            "copyright_year": year,
-            "namespace_package": namespace or name.replace("-", "_"),
-            "packages": [],
-        }
+        answers = project_facts(root)
         render(
             source,
             root,
             {**answers, **render_injections(root, answers)},
             ref=ref,
         )
-        # The receipt's source line follows the contract, display-safe.
-        stored = read_answers(root / ".copier-answers.yml")
-        from livery.workshop._templates import _write_root_answers
+        if ref:
+            # A remote source's next update merges from the reference
+            # this birth rendered at.
+            from livery.workshop._templates import record_templates_ref
 
-        _write_root_answers(root, stored)
+            record_templates_ref(root, ref)
         print("  render: born")
 
     # The project file is composed from the answers, and the lock below

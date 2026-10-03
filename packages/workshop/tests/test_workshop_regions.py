@@ -90,10 +90,11 @@ def test_regions_are_read_with_their_lines_and_content(tmp_path: Path) -> None:
 
 def test_this_workspace_renders_its_own_regions_back(tmp_path: Path) -> None:
     """The committed regions are the render's input, so the render keeps them."""
-    from livery.workshop._templates import read_answers, render_injections
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
-    answers = read_answers(root / ".copier-answers.yml")
+    answers = project_facts(root)
     regions = render_injections(root, answers)["regions"]
     assert set(regions) >= {"tasks.py"}
     # The three execution environments this repository declares live in

@@ -2,6 +2,13 @@
 # nothing else is authoritative about workspace shape.
 
 [workspace]
+# The workspace's identity: what its project file, its README and
+# its licence name it by, and what a new member's name derives from.
+name = "livery"
+description = "The livery ecosystem monorepo (virtual root)."
+namespace = "livery"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+copyright-year = "2026"
 # The extensions, in precedence order, each by the name its
 # distribution declares in the workshop.extensions entry point group.
 # Discovery is this list and nothing else: an extension not named here

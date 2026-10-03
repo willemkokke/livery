@@ -3,6 +3,8 @@
 
 kind = "python"
 name = "livery-workshop"
+description = "The livery workshop, a footman plugin serving the whole dev loop."
+dev-extras = ["dev"]
 
 [[depends]]
 path = "packages/toolroom"

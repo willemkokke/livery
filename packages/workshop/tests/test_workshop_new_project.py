@@ -260,10 +260,10 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
     assert '"acme_tools.brand" = "acme_tools.brand._tasks"' in pyproject
-    # The roster carries the member; the home's dev group derives it.
+    # The member's contract names it; the home's dev group derives it.
     # The convention folds dots to dashes; the namespace keeps its
     # own spelling (acme_tools.brand is acme_tools-brand).
-    assert "acme_tools-brand" in (root / ".copier-answers.yml").read_text()
+    assert '"acme_tools-brand' in (root / "pyproject.toml").read_text()
     out = capsys.readouterr().out
     assert "self-hosted, last in the stack" in out
     # The second run walks past the scaffold.

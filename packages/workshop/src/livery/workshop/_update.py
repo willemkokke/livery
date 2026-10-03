@@ -10,6 +10,7 @@ commits, and submits lives beside this module.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -93,8 +94,9 @@ def refresh_rendered(root: Path) -> list[str]:
     repository by default, a fork if the contract says so) is pulled
     by ``copier update`` at the resolved artifact tag, so an
     instance moves to exactly the templates its workshop shipped
-    with. The contract's source is written into the answers file
-    first, because that is where copier reads it.
+    with. copier reads its source and its answers from an answers
+    file, so one is written from the contract for the run and removed
+    after it; the contract is the record.
     """
     from livery.workshop._templates import (
         apply_project,
@@ -105,21 +107,14 @@ def refresh_rendered(root: Path) -> list[str]:
 
     if local_template_dir(root) is not None:
         return apply_project(root)
-    # The stored path is display-safe; a credentialled clone of a
-    # private source is git's credential machinery's job, never a
-    # committed byte's.
-    notes = _align_answers_source(root, redacted_source(template_source(root)))
-    from livery.workshop._templates import (
-        read_answers,
-        render_injections,
-        template_ref,
-    )
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render_injections, template_ref
 
-    # The injected values ride as render data, never answers: the
-    # runner's name belongs to the process, the floor and the extensions
-    # to the contract, so rebranding or re-layering an instance is
-    # exactly this run under the new contract.
-    answers = read_answers(root / ".copier-answers.yml")
+    # The injected values ride as render data: the runner's name belongs
+    # to the process, the floor and the extensions to the contract, so
+    # rebranding or re-layering an instance is exactly this run under the
+    # new contract.
+    answers = project_facts(root)
     # A data file rather than --data pairs: the regions, the slots and
     # the fragments are tables of multi-line text, which no command
     # line spells safely.
@@ -130,6 +125,25 @@ def refresh_rendered(root: Path) -> list[str]:
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
         yaml.safe_dump(render_injections(root, answers), handle)
         data_file = handle.name
+    # The display-safe source: a credentialled clone of a private source
+    # is git's credential machinery's job, never a byte on disk. The
+    # file lives in the git directory, where it is never part of the
+    # working tree: copier refuses a destination with untracked changes.
+    git_dir = Path(
+        tools.git.opts(cwd=root, recorded=False)(
+            "rev-parse", "--absolute-git-dir"
+        ).stdout.strip()
+    )
+    receipt = git_dir / "workshop-copier-answers.yml"
+    from livery.workshop._templates import record_templates_ref, templates_ref
+
+    previous = templates_ref(root)
+    receipt.write_text(
+        (f"_commit: {previous}\n" if previous else "")
+        + f"_src_path: {redacted_source(template_source(root))}\n"
+        + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
     try:
         result = tools.copier.opts(cwd=root)(
             "update",
@@ -138,14 +152,18 @@ def refresh_rendered(root: Path) -> list[str]:
             "--skip-answered",
             "--data-file",
             data_file,
+            "--answers-file",
+            os.path.relpath(receipt, root),
             "--vcs-ref",
             template_ref(root),
             str(root),
         )
     finally:
         Path(data_file).unlink(missing_ok=True)
+        receipt.unlink(missing_ok=True)
     if result.code != 0:
         fail(f"copier update exited {result.code}:\n{result.stdout}{result.stderr}")
+    record_templates_ref(root, template_ref(root))
     from livery.workshop._shipped_files import deliver
     from livery.workshop._templates import apply_generated
 
@@ -153,26 +171,4 @@ def refresh_rendered(root: Path) -> list[str]:
     # the template copier just updated from.
     composed = [line.strip() for line in deliver(root)]
     generated = apply_generated(root)
-    return [*notes, "copier update ran; review the working tree", *composed, *generated]
-
-
-def _align_answers_source(root: Path, source: str) -> list[str]:
-    """Make the answers' ``_src_path`` follow the contract; what changed.
-
-    ``copier update`` reads its source from the answers file, so the
-    contract's declared source (a fork, say) must be written there
-    first or the update would quietly pull from the old place.
-    """
-    answers = root / ".copier-answers.yml"
-    if not answers.is_file():
-        return []
-    text = answers.read_text("utf-8")
-    # A function, not a template string: a Windows path's backslashes
-    # would read as escapes in a replacement template.
-    aligned, count = re.subn(
-        r"^_src_path: .*$", lambda _m: f"_src_path: {source}", text, count=1, flags=re.M
-    )
-    if count and aligned != text:
-        answers.write_text(aligned, encoding="utf-8")
-        return [f"answers _src_path now follows the contract: {source}"]
-    return []
+    return ["copier update ran; review the working tree", *composed, *generated]
