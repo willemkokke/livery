@@ -18,7 +18,7 @@ from typing import Any, cast
 import pytest
 
 from livery.footman.api import Failed
-from livery.forge.api import ForgeError, StateFilter
+from livery.forge.api import ForgeError, Repository, Run, StateFilter
 from livery.forge.testing import FakeForge, Outcome
 from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, status_flow
 from livery.workshop._git_ops import GitOps
@@ -947,6 +947,45 @@ def test_rerun_leaves_a_release_wave_to_the_train_off_main(
     rerun_flow(repo, git)
     (wave,) = [run for run in repo.checks.runs() if run.workflow == "release.yml"]
     assert wave.status != "completed"
+
+
+def test_rerun_off_main_leaves_mains_red_runs_to_main(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A red nightly on a commit main already has is main's verdict: a
+    # branch's rerun names it and re-runs only the branch's own red
+    # run. From main, the nightly re-runs.
+    fake, git = rig
+    _git(git.root, "checkout", "main")
+    main_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "main", sha=main_sha)
+    fake.settle(OWNER, NAME, main_sha)
+    repo = _repo(fake)
+    cast(Any, repo.checks).dispatch("nightly.yml", ref="main", outcome="failure")
+    fake.settle(OWNER, NAME, main_sha)
+    _git(git.root, "checkout", "-b", "feat/later")
+    (git.root / "later.txt").write_text("later\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "feat: later")
+    branch_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "feat/later", sha=branch_sha, outcome="failure")
+    fake.settle(OWNER, NAME, branch_sha)
+    rerun_flow(repo, git)
+    out = capsys.readouterr().out
+    assert (
+        f"nightly.yml (run {_run_of(repo, 'nightly.yml').id}) failed on"
+        f" {main_sha[:10]}, which main already has: it is main's verdict, so"
+        " re-run it from main"
+    ) in out
+    assert _run_of(repo, "nightly.yml").status == "completed"
+    assert "re-running ci.yml" in out
+    _git(git.root, "checkout", "main")
+    rerun_flow(repo, git)
+    assert _run_of(repo, "nightly.yml").status != "completed"
+
+
+def _run_of(repo: Repository, workflow: str) -> Run:
+    return next(run for run in repo.checks.runs() if run.workflow == workflow)
 
 
 def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
