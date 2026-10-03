@@ -579,6 +579,50 @@ def test_the_successor_adopts_the_box_it_was_handed(tmp_path, monkeypatch):
     assert predecessor["ts"] == 0.0 < own["ts"]
 
 
+def test_an_inherited_anchor_is_taken_only_from_the_same_run_clock(monkeypatch):
+    from livery.footman import context
+
+    own = (1000.0, 50.0)
+    # A garbled entry, and a pairing from another clock domain, are refused.
+    monkeypatch.setenv(context.ANCHOR_ENV, "not,a pair")
+    assert context._inherited_anchor(own) is None
+    monkeypatch.setenv(context.ANCHOR_ENV, "999.0,40.0")
+    assert context._inherited_anchor(own) is None  # maps 50 to 1009: 9 s off
+    # The same run clock, the wall stepped 30 ms since: the parent's pairing wins.
+    monkeypatch.setenv(context.ANCHOR_ENV, "949.97,0.0")
+    assert context._inherited_anchor(own) == (949.97, 0.0)
+    monkeypatch.delenv(context.ANCHOR_ENV)
+    assert context._inherited_anchor(own) is None
+
+
+def test_a_child_whose_wall_clock_stepped_still_nests_in_its_parent(
+    tmp_path, monkeypatch
+):
+    """A virtual machine steps its wall clock; the child maps through the parent's."""
+    monkeypatch.chdir(tmp_path)
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    # Every spawned child sees the wall clock 50 ms ahead of the parent's.
+    (shim / "sitecustomize.py").write_text(
+        "import time\n_real = time.time\ntime.time = lambda: _real() + 0.05\n"
+    )
+    monkeypatch.setenv(
+        "PYTHONPATH",
+        os.pathsep.join(filter(None, [str(shim), os.environ.get("PYTHONPATH")])),
+    )
+    src = tmp_path / "tasks.py"
+    src.write_text(CHILD_TASKS)
+    result = Runner().invoke("--profile outer", tasks=src)
+    assert result.ok, result.stderr
+    tasks = {
+        e["name"]: e
+        for e in _trace(tmp_path / "fm-profile.json")
+        if e.get("cat") == "task"
+    }
+    outer, inner = tasks["outer"], tasks["inner"]
+    assert inner["ts"] + inner["dur"] <= outer["ts"] + outer["dur"]
+
+
 def test_a_profiled_parent_gets_the_inside_of_the_fm_it_spawned(tmp_path, monkeypatch):
     """The point of the phase: a verb that spawns a verb shows both."""
     monkeypatch.chdir(tmp_path)

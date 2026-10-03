@@ -809,13 +809,46 @@ def _sample_anchor(tries: int = 8) -> tuple[float, float]:
     return best[1], best[2]
 
 
-_WALL_ANCHOR: tuple[float, float] = _sample_anchor()
+ANCHOR_ENV = "FM_PROFILE_ANCHOR"
+"""The environment entry a profiled run hands its children: its own anchor,
+as `<wall>,<run clock>`."""
+
+_INHERITED_SLACK = 1.0
+"""How far, in seconds, an inherited anchor may disagree with this
+process's own pairing and still share its run clock."""
+
+
+def _inherited_anchor(own: tuple[float, float]) -> tuple[float, float] | None:
+    """The anchor a parent handed down, when it shares this process's run clock.
+
+    `perf_counter` reads one clock for every process on a machine
+    (`mach_absolute_time`, `CLOCK_MONOTONIC`, QPC), so a child that maps
+    through its parent's pairing lands beside the parent exactly. Its own
+    pairing would not: the wall clock is stepped by time synchronisation,
+    on a virtual machine by tens of milliseconds, and a step between the
+    two processes' samples shifts the child's whole timeline. A child in
+    another clock domain (a container on another kernel) disagrees with the
+    handed pairing by far more than a second, and keeps its own.
+    """
+    try:
+        wall, clock = (float(part) for part in os.environ[ANCHOR_ENV].split(","))
+    except (KeyError, ValueError):
+        return None
+    own_wall, own_clock = own
+    if abs(wall + (own_clock - clock) - own_wall) > _INHERITED_SLACK:
+        return None
+    return wall, clock
+
+
+_OWN_ANCHOR = _sample_anchor()
+_WALL_ANCHOR: tuple[float, float] = _inherited_anchor(_OWN_ANCHOR) or _OWN_ANCHOR
 """One pairing of both clocks, so a wall-clock moment maps onto the run
 clock every record in this module keeps: a retroactive
 `Stream.section(start=…, end=…)` window lands beside spans that were stamped
 live, and one process's timeline lands beside another's. Module-level on
-purpose — `perf_counter`'s origin is arbitrary but process-wide, so one
-anchor serves every run in the process."""
+purpose: `perf_counter` reads one clock for the whole machine, so one
+anchor serves every run in the process, and a profiled child takes its
+parent's ([livery.footman.context.ANCHOR_ENV][])."""
 
 
 @dataclass(frozen=True)
