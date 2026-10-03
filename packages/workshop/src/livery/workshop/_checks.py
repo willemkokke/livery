@@ -1364,6 +1364,16 @@ def _register_builtin() -> None:
 
         _quality.template_check()
 
+    def render_fix(ctx: GateContext) -> None:
+        # A rewriter is not judged again under --fix, so the fix judges
+        # what it leaves, as the provenance fix does.
+        from livery.workshop import _quality
+        from livery.workshop._shipped_files import deliver, relocate
+
+        for line in relocate(ctx.root) + deliver(ctx.root):
+            print(line)
+        _quality.template_check()
+
     def provenance_run(ctx: GateContext) -> None:
         from livery.workshop import _provenance
 
@@ -1634,7 +1644,7 @@ def _register_builtin() -> None:
             tools=("pytest",),
             claims=(Claim("example", suffixes=py),),
         ),
-        CheckRecord("check", "template", render_run, in_scoped=False),
+        CheckRecord("check", "template", render_run, fix=render_fix, in_scoped=False),
         CheckRecord(
             "check",
             "provenance",

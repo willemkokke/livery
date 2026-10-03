@@ -36,8 +36,6 @@ from livery.workshop._packages import Package
 PROJECT_RENDERED = (
     "pyproject.toml",
     "tasks.py",
-    ".vscode/settings.json",
-    ".vscode/extensions.json",
 )
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
@@ -615,12 +613,21 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
 
     Only the workspace's own packages are linted: an installed
     extension's content is its home repository's to keep. Files without
-    a comment syntax are exempt; explain still answers for them.
+    a comment syntax are exempt, and so are the fragment engine's
+    templates under `content/root/` and `content/package/`, whose
+    composed files carry headers of their own; explain still answers
+    for them.
     """
+    from livery.workshop._shipped_files import PACKAGE_CONTENT, ROOT_CONTENT
+
     problems = []
     for extension, content in _content_trees(root):
         for path in sorted(content.rglob("*")):
             if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            # A template the fragment engine composes into a workspace file
+            # carries that file's own header; this one would land in it.
+            if path.relative_to(content).parts[0] in (ROOT_CONTENT, PACKAGE_CONTENT):
                 continue
             style = comment_style(path)
             if not style:

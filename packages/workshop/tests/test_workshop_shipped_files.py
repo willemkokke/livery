@@ -39,7 +39,12 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    assert deliver(root) == ["  wrote .gitattributes", "  wrote .gitignore"]
+    assert deliver(root) == [
+        "  wrote .gitattributes",
+        "  wrote .gitignore",
+        "  wrote .vscode/extensions.json",
+        "  wrote .vscode/settings.json",
+    ]
     ignored = (root / ".gitignore").read_text()
     assert "site/" in ignored and ignored.index("dist/") < ignored.index("site/")
     edited = ignored.replace(
@@ -135,3 +140,73 @@ def test_lfs_on_requires_the_tool_and_the_checkout_fetches_the_objects(
     (root / "workshop.toml").write_text('[workspace]\nextensions = []\nlfs = "yes"\n')
     with pytest.raises(Failed, match=r"workspace.lfs"):
         requirements(root)
+
+
+def test_two_contributions_to_one_key_refuse_naming_both_owners(tmp_path: Path) -> None:
+    template = Fragment(
+        "livery.workshop", "t", "s.json", "{\n{{ contributed_entries }}}\n"
+    )
+    one = Fragment("livery.workshop", "a", "s.json", '{"k": 1}', contributes=True)
+    two = Fragment("docs", "b", "s.json", '{"k": 2}', contributes=True)
+    with pytest.raises(Failed, match=r"k is set by both livery.workshop:a and docs:b"):
+        engine.plan(tmp_path, (template, one, two), ("livery.workshop", "docs"), {})
+    same = Fragment("docs", "b", "s.json", '{"k": 1, "j": [2]}', contributes=True)
+    (out,) = engine.plan(
+        tmp_path, (template, one, same), ("livery.workshop", "docs"), {}
+    )
+    assert out.body.decode() == '{\n  "k": 1,\n  "j": [\n    2\n  ],\n}\n'
+
+
+def test_check_fix_moves_what_vscode_added_into_the_region(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._shipped_files import relocate
+
+    root = _workspace(tmp_path / "ws", "[]")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    deliver(root)
+    settings = root / ".vscode/settings.json"
+    rendered = settings.read_text()
+    # The refusal first: a setting the render owns, changed by hand.
+    owned = rendered.replace('"charliermarsh.ruff"', '"ms-python.black-formatter"')
+    settings.write_text(owned)
+    with pytest.raises(Failed) as refused:
+        relocate(root)
+    assert "[python]: the render sets" in str(refused.value)
+    assert '"ms-python.black-formatter"' in str(refused.value)
+    # VS Code's UI adds a key before the closing brace, and a recommendation
+    # inside the list; both move into the regions and the files match.
+    settings.write_text(rendered.replace("\n}\n", ',\n  "editor.rulers": [88]\n}\n'))
+    extensions = root / ".vscode/extensions.json"
+    extensions.write_text(
+        extensions.read_text().replace(
+            '"recommendations": [\n',
+            '"recommendations": [\n    "ms-vscode.cpptools",\n',
+        )
+    )
+    assert relocate(root) == [
+        "  .vscode/extensions.json: moved ms-vscode.cpptools into the region",
+        "  .vscode/settings.json: moved editor.rulers into the region",
+    ]
+    assert shipped_drift(root) == []
+    assert '  "editor.rulers": [\n    88\n  ],\n  // -- workshop: end settings --' in (
+        settings.read_text()
+    )
+    assert deliver(root) == []
+    assert relocate(root) == []
+
+
+def test_the_header_lint_leaves_the_engines_templates_alone(tmp_path: Path) -> None:
+    """A composed file's template carries that file's header; the lint adds none."""
+    from livery.workshop._provenance import content_lint
+
+    content = tmp_path / "packages/thing/src/livery/thing/content"
+    (content / "root").mkdir(parents=True)
+    (content / "root/.gitignore").write_text("dist/\n")
+    (content / "fragments").mkdir()
+    (content / "fragments/voice.md").write_text("# Voice\n")
+    assert content_lint(tmp_path) == [
+        "packages/thing/src/livery/thing/content/fragments/voice.md: missing its header"
+    ]

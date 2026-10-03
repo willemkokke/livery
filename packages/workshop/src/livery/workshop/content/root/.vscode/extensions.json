@@ -1,16 +1,15 @@
 {
-  // Composed by `fm sync` from the base's template and what the
+  // Composed by `{{ prog }} sync` from the base's template and what the
   // listed extensions and the registered checks contribute; the gate
   // keeps it matching. Edit inside the region below, which is the
-  // repository's own: `fm check --fix` moves a setting added
+  // repository's own: `{{ prog }} check --fix` moves a setting added
   // anywhere else, VS Code's own included, into it.
   //
   // The extensions the registered checks carry a marketplace id for,
   // and nothing else: a check without a verified id recommends none.
   "recommendations": [
-    "charliermarsh.ruff",
-    "detachedfork.basedpyright",
-    // The repository's own recommendations, each line ending with a comma.
+{% for extension in contributed.get("recommendations", []) %}    "{{ extension }}",
+{% endfor %}    // The repository's own recommendations, each line ending with a comma.
     // -- workshop: region recommendations, yours to edit; the render keeps it --
     // -- workshop: end recommendations --
   ]

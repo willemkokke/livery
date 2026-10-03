@@ -368,7 +368,5 @@ HeaderFilterRegex: "^$"
 
 #: The editor: ruff formats python in the editor as in the gate.
 RUFF_SETTINGS = """\
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff"
-  },
+{"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}}
 """

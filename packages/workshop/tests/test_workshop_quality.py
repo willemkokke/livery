@@ -424,10 +424,11 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     assert ran[:opened] == [
         "format.ruff",
         "lint.ruff",
+        "template.check",
         "provenance.check",
         "layering.graph",
     ]
-    assert sorted(ran[opened + 1 : -1]) == ["template.check", *PYTHON_JUDGES]
+    assert sorted(ran[opened + 1 : -1]) == sorted(PYTHON_JUDGES)
     assert ran[-1] == ">parallel"
 
 

@@ -1,4 +1,6 @@
 {
-  ".gitattributes": "630c331bf4002288075eacd2d652633c4499d5221f72bb6fe9f029bb6ece41e0",
-  ".gitignore": "508377d64940cba4dbc1120b121f3620fb6dbbe614b049323929575ed64f4a65"
+  ".gitattributes": "777778cbdb9c481540de884a4820c5dbe8ff65dad89d3b07385d1eeb702e0f4d",
+  ".gitignore": "33c511d98f9f94d8b036d3716c82e536f868eb7f3f0d133cff63fdfbf04ee9e4",
+  ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
+  ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111"
 }
