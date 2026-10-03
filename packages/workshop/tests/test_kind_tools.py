@@ -1309,6 +1309,37 @@ def test_a_satisfying_host_copy_serves_and_a_fresh_receipt_is_reused_without_a_p
     assert probed.receipt is not None and probed.receipt.stamp["size"] == "19"
 
 
+def test_a_missing_system_tool_refuses_unless_it_is_optional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A required host tool the machine lacks refuses; an optional one is named."""
+    from livery.toolroom.store.api import StoreError
+
+    missing = (
+        "dock: not on PATH; a system-check tool is the machine's own and the"
+        " store installs nothing for it"
+    )
+    dock = Record("dock", kind="system-check", deltas=_read("1.0.0"))
+    # The refusal first: a required tool absent from the host stops a
+    # strict materialisation, and a lenient one reports it.
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["dock"]\n')
+    _records(root, dock)
+    _tools.write_lock(root)
+    _Probing.answers = {"dock": StoreError(missing)}
+    _Probing.calls = []
+    monkeypatch.setattr("livery.toolroom.store.api.Store", _Probing)
+    with pytest.raises(Failed, match="dock: not on PATH"):
+        _tools.materialise(root, ("dock",))
+    (made,) = _tools.materialise(root, ("dock",), strict=False)
+    assert made.receipt is None and made.failure == missing
+    # Optional: the same absence is named and never refused, strict or not.
+    _contract(root, 'requires = ["dock?"]\n')
+    lock = _tools.write_lock(root)
+    assert lock.tools["dock"].optional
+    (made,) = _tools.materialise(root, ("dock",))
+    assert made.receipt is None and made.failure == missing
+
+
 def test_the_sync_names_the_host_served_tools_and_the_copies_passed_over(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
