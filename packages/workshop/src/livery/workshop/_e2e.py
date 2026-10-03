@@ -40,10 +40,6 @@ E2E_REPO = "ci-e2e-loop"
 #: holding tests/ is three parents up.
 _WORKSHOP_TESTS = Path(__file__).resolve().parents[3] / "tests"
 
-#: The template source the loop renders from: this package's own
-#: tree, so the loop tests the templates being edited.
-_TEMPLATES = Path(__file__).parent / "templates"
-
 #: The member the loop eats the dev wheels of; its dependency closure
 #: rides along, read from the contracts by `dev_members`.
 DEV_MEMBER = "packages/workshop"
@@ -806,14 +802,13 @@ def _unpushed_commits(root: Path) -> list[str]:
 def _birth(kind: str, url: str) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
-    ``fm new.project`` owns the whole half: render, git, repository,
+    ``fm new.project`` owns the whole half: seeds, git, repository,
     protection, and the setup pull request. It runs as a child of the
     pass, this interpreter's own footman with the pass's environment:
     a task run in-process starts from the run's pinned environment,
     and the pass's own settings, its unsigned commits, would never
     reach the birth's git. Re-running resumes, so this is the recovery
-    procedure too. The templates are this package's own tree: the
-    loop tests the source being edited.
+    procedure too.
     """
     import sys
 
@@ -830,7 +825,6 @@ def _birth(kind: str, url: str) -> Path:
             f"--forge={kind}",
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
-            f"--templates={_TEMPLATES}",
             "--description=The workshop's local CI loop. Scratch; recreated freely.",
         ],
         cwd=home,
@@ -863,33 +857,6 @@ def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     )
     if result.code != 0:
         fail(f"git remote set-url exited {result.code}")
-
-
-_TEMPLATES_LINE = re.compile(r'^templates = ".*"$', re.MULTILINE)
-
-
-def _point_templates(contract: str, templates: Path) -> str:
-    """The contract text with its template source set to *templates*.
-
-    Birth seeds the source once, from the worktree that births; every
-    later pass runs from whichever worktree invokes it, and a render
-    from the birthing worktree's templates would test that tree's
-    files under this tree's wheels. Refuses when the contract names
-    no source at all, because birth always seeds one.
-    """
-    match = _TEMPLATES_LINE.search(contract)
-    if match is None:
-        fail(
-            "the loop's contract names no template source; birth seeds"
-            " one, so this workspace was not born by the loop"
-        )
-    from livery.workshop._contract import toml_string
-
-    return (
-        contract[: match.start()]
-        + f"templates = {toml_string(templates.as_posix())}"
-        + contract[match.end() :]
-    )
 
 
 def _lock_pins(root: Path, pins: dict[str, str]) -> None:
@@ -1045,7 +1012,6 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
             + 'task = "release.replay"\n'
             + 'args = ["loop-echo", "--python={python}"]\n'
         )
-    contract_text = _point_templates(contract_text, _TEMPLATES)
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
     pyproject = root / "pyproject.toml"
@@ -2476,14 +2442,6 @@ def _born(pass_: Pass) -> None:
         # stranger's history and refuses.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
-        # Birth's resume renders from the contract's template source
-        # before the wiring re-points it, and the source a previous
-        # pass named may be a worktree that no longer exists; this
-        # pass's templates are the source, from here.
-        contract = root / "workshop.toml"
-        contract.write_text(
-            _point_templates(contract.read_text("utf-8"), _TEMPLATES), "utf-8"
-        )
     root = _birth(forge, pass_.url)
     _authenticate_remote(root, lane_token, forge)
     provision(forge)

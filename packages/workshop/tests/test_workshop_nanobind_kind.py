@@ -17,17 +17,14 @@ from livery.workshop._kinds import (
     is_python_kind,
     kind_for,
     kind_tools,
-    managed_files,
     template_chain,
 )
 from livery.workshop._packages import Package
-from livery.workshop._templates import render
-from workshop_composed import IDENTITY
+from workshop_composed import IDENTITY, seed_into
 
 _FAILURES = (BaseException,)
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _toolchain_gap() -> str:
@@ -75,14 +72,13 @@ needs_clang_format = pytest.mark.skipif(
 
 
 def _render_named(tmp_path: Path, package_name: str) -> Path:
-    """The nanobind template rendered for *package_name*, native configs composed."""
+    """The nanobind seeds written for *package_name*, native configs composed."""
     answers = project_facts(ROOT)
     destination = tmp_path / "packages" / "native"
-    render(
-        str(TEMPLATES),
+    seed_into(
         destination,
+        "package-python-nanobind",
         {
-            "kind": "package-python-nanobind",
             "package_name": package_name,
             "package_description": "A native extension.",
             "namespace_package": "acme",
@@ -138,25 +134,22 @@ def test_the_rendered_member_passes_its_own_format_checks_whatever_its_name(
 
 
 def _render_chain(tmp_path: Path) -> Package:
-    """A rendered python-nanobind package, parent then leaf."""
+    """A python-nanobind package's seeds, parent then leaf."""
     destination = tmp_path / "packages" / "ext"
     answers = project_facts(ROOT)
-    for kind in template_chain("package-python-nanobind"):
-        render(
-            str(TEMPLATES),
-            destination,
-            {
-                "kind": kind,
-                "package_dir": "ext",
-                "package_name": "acme-ext",
-                "package_description": "acme-ext: a compiled extension.",
-                "namespace_package": "acme",
-                "author_name": answers["author_name"],
-                "author_email": answers["author_email"],
-                "copyright_year": answers["copyright_year"],
-                "project_name": "acme",
-            },
-        )
+    seed_into(
+        destination,
+        "package-python-nanobind",
+        {
+            "package_name": "acme-ext",
+            "package_description": "acme-ext: a compiled extension.",
+            "namespace_package": "acme",
+            "author_name": answers["author_name"],
+            "author_email": answers["author_email"],
+            "copyright_year": answers["copyright_year"],
+            "project_name": "acme",
+        },
+    )
     return _package(destination, "acme-ext")
 
 
@@ -188,7 +181,6 @@ def test_the_kind_chains_from_python() -> None:
     # the package owns, not rendered-managed ones.
     # The native configs are rendered from the check records, so the kind
     # manages them; the changelog config is the base's, for every package.
-    assert managed_files("python-nanobind") == (".clang-format", ".clang-tidy")
     # The chain's union of what operates the kinds: the base's and
     # python's beneath the kind's own build tools; the checkers, the
     # formatter, the test runner and the two clang tools ride their
@@ -220,10 +212,10 @@ def test_the_kind_chains_from_python() -> None:
     assert record.host_tools == ("cc", "c++")
 
 
-# The chain render: the phase 1 deferred acceptance closes here.
+# The chain's seeds: the parent's first, the leaf's over them.
 
 
-def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
+def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
     package = _render_chain(tmp_path)
     directory = package.directory
     # The parent's files survive beneath the leaf's.
@@ -243,13 +235,11 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
     assert "native_hello" in init
 
 
-def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
+def test_a_chained_member_gets_the_base_files(tmp_path: Path) -> None:
     from livery.workshop._templates import apply_project
 
-    shutil.copytree(TEMPLATES, tmp_path / "templates")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n" + IDENTITY + "extensions = []\n"
-        'templates = "templates"\n'
         "\n"
         "[forge]\n"
         'kind = "github"\n'
@@ -279,11 +269,10 @@ def _render_library(tmp_path: Path) -> Package:
     """A rendered cpp-conan library beside the extension, named acme-geometry."""
     destination = tmp_path / "packages" / "geometry"
     answers = project_facts(ROOT)
-    render(
-        str(TEMPLATES),
+    seed_into(
         destination,
+        "package-cpp-conan",
         {
-            "kind": "package-cpp-conan",
             "package_name": "acme-geometry",
             "package_description": "acme-geometry: a native library.",
             "namespace_package": "acme",

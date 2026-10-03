@@ -38,24 +38,19 @@ dependencies = [
     # floor is the one that edge carries, since raising one is a
     # decision and the release's lowest-direct leg proves it.
     "livery-strongroom>=0.1.0",
-    # The template engine behind `fm template.check` and `fm
-    # new.package`; pyyaml reads the adopted answers files. The
-    # pyyaml floor is the oldest release whose wheels cover every
-    # Python this package supports: the release train's floor leg
-    # installs the floor itself, and 6.0.0's sdist no longer builds
-    # under a current Cython.
-    "copier>=9.18.2",
-    "pyyaml>=6.0.3",
     # The fragment engine's renderer: one compiled template per
     # fragment content, over the subset the engine declares.
     "minijinja>=2.24",
 ]
 
 [project.optional-dependencies]
-# What this package's own dev loop needs beyond its dependencies:
-# the stubs for its yaml reads, so mypy stays strict. The workspace's
-# dev group installs the member as `livery-workshop[dev]`.
-dev = ["types-pyyaml"]
+# What this package's own dev loop needs beyond its dependencies: its
+# tests parse the emitted CI files as YAML, with the stubs so mypy stays
+# strict. The pyyaml floor is the oldest release whose wheels cover
+# every Python this package supports; 6.0.0's sdist no longer builds
+# under a current Cython. The workspace's dev group installs the member
+# as `livery-workshop[dev]`.
+dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"

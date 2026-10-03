@@ -1,0 +1,52 @@
+# Seeded from the package-python-nanobind seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+[build-system]
+requires = ["scikit-build-core>=0.11", "nanobind>=2.7"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "{{ package_name }}"
+version = "0.0.0"
+description = "{{ package_description }}"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">={{ python_floor }}"
+authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+[project.urls]
+{%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}
+{%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] %}
+Repository = "{{ web_root }}/{{ forge_owner }}/{{ project_name }}"
+
+[tool.scikit-build]
+# The compiled module builds through CMake and lands inside the
+# package; the pure-python sources ride from src/ unchanged.
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["src/{{ namespace_package.split('.')[0] }}"]
+
+[tool.scikit-build.cmake.define]
+# The CMake dependency provider that resolves find_package through
+# conan: the store names the file in CMAKE_CONAN_PROVIDER when the
+# environment is entered, and CMake reads no environment variable of
+# its own for this.
+CMAKE_PROJECT_TOP_LEVEL_INCLUDES = { env = "CMAKE_CONAN_PROVIDER" }
+# What conan builds for the provider: a package the cache lacks, and a
+# workspace sibling registered editable, from its source at HEAD. A
+# release leg registers no editable, so there the second is a no-op.
+# Those builds use Ninja on every host, the store's generator, under
+# the compiler environment conan activates; a Visual Studio generator
+# would let MSBuild pick a platform apart from the compiler conan names.
+# The environment wins where it is set: the floor leg builds the same
+# package against the version the contract floors a sibling at, by
+# passing these arguments and a profile that replaces the sibling's
+# requirement with that version.
+CONAN_INSTALL_ARGS = { env = "CONAN_INSTALL_ARGS", default = "--build=missing;--build=editable;-c;tools.cmake.cmaketoolchain:generator=Ninja" }

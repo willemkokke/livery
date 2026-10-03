@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop._provenance import PROJECT_RENDERED, classify, emitted_paths
+from livery.workshop._provenance import classify, emitted_paths
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
+SEEDS = ROOT / "packages/workshop/src/livery/workshop/content/seeds"
 
 
 def _tracked() -> list[Path]:
@@ -45,7 +45,7 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
         "workshop.toml": "contract",
         "packages/forge/workshop.toml": "contract",
         ".workshop-rendered": "receipts",
-        "packages/forge/cliff.toml": "rendered",
+        "packages/forge/cliff.toml": "composed",
         "packages/forge/README.md": "yours",
         "uv.lock": "toolchain",
         "CLAUDE.md": "sync stub",
@@ -62,21 +62,15 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
         assert classify(ROOT, Path(path), emitted=emitted).channel == channel, path
 
 
-def test_the_rendered_list_matches_the_template_tree() -> None:
-    from livery.workshop._templates import PROJECT_SEEDS
+def test_the_seed_list_matches_the_project_seeds() -> None:
+    from livery.workshop._seeds import PROJECT_SEEDS
 
     names = set()
-    project = TEMPLATES / "project"
+    project = SEEDS / "project"
     for path in project.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(project).as_posix()
-        if relative.endswith(".jinja"):
-            relative = relative[: -len(".jinja")]
-        if "_copier_conf" in relative:
-            continue  # the answers file: receipts, its own header
-        names.add(relative)
-    assert names == set(PROJECT_RENDERED) | set(PROJECT_SEEDS)
+        if path.is_file():
+            names.add(path.relative_to(project).as_posix().removesuffix(".jinja"))
+    assert names == set(PROJECT_SEEDS)
 
 
 def test_a_precomputed_emission_renders_nothing(

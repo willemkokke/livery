@@ -1,0 +1,15 @@
+# Seeded from the package-extension seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+"""The workshop extension declaration of ``{{ import_path }}``, read without its tasks."""
+
+from __future__ import annotations
+
+#: The workshop extension API this declaration is written for.
+API_VERSION = 1
+
+#: Listed in ``[workspace] extensions``.
+LEVELS = ("workspace",)
+
+#: The footman plugin that carries this extension's verbs.
+PLUGIN = "{{ import_path }}"

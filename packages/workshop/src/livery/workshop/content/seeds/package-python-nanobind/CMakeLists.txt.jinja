@@ -1,0 +1,22 @@
+# Seeded from the package-python-nanobind seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project({{ project_slug }}_native LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(Python {{ python_floor }} COMPONENTS Interpreter Development.Module REQUIRED)
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_VARIABLE nanobind_ROOT OUTPUT_STRIP_TRAILING_WHITESPACE)
+find_package(nanobind CONFIG REQUIRED)
+# Resolved by conan through the CMake dependency provider that
+# pyproject.toml wires in from the environment's CMAKE_CONAN_PROVIDER;
+# conanfile.py is the recipe it installs.
+find_package(fmt REQUIRED)
+
+nanobind_add_module(_native src/{{ source_path }}/_native.cpp)
+target_link_libraries(_native PRIVATE fmt::fmt)
+install(TARGETS _native LIBRARY DESTINATION {{ source_path }})

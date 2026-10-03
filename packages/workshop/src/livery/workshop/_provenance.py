@@ -1,11 +1,9 @@
 """Provenance: which channel owns a file, and where to edit it.
 
 One classifier answers for any path; everything else serialises its
-answer. ``fm explain <path>`` prints it. The templates carry their
-own headers (parameterised, so ``copier update`` sees them as
-template lines, never local edits) and the emitters open every
-generated file with theirs, so the answer rides the file wherever
-comments are possible. Materialised copies are never injected:
+answer. ``fm explain <path>`` prints it. The fragment engine and the
+emitters open every file they write with a header, so the answer rides
+the file wherever comments are possible. Materialised copies are never injected:
 override detection depends on the copy staying byte-identical to
 its source, so those files, and comment-hostile ones, are explain's
 territory alone. Shipped extension content carries its header through
@@ -29,11 +27,6 @@ from livery.workshop._categories import (
 )
 from livery.workshop._extensions import stack_names, workspace_root
 from livery.workshop._packages import Package
-
-#: The project render's managed names, judged by the drift gate. The
-#: template tree is the truth; this list is the offline copy a wheel
-#: instance can answer from, pinned against the tree by test.
-PROJECT_RENDERED: tuple[str, ...] = ()
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
 #: A type absent from both tables cannot carry a header and is
@@ -169,8 +162,8 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
                 f" `{prog} sync` keeps and names",
             )
         # Everything else under .workshop is this checkout's own: the
-        # tool receipts, the stub receipt, the linked binaries, an extension
-        # home's composed templates. None of them has an edit path, and
+        # tool receipts, the stub receipt, the linked binaries. None of
+        # them has an edit path, and
         # calling them extension fragments was a lie the directory's older
         # shape made easy to tell.
         return Provenance(
@@ -297,11 +290,16 @@ def _rule_composed(
     from livery.workshop._shipped_files import shipped
 
     fragments, _order = shipped(root)
+    # A package's file is composed from the `package/` fragments.
+    inner = (
+        PACKAGE_PREFIX + Path(*relative.parts[2:]).as_posix()
+        if len(relative.parts) > 2 and relative.parts[0] == "packages"
+        else ""
+    )
     owners = [
         fragment.owner
         for fragment in fragments
-        if not fragment.target.startswith(PACKAGE_PREFIX)
-        and fragment.target == relative.as_posix()
+        if fragment.target in (relative.as_posix(), inner)
     ]
     if not owners:
         return None
@@ -313,34 +311,19 @@ def _rule_composed(
     )
 
 
-def _rule_rendered(
-    root: Path, relative: Path, emitted: frozenset[str] | None
-) -> Provenance | None:
-    del emitted
-    from livery.workshop._templates import template_source
-
-    if relative.as_posix() not in PROJECT_RENDERED:
-        return None
-    prog = footman.prog()
-    return Provenance(
-        "rendered",
-        f"the template channel ({template_source(root)}, project kind)",
-        f"edit the template source and run `{prog} template.apply`",
-    )
-
-
 def _rule_seed(
     root: Path, relative: Path, emitted: frozenset[str] | None
 ) -> Provenance | None:
     del emitted
-    from livery.workshop._templates import PROJECT_SEEDS, template_source
+    del root
+    from livery.workshop._seeds import PROJECT_SEEDS
 
     if relative.as_posix() not in PROJECT_SEEDS:
         return None
     return Provenance(
         "seed",
-        f"seeded at birth from the template channel ({template_source(root)})",
-        "yours: edit directly; the template never rewrites it",
+        "written at birth from the extensions' seeds",
+        "yours: edit directly; nothing rewrites it",
     )
 
 
@@ -403,19 +386,12 @@ def _rule_member(
 ) -> Provenance | None:
     """A package's own files: its changelog config, its receipts, its content."""
     del emitted
-    from livery.workshop._templates import template_source
 
     if len(relative.parts) <= 2 or relative.parts[0] != "packages":
         return None
     prog = footman.prog()
     member = Path(*relative.parts[:2])
     rest = Path(*relative.parts[2:]).as_posix()
-    if rest == "cliff.toml":
-        return Provenance(
-            "rendered",
-            f"the template channel ({template_source(root)}, package-python kind)",
-            f"edit the template source and run `{prog} template.apply`",
-        )
     if rest == ".workshop-rendered":
         return Provenance(
             "receipts",
@@ -450,7 +426,6 @@ register_channels(
         ChannelRule("materialised", _rule_materialised, 100, "livery.workshop"),
         ChannelRule("generated", _rule_generated, 90, "livery.workshop"),
         ChannelRule("composed", _rule_composed, 85, "livery.workshop"),
-        ChannelRule("rendered", _rule_rendered, 80, "livery.workshop"),
         ChannelRule("seed", _rule_seed, 70, "livery.workshop"),
         ChannelRule("receipts", _rule_receipts, 60, "livery.workshop"),
         ChannelRule("contract", _rule_contract, 50, "livery.workshop"),
@@ -560,22 +535,14 @@ def _root_unit(root: Path) -> Package:
 def owned_lines(root: Path, relative: Path) -> list[str]:
     """What a managed file carries that the repository owns, one line each.
 
-    A marked region is named with the lines its markers enclose; a
-    tail file names the line the render's bytes end on. A file with
-    neither says nothing.
+    A marked region is named with the lines its markers enclose. A file
+    without one says nothing.
     """
     from livery.workshop import _regions
-    from livery.workshop._templates import TAIL_FILES
 
-    posix = relative.as_posix()
     path = root / relative
     if not path.is_file():
         return []
-    if posix in TAIL_FILES:
-        return [
-            "yours: the render owns this file's first lines, as many as it"
-            " renders; your own lines follow them"
-        ]
     text = path.read_text(encoding="utf-8", errors="replace")
     return [
         f"region {region.name}: lines {region.first} to {region.last}, yours to"
@@ -591,8 +558,8 @@ def _content_trees(root: Path) -> list[tuple[str, Path]]:
         for content in sorted(src.rglob("content")):
             if not content.is_dir():
                 continue
-            if "templates" in content.relative_to(src).parts:
-                continue  # a template kind's content seeds render later
+            if {"templates", "content"} & set(content.relative_to(src).parts[:-1]):
+                continue  # a seed's own content tree, written at a birth
             extension = ".".join(content.parent.relative_to(src).parts)
             trees.append((extension, content))
     return trees
@@ -605,9 +572,10 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
     extension's content is its home repository's to keep. Files without
     a comment syntax are exempt, and so are the fragment engine's
     templates under `content/root/` and `content/package/`, whose
-    composed files carry headers of their own; explain still answers
-    for them.
+    composed files carry headers of their own, and the seeds under
+    `content/seeds/`, which become the workspace's own files.
     """
+    from livery.workshop._seeds import SEEDS
     from livery.workshop._shipped_files import PACKAGE_CONTENT, ROOT_CONTENT
 
     problems = []
@@ -617,7 +585,11 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
                 continue
             # A template the fragment engine composes into a workspace file
             # carries that file's own header; this one would land in it.
-            if path.relative_to(content).parts[0] in (ROOT_CONTENT, PACKAGE_CONTENT):
+            if path.relative_to(content).parts[0] in (
+                ROOT_CONTENT,
+                PACKAGE_CONTENT,
+                SEEDS,
+            ):
                 continue
             style = comment_style(path)
             if not style:

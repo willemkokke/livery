@@ -7,8 +7,6 @@ nothing but time.
 
 from __future__ import annotations
 
-import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -16,26 +14,21 @@ import pytest
 # The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
-from livery.workshop._contract import toml_string
 from livery.workshop._identity import project_facts
 from livery.workshop._templates import (
     apply_project,
     project_drift,
-    render,
 )
-from workshop_composed import IDENTITY, compose_into
+from workshop_composed import IDENTITY, compose_into, seed_into
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _template_instance(tmp_path: Path) -> Path:
-    """A scratch workspace carrying the real template source and this identity."""
-    shutil.copytree(TEMPLATES, tmp_path / "templates")
+    """A scratch workspace with this repository's identity."""
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n" + IDENTITY + "extensions = []\n"
-        'templates = "templates"\n'
         "\n"
         "[forge]\n"
         'kind = "github"\n'
@@ -78,29 +71,7 @@ def _contract_root(
     return root
 
 
-def test_the_template_source_is_the_contracts_call(tmp_path: Path) -> None:
-    from livery.workshop._templates import (
-        DEFAULT_TEMPLATE_SOURCE,
-        local_template_dir,
-        template_source,
-    )
-
-    (tmp_path / "workshop.toml").write_text("[workspace]\n")
-    assert template_source(tmp_path) == DEFAULT_TEMPLATE_SOURCE
-    assert local_template_dir(tmp_path) is None  # remote: no local dir
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\ntemplates = "my-fork-checkout"\n'
-    )
-    assert local_template_dir(tmp_path) is None  # declared but absent
-    (tmp_path / "my-fork-checkout").mkdir()
-    assert local_template_dir(tmp_path) == tmp_path / "my-fork-checkout"
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\ntemplates = "git@example.com:me/fork.git"\n'
-    )
-    assert local_template_dir(tmp_path) is None
-
-
-def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
+def test_a_members_seeds_are_never_judged(tmp_path: Path) -> None:
     # The seeds must NOT be judged: a package writes its own README
     # and changelog the moment it is born, and reporting those as
     # drift would ask a living package to revert to its stub.
@@ -181,42 +152,6 @@ def test_the_cliff_remote_carries_the_api_prefix_gitlab_alone_needs(
     assert f'api_url = "{api_url}"' in body
 
 
-def test_a_render_is_made_once_per_input_and_again_after_an_edit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import time
-
-    import livery.toolroom.tools.api as toolroom
-    from livery.workshop._templates import render
-
-    template = tmp_path / "template"
-    template.mkdir()
-    (template / "copier.yml").write_text("name:\n  type: str\n  default: x\n")
-    (template / "{{ name }}.txt.jinja").write_text("hello {{ name }}\n")
-    render(template, tmp_path / "one", {"name": "a"})
-    assert (tmp_path / "one" / "a.txt").read_text() == "hello a\n"
-    # The same inputs again: a copy of the first render, no copier run.
-    real = toolroom.copier
-
-    def _never(*args: object, **kwargs: object) -> object:
-        raise AssertionError("copier ran for inputs already rendered")
-
-    monkeypatch.setattr(toolroom, "copier", _never)
-    render(template, tmp_path / "two", {"name": "a"})
-    assert (tmp_path / "two" / "a.txt").read_text() == "hello a\n"
-    # Other data renders; an edited template renders again, however
-    # recent the last render was.
-    with pytest.raises(AssertionError, match="copier ran"):
-        render(template, tmp_path / "three", {"name": "b"})
-    time.sleep(0.01)
-    (template / "{{ name }}.txt.jinja").write_text("hi {{ name }}\n")
-    with pytest.raises(AssertionError, match="copier ran"):
-        render(template, tmp_path / "four", {"name": "a"})
-    monkeypatch.setattr(toolroom, "copier", real)
-    render(template, tmp_path / "four", {"name": "a"})
-    assert (tmp_path / "four" / "a.txt").read_text() == "hi a\n"
-
-
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     root = _template_instance(tmp_path)
     changed = apply_project(root)
@@ -251,7 +186,7 @@ def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     answers = project_facts(ROOT)
     answers.update({"kind": "project", "forge_kind": forge_kind}, **extra)
     answers.update(extra)
-    render(TEMPLATES, destination, answers)
+    seed_into(destination, "project", answers)
     return compose_into(destination)
 
 
@@ -305,11 +240,10 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
     answers = project_facts(ROOT)
-    render(
-        TEMPLATES,
+    seed_into(
         destination,
+        "package-python",
         {
-            "kind": "package-python",
             "package_name": "livery-scratch",
             "package_description": "livery-scratch: a livery workspace package.",
             "namespace_package": "livery",
@@ -671,15 +605,9 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
 def test_the_rendered_prose_spells_the_brand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import render
-
     answers = project_facts(ROOT)
     destination = tmp_path / "branded"
-    render(
-        TEMPLATES,
-        destination,
-        {**answers, "runner_prog": "hse"},
-    )
+    seed_into(destination, "project", {**answers, "runner_prog": "hse"})
     # The composed tasks.py takes the brand from the running process.
     monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
     tasks = (compose_into(destination) / "tasks.py").read_text()
@@ -690,17 +618,12 @@ def test_the_rendered_prose_spells_the_brand(
 def test_the_rendered_answers_never_store_the_brand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import render
-
     answers = project_facts(ROOT)
     destination = tmp_path / "branded"
-    from livery.workshop._templates import compose_fragments
-
-    data = {**answers, "runner_prog": "hse"}
-    render(TEMPLATES, destination, {**data, "fragments": compose_fragments(data)})
-    # The brand belongs to the process: the render stores no answers at
-    # all, so nothing pins the instance to the CLI that rendered it.
-    assert not (destination / ".copier-answers.yml").exists()
+    seed_into(destination, "project", {**answers, "runner_prog": "hse"})
+    # The brand belongs to the process: a birth stores no answers at
+    # all, so nothing pins the instance to the CLI that wrote it.
+    assert not (destination / ".copier-answers.yml").exists()  # no answers file
     # The meter comment rides the brand too: the composed project file
     # takes it from the process, as the render does.
     monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
@@ -747,43 +670,24 @@ def test_the_gitignore_header_speaks_the_brand() -> None:
     assert "`hse sync`" in _IGNORE_HEADER.format(prog="hse")
 
 
-def _build_instance_from_git_template(base: Path) -> None:
-    """A scratch git template repo and an instance rendered from it.
+def _build_instance(base: Path) -> None:
+    """A born instance under the default brand, committed.
 
-    A seed build: two repositories, a whole-tree copy and a render,
-    none of which any test needs repeated.
+    A seed build: the seeds, the composed files and the git processes
+    cost the same whoever asks.
     """
-    import shutil
     import subprocess
 
-    from livery.workshop.api import __version__
-
-    repo = base / "template-repo"
-    shutil.copytree(TEMPLATES, repo)
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
-    subprocess.run(["git", "tag", f"v{__version__}"], cwd=repo, check=True)
     instance = base / "instance"
     answers = project_facts(ROOT)
-    render(repo, instance, {**answers, "runner_prog": "fm"})
-    # The contract is a birth-time seed the render never writes; the
-    # fixture stands in for the birth verb.
+    seed_into(instance, "project", {**answers, "runner_prog": "fm"})
+    # The contract stands in for the birth verb's.
     (instance / "workshop.toml").write_text(
-        "[workspace]\n"
-        + IDENTITY
-        + f'templates-ref = "v{__version__}"\n'
-        + "extensions = []\n"
-        'templates = "templates"\n'
+        "[workspace]\n" + IDENTITY + "extensions = []\n"
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
-    # A born instance carries the files the engine composes.
     compose_into(instance)
-    # copier update works only in a git-tracked destination, which
-    # every real instance is.
     subprocess.run(["git", "init", "-q"], cwd=instance, check=True)
     subprocess.run(["git", "config", "user.email", "t@l"], cwd=instance, check=True)
     subprocess.run(["git", "config", "user.name", "T"], cwd=instance, check=True)
@@ -791,35 +695,16 @@ def _build_instance_from_git_template(base: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=instance, check=True)
 
 
-def test_the_remote_update_arm_brands_and_reemits(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_an_update_rebrands_and_reemits(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The arm every instance takes: no local template directory, the
-    # source is a git repository, and rebranding is exactly this run
-    # under the branded CLI.
+    # Rebranding an instance is exactly an update under the branded CLI:
+    # the composed files and the workflows take the running brand.
     import livery.footman.api as footman
-    from livery.workshop import _templates
     from livery.workshop._update import refresh_rendered
 
-    made = seeds("template-instance", _build_instance_from_git_template)
-    repo, instance = made / "template-repo", made / "instance"
+    instance = seeds("born-instance", _build_instance) / "instance"
     assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
-    contract = (instance / "workshop.toml").read_text()
-    lines = [
-        f"templates = {toml_string(str(repo))}"
-        if line.startswith("templates = ")
-        else line
-        for line in contract.splitlines()
-    ]
-    assert any(line.startswith("templates = ") for line in lines)
-    (instance / "workshop.toml").write_text("\n".join(lines) + "\n")
-    import subprocess
-
-    subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
-    subprocess.run(
-        ["git", "commit", "-qm", "point at the repo"], cwd=instance, check=True
-    )
-    monkeypatch.setattr(_templates, "local_template_dir", lambda _root: None)
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     changed = refresh_rendered(instance)
     assert changed  # the update reported work
@@ -871,37 +756,8 @@ def test_no_runtime_string_spells_the_default_brand() -> None:
     assert offenders == [], offenders
 
 
-def _build_template_repo(base: Path, *, tagged: bool = True) -> None:
-    """The template source as a git repository, the artifact's shape.
-
-    A seed build: the copy of the whole template tree and the five git
-    processes around it cost the same whoever asks, so the `seeds`
-    fixture builds it once per session and copies it per test.
-    """
-    import shutil
-    import subprocess
-    from importlib.metadata import version
-
-    repo = base / "artifact-repo"
-    shutil.copytree(TEMPLATES, repo)
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
-    if tagged:
-        subprocess.run(
-            ["git", "tag", f"v{version('livery-workshop')}"], cwd=repo, check=True
-        )
-
-
-def _build_untagged_repo(base: Path) -> None:
-    """The same source, with no release tag: the missing-tag arm's shape."""
-    _build_template_repo(base, tagged=False)
-
-
-def _wheel_instance(tmp_path: Path, source: str) -> Path:
-    """A workspace with no templates/ whose contract points at *source*."""
+def _wheel_instance(tmp_path: Path) -> Path:
+    """A workspace that takes everything from the installed extensions."""
     root = tmp_path / "instance"
     root.mkdir()
     (root / "workshop.toml").write_text(
@@ -911,7 +767,6 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
         'authors = [{ name = "A", email = "a@example.com" }]\n'
         'copyright-year = "2026"\n'
         "extensions = []\n"
-        f"templates = {toml_string(str(source))}\n"
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
@@ -919,16 +774,13 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
     return compose_into(root)
 
 
-def test_new_package_renders_from_the_artifact_repository(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_new_package_writes_the_installed_seeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The known gap carried since the 0831 plan closes: a wheel
-    # instance (no templates/ directory) renders a member from the
-    # remote source at the resolved tag.
+    # The member's seeds come from the installed extensions.
     from livery.workshop._templates import new_package
 
-    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
-    root = _wheel_instance(tmp_path, f"git+file://{repo}")
+    root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
@@ -942,139 +794,24 @@ def test_new_package_renders_from_the_artifact_repository(
     new_package("thing")
     assert (root / "packages" / "thing" / "cliff.toml").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
+    assert (root / "packages" / "thing" / "docs" / "index.md").is_file()
     assert synced == ["lock", "sync"]
-    # The project render resolved remotely too: the roster reached
-    # the managed pyproject.
+    # The member reached the composed project file.
     assert "acme-thing" in (root / "pyproject.toml").read_text()
 
 
-def test_an_unreachable_source_teaches_source_and_ref(
+def test_a_tree_no_listed_extension_seeds_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._templates import new_package
 
-    root = _wheel_instance(tmp_path, "https://127.0.0.1:1/acme/templates.git")
+    root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
-    with pytest.raises(BaseException) as caught:
-        new_package("thing")
-    text = str(caught.value)
-    assert "https://127.0.0.1:1/acme/templates.git" in text
-    assert "v" in text  # the wanted ref is named
-
-
-def test_a_missing_artifact_tag_names_the_release(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.workshop._templates import new_package
-
-    repo = seeds("template-repo-untagged", _build_untagged_repo) / "artifact-repo"
-    root = _wheel_instance(tmp_path, f"git+file://{repo}")
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    with pytest.raises(BaseException) as caught:
-        new_package("thing")
-    text = str(caught.value)
-    assert "has no v" in text and "release publishes" in text
-
-
-def test_a_source_without_the_kind_teaches(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import shutil
-    import subprocess
-
-    from livery.workshop._templates import new_package
-
-    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
-    shutil.rmtree(repo / "package-python")
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "drop the kind"], cwd=repo, check=True)
-    subprocess.run(["git", "tag", "-f", _ref()], cwd=repo, check=True)
-    root = _wheel_instance(tmp_path, f"git+file://{repo}")
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    with pytest.raises(BaseException) as caught:
-        new_package("thing")
-    assert "package-python" in str(caught.value)
-
-
-def _ref() -> str:
-    from importlib.metadata import version
-
-    return f"v{version('livery-workshop')}"
-
-
-def test_repeated_render_at_one_tag_is_byte_identical(
-    seeds: Seeds, tmp_path: Path
-) -> None:
-    import filecmp
-
-    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
-    data = {
-        "kind": "project",
-        "project_name": "acme-tools",
-        "namespace_package": "acme",
-        "packages": [],
-        "runner_prog": "fm",
-    }
-    first = tmp_path / "one"
-    second = tmp_path / "two"
-    render(f"git+file://{repo}", first, dict(data), ref=_ref())
-    render(f"git+file://{repo}", second, dict(data), ref=_ref())
-    comparison = filecmp.dircmp(str(first), str(second))
-    assert not comparison.left_only and not comparison.right_only
-    names = list(comparison.common_files)
-    mismatch, errors = filecmp.cmpfiles(str(first), str(second), names, shallow=False)[
-        1:
-    ]
-    assert not mismatch and not errors
-
-
-def test_a_declared_but_absent_local_source_teaches(tmp_path: Path) -> None:
-    from livery.workshop._templates import resolve_source
-
-    root = _wheel_instance(tmp_path, "my-fork-checkout")
-    with pytest.raises(BaseException) as caught:
-        resolve_source(root)
-    text = str(caught.value)
-    assert "my-fork-checkout" in text and "no such" in text
-
-
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="git for Windows reads a file URL that carries userinfo as a path",
-)
-def test_a_credentialled_source_never_reaches_a_rendered_byte(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Tokens are environment facts and should never sit in the
-    # contract; when one does anyway, the rendered headers and the
-    # refusals must not repeat it.
-    from livery.workshop._templates import new_package, redacted_source
-
-    assert redacted_source("http://user:secret@host/o/r.git") == "http://host/o/r.git"
-    assert redacted_source("git+file:///tmp/repo") == "git+file:///tmp/repo"
-    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
-    root = _wheel_instance(
-        tmp_path, f"git+file://user:sekrit@/{repo.as_posix().lstrip('/')}"
-    )
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
-    monkeypatch.setattr(
-        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
-    )
-    new_package("thing")
-    for path in sorted(root.rglob("*")):
-        # The contract carries the caller's own value; everything the
-        # machinery wrote must be clean.
-        if path.is_file() and path.name != "workshop.toml":
-            assert "sekrit" not in path.read_text(errors="ignore"), path
+    with pytest.raises(BaseException, match="no listed extension seeds package-x"):
+        new_package("thing", kind="package-x")
+    assert not (root / "packages" / "thing").exists()
 
 
 def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):

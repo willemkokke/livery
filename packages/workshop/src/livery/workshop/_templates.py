@@ -1,195 +1,34 @@
-"""The template channel: the render gate, the applier, the generator.
+"""The workspace's generated files: the drift check, the applier, new members.
 
-The template source lives in the workspace's ``templates/`` directory:
-one copier template, two kinds (``project`` for the workspace root,
-``package-python`` for one package), rendered from the adopted
-answers file at the workspace root.
-
-``fm template.check`` renders the ``project`` kind into a scratch
-directory and compares every rendered file byte for byte against the
-repository, failing on any drift; it is part of ``fm check``, and
-does nothing in a workspace without a ``templates/`` directory.
-``fm template.apply`` writes the same render over the repository,
-which is the recovery procedure for drift. ``fm new.package`` renders
-the ``package-python`` kind into ``packages/<name>`` and wires the
-member into the workspace by appending it to the answers file and
-re-applying the ``project`` render.
+The listed extensions' files are composed by the fragment engine
+(`livery.workshop._shipped_files`); the CI files and the codeowners file
+are generated from the contract. ``fm template.check`` judges both
+against the repository and is part of ``fm check``; ``fm template.apply``
+writes both, which is the recovery procedure for drift. ``fm
+new.package`` writes a member's seeds (`livery.workshop._seeds`) into
+``packages/<name>`` and adds it to the project files.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Annotated, Any
 
-import yaml
-
 import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
-from livery.workshop._contract import load_contract, toml_string
+from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
-    extension_entries,
     stack_entries,
     workspace_root,
 )
-from livery.workshop._fragments import PACKAGE_FILES
-from livery.workshop._identity import identity, package_facts, project_facts
-from livery.workshop._materialise import write_lf
+from livery.workshop._identity import identity
 from livery.workshop._pythons import python_floor
 
-template = group("template", help="The template source and its render gate")
-new = group("new", help="Render new pieces from the template source")
-
-
-#: Where instances take their templates from when the contract is
-#: silent: the published artifact repository, readable anonymously.
-DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
-
-
-def templates_artifact(root: Path) -> str:
-    """Where this workspace publishes its template artifact, or empty.
-
-    ``[workspace] templates-artifact`` in ``workshop.toml``: the git
-    remote a home's release pushes its (composed) template tree to,
-    tagged with the publishing extension's version. Empty means this
-    workspace publishes no templates, which is every ordinary
-    instance.
-    """
-    contract = load_contract(root / "workshop.toml")
-    workspace = contract.get("workspace") or {}
-    return str(workspace.get("templates-artifact", ""))
-
-
-def template_source(root: Path) -> str:
-    """The workspace's declared template source.
-
-    ``[workspace] templates`` in ``workshop.toml``: a directory relative
-    to the root (the monorepo names the base extension's own tree under
-    ``packages/workshop``), or a git URL (a fork, at its own risk).
-    Silent means the published artifact repository.
-    """
-    contract = load_contract(root / "workshop.toml")
-    workspace = contract.get("workspace") or {}
-    return str(workspace.get("templates", "")) or DEFAULT_TEMPLATE_SOURCE
-
-
-def local_template_dir(root: Path) -> Path | None:
-    """The template source as a local directory, or None when remote."""
-    source = template_source(root)
-    if "://" in source or source.startswith("git@"):
-        return None
-    directory = root / source
-    return directory if directory.is_dir() else None
-
-
-def redacted_source(source: str) -> str:
-    """*source* with URL credentials stripped, for anything displayed.
-
-    A contract may carry a credentialled URL (it should not: tokens
-    are environment facts), and the rendered headers, refusals, and
-    labels must never repeat the secret. The working value the
-    machinery clones with is untouched.
-    """
-    return re.sub(r"^(\w+(?:\+\w+)?://)[^/@]+@", r"\1", source)
-
-
-def template_ref(root: Path) -> str:
-    """The tag a remote template source renders at.
-
-    The publishing extension's installed version, ``v`` prefixed: the
-    topmost extension in the stack that ships a template tree, because
-    that extension's home published the composed artifact the contract
-    points at. A plain instance's topmost tree-shipper is the base
-    extension; "topmost extension" alone would be wrong, since an extension may
-    own no templates at all.
-    """
-    from importlib.metadata import PackageNotFoundError, version
-
-    from livery.workshop._compose import extension_template_tree
-
-    entries = stack_entries(root)
-    if not entries:
-        fail(
-            "workshop.toml declares no [workspace] extensions: the template"
-            " ref is the publishing extension's version and there is none"
-        )
-    publisher = ""
-    for extension, dist in entries:
-        if extension_template_tree(root, extension) is not None:
-            publisher = dist
-    if not publisher:
-        publisher = entries[0][1]
-    try:
-        return "v" + version(publisher)
-    except PackageNotFoundError:
-        fail(
-            f"the publishing extension's distribution {publisher} is not"
-            " installed, so the template ref is unknowable: `uv sync`"
-            " installs the dev group"
-        )
-
-
-def resolve_source(root: Path) -> tuple[str, str | None]:
-    """The render source and ref; every channel verb resolves through this.
-
-    A local directory renders the working tree directly, ref-less:
-    the monorepo edits its templates at HEAD (contract 12). A git
-    URL renders at livery.workshop._templates.template_ref, the
-    artifact tag the installed workshop shipped with. A declared
-    local directory that does not exist is a taught refusal, never
-    a guess.
-    """
-    source = template_source(root)
-    if "://" not in source and not source.startswith("git@"):
-        directory = root / source
-        if directory.is_dir():
-            return str(directory), None
-        fail(
-            f"[workspace] templates names {source!r} and no such"
-            " directory exists here: create the checkout, or point the"
-            " contract at a git URL"
-        )
-    return source, template_ref(root)
-
-
-def render_source(root: Path) -> tuple[str, str | None, dict[str, str]]:
-    """The render's source, its ref, and each file's owning extension.
-
-    A self-hosting extension home composes: a workspace extension above the
-    base that ships a template tree turns the source into the stack,
-    composed bottom to top into ``.workshop/composed-templates``,
-    regenerated on every call so the home's gate judges the local
-    overlay at HEAD, never the released artifact. Everything else is
-    livery.workshop._templates.resolve_source unchanged with no
-    owners: a child consumes its parent's composed artifact and
-    never composes at update time (the answers anchor exactly one
-    source).
-    """
-    import shutil
-
-    from livery.workshop._compose import compose_source, extension_template_tree
-
-    def _member_overlay() -> bool:
-        for extension, _dist in extension_entries(root):
-            tree = extension_template_tree(root, extension)
-            if tree is not None and tree.is_relative_to(root):
-                return True
-        return False
-
-    if _member_overlay():
-        destination = root / ".workshop" / "composed-templates"
-        if destination.exists():
-            shutil.rmtree(destination)
-        destination.mkdir(parents=True)
-        composed = compose_source(root, destination)
-        return str(composed.path), None, composed.owners
-    source, ref = resolve_source(root)
-    return source, ref, {}
+template = group(
+    "template", help="The composed and generated files, and their drift check"
+)
+new = group("new", help="Create a project or a package from the extensions' seeds")
 
 
 def _root() -> Path:
@@ -248,20 +87,12 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     }
     from livery.workshop._checks import editor_extensions
     from livery.workshop._docs_contract import docs_table
-    from livery.workshop._provenance import PROJECT_RENDERED
-    from livery.workshop._regions import contents
     from livery.workshop._slots import all_composed
 
     injected: dict[str, Any] = {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
         "docs_site_url": str(docs_table(root).get("site-url", "")),
-        "template_source_label": redacted_source(template_source(root)),
-        # The regions the committed files carry, an input like the
-        # answers: the render writes each back in place, so an apply
-        # keeps the repository's own lines and the drift gate judges
-        # whole bytes.
-        "regions": {name: contents(root / name) for name in PROJECT_RENDERED},
         # The slots the check records fill: the dev group's tool lines,
         # pytest's addopts. An extension's contribution lands here, and a
         # withdrawn check takes its line with it.
@@ -294,8 +125,7 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
     The roster is split the way the project file splits it, ``py`` for
     the members with a dev entry and ``native`` for the rest, and the
     per-file ignores the claims render are added for the kinds present.
-    Both the copier render and the fragment engine read their check
-    tables through this.
+    The fragment engine reads the check tables through this.
     """
     from livery.workshop._checks import per_file_ignores
     from livery.workshop._kinds import kind_names, record_for_template
@@ -341,7 +171,6 @@ def package_injections(root: Path) -> dict[str, Any]:
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
         "docs_site_url": str(docs_table(root).get("site-url", "")),
-        "template_source_label": redacted_source(template_source(root)),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
         "forge_url": str(forge_table.get("url", "")),
@@ -349,187 +178,12 @@ def package_injections(root: Path) -> dict[str, Any]:
     }
 
 
-#: Renders this process made, by their inputs: a second render of the
-#: same template, ref, and data copies the first. A local template
-#: directory's key carries every file's path, size, and mtime, so an
-#: edit between two renders renders again.
-_RENDERS: dict[str, Path] = {}
-_RENDER_HOME: tempfile.TemporaryDirectory[str] | None = None
-
-
-def _render_key(template_dir: Path | str, ref: str | None, data: dict[str, Any]) -> str:
-    """The inputs of one render, hashed; a local directory by its files' state."""
-    digest = hashlib.sha256()
-    for part in (
-        str(template_dir),
-        ref or "",
-        json.dumps(data, sort_keys=True, default=str),
-    ):
-        digest.update(part.encode("utf-8"))
-        digest.update(b"\0")
-    directory = Path(str(template_dir))
-    if ref is None and directory.is_dir():
-        for path in sorted(directory.rglob("*")):
-            if not path.is_file() or ".git" in path.parts:
-                continue
-            stat = path.stat()
-            digest.update(
-                f"{path.relative_to(directory)}\0{stat.st_size}\0{stat.st_mtime_ns}\0".encode()
-            )
-    return digest.hexdigest()
-
-
-def _remember(key: str, destination: Path) -> None:
-    """Keep a copy of the render at *destination* for this process's later renders."""
-    global _RENDER_HOME
-    if _RENDER_HOME is None:
-        _RENDER_HOME = tempfile.TemporaryDirectory(prefix="workshop-renders-")
-    kept = Path(_RENDER_HOME.name) / key
-    shutil.copytree(destination, kept, symlinks=True)
-    _RENDERS[key] = kept
-
-
-def render(
-    template_dir: Path | str,
-    destination: Path,
-    data: dict[str, Any],
-    *,
-    ref: str | None = None,
-) -> None:
-    """Render *template_dir* into *destination* with *data*, no prompts.
-
-    A local directory renders the working tree: uncommitted template
-    edits render too, which is what lets the gate judge a change
-    before its commit. A git source renders at *ref*, the artifact
-    tag. Runs copier in a child process because it chdirs while
-    rendering, which a parallel task must never do to the one real
-    directory. The templates carry their own provenance headers,
-    parameterised by ``template_source_label``: injecting them after
-    the render would make every managed file read as locally
-    modified to ``copier update``, whose merge then drops real
-    template changes.
-    """
-    fresh = not destination.exists() or not any(destination.iterdir())
-    key = _render_key(template_dir, ref, data)
-    kept = _RENDERS.get(key)
-    if kept is not None and fresh:
-        shutil.copytree(kept, destination, dirs_exist_ok=True, symlinks=True)
-        return
-    if ref is not None:
-        _probe_ref(str(template_dir), ref)
-    with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
-        yaml.safe_dump(data, handle)
-        data_file = handle.name
-    pinned = ["--vcs-ref", ref] if ref else []
-    try:
-        result = tools.copier(
-            "copy",
-            "--defaults",
-            "--trust",
-            "--overwrite",
-            "--quiet",
-            *pinned,
-            "--data-file",
-            data_file,
-            str(template_dir),
-            str(destination),
-        )
-    finally:
-        Path(data_file).unlink(missing_ok=True)
-    if result.code != 0:
-        _taught_render_failure(str(template_dir), ref, data, result)
-    if fresh:
-        _remember(key, destination)
-
-
-def _probe_ref(source: str, ref: str) -> None:
-    """Refuse before cloning when *source* lacks *ref*.
-
-    copier falls back to rendering HEAD when a requested ref does
-    not exist, which would silently hand an instance templates its
-    workshop never shipped; the probe turns the missing tag into a
-    taught refusal instead.
-    """
-    # copier spells an explicit git source with a `git+` prefix; git
-    # itself does not understand it.
-    import livery.toolroom.tools.api as tools
-
-    listing = tools.git.opts(
-        # ls-remote never reads the working directory; the explicit
-        # value satisfies the deliberate-spawn rule and always exists.
-        cwd=tempfile.gettempdir(),
-        nofail=True,
-        recorded=False,
-    )("ls-remote", source.removeprefix("git+"), f"refs/tags/{ref}")
-    shown = redacted_source(source)
-    if listing.code != 0:
-        fail(
-            f"cannot reach the template source {shown} (wanted {ref}):"
-            " check the network, or point [workspace] templates at a"
-            f" local checkout.\n{listing.stderr}"
-        )
-    if not listing.stdout.strip():
-        fail(
-            f"the template source {shown} has no {ref} tag: a workshop"
-            " release publishes it. Update the workspace to a released"
-            " workshop, or point [workspace] templates at a source that"
-            f" carries {ref}."
-        )
-
-
-def _taught_render_failure(
-    source: str, ref: str | None, data: dict[str, Any], result: Any
-) -> None:
-    """Fail with what stopped the render and what to do about it.
-
-    The raw copier output rides along verbatim: a failure reason is
-    never summarised into a boolean.
-    """
-    output = f"{result.stdout}{result.stderr}"
-    lowered = output.lower()
-    kind = str(data.get("kind", "project"))
-    source = redacted_source(source)
-    if (
-        ref
-        and ("revision" in lowered or "reference" in lowered)
-        and (
-            "not found" in lowered or "unknown" in lowered or "did not match" in lowered
-        )
-    ):
-        fail(
-            f"the template source {source} has no {ref} tag: a workshop"
-            " release publishes it. Update the workspace to a released"
-            " workshop, or point [workspace] templates at a source that"
-            f" carries {ref}.\n{output}"
-        )
-    if (
-        "could not resolve host" in lowered
-        or "unable to access" in lowered
-        or "failed to connect" in lowered
-        or "connection refused" in lowered
-        or "operation timed out" in lowered
-    ):
-        wanted = f" (wanted {ref})" if ref else ""
-        fail(
-            f"cannot reach the template source {source}{wanted}: check"
-            " the network, or point [workspace] templates at a local"
-            f" checkout.\n{output}"
-        )
-    if "subdirectory" in lowered or "invalid choice" in lowered or "choice" in lowered:
-        fail(
-            f"the template source {source} does not carry the {kind}"
-            " kind: point [workspace] templates at a source that ships"
-            f" it, or render a kind the source has.\n{output}"
-        )
-    fail(f"copier exited {result.code}:\n{output}")
-
-
 def _lf(data: bytes) -> bytes:
     """The bytes with LF endings, whatever the platform wrote.
 
-    The channel is LF end to end: git holds LF, and copier writes the
-    platform's endings, so both sides normalise before any compare or
-    write. Without this the Windows gate drifts on every file.
+    Git holds LF, and a file written on Windows may carry CRLF, so both
+    sides normalise before any compare or write. Without this the
+    Windows gate drifts on every file.
     """
     return data.replace(b"\r\n", b"\n")
 
@@ -543,46 +197,13 @@ def _member_directories(root: Path) -> list[Path]:
     return [package.directory for package in discover_packages(root)]
 
 
-def rendered_files(destination: Path) -> list[Path]:
-    """Every rendered file in *destination*, sorted."""
-    return sorted(path for path in destination.rglob("*") if path.is_file())
-
-
 def project_drift(root: Path) -> list[str]:
-    """The drift report: rendered files that disagree with *root*.
+    """The drift report: generated files (CI, codeowners) that disagree with *root*.
 
-    Empty when every rendered file matches the repository byte for
+    Empty when every generated file matches the repository byte for
     byte.
     """
-    answers = project_facts(root)
-    data = {**answers, **render_injections(root, answers)}
-    if local_template_dir(root) is None:
-        fail("no local template source: the render gate needs one")
-    source, _ref, owners = render_source(root)
-    drift = []
-    with tempfile.TemporaryDirectory() as scratch:
-        render(source, Path(scratch), data)
-        for rendered in rendered_files(Path(scratch)):
-            relative = rendered.relative_to(scratch).as_posix()
-            if relative in PROJECT_SEEDS:
-                continue
-            committed = root / relative
-            # The owners map keys the composed tree: kind-prefixed,
-            # usually with the template suffix.
-            owner = owners.get(f"project/{relative}.jinja") or owners.get(
-                f"project/{relative}"
-            )
-            named = f" (the {owner} extension owns it)" if owner else ""
-            if not committed.is_file():
-                drift.append(
-                    f"{relative}: rendered, but missing from the repository{named}"
-                )
-                continue
-            drift.extend(
-                _drift_line(
-                    relative, committed.read_bytes(), rendered.read_bytes(), named
-                )
-            )
+    drift: list[str] = []
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
@@ -612,98 +233,6 @@ def project_drift(root: Path) -> list[str]:
     return drift
 
 
-#: Managed files whose format has no comments: the render owns their
-#: first lines, as many as it renders, and the repository's own lines
-#: follow as an appended tail. None of the project's managed files
-#: needs the form today; the rule exists for the next one.
-TAIL_FILES: tuple[str, ...] = ()
-
-
-def _drift_line(
-    relative: str, committed: bytes, rendered: bytes, named: str = ""
-) -> list[str]:
-    """The drift report's line for one managed file, or none when it matches.
-
-    A file with regions the repository owns is judged outside them,
-    since the render already carries the committed regions as its
-    input: a difference is outside a region or a missing marker, and
-    the line says which. A tail file is judged on the lines the
-    render owns. Any other file is judged whole.
-    """
-    from livery.workshop import _regions
-
-    committed, rendered = _lf(committed), _lf(rendered)
-    if relative in TAIL_FILES:
-        prefix, _tail = _regions.tail_split(committed, rendered)
-        if prefix == rendered:
-            return []
-        owned = rendered.count(b"\n")
-        return [
-            f"{relative}: differs from its render in the lines it owns"
-            f" (1 to {owned}); your own lines go after them{named}"
-        ]
-    if committed == rendered:
-        return []
-    names = _regions.region_names(rendered.decode("utf-8", "replace"))
-    if not names:
-        return [f"{relative}: differs from its render{named}"]
-    text = committed.decode("utf-8", "replace")
-    present = {region.name for region in _regions.regions_in(text)}
-    missing = [name for name in names if name not in present]
-    if missing:
-        listed = ", ".join(f"`{name}`" for name in missing)
-        return [
-            f"{relative}: the {listed} region's markers are rendered; restore"
-            f" them, `{footman.prog()} template.apply` rewrites them{named}"
-        ]
-    listed = ", ".join(f"`{name}`" for name in names)
-    return [
-        f"{relative}: differs from its render outside the {listed} region;"
-        f" lines of your own go inside the region{named}"
-    ]
-
-
-#: What a package's own render owns for good. Every other rendered
-#: file is a package's seed, which its authors then write: comparing
-#: those would report a living package as drift from its own birth.
-#: The python kind's set; a package's actual set is its kind
-#: chain's union, livery.workshop._kinds.managed_files, and a pin
-#: keeps this legacy name agreeing with the registry.
-PACKAGE_MANAGED: tuple[str, ...] = ()
-
-
-def _package_regions(directory: Path) -> dict[str, dict[str, str]]:
-    """The regions a package's managed files carry, by file name."""
-    from livery.workshop._regions import contents
-
-    return {name: contents(directory / name) for name in _managed_for(directory)}
-
-
-def _managed_for(directory: Path) -> tuple[str, ...]:
-    """The drift-judged files for the package at *directory*."""
-    from livery.workshop._kinds import managed_files
-
-    contract = directory / "workshop.toml"
-    if not contract.is_file():
-        return PACKAGE_MANAGED
-    declared = str(load_contract(contract).get("kind", "python"))
-    return managed_files(declared)
-
-
-#: The project render's seeds: born with the workspace, then the
-#: workspace's own. Written only when missing; the drift gate never
-#: judges them.
-PROJECT_SEEDS = (
-    "tests/test_workspace_contracts.py",
-    "tests/test_docs_drift.py",
-    "docs/index.md",
-    "docs/assets/og-card.png",
-    "docs/assets/site.css",
-    "README.md",
-    "LICENSE",
-)
-
-
 def _release_baseline(directory: Path) -> str:
     """The [release] baseline a package's contract declares, or empty.
 
@@ -718,83 +247,14 @@ def _release_baseline(directory: Path) -> str:
     return str((data.get("release") or {}).get("baseline", ""))
 
 
-def package_drift(root: Path) -> list[str]:
-    """The drift report for every package's managed rendered files.
-
-    Only the files in
-    livery.workshop._templates.PACKAGE_MANAGED are judged: a package
-    is rendered once and then written, so its seeds are not the
-    template's to keep. A package whose managed file is missing is
-    named, which is what a package rendered before the file existed
-    looks like.
-    """
-    if local_template_dir(root) is None:
-        fail("no local template source: the render gate needs one")
-    source, _ref, _owners = render_source(root)
-    drift = []
-    for directory in _member_directories(root):
-        data = {
-            **package_facts(root, directory),
-            **package_injections(root),
-            "package_dir": directory.name,
-            "release_baseline": _release_baseline(directory),
-            "regions": _package_regions(directory),
-        }
-        with tempfile.TemporaryDirectory() as scratch:
-            # The full chain, parent first, exactly as the package
-            # was born: a chained member's managed files come from
-            # its parent's template, and the leaf render alone would
-            # skip them as missing.
-            from livery.workshop._kinds import template_chain
-
-            for chained_kind in template_chain(str(data.get("kind", ""))):
-                render(source, Path(scratch), {**data, "kind": chained_kind})
-            for name in _managed_for(directory):
-                if name in PACKAGE_FILES:
-                    continue  # the fragment engine composes and judges these
-                rendered = Path(scratch) / name
-                committed = directory / name
-                relative = committed.relative_to(root).as_posix()
-                if not committed.is_file():
-                    drift.append(
-                        f"{relative}: rendered, but missing from the repository"
-                    )
-                    continue
-                drift.extend(
-                    _drift_line(relative, committed.read_bytes(), rendered.read_bytes())
-                )
-    return drift
-
-
 def apply_project(root: Path) -> list[str]:
-    """Write the ``project`` render over *root*; the files that changed.
+    """Write the composed and generated files over *root*; the files that changed.
 
-    The files the fragment engine composes (the project file, the editor
-    files, the ignore and attribute lines) are written in the same pass,
-    so a member added to the answers reaches `pyproject.toml` here.
+    The fragment engine composes the project file, the editor files, the
+    ignore and attribute lines, so a new member reaches `pyproject.toml`
+    here; the CI files and the codeowners file are generated after.
     """
-    answers = project_facts(root)
-    data = {**answers, **render_injections(root, answers)}
-    source, ref, _owners = render_source(root)
-    changed = []
-    with tempfile.TemporaryDirectory() as scratch:
-        render(source, Path(scratch), data, ref=ref)
-        for rendered in rendered_files(Path(scratch)):
-            relative = rendered.relative_to(scratch).as_posix()
-            committed = root / relative
-            if relative in PROJECT_SEEDS and committed.is_file():
-                continue  # a seed is the workspace's own once it exists
-            body = _lf(rendered.read_bytes())
-            if relative in TAIL_FILES and committed.is_file():
-                # The render owns the first lines; the tail is the
-                # repository's and rides along.
-                from livery.workshop._regions import tail_split
-
-                body += tail_split(_lf(committed.read_bytes()), body)[1]
-            if not committed.is_file() or _lf(committed.read_bytes()) != body:
-                committed.parent.mkdir(parents=True, exist_ok=True)
-                committed.write_bytes(body)
-                changed.append(relative)
+    changed: list[str] = []
     from livery.workshop._shipped_files import deliver
 
     for line in deliver(root):
@@ -813,9 +273,9 @@ def apply_project(root: Path) -> list[str]:
 def apply_generated(root: Path) -> list[str]:
     """Write the emitted artifacts (CI files, codeowners); what changed.
 
-    The render half and this half together are apply_project; the
-    remote-source update runs copier itself and then this, so an
-    instance's generated workflows move with its workshop too.
+    The fragment engine's delivery and this together are apply_project,
+    which an update runs, so an instance's generated workflows move
+    with its workshop.
     """
     changed: list[str] = []
     from livery.workshop._ci_generate import generated_files
@@ -843,142 +303,61 @@ def apply_generated(root: Path) -> list[str]:
     return changed
 
 
-def apply_packages(root: Path) -> list[str]:
-    """Write each package's managed rendered files; what changed.
-
-    Only livery.workshop._templates.PACKAGE_MANAGED is written. A
-    package's seeds belong to whoever has been writing them since it
-    was born, and rewriting those would replace a living package's
-    README, changelog, and sources with the template's stubs.
-    """
-    source, ref, _owners = render_source(root)
-    changed = []
-    for directory in _member_directories(root):
-        data = {
-            **package_facts(root, directory),
-            **package_injections(root),
-            "package_dir": directory.name,
-            "release_baseline": _release_baseline(directory),
-            "regions": _package_regions(directory),
-        }
-        with tempfile.TemporaryDirectory() as scratch:
-            # The full chain, parent first, as in package_drift.
-            from livery.workshop._kinds import template_chain
-
-            for chained_kind in template_chain(str(data.get("kind", ""))):
-                render(source, Path(scratch), {**data, "kind": chained_kind}, ref=ref)
-            for name in _managed_for(directory):
-                if name in PACKAGE_FILES:
-                    continue  # the fragment engine composes these
-                rendered = Path(scratch) / name
-                committed = directory / name
-                body = _lf(rendered.read_bytes())
-                if not committed.is_file() or _lf(committed.read_bytes()) != body:
-                    committed.write_bytes(body)
-                    changed.append(committed.relative_to(root).as_posix())
-    return changed
-
-
 @template.task(name="check")
 def template_check() -> None:
-    """Fail when a rendered file drifts from the template source.
+    """Fail when a composed or generated file drifts from what writes it.
 
-    Part of the gate. A workspace without a ``templates/`` directory
-    is an instance, not the template source, and passes the render
-    check vacuously.
+    Part of the gate.
     """
     from livery.workshop._shipped_files import shipped_drift
 
     root = _root()
-    drift = shipped_drift(root)
-    if local_template_dir(root) is not None:
-        drift += project_drift(root) + package_drift(root)
+    drift = shipped_drift(root) + project_drift(root)
     if not drift:
         return
     fail(
         "committed files drift from their generation:\n  "
         + "\n  ".join(drift)
-        + f"\n  a composed file: run `{footman.prog()} sync`; a rendered one:"
-        f" edit templates/ (never the rendered copy) and run"
-        f" `{footman.prog()} template.apply`"
+        + f"\n  a composed file: run `{footman.prog()} sync`; a generated one:"
+        f" run `{footman.prog()} template.apply`"
     )
 
 
 @template.task(name="apply")
 def template_apply() -> None:
-    """Re-render the ``project`` kind and each package's managed files.
+    """Write the composed and generated files over the workspace.
 
-    The recovery procedure for drift, and the delivery step after a
-    template edit. A package's seeds are never rewritten: only the
-    files the template keeps owning
-    (livery.workshop._templates.PACKAGE_MANAGED). Idempotent: a clean
-    tree changes nothing.
+    The recovery procedure for drift. Seeds are never rewritten.
+    Idempotent: a clean tree changes nothing.
     """
     root = _root()
-    changed = apply_project(root) + apply_packages(root)
+    changed = apply_project(root)
     for name in changed:
         print(f"  rendered: {name}")
     if not changed:
-        print("  everything already matches the render")
+        print("  everything already matches what writes it")
 
 
 @new.task(name="package")
 def new_package(
     name: Annotated[str, doc("directory name under packages/ (e.g. scratch)")],
     kind: Annotated[
-        str, doc("template kind (package-python, package-cpp-conan, ...)")
+        str, doc("seed tree (package-python, package-cpp-conan, ...)")
     ] = "package-python",
 ) -> None:
-    """Render a new package of *kind* and wire it into the workspace.
+    """Create a package from *kind*'s seeds and wire it into the workspace.
 
-    Renders the kind's template chain into ``packages/<name>`` with
-    the distribution named after the workspace convention
-    (``livery-<name>``), appends the member to the root answers file,
-    re-applies the ``project`` render so every per-package list picks
-    it up, and re-locks the environment. A non-python kind joins the
-    roster without a dev-group entry: there is no dist to install.
+    Writes the seeds of the kind's chain into ``packages/<name>``, with
+    the distribution named ``<namespace>-<name>``, writes the project
+    files again so every per-package list picks the member up, and
+    locks the environment again. A non-python kind joins the roster
+    without a dev-group entry: there is no distribution to install.
     """
     wire_package(_root(), name, kind=kind)
 
 
-def _render_kind(
-    template_dir: str,
-    destination: Path,
-    kind: str,
-    *,
-    name: str,
-    package_name: str,
-    project: str,
-    namespace: str,
-    answers: dict[str, object],
-    root: Path,
-    ref: str | None,
-) -> None:
-    """One chain link's render into *destination*; child over parent."""
-    render(
-        template_dir,
-        destination,
-        {
-            "kind": kind,
-            "package_dir": name,
-            "package_name": package_name,
-            "package_description": f"{package_name}: a {project} workspace package.",
-            "namespace_package": namespace,
-            "author_name": answers.get("author_name", ""),
-            "author_email": answers.get("author_email", ""),
-            "copyright_year": answers.get("copyright_year", ""),
-            # The forge facts ride the contract, not the answers: a
-            # package's changelog links its own pull requests, and a
-            # default taken from the template would put a Gitea
-            # workspace's entries on github.com.
-            **package_injections(root),
-        },
-        ref=ref,
-    )
-
-
 def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
-    """Render one *kind* package into *root* and wire it; the import path.
+    """Create one *kind* package in *root* and wire it; the import path.
 
     The shared core of ``new.package`` and the birth verb's extension
     arm: `render_member`, then the project re-apply, lock and sync.
@@ -998,81 +377,47 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     # member and the store supplies what it names: the gate that
     # follows finds them, as it does after a birth.
     sync_tools(root)
-    print(f"  packages/{name}: rendered, wired, and installed")
+    print(f"  packages/{name}: seeded, wired, and installed")
     return import_path
 
 
 def render_member(root: Path, name: str, *, kind: str = "package-python") -> str:
-    """Render one *kind* package into *root* and add it to the roster; the import path.
+    """Write one *kind* package's seeds into *root*; the import path.
 
-    Renders the kind's template chain, writes the receipt and the
-    native files the records render, and appends the member to the
-    root answers. The project render, the lock and the install are
-    the caller's: `wire_package` runs them for one member, and a
-    caller adding many members runs them once after the last.
+    Writes the seeds of the kind's chain (livery.workshop._seeds.create)
+    and the files the records compose for it. The member's own contract
+    is one of the seeds, and discovery finds the member through it, so
+    the roster needs no write. The project files, the lock and the
+    install are the caller's: `wire_package` runs them for one member,
+    and a caller adding many members runs them once after the last.
     Refuses an existing directory, naming it.
     """
-    template_dir, ref, _owners = render_source(root)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
     destination = root / "packages" / name
     if destination.exists():
         fail(f"{destination} already exists")
-    answers = identity(root)
-
-    namespace = str(answers.get("namespace_package", ""))
+    facts = identity(root)
+    namespace = str(facts.get("namespace_package", ""))
     prefix = namespace.replace(".", "-")
     package_name = f"{prefix}-{name}" if prefix else name
-    project = str(answers.get("project_name", ""))
-    slug = name.replace("-", "_")
+    data: dict[str, Any] = {
+        **facts,
+        # The forge facts ride the contract: a package's changelog
+        # links its own pull requests on the workspace's forge.
+        **package_injections(root),
+        "package_dir": name,
+        "package_name": package_name,
+        "package_description": (
+            f"{package_name}: a {facts.get('project_name', '')} workspace package."
+        ),
+    }
     from livery.workshop._kinds import template_chain
+    from livery.workshop._seeds import create, derived
 
-    for chained_kind in template_chain(kind):
-        _render_kind(
-            template_dir,
-            destination,
-            chained_kind,
-            name=name,
-            package_name=package_name,
-            project=project,
-            namespace=namespace,
-            answers=answers,
-            root=root,
-            ref=ref,
-        )
-    # The member's own contract, which the template just wrote, is what
-    # discovery finds: the roster derives from it, so nothing else is
-    # written here.
-    # The files the records render for the kind, the native configs,
-    # land with the birth: the template ships none of them.
+    data.update(derived(data))
+    create(root, destination, template_chain(kind), data)
     from livery.workshop._shipped_files import deliver
 
     deliver(root)
-    return f"{namespace}.{slug}" if namespace else slug
-
-
-def templates_ref(root: Path) -> str:
-    """The template reference the workspace was last rendered from; empty if none.
-
-    `copier update` merges three ways and needs the old reference; the
-    contract's `[workspace] templates-ref` keeps it while copier renders
-    the project.
-    """
-    workspace = load_contract(root / "workshop.toml").get("workspace") or {}
-    return str(workspace.get("templates-ref", ""))
-
-
-def record_templates_ref(root: Path, ref: str) -> None:
-    """Write *ref* as the contract's `[workspace] templates-ref`, in place."""
-    path = root / "workshop.toml"
-    text = path.read_text(encoding="utf-8")
-    line = f"templates-ref = {toml_string(ref)}"
-    replaced, count = re.subn(
-        r"(?m)^templates-ref = .*$", lambda _m: line, text, count=1
-    )
-    if not count:
-        replaced = re.sub(
-            r"(?m)^\[workspace\]\n", lambda m: m.group(0) + line + "\n", text, count=1
-        )
-    if replaced != text:
-        write_lf(path, replaced)
+    return str(data["import_path"])

@@ -81,7 +81,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "python"): 2,
     ("_replay", "python"): 2,
     ("_sync", "cpp-conan"): 1,
-    ("_templates", "python"): 5,
+    ("_templates", "python"): 4,
     ("_tools", "python"): 2,
     ("_update", "pyproject.toml"): 1,
 }

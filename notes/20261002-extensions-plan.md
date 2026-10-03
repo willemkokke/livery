@@ -1037,6 +1037,35 @@ sync whose pass changed a file plans once more, since a rendered
 fragment can read a file the same pass wrote (the verbs fragment reads
 `tasks.py`); the next sync finds the tree settled.
 
+**7b2 built (issue #1086): a birth writes seeds, and copier is gone.**
+The six template trees are the base's seeds under
+`content/seeds/<tree>/`. `livery.workshop._seeds.create` writes a tree's
+seeds into a destination: a `.jinja` file rendered with minijinja in
+strict mode, its path rendered too, any other file copied, an existing
+file never touched, nothing receipted. A kind's chain writes
+`package-base` first and the leaf over it. `fm new.project`,
+`fm new.package` and the `--extension` arm write their seeds through
+it. Two extensions seeding one path refuse unless the later one
+declares it, and a tree no listed extension seeds refuses naming it.
+With births on seeds copier rendered nothing, so its remaining users
+went in the same change: `fm update` and `fm template.apply` write the
+composed and generated files, the template check judges both in every
+workspace and its `--fix` writes both; the overlays and
+`overlay.toml`, `fm release.templates` and the release point's
+templates job, `[workspace] templates`, `templates-artifact` and
+`templates-ref`, the package render and its drift report, the tail
+form and the `managed` field of a kind record are gone, and copier
+left the dependencies. The check records' fragments render with
+minijinja in lenient mode, which the parity test had proved byte-equal
+before it went with jinja2. The armed descendant chain proves the brand
+through a declared `REPLACES` in its wheel instead of an artifact.
+Proved by running: a local `fm new.project` wrote seven seeds and no
+answers file; with its uv sources pointed at this branch's packages,
+`fm new.package thing` and `fm new.package geometry
+--kind=package-cpp-conan` seeded and wired both members, and the
+newborn's own `fm check` exited 0, configure, build, ctest and
+clang-tidy included. `test_a_born_project_is_green` stays open with 7c.
+
 Deliverables:
 
 - Seeds in extension wheels under `seeds/`; the `create` phase writes
@@ -1059,6 +1088,9 @@ Acceptance:
   birth members whose gate is green, in the conformance kit.
 
 ### Phase 8: templates go
+
+Copier, the overlays and the template artifact went with 7b2 (see
+there); the verbs and the member removal are left.
 
 Deliverables:
 
@@ -1491,6 +1523,22 @@ Acceptance:
   `*.cmd` CRLF. The byte comparisons that normalise CRLF today stay as
   a fallback. A CRLF file written after checkout is named by an
   `.editorconfig` and an eclint check later (issue #1064).
+- Willem, 2026-10-03, 7b2: one way to do things. A later extension
+  replaces or deletes an earlier one's shipped file, fragment or seed
+  alike, by declaring it in its declaration module:
+  `REPLACES = {"<owner>:<name>": "<reason>"}`, its own file of the same
+  name being the replacement, or `DELETES` in the same shape. Two
+  extensions seeding one path without a declaration refuse.
+- 2026-10-03, 7b2: with births on seeds, copier rendered nothing, and
+  overlays and `fm release.templates` broke with the template kinds, so
+  phase 8's copier half went in the same change rather than leaving
+  them broken until phase 8: an update is the engine and the generated
+  files from the installed extensions, and a brand replaces a base
+  file through its wheel. The artifact repository
+  (`willemkokke/workshop-templates`) and its deploy key secret
+  (`WORKSHOP_TEMPLATES_DEPLOY_KEY`) have no reader any more.
+  `--extensions=<combination>` for `fm new.package` waits for the
+  package composition phase; `--kind` stays until then.
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an

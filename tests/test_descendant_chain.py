@@ -1,11 +1,11 @@
 """The proof chain (contract 22): create, customise, inherit.
 
 The dummy descendant, end to end on the local Gitea: an extension home is
-born and self-hosts, populates its overlay and content, releases its
-composed artifact; the branded App begets a child from that
-artifact; a core improvement dev-ships as a base wheel bump and
-reaches the child through the home's recompose, while the
-overlay-replaced file stays the brand's, the named forfeit. The
+born and self-hosts, populates its content (a declared replacement of a
+base file, a fragment line, a skill) and builds its wheel; the branded
+App begets a child that installs that wheel; a core improvement
+dev-ships as a base wheel bump and reaches the child through its
+update, while the replaced file stays the brand's, the named forfeit. The
 chain creates and destroys its own repositories, and a second run
 resumes quietly.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
+BASE_ROOT = ROOT / "packages/workshop/src/livery/workshop/content/root"
 
 GITEA = "http://localhost:3000"
 OWNER = "livery-admin"
@@ -287,7 +287,7 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     for belt in ("FOOTMAN_UV_REEXEC", "FOOTMAN_NO_UV"):
         base_env.pop(belt, None)
     fm = str(ROOT / ".venv" / "bin" / "fm")
-    for name in ("dummy", "child", f"{BRAND}-templates"):
+    for name in ("dummy", "child"):
         _destroy(token, name)
     try:
         _chain(tmp_path, token, fm, base_env, resumed=False)
@@ -295,7 +295,7 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
         _chain(tmp_path, token, fm, base_env, resumed=True)
     finally:
         if not os.environ.get("WORKSHOP_CHAIN_KEEP"):
-            for name in ("dummy", "child", f"{BRAND}-templates"):
+            for name in ("dummy", "child"):
                 _destroy(token, name)
 
 
@@ -350,7 +350,6 @@ def _chain(
             "--forge=gitea",
             f"--owner={OWNER}",
             f"--url={GITEA}",
-            f"--templates={TEMPLATES}",
             "--namespace=dummy",
         ],
         work,
@@ -368,21 +367,23 @@ def _chain(
     assert (home / "docs" / "index.md").is_file()
     assert (home / "packages" / BRAND / "docs" / "index.md").is_file()
 
-    # -- 2. populate: overlay replace, fragment line, a skill --------
+    # -- 2. populate: a declared replace, fragment line, a skill ------
     member = home / "packages" / BRAND
-    overlay = member / "src" / "dummy" / BRAND / "templates"
+    package = member / "src" / "dummy" / BRAND
     if not resumed:
-        (overlay / "project").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(
-            TEMPLATES / "project" / ".gitignore.jinja",
-            overlay / "project" / ".gitignore.jinja",
-        )
-        with (overlay / "project" / ".gitignore.jinja").open("a") as handle:
+        ignore = package / "content" / "root" / ".gitignore"
+        ignore.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(BASE_ROOT / ".gitignore", ignore)
+        with ignore.open("a") as handle:
             handle.write("brandx-build/\n")
-        (overlay / "overlay.toml").write_text(
-            '[[replace]]\npath = "project/.gitignore.jinja"\n'
-            'reason = "the brand ignores its own build tree"\n'
-        )
+        with (package / "_extension.py").open("a") as handle:
+            handle.write(
+                "\n#: The base files this extension ships in place of the base's.\n"
+                "REPLACES = {\n"
+                '    "livery.workshop:.gitignore": "the brand ignores its own'
+                ' build tree",\n'
+                "}\n"
+            )
         fragment = member / "src" / "dummy" / BRAND / "content" / "fragments"
         with (fragment / f"CLAUDE.{BRAND}.md").open("a") as handle:
             handle.write("\nAlways speak plainly.\n")
@@ -444,36 +445,13 @@ def _chain(
     clean = _run(["git", "status", "--porcelain"], home, env)
     assert clean.stdout.strip() == ""
 
-    # -- 3. the home releases: wheel and composed artifact -----------
-    _api(
-        token,
-        "POST",
-        "/user/repos",
-        # Public, livery's own artifact stance: instances clone it
-        # with no credential; a private one is git credential
-        # machinery's business, never a contract byte's.
-        {"name": f"{BRAND}-templates", "private": False, "auto_init": False},
-    ) if not resumed else None
+    # -- 3. the home releases its wheel -------------------------------
     _run(
         ["uv", "build", "--wheel", "-o", str(wheelhouse), f"packages/{BRAND}"],
         home,
         env,
     )
     _pin_the_wheelhouse(wheelhouse)
-    release = _run(
-        [
-            fm,
-            "release.templates",
-            f"--remote={GITEA}/{OWNER}/{BRAND}-templates.git",
-        ],
-        home,
-        _hermetic(env, home / ".venv"),
-    )
-    assert ("published v0.0.0" in release.stdout) or (
-        "already published with this content" in release.stdout
-    )
-    if resumed:
-        assert "already published with this content" in release.stdout
 
     # -- 4. the branded App begets the child --------------------------
     tool = tmp_path / "brand-tool"
@@ -506,7 +484,6 @@ def _chain(
             "--forge=gitea",
             f"--owner={OWNER}",
             f"--url={GITEA}",
-            f"--templates=git+{GITEA}/{OWNER}/{BRAND}-templates.git",
             "--namespace=kid",
         ],
         child_work,
@@ -520,7 +497,7 @@ def _chain(
     assert 'extensions = ["dummy.brandx"]' in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
-    # The brand's overlay reached the child's managed render.
+    # The brand's replacement reached the child's composed file.
     assert "brandx-build/" in (child / ".gitignore").read_text()
     # The brand's content arrived through sync.
     assert (
@@ -685,10 +662,10 @@ def _chain(
     if improved.exists():
         shutil.rmtree(improved)
     shutil.copytree(ROOT / "packages" / "workshop", improved)
-    templates2 = improved / "src" / "livery" / "workshop" / "templates"
-    with (templates2 / "project" / "tasks.py.jinja").open("a") as handle:
+    content2 = improved / "src" / "livery" / "workshop" / "content" / "root"
+    with (content2 / "tasks.py.jinja").open("a") as handle:
         handle.write("\n# The core teaches: run the gate before every commit.\n")
-    with (templates2 / "project" / ".gitignore.jinja").open("a") as handle:
+    with (content2 / ".gitignore").open("a") as handle:
         handle.write("core-scratch/\n")
     with (
         improved
@@ -719,7 +696,7 @@ def _chain(
 
     # The home takes the base bump the real way: the lock moves to the
     # new wheel, sync refreshes the environment (the bumped member's
-    # own metadata included), then recompose and re-release.
+    # own metadata included), then rebuilds the brand's wheel.
     brand_pyproject = member / "pyproject.toml"
     brand_pyproject.write_text(
         brand_pyproject.read_text().replace('version = "0.0.0"', 'version = "0.0.1"')
@@ -732,26 +709,15 @@ def _chain(
     _run(["uv", "sync"], home, env)
     home_fm = home / ".venv" / "bin" / "fm"
     _run([str(home_fm), "sync"], home, _hermetic(env, home / ".venv"), check=False)
-    _run([str(home_fm), "template.apply"], home, _hermetic(env, home / ".venv"))
     _run(
         ["uv", "build", "--wheel", "-o", str(wheelhouse), f"packages/{BRAND}"],
         home,
         env,
     )
     _pin_the_wheelhouse(wheelhouse)
-    rerelease = _run(
-        [
-            str(home_fm),
-            "release.templates",
-            f"--remote={GITEA}/{OWNER}/{BRAND}-templates.git",
-        ],
-        home,
-        _hermetic({**env, "FORGE_TOKEN": token}, home / ".venv"),
-    )
-    assert "published v0.0.1" in rerelease.stdout
 
     # The child updates: new brand and base wheels arrive, then the
-    # rendered files move to the recomposed artifact's tag.
+    # composed files move to what they ship.
     _run(
         [
             "uv",
@@ -814,11 +780,11 @@ def _chain(
     # The core improvement reached the grandchild through the gradient.
     assert "run the gate before every commit" in files, updated.stdout + updated.stderr
     ignored = _run(["git", "show", "FETCH_HEAD:.gitignore"], child, env).stdout
-    # The overlay-replaced file did not move: the named forfeit is the
-    # brand's declared replace, and the base's new line stays out.
+    # The replaced file did not move: the named forfeit is the brand's
+    # declared replace, and the base's new line stays out.
     assert "brandx-build/" in ignored
     assert "core-scratch/" not in ignored
-    # No extension-owned line changed: the brand's overlay content stands.
+    # No extension-owned line changed: the brand's content stands.
     assert (
         "Always speak plainly."
         in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()

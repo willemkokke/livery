@@ -7,7 +7,6 @@ so the refusal and the idempotency are proven without a network.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,7 +16,6 @@ from livery.footman.api import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._release import (
     prepare_release,
-    publish_templates,
     verify_release,
 )
 from livery.workshop._update import bump_floors, latest_released
@@ -148,50 +146,6 @@ def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, tmp_path: Path) ->
     _git(root, "commit", "-m", "chore: release 0.3.0 (#42)")
     _git(root, "tag", "packages/tool/v0.3.0")
     assert prepare_release(root, "packages/tool") == []
-
-
-def _artifact_remote(tmp_path: Path) -> tuple[Path, Path]:
-    remote = tmp_path / "artifact.git"
-    remote.mkdir()
-    _git(remote, "init", "--bare", "--initial-branch=main")
-    templates = tmp_path / "templates"
-    templates.mkdir()
-    (templates / "copier.yml").write_text("kind:\n  type: str\n")
-    (templates / "project").mkdir()
-    (templates / "project" / "tasks.py").write_text("plugin\n")
-    return remote, templates
-
-
-def test_the_snapshot_publishes_and_is_idempotent(tmp_path: Path) -> None:
-    remote, templates = _artifact_remote(tmp_path)
-    first = publish_templates(templates, "0.0.2", str(remote), author="T <t@l>")
-    assert first == "published v0.0.2"
-    again = publish_templates(templates, "0.0.2", str(remote), author="T <t@l>")
-    assert again == "v0.0.2 already published with this content"
-    # The acceptance diff: the artifact tree at the tag is templates/.
-    check = tmp_path / "check"
-    _git(tmp_path, "clone", str(remote), "check")
-    _git(check, "checkout", "v0.0.2")
-    shutil.rmtree(check / ".git")  # --no-index would walk the pack files
-    diff = subprocess.run(
-        ["git", "diff", "--no-index", str(templates), str(check)],
-        capture_output=True,
-        text=True,
-    )
-    assert diff.returncode == 0 and diff.stdout == ""
-
-
-def test_the_same_version_with_different_content_refuses(tmp_path: Path) -> None:
-    remote, templates = _artifact_remote(tmp_path)
-    publish_templates(templates, "0.0.2", str(remote), author="T <t@l>")
-    (templates / "copier.yml").write_text("kind:\n  type: str\n  default: x\n")
-    with pytest.raises(_FAILURES) as caught:
-        publish_templates(templates, "0.0.2", str(remote), author="T <t@l>")
-    assert "immutable" in str(caught.value)
-    assert (
-        publish_templates(templates, "0.0.3", str(remote), author="T <t@l>")
-        == "published v0.0.3"
-    )
 
 
 def test_floor_bumps_move_both_homes(seeds: Seeds) -> None:

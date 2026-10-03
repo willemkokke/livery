@@ -64,21 +64,13 @@ def _facts(root: Path) -> dict[str, Any]:
     minor; the uv pin from the lock. Nothing here is an answer: the
     answers hold identity alone.
     """
-    from livery.workshop._compose import extension_template_tree
     from livery.workshop._docs_contract import docs_requirements, publish_seam
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
-    from livery.workshop._extensions import stack_entries
-    from livery.workshop._templates import templates_artifact
     from livery.workshop._wheels import member_roster, wheel_runners
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
-    publisher = ""
-    for extension, dist in stack_entries(root):
-        tree = extension_template_tree(root, extension)
-        if tree is not None and tree.is_relative_to(root):
-            publisher = dist
     from livery.workshop._lfs import lfs_enabled
 
     return {
@@ -106,10 +98,6 @@ def _facts(root: Path) -> dict[str, Any]:
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
-        # The publish side: where this home ships its template
-        # artifact, and which member extension's release triggers it.
-        "templates_artifact": templates_artifact(root),
-        "templates_publisher": publisher,
         # The members with their kinds, and the runner labels the
         # platform-wheel members declare: the wheels job exists when
         # the union is non-empty and runs one leg per label.
@@ -304,10 +292,6 @@ def _renders(job: Job, answers: dict[str, Any]) -> bool:
     """Whether *job* exists for this workspace: its ``only`` against the facts."""
     if job.only == "wheels":
         return bool(_wheel_runners(answers))
-    if job.only == "home":
-        return bool(answers.get("templates_artifact")) and bool(
-            answers.get("templates_publisher")
-        )
     return True
 
 
@@ -367,11 +351,6 @@ def _call_env(job: Job, *, forge: str) -> str:
         # before it spawns uv, so uv stays on trusted publishing.
         secret = "PYPI_TOKEN" if forge == "github" else "UV_PUBLISH_TOKEN"
         lines.append(f"UV_PUBLISH_TOKEN: ${{{{ secrets.{secret} }}}}")
-    if job.deploy_key and forge == "github":
-        lines.append(
-            "GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy"
-            " -o StrictHostKeyChecking=accept-new"
-        )
     if not lines:
         return ""
     return "        env:\n" + "".join(f"          {line}\n" for line in lines)
@@ -444,20 +423,6 @@ def _driver_step(prog: str, point: Point, job: Job, *, forge: str) -> str:
     return (
         "      - name: Pin the driver\n"
         f'        run: {prog} release.driver --workshop="{value}"\n'
-    )
-
-
-def _deploy_key_step(job: Job) -> str:
-    """The deploy key written to disk for a cross-repository push over ssh (GitHub)."""
-    if not job.deploy_key:
-        return ""
-    return (
-        "      - name: Deploy key\n"
-        "        run: |\n"
-        "          mkdir -p ~/.ssh\n"
-        f"          printf '%s\\n' \"${{{{ secrets.{job.deploy_key} }}}}\""
-        " > ~/.ssh/templates_deploy\n"
-        "          chmod 600 ~/.ssh/templates_deploy\n"
     )
 
 
@@ -584,8 +549,6 @@ def _actions_job(
         _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
     )
     lines.append(_driver_step(prog, point, job, forge=forge))
-    if forge == "github":
-        lines.append(_deploy_key_step(job))
     lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
     lines.append(_call_env(job, forge=forge))
     lines.append(_call_step(prog, point, job))
@@ -726,8 +689,8 @@ def _gitlab_job(
     if job.pushes:
         lines.append("    - git fetch --tags\n")
     if job.pushes or job.writes:
-        # The job token cannot push: a store write, a receipt tag and
-        # the template artifact all ride the push token. The address
+        # The job token cannot push: a store write and a receipt tag
+        # ride the push token. The address
         # is the server's own protocol, host and port: an instance
         # off 443 (the local one) is unreachable at a bare https host.
         lines.append(
@@ -782,8 +745,8 @@ def _gitlab_document(
 # process environment, the cascade's highest rung already: declare
 # PYTHON_PUBLISH_INDEX, PYTHON_REGISTRY_URL, FORGE_TOKEN,
 # UV_PUBLISH_TOKEN and GITLAB_PUSH_TOKEN (a project access token with
-# write_repository: the job token cannot push, and the state store,
-# the receipt tags and the template artifact are pushes) as CI
+# write_repository: the job token cannot push, and the state store
+# and the receipt tags are pushes) as CI
 # variables, masked where their values allow it.
 workflow:
   name: $FORGE_WORKFLOW

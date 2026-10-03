@@ -20,21 +20,18 @@ from livery.workshop._checks import (
     register_check,
     run_check,
 )
-from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
     CiContract,
     KindRecord,
     gated,
     is_python_kind,
     kind_for,
-    managed_files,
     record_for_template,
     register_kind,
     template_chain,
 )
 from livery.workshop._packages import Neighbours, Package, discover_packages
 from livery.workshop._registries import RegistryTarget
-from livery.workshop._templates import render
 
 _FAILURES = (BaseException,)
 
@@ -50,7 +47,6 @@ class _FakeStamper:
 
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 #: The armed leg needs the host toolchain; a machine without it skips
 #: naming what is missing instead of failing mid-configure. Windows
@@ -112,20 +108,17 @@ def _package(directory: Path, name: str, kind_name: str) -> Package:
 
 
 def _render_cpp(tmp_path: Path) -> Package:
-    """A rendered cpp-conan package, straight from the template."""
+    """A cpp-conan package, straight from its seeds."""
     destination = tmp_path / "packages" / "native"
-    answers = project_facts(ROOT)
-    render(
-        str(TEMPLATES),
+    from workshop_composed import seed_into
+
+    seed_into(
         destination,
+        "package-cpp-conan",
         {
-            "kind": "package-cpp-conan",
             "package_name": "acme-native",
             "package_description": "acme-native: a native library.",
             "namespace_package": "acme",
-            "author_name": answers["author_name"],
-            "author_email": answers["author_email"],
-            "copyright_year": answers["copyright_year"],
             "project_name": "acme",
         },
     )
@@ -449,7 +442,6 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    assert managed_files("cpp-conan") == (".clang-format", ".clang-tidy")
     assert not is_python_kind("cpp-conan")
     assert is_python_kind("python")
     record = record_for_template("package-cpp-conan")
@@ -483,11 +475,6 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
         (destination / "packages" / member).mkdir(parents=True)
         (destination / "packages" / member / "workshop.toml").write_text(contract)
         (destination / "packages" / member / manifest).write_text("")
-    answers = dict(project_facts(ROOT))
-    from livery.workshop._templates import compose_fragments
-
-    data = {**answers, "kind": "project"}
-    render(str(TEMPLATES), destination, {**data, "fragments": compose_fragments(data)})
     from workshop_composed import compose_into
 
     pyproject = (compose_into(destination) / "pyproject.toml").read_text()

@@ -19,11 +19,6 @@ extensions = [
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
 ]
-# Where the rendered files come from: a directory relative to this
-# root, or a git URL (a fork, at your own risk). The update wave
-# follows this value.
-templates = "packages/workshop/src/livery/workshop/templates"
-templates-artifact = "git@github.com:willemkokke/workshop-templates.git"
 
 [docs]
 # The site's home; the account-level domain serves every project.

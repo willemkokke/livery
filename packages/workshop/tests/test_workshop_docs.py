@@ -923,11 +923,10 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
     assert "sudo" not in pipeline
 
 
-def test_the_docs_seeds_live_once_in_the_base_template() -> None:
-    # Every package template chains from package-base, the one home
-    # of the docs seeds; a copy in a kind template would shadow the
-    # base's and rot separately. The chain once caught an extension-born
-    # package arriving seedless from exactly that duplication.
+def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
+    # Every package's seed chain starts at package-base, the one home
+    # of the docs seeds; a copy in a kind's tree would shadow the
+    # base's and rot separately.
     from livery.workshop._kinds import template_chain
 
     templates = (
@@ -935,7 +934,8 @@ def test_the_docs_seeds_live_once_in_the_base_template() -> None:
         / "src"
         / "livery"
         / "workshop"
-        / "templates"
+        / "content"
+        / "seeds"
     )
     base = templates / "package-base" / "docs"
     assert (base / "nav.toml").is_file()

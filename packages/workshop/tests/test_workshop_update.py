@@ -25,7 +25,6 @@ _REAL_GATE = run_gate
 _FAILURES = (SystemExit, Failed)
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -46,14 +45,11 @@ def _build(base: Path) -> None:
     _git(base, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    import shutil
 
-    shutil.copytree(TEMPLATES, root / "templates")
     # The contract is a birth-time seed the render never touches; the
     # tests stand in for the birth verb and write it whole.
     (root / "workshop.toml").write_text(
         "[workspace]\n" + IDENTITY + "extensions = []\n"
-        'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )

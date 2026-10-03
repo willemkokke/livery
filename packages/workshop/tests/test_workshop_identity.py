@@ -105,17 +105,3 @@ def test_a_members_facts_come_from_its_contract_and_the_projects(
     )
     assert template_of(variant) == "package-extension"
     assert package_facts(tmp_path, variant)["package_description"] == "The brand."
-
-
-def test_the_template_reference_is_recorded_in_place(tmp_path: Path) -> None:
-    from livery.workshop._templates import record_templates_ref, templates_ref
-
-    contract = tmp_path / "workshop.toml"
-    contract.write_text('[workspace]\nname = "acme"\n\n[forge]\nkind = "github"\n')
-    assert templates_ref(tmp_path) == ""
-    record_templates_ref(tmp_path, "v1.0.0")
-    assert templates_ref(tmp_path) == "v1.0.0"
-    assert contract.read_text().startswith('[workspace]\ntemplates-ref = "v1.0.0"\n')
-    record_templates_ref(tmp_path, "v1.1.0")
-    assert contract.read_text().count("templates-ref") == 1
-    assert templates_ref(tmp_path) == "v1.1.0"

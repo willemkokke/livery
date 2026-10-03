@@ -79,14 +79,19 @@ def verify(fragments: tuple[Fragment, ...], check: str) -> None:
 
 
 def _render(text: str, data: dict[str, Any]) -> str:
-    """*text* rendered with *data*, the way the template reads it."""
-    import jinja2
+    """*text* rendered with *data*."""
+    import json
 
-    # Lenient on an undefined name, as copier's own environment is,
-    # so a render over partial data draws the same file the template
-    # would; the drift gate reads the full data and judges the bytes.
-    environment = jinja2.Environment(keep_trailing_newline=True)
-    return environment.from_string(text).render(**data)
+    import minijinja
+
+    # Lenient on an undefined name, so a render over partial data draws
+    # the file the full data would, less the missing parts; the drift
+    # gate reads the full data and judges the bytes.
+    environment = minijinja.Environment(
+        keep_trailing_newline=True, undefined_behavior="lenient"
+    )
+    plain = json.loads(json.dumps(data, default=str))
+    return environment.render_str(text, **plain)
 
 
 def compose_project(data: dict[str, Any]) -> dict[str, str]:
