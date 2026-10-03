@@ -24,7 +24,6 @@ Reach for [livery.toolroom.store.api.Requirement][],
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -32,7 +31,8 @@ from typing import Any
 
 from livery.strongroom.api import Digest
 from livery.toolroom.store._catalogue import Catalogue, CatalogueError, Listed
-from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, PLATFORMS, version_key
+from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, version_key
+from livery.toolroom.store._requirement import Scope, Spec, SpecError
 from livery.toolroom.tools.api import version_tuple
 
 LOCK_FILE = "tools.lock"
@@ -43,11 +43,6 @@ LOCK_SCHEMA = 1
 
 GRAPHS = "tools.graphs"
 """The directory beside the lock holding one resolved graph per delegated tool."""
-
-_REQUIREMENT = re.compile(
-    r"^\s*(?P<name>[A-Za-z0-9_.\-]+)\s*(?:>=\s*(?P<floor>[^\s@]+))?\s*"
-    r"(?:@\s*(?P<hosts>[A-Za-z0-9,\-\s]*))?\s*$"
-)
 
 
 class LockError(ValueError):
@@ -84,33 +79,17 @@ class Requirement:
                 scope naming no host or a token that is neither a
                 platform nor a host key.
         """
-        match = _REQUIREMENT.match(text)
-        if match is None:
+        where = site or "a requirement"
+        try:
+            spec = Spec.parse(text, where=where)
+        except SpecError as error:
+            raise LockError(str(error)) from None
+        if spec.options or spec.optional or spec.scope.exclude:
             raise LockError(
-                f"{site or 'a requirement'}: {text!r} is not a requirement;"
-                " spell it `name`, `name>=floor`, or either followed by"
-                " `@hosts`"
+                f"{where}: {text!r} is not a requirement; spell it `name`,"
+                " `name>=floor`, or either followed by `@hosts`"
             )
-        scope: tuple[str, ...] = ()
-        if match["hosts"] is not None:
-            tokens = tuple(
-                token.strip() for token in match["hosts"].split(",") if token.strip()
-            )
-            if not tokens:
-                raise LockError(
-                    f"{site or 'a requirement'}: {text!r} names no host after @;"
-                    f" a scope names a platform ({', '.join(PLATFORMS)}) or a"
-                    f" host key ({', '.join(HOSTS)})"
-                )
-            for token in tokens:
-                if token not in PLATFORMS and token not in HOSTS:
-                    raise LockError(
-                        f"{site or 'a requirement'}: {token!r} in {text!r} is"
-                        f" neither a platform ({', '.join(PLATFORMS)}) nor a host"
-                        f" key ({', '.join(HOSTS)})"
-                    )
-            scope = tokens
-        return cls(match["name"], match["floor"] or "", site, scope)
+        return cls(spec.name, spec.floor, site, spec.scope.include)
 
     def __str__(self) -> str:
         spelled = f"{self.name}>={self.floor}" if self.floor else self.name
@@ -122,14 +101,7 @@ class Requirement:
 
     def on(self, locked: Iterable[str]) -> tuple[str, ...]:
         """The hosts of *locked* this requirement applies to, in their order."""
-        hosts = tuple(locked)
-        if not self.hosts:
-            return hosts
-        return tuple(
-            host
-            for host in hosts
-            if host in self.hosts or host.partition("-")[0] in self.hosts
-        )
+        return Scope(self.hosts).hosts(locked)
 
 
 @dataclass(frozen=True)

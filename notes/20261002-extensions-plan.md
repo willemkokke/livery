@@ -742,8 +742,16 @@ repository's region. A plugin mounted inside another's import keeps its
 own name in footman's provenance. `fm --list` offers the same 161
 verbs before and after.
 
-5c (tool declarations, `?` and `!`) and 5d (`[workspace] platforms`)
-are not started.
+**5c built (issue #1045): one requirement grammar.**
+`livery.toolroom.store.api.Spec` parses `name[options]?>=floor@scope`
+and `Scope` resolves a scope's inclusions and exclusions against a
+supported set, both public; `Requirement` parses through them and, until
+its sites take them, refuses options, `?` and `!` as before. Willem's
+ruling of 2026-10-03: parse the grammar once and let each site add its
+own rule, the parser being public API like the lock it serves.
+
+5d (`?` and `!` at the tool sites, plugins' tool declarations) and 5e
+(`[workspace] platforms`) are not started.
 
 Carried from the empty shell plan's phase 12, extended.
 

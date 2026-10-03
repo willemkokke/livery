@@ -102,10 +102,22 @@ read is offline; the authoring site reads its records directly and gets
 the same catalogue, since a deployment's digest is the digest of its
 canonical JSON either way.
 
-A requirement is a tool's name with a floor, `ruff` or `ruff>=0.16`,
-and may name the hosts it applies to after `@`, `dotnet_coverage@windows`
-or `tea>=1.1@linux,macos-arm`: a platform means every locked host of
-it, a host key itself, and any other token refuses at parse. The lock
+Every site that names a tool or an extension spells it in one grammar,
+`name[option,...]?>=floor@scope`, and `Spec.parse` is its one parser:
+`[...]` names options (a tool's profile, an extension's switches), `?`
+marks it optional, `>=floor` is the lowest version that satisfies, and
+`@scope` limits it to some hosts. A scope is comma-separated platforms
+(`windows`, every host of it) or host keys (`windows-x64`), each
+excluded with a leading `!`; any other token refuses at parse.
+`Scope.hosts(supported)` resolves a scope against the hosts a
+workspace supports: no inclusion reaches every one of them, and an
+exclusion then removes its hosts, so `tea@!windows-arm` is every
+supported host but one. The parser enforces the grammar alone; what a
+site takes of it is the site's rule, refused there with the site named.
+
+A tool requirement is a tool's name with a floor, `ruff` or
+`ruff>=0.16`, and may name the hosts it applies to after `@`,
+`dotnet_coverage@windows` or `tea>=1.1@linux,macos-arm`. The lock
 takes for each tool the newest version the catalogue lists that
 satisfies every floor and resolves on every host the tool is required
 on, the union of its requirements' scopes and the whole lock for one
