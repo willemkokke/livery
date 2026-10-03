@@ -80,12 +80,7 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    assert extension_names(ROOT) == (
-        "docs",
-        "livery.forge",
-        "livery.toolroom.bench",
-        "livery.footman",
-    )
+    assert extension_names(ROOT) == ("docs",)
 
 
 def test_outside_a_workspace_there_are_no_extensions(tmp_path: Path) -> None:
@@ -97,16 +92,13 @@ def test_outside_a_workspace_there_are_no_extensions(tmp_path: Path) -> None:
 def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> None:
     from livery.footman import registry
 
-    # A scratch contract naming an extension the workshop itself depends
-    # on, never this repository's, whose further extensions belong to its
-    # dev group and are absent where the suite runs against the wheel
-    # with the package's own dependencies alone.
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["livery.forge"]\n'
-    )
+    # A scratch contract naming the extension the workshop's own wheel
+    # ships, so the suite needs nothing beyond the package's own
+    # dependencies when it runs against the wheel.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("livery.forge",)
+        assert mount_extensions(tmp_path) == ("docs",)
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:

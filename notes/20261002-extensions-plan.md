@@ -728,10 +728,22 @@ project, the `footman.builtin` names of the distributions its
 `pyproject.toml` names directly (`[project] dependencies` and every
 `[dependency-groups]` list) mount after the machine's built-ins and
 before the user's file; `[tool.footman] builtin-exclude` keeps a name
-out and `fm --plugins` labels both. 5b (the rendered `tasks.py` keeps
-only its comment, forge, the bench and footman become plugins), 5c
-(tool declarations, `?` and `!`) and 5d (`[workspace] platforms`) are
-not started.
+out and `fm --plugins` labels both.
+
+**5b built (issue #1042).** The workshop's entry module
+(`livery.workshop._mount`) registers the base's verbs and mounts the
+listed extensions, so the rendered `tasks.py` keeps its comment and the
+repository's region alone. forge and the bench declare `footman.builtin`
+entries and left `[workspace] extensions`; footman declares
+`footman.profile` a built-in of every project depending on it, and its
+own docs plugin stays out of the rung (every born project names
+footman, and the verb builds footman's pages), mounted in this
+repository's region. A plugin mounted inside another's import keeps its
+own name in footman's provenance. `fm --list` offers the same 161
+verbs before and after.
+
+5c (tool declarations, `?` and `!`) and 5d (`[workspace] platforms`)
+are not started.
 
 Carried from the empty shell plan's phase 12, extended.
 
@@ -1038,8 +1050,6 @@ Acceptance:
 
 | Temporary | Replaced by |
 | --- | --- |
-| `livery.forge`, `livery.toolroom.bench` and `livery.footman` listed as extensions | plugins mounted by the project builtin rung (phase 5) |
-| `plugin("livery.workshop")` in the rendered `tasks.py` | the project builtin rung (phase 5) |
 | check-owned fragments, prose, skills, hooks, settings and CSS as separate channels | one fragment engine (phase 6) |
 | copier, the templates, the answers file, the template channel | seeds and fragments from wheels (phases 7, 8) |
 | `CiContract` and kinds' roles | roles from listed checks (phase 9) |

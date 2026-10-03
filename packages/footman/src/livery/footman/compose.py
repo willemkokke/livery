@@ -230,11 +230,16 @@ def _stamp(node: Group, identity: str) -> None:
 
     Groups carry it as a field (each mount grafts fresh Group objects); task
     fns carry the marker attribute — they are shared between forks, and the
-    identity is the same everywhere the same provider's fn lands.
+    identity is the same everywhere the same provider's fn lands. A node
+    that already carries an identity keeps it: a provider whose import
+    mounts another plugin (`plugin()` inside a plugin) leaves that
+    plugin's verbs under that plugin's own name, not its own.
     """
-    node.mounted_from = identity
+    if node.mounted_from is None:
+        node.mounted_from = identity
     for fn in node.tasks.values():
-        setattr(fn, registry._MOUNTED, identity)
+        if registry.mounted_from(fn) is None:
+            setattr(fn, registry._MOUNTED, identity)
     for sub in node.groups.values():
         _stamp(sub, identity)
 

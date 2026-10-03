@@ -1,8 +1,9 @@
 # livery.workshop
 
 The devkit: what every repository in the livery ecosystem runs. A
-repository's whole `tasks.py` is `plugin("livery.workshop")`; every
-verb below arrives through that line.
+repository depends on the workshop, and footman mounts it through its
+project rung: the rendered `tasks.py` mounts nothing, and every verb
+below arrives through that dependency.
 
 ## The extension model
 

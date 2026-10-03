@@ -57,7 +57,7 @@ dependencies = [
 dev = ["types-pyyaml", "minijinja>=2.24"]
 
 [project.entry-points."footman.tasks"]
-"livery.workshop" = "livery.workshop._tasks"
+"livery.workshop" = "livery.workshop._mount"
 # The docs extension, an extension inside this wheel with a surface of its own.
 "livery.extensions.docs" = "livery.extensions.docs._tasks"
 
@@ -71,7 +71,7 @@ docs = "livery.extensions.docs._extension"
 # `fm self.add livery-workshop` records the name; whether it mounts
 # stays the machine owner's call through builtins.discovery_mode.
 [project.entry-points."footman.builtin"]
-"livery.workshop" = "livery.workshop._tasks"
+"livery.workshop" = "livery.workshop._mount"
 
 # The runner's sweep: what the workshop leaves in the data directory
 # is the workshop's to bound, run by `fm janitor` and the

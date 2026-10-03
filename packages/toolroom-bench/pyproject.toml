@@ -42,12 +42,12 @@ test = [
     "livery-strongroom>=0.2.0",
 ]
 
-# A workshop extension until the workshop mounts a project's plugins by
-# its dependencies: the data module that declares it.
-[project.entry-points."workshop.extensions"]
-"livery.toolroom.bench" = "livery.toolroom.bench._extension"
-
 [project.entry-points."footman.tasks"]
+"livery.toolroom.bench" = "livery.toolroom.bench.api"
+
+# A project that depends on the bench directly gets the tools verbs
+# through footman's project rung.
+[project.entry-points."footman.builtin"]
 "livery.toolroom.bench" = "livery.toolroom.bench.api"
 
 [project.entry-points.pytest11]

@@ -10,10 +10,13 @@ small API lets a task add its own timing to the same picture.
 
 ## The profile plugin
 
-Mount it like any plugin:
+footman declares it a built-in of every project that depends on
+footman directly, so a project gets it without mounting anything. A
+script or a project that keeps it out by `builtin-exclude` mounts it
+like any plugin:
 
 ```python
-from livery.footman.compose import plugin
+from livery.footman.api import plugin
 
 plugin("footman.profile")
 ```

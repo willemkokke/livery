@@ -1,36 +1,21 @@
 # Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `fm template.apply`; an edit here is drift.
-"""The dev loop: the workspace's extensions, mounted.
+"""The dev loop.
 
 Run with ``fm <task>``. ``fm check`` is the whole local gate;
-CI runs the same command. The tree comes from the mounted extensions, and
-the render owns this file above the mount: the gate keeps that part
-matching the template, and a workspace adds tasks through the extensions
-its contract names, or in the region below the mount, which is its
-own.
+CI runs the same command. Nothing here mounts anything: the workshop and
+every plugin this project depends on directly arrive through the
+runner's project rung, and the workshop mounts the extensions the
+contract lists. The region below is the repository's own, for tasks of
+its own or a plugin it mounts by hand.
 """
 
+# -- workshop: region tasks, yours to edit; the render keeps it --
 from livery.footman.api import plugin
 
-plugin("livery.workshop")
-
-# `fm --profile <task>` writes the run as a Chrome trace: a
-# track per worker, a slice per task with its steps and lane waits,
-# every pytest test its own slice. Mounted in every workspace so any
-# run, a CI leg included, can be profiled with one flag.
-plugin("footman.profile")
-
-# Every further extension the contract names mounts here, each under its
-# own identity, so a task's provenance names its real provider.
-# Composition belongs to the workspace's own file, never to a
-# extension's import side effects. The late import is load-bearing:
-# plugin() above must be the extension's first importer, so its task
-# registration lands inside footman's capture.
-from livery.workshop.api import mount_extensions  # noqa: E402
-
-mount_extensions()
-
-# The repository's own tasks, below the mount.
-# -- workshop: region tasks, yours to edit; the render keeps it --
+# footman's own docs pages (`fm footman.pages`): this repository builds
+# them, so it mounts the plugin itself; a project depending on footman
+# has no use for the verb.
+plugin("livery.footman")
 # -- workshop: end tasks --
