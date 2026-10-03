@@ -776,9 +776,9 @@ rulings of 2026-10-03 on the clang tools: `clang-format` and
 build per release for every host we lock, macos-x64 included; the
 hand-written records over the third-party static builds go, pinned at
 20.1.0 where PyPI has clang-tidy 22.1.8 and clang-format 23.1.2.
-macos-x64 stays a supported host, proved on a `macos-15-intel` leg; the
-phase opens with an audit naming every record that lacks a macos-x64
-build, and those carry a scope.
+macos-x64 stays a supported host with no CI leg for now; the phase
+opens with an audit naming every record that lacks a macos-x64 build,
+and those carry a scope.
 
 Carried from the empty shell plan's phase 12, extended.
 
@@ -1280,10 +1280,11 @@ Acceptance:
 - Willem, 2026-10-03: macos-x64 stays supported. Apple's last Intel
   release is macOS 26 and GitHub's `macos-15-intel` image is the last
   x64 one, but the PyPI wheels and Xcode cover the LLVM tools there.
-- Willem, 2026-10-03: a tool two records can provide comes from its
-  own record unless a required collection contains it. No record
-  overlaps once the clang tools leave `llvm`; the rule waits for the
-  first one that does.
+  No CI leg proves it for now, since one would slow every run; it is
+  taken up nearer the image's retirement.
+- Willem, 2026-10-03: one record provides a tool; there is no rule for
+  choosing between records, since no tool has two once the clang tools
+  leave `llvm`.
 - 2026-10-02: the release notes provider, the derived version and the
   member list (the empty shell plan's phases 7 and 8a) are the
   foundations phase 11 composes on.
@@ -1315,3 +1316,6 @@ Acceptance:
    plan's open item 5). Owner: Willem, after phase 12.
 10. **The pwsh spelling of the entry** (the extensible gate plan's
     open item 5). Owner: Willem.
+11. **A CI leg proving macos-x64** on `macos-15-intel`, a supported
+    host no run proves until then. Owner: Willem, before GitHub
+    retires the image.
