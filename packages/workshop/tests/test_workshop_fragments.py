@@ -99,11 +99,8 @@ def test_a_hand_edited_section_is_drift(tmp_path: Path) -> None:
 def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     tmp_path: Path, restored_checks
 ) -> None:
-    from livery.workshop._templates import (
-        judge_fragment_file,
-        read_rendered,
-        settle_fragment_file,
-    )
+    from livery.workshop._fragment_engine import read_rendered
+    from livery.workshop._templates import judge_fragment_file, settle_fragment_file
 
     data = {**_data(), "kind": "cpp-conan"}
     member = tmp_path / "packages" / "native"
@@ -148,7 +145,8 @@ def _restore_clang_tidy() -> CheckRecord:
 def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._templates import read_rendered, settle_fragment_file
+    from livery.workshop._fragment_engine import read_rendered
+    from livery.workshop._templates import settle_fragment_file
 
     data = {**_data(), "kind": "cpp-conan"}
     member = tmp_path / "packages" / "native"

@@ -37,6 +37,7 @@ from livery.workshop._extensions import (
     stack_entries,
     workspace_root,
 )
+from livery.workshop._fragment_engine import read_rendered, write_rendered
 from livery.workshop._materialise import write_lf
 from livery.workshop._pythons import python_floor
 
@@ -770,44 +771,8 @@ def package_drift(root: Path) -> list[str]:
     return drift
 
 
-#: The receipt of what the render wrote into a package for the checks'
-#: per-package files, name to digest: what lets a withdrawn check's
-#: file go only when nobody edited it.
-RENDERED_MANIFEST = ".workshop-rendered"
-
-
 def _digest(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
-
-
-def read_rendered(directory: Path) -> dict[str, str]:
-    """The package's rendered-file receipts, name to digest; empty without any."""
-    import json
-
-    path = directory / RENDERED_MANIFEST
-    if not path.is_file():
-        return {}
-    try:
-        loaded = json.loads(path.read_text("utf-8"))
-    except ValueError:
-        return {}
-    return (
-        {str(k): str(v) for k, v in loaded.items()} if isinstance(loaded, dict) else {}
-    )
-
-
-def write_rendered(directory: Path, receipts: dict[str, str]) -> None:
-    """Write the receipts, or remove the file when there are none."""
-    import json
-
-    path = directory / RENDERED_MANIFEST
-    if not receipts:
-        if path.is_file():
-            path.unlink()
-        return
-    path.write_bytes(
-        (json.dumps(dict(sorted(receipts.items())), indent=2) + "\n").encode()
-    )
 
 
 def _fragment_render(directory: Path, name: str, data: dict[str, Any]) -> bytes | None:

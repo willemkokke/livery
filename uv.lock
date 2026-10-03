@@ -968,12 +968,12 @@ dependencies = [
     { name = "livery-strongroom" },
     { name = "livery-toolroom" },
     { name = "livery-toolroom-store" },
+    { name = "minijinja" },
     { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
 dev = [
-    { name = "minijinja" },
     { name = "types-pyyaml" },
 ]
 
@@ -985,7 +985,7 @@ requires-dist = [
     { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-toolroom-store", editable = "packages/toolroom-store" },
-    { name = "minijinja", marker = "extra == 'dev'", specifier = ">=2.24" },
+    { name = "minijinja", specifier = ">=2.24" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },
 ]
