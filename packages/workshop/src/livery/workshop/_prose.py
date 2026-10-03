@@ -18,11 +18,11 @@ leaves the fragment out for that reader. A topic is never named
 ``fm sync`` delivers the agent's set flat under ``.workshop/fragments/``
 with the audience dropped from the name: a shipped fragment byte for
 byte its source, a rendered one under a header naming its origin, each
-through the materialiser so an edited copy is kept and named. The
+through the fragment engine so an edited copy is kept and named. The
 repository's own fragments live in ``fragments/`` at the root under the
 same names, are never copied, and come last. Reach for
 [livery.workshop._prose.fragments][] for the set a reader gets and
-[livery.workshop._prose.deliver][] for the delivery.
+[livery.workshop._shipped_files][] for the delivery.
 """
 
 from __future__ import annotations
@@ -35,11 +35,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import livery.footman.api as footman
-from livery.workshop._materialise import (
-    materialise_bytes,
-    materialise_file,
-    sweep_files,
-)
 
 BASE_EXTENSION = "livery.workshop"
 AGENT = "agent"
@@ -374,64 +369,32 @@ def fragments(
     return chosen
 
 
-@dataclass(frozen=True)
-class Delivery:
-    """What one delivery did.
+def agent_set(root: Path, shipped: Iterable[Prose]) -> tuple[list[Prose], list[str]]:
+    """The fragments the agent gets from *shipped*, and the repository's own names.
 
-    Attributes:
-        lines: The summary lines, empty when nothing changed.
-        delivered: The names under ``.workshop/fragments/``, in reading order.
-        own: The repository's own names under ``fragments/``, in reading order.
+    Both readers' sets are validated, so a collision a human reader would
+    meet refuses here as well. The repository's own fragments are named,
+    never copied: they live in ``fragments/`` already.
+
+    Raises:
+        ProseError: for two fragments that deliver as one file.
     """
+    listed = list(shipped)
+    chosen = fragments(root, listed, AGENT)
+    fragments(root, listed, HUMAN)
+    delivered = [prose for prose in chosen if prose.extension != REPOSITORY]
+    own = [prose.name for prose in chosen if prose.extension == REPOSITORY]
+    return delivered, own
 
-    lines: list[str]
-    delivered: tuple[str, ...]
-    own: tuple[str, ...]
 
-
-def _rendered_header(prose: Prose) -> str:
+def rendered_header(prose: Prose) -> str:
+    """The header a rendered fragment's copy opens with."""
     return (
         f"<!-- Rendered by `{footman.prog()} sync` from the registries"
         f" {prose.extension} fills;\n"
         "     the source is the code. An edited copy is a local override,\n"
         "     kept and named until it is deleted. -->\n"
     )
-
-
-def deliver(root: Path, shipped: Iterable[Prose]) -> Delivery:
-    """Deliver the agent's set under ``.workshop/fragments/``.
-
-    The reader's set is validated too, so a collision a human reader
-    would meet refuses here as well. A shipped fragment is copied byte
-    for byte and a rendered one written under its header, each through
-    the materialiser: a current copy is quiet, a stale one refreshes,
-    an edited one is kept and named. A file nobody delivers any more is
-    removed. The repository's own fragments stay where they are and are
-    named in the result.
-    """
-    listed = list(shipped)
-    chosen = fragments(root, listed, AGENT)
-    fragments(root, listed, HUMAN)
-    lines: list[str] = []
-    delivered: list[str] = []
-    own: list[str] = []
-    for prose in chosen:
-        if prose.extension == REPOSITORY:
-            own.append(prose.name)
-            continue
-        relative = f"{DELIVERED}/{prose.name}"
-        if prose.render is not None:
-            text = prose.render(root, AGENT)
-            if not text:
-                continue
-            body = (_rendered_header(prose) + text).encode("utf-8")
-            lines += materialise_bytes(root, body, relative)
-        elif prose.source is not None:
-            lines += materialise_file(root, prose.source, relative)
-        delivered.append(prose.name)
-    for name in sweep_files(root / DELIVERED, set(delivered)):
-        lines.append(f"  fragments: removed {name} (no extension ships it)")
-    return Delivery(lines, tuple(delivered), tuple(own))
 
 
 def render_gate(root: Path, audience: str | None) -> str:

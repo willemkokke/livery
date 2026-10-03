@@ -118,7 +118,9 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     # The check withdrawn: the edited arm first, kept and named.
     unregister_check("lint.clang-tidy", by="acme.brand")
     (member / ".clang-tidy").write_text("Checks: mine\n")
-    assert deliver(root) == [
+    # The gate's prose follows the withdrawn check too; the package's
+    # lines are the ones under test.
+    assert [line for line in deliver(root) if "packages/" in line] == [
         "  kept packages/native/.clang-tidy: no listed extension renders it, and"
         " it was edited here, so it stays as the repository's own"
     ]
@@ -129,7 +131,7 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     register_check(_checks._CHECKS.get("lint.clang-tidy") or _restore_clang_tidy())
     deliver(root)
     unregister_check("lint.clang-tidy", by="acme.brand")
-    assert deliver(root) == [
+    assert [line for line in deliver(root) if "packages/" in line] == [
         "  removed packages/native/.clang-tidy: no listed extension renders it"
     ]
     assert not (member / ".clang-tidy").is_file()

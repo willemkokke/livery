@@ -235,7 +235,7 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
                 )
                 output = Output(output.path, text.encode(), output.owners)
         kept.append(output)
-    return tuple(kept), notes
+    return (*kept, *_agent_outputs(root, order)), notes
 
 
 def deliver(root: Path) -> list[str]:
@@ -371,3 +371,92 @@ def settle_package(member: Path, kind: str) -> list[str]:
 def judge_package(member: Path, kind: str) -> list[str]:
     """The drift lines for the per-package files of a package of *kind* at *member*."""
     return [line.strip() for line in drift(member, _package_outputs(member, kind))]
+
+
+STUB_HEADER = (
+    "<!-- Managed by `{prog} sync`: one import per fragment, in section\n"
+    "     order, the repository's own fragments/ after them, then its\n"
+    "     CLAUDE.project.md, which always wins. Edit CLAUDE.project.md,\n"
+    "     never this file. -->\n"
+)
+"""The `CLAUDE.md` stub's header, formatted with the runner's name at write time."""
+
+
+def _agent_outputs(root: Path, order: list[str]) -> list[Output]:
+    """What the listed extensions give the agent, and the stub that imports it.
+
+    Each extension's skills and hooks are links into its shipped content,
+    and its `settings.json` a copy; the prose fragments are copies in
+    section order under `.workshop/fragments/`. All of them belong to this
+    checkout alone. The `CLAUDE.md` stub that imports the fragments, then
+    the repository's own, then `CLAUDE.project.md`, is committed.
+    """
+    from livery.workshop import _prose
+
+    outputs: list[Output] = []
+    settings: Output | None = None
+    listed: list[_prose.Prose] = []
+    for extension in order:
+        content = extension_content(extension)
+        if content is None:
+            continue
+        listed += _prose.shipped(extension, content)
+        for kind in ("skills", "hooks"):
+            shipped = content / kind
+            if not shipped.is_dir():
+                continue
+            for entry in sorted(shipped.iterdir()):
+                if entry.name.startswith(".") or entry.name == "__pycache__":
+                    continue
+                outputs.append(
+                    Output(
+                        f".claude/{kind}/{entry.name}",
+                        b"",
+                        (f"{extension}:{kind}/{entry.name}",),
+                        link=entry,
+                        local=True,
+                    )
+                )
+        source = content / "settings.json"
+        if source.is_file():
+            if settings is not None:
+                fail(
+                    f".claude/settings.json has one owner, and {settings.owners[0]}"
+                    f" and {extension} both ship it"
+                )
+            settings = Output(
+                ".claude/settings.json",
+                source.read_bytes().replace(b"\r\n", b"\n"),
+                (f"{extension}:settings.json",),
+                local=True,
+            )
+    if settings is not None:
+        outputs.append(settings)
+    listed += _prose.repository_fragments(root)
+    chosen, own = _prose.agent_set(root, listed)
+    delivered: list[str] = []
+    for prose in chosen:
+        if prose.render is not None:
+            text = prose.render(root, _prose.AGENT)
+            if not text:
+                continue
+            body = (_prose.rendered_header(prose) + text).encode("utf-8")
+        elif prose.source is not None:
+            body = prose.source.read_bytes().replace(b"\r\n", b"\n")
+        else:
+            continue
+        outputs.append(
+            Output(
+                f"{_prose.DELIVERED}/{prose.name}",
+                body,
+                (f"{prose.extension}:{prose.name}",),
+                local=True,
+            )
+        )
+        delivered.append(prose.name)
+    stub = STUB_HEADER.format(prog=footman.prog())
+    stub += "".join(f"@{_prose.DELIVERED}/{name}\n" for name in delivered)
+    stub += "".join(f"@{_prose.OWN}/{name}\n" for name in own)
+    stub += "@CLAUDE.project.md\n"
+    outputs.append(Output("CLAUDE.md", stub.encode(), ("livery.workshop:CLAUDE.md",)))
+    return outputs

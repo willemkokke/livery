@@ -153,9 +153,11 @@ def strip_header(text: str, path: Path) -> str:
 
 def _materialised(root: Path, relative: Path) -> Provenance | None:
     """The answer for a path the sync verb delivers, or None."""
-    from livery.workshop._materialise import _is_link, _read_manifest
+    from livery.workshop._fragment_engine import local_receipts
+    from livery.workshop._materialise import _is_link
 
     prog = footman.prog()
+    receipted = local_receipts(root)
     parts = relative.parts
     if parts[0] == ".workshop":
         if parts[1:2] == ("fragments",):
@@ -185,10 +187,8 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
     if parts[0] != ".claude" or len(parts) < 2:
         return None
     if parts[1] in ("skills", "hooks") and len(parts) >= 3:
-        home = root / ".claude" / parts[1]
-        entry = home / parts[2]
-        manifest = _read_manifest(home)
-        if _is_link(entry) or parts[2] in manifest:
+        entry = root / ".claude" / parts[1] / parts[2]
+        if _is_link(entry) or f".claude/{parts[1]}/{parts[2]}" in receipted:
             return Provenance(
                 "materialised",
                 f"a mounted extension's content/{parts[1]}/{parts[2]}",
@@ -201,8 +201,7 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
             "edit directly; it commits like any repo file",
         )
     if parts[1] == "settings.json":
-        manifest = _read_manifest(root / ".claude")
-        if "settings.json" in manifest:
+        if ".claude/settings.json" in receipted:
             return Provenance(
                 "materialised",
                 "a mounted extension's content/settings.json",

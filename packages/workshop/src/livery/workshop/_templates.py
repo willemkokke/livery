@@ -808,8 +808,11 @@ def apply_project(root: Path) -> list[str]:
 
     for line in deliver(root):
         verb, _, rest = line.strip().partition(" ")
+        path = rest.partition(":")[0].split(" ")[0]
+        if path.startswith((".workshop/", ".claude/")):
+            continue  # this checkout's own, not the project's render
         if verb in ("wrote", "updated", "removed"):
-            changed.append(rest.partition(":")[0])
+            changed.append(path)
         else:
             print(line)
     changed.extend(apply_generated(root))

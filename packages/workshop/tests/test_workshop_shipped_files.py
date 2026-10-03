@@ -17,6 +17,15 @@ _REGION = (
 )
 
 
+def _composed(lines: list[str]) -> list[str]:
+    """*lines* for the composed files alone, the agent's own content left out."""
+    return [
+        line
+        for line in lines
+        if not line.split()[1].startswith((".claude", ".workshop", "CLAUDE.md"))
+    ]
+
+
 def _workspace(root: Path, extensions: str) -> Path:
     root.mkdir(exist_ok=True)
     (root / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
@@ -39,7 +48,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    assert deliver(root) == [
+    assert _composed(deliver(root)) == [
         "  wrote .gitattributes",
         "  wrote .gitignore",
         "  wrote .vscode/extensions.json",
@@ -55,7 +64,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     # The docs extension leaves the list: its lines go, the repository's
     # line stays, and the file is still the engine's to rewrite.
     _workspace(root, "[]")
-    assert deliver(root) == ["  updated .gitignore"]
+    assert _composed(deliver(root)) == ["  updated .gitignore"]
     ignored = (root / ".gitignore").read_text()
     assert "site/" not in ignored
     assert "mine/\n# -- workshop: end rules --" in ignored
@@ -113,7 +122,7 @@ def test_lfs_rules_are_left_out_and_named_until_the_workspace_turns_lfs_on(
     assert shipped_drift(root) == []
     # On: the rule is composed, and the tool and the checkout follow.
     (root / "workshop.toml").write_text("[workspace]\nextensions = []\nlfs = true\n")
-    assert deliver(root) == ["  updated .gitattributes"]
+    assert _composed(deliver(root)) == ["  updated .gitattributes"]
     assert (
         "*.png filter=lfs diff=lfs merge=lfs -text"
         in (root / ".gitattributes").read_text()
