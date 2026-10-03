@@ -540,22 +540,20 @@ def _project_drift(subject: Subject) -> list[Violation]:
 
 def _package_drift(fragment: Fragment) -> str:
     """What goes wrong rendering *fragment* into a probe package; empty when nothing."""
-    from livery.workshop import _templates
+    from livery.workshop import _shipped_files
 
-    data = _probe_answers(fragment.kind)
-    relative = f"packages/probe/{fragment.file}"
     with tempfile.TemporaryDirectory() as scratch:
         member = Path(scratch)
         try:
-            _templates.settle_fragment_file(member, fragment.file, data)
+            _shipped_files.settle_package(member, fragment.kind)
         except Exception as error:
             return f"does not render: {error}"
-        drift = _templates.judge_fragment_file(member, fragment.file, data, relative)
+        drift = _shipped_files.judge_package(member, fragment.kind)
         if drift:
             return f"drifts from its own render: {drift[0]}"
         copy = member / fragment.file
         copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
-        if not _templates.judge_fragment_file(member, fragment.file, data, relative):
+        if not _shipped_files.judge_package(member, fragment.kind):
             return "a hand edit of the rendered file is not named as drift"
     return ""
 
@@ -578,17 +576,16 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
     again. A file another check still renders for the kind is not
     withdrawn at all, and says nothing here.
     """
-    from livery.workshop import _templates
+    from livery.workshop import _shipped_files
 
     if record.name not in checks_by_name():
         return ""
-    data = _probe_answers(fragment.kind)
     state = _checks.snapshot()
     with tempfile.TemporaryDirectory() as scratch:
         member = Path(scratch)
         copy = member / fragment.file
         try:
-            _templates.settle_fragment_file(member, fragment.file, data)
+            _shipped_files.settle_package(member, fragment.kind)
             if not copy.is_file():
                 return ""  # it did not render: the drift clause names that
             if edited:
@@ -596,7 +593,7 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
             _checks.unregister_check(record.name)
             if package_fragment(fragment.kind, fragment.file) is not None:
                 return ""
-            _templates.settle_fragment_file(member, fragment.file, data)
+            _shipped_files.settle_package(member, fragment.kind)
         except Exception:
             return ""  # a render that fails is the drift clause's to name
         finally:

@@ -73,9 +73,7 @@ needs_clang_format = pytest.mark.skipif(
 
 
 def _render_named(tmp_path: Path, package_name: str) -> Path:
-    """The nanobind template rendered for *package_name*, native configs settled."""
-    from livery.workshop._templates import settle_fragment_files
-
+    """The nanobind template rendered for *package_name*, native configs composed."""
     answers = read_answers(ROOT / ".copier-answers.yml")
     destination = tmp_path / "packages" / "native"
     render(
@@ -92,9 +90,14 @@ def _render_named(tmp_path: Path, package_name: str) -> Path:
             "project_name": "acme",
         },
     )
-    settle_fragment_files(
-        destination, {"kind": "package-python-nanobind", "package_dir": "native"}
-    )
+    # The native configs come from the fragment engine, as a sync writes
+    # them into the package of a workspace.
+    from livery.workshop._shipped_files import deliver
+
+    contract = tmp_path / "workshop.toml"
+    if not contract.is_file():
+        contract.write_text("[workspace]\nextensions = []\n")
+    deliver(tmp_path)
     return destination
 
 

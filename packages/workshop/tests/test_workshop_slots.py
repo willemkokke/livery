@@ -139,3 +139,19 @@ def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
     ).read_text()
     assert '"pytest-xdist>=3.6",' not in template
     assert 'addopts = "-q' not in template
+
+
+def test_a_union_composes_the_same_whatever_order_its_checks_registered() -> None:
+    """A check registered again does not move its lines in the union."""
+    from livery.workshop import _checks
+    from livery.workshop._slots import all_composed
+
+    before = all_composed()["python.dev-group"]
+    state = _checks.snapshot()
+    try:
+        record = _checks.checks_by_name()["typecheck.mypy"]
+        _checks.unregister_check("typecheck.mypy", by="a test")
+        _checks.register_check(record)
+        assert all_composed()["python.dev-group"] == before
+    finally:
+        _checks.restore(state)

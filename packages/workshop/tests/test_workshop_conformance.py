@@ -249,17 +249,17 @@ def test_a_file_that_drifts_from_its_render_or_hides_an_edit_breaks_the_drift(
 ) -> None:
     # The render and the drift judge are the workshop's; the clause
     # names the extension's file wherever the two disagree about it.
-    from livery.workshop import _templates
+    from livery.workshop import _shipped_files
 
     subject = _tidy()
     assert _names(subject, "fragment-drift") == []
-    monkeypatch.setattr(_templates, "judge_fragment_file", lambda *args: [])
+    monkeypatch.setattr(_shipped_files, "judge_package", lambda *args: [])
     assert _names(subject, "fragment-drift") == [
         f"fragment-drift: {TIDY}: a hand edit of the rendered file is not named as"
         " drift"
     ]
     monkeypatch.setattr(
-        _templates, "judge_fragment_file", lambda *args: ["probe: differs"]
+        _shipped_files, "judge_package", lambda *args: ["probe: differs"]
     )
     assert _names(subject, "fragment-drift") == [
         f"fragment-drift: {TIDY}: drifts from its own render: probe: differs"
@@ -269,30 +269,35 @@ def test_a_file_that_drifts_from_its_render_or_hides_an_edit_breaks_the_drift(
 def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract_11(
     acme: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _templates
+    from livery.workshop import _shipped_files
 
     subject = _tidy()
     assert _names(subject, "withdrawn-file") == []
-    real = _templates.settle_fragment_file
+    real = _shipped_files.settle_package
 
-    def never_again(directory: Path, name: str, data: dict[str, object]) -> str:
-        if (directory / name).is_file():
-            return ""
-        return real(directory, name, data)
+    def written(directory: Path) -> list[Path]:
+        return [
+            p for p in directory.iterdir() if p.name in (".clang-tidy", ".clang-format")
+        ]
 
-    monkeypatch.setattr(_templates, "settle_fragment_file", never_again)
+    def never_again(directory: Path, kind: str) -> list[str]:
+        if written(directory):
+            return []
+        return real(directory, kind)
+
+    monkeypatch.setattr(_shipped_files, "settle_package", never_again)
     assert _names(subject, "withdrawn-file") == [
         f"withdrawn-file: {TIDY}: an unedited copy stays once the check is"
         " withdrawn; contract 11 removes it"
     ]
 
-    def always_removes(directory: Path, name: str, data: dict[str, object]) -> str:
-        if (directory / name).is_file():
-            (directory / name).unlink()
-            return f"removed: {name}"
-        return real(directory, name, data)
+    def always_removes(directory: Path, kind: str) -> list[str]:
+        found = written(directory)
+        for path in found:
+            path.unlink()
+        return [f"removed {path.name}" for path in found] or real(directory, kind)
 
-    monkeypatch.setattr(_templates, "settle_fragment_file", always_removes)
+    monkeypatch.setattr(_shipped_files, "settle_package", always_removes)
     assert _names(subject, "withdrawn-file") == [
         f"withdrawn-file: {TIDY}: an edited copy is removed once the check is"
         " withdrawn; contract 11 keeps it as a local override"

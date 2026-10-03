@@ -97,42 +97,43 @@ def test_a_hand_edited_section_is_drift(tmp_path: Path) -> None:
 
 
 def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
-    tmp_path: Path, restored_checks
+    tmp_path: Path, restored_checks, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
-    from livery.workshop._templates import judge_fragment_file, settle_fragment_file
+    from livery.workshop._shipped_files import deliver, shipped_drift
 
-    data = {**_data(), "kind": "cpp-conan"}
-    member = tmp_path / "packages" / "native"
+    root = tmp_path / "ws"
+    member = root / "packages" / "native"
     member.mkdir(parents=True)
-    # The render writes the file and its receipt.
-    assert settle_fragment_file(member, ".clang-tidy", data) == "rendered: .clang-tidy"
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    # The engine writes the file and its receipt in the package.
+    assert "  wrote packages/native/.clang-tidy" in deliver(root)
     assert ".clang-tidy" in read_rendered(member)
-    assert settle_fragment_file(member, ".clang-tidy", data) == ""
+    assert "cpp-conan" in (member / ".clang-tidy").read_text()
+    assert deliver(root) == []
     # The check withdrawn: the edited arm first, kept and named.
     unregister_check("lint.clang-tidy", by="acme.brand")
     (member / ".clang-tidy").write_text("Checks: mine\n")
-    assert (
-        judge_fragment_file(member, ".clang-tidy", data, "packages/native/.clang-tidy")
-        == []
-    )
-    assert settle_fragment_file(member, ".clang-tidy", data).startswith(
-        "kept: .clang-tidy"
-    )
+    assert deliver(root) == [
+        "  kept packages/native/.clang-tidy: no listed extension renders it, and"
+        " it was edited here, so it stays as the repository's own"
+    ]
     assert (member / ".clang-tidy").is_file()
-    # The unedited arm: stale, named as drift, removed by the apply.
-    register_check(_checks._CHECKS.get("lint.clang-tidy") or _restore_clang_tidy())
-    settle_fragment_file(member, ".clang-tidy", data)
-    unregister_check("lint.clang-tidy", by="acme.brand")
-    (line,) = judge_fragment_file(
-        member, ".clang-tidy", data, "packages/native/.clang-tidy"
-    )
-    assert "written for a check that is withdrawn" in line
-    assert settle_fragment_file(member, ".clang-tidy", data).startswith(
-        "removed: .clang-tidy"
-    )
-    assert not (member / ".clang-tidy").is_file()
     assert ".clang-tidy" not in read_rendered(member)
+    # The unedited arm: removed by the next delivery, and no drift after.
+    (member / ".clang-tidy").unlink()
+    register_check(_checks._CHECKS.get("lint.clang-tidy") or _restore_clang_tidy())
+    deliver(root)
+    unregister_check("lint.clang-tidy", by="acme.brand")
+    assert deliver(root) == [
+        "  removed packages/native/.clang-tidy: no listed extension renders it"
+    ]
+    assert not (member / ".clang-tidy").is_file()
+    assert shipped_drift(root) == []
 
 
 def _restore_clang_tidy() -> CheckRecord:
@@ -146,21 +147,21 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
-    from livery.workshop._templates import settle_fragment_file
+    from livery.workshop._shipped_files import settle_package
 
     data = {**_data(), "kind": "cpp-conan"}
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
     rendered = compose_package("cpp-conan", ".clang-format", data)
     assert rendered is not None
-    (member / ".clang-format").write_text(rendered)
-    assert settle_fragment_file(member, ".clang-format", data) == ""
-    assert ".clang-format" in read_rendered(member)  # adopted
+    (member / ".clang-format").write_bytes(rendered.encode())
     other = member / ".clang-tidy"
     other.write_text("Checks: mine\n")
-    assert settle_fragment_file(member, ".clang-tidy", data).startswith(
-        "kept: .clang-tidy (a local override"
-    )
+    assert settle_package(member, "cpp-conan") == [
+        "  kept .clang-tidy: edited here, so it is not rewritten; delete it to"
+        " take the rendered file"
+    ]
+    assert ".clang-format" in read_rendered(member)  # adopted
     assert other.read_text() == "Checks: mine\n"
 
 

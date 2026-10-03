@@ -130,11 +130,9 @@ def _render_cpp(tmp_path: Path) -> Package:
     )
     # The native configs come from the check records, as they do at a
     # birth: the template ships none.
-    from livery.workshop._templates import settle_fragment_files
+    from livery.workshop._shipped_files import settle_package
 
-    settle_fragment_files(
-        destination, {"kind": "package-cpp-conan", "package_dir": "native"}
-    )
+    settle_package(destination, "cpp-conan")
     return _package(destination, "acme-native", "cpp-conan")
 
 

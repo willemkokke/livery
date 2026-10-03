@@ -163,9 +163,19 @@ def test_the_monorepo_is_in_sync() -> None:
         # The dogfood check means the editable checkout syncing itself.
         pytest.skip("dogfood: only the editable checkout syncs itself")
     before = _tracked_state()
-    sync_workspace(ROOT)
+    first = sync_workspace(ROOT)
     assert sync_workspace(ROOT) == []
-    assert _tracked_state() == before
+    after = _tracked_state()
+    # A failure names what moved, so a runner-only difference is readable
+    # from the log alone.
+    moved = subprocess.run(
+        ["git", "diff", "--", "pyproject.toml", ".workshop-rendered", ".gitignore"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert after == before, f"{first}\n{moved}"
 
 
 _SHIPPED_SETTINGS = ROOT / "packages/workshop/src/livery/workshop/content/settings.json"

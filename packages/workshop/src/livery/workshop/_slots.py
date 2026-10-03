@@ -158,7 +158,15 @@ def composed(name: str) -> object:
         return slot.compose(values)
     if slot.compose == UNION:
         found: list[object] = []
+        # Extensions in the order they first contributed, the mount
+        # order; within one extension, by contributor name rather than by
+        # when each registered, so a check registered again (a test's
+        # restore, a record replaced) leaves the render where it was.
+        rank: dict[str, int] = {}
         for contribution in slot.contributions:
+            rank.setdefault(contribution.extension, len(rank))
+        ordered = sorted(slot.contributions, key=lambda c: (rank[c.extension], c.by))
+        for contribution in ordered:
             items: list[object] = (
                 list(contribution.value)
                 if isinstance(contribution.value, (list, tuple))

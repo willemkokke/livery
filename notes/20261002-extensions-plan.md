@@ -929,6 +929,32 @@ an instance's copier-written `pyproject.toml` is kept as an edit on
 its first sync, like any file the engine did not write, and taken by
 deleting it once.
 
+**6b, per-package slice built (issue #1078).** A package's
+`.clang-format` and `.clang-tidy` are engine outputs at the package's
+path, from the nearest kind's check fragment down the chain, rendered
+with the kind as per-package data (`plan(package_data=...)`), their
+receipts in the package's `.workshop-rendered` (the settle path's
+format, so existing receipts carry over). The settle and judge path in
+`_templates.py` is gone; `settle_package` and `judge_package` serve a
+package directory with no workspace around it (the conformance kit),
+and `drift` names an unedited file whose owner is no longer listed,
+since the next sync removes it. Until packages list extensions (phase
+11) the kind chain picks the fragments. Proved by the C++ kind's
+merge-point tests, which build and lint a rendered package.
+A union slot composes in its contributors' order (extension, then
+check), not in registration order: once `fm sync` composed
+`pyproject.toml`, a test that registered a check again moved its line
+in the dev group, and the dogfood sync test failed on the macOS leg
+alone. The same cause fits the one unexplained template-check drift of
+the first slice.
+
+Still open in 6b: the prose fragments, skills, hooks, `.claude/settings.json`
+and the site CSS still go through `livery.workshop._materialise` and
+`livery.workshop._prose`; `PROJECT_FILES`, `PACKAGE_FILES` and
+`Fragment(file, text, kind)` on check records stay until checks become
+tools (phase 9), as the source the engine reads the checks' fragments
+from.
+
 **6b, the channels move onto it.** Deliverables:
 
 - Check fragments (the `[tool.*]` tables, `.vscode` files,
