@@ -671,6 +671,12 @@ DRIVERS: tuple[Driver, ...] = (
         provision=Provision(kind="github", repo="orhun/git-cliff"),
     ),
     Driver(
+        "git-lfs",
+        url="https://git-lfs.com/",
+        verbs=("install", "track", "untrack", "ls-files", "pull", "fetch", "push"),
+        provision=Provision(kind="github", repo="git-lfs/git-lfs"),
+    ),
+    Driver(
         "pyproject-build",
         attr="build",
         provision=Provision(package="build"),

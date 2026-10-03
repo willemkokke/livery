@@ -874,6 +874,19 @@ composed one; no migration code adopts it (the ruling of 2026-09-25).
 The receipt at the root is committed, like a lock. The tool caches'
 lines stay with the base until checks become tools (phase 9).
 
+**6b, LFS slice built (issue #1069).** `[workspace] lfs = true` turns
+Git LFS on (`livery.workshop._lfs`): the lines that set `filter=lfs`
+are composed into `.gitattributes`, `git_lfs` is required (site
+`workshop.toml [workspace] lfs`), `fm sync` runs `git lfs install
+--local`, and the emitted GitHub and Gitea checkouts fetch the LFS
+objects. Off, the default, those lines are left out and `fm sync`
+names the patterns and the setting. A new `git_lfs` record covers all
+six hosts from the git-lfs releases (3.8.0, read on macOS). Proved by
+running: a scratch clone with `lfs = true` locked and installed
+`git_lfs`, and the sync wrote LFS's four hooks and its filter. GitLab's
+runner fetches LFS objects by itself where its image has git-lfs; the
+image is not ours to change.
+
 **6b, the channels move onto it.** Deliverables:
 
 - Check fragments (the `[tool.*]` tables, `.vscode` files,
@@ -977,6 +990,13 @@ Acceptance, refusals first:
 - `test_a_role_with_no_listed_check_has_no_verb`.
 - `fm check` exits 0 with the same gate members as before, proven by
   the gate's pinning tests.
+
+Willem, 2026-10-03: as few tool directories in the root as possible.
+A tool's cache moves under `.workshop/.cache/<tool>/` when the tool
+becomes a check of its own (`.pytest_cache/` to
+`.workshop/.cache/pytest/`, the same for ruff and mypy), through each
+tool's own setting, and its `.gitignore` line goes, `.workshop/` being
+ignored already.
 
 ### Phase 10: the workspace extensions ship apart
 

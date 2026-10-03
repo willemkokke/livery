@@ -15,7 +15,7 @@ directory are delivered by `livery.workshop._prose` and
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from livery.footman import api as footman
 from livery.workshop._extensions import extension_content, stack_names
@@ -59,13 +59,42 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
 
 def outputs(root: Path) -> tuple[Output, ...]:
     """The shipped files as the listed extensions render them for *root*."""
+    return _composed(root)[0]
+
+
+def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
+    """The shipped files for *root*, and a line naming the LFS rules left out.
+
+    While the workspace has Git LFS off, an `.gitattributes` keeps no
+    LFS line; the line says which patterns were left out and the
+    setting that composes them.
+    """
+    from livery.workshop._lfs import KEY, lfs_enabled, without_lfs
+
     fragments, order = shipped(root)
-    return plan(root, fragments, order, {"prog": footman.prog()})
+    planned = plan(root, fragments, order, {"prog": footman.prog()})
+    if lfs_enabled(root):
+        return planned, []
+    kept: list[Output] = []
+    notes: list[str] = []
+    for output in planned:
+        if PurePosixPath(output.path).name == ".gitattributes":
+            text, left = without_lfs(output.body.decode())
+            if left:
+                notes.append(
+                    f"  {output.path}: Git LFS is off, so the LFS rules for"
+                    f" {', '.join(left)} are left out; `[workspace] {KEY} = true`"
+                    " in workshop.toml composes them"
+                )
+                output = Output(output.path, text.encode(), output.owners)
+        kept.append(output)
+    return tuple(kept), notes
 
 
 def deliver(root: Path) -> list[str]:
     """Write the shipped files into *root*; one line per file that changed."""
-    return apply(root, outputs(root))
+    planned, notes = _composed(root)
+    return notes + apply(root, planned)
 
 
 def shipped_drift(root: Path) -> list[str]:

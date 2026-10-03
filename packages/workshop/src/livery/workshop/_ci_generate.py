@@ -79,8 +79,13 @@ def _facts(root: Path) -> dict[str, Any]:
         tree = extension_template_tree(root, extension)
         if tree is not None and tree.is_relative_to(root):
             publisher = dist
+    from livery.workshop._lfs import lfs_enabled
+
     return {
         "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
+        # With Git LFS on, a checkout fetches the LFS objects, or the
+        # gate reads pointer files where the binaries should be.
+        "lfs": lfs_enabled(root),
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
         "required_context": str(ci.get("required-context", "gate")),
         "python_versions": python_matrix(root),
@@ -372,10 +377,12 @@ def _call_env(job: Job, *, forge: str) -> str:
     return "        env:\n" + "".join(f"          {line}\n" for line in lines)
 
 
-def _checkout_step(point: Point, job: Job, *, forge: str) -> str:
+def _checkout_step(point: Point, job: Job, *, forge: str, lfs: bool = False) -> str:
     """The checkout: as deep as the verbs need, at the dispatched ref, able to push."""
     action = CHECKOUT if forge == "github" else "actions/checkout@v4"
     with_lines: list[str] = []
+    if lfs:
+        with_lines.append("          lfs: true")
     if point.ref_input:
         with_lines.append(f"          ref: ${{{{ inputs.{point.ref_input} }}}}")
     if job.fetch == "full":
@@ -562,7 +569,7 @@ def _actions_job(
     else:
         lines.append(f"    runs-on: {first}\n")
     lines.append("    steps:\n")
-    lines.append(_checkout_step(point, job, forge=forge))
+    lines.append(_checkout_step(point, job, forge=forge, lfs=bool(answers.get("lfs"))))
     if forge == "github":
         lines.append(_setup_uv_step(answers))
     lines.append(_collect_step(job, forge=forge))

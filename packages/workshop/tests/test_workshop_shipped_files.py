@@ -72,3 +72,66 @@ def test_the_template_check_names_a_composed_files_drift(
     (root / ".gitattributes").write_text("* text\n")
     with pytest.raises(Failed, match=r"\.gitattributes: differs from what"):
         template_check()
+
+
+def test_lfs_rules_are_left_out_and_named_until_the_workspace_turns_lfs_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _shipped_files
+
+    root = _workspace(tmp_path / "ws", "[]")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    real = _shipped_files.shipped
+
+    def with_assets(at: Path) -> tuple[list[Fragment], list[str]]:
+        fragments, order = real(at)
+        assets = Fragment(
+            "assets",
+            ".gitattributes",
+            ".gitattributes",
+            "*.png filter=lfs diff=lfs merge=lfs -text\n*.svg text\n",
+        )
+        return [*fragments, assets], [*order, "assets"]
+
+    monkeypatch.setattr(_shipped_files, "shipped", with_assets)
+    # Off, the default: never refused; the rule is left out and named,
+    # and the extension's other lines are composed.
+    lines = deliver(root)
+    assert lines[0] == (
+        "  .gitattributes: Git LFS is off, so the LFS rules for *.png are left"
+        " out; `[workspace] lfs = true` in workshop.toml composes them"
+    )
+    attributes = (root / ".gitattributes").read_text()
+    assert "filter=lfs" not in attributes and "*.svg text" in attributes
+    assert shipped_drift(root) == []
+    # On: the rule is composed, and the tool and the checkout follow.
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\nlfs = true\n")
+    assert deliver(root) == ["  updated .gitattributes"]
+    assert (
+        "*.png filter=lfs diff=lfs merge=lfs -text"
+        in (root / ".gitattributes").read_text()
+    )
+
+
+def test_lfs_on_requires_the_tool_and_the_checkout_fetches_the_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._ci_generate import generate
+    from livery.workshop._tools import requirements
+
+    root = _workspace(tmp_path / "ws", "[]")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    assert "git_lfs" not in {r.name for r in requirements(root)}
+    assert "lfs: true" not in generate(root)[".github/workflows/ci.yml"]
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\nlfs = true\n")
+    (lfs,) = [r for r in requirements(root) if r.name == "git_lfs"]
+    assert lfs.site == "workshop.toml [workspace] lfs"
+    assert "          lfs: true\n" in generate(root)[".github/workflows/ci.yml"]
+    # A value that is not a boolean refuses as the contract's type.
+    (root / "workshop.toml").write_text('[workspace]\nextensions = []\nlfs = "yes"\n')
+    with pytest.raises(Failed, match=r"workspace.lfs"):
+        requirements(root)
