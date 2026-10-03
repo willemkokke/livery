@@ -16,7 +16,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from livery.footman.api import fail, prog
+from livery.footman.api import prog
 
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
@@ -243,10 +243,15 @@ MOUNTED: bool = False
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount every listed extension's plugin, in order; the names mounted.
 
-    Refuses a contract without ``[workspace] extensions``, printing the
-    line to add, an extension no installed distribution declares, one
-    declared for another workshop API version, and one that may not be
-    listed at the workspace level. An extension whose declaration names
+    Refuses an extension declared for another workshop API version. A
+    contract without ``[workspace] extensions``, an extension no
+    installed distribution declares, and one that may not be listed at
+    the workspace level are named on stderr and skipped, never refused:
+    the mount runs on every command, ``fm sync`` among them, which is
+    what installs a missing declaration, so a refusal here would stop
+    the command that repairs it. The gate's layering check and
+    ``fm extensions`` refuse the same problems. An extension whose
+    declaration names
     no ``PLUGIN`` registers what it declares and mounts no verbs. A
     plugin a branded App already mounts as a builtin is skipped:
     claiming its tasks again puts the same task in one rung twice.
@@ -260,7 +265,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     MOUNTED = True
     root = workspace_root(start)
     if root is not None and (why := missing_list(root)):
-        fail(why)
+        _note(why)
     builtin = set(_paths.builtin())
     mounted = []
     declared = contributions(start)
@@ -278,29 +283,33 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             continue
         module = declaration(extension)
         if module is None:
-            fail(
+            _note(
                 f"extension {extension!r} is listed in [workspace] extensions, and no"
                 f" installed distribution declares it in {GROUP}; install the"
-                f" distribution that ships it ({dist} by its name), or remove the entry"
+                f" distribution that ships it ({dist} by its name), or remove the"
+                f" entry; `{prog()} sync` installs one this workspace builds"
             )
+            continue
         check_api_version(extension, module)
         if WORKSPACE not in levels_of(extension):
-            fail(
+            _note(
                 f"extension {extension!r} is listed in [workspace] extensions, and it"
                 f" declares the levels {', '.join(levels_of(extension)) or 'none'};"
                 " list it in each package's `extensions` instead"
             )
+            continue
         name = getattr(module, "PLUGIN", None)
         if name and name not in builtin:
             try:
                 plugin(str(name))
             except Exception as error:
-                raise RuntimeError(
+                _note(
                     f"extension {extension!r} did not mount its plugin {name!r}:"
-                    f" {error}\n  its distribution ({dist}) belongs in the dev"
-                    " group; `uv sync` installs it"
-                ) from error
-            mounted.append(extension)
+                    f" {error}; its distribution ({dist}) belongs in the dev"
+                    f" group, and `{prog()} sync` installs it"
+                )
+            else:
+                mounted.append(extension)
         present.append(extension)
         _graft_contributions(present, declared, active, grafted)
     # An extension's checks registered as it mounted; their verbs join the
@@ -309,6 +318,13 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
 
     generate_verbs()
     return tuple(mounted)
+
+
+def _note(text: str) -> None:
+    """Name a problem the mount skips past, on stderr."""
+    import sys
+
+    print(f"  note: {text}", file=sys.stderr)
 
 
 def _graft_contributions(
@@ -522,6 +538,8 @@ def closure_problems(start: Path | None = None) -> list[str]:
                     " remove it from `for`"
                 )
     if root is not None:
+        if why := missing_list(root):
+            problems.append(why)
         problems += level_problems(root)
     return problems
 

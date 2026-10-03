@@ -1045,6 +1045,13 @@ Acceptance:
 
 ## Decision record
 
+- 2026-10-03, phase 4, after the merge (issue #1039): the mount names
+  a missing list, an undeclared extension, a wrong level and a plugin
+  that will not mount on stderr and goes on; the gate's layering check
+  and `fm extensions` refuse them. Pulling the change left a checkout's
+  environment without the new entry points, and the refusing mount
+  stopped `fm sync`, the command that installs them. Only a wrong API
+  version still refuses at mount.
 - 2026-10-03, phase 4: an extension's declaring module carries
   `API_VERSION`, `LEVELS`, `PLUGIN`, `REQUIRES`, `TOOLS`, `FOR` and
   `CONTRACT_KEYS`; the `workshop.contract` group folded into

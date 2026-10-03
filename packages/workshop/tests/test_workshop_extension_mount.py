@@ -204,7 +204,7 @@ def test_a_footman_plugin_is_not_offered_as_an_extension() -> None:
 
 
 def test_an_extension_listed_at_the_wrong_level_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _fake_extensions(
         tmp_path,
@@ -212,13 +212,14 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
         native='LEVELS = ("package",)\n',
         site="",
     )
-    # A package-level extension in the workspace list: the mount refuses.
+    # A package-level extension in the workspace list: the gate refuses,
+    # the mount names it and skips it.
     _contract(tmp_path, '["acme.native"]')
     from livery.footman import registry
 
-    with registry.capture(), pytest.raises(BaseException) as caught:
-        _extensions.mount_extensions(tmp_path)
-    assert "declares the levels package" in str(caught.value)
+    with registry.capture():
+        assert _extensions.mount_extensions(tmp_path) == ()
+    assert "declares the levels package" in capsys.readouterr().err
     assert (
         "[workspace] extensions lists acme.native, which is listed in a"
         " package's `extensions` alone; move it there"
