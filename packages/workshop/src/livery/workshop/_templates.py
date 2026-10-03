@@ -993,16 +993,19 @@ def template_check() -> None:
     is an instance, not the template source, and passes the render
     check vacuously.
     """
+    from livery.workshop._shipped_files import shipped_drift
+
     root = _root()
-    drift: list[str] = []
+    drift = shipped_drift(root)
     if local_template_dir(root) is not None:
-        drift = project_drift(root) + package_drift(root)
+        drift += project_drift(root) + package_drift(root)
     if not drift:
         return
     fail(
         "committed files drift from their generation:\n  "
         + "\n  ".join(drift)
-        + f"\n  edit templates/ (never the rendered copy) and run"
+        + f"\n  a composed file: run `{footman.prog()} sync`; a rendered one:"
+        f" edit templates/ (never the rendered copy) and run"
         f" `{footman.prog()} template.apply`"
     )
 

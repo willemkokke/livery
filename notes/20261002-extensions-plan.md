@@ -854,6 +854,26 @@ has no file that uses one yet, so the engine carries regions only.
 - `replaces` and `deletes` with reasons; refusals for undeclared
   clashes and missing references.
 
+**6b, first slice built (issue #1067): `.gitignore` and
+`.gitattributes` are composed.** `fm sync` writes both through the
+engine from what each listed extension ships under
+`content/root/<path>` (`content/package/<path>` for a file in each of
+its packages): the base its general lines, the docs extension its
+site's. The repository's `rules` region comes last whichever fragment
+carries it, and a receipt digests a file with its regions left out, so
+an edit inside a region never stops the engine updating the rest.
+`fm template.check` judges the composed files in every workspace, and
+`fm explain` names them `composed`, with their owners. Copier no longer
+renders either file. Against the copier render the lines are the same
+but for the dead `.forge.dev.env` line; the header names `fm sync` as
+the writer and the lines follow their owners, so the files are not
+byte-identical across this slice, the one difference the acceptance
+allows. An existing workspace's copier-written file has no receipt and
+differs, so its first sync keeps it and says to delete it to take the
+composed one; no migration code adopts it (the ruling of 2026-09-25).
+The receipt at the root is committed, like a lock. The tool caches'
+lines stay with the base until checks become tools (phase 9).
+
 **6b, the channels move onto it.** Deliverables:
 
 - Check fragments (the `[tool.*]` tables, `.vscode` files,

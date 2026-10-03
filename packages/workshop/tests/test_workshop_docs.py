@@ -10,8 +10,6 @@ import pytest
 
 # The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
-import livery.extensions.docs._tasks
-import livery.workshop.api
 from livery.extensions.docs._site import (
     MEMBERS_SLOT,
     THEME_SLOT,
@@ -1832,17 +1830,16 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
 
     root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
-    # The rules under test are the project template's own, so a build
-    # output the template forgets fails here instead of dirtying every
-    # checkout; the two header lines with template variables are comments.
-    template = (
-        Path(livery.workshop.api.__file__ or ".").resolve().parent
-        / "templates/project/.gitignore.jinja"
-    )
-    rules = [
-        line for line in template.read_text().splitlines() if not line.startswith("#")
-    ]
-    (root / ".gitignore").write_text("\n".join(rules) + "\n")
+    # The rules under test are the ones the base and the docs extension
+    # compose, so a build output the docs extension forgets to ignore
+    # fails here instead of dirtying every checkout.
+    from livery.workshop._shipped_files import outputs
+
+    listing = tmp_path / "listing"
+    listing.mkdir()
+    (listing / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    (ignore,) = [o for o in outputs(listing) if o.path == ".gitignore"]
+    (root / ".gitignore").write_bytes(ignore.body)
     git = [
         "git",
         "-c",

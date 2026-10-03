@@ -1,7 +1,7 @@
 # Shipped as livery.workshop extension content, delivered to the workspace
 # by the sync verb. Edit this copy in the extension and release it;
 # an edited delivered copy is a local override, kept and named.
-# Composed by `fm sync` from the lines each listed extension
+# Composed by `{{ prog }} sync` from the lines each listed extension
 # ships; the gate keeps it matching. Edit inside the region below,
 # which is the repository's own; an edit anywhere else is drift.
 dist/
@@ -22,23 +22,5 @@ coverage-data/
 # Finder writes .DS_Store into any directory it opens; a workflow verb
 # refuses a dirty tree, so the file is never a change.
 .DS_Store
-# Shipped as livery.extensions.docs extension content, delivered to the workspace
-# by the sync verb. Edit this copy in the extension and release it;
-# an edited delivered copy is a local override, kept and named.
-# The docs site's build and its generated pages.
-site/
-zensical.toml
-.docs-build/
-docs/packages/
-docs/releases/
-docs/tasks/
-docs/tools/
-docs/_generated/
-docs/_extensions/
-docs/development/
-packages/*/src/**/_docs/
-.docs-preview/
-packages/*/docs/_generated/
-packages/*/_generated/
 # -- workshop: region rules, yours to edit; the render keeps it --
 # -- workshop: end rules --

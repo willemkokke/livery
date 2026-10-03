@@ -246,6 +246,17 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     )
 
 
+def _composed(tmp_path: Path, name: str) -> str:
+    """*name* as the base composes it into a workspace listing no extension."""
+    from livery.workshop._shipped_files import outputs
+
+    workspace = tmp_path / "composed"
+    workspace.mkdir(exist_ok=True)
+    (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    (output,) = [o for o in outputs(workspace) if o.path == name]
+    return output.body.decode()
+
+
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     destination = tmp_path / forge_kind
     answers = read_answers(ROOT / ".copier-answers.yml")
@@ -619,7 +630,7 @@ def test_every_rendered_project_mounts_the_profiler(tmp_path: Path) -> None:
     assert "footman.profile" in builtins
     assert "plugin(" not in (rendered / "tasks.py").read_text()
     # One trace per entry, so the rule is a pattern.
-    ignored = (rendered / ".gitignore").read_text()
+    ignored = _composed(tmp_path, ".gitignore")
     assert "fm-profile*.json" in ignored
     # The assembled traces land in a directory of their own, and the
     # ignore list follows the constant that names it rather than a
@@ -636,8 +647,7 @@ def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
     # changes in flight collide at the same tail; the rendered
     # attributes make git take both sides' lines there instead of
     # stopping the integrate on a conflict.
-    rendered = _render_kind(tmp_path, "github")
-    attributes = (rendered / ".gitattributes").read_text()
+    attributes = _composed(tmp_path, ".gitattributes")
     assert "notes/*.md merge=union" in attributes
     assert "notes/**/*.md merge=union" in attributes
 
@@ -648,7 +658,6 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
     """Git for Windows' autocrlf default would check out CRLF; the attributes win."""
     import subprocess
 
-    rendered = _render_kind(tmp_path, "github")
     repo = tmp_path / "checkout"
     repo.mkdir()
 
@@ -658,7 +667,7 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
     git("init", "-q")
     git("config", "core.autocrlf", "true")
     git("config", "commit.gpgsign", "false")
-    (repo / ".gitattributes").write_bytes((rendered / ".gitattributes").read_bytes())
+    (repo / ".gitattributes").write_text(_composed(tmp_path, ".gitattributes"))
     (repo / "a.py").write_bytes(b"one\ntwo\n")
     (repo / "run.cmd").write_bytes(b"@echo off\n")
     git("add", ".")
