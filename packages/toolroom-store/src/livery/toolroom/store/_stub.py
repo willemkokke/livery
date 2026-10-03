@@ -490,15 +490,27 @@ def _esc(text: str) -> str:
     `filename=path[,reset=true|false][,...]` format strings) parses
     as Markdown reference links on the rendered page and trips the
     strict build's autoref check, so such tokens render as code
-    spans, which is also how a format grammar reads best.
+    spans, which is also how a format grammar reads best. Bracket
+    groups a space apart (git-lfs's `[options] [<remote> [<ref>...]]`)
+    parse the same way, so every bracketed token of such a text
+    becomes a code span too.
     """
+    import re
+
     escaped = text.replace("\\", "\\\\")
-    if "][" not in escaped:
-        return escaped
-    return " ".join(
-        token if ("][" not in token or token.startswith("`")) else f"`{token}`"
-        for token in escaped.split(" ")
-    )
+    if "][" in escaped:
+        return " ".join(
+            token if ("][" not in token or token.startswith("`")) else f"`{token}`"
+            for token in escaped.split(" ")
+        )
+    if re.search(r"\]\s+\[", escaped):
+        return " ".join(
+            f"`{token}`"
+            if ("[" in token or "]" in token) and not token.startswith("`")
+            else token
+            for token in escaped.split(" ")
+        )
+    return escaped
 
 
 def _annotation(

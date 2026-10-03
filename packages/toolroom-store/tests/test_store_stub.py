@@ -36,6 +36,17 @@ def test_the_stub_escapes_backslashes_in_help_text():
     assert _esc(r"a \.py$ b") == r"a \\.py$ b"
 
 
+def test_bracket_groups_a_space_apart_render_as_code_spans():
+    """Markdown reads `[a] [b]` as a reference link; a usage line is code."""
+    from livery.toolroom.store._stub import _esc
+
+    assert _esc("git lfs fetch [options] [<remote> [<ref>...]]") == (
+        "git lfs fetch `[options]` `[<remote>` `[<ref>...]]`"
+    )
+    # A lone bracket group is plain text, as before.
+    assert _esc("git lfs track [pattern]") == "git lfs track [pattern]"
+
+
 def test_a_choice_is_spelled_double_quoted_and_escaped():
     assert _quoted("auto") == '"auto"'
     assert _quoted('say "hi"') == '"say \\"hi\\""'
