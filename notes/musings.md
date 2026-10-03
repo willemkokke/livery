@@ -386,3 +386,248 @@ state that must survive one.
 A test for whether the separation is real: a plain workshop project,
 with the house layer absent, gates green with the small set and
 keeps its voice rules nowhere.
+
+## 2026-10-03: an in-memory strongroom, and the core it implies
+
+Willem, during the extensions refactor, wanting something to think
+about: "lets assume the strongroom redesign plan holds up. I feel
+there is room for an in memory database variant, optionally
+filesystem backed. It would have to be super quick, with a great
+multithreading story." It picks up the 2026-09-28 musing (a native
+strongroom under a pants2-style test selector) and went much further.
+Nothing below is ruled; the one lean is marked as a lean.
+
+### Why it is the same store
+
+The redesign's concurrency rules were written for processes and
+remote tiers, and they are also the rules of lock-free memory.
+Immutable objects need no read lock, and two threads landing the same
+object race harmlessly. One writer per pack becomes one per thread.
+The one head per namespace is an atomic pointer, and a loser applies
+the merge rule. Seal before ref becomes a release store before the
+compare-and-swap. A write rooted before its bytes land lets the sweep
+run beside writers. A snapshot is a version digest. So the variant is
+a tier under contract 7, not a fork of the spec. The file backing is
+also the multi-process answer: footman's threads conduct and its
+processes work, and a mapped file is how pytest, a compiler or a
+DataLoader worker reads the same store without a daemon.
+
+Measured on the Mac, Python 3.12, 10,000 random reads of 200-byte
+objects, warm, best of five: a file per object 92 µs (the on-disk
+review measured 650 to 970 µs per open under Defender); a pack with a
+SQLite index and `pread`, phase 3's shape, 5.2 µs; a mapped pack with
+the index in memory, 0.08 µs.
+
+### What it opens, strongest fit first
+
+1. The mount's daemon, and the stick: lookups from many kernel
+   threads at stat latency. The backing file is what the stick
+   carries; what remains is an adapter per OS.
+2. Unreal's derived data on the same store. `FIoHash` is BLAKE3-160,
+   the first 20 bytes of BLAKE3-256, and a DDC value is named by the
+   IoHash of its raw bytes, so in a blake3 space Unreal's name is a
+   prefix of ours: an argument for blake3 that ruling 1's record does
+   not list. The DDC is an ordered hierarchy of stores (memory, file
+   system, pak, Zen, HTTP, S3), its build definition is the fabric's
+   call, its memory tier is two `TMap`s behind one `FRWLock`, and
+   Epic's own answer to the workload is a native daemon, `zenserver`.
+3. Training data from a pinned version. Entry counts make "the i-th
+   sample" a walk and a seeded shuffle needs no file list; the
+   receipt names version, seed and sampler, so the data order is
+   attested though the weights never replay. A pin is the 2026-09-04
+   read lease, in memory. Contamination as a digest intersection runs
+   at memory speed.
+4. The fabric's evaluator, per file. Livery alone does not need it
+   (215 source and 235 test files, about 5,400 keys, about 28 ms at
+   phase 3's cost); the work monorepo with conan C++ and Unreal
+   plugins does. Pants keeps its local store in LMDB split 16 ways;
+   Bazel and Buck2 rebuild their graph after a restart; a mapped file
+   keeps it across `fm` runs and shares it between worktrees and
+   agent sessions.
+5. A second implementation before the freeze: no layout and no
+   materialiser, only formats, refs and the sweep, which is what the
+   vectors test, and fast enough to drive the merge rules with
+   millions of concurrent moves.
+6. No backing file: the same core in a browser through WebAssembly,
+   reading packs from a static tier.
+
+Two forks decide which are cheap. A library over a mapped file
+(LMDB's shape) or a resident daemon (Zen's shape), one core under
+both. And the GIL: a small read costs less than a GIL handoff, so the
+threading pays for native callers, on 3.14t, and in batch calls, which
+puts `get_many` and `put_many` first in the Python API.
+
+### Small and fast
+
+Measured on the workspace's `site-packages` (27,679 files, 168 MB,
+Python 3.14.6, zstd level 3, a dictionary trained on half the small
+objects and measured on the other half): 47% of distinct objects at
+or below 512 bytes, 86% at or below 4 KiB. Ratio 3.22 one frame per
+object, 3.76 with a 110 KiB dictionary, 3.88 as one frame with no
+random access; below 512 bytes, 1.44 without the dictionary and 2.35
+with it. One decompression, 3.6 µs and 3.7 µs. Canonical trees
+through the codec: 55.3 bytes per entry, 58% of it digests. Names:
+0.44 MB plain, 0.34 MB front-coded.
+
+What followed:
+- Do not ask one representation to be both. Hot objects plain and
+  decoded; warm ones compressed, one frame each with a trained
+  dictionary (97% of the one-frame ratio, still random access); cold
+  ones mapped and left to the page cache. Large objects are never
+  compressed in memory. Evict with CLOCK or S3-FIFO, so a hot read
+  writes no shared state.
+- Digests do not compress, so intern them: a dense 4-byte id per
+  digest, ids in trees, refcounts and bitmaps, about 21 bytes per
+  decoded entry against 55.3 encoded. The strict codec makes it safe:
+  decoding and re-encoding give the same bytes, so the encoded tree
+  need not stay resident. Interning names saves nothing within a tree
+  (22,109 distinct over 29,349 entries), and inlining tiny objects is
+  not worth it (137 of 25,779 are 32 bytes or less).
+- The index stores only what the position does not imply. The name
+  is its own hash: a 65,536-entry fanout, then 4-byte fingerprints
+  and ids, about 20 bytes per object against 50 to 70 for a hash map
+  of full digests. The full-digest check stays, beside the data: at
+  ten million objects there is a one-in-six chance that two share 48
+  bits. Sealed runs plus a sharded mutable table: an LSM. A sorted
+  index answers Unreal's 20-byte prefix lookup with the same search.
+  An untrusted writer can aim at a bucket in about 2^16 tries, so the
+  service keys bucket selection.
+- Arenas per thread, compaction as a copying collector, batch calls
+  that prefetch across the batch and hash small objects in SIMD lanes.
+- None of it freezes: every item is a representation, and a version
+  mismatch rebuilds from the packs.
+
+### Reclamation, and retention first
+
+Every namespace keeps its history and the sweep walks parents, so
+without retention nothing a namespace pointed at becomes unreachable.
+The tool store's comment, "the old tree is unreached once the ref has
+moved", stops being true at the switch. Once retention exists: drop
+whole dead arenas; free dead page runs in place (`madvise`,
+`F_PUNCHHOLE`, private arenas only, 16 KiB pages on this Mac); copy
+mostly-dead ones, emptiest first, at u/(1-u) bytes copied per byte
+freed, as restic (`--max-unused`, 5%) and Borg (`--threshold`, 10%)
+do. Land together what dies together. Compaction needs no write
+barrier, because objects never change, and the pending root is the
+"allocate black" rule of a concurrent collector. Erasure turns
+compaction into a deadline.
+
+Four decisions came out of it:
+1. Retention. B: a "no history" class, moves written as parentless
+   versions, for caches. D: cuts recorded as a "pruned" tombstone
+   kind, per tier, for windows. Willem is "strongly leaning" towards
+   this, with the requirement "All those things should be possible
+   (fill history from mirror, keep latest N, etcetera)". Git's
+   shallow clone is the shape: the boundary belongs to a repository,
+   the commits are unchanged, and the server keeps everything. Today
+   `drop_ref` (volatile only) frees its target; after the redesign a
+   drop is a move and frees nothing until history is cut. Erasing a
+   version cuts history below it today (reached, not walked), at the
+   price of a permanent tombstone that refuses re-landing.
+2. Which packs a compaction copies: a dead-space budget, emptiest
+   first, beside geometric pack-count merges.
+3. Where the lifetime class lives: inferred from the namespace,
+   learned from survival otherwise, nothing in `policy.md`, which
+   keeps fields it does not know.
+4. Found on the way: ruling 6 sends two concurrent moves of one
+   volatile ref to a person, and the tool store declares `tools`
+   volatile, so two simultaneous `fm sync` runs with different
+   layouts would ask a person. A cache wants a merge rule that never
+   asks.
+
+### Strongroom and git
+
+Plumbing, not porcelain. Strongroom maps closely onto git's plumbing:
+`hash-object`, `cat-file`, `mktree`, `commit-tree`, `update-ref` with
+an old value, `rev-list --objects`, packs, `gc`, `fsck`,
+`update-server-info`, worktrees, alternates, promisor remotes. It
+refuses four of git's decisions: type-prefixed names, sizeless trees,
+compression as the only state, age-based collection. Missing
+plumbing: history walks, tree diff, symbolic refs, content merge,
+shallow history. The porcelain is the version control tenant, with jj
+as its precedent.
+
+### The core, and a btrfs-like filesystem on top
+
+Willem: "strong room has to be the core that allows all these things
+to be implemented on top of it as cleanly as possible, so it
+naturally will need to have various policies, retention schemes and
+settings that can be combined to provide the most optimal backend for
+those use cases. Ideally I would love it to be a core that is
+flexible enough to implement a btrfs like filesystem on top of."
+
+Read as btrfs's features offered to programs. That extends the design
+note's "Venti and Fossil, not btrfs" rather than reversing it; raw
+disks stay below, in the block-device backend. Subvolumes are
+namespaces, snapshots are versions, copy-on-write and reflinks are
+native, a commit is a version behind a compare-and-swap, the log tree
+is the write-back journal, send and receive are a set difference, and
+the checksums are stronger. Missing: exclusive space accounting and
+redundancy.
+
+The rule for where a setting binds: what changes a name's meaning or
+a move's promise belongs to the address space or the namespace and is
+the same everywhere; what changes only what one tier holds or costs
+belongs to the tier. Digest and encryption: address space. Profile,
+mutation class, history, eviction, placement: namespace. Depth,
+verification cadence, compaction, lifetime grouping: tier.
+Representation: requested per call, applied per tier.
+
+What this asks of phase 2: the pruned tombstone kind; subtree counts
+on the entry, not only in the header; `policy.md` and namespace
+declarations keeping fields they do not know; and whether redundancy
+is placement only or also an erasure-coded representation.
+
+### nodatacow and the ZFS way
+
+`nodatacow` writes data in place, implies `nodatasum`, drops
+compression, allows torn writes, and copies once after every
+snapshot. The ZFS way is regarded as the better design: always
+copy-on-write, `recordsize` at the database page, an intent log, and
+the database drops its own torn-page protection
+(`innodb_doublewrite=0`, `full_page_writes=off`). For strongroom, the
+plain overlay file is the btrfs way; the ZFS way is a checksummed
+append-only journal folded into page-sized chunks at each checkpoint.
+It is open without a format change if phase 2 keeps the fixed
+chunker's size free down to a page and keeps in-place replacement in
+recipes. Not built: an edit call, a policy per path, and incremental
+naming, which is microseconds in a blake3 space with its outboard and
+a rehash to the end of the file in sha256 (about 3 s per 10 GB per
+core). That is a third reason for blake3, after slicing and IoHash.
+
+### LSM trees, LMDB, and what sets strongroom apart
+
+LSM trees: a write-ahead log and a memtable, immutable sorted files,
+compaction leveled or tiered, the RUM trade. LMDB: a copy-on-write
+B+tree in one mapped file, two meta pages, readers that never block,
+one writer, a stuck reader that grows the file, a format tied to byte
+order. Pants: 16 LMDB shards by digest bits, leases, and a
+target-size collection under an exclusive lock. Packs are an LSM
+without shadowing, because a name never changes value.
+
+Set apart: verification by name across tiers, dedup, permanent
+snapshots, replication by name, reachability and erasure with stable
+names, a portable spec, representation per object and tier, storage
+that reads its own structure, semantics per namespace. Where the
+engines stay better: mutable data under arbitrary keys, range scans
+over keys with meaning, maturity. Additions that would widen the gap:
+proofs, a versioned sorted map, reconciliation in proportion to the
+difference, verified slices, encryption a tier can scrub without
+keys.
+
+The versioned sorted map, expanded. Prolly trees (phase 8) are
+B-trees whose node boundaries come from content. Dolt targets 4 KiB
+nodes and chooses a boundary from the key and the current node size,
+never the value, so a value change never moves a boundary. The same
+set gives the same root, and one change rewrites one path. The map
+adds get, put, range, a commit as a version, a diff that skips equal
+subtrees, a three-way merge per key with conflicts as data, rank and
+count, proofs and sync. A commit hashes about 16 KiB per change at
+four levels, so puts batch through a memtable: an LSM whose runs are
+versions. It is close to free: a namespace's refs are already a tree
+and a large one a prolly tree, so `derivations/` is already a
+versioned map whose values are digests. The phase 8 question: a
+general key-to-value node with directories as one schema, or a
+directory-only node. Users: the lineage note's mutable index keyed by
+digest, the state store's series, a registry index, training-sample
+indexes.
