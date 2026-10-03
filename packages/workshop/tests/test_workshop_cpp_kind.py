@@ -449,7 +449,7 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    assert managed_files("cpp-conan") == (".clang-format", ".clang-tidy", "cliff.toml")
+    assert managed_files("cpp-conan") == (".clang-format", ".clang-tidy")
     assert not is_python_kind("cpp-conan")
     assert is_python_kind("python")
     record = record_for_template("package-cpp-conan")

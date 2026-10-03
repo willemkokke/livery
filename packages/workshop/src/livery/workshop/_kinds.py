@@ -555,7 +555,6 @@ def _register_builtin() -> None:
             name="base",
             template=BASE_TEMPLATE,
             tools=("git_cliff",),
-            managed=("cliff.toml",),
             artifact="",
             wheel_identity="",
             abstract=True,

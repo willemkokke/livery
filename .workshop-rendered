@@ -4,5 +4,6 @@
   ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
   ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111",
   "CLAUDE.md": "cc6ccfb7b6c3b25a9b1674aedb29724686142d1075d161247893f21e75926c00",
-  "pyproject.toml": "fc5b2350ce822e94f7d4e6e05ec7fa29a2f81bd3f49818a484a36bddce6405be"
+  "pyproject.toml": "fc5b2350ce822e94f7d4e6e05ec7fa29a2f81bd3f49818a484a36bddce6405be",
+  "tasks.py": "7e8d6b67ae153fbb7f4cd6d10f3a8dc41fd50573fcd9e7a64ee3cf6d8129df1d"
 }

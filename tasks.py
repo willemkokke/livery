@@ -1,6 +1,6 @@
-# Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
-# the gate keeps it matching its render. Edit the source and
-# run `fm template.apply`; an edit here is drift.
+# Composed by `fm sync` from the base's template; the gate keeps
+# it matching. Edit inside the region below, which is the repository's
+# own; an edit anywhere else is drift.
 """The dev loop.
 
 Run with ``fm <task>``. ``fm check`` is the whole local gate;

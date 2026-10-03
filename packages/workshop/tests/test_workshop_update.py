@@ -201,8 +201,8 @@ def test_a_changed_instance_submits_through_the_engine(
 ) -> None:
     root = seeds("update", _build) / "ws"
     # Drift one rendered file; the update re-renders and submits.
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
@@ -222,8 +222,8 @@ def test_a_killed_update_resumes_without_redoing_the_work(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = seeds("update", _build) / "ws"
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
@@ -330,8 +330,8 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
 
     root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     # The real run_gate over a stub `uv run fm check`: exit 1 is the
@@ -362,8 +362,8 @@ def test_sync_and_the_gate_run_between_the_work_and_the_commit(
 ) -> None:
     root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     events: list[str] = []
@@ -387,8 +387,8 @@ def test_the_reexec_guard_prevents_a_loop(
 ) -> None:
     root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     versions = iter(("0.0.1", "0.0.2"))
@@ -415,8 +415,8 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
 ) -> None:
     root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     versions = iter(("0.0.1", "0.0.2"))
@@ -454,8 +454,8 @@ def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     _drive("templates", armed=True)  # returns, no SystemExit: exit 0
@@ -479,8 +479,8 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     released = {"done": False}
@@ -546,8 +546,8 @@ def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    tasks = root / "tasks.py"
-    tasks.write_text(tasks.read_text() + "# drift\n")
+    # A file the update writes back: the composed tasks.py, removed.
+    (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     # First invocation parks (bounded wait, then exit 0): the kill.

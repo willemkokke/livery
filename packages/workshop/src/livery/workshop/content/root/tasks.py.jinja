@@ -1,9 +1,9 @@
-# Rendered by the template channel ({{ template_source_label }}, project kind);
-# the gate keeps it matching its render. Edit the source and
-# run `{{ runner_prog }} template.apply`; an edit here is drift.
+# Composed by `{{ prog }} sync` from the base's template; the gate keeps
+# it matching. Edit inside the region below, which is the repository's
+# own; an edit anywhere else is drift.
 """The dev loop.
 
-Run with ``{{ runner_prog }} <task>``. ``{{ runner_prog }} check`` is the whole local gate;
+Run with ``{{ prog }} <task>``. ``{{ prog }} check`` is the whole local gate;
 CI runs the same command. Nothing here mounts anything: the workshop and
 every plugin this project depends on directly arrive through the
 runner's project rung, and the workshop mounts the extensions the
@@ -12,4 +12,4 @@ its own or a plugin it mounts by hand.
 """
 
 # -- workshop: region tasks, yours to edit; the render keeps it --
-{{ (regions.get('tasks.py') or {}).get('tasks', '') }}# -- workshop: end tasks --
+# -- workshop: end tasks --

@@ -65,13 +65,14 @@ def test_the_stub_imports_the_sections_in_order_then_the_instance(
     lines = (root / "CLAUDE.md").read_text().splitlines()
     imports = [line for line in lines if line.startswith("@")]
     # The voice and the standards before any rules, the gate's render
-    # after them; a workspace with no package, no tasks file and no
-    # lock has no verbs, kinds or tools to say.
+    # after them, then the verbs the composed tasks.py mounts; a
+    # workspace with no package and no lock has no kinds or tools to say.
     assert imports == [
         "@.workshop/fragments/voice.interaction.md",
         "@.workshop/fragments/standards.documentation.md",
         "@.workshop/fragments/rules.workshop.md",
         "@.workshop/fragments/gate.checks.md",
+        "@.workshop/fragments/verbs.extensions.md",
         "@CLAUDE.project.md",
     ]
     for line in imports[:-1]:

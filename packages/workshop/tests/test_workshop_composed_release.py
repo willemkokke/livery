@@ -104,7 +104,7 @@ def test_the_home_publishes_its_composed_artifact(
     subprocess.run(["git", "clone", "-q", str(repo), str(clone)], check=True)
     subprocess.run(["git", "checkout", "-q", "v0.5.0"], cwd=clone, check=True)
     assert (clone / "project" / "BRAND.md.jinja").is_file()
-    assert (clone / "project" / "tasks.py.jinja").is_file()  # the base rode along
+    assert (clone / "project" / "README.md.jinja").is_file()  # the base rode along
     record = (clone / "composition.toml").read_text()
     assert 'base = "livery-workshop"' in record
     assert f'base_version = "{version("livery-workshop")}"' in record

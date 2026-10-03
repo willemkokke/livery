@@ -187,12 +187,8 @@ def test_the_kind_chains_from_python() -> None:
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     # The native configs are rendered from the check records, so the kind
-    # manages them beside the changelog config.
-    assert managed_files("python-nanobind") == (
-        ".clang-format",
-        ".clang-tidy",
-        "cliff.toml",
-    )
+    # manages them; the changelog config is the base's, for every package.
+    assert managed_files("python-nanobind") == (".clang-format", ".clang-tidy")
     # The chain's union of what operates the kinds: the base's and
     # python's beneath the kind's own build tools; the checkers, the
     # formatter, the test runner and the two clang tools ride their
@@ -231,7 +227,6 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
     package = _render_chain(tmp_path)
     directory = package.directory
     # The parent's files survive beneath the leaf's.
-    assert (directory / "cliff.toml").is_file()
     assert (directory / "LICENSE").is_file()
     assert (directory / "src" / "acme" / "ext" / "py.typed").is_file()
     # The leaf's build files land over them.
@@ -249,7 +244,7 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
 
 
 def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
-    from livery.workshop._templates import apply_packages, apply_project
+    from livery.workshop._templates import apply_project
 
     shutil.copytree(TEMPLATES, tmp_path / "templates")
     (tmp_path / "workshop.toml").write_text(
@@ -267,9 +262,11 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
         'kind = "python-nanobind"\nname = "livery-ext"\n'
     )
     (package / "pyproject.toml").write_text('[project]\nname = "livery-ext"\n')
-    # cliff.toml is the parent's managed file: the leaf render alone
-    # cannot produce it, so this forces the chain through the loop.
-    assert "packages/ext/cliff.toml" in apply_packages(tmp_path)
+    # cliff.toml is the base's, for every package of any kind: the engine
+    # writes it for the leaf as for any member.
+    from livery.workshop._shipped_files import deliver
+
+    assert "  wrote packages/ext/cliff.toml" in deliver(tmp_path)
     body = (package / "cliff.toml").read_text()
     assert 'include_paths = ["packages/ext/**"]' in body
 

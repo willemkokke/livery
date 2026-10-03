@@ -1026,6 +1026,17 @@ sources and the dev group follow path order now. Proved by running: a
 local `fm new.project` wrote the identity into its contract, composed
 `pyproject.toml` from it, and left no answers file.
 
+**7b1 built (issue #1084): copier only births.** The root `tasks.py`
+and each package's `cliff.toml` are the base's fragments in the engine:
+`tasks.py` a root template, `cliff.toml` a `content/package/` template
+every member gets, since every package lists the base implicitly,
+rendered with the member's facts, the forge facts and its release
+baseline (the three kind variants differed only in their header).
+Copier's managed sets are empty, so it renders only at a birth. A
+sync whose pass changed a file plans once more, since a rendered
+fragment can read a file the same pass wrote (the verbs fragment reads
+`tasks.py`); the next sync finds the tree settled.
+
 Deliverables:
 
 - Seeds in extension wheels under `seeds/`; the `create` phase writes
