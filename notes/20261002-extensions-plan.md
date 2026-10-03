@@ -793,6 +793,15 @@ hand-written records over the third-party static builds go, pinned at
 macos-x64 stays a supported host with no CI leg for now; the phase
 opens with an audit naming every record that lacks a macos-x64 build,
 and those carry a scope.
+**5f built (issue #1057): the clang tools from PyPI.** Both records
+are `pypi` records at the locked 20.1.0, which has no `win_arm64`
+wheel for either, so the scopes narrowed to `clang_format@!windows-arm`
+and `clang_tidy@!windows-arm`; the weekly refresh tracks the newer
+releases, and clang-format's windows-arm wheel arrives with them. The
+direct downloads note records them as its named exception. Willem's
+ruling of 2026-10-03: the `ssciwr` wheels replace the hand-written
+records over the third-party static builds. The macos-x64 audit found
+every locked download with a macos-x64 build already.
 
 Carried from the empty shell plan's phase 12, extended.
 

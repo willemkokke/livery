@@ -20,31 +20,33 @@
     },
     "clang_format": {
       "version": "20.1.0",
-      "hosts": {
-        "linux-x64": "sha256:78d7bfdf70e47857df1c019cc60ae776e600b1f7dd4641b34228fc58c41357ec",
-        "macos-arm": "sha256:44772a9414dfa2d8ca5ae824862de700fde9fc6ed21a34a367aba096776b8982",
-        "macos-x64": "sha256:547a651939dd5c0a1defae42ac2d81c2132d03b4eac102e7e6a2147138c4ea2b",
-        "windows-x64": "sha256:891d9ee7ece8d367da6372cbf3a56d26ece5a3556bd2ce07e828458fad0278b4"
+      "hosts": {},
+      "graph": {
+        "file": "clang_format.txt",
+        "digest": "sha256:395fd28bb0932693b76a15c6771112c8db8bc3dd1d95c1d3806aad911e72c6e0",
+        "by": "uv 0.12.5"
       },
       "on": [
         "macos-arm",
         "macos-x64",
         "linux-x64",
+        "linux-arm",
         "windows-x64"
       ]
     },
     "clang_tidy": {
       "version": "20.1.0",
-      "hosts": {
-        "linux-x64": "sha256:4691c0e68d116c67d0a5f1b16f1867597ed389908393d0499786df11c997c739",
-        "macos-arm": "sha256:986f2d9a1809c7fee8e54554284b478ea743b576cec8050df152e4e8c08ea249",
-        "macos-x64": "sha256:edb5f84424b7097ae65bac19ff116e3afd82dd9db2b7b8e3b6dae67609df88d9",
-        "windows-x64": "sha256:54c30a672ff5e495f64518720cb4192ddc587a9841fd065de1a3fb3bd23f52b4"
+      "hosts": {},
+      "graph": {
+        "file": "clang_tidy.txt",
+        "digest": "sha256:a320a8c30ae98fd648d8f74d7e5ae892e1bb55925882fa248eadba96212c26b3",
+        "by": "uv 0.12.5"
       },
       "on": [
         "macos-arm",
         "macos-x64",
         "linux-x64",
+        "linux-arm",
         "windows-x64"
       ]
     },
