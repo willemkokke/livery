@@ -1265,7 +1265,9 @@ def materialise(
     unless *strict* is off: then it is reported in its outcome and the
     others are supplied, which is what `sync` wants, since one tool's
     origin being unreachable must not stop the environment from
-    entering.
+    entering. A tool the lock marks optional is reported and never
+    refused, strict or not: the verbs that need it name its absence
+    when they run.
     """
     from livery.toolroom.store.api import (
         DOWNLOAD_KINDS,
@@ -1359,7 +1361,7 @@ def materialise(
                 # no build for: the tool is reported and the others are
                 # supplied, as any tool the store cannot supply is.
                 reason = f"{name} {locked.version}: not locked for {host}: {error}"
-                if strict:
+                if strict and not locked.optional:
                     fail(reason)
                 done.append(Materialised(None, False, reason))
                 continue
@@ -1379,7 +1381,9 @@ def materialise(
             reason = str(error)
             if site and "below the floor" in reason:
                 reason += f"; {site} requires {name}>={floor}"
-            if strict:
+            # An optional tool the host cannot supply is named, never
+            # refused: the verbs that need it say so when they run.
+            if strict and not locked.optional:
                 fail(reason)
             done.append(Materialised(None, False, reason))
             continue
