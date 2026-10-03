@@ -1,6 +1,6 @@
-# Rendered by the template channel (packages/workshop/src/livery/workshop/templates, package-python kind);
-# the gate keeps it matching its render. Edit the source and
-# run `fm template.apply`; an edit here is drift.
+# Composed by `fm sync` from the base's template; the gate keeps
+# it matching. Edit inside the region at the end, which is the
+# package's own; an edit anywhere else is drift.
 # How livery-forge's changelog is written.
 #
 # git-cliff reads the conventional commits under this package's paths

@@ -96,7 +96,9 @@ def test_this_workspace_renders_its_own_regions_back(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[3]
     answers = project_facts(root)
     regions = render_injections(root, answers)["regions"]
-    assert set(regions) >= {"tasks.py"}
+    # No file copier renders carries a region any more: the composed
+    # files keep theirs through the fragment engine.
+    assert regions == {}
     # The three execution environments this repository declares live in
     # its own region of the composed project file, not in the base's
     # template.

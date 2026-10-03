@@ -53,6 +53,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
         "  wrote .gitignore",
         "  wrote .vscode/extensions.json",
         "  wrote .vscode/settings.json",
+        "  wrote tasks.py",
     ]
     ignored = (root / ".gitignore").read_text()
     assert "site/" in ignored and ignored.index("dist/") < ignored.index("site/")

@@ -33,7 +33,7 @@ from livery.workshop._packages import Package
 #: The project render's managed names, judged by the drift gate. The
 #: template tree is the truth; this list is the offline copy a wheel
 #: instance can answer from, pinned against the tree by test.
-PROJECT_RENDERED = ("tasks.py",)
+PROJECT_RENDERED: tuple[str, ...] = ()
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
 #: A type absent from both tables cannot carry a header and is

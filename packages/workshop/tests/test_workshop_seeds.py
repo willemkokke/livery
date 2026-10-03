@@ -75,8 +75,8 @@ def test_the_copy_keeps_a_tracked_lock_and_drops_only_gits_own(tmp_path: Path) -
 
 TEMPLATE = (
     Path(__file__).resolve().parents[3]
-    / "packages/workshop/src/livery/workshop/templates"
-    / "package-python/cliff.toml.jinja"
+    / "packages/workshop/src/livery/workshop/content"
+    / "package/cliff.toml.jinja"
 )
 
 

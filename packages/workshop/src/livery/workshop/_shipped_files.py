@@ -22,7 +22,7 @@ from typing import Any, cast
 
 from livery.footman import api as footman
 from livery.footman.api import fail
-from livery.workshop._extensions import extension_content, stack_names
+from livery.workshop._extensions import SELF, extension_content, stack_names
 from livery.workshop._fragment_engine import (
     PACKAGE_PREFIX,
     Fragment,
@@ -173,9 +173,22 @@ def _packaged(
                         text,
                     )
                 )
-    paths: dict[str, tuple[str, ...]] = {package.path: () for package in packages}
+    from livery.workshop._identity import package_facts
+    from livery.workshop._templates import _release_baseline, package_injections
+
+    # Every package lists the base implicitly, so the base's
+    # `content/package/` files (the changelog's configuration) reach each
+    # one, rendered with the member's own facts.
+    paths: dict[str, tuple[str, ...]] = {package.path: (SELF,) for package in packages}
+    injected = package_injections(root) if packages else {}
     data: dict[str, dict[str, Any]] = {
-        package.path: {"kind": package.kind} for package in packages
+        package.path: {
+            **package_facts(root, package.directory),
+            **injected,
+            "release_baseline": _release_baseline(package.directory),
+            "kind": package.kind,
+        }
+        for package in packages
     }
     return fragments, paths, data
 
@@ -224,16 +237,26 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
 
 
 def deliver(root: Path) -> list[str]:
-    """Write the shipped files into *root*; one line per file that changed."""
+    """Write the shipped files into *root*; one line per file that changed.
+
+    A pass that changed anything is followed by one more: a rendered
+    fragment may read a file the same pass wrote (the verbs fragment
+    reads `tasks.py`), and the second pass renders it from what is now
+    on disk, so a sync leaves a tree the next sync finds settled.
+    """
     from livery.workshop._packages import discover_packages
 
-    planned, notes = _composed(root)
     homes = (
         [package.path for package in discover_packages(root)]
         if (root / "packages").is_dir()
         else []
     )
-    return notes + apply(root, planned, packages=homes)
+    planned, notes = _composed(root)
+    lines = apply(root, planned, packages=homes)
+    if lines:
+        planned, _notes = _composed(root)
+        lines += apply(root, planned, packages=homes)
+    return notes + lines
 
 
 def shipped_drift(root: Path) -> list[str]:

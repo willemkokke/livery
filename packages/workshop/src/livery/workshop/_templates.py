@@ -669,7 +669,7 @@ def _drift_line(
 #: The python kind's set; a package's actual set is its kind
 #: chain's union, livery.workshop._kinds.managed_files, and a pin
 #: keeps this legacy name agreeing with the registry.
-PACKAGE_MANAGED = ("cliff.toml",)
+PACKAGE_MANAGED: tuple[str, ...] = ()
 
 
 def _package_regions(directory: Path) -> dict[str, dict[str, str]]:

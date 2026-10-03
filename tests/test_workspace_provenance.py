@@ -37,7 +37,7 @@ def test_every_tracked_file_classifies() -> None:
 def test_the_channels_land_where_the_workspace_knows_them() -> None:
     expect = {
         "pyproject.toml": "composed",
-        "tasks.py": "rendered",
+        "tasks.py": "composed",
         ".gitignore": "composed",
         ".gitattributes": "composed",
         ".github/workflows/ci.yml": "generated",

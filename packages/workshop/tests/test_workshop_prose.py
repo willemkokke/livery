@@ -509,6 +509,7 @@ def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
         "@.workshop/fragments/rules.workshop.md",
         "@.workshop/fragments/workflow.acme.md",
         "@.workshop/fragments/gate.checks.md",
+        "@.workshop/fragments/verbs.extensions.md",
         "@fragments/identity.acme.md",
         "@CLAUDE.project.md",
     ]

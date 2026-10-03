@@ -2,9 +2,9 @@
 {%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] -%}
 {%- set repo_url = web_root ~ '/' ~ forge_owner ~ '/' ~ project_name -%}
 {%- set pr_path = 'pull' if forge_kind == 'github' else ('pulls' if forge_kind == 'gitea' else '-/merge_requests') -%}
-# Rendered by the template channel ({{ template_source_label }}, package-python kind);
-# the gate keeps it matching its render. Edit the source and
-# run `{{ runner_prog }} template.apply`; an edit here is drift.
+# Composed by `{{ prog }} sync` from the base's template; the gate keeps
+# it matching. Edit inside the region at the end, which is the
+# package's own; an edit anywhere else is drift.
 # How {{ package_name }}'s changelog is written.
 #
 # git-cliff reads the conventional commits under this package's paths
@@ -92,4 +92,4 @@ trim = true
 
 # The package's own tables.
 # -- workshop: region own, yours to edit; the render keeps it --
-{{ (regions.get('cliff.toml') or {}).get('own', '') }}# -- workshop: end own --
+# -- workshop: end own --

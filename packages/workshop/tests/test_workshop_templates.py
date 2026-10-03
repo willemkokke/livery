@@ -19,9 +19,7 @@ import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop._contract import toml_string
 from livery.workshop._identity import project_facts
 from livery.workshop._templates import (
-    apply_packages,
     apply_project,
-    package_drift,
     project_drift,
     render,
 )
@@ -112,26 +110,25 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
     package.mkdir(parents=True)
     (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
     (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
-    # Nothing rendered yet: the managed file is named as missing.
-    assert package_drift(root) == [
-        "packages/thing/cliff.toml: rendered, but missing from the repository"
-    ]
-    assert "packages/thing/cliff.toml" in apply_packages(root)
-    assert package_drift(root) == []
-    assert apply_packages(root) == []  # idempotent
-    # A README the package's authors wrote is not the template's to keep.
+    from livery.workshop._shipped_files import deliver, shipped_drift
+
+    # Nothing composed yet: the base's file is named as missing.
+    assert "packages/thing/cliff.toml: missing; `fm sync` writes it" in shipped_drift(
+        root
+    )
+    assert "  wrote packages/thing/cliff.toml" in deliver(root)
+    assert shipped_drift(root) == []
+    assert deliver(root) == []  # idempotent
+    # A README the package's authors wrote is not the base's to keep.
     (package / "README.md").write_text("# thing\n\nWritten by its authors.\n")
-    assert package_drift(root) == []
+    assert shipped_drift(root) == []
     (package / "cliff.toml").write_text("# edited by hand\n")
-    # Rewritten wholesale, the file has lost its `own` region's markers,
-    # which are rendered bytes: the line says so.
-    assert package_drift(root) == [
-        "packages/thing/cliff.toml: the `own` region's markers are rendered;"
-        " restore them, `fm template.apply` rewrites them"
+    assert shipped_drift(root) == [
+        "packages/thing/cliff.toml: differs from what livery.workshop:cliff.toml render"
     ]
 
 
-def test_a_receipt_without_package_dir_renders_the_right_paths(
+def test_a_members_files_carry_its_own_path(
     tmp_path: Path,
 ) -> None:
     # The re-render happens in a temp directory, and package_dir comes
@@ -143,10 +140,12 @@ def test_a_receipt_without_package_dir_renders_the_right_paths(
     package.mkdir(parents=True)
     (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
     (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
-    assert "packages/thing/cliff.toml" in apply_packages(root)
+    from livery.workshop._shipped_files import deliver, shipped_drift
+
+    assert "  wrote packages/thing/cliff.toml" in deliver(root)
     body = (package / "cliff.toml").read_text()
     assert 'include_paths = ["packages/thing/**"]' in body
-    assert package_drift(root) == []
+    assert shipped_drift(root) == []
 
 
 @pytest.mark.parametrize(
@@ -174,7 +173,9 @@ def test_the_cliff_remote_carries_the_api_prefix_gitlab_alone_needs(
     package.mkdir(parents=True)
     (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
     (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
-    assert "packages/thing/cliff.toml" in apply_packages(root)
+    from livery.workshop._shipped_files import deliver
+
+    assert "  wrote packages/thing/cliff.toml" in deliver(root)
     body = (package / "cliff.toml").read_text()
     assert f"[remote.{kind}]" in body
     assert f'api_url = "{api_url}"' in body
@@ -224,12 +225,13 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert "workshop.toml" not in changed
     assert project_drift(root) == []
     assert apply_project(root) == []  # idempotent: a clean tree changes nothing
+    from livery.workshop._shipped_files import shipped_drift
+
     (root / "tasks.py").write_text("# doctored\n")
-    drift = project_drift(root)
-    # Doctored wholesale, the file has lost its `tasks` region's markers.
+    # The composed tasks.py, doctored, is the engine's drift.
     assert (
-        "tasks.py: the `tasks` region's markers are rendered; restore"
-        " them, `fm template.apply` rewrites them" in drift
+        "tasks.py: differs from what livery.workshop:tasks.py render"
+        in shipped_drift(root)
     )
 
 
@@ -666,7 +668,9 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
     assert (repo / "run.cmd").read_bytes() == b"@echo off\r\n"
 
 
-def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
+def test_the_rendered_prose_spells_the_brand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from livery.workshop._templates import render
 
     answers = project_facts(ROOT)
@@ -676,7 +680,9 @@ def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
         destination,
         {**answers, "runner_prog": "hse"},
     )
-    tasks = (destination / "tasks.py").read_text()
+    # The composed tasks.py takes the brand from the running process.
+    monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
+    tasks = (compose_into(destination) / "tasks.py").read_text()
     assert "Run with ``hse <task>``" in tasks
     assert "``hse check``" in tasks
 
@@ -774,6 +780,8 @@ def _build_instance_from_git_template(base: Path) -> None:
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
+    # A born instance carries the files the engine composes.
+    compose_into(instance)
     # copier update works only in a git-tracked destination, which
     # every real instance is.
     subprocess.run(["git", "init", "-q"], cwd=instance, check=True)

@@ -58,7 +58,7 @@ def test_add_and_declared_replace_compose(tmp_path: Path) -> None:
     text = (composed.path / "project" / "README.md.jinja").read_text()
     assert text == "# the brand's own\n"
     assert composed.owners["project/README.md.jinja"] == "acme.brand"
-    assert composed.owners["project/tasks.py.jinja"] == "livery.workshop"
+    assert composed.owners["project/LICENSE.jinja"] == "livery.workshop"
     config = (composed.path / "copier.yml").read_text()
     assert "Contributed by the acme.brand extension" in config
     assert "brand_motto" in config
@@ -67,11 +67,11 @@ def test_add_and_declared_replace_compose(tmp_path: Path) -> None:
 def test_an_undeclared_same_path_file_is_refused(tmp_path: Path) -> None:
     root = _home(tmp_path)
     overlay = _overlay(root)
-    (overlay / "project" / "tasks.py.jinja").write_text("# patched\n")
+    (overlay / "project" / "README.md.jinja").write_text("# patched\n")
     with pytest.raises(_FAILURES) as caught:
         compose_source(root, tmp_path / "out")
     text = str(caught.value)
-    assert "project/tasks.py.jinja" in text
+    assert "project/README.md.jinja" in text
     assert "acme.brand" in text and "never edits" in text
 
 
@@ -136,11 +136,11 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
         )
     )
     overlay = _overlay(root)
-    (overlay / "project" / "tasks.py.jinja").write_text(
-        (root / "templates/project/tasks.py.jinja").read_text() + "# brand-extra\n"
+    (overlay / "project" / "README.md.jinja").write_text(
+        (root / "templates/project/README.md.jinja").read_text() + "brand-extra\n"
     )
     (overlay / "overlay.toml").write_text(
-        '[[replace]]\npath = "project/tasks.py.jinja"\n'
+        '[[replace]]\npath = "project/README.md.jinja"\n'
         'reason = "the brand mounts its own tasks"\n'
     )
     contract = (root / "workshop.toml").read_text()
@@ -155,18 +155,10 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
     )
     source, _ref, owners = render_source(root)
     assert source.endswith("composed-templates")
-    assert owners["project/tasks.py.jinja"] == "acme.brand"
+    assert owners["project/README.md.jinja"] == "acme.brand"
+    # The replaced file is a seed: a birth writes the brand's version, and
+    # the drift gate never judges a seed afterwards.
     changed = apply_project(root)
-    assert "tasks.py" in changed
-    assert "# brand-extra" in (root / "tasks.py").read_text()
+    assert "README.md" in changed
+    assert "brand-extra" in (root / "README.md").read_text()
     assert project_drift(root) == []
-    # A doctored composed file names the extension that owns it. Doctored
-    # wholesale, it has also lost its `tasks` region's markers, which
-    # the line names first.
-    (root / "tasks.py").write_text("# doctored\n")
-    drift = project_drift(root)
-    assert any(
-        "tasks.py: the `tasks` region's markers are rendered; restore them,"
-        " `fm template.apply` rewrites them (the acme.brand extension owns it)" in line
-        for line in drift
-    )

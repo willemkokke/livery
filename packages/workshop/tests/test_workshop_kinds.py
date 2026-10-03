@@ -136,13 +136,10 @@ def test_a_concrete_kind_without_a_backend_refuses(restored_registry) -> None:
 
 def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None:
     """Every kind releases, so the changelog engine is declared once, on the base."""
-    from livery.workshop._kinds import managed_files
-
     assert "base" not in kind_names()
     for name in ("python", "python-nanobind", "cpp-conan"):
         assert kind_chain(name)[0].name == "base", name
         assert "git_cliff" in kind_tools({name}), name
-        assert "cliff.toml" in managed_files(name), name
     with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
         backend_for(_package(tmp_path, "base"))
 
@@ -286,6 +283,6 @@ def test_managed_files_union_along_the_chain(restored_registry) -> None:
             managed=("CMakeLists.txt",),
         )
     )
-    assert managed_files("python-fake") == ("CMakeLists.txt", "cliff.toml")
+    assert managed_files("python-fake") == ("CMakeLists.txt",)
     # The legacy constant stays pinned to the python kind's set.
     assert managed_files("python") == PACKAGE_MANAGED
