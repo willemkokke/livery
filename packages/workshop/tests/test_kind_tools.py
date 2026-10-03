@@ -121,13 +121,17 @@ def _python_tools(*versions: str) -> list[Record]:
 
 
 def _workspace(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, tools: str = ""
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tools: str = "",
+    workspace: str = "",
 ) -> Path:
     """A python workspace with one member and its records beside it."""
     root = tmp_path / "ws"
     (root / "packages" / "member").mkdir(parents=True)
     (root / "workshop.toml").write_text(
-        f'[workspace]\n\n[tools]\nindex = "records"\n{tools}'
+        f'[workspace]\n{workspace}\n[tools]\nindex = "records"\n{tools}'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
         'kind = "python"\nname = "acme-member"\n'
@@ -207,8 +211,9 @@ def test_a_version_on_fewer_hosts_than_the_lock_covers_refuses_naming_the_host(
     assert "the first version that has it is 1.0.0" in str(refused.value)
     # Locking for the two hosts that have it resolves.
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea>=1.1"]\n'
-        'hosts = ["linux-x64", "macos-arm"]\n'
+        '[workspace]\nhosts = ["linux-x64", "macos-arm"]\n\n'
+        '[tools]\nindex = "records"\n'
+        'requires = ["tea>=1.1"]\n'
     )
     assert _tools.write_lock(root).tools["tea"].version == "1.1.0"
 
@@ -227,10 +232,16 @@ def test_a_contract_off_the_shape_refuses_naming_the_key(
     with pytest.raises(Failed, match=r"workshop.toml: 'ruff<1' is not a requirement"):
         _tools.requirements(root)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nhosts = "linux-x64"\n'
+        '[workspace]\nhosts = "linux-x64"\n\n[tools]\nindex = "records"\n'
     )
-    with pytest.raises(Failed, match=r"tools.hosts is a string"):
-        _tools.locked_hosts(root)
+    with pytest.raises(Failed, match=r"workspace.hosts is a string"):
+        _tools.supported_hosts(root)
+    # The old home of the key is no key at all.
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nhosts = ["linux-x64"]\n'
+    )
+    with pytest.raises(Failed, match=r"\[tools\] has no key 'hosts'"):
+        _tools.supported_hosts(root)
     (root / "workshop.toml").write_text("[workspace]\n")
     with pytest.raises(Failed, match=r"\[tools\] index names no source"):
         _tools.index_source(root)
@@ -664,8 +675,9 @@ def test_a_scope_no_locked_host_matches_locks_nothing_and_says_so(
     # A scope reaching none of the locked hosts: the tool is not locked,
     # and the lock says which requirement went unmet.
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea@windows"]\n'
-        'hosts = ["linux-x64", "macos-arm"]\n'
+        '[workspace]\nhosts = ["linux-x64", "macos-arm"]\n\n'
+        '[tools]\nindex = "records"\n'
+        'requires = ["tea@windows"]\n'
     )
     lock = _tools.write_lock(root)
     assert "tea" not in lock.tools
@@ -780,16 +792,19 @@ def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
     assert not (receipts / "tea.json").exists()
 
 
-def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_runner_on_an_unsupported_host_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A host outside the lock's set meets a download it lacks: named, never fatal."""
+    """A host outside `[workspace] hosts` refuses in CI and strict; a desk is told."""
     from livery.toolroom.store.api import StoreError
     from workshop_hosts import HERE
 
     elsewhere = "linux-x64" if HERE != "linux-x64" else "macos-arm"
     root = _workspace(
-        tmp_path, monkeypatch, tools=f'requires = ["tea"]\nhosts = ["{elsewhere}"]\n'
+        tmp_path,
+        monkeypatch,
+        tools='requires = ["tea"]\n',
+        workspace=f'hosts = ["{elsewhere}"]\n',
     )
     _records(root, _tea(elsewhere))
     _tools.write_lock(root)
@@ -806,15 +821,64 @@ def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
             raise StoreError(f"{name}: stood in for")
 
     monkeypatch.setattr("livery.toolroom.store.api.Store", _Store)
-    # Strict, the refusal names the tool and the host.
-    with pytest.raises(Failed, match=rf"tea 1.0.0: not locked for {HERE}"):
+    unsupported = (
+        f"this host ({HERE}) is not one the workspace supports;"
+        f" [workspace] hosts supports {elsewhere}"
+    )
+    # Strict, one refusal names the host and the supported set.
+    with pytest.raises(Failed) as refused:
         _tools.materialise(root, ("tea",))
-    # As sync materialises, the tool is reported and every other tool
-    # is still supplied.
+    assert str(refused.value) == unsupported
+    # A CI runner refuses the same way, however sync asks.
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(Failed) as refused:
+        _tools.materialise(root, strict=False)
+    assert str(refused.value) == unsupported
+    assert supplied == []
+    # At a desk, sync says so once, reports the tool the lock lacks for
+    # this host, and still supplies every other tool.
+    monkeypatch.delenv("CI")
     outcomes = _tools.materialise(root, strict=False)
+    assert f"  {unsupported}\n" in capsys.readouterr().out
     reported = [made.failure for made in outcomes if made.failure]
     assert any(f"tea 1.0.0: not locked for {HERE}" in why for why in reported)
     assert "tea" not in supplied and "ruff" in supplied
+
+
+def test_the_supported_hosts_read_the_scope_tokens_and_refuse_a_bad_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.toolroom.store.api import HOSTS
+
+    monkeypatch.setattr(_tools, "DEFAULT_HOSTS", ())
+    root = _workspace(tmp_path, monkeypatch)
+
+    def declare(hosts: str) -> None:
+        (root / "workshop.toml").write_text(
+            f'[workspace]\nhosts = {hosts}\n\n[tools]\nindex = "records"\n'
+        )
+
+    # The refusals first: a token that is no host, an empty list, and
+    # a list that removes every host.
+    declare('["macos", "bsd"]')
+    with pytest.raises(Failed, match=r"\[workspace\] hosts: 'bsd' in .* is neither"):
+        _tools.supported_hosts(root)
+    declare("[]")
+    with pytest.raises(Failed, match=r"\[workspace\] hosts is empty"):
+        _tools.supported_hosts(root)
+    declare('["!linux", "!macos", "!windows"]')
+    with pytest.raises(Failed, match=r"leaves no host"):
+        _tools.supported_hosts(root)
+    # Undeclared, every host key, in the store's order.
+    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    assert _tools.supported_hosts(root) == HOSTS
+    # A platform reaches both its hosts; a removal alone starts from all.
+    declare('["macos", "linux-x64"]')
+    assert _tools.supported_hosts(root) == ("macos-arm", "macos-x64", "linux-x64")
+    declare('["!windows-arm"]')
+    assert _tools.supported_hosts(root) == tuple(
+        host for host in HOSTS if host != "windows-arm"
+    )
 
 
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(

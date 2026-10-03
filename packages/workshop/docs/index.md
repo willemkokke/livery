@@ -302,9 +302,21 @@ without the plugin's tasks, which is how forge's dev verbs bring
 know; and the project, in the root contract's `[tools] requires`, for
 what belongs to the repository. The root contract's `[tools] index` names where the
 catalogue is read from, the published index's URL or a directory
-holding the index or the records that build one, and `[tools] hosts`
-the hosts the repository locks for, the gated three unless it says
-otherwise. The repository that authors the records reads them directly.
+holding the index or the records that build one. The repository that
+authors the records reads them directly.
+
+`[workspace] hosts` names the hosts the workspace supports, in the
+scope tokens a requirement takes after `@`: a platform (`macos`), a
+host key (`linux-arm`), and either with `!` to remove it. Without the
+key every host key is supported. The lock covers every supported host,
+so a requirement without a scope must resolve on all of them. `fm
+sync` on another host says so once; in CI, and from `fm tools.add`, it
+refuses, naming the host and the supported set.
+
+```toml
+[workspace]
+hosts = ["macos", "linux-x64", "windows-x64"]
+```
 
 `fm tools.lock` resolves every site's requirements against the
 catalogue and writes `tools.lock` at the root: one version per tool for

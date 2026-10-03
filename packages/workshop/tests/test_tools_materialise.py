@@ -191,7 +191,20 @@ def test_a_store_refusal_and_a_host_the_lock_lacks_refuse_naming_the_tool(
     assert lines[0] == "  tools: 1 receipt(s), installed tea"
     assert lines[1].startswith("  tools: could not materialise: ruff 0.16.0: `uv tool")
     assert list(_tools.receipts(root)) == ["tea"]
+    # A host the workspace does not support refuses as a host, once.
     monkeypatch.setattr(_engine, "_default_host", lambda: "linux-arm")
+    with pytest.raises(
+        Failed, match=r"this host \(linux-arm\) is not one the workspace"
+    ):
+        _tools.materialise(root, ("tea",))
+    # Supported, but missing from a lock written before: the tool is named.
+    monkeypatch.setattr(_tools, "DEFAULT_HOSTS", ())
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace(
+            "[workspace]\n", '[workspace]\nhosts = ["linux", "macos", "windows"]\n', 1
+        )
+    )
     with pytest.raises(Failed, match=r"tea 1\.0\.0: not locked for linux-arm"):
         _tools.materialise(root, ("tea",))
 

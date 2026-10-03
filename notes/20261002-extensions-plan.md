@@ -328,9 +328,10 @@ scope = token(,token)*     token = [!]platform | [!]host-key
   metadata (contract 15). A package's `extensions` list names
   extensions and options only; the lock pins the versions.
 
-`[workspace] platforms` declares the supported platforms in the same
-tokens; undeclared, every host. A requirement without a scope must
-resolve on every supported platform. `[tools] hosts` goes.
+`[workspace] hosts` declares the supported hosts in the same tokens;
+undeclared, every host. A requirement without a scope must resolve on
+every supported host. `[tools] hosts` goes. "Platform" stays free for
+the targets a toolchain builds for (iOS, Android).
 
 ### Checks and roles
 
@@ -527,7 +528,7 @@ extension.
   runners, and clones a local checkout whose remote is the lodge.
 - `fm lodge.config <name>` prints the `workshop.toml` values the
   repository needs there: `[forge]`, registries, `[ci] runners` and
-  `[workspace] platforms` from its runners.
+  `[workspace] hosts` from its runners.
 - In the local checkout, `fm` recognises the lodge from the remote
   URL through the lodge's record of what it created, and applies the
   values in memory; in CI, every runner the lodge registers sets
@@ -770,7 +771,20 @@ group at once, and `livery.footman.api.installed_entry_points` serves
 footman's loader, its rungs and the workshop's readers from that scan
 (issue #1049): one read of about 2 ms where each group cost one.
 
-5e (`[workspace] platforms`) is not started. It carries Willem's
+**5e built (issue #1055): `[workspace] hosts`.** The supported hosts
+are read in the scope tokens, every host key while the key is absent,
+and the lock covers all of them; `[tools] hosts` refuses as unknown. A
+runner's label is free text on every forge, so the check runs on the
+host: `fm sync` on an unsupported host says so once at a desk, and
+refuses in CI and from `fm tools.add`. This repository declares no
+hosts and locks six. The tools without a build somewhere carry a scope:
+`clang_format@!linux-arm,!windows-arm` and
+`clang_tidy@!linux-arm,!windows-arm` (the static builds have neither);
+`dotnet` and `dotnet_coverage` already ran `@windows`, now on both
+Windows hosts. `uv` moved from 0.11.26 to 0.12.5, the one version
+the record carries a windows-arm build for.
+
+5f (the clang tools from PyPI) is not started. It carries Willem's
 rulings of 2026-10-03 on the clang tools: `clang-format` and
 `clang-tidy` become two `pypi` records over the `ssciwr` wheels, one
 build per release for every host we lock, macos-x64 included; the
@@ -791,9 +805,9 @@ Deliverables:
   `fm --where` showing it.
 - Plugins and extensions declare tools; `?` marks an optional one;
   scopes accept `!`.
-- `[workspace] platforms`, every host when undeclared; an unscoped
-  requirement must resolve on every supported platform; a runner on
-  an unsupported platform refuses.
+- `[workspace] hosts`, every host when undeclared; an unscoped
+  requirement must resolve on every supported host; a runner on an
+  unsupported host refuses.
 - The rendered `tasks.py` keeps only its comment: the workshop is a
   direct dependency, so it mounts through the rung.
 
@@ -805,8 +819,8 @@ Acceptance, refusals first:
   footman's gate.
 - `test_an_optional_tool_absent_is_named_and_never_refused`,
   `test_an_exclusion_scope_removes_its_hosts`,
-  `test_a_runner_on_an_unsupported_platform_refuses`.
-- `fm tools.lock` on this repository with `platforms` undeclared
+  `test_a_runner_on_an_unsupported_host_refuses`.
+- `fm tools.lock` on this repository with `hosts` undeclared
   locks every host; the tools without a build somewhere carry a
   scope, quoted in the decision record.
 
@@ -1214,10 +1228,11 @@ Acceptance:
   exists only where a plugin is not enough.
 - Willem: plugins may declare tools, optional ones with `?`; scopes
   take `!`.
-- Willem: `[workspace] platforms` declares the supported platforms;
+- Willem: `[workspace] hosts` declares the supported hosts;
   undeclared, every host; an unscoped requirement must resolve on
-  every supported platform; every runner must be a supported
-  platform, and a supported platform needs no runner.
+  every supported host; every runner must be a supported host, and a
+  supported host needs no runner. Named `platforms` until 2026-10-03,
+  when Willem renamed it so "platform" stays free for build targets.
 - Willem: configuration is strict and teaching everywhere; removed
   keys refuse as unknown, with no code naming them.
 - Willem: `[workspace] extensions` is required; `fm new.project`
