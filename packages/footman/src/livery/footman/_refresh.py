@@ -130,6 +130,16 @@ def _rebuild() -> None:
         builtin = _config.effective_builtin(_paths.builtin())
     except Exception:
         builtin = _paths.builtin()
+    # The project rung, as the run computes it: the built-ins the
+    # project's direct dependencies offer, less what it excludes.
+    if project_files:
+        offered = _config.project_builtin(project_files[0].parent)
+        builtin = (*builtin, *[name for name in offered if name not in builtin])
+    try:
+        excluded = _config.builtin_exclude(cfg)
+    except _config.ConfigError:
+        excluded = ()
+    builtin = tuple(name for name in builtin if name not in excluded)
     if not files and not builtin:
         return
     # The re-executed child is a fresh interpreter, so it needs telling where

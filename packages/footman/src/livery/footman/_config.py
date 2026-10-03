@@ -176,6 +176,14 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "a name that is not installed is refused. **User-level only.**",
     ),
     (
+        "builtin-exclude",
+        "list of entry points",
+        "empty",
+        "Built-in names this project keeps out of its cascade, the ones its "
+        "direct dependencies offer included. `{prog} --plugins` names each "
+        "exclusion.",
+    ),
+    (
         "docs-url",
         "URL template",
         "unset",
@@ -636,6 +644,72 @@ def effective_builtin(brand: tuple[str, ...]) -> tuple[str, ...]:
     if mode in ("auto", "manual"):
         names += [n for n in discovered_builtin() if n not in names]
     names += [n for n in user_builtin() if n not in names]
+    return tuple(names)
+
+
+def builtin_exclude(cfg: dict[str, Any]) -> tuple[str, ...]:
+    """The built-in names the merged config keeps out of the cascade.
+
+    Raises:
+        BuiltinError: when ``builtin-exclude`` is not a list of strings.
+    """
+    raw = cfg.get("builtin-exclude", [])
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise BuiltinError(
+            f"builtin-exclude must be a list of entry point names, not {raw!r}"
+        )
+    return tuple(raw)
+
+
+def _requirement_name(text: str) -> str:
+    """A requirement's distribution name, in its canonical spelling."""
+    import re
+
+    found = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", text)
+    return re.sub(r"[-_.]+", "-", found.group(1)).lower() if found else ""
+
+
+def project_builtin(root: Path) -> tuple[str, ...]:
+    """The ``footman.builtin`` names *root*'s direct dependencies offer.
+
+    The project's ``pyproject.toml`` names its direct dependencies under
+    ``[project] dependencies`` and in each ``[dependency-groups]`` list;
+    an installed distribution among them contributes every name it
+    declares in the ``footman.builtin`` group, in the order the manifest
+    names it. A distribution installed only as another's dependency
+    contributes nothing: depending on a plugin is the choice to have its
+    verbs, and a dependency of a dependency is nobody's choice.
+    """
+    from importlib.metadata import entry_points
+
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    try:
+        data = tomllib.loads(pyproject.read_text("utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return ()
+    declared: list[str] = []
+    project = data.get("project")
+    if isinstance(project, dict):
+        declared += [str(text) for text in project.get("dependencies") or []]
+    groups = data.get("dependency-groups")
+    if isinstance(groups, dict):
+        for listed in groups.values():
+            if isinstance(listed, list):
+                declared += [text for text in listed if isinstance(text, str)]
+    direct = list(
+        dict.fromkeys(name for name in map(_requirement_name, declared) if name)
+    )
+    offered: dict[str, list[str]] = {}
+    for entry in entry_points(group="footman.builtin"):
+        dist = getattr(entry, "dist", None)
+        name = _requirement_name(getattr(dist, "name", "") or "") if dist else ""
+        if name:
+            offered.setdefault(name, []).append(entry.name)
+    names: list[str] = []
+    for dist in direct:
+        names += [entry for entry in offered.get(dist, []) if entry not in names]
     return tuple(names)
 
 
