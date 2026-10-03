@@ -31,6 +31,21 @@ latest leg proves the newest, and the lock may sit anywhere between.
 A toolchain tool that needs another version of a dependency the
 member declares is refused by name.
 
+The floor leg runs while `prove-floors` is on, which it is unless a
+`[release]` table turns it off: the workspace's `workshop.toml` sets
+the default for every member, and a package's own `workshop.toml`
+overrides it for that package either way.
+
+```toml
+[release]
+prove-floors = false
+```
+
+With it off, the member's floor leg is skipped and the release names
+the skip and the file that turned it off; the latest leg still runs.
+A sibling released in the same wave counts at its new version: its
+floor in every co-released member rises to that version first.
+
 The wave runs at the release squash with the squash's own workshop:
 the checkout, the wheel, the receipt and the driver are all the
 squash's, so a re-run does what the first run did. When the driver

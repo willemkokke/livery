@@ -1593,6 +1593,13 @@ Acceptance:
   birth listed the site's extension after the brand's, so it won;
   the site's comes first now. Supplying one tool from two processes at
   once collides in the store (issue #1092).
+- Willem, 2026-10-04 (issue #1094): proving the floors is a choice.
+  `[release] prove-floors`, `true` by default in the workspace's
+  `workshop.toml`, overridable either way in a package's; off, the
+  floor leg is skipped and named. A co-released sibling already counts
+  at its wave version (`bump_set_floors`). A failed release's rollback
+  now restores the files the stamper writes, a namespace package's
+  `api.py` among them.
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an

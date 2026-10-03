@@ -227,10 +227,14 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
             )
             if (package.directory / name).is_file()
         )
-        src = package.directory / "src"
-        if src.is_dir():
+        # Every file the kind's stamper writes a version into: a
+        # namespace package keeps `__version__` in its `api.py`. A kind
+        # that cannot name them restores the rest regardless.
+        with contextlib.suppress(Exception):
             paths.extend(
-                p.relative_to(root).as_posix() for p in src.rglob("__init__.py")
+                home.relative_to(root).as_posix()
+                for home in backend_for(package).stamp_version(package).homes()
+                if home.is_file()
             )
     tools.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
     # The lock the stamp refreshed, restored alone: an untracked lock
@@ -254,6 +258,28 @@ def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
     )
 
 
+#: The setting that decides whether the floor leg runs, in `[release]`.
+PROVE_FLOORS = "prove-floors"
+
+
+def proves_floors(root: Path, package: Package) -> tuple[bool, str]:
+    """Whether *package*'s floors are proved, and the file that decided it.
+
+    The package's own `[release] prove-floors` wins; the workspace's
+    is the default; without either the floors are proved.
+    """
+    from livery.workshop._contract import load_contract
+
+    for contract in (package.directory / "workshop.toml", root / "workshop.toml"):
+        if not contract.is_file():
+            continue
+        release = load_contract(contract).get("release") or {}
+        if PROVE_FLOORS in release:
+            where = contract.relative_to(root).as_posix()
+            return bool(release[PROVE_FLOORS]), where
+    return True, ""
+
+
 def validate_member(
     root: Path,
     plan: MemberPlan,
@@ -264,7 +290,10 @@ def validate_member(
     """Build and run the isolated legs for one member, reporting each.
 
     The floor leg first (a floor lying about compatibility fails
-    before anything else is spent), then the latest leg. The report
+    before anything else is spent), then the latest leg. The floor leg
+    runs while `[release] prove-floors` is on for the member
+    ([livery.workshop._release_driver.proves_floors][]); off, the leg
+    is skipped and the skip is named with the file that turned it off. The report
     names what each leg resolved per co-member and sibling. The
     caller builds every set member's wheel first: the legs'
     find-links name each sibling's ``dist/``, so a later member's
@@ -283,6 +312,13 @@ def validate_member(
             " gate builds and tests)"
         )
         return
+    proved, where = proves_floors(root, plan.package)
+    if not proved and "lowest-direct" in legs:
+        legs = tuple(leg for leg in legs if leg != "lowest-direct")
+        print(
+            f"  {plan.package.name} floor leg: skipped, `[release] {PROVE_FLOORS}"
+            f" = false` in {where}"
+        )
     for leg in legs:
         resolved = _python.run_isolated_test(
             plan.package, root, release_dirs=release_dirs, resolution=leg
