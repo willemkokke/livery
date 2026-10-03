@@ -184,6 +184,29 @@ def test_the_verb_refuses_without_touching_the_record(tmp_path, monkeypatch) -> 
     assert (records / "tool.jsonl").read_text() == before
 
 
+def test_a_record_that_does_not_load_is_refused_with_its_fix(
+    tmp_path, monkeypatch
+) -> None:
+    """A Windows layout on a record with no hosts yet: one line, never a traceback."""
+    import json
+
+    records = isolate(tools, monkeypatch, tmp_path)
+    save(_record("1.0.0", layout=Layout(root="tool-{version}")), records)
+    path = records / "tool.jsonl"
+    lines = path.read_text().split("\n")
+    axis = json.loads(lines[0])
+    axis["hosts"] = []
+    axis["host_layouts"] = {"windows-x64": {"entry_points": ["tool.exe"]}}
+    path.write_text("\n".join([json.dumps(axis), *lines[1:]]))
+    with pytest.raises(Failed) as refused:
+        tools.tools_artifacts("tool")
+    assert str(refused.value).startswith(f"{path}: ")
+    assert str(refused.value).endswith(
+        "List windows-x64 in the record's `hosts` first, and `tools.artifacts`"
+        " records its artifact"
+    )
+
+
 # --- the step -----------------------------------------------------------------
 
 
