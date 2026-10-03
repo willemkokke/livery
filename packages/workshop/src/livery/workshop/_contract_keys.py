@@ -171,7 +171,7 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     that extension's.
     Two owners declaring one path refuse, naming both.
     """
-    from importlib.metadata import entry_points
+    from livery.footman.api import installed_entry_points
 
     found: dict[tuple[ContractKind, str], _Owned] = {}
 
@@ -186,7 +186,7 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
             found[key] = _Owned(item, owner)
 
     take(BASE, _base())
-    for entry in entry_points(group="workshop.extensions"):
+    for entry in installed_entry_points("workshop.extensions"):
         loaded: Any = entry.load()
         take(entry.name, tuple(getattr(loaded, "CONTRACT_KEYS", ())))
     return found

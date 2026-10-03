@@ -191,52 +191,35 @@ def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
 
     The plugins are the ``footman.builtin`` names the project's direct
     dependencies offer, as footman's project rung mounts them. A plugin
-    declares the tools its verbs need as a literal ``TOOLS = (...)`` in
-    its entry module, ``("docker?",)`` for one it can do without. The
-    value is read from the module's source and never imported: importing
-    a plugin outside footman's mount would register its tasks there.
+    declares the tools its verbs need in a data module that its
+    ``workshop.tools`` entry point names, under the plugin's own name:
+    ``"livery.forge" = "livery.forge._dev_tools:TOOLS"``, a tuple of
+    requirement strings, ``("docker?",)`` for one it can do without.
+    Loading it imports that module alone, never the plugin's tasks.
 
     Raises:
-        Failed: when a plugin's ``TOOLS`` is not a literal tuple or list
-            of strings, naming the plugin.
+        Failed: when a declaration is not a tuple or list of strings,
+            naming the plugin.
     """
-    import ast
-    import importlib.util
-    from importlib.metadata import entry_points
-
     from livery.footman import _config  # pyright: ignore[reportPrivateUsage]
+    from livery.footman.api import installed_entry_points
 
-    modules = {
-        entry.name: entry.value.partition(":")[0]
-        for entry in entry_points(group="footman.tasks")
-    }
+    declared = {entry.name: entry for entry in installed_entry_points("workshop.tools")}
     found: dict[str, tuple[str, ...]] = {}
     for name in _config.project_builtin(root):
-        module = modules.get(name)
-        spec = importlib.util.find_spec(module) if module else None
-        if spec is None or spec.origin is None or not spec.origin.endswith(".py"):
+        entry = declared.get(name)
+        if entry is None:
             continue
-        tree = ast.parse(Path(spec.origin).read_text("utf-8"))
-        for node in tree.body:
-            if not (
-                isinstance(node, ast.Assign)
-                and any(
-                    isinstance(t, ast.Name) and t.id == "TOOLS" for t in node.targets
-                )
-            ):
-                continue
-            try:
-                value = ast.literal_eval(node.value)
-            except ValueError:
-                value = None
-            if not isinstance(value, (tuple, list)) or not all(
-                isinstance(text, str) for text in value
-            ):
-                fail(
-                    f"plugin {name}: TOOLS in {module} is not a literal tuple of"
-                    ' requirement strings, ("docker?",)'
-                )
-            found[name] = tuple(value)
+        value: object = entry.load()
+        if not isinstance(value, (tuple, list)) or not all(
+            isinstance(text, str)
+            for text in value  # pyright: ignore[reportUnknownVariableType]
+        ):
+            fail(
+                f"plugin {name}: its workshop.tools entry point ({entry.value}) is"
+                ' not a tuple of requirement strings, ("docker?",)'
+            )
+        found[name] = tuple(str(text) for text in value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
     return found
 
 

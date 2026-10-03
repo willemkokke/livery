@@ -197,3 +197,18 @@ class _TraceRecorder:
                 json.dump({"traceEvents": metadata + self._events}, sink)
         except OSError as exc:  # a broken drop never fails the suite it rode in
             print(f"footman profile fragment not written: {exc}", file=sys.stderr)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_entry_point_scan() -> Iterator[None]:
+    """Scan the installed entry points afresh for every test.
+
+    footman keeps one scan per process; a test that installs a
+    distribution on its path, or fakes a scan, must see its own and
+    leave nothing for the next.
+    """
+    from livery.footman import _entries
+
+    _entries.rescan_entry_points()
+    yield
+    _entries.rescan_entry_points()

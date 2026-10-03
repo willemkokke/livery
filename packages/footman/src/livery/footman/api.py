@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     # on a bare `import footman` (the completion hot path).
     from livery.footman import docstrings as docstrings
     from livery.footman import markdown as markdown
+    from livery.footman._entries import installed_entry_points as installed_entry_points
+    from livery.footman._entries import rescan_entry_points as rescan_entry_points
     from livery.footman._executor import handing_off as handing_off
     from livery.footman._fetch import FetchError as FetchError
     from livery.footman._fetch import fetch as fetch
@@ -203,6 +205,7 @@ __all__ = [
     "hidden",
     "include",
     "inherited",
+    "installed_entry_points",
     "isdir",
     "isfile",
     "lane",
@@ -230,6 +233,7 @@ __all__ = [
     "requires_dep",
     "requires_env",
     "requires_tool",
+    "rescan_entry_points",
     "run",
     "section",
     "select",
@@ -356,6 +360,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import registry
 
         return getattr(registry, name)
+    if name in ("installed_entry_points", "rescan_entry_points"):
+        from livery.footman import _entries
+
+        return getattr(_entries, name)
     if name == "handing_off":
         from livery.footman import _executor
 

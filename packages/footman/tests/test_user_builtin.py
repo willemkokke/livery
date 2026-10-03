@@ -58,9 +58,12 @@ def provider(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(pkg))
     monkeypatch.delitem(sys.modules, "acme_tasks", raising=False)
 
+    from livery.footman import _entries, compose
+
     class FakeEP:
         name = "acme_tasks"
         dist = None
+        group = compose.ENTRY_POINT_GROUP
 
         def load(self):
             # By name, not a static import: the module is written into a
@@ -69,19 +72,11 @@ def provider(tmp_path, monkeypatch):
 
             return importlib.import_module("acme_tasks")
 
-    import importlib.metadata
-
-    from livery.footman import compose
-
-    real = importlib.metadata.entry_points
-
-    def fake_entry_points(group=None):
-        # The real set plus ours: footman's own entry points have to stay
-        # visible, or the brand's built-ins stop mounting mid-test.
-        found = list(real(group=group)) if group else []
-        return [*found, FakeEP()] if group == compose.ENTRY_POINT_GROUP else found
-
-    monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
+    # The real scan plus ours: footman's own entry points have to stay
+    # visible, or the brand's built-ins stop mounting mid-test.
+    monkeypatch.setattr(
+        _entries, "_SCAN", (*_entries.installed_entry_points(), FakeEP())
+    )
     return tmp_path
 
 

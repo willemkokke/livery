@@ -1033,11 +1033,11 @@ def _plugins_report(reg: registry.Group) -> int:
     code could crash a listing, and a repeated package summary taught
     nothing.
     """
-    from importlib.metadata import entry_points
+    from livery.footman import _entries, compose
 
-    from livery.footman import compose
-
-    eps = sorted(entry_points(group=compose.ENTRY_POINT_GROUP), key=lambda e: e.name)
+    eps = sorted(
+        _entries.installed_entry_points(compose.ENTRY_POINT_GROUP), key=lambda e: e.name
+    )
     if not eps:
         print("No footman.tasks plugins installed.")
         return 0

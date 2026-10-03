@@ -23,10 +23,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
-from importlib.metadata import entry_points
 from typing import Annotated, Any
 
-from livery.footman import _gc, _paths
+from livery.footman import _entries, _gc, _paths
 from livery.footman.params import doc
 from livery.footman.registry import Group, group
 
@@ -41,7 +40,7 @@ Sweeper = Callable[..., Iterable[str]]
 def _sweepers() -> list[tuple[str, Sweeper | str]]:
     """Every registered sweeper by name, or the reason it did not load."""
     found: list[tuple[str, Sweeper | str]] = []
-    for point in sorted(entry_points(group=GROUP), key=lambda p: p.name):
+    for point in sorted(_entries.installed_entry_points(GROUP), key=lambda p: p.name):
         try:
             loaded: Any = point.load()
         except Exception as error:

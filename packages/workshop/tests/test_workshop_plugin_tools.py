@@ -1,8 +1,7 @@
-"""The tools a project's plugins declare: read from source, never imported."""
+"""The tools a project's plugins declare, in a data module of their own."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,29 +10,18 @@ import pytest
 from livery.footman.api import Failed
 
 
-def _plugin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
-    """A plugin module `acme_plugin` the project's rung mounts as `acme`."""
-    site = tmp_path / "site"
-    site.mkdir()
-    # Importing it would raise: the read must never import.
-    (site / "acme_plugin.py").write_text("raise RuntimeError('imported')\n" + body)
-    monkeypatch.syspath_prepend(str(site))
-    monkeypatch.delitem(sys.modules, "acme_plugin", raising=False)
-    import importlib.metadata
+def _plugin(monkeypatch: pytest.MonkeyPatch, declared: object) -> None:
+    """A plugin `acme` the project's rung mounts, declaring *declared* as its tools."""
+    from livery.footman import _config, _entries  # pyright: ignore[reportPrivateUsage]
 
-    real = importlib.metadata.entry_points
-
-    def fake(group: str | None = None) -> list[object]:
-        found: list[object] = list(real(group=group)) if group else []
-        if group == "footman.tasks":
-            found.append(SimpleNamespace(name="acme", value="acme_plugin"))
-        return found
-
-    monkeypatch.setattr(importlib.metadata, "entry_points", fake)
-    from livery.footman import _config  # pyright: ignore[reportPrivateUsage]
-
+    entry = SimpleNamespace(
+        name="acme",
+        group="workshop.tools",
+        value="acme_tools:TOOLS",
+        load=lambda: declared,
+    )
+    monkeypatch.setattr(_entries, "_SCAN", (*_entries.installed_entry_points(), entry))
     monkeypatch.setattr(_config, "project_builtin", lambda root: ("acme",))
-    return tmp_path
 
 
 def test_a_tools_declaration_off_the_shape_refuses_naming_the_plugin(
@@ -41,21 +29,21 @@ def test_a_tools_declaration_off_the_shape_refuses_naming_the_plugin(
 ) -> None:
     from livery.workshop._tools import plugin_tools
 
-    root = _plugin(tmp_path, monkeypatch, 'TOOLS = "docker"\n')
+    _plugin(monkeypatch, "docker")
     with pytest.raises(
-        Failed, match="plugin acme: TOOLS in acme_plugin is not a literal"
+        Failed,
+        match=r"plugin acme: its workshop.tools entry point \(acme_tools:TOOLS\)",
     ):
-        plugin_tools(root)
+        plugin_tools(tmp_path)
 
 
-def test_a_plugins_tools_are_read_without_importing_it(
+def test_a_plugins_tools_come_from_its_data_module(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._tools import plugin_tools
 
-    root = _plugin(tmp_path, monkeypatch, 'TOOLS = ("docker?", "tea@!windows")\n')
-    assert plugin_tools(root) == {"acme": ("docker?", "tea@!windows")}
-    assert "acme_plugin" not in sys.modules
+    _plugin(monkeypatch, ("docker?", "tea@!windows"))
+    assert plugin_tools(tmp_path) == {"acme": ("docker?", "tea@!windows")}
 
 
 def test_this_repository_takes_docker_from_the_forge_plugin() -> None:
@@ -65,3 +53,31 @@ def test_this_repository_takes_docker_from_the_forge_plugin() -> None:
     assert plugin_tools(root)["livery.forge"] == ("docker?",)
     docker = [r for r in requirements(root) if r.name == "docker"]
     assert [(r.site, r.optional) for r in docker] == [("plugin livery.forge", True)]
+
+
+def test_footman_and_the_workshop_share_one_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.footman import _config, _entries  # pyright: ignore[reportPrivateUsage]
+    from livery.workshop import _contract_keys, _extensions
+    from livery.workshop._tools import plugin_tools
+
+    scans: list[int] = []
+    real = _entries._scan  # pyright: ignore[reportPrivateUsage]
+
+    def counted() -> tuple[object, ...]:
+        scans.append(1)
+        return real()
+
+    monkeypatch.setattr(_entries, "_scan", counted)
+    _contract_keys.declarations.cache_clear()
+    try:
+        root = Path(__file__).resolve().parents[3]
+        _config.project_builtin(root)
+        _extensions.declaration("docs")
+        _contract_keys.declarations()
+        plugin_tools(root)
+        _entries.installed_entry_points("footman.tasks")
+    finally:
+        _contract_keys.declarations.cache_clear()
+    assert scans == [1]

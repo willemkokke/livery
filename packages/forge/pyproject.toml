@@ -42,6 +42,11 @@ test = [
 [project.entry-points."footman.builtin"]
 "livery.forge" = "livery.forge._dev"
 
+# The tools the dev verbs need, as a data module the workshop reads
+# without importing the verbs.
+[project.entry-points."workshop.tools"]
+"livery.forge" = "livery.forge._dev_tools:TOOLS"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

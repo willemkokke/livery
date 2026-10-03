@@ -56,10 +56,13 @@ def providers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in ("acme_direct", "acme_deep"):
         monkeypatch.delitem(sys.modules, name, raising=False)
 
+    from livery.footman import _entries, compose
+
     class FakeEP:
-        def __init__(self, name: str, dist: str) -> None:
+        def __init__(self, name: str, dist: str, group: str) -> None:
             self.name = name
             self.value = name
+            self.group = group
             self.dist = SimpleNamespace(name=dist, metadata=None, version="1.0")
 
         def load(self) -> object:
@@ -67,20 +70,12 @@ def providers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
             return importlib.import_module(self.name)
 
-    import importlib.metadata
-
-    from livery.footman import compose
-
-    fakes = [FakeEP("acme_direct", "acme-direct"), FakeEP("acme_deep", "acme-deep")]
-    real = importlib.metadata.entry_points
-
-    def fake_entry_points(group: str | None = None) -> list[object]:
-        found: list[object] = list(real(group=group)) if group else []
-        if group in (compose.ENTRY_POINT_GROUP, "footman.builtin"):
-            return [*found, *fakes]
-        return found
-
-    monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
+    fakes = [
+        FakeEP(name, dist, group)
+        for name, dist in (("acme_direct", "acme-direct"), ("acme_deep", "acme-deep"))
+        for group in (compose.ENTRY_POINT_GROUP, "footman.builtin")
+    ]
+    monkeypatch.setattr(_entries, "_SCAN", (*_entries.installed_entry_points(), *fakes))
     monkeypatch.setenv("FOOTMAN_CONFIG", str(tmp_path / "user.toml"))
     monkeypatch.setenv("FOOTMAN_CONFIG_DIR", str(tmp_path / "cfgdir"))
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))

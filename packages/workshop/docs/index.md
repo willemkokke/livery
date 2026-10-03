@@ -294,9 +294,10 @@ for what operates it, uv for the python kind; the checks that judge a
 kind, each naming its tools, which is how ruff, pytest and the checkers
 reach a python workspace; a listed extension, as `TOOLS` in its
 declaration, for what its own verbs need; a plugin the project mounts
-through its direct dependencies, as a literal `TOOLS = (...)` in its
-entry module, read from the source without importing it, which is how
-forge's dev verbs bring `docker?`; a package instance, in its
+through its direct dependencies, as a tuple in a data module its
+`workshop.tools` entry point names under the plugin's own name, loaded
+without the plugin's tasks, which is how forge's dev verbs bring
+`docker?`; a package instance, in its
 `workshop.toml` under `[tools] requires`, for what its kind cannot
 know; and the project, in the root contract's `[tools] requires`, for
 what belongs to the repository. The root contract's `[tools] index` names where the
