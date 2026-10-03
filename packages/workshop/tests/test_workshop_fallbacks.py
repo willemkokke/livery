@@ -22,10 +22,10 @@ from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
-from livery.workshop._materialise import materialise
 from livery.workshop._packages import Package
 from livery.workshop._release import prepare_release, verify_release
 from livery.workshop._submit import _arm_verified
+from workshop_links import link_entries as materialise
 
 _FAILURES = (SystemExit, Failed)
 
@@ -81,7 +81,7 @@ def test_the_fallback_prunes_what_is_no_longer_shipped(
     (source / "thing" / "SKILL.md").unlink()
     (source / "thing").rmdir()
     lines = materialise(repo, source, "skills")
-    assert any("no longer shipped" in line for line in lines)
+    assert any("no listed extension ships it" in line for line in lines)
     assert not (repo / ".claude" / "skills" / "thing").exists()
 
 
@@ -95,7 +95,7 @@ def test_a_local_override_survives_the_fallback(
     override = repo / ".claude" / "skills" / "thing" / "SKILL.md"
     override.write_text("mine now\n")
     lines = materialise(repo, source, "skills")
-    assert any("override" in line for line in lines)
+    assert any("kept" in line and "edited here" in line for line in lines)
     assert override.read_text() == "mine now\n"
 
 

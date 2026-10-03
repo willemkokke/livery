@@ -122,11 +122,18 @@ class Output:
         body: The bytes the file should hold.
         owners: The fragments it was composed from, as `<owner>:<name>`,
             in the order they applied.
+        link: The shipped file or directory the output links to instead
+            of holding bytes; None for a written file.
+        local: Whether the output belongs to this checkout alone and is
+            never committed: a link into an installed wheel, a copy the
+            agent reads. Its receipt is the checkout's own.
     """
 
     path: str
     body: bytes
     owners: tuple[str, ...]
+    link: Path | None = None
+    local: bool = False
 
 
 def composition(target: str) -> Composition:
@@ -563,6 +570,8 @@ def apply(
     Returns:
         One line per file written, removed or kept, in path order.
     """
+    lines = _apply_local(root, [output for output in outputs if output.local])
+    outputs = [output for output in outputs if not output.local]
     homes = ["", *sorted(packages, key=len, reverse=True)]
 
     def home_of(path: str) -> str:
@@ -572,7 +581,6 @@ def apply(
         return ""
 
     receipts = {home: read_rendered(root / home) for home in homes}
-    lines: list[str] = []
     rendered: set[str] = set()
     for output in outputs:
         rendered.add(output.path)
@@ -617,6 +625,159 @@ def apply(
     return sorted(lines, key=lambda line: line.split()[1])
 
 
+LOCAL_RECEIPT = ".workshop/rendered/receipts.json"
+"""The checkout's own receipts: what the engine linked or copied for it alone."""
+
+_IGNORE_HEADER = (
+    "# Managed by `{prog} sync`: the entries below are linked or copied from\n"
+    "# the listed extensions. The list is self-scoped: an entry you add\n"
+    "# yourself is not ignored and commits normally.\n"
+)
+
+
+def local_receipts(root: Path) -> dict[str, str]:
+    """What the engine linked or copied for this checkout alone, path to receipt."""
+    return _read_local(root)
+
+
+def _read_local(root: Path) -> dict[str, str]:
+    path = root / LOCAL_RECEIPT
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text("utf-8"))
+    except ValueError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return {str(k): str(v) for k, v in cast("dict[object, object]", loaded).items()}
+
+
+def _write_local(root: Path, receipts: Mapping[str, str]) -> None:
+    path = root / LOCAL_RECEIPT
+    if not receipts:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        (json.dumps(dict(sorted(receipts.items())), indent=2) + "\n").encode()
+    )
+
+
+def _apply_local(root: Path, outputs: Sequence[Output]) -> list[str]:
+    """Link or write the checkout's own outputs, and withdraw what is gone.
+
+    A link goes through the materialiser's mechanism: a relative symlink,
+    a junction or a copy where links are refused, an identical copy
+    reclaimed, an edited one kept as an override. Its receipt says `link`,
+    or the copy's digest. A written local file follows the committed
+    rule. A receipted entry nothing renders any more is removed while it
+    is a link or an unedited copy, and kept and named otherwise. Each
+    directory holding local entries outside `.workshop/` gets a
+    self-scoped `.gitignore` naming them, so an override commits.
+    """
+    from livery.workshop import _materialise
+
+    receipts = _read_local(root)
+    lines: list[str] = []
+    ours: dict[Path, list[str]] = {}
+    seen: set[str] = set()
+    for output in outputs:
+        seen.add(output.path)
+        target = root / output.path
+        recorded = receipts.get(output.path)
+        if output.link is not None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            overrides: list[str] = []
+            reclaimed: list[str] = []
+            copied = recorded if recorded not in (None, "link") else None
+            mine, mode = _materialise._entry(
+                target, output.link, overrides, reclaimed, copied_digest=copied
+            )
+            if not mine:
+                lines.append(
+                    f"  kept {output.path}: edited here, so it is not replaced;"
+                    " delete it to take the shipped one"
+                )
+                receipts.pop(output.path, None)
+                ours.setdefault(target.parent, [])
+                continue
+            if reclaimed:
+                lines.append(f"  reclaimed {output.path}: a committed copy of it")
+            elif mode:
+                lines.append(f"  {mode} {output.path}")
+            receipts[output.path] = (
+                "link"
+                if _materialise._is_link(target)
+                else _materialise._digest(target)
+            )
+        else:
+            if _materialise._is_link(target):
+                # A link would take an editor's write into the wheel, so a
+                # written local file is always a copy.
+                _materialise._remove(target)
+                target.write_bytes(output.body)
+                lines.append(f"  wrote {output.path} in place of a link")
+            elif not target.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(output.body)
+                lines.append(f"  wrote {output.path}")
+            elif (existing := _committed(target)) == output.body:
+                pass
+            elif recorded is not None and _owned(existing) == recorded:
+                target.write_bytes(output.body)
+                lines.append(f"  updated {output.path}")
+            else:
+                lines.append(
+                    f"  kept {output.path}: edited here, so it is not rewritten;"
+                    " delete it to take the rendered file"
+                )
+                receipts.pop(output.path, None)
+                ours.setdefault(target.parent, [])
+                continue
+            receipts[output.path] = _owned(output.body)
+        ours.setdefault(target.parent, []).append(target.name)
+    for path, recorded in sorted(receipts.items()):
+        if path in seen:
+            continue
+        del receipts[path]
+        target = root / path
+        if _materialise._is_link(target):
+            _materialise._remove(target)
+            lines.append(f"  removed {path}: no listed extension ships it")
+        elif target.exists():
+            if _materialise._digest(target) == recorded or (
+                target.is_file() and _owned(_committed(target)) == recorded
+            ):
+                _materialise._remove(target)
+                lines.append(f"  removed {path}: no listed extension ships it")
+            else:
+                lines.append(
+                    f"  kept {path}: no listed extension ships it, and it was"
+                    " edited here, so it stays as the repository's own"
+                )
+        ours.setdefault(target.parent, [])
+    workshop = root / ".workshop"
+    for directory, names in ours.items():
+        if directory == workshop or workshop in directory.parents:
+            continue
+        ignore = directory / ".gitignore"
+        if not names:
+            if ignore.is_file() and ignore.read_text(encoding="utf-8").startswith(
+                _IGNORE_HEADER.format(prog=prog())
+            ):
+                ignore.unlink()
+            continue
+        body = _IGNORE_HEADER.format(prog=prog()) + "".join(
+            f"/{name}\n" for name in sorted(names)
+        )
+        body += "/.gitignore\n"
+        if not ignore.is_file() or ignore.read_text(encoding="utf-8") != body:
+            ignore.write_text(body, encoding="utf-8", newline="\n")
+    _write_local(root, receipts)
+    return lines
+
+
 def drift(
     root: Path, outputs: Sequence[Output], *, packages: Sequence[str] = ()
 ) -> list[str]:
@@ -627,6 +788,9 @@ def drift(
     repository's and says nothing.
     """
     lines: list[str] = []
+    # What a checkout holds for itself alone is never committed, so the
+    # gate does not judge it.
+    outputs = [output for output in outputs if not output.local]
     rendered = {output.path for output in outputs}
     for home in ["", *packages]:
         for name, recorded in sorted(read_rendered(root / home).items()):

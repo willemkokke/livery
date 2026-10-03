@@ -948,12 +948,32 @@ in the dev group, and the dogfood sync test failed on the macOS leg
 alone. The same cause fits the one unexplained template-check drift of
 the first slice.
 
-Still open in 6b: the prose fragments, skills, hooks, `.claude/settings.json`
-and the site CSS still go through `livery.workshop._materialise` and
-`livery.workshop._prose`; `PROJECT_FILES`, `PACKAGE_FILES` and
-`Fragment(file, text, kind)` on check records stay until checks become
-tools (phase 9), as the source the engine reads the checks' fragments
-from.
+**6b, agent slice built (issue #1080).** Skills and hooks are link
+outputs of the engine (Willem's ruling of 2026-10-03, option 3): a
+relative symlink into the shipped content, a junction or a copy where
+links are refused, through the materialiser's mechanism
+(`_materialise._entry`), so an edit to a skill in this repository's
+source reaches `.claude/` at once. `.claude/settings.json` (always a
+copy) and the prose fragments under `.workshop/fragments/` are engine
+files, and the `CLAUDE.md` stub is a committed one. What belongs to a
+checkout alone is receipted in `.workshop/rendered/receipts.json`,
+never in the committed `.workshop-rendered`, since a link's target is
+a path on that machine; each directory holding such entries outside
+`.workshop/` gets a self-scoped `.gitignore`, so an override commits.
+Withdrawal follows contract 10 for all of them: an unedited copy or a
+link goes, an edited one is kept and named, where the materialiser and
+the prose sweep removed whatever they no longer shipped, edited or not.
+`fm sync` delivers everything in one engine pass; the materialiser's
+own delivery (`materialise`, `materialise_file`, `materialise_bytes`,
+`sweep_files`, its manifests) and `_prose.deliver` are gone. Customising
+a skill per extension or per workspace, or assembling one from
+fragments, is later work.
+
+Still open in 6b: the site CSS, staged into the build by the docs
+extension rather than delivered by sync; `PROJECT_FILES`,
+`PACKAGE_FILES` and `Fragment(file, text, kind)` on check records stay
+until checks become tools (phase 9), as the source the engine reads the
+checks' fragments from.
 
 **6b, the channels move onto it.** Deliverables:
 

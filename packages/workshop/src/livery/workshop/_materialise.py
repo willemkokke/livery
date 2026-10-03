@@ -1,32 +1,29 @@
-"""Materialise wheel-shipped agent content into a repository's ``.claude/``.
+"""Link wheel-shipped content into a checkout, the way the fragment engine does it.
 
-The contract is sync-materialised wheel content: after ``fm sync``,
-``.claude/skills/<name>`` and ``.claude/hooks/<script>`` match what
-the mounted extensions ship. Links are the zero-drift way to honour it (a
-extension upgrade moves every repository at once, nothing to re-copy) but
-they are an optimisation, not the contract: where a link cannot be
-made, the same content is copied and refreshed on every sync. Nothing
-here ever fails a reconcile; the worst case is a printed line.
+The fragment engine delivers skills and hooks as links into the listed
+extensions' shipped content ([livery.workshop._fragment_engine][]) and
+calls these for the mechanism. Links are the zero-drift way (an
+extension upgrade moves every checkout at once, nothing to re-copy) but
+they are an optimisation, not the contract: where a link cannot be made,
+the same content is copied and refreshed on every sync.
 
 Link mechanism, in order of preference: a relative ``os.symlink`` (a
 relative target survives the repository moving; in the monorepo the
 target sits inside the repository, so containment holds by
 construction); a Windows directory junction, which needs no privilege
-where symlinks do; a copy, recorded in a manifest so the next sync
-knows the entry is ours to refresh rather than a developer's own
-work.
+where symlinks do; a copy, whose digest the engine records so the next
+sync tells a stale copy of ours from a local edit.
 
-**Local content always wins.** A real directory whose content differs
-from the shipped copy is a deliberate override: it is kept and named
-in the summary, and the managed ``.gitignore`` is self-scoped (it
-lists only what this module materialised), so the override commits
-like any repository file.
+**Local content always wins.** A real entry whose content differs from
+the shipped one is a deliberate override: it is kept and named, and the
+engine's self-scoped ``.gitignore`` leaves it out, so the override
+commits like any repository file.
 
-**Editing through a link writes into the wheel.** In the monorepo
-that is correct: the target is the source tree. In an instance it
-edits site-packages, machine-wide and lost on the next upgrade; the
-escape is to copy the entry to a real directory of the same name,
-which then takes precedence.
+**Editing through a link writes into the wheel.** In the monorepo that
+is correct: the target is the source tree. In an instance it edits
+site-packages, machine-wide and lost on the next upgrade; the escape is
+to copy the entry to a real directory of the same name, which then
+takes precedence.
 """
 
 from __future__ import annotations
@@ -37,30 +34,8 @@ import os
 import shutil
 import stat
 import sys
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
-
-import livery.footman.api as footman
-
-_MANIFEST = ".workshop-materialised"
-"""What this module *copied* into a directory: ``<hash> <name>`` lines.
-
-A manifest rather than a marker inside each entry, because the copy
-fallback must work for files too (the hook scripts) and a file has
-nowhere to carry a marker. Links need no record; they are
-self-identifying. The hash is the copied content's digest at copy
-time: it is how a later sync tells a stale copy of ours (refresh)
-from a local edit (an override, kept and named). A legacy line
-without a hash grants ownership without that distinction, and the
-next refresh upgrades it.
-"""
-
-_GITIGNORE_HEADER = (
-    "# Managed by `{prog} sync` - the entries below are materialised from the\n"
-    "# mounted extensions' wheels. This list is deliberately self-scoped: a\n"
-    "# skill you add yourself is NOT ignored and commits normally.\n"
-)
 
 
 def _is_link(path: Path) -> bool:
@@ -188,29 +163,6 @@ def _digest(target: Path) -> str:
     return digest.hexdigest()
 
 
-def _read_manifest(root: Path) -> dict[str, str]:
-    """Name to copy-time digest from a previous sync (empty when none).
-
-    A legacy name-only line reads as an empty digest: ownership
-    without the stale-versus-edited distinction.
-    """
-    path = root / _MANIFEST
-    entries: dict[str, str] = {}
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return entries
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        first, _, rest = line.partition(" ")
-        if rest and len(first) == 64 and all(c in "0123456789abcdef" for c in first):
-            entries[rest] = first
-        else:
-            entries[line.strip()] = ""
-    return entries
-
-
 def write_lf(path: Path, text: str) -> None:
     r"""Write *text* with LF endings on every platform.
 
@@ -219,17 +171,6 @@ def write_lf(path: Path, text: str) -> None:
     so their bytes cannot depend on which one wrote them.
     """
     path.write_text(text, encoding="utf-8", newline="\n")
-
-
-def _write_manifest(root: Path, copies: dict[str, str]) -> None:
-    """Record what we copied and its digests; remove the file when nothing."""
-    path = root / _MANIFEST
-    if not copies:
-        path.unlink(missing_ok=True)
-        return
-    body = "".join(f"{digest} {name}\n" for name, digest in sorted(copies.items()))
-    if not path.exists() or path.read_text(encoding="utf-8") != body:
-        write_lf(path, body)
 
 
 def _entry(
@@ -276,290 +217,3 @@ def _entry(
         return True, _make_link(link, target)
     overrides.append(link.name)
     return False, ""
-
-
-def _write_gitignore(root: Path, managed: list[str]) -> None:
-    """Rewrite the managed .gitignore from what was actually materialised.
-
-    Deliberately not the list of shipped names: an override owns a
-    real directory of the shipped name, and listing it here would make
-    the override impossible to commit.
-    """
-    body = _GITIGNORE_HEADER.format(prog=footman.prog()) + "".join(
-        f"/{name}\n" for name in sorted(managed)
-    )
-    body += f"/{_MANIFEST}\n/.gitignore\n"
-    path = root / ".gitignore"
-    if not path.exists() or path.read_text(encoding="utf-8") != body:
-        write_lf(path, body)
-
-
-def _normalise(path: Path | str) -> str:
-    r"""A local path reduced to its filesystem identity, for comparison.
-
-    Windows hands back an extended-length form from ``readlink``
-    (``\\?\D:\repo``), so a plain prefix comparison against a normal
-    path fails; strip the markers, then make the path absolute, fold
-    case, and keep native separators.
-    """
-    text = str(path)
-    if text.startswith("\\\\?\\"):
-        text = text[4:]
-        if text[:4].upper() == "UNC\\":
-            text = "\\\\" + text[4:]
-    return os.path.normcase(os.path.normpath(os.path.abspath(text)))
-
-
-def _ours(child: Path, source: Path, copies: set[str]) -> bool:
-    """Whether *child* is content this module materialised from *source*.
-
-    Provenance is "the link points into the source tree", compared
-    lexically so a dangling link (the venv was rebuilt) is still
-    recognisably ours rather than stranded forever.
-    """
-    if child.name in copies:
-        return True
-    if not _is_link(child):
-        return False
-    try:
-        target = Path(os.readlink(child)) if child.is_symlink() else child.resolve()
-    except OSError:
-        return False
-    if not target.is_absolute():
-        target = child.parent / target
-    root = _normalise(source)
-    # Guard the separator: without it `.../skills-old/x` reads as ours
-    # against source `.../skills` and would be pruned.
-    return _normalise(target).startswith(root + os.sep)
-
-
-def case_insensitive(directory: Path) -> bool:
-    """Whether *directory*'s filesystem matches names ignoring case.
-
-    Asked of the filesystem, never inferred from the platform: macOS
-    ships both behaviours and a wrong answer either deletes a live
-    entry or strands a stale one. A directory that cannot be written
-    answers False, the conservative reading.
-    """
-    try:
-        handle, name = tempfile.mkstemp(prefix=".livery-case-", dir=directory)
-    except OSError:
-        return False
-    os.close(handle)
-    probe = Path(name)
-    try:
-        return probe.with_name(probe.name.upper()).exists()
-    except OSError:
-        return False
-    finally:
-        probe.unlink(missing_ok=True)
-
-
-def _prune(root: Path, shipped: set[str], source: Path, copies: set[str]) -> list[str]:
-    """Drop links we made for content the extensions no longer ship.
-
-    Membership is case-folded where the filesystem is, so a shipped
-    entry renamed by case alone is not read as gone and deleted.
-    """
-    keep = shipped | {".gitignore", _MANIFEST}
-    if case_insensitive(root):
-        keep = {name.lower() for name in keep}
-        folded = True
-    else:
-        folded = False
-    dropped: list[str] = []
-    for child in sorted(root.iterdir()):
-        name = child.name.lower() if folded else child.name
-        if name in keep:
-            continue
-        try:
-            if _ours(child, source, copies):
-                _remove(child)
-                dropped.append(child.name)
-        except OSError:
-            continue
-    return dropped
-
-
-def materialise(repo_root: Path, source: Path, subdir: str) -> list[str]:
-    """Materialise every entry of *source* into ``<repo_root>/.claude/<subdir>``.
-
-    Returns human-readable summary lines (empty when nothing changed
-    and nothing needs saying). Errors are reported, never raised:
-    agent content is a convenience, and a broken link must not fail a
-    sync.
-    """
-    lines: list[str] = []
-    if not source.is_dir():
-        return lines
-    root = repo_root / ".claude" / subdir
-    root.mkdir(parents=True, exist_ok=True)
-
-    shipped = [
-        entry.name for entry in sorted(source.iterdir()) if entry.name != "__pycache__"
-    ]
-    overrides: list[str] = []
-    modes: set[str] = set()
-    previous = _read_manifest(root)
-    ours: list[str] = []
-    reclaimed: list[str] = []
-    copies: dict[str, str] = {}
-    for name in shipped:
-        entry = root / name
-        pre_existing = entry.exists() or _is_link(entry)
-        try:
-            mine, mode = _entry(
-                entry,
-                source / name,
-                overrides,
-                reclaimed,
-                copied_digest=previous.get(name) if name in previous else None,
-            )
-            if mode:
-                modes.add(mode)
-            if mine:
-                ours.append(name)
-                if mode == "copied" or (not mode and name in previous):
-                    copies[name] = _digest(source / name)
-        except OSError as exc:
-            lines.append(
-                f"  Note: could not materialise .claude/{subdir}/{name} ({exc})"
-            )
-            # Whatever is on disk is still ours: a previous copy, or the
-            # half-written one this call failed part way through. The
-            # old digest (or a legacy blank) rides along, so the next
-            # sync treats it as stale and refreshes it.
-            if name in previous or not pre_existing:
-                copies[name] = previous.get(name, "")
-
-    try:
-        dropped = _prune(root, set(shipped), source, set(previous))
-    except OSError:
-        dropped = []
-    _write_manifest(root, copies)
-    _write_gitignore(root, ours)
-
-    if reclaimed:
-        # The loudest thing this step ever does: it deletes tracked
-        # files out of the working tree. Never do that silently.
-        lines.append(
-            f"  {subdir}: reclaimed {len(reclaimed)} committed copies now"
-            " shipped by an extension; commit the deletions"
-        )
-    if modes - {"linked"}:
-        lines.append(f"  {subdir}: materialised via {', '.join(sorted(modes))}")
-    if dropped:
-        lines.append(f"  {subdir}: removed {len(dropped)} entry no longer shipped")
-    if overrides:
-        names = ", ".join(sorted(overrides))
-        lines.append(
-            f"  {subdir}: local override kept, shadowing the shipped copy;"
-            f" commit it like any repo file ({names})"
-        )
-    return lines
-
-
-def materialise_file(repo_root: Path, source: Path, relative: str) -> list[str]:
-    """Deliver one shipped file into the repository by copy.
-
-    Always a copy, never a link, whatever the platform offers: the
-    target is a file its editors rewrite in place, and a write
-    through a link would land inside the installed wheel. The
-    manifest beside the target records the copy-time digest, so a
-    current copy is quiet, a stale one refreshes, and an edited one
-    is an override, kept and named. Returns summary lines; errors
-    are reported, never raised.
-    """
-    try:
-        body = source.read_bytes()
-    except OSError as exc:
-        return [f"  Note: could not materialise {relative} ({exc})"]
-    return materialise_bytes(repo_root, body, relative)
-
-
-def materialise_bytes(repo_root: Path, body: bytes, relative: str) -> list[str]:
-    """Deliver *body* as the file at *relative*, by the file delivery's rules.
-
-    The bytes stand for a shipped file that exists nowhere on disk, a
-    fragment rendered from the registries say; the manifest, the
-    override and the managed ``.gitignore`` behave as they do for
-    [livery.workshop._materialise.materialise_file][], the ignore
-    listing every copy the directory's manifest owns.
-    """
-    target = repo_root / relative
-    home = target.parent
-    lines: list[str] = []
-    try:
-        home.mkdir(parents=True, exist_ok=True)
-        previous = _read_manifest(home)
-        copies = {
-            name: digest for name, digest in previous.items() if name != target.name
-        }
-        recorded = previous.get(target.name)
-        ours = True
-        if _is_link(target):
-            # An editor's write through a link would land in the wheel.
-            _remove(target)
-            target.write_bytes(body)
-            lines.append(f"  {relative}: copied in place of a link")
-        elif not target.exists():
-            target.write_bytes(body)
-            lines.append(f"  {relative}: materialised")
-        elif recorded is not None:
-            if _holds(target, body):
-                pass  # our copy, current: nothing to do or say
-            elif recorded and _digest(target) != recorded:
-                ours = False
-            else:
-                _remove(target)
-                target.write_bytes(body)
-                lines.append(f"  {relative}: refreshed")
-        elif _holds(target, body):
-            lines.append(f"  {relative}: adopted; it matches the shipped copy")
-        else:
-            ours = False
-        if ours:
-            copies[target.name] = _digest(target)
-        else:
-            lines.append(
-                f"  {relative}: local override kept, shadowing the shipped"
-                " copy; commit it like any repo file"
-            )
-        _write_manifest(home, copies)
-        _write_gitignore(home, sorted(copies))
-    except OSError as exc:
-        lines.append(f"  Note: could not materialise {relative} ({exc})")
-    return lines
-
-
-def _holds(target: Path, body: bytes) -> bool:
-    """Whether the real file at *target* is exactly *body*."""
-    return target.is_file() and target.read_bytes() == body
-
-
-def sweep_files(home: Path, keep: set[str]) -> list[str]:
-    """Remove the files in *home* outside *keep* and forget them; the names removed.
-
-    The directory is one the sync delivers wholesale, so a file nobody
-    delivers is gone whoever wrote it; the manifest and the managed
-    ``.gitignore`` stay and are rewritten to what remains.
-    """
-    if not home.is_dir():
-        return []
-    removed: list[str] = []
-    for child in sorted(home.iterdir()):
-        if child.name in keep or child.name in (".gitignore", _MANIFEST):
-            continue
-        if not child.is_file():
-            continue
-        child.unlink()
-        removed.append(child.name)
-    if removed:
-        copies = {
-            name: digest
-            for name, digest in _read_manifest(home).items()
-            if name in keep
-        }
-        _write_manifest(home, copies)
-        _write_gitignore(home, sorted(copies))
-    return removed

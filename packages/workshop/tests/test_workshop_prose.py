@@ -14,7 +14,7 @@ from livery.workshop._prose import (
     AGENT,
     HUMAN,
     ProseError,
-    deliver,
+    agent_set,
     fragments,
     parse_name,
     register_fragment,
@@ -155,7 +155,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
         ),
     )
     with pytest.raises(ProseError, match=r"two fragments deliver as rules\.house\.md"):
-        deliver(root, both_and_agent)
+        agent_set(root, both_and_agent)
     # The reader's set is validated at the same delivery.
     both_and_human = shipped(
         "acme.brand",
@@ -164,7 +164,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
         ),
     )
     with pytest.raises(ProseError, match=r"two fragments deliver as rules\.house\.md"):
-        deliver(root, both_and_human)
+        agent_set(root, both_and_human)
     # One file per reader is the pair the convention exists for.
     pair = shipped(
         "acme.brand",
@@ -175,11 +175,12 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
             rules__house__human="# human\n",
         ),
     )
-    delivered = deliver(root, pair)
-    assert delivered.delivered == ("rules.house.md", "gate.checks.md")
-    assert (
-        root / ".workshop" / "fragments" / "rules.house.md"
-    ).read_text() == "# agent\n"
+    chosen, _own = agent_set(root, pair)
+    shipped_names = [prose.name for prose in chosen if prose.source is not None]
+    assert shipped_names == ["rules.house.md"]
+    assert "gate.checks.md" in [prose.name for prose in chosen]
+    (house,) = [prose for prose in chosen if prose.name == "rules.house.md"]
+    assert house.source is not None and house.source.read_text() == "# agent\n"
 
 
 def test_a_section_registered_twice_or_after_an_unknown_one_refuses(restored) -> None:
@@ -364,15 +365,15 @@ def test_a_shipped_fragment_lands_byte_for_byte_and_an_edit_is_kept_and_named(
     assert sync_workspace(root) == []
     delivered.write_text("# My voice\n")
     lines = sync_workspace(root)
-    assert any("voice.interaction.md: local override kept" in line for line in lines)
+    assert any(
+        "kept .workshop/fragments/voice.interaction.md: edited here" in line
+        for line in lines
+    )
     assert delivered.read_text() == "# My voice\n"
-    ignore = (delivered.parent / ".gitignore").read_text()
-    assert "/voice.interaction.md\n" not in ignore
-    assert "/standards.documentation.md\n" in ignore
     # Deleting the override takes the shipped copy again.
     delivered.unlink()
     lines = sync_workspace(root)
-    assert any("voice.interaction.md: materialised" in line for line in lines)
+    assert "  wrote .workshop/fragments/voice.interaction.md" in lines
     assert delivered.read_bytes() == source.read_bytes()
 
 
@@ -402,12 +403,14 @@ def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
     unregister_fragment("rules.acme.md", by="acme.brand")
     unregister_fragment("rules.quiet.md", by="acme.brand")
     lines = sync_workspace(root)
-    assert any(
-        "removed rules.acme.md (no extension ships it)" in line for line in lines
+    assert (
+        "  removed .workshop/fragments/rules.acme.md: no listed extension ships it"
+        in lines
     )
     assert not delivered.exists()
-    manifest = (delivered.parent / ".workshop-materialised").read_text()
-    assert "rules.acme.md" not in manifest
+    from livery.workshop._fragment_engine import local_receipts
+
+    assert ".workshop/fragments/rules.acme.md" not in local_receipts(root)
 
 
 def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(

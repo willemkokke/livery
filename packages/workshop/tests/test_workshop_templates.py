@@ -749,9 +749,11 @@ def test_the_pipe_guard_recognises_the_brand(
 
 
 def test_the_gitignore_header_speaks_the_brand() -> None:
-    from livery.workshop._materialise import _GITIGNORE_HEADER
+    from livery.workshop._fragment_engine import (
+        _IGNORE_HEADER,  # pyright: ignore[reportPrivateUsage]
+    )
 
-    assert "`hse sync`" in _GITIGNORE_HEADER.format(prog="hse")
+    assert "`hse sync`" in _IGNORE_HEADER.format(prog="hse")
 
 
 def _build_instance_from_git_template(base: Path) -> None:

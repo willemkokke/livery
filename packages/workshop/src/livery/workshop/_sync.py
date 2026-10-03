@@ -37,20 +37,9 @@ if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
 
 from livery.workshop._extensions import (
-    extension_content,
-    stack_names,
     workspace_root,
 )
-from livery.workshop._materialise import materialise, materialise_file, write_lf
-
-# Formatted at write time: a module-level f-string would freeze the
-# brand at import.
-_STUB_HEADER = (
-    "<!-- Managed by `{prog} sync`: one import per fragment, in section\n"
-    "     order, the repository's own fragments/ after them, then its\n"
-    "     CLAUDE.project.md, which always wins. Edit CLAUDE.project.md,\n"
-    "     never this file. -->\n"
-)
+from livery.workshop._materialise import write_lf
 
 
 def sync_workspace(root: Path) -> list[str]:
@@ -65,40 +54,6 @@ def sync_workspace(root: Path) -> list[str]:
     lines: list[str] = deliver(root)
     if lfs_enabled(root):
         lines += install_hooks(root)
-    extensions = stack_names(root)
-    contents = [
-        (extension, content)
-        for extension in extensions
-        if (content := extension_content(extension)) is not None
-    ]
-
-    from livery.workshop import _prose
-
-    listed = [
-        prose
-        for extension, content in contents
-        for prose in _prose.shipped(extension, content)
-    ]
-    listed += _prose.repository_fragments(root)
-    delivery = _prose.deliver(root, listed)
-    lines += delivery.lines
-
-    for _extension, content in contents:
-        lines += materialise(root, content / "skills", "skills")
-        lines += materialise(root, content / "hooks", "hooks")
-        settings = content / "settings.json"
-        if settings.is_file():
-            lines += materialise_file(root, settings, ".claude/settings.json")
-
-    stub = _STUB_HEADER.format(prog=footman.prog())
-    stub += "".join(f"@{_prose.DELIVERED}/{name}\n" for name in delivery.delivered)
-    stub += "".join(f"@{_prose.OWN}/{name}\n" for name in delivery.own)
-    stub += "@CLAUDE.project.md\n"
-    stub_path = root / "CLAUDE.md"
-    current = stub_path.read_text(encoding="utf-8") if stub_path.is_file() else ""
-    if current != stub:
-        write_lf(stub_path, stub)
-        lines.append("  CLAUDE.md: stub regenerated")
     project = root / "CLAUDE.project.md"
     if not project.is_file():
         write_lf(
