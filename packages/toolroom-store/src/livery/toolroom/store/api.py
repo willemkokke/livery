@@ -98,6 +98,9 @@ if TYPE_CHECKING:
     from livery.toolroom.store._record import surface_at as surface_at
     from livery.toolroom.store._record import validate as validate
     from livery.toolroom.store._record import version_key as version_key
+    from livery.toolroom.store._requirement import Scope as Scope
+    from livery.toolroom.store._requirement import Spec as Spec
+    from livery.toolroom.store._requirement import SpecError as SpecError
     from livery.toolroom.store._spec import Option as Option
     from livery.toolroom.store._spec import ToolSpec as ToolSpec
     from livery.toolroom.store._spec import Verb as Verb
@@ -154,6 +157,9 @@ __all__ = [
     "RecordDelta",
     "RecordError",
     "Requirement",
+    "Scope",
+    "Spec",
+    "SpecError",
     "Store",
     "StoreError",
     "Surface",
@@ -237,6 +243,9 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "RecordDelta": ("livery.toolroom.store._record", "Delta"),
     "RecordError": ("livery.toolroom.store._record", "RecordError"),
     "Requirement": ("livery.toolroom.store._lock", "Requirement"),
+    "Scope": ("livery.toolroom.store._requirement", "Scope"),
+    "Spec": ("livery.toolroom.store._requirement", "Spec"),
+    "SpecError": ("livery.toolroom.store._requirement", "SpecError"),
     "SURFACE_PLATFORMS": ("livery.toolroom.store._record", "SURFACE_PLATFORMS"),
     "Store": ("livery.toolroom.store._engine", "Store"),
     "StoreError": ("livery.toolroom.store._engine", "StoreError"),
