@@ -112,13 +112,6 @@ workspace's python matrix through cibuildwheel, and the publish job
 ships the collected set. A pure member's one wheel is built by the
 publish job itself, and the key on such a member refuses.
 
-A release of livery-workshop also publishes the template snapshot:
-the `templates/` tree at the tagged commit becomes the artifact
-repository's content, tagged `v<semver>` in lockstep. The same
-version with the same content is a quiet success; the same version
-with different content refuses, because a published tag is
-immutable.
-
 Not covered today: attestation or signing of the built wheels, a
 non-PyPI index for the github kind, and publishing anywhere but the
 one configured index per workspace.

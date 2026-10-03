@@ -18,7 +18,6 @@ from livery.workshop._new_project import new_project
 _REAL_SYNC_TOOLS = _newborn_module._sync_tools
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 _FAILURES = (BaseException,)
 
@@ -94,7 +93,6 @@ def _birth(**overrides: Any) -> None:
         "forge": "gitea",
         "owner": "acme",
         "url": "https://forge.acme.example",
-        "templates": str(TEMPLATES),
     }
     arguments.update(overrides)
     new_project(**arguments)
@@ -136,7 +134,7 @@ def test_birth_end_to_end_and_the_second_run_resumes(
     out = capsys.readouterr().out
     for line in (
         "workshop.toml: already seeded",
-        "render: already born",
+        "seeds: already written",
         "git: already initialised",
         "setup PR: already open",
     ):
@@ -144,7 +142,7 @@ def test_birth_end_to_end_and_the_second_run_resumes(
 
 
 _BOMBS = (
-    ("render", "livery.workshop._templates.render"),
+    ("seeds", "livery.workshop._seeds.create"),
     ("sync", "livery.workshop._sync.sync_workspace"),
     ("apply", "livery.workshop._templates.apply_project"),
     ("configure", "livery.workshop._workflow_tasks.assert_configuration"),
@@ -249,9 +247,6 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     root = tmp_path / "acme-tools"
     member = root / "packages" / "brand"
     assert (member / "src" / "acme_tools" / "brand" / "_tasks.py").is_file()
-    assert (
-        member / "src" / "acme_tools" / "brand" / "templates" / "overlay.toml"
-    ).is_file()
     fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()

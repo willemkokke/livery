@@ -1,4 +1,4 @@
-"""The release train's verbs: prepare, verify, and the template snapshot.
+"""The release train's verbs: prepare, verify, wheels, the driver, and replay.
 
 ``fm release.verify`` is the train's gate, run by the release
 workflow before anything builds: the tag, the ``pyproject`` version,
@@ -6,21 +6,12 @@ the ``__version__``, and the changelog must all agree, and every
 ``[[depends]]`` floor must resolve to a tag that has actually been
 released. ``fm release.prepare`` stamps a version into those same
 places, idempotently, so the human act is one command plus one tag.
-
-``fm release.templates`` is the workshop release's aftermath: the
-``templates/`` tree at the tagged commit is published to the artifact
-repository and tagged ``vX.Y.Z`` in lockstep with
-``packages/workshop/vX.Y.Z``. Idempotent: the same version with the
-same content is a quiet success, and the same version with different
-content refuses, because a published tag is immutable.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import shutil
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -42,8 +33,6 @@ release = group("release", help="The release train's CI entries")
 
 _TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+\.\d+\.\d+)$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-#: The artifact repository the workshop's template snapshot lands in.
 
 
 def _root() -> Path:
@@ -235,93 +224,6 @@ def release_prepare(
         print(f"  stamped: {name}")
 
 
-def _run_git(cwd: Path, *args: str) -> tools.Result:
-    return tools.git.opts(cwd=cwd, nofail=True, recorded=False)(*args)
-
-
-def _git_or_fail(cwd: Path, *args: str) -> str:
-    result = _run_git(cwd, *args)
-    if result.code != 0:
-        fail(
-            f"git {' '.join(args)} exited {result.code}:"
-            f"\n{result.stdout}{result.stderr}"
-        )
-    return result.stdout
-
-
-def publish_templates(
-    templates: Path, version: str, remote: str, *, author: str = ""
-) -> str:
-    """Publish *templates* to *remote* as ``v<version>``; the outcome line.
-
-    W6, idempotent by construction: an existing ``v<version>`` tag
-    whose tree matches *templates* is a quiet success; one whose tree
-    differs refuses, because a published tag is immutable and a
-    different tree under the same number would lie to every instance.
-    Otherwise the remote's default branch becomes exactly *templates*
-    (deletions included) and the tag is pushed with the commit.
-    """
-    if not _SEMVER_RE.fullmatch(version):
-        fail(f"version {version!r} is not <major>.<minor>.<patch>")
-    if not templates.is_dir():
-        fail(f"{templates} is not a directory")
-    remote = _authenticated_remote(remote)
-    with tempfile.TemporaryDirectory() as scratch:
-        clone = Path(scratch) / "artifact"
-        _git_or_fail(Path(scratch), "clone", remote, "artifact")
-        if author:
-            name, _, email = author.partition(" <")
-            _git_or_fail(clone, "config", "user.name", name)
-            _git_or_fail(clone, "config", "user.email", email.rstrip(">"))
-        tags = _git_or_fail(clone, "tag", "-l").split()
-        _replace_tree(clone, templates)
-        _git_or_fail(clone, "add", "-A")
-        if f"v{version}" in tags:
-            # --cached against the tag sees additions and deletions the
-            # worktree diff would miss.
-            diff = _run_git(clone, "diff", "--cached", "--quiet", f"v{version}", "--")
-            if diff.code == 0:
-                return f"v{version} already published with this content"
-            fail(
-                f"v{version} is already published with different content:"
-                " a released tag is immutable, bump the version"
-            )
-        if _git_or_fail(clone, "status", "--porcelain").strip():
-            _git_or_fail(clone, "commit", "-m", f"templates v{version}")
-        _git_or_fail(clone, "tag", "-a", f"v{version}", "-m", f"templates v{version}")
-        _git_or_fail(clone, "push", "origin", "HEAD", f"v{version}")
-        return f"published v{version}"
-
-
-def _authenticated_remote(remote: str) -> str:
-    """*remote* with ``FORGE_TOKEN`` credentials for a bare http URL.
-
-    A CI job pushes the artifact over http with the mounted token; a
-    URL already carrying userinfo, an ssh remote, and a local path
-    pass through untouched. The credentialled spelling lives only in
-    this process: nothing writes it to disk.
-    """
-    import os
-    import re as _re
-
-    token = os.environ.get("FORGE_TOKEN", "")
-    if token and _re.match(r"^https?://[^@/]+(?:/|$)", remote):
-        return _re.sub(r"^(https?://)", rf"\1x-access-token:{token}@", remote, count=1)
-    return remote
-
-
-def _replace_tree(clone: Path, templates: Path) -> None:
-    """Make *clone*'s worktree exactly *templates*, deletions included."""
-    for entry in sorted(clone.iterdir()):
-        if entry.name == ".git":
-            continue
-        if entry.is_dir():
-            shutil.rmtree(entry)
-        else:
-            entry.unlink()
-    shutil.copytree(templates, clone, dirs_exist_ok=True)
-
-
 @release.task(name="replay")
 def release_replay(
     member: Annotated[str, doc("the member's directory under packages/")],
@@ -477,128 +379,3 @@ def release_driver(
 
     tools.uv("pip", "install", f"{DRIVER_DIST}=={workshop}")
     print(f"  driver: {DRIVER_DIST} {workshop} installed over the checkout's")
-
-
-def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
-    """The home's template publisher, and whether the wave at *ref* released it.
-
-    The wave at *ref* is the manifest the release squash stamped; the
-    publisher is the last extension in the stack that ships a template
-    tree. A home whose stack ships none answers ``("", False)``.
-    """
-    from livery.workshop._compose import extension_template_tree
-    from livery.workshop._extensions import stack_entries
-    from livery.workshop._publish import MANIFEST, discover_release, read_manifest
-
-    publisher = ""
-    for extension, dist in stack_entries(root):
-        if extension_template_tree(root, extension) is not None:
-            publisher = dist
-    if not publisher:
-        return "", False
-    git = GitOps(root)
-    if read_manifest(git.file_at(ref or "HEAD", MANIFEST)) is None:
-        # No member list at the ref: nothing was released there.
-        return publisher, False
-    released = {
-        package.name for package, _version in discover_release(root, git, ref or "HEAD")
-    }
-    return publisher, publisher in released
-
-
-@release.task(name="templates", hidden=True)
-def release_templates(
-    version: Annotated[
-        str, doc("the publishing extension's version (default: its installed one)")
-    ] = "",
-    remote: Annotated[
-        str, doc("artifact repository url (default: the contract's)")
-    ] = "",
-    ref: Annotated[
-        str, doc("the release squash whose wave this follows; empty means every wave")
-    ] = "",
-) -> None:
-    """Publish this home's template artifact for one release.
-
-    Runs from the released checkout in the release workflow, after the
-    wave. With ``--ref`` it decides for itself: the manifest at the
-    squash names the wave's members, and a wave that did not release
-    the publishing extension has no artifact to publish, so the verb says
-    so and exits green. An extension home publishes its composed tree (base
-    at the pinned installed version plus its overlay), with the
-    composition recorded in the artifact; the base home publishes its
-    own tree unchanged, the degenerate case. The tag is
-    ``v<version>``, the publishing extension's version, in lockstep with
-    that extension's release tag. Same version, different content
-    refuses: a released tag is immutable.
-    """
-    import tempfile as _tempfile
-    from importlib.metadata import version as installed
-
-    from livery.workshop._compose import extension_template_tree
-    from livery.workshop._extensions import stack_entries
-    from livery.workshop._templates import render_source, templates_artifact
-
-    root = _root()
-    if ref:
-        publisher, released = publisher_in_wave(root, ref)
-        if publisher and not released:
-            print(
-                f"  templates: {publisher} was not in the wave at {ref[:12]};"
-                " nothing to publish"
-            )
-            return
-    remote = remote or templates_artifact(root)
-    if not remote:
-        fail(
-            "this workspace declares no [workspace] templates-artifact:"
-            " only a template home publishes; declare the artifact"
-            " repository in workshop.toml"
-        )
-    entries = stack_entries(root)
-    publisher = ""
-    publisher_extension = ""
-    for extension, dist in entries:
-        if extension_template_tree(root, extension) is not None:
-            publisher, publisher_extension = dist, extension
-    if not publisher:
-        fail(
-            "no extension in the stack ships a template tree: nothing to"
-            " publish; `uv sync` installs the base extension's"
-        )
-    version = version or installed(publisher)
-    source, remote_ref, owners = render_source(root)
-    if remote_ref is not None:
-        fail(
-            "the template source resolves to a remote artifact: only a"
-            " home (a workspace whose stack ships its trees locally)"
-            " publishes"
-        )
-    with _tempfile.TemporaryDirectory() as scratch:
-        staged = Path(scratch) / "tree"
-        shutil.copytree(source, staged)
-        if owners:
-            # A composed tree records what it was composed from: the
-            # base and its pinned version, so a reader of the artifact
-            # knows which improvements it already carries.
-            _base_extension, base_dist = entries[0]
-            lines = [
-                "# Generated by the workshop's composed release; the",
-                "# artifact states its own composition.",
-                "[composed]",
-                f'base = "{base_dist}"',
-                f'base_version = "{installed(base_dist)}"',
-                f'publisher = "{publisher}"',
-                "extensions = ["
-                + ", ".join(f'"{extension}"' for extension, _ in entries)
-                + "]",
-            ]
-            record = "\n".join(lines) + "\n"
-            (staged / "composition.toml").write_text(record, encoding="utf-8")
-        outcome = publish_templates(
-            staged,
-            version,
-            remote,
-            author=f"{publisher_extension} release train <release@{publisher}.invalid>",
-        )
-    print(f"  {outcome}")

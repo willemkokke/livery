@@ -1369,9 +1369,12 @@ def _register_builtin() -> None:
         # what it leaves, as the provenance fix does.
         from livery.workshop import _quality
         from livery.workshop._shipped_files import deliver, relocate
+        from livery.workshop._templates import apply_generated
 
         for line in relocate(ctx.root) + deliver(ctx.root):
             print(line)
+        for path in apply_generated(ctx.root):
+            print(f"  generated: {path}")
         _quality.template_check()
 
     def provenance_run(ctx: GateContext) -> None:

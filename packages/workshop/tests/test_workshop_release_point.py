@@ -106,64 +106,6 @@ def test_the_wave_builds_unless_ci_collected_wheels(
     assert collected_wheels(root, git, pure_only) is False
 
 
-# --- the templates verb's decision -------------------------------------------------
-
-
-def test_the_templates_verb_skips_a_wave_that_did_not_release_the_publisher(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from livery.workshop import _release
-    from livery.workshop._release import publisher_in_wave, release_templates
-
-    root = _workspace(tmp_path)
-    monkeypatch.setattr(
-        "livery.workshop._release.workspace_root", lambda start=None: root
-    )
-    # The base extension ships the template tree, so it is every plain
-    # workspace's publisher, and the birth commit released neither it
-    # nor anything named for it.
-    assert publisher_in_wave(root, "HEAD") == ("livery-workshop", False)
-    # The publisher is the extension shipping a tree; the wave at the ref
-    # says whether it was released.
-    monkeypatch.setattr(
-        _release, "publisher_in_wave", lambda root, ref: ("acme-pure", False)
-    )
-    other = _stamp(root, "native")
-    release_templates(ref=other)
-    assert f"acme-pure was not in the wave at {other[:12]}; nothing to publish" in (
-        capsys.readouterr().out
-    )
-    # Released: the verb goes on to publish, which this workspace
-    # refuses for the ordinary reason, so the decision is the skip.
-    monkeypatch.setattr(
-        _release, "publisher_in_wave", lambda root, ref: ("acme-pure", True)
-    )
-    with pytest.raises((SystemExit, Exception)) as caught:
-        release_templates(ref=_stamp(root, "pure"))
-    assert "templates-artifact" in str(caught.value)
-
-
-def test_the_publisher_is_read_from_the_wave_at_the_ref(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.workshop._release import publisher_in_wave
-
-    root = _workspace(tmp_path)
-    monkeypatch.setattr(
-        "livery.workshop._extensions.extension_entries",
-        lambda root=None: (("acme.pure", "acme-pure"),),
-    )
-    monkeypatch.setattr(
-        "livery.workshop._compose.extension_template_tree",
-        lambda root, extension: root / "packages" / "pure",
-    )
-    assert publisher_in_wave(root, _stamp(root, "native")) == ("acme-pure", False)
-    assert publisher_in_wave(root, _stamp(root, "pure", "native")) == (
-        "acme-pure",
-        True,
-    )
-
-
 # --- the driver pin ----------------------------------------------------------------
 
 

@@ -3,20 +3,16 @@
 A managed file is rendered whole and judged byte for byte, and a
 repository still needs lines of its own in some of them: its own
 rules in the root ``.gitignore``, its own tables in ``pyproject.toml``,
-its own tasks below the mount in ``tasks.py``. Two forms carry them.
+its own tasks below the mount in ``tasks.py``. A region carries them.
 
 A **region** is a pair of marker comments the template renders, with
-the repository's lines between them. The render reads each region
-from the committed file as an input, the way it reads the answers,
-and writes it back in place, so an apply preserves it by
-construction and the drift gate still compares whole bytes: an edit
+the repository's lines between them. The fragment engine reads each
+region from the committed file and writes it back in place, so a sync
+preserves it by construction and the drift gate still compares whole
+bytes: an edit
 inside a region is the repository's, an edit outside it is drift,
 and a removed marker is drift too. A file without the region yet
 gains the markers, empty, on the next apply.
-
-A **tail** serves a format without comments: the render owns the
-first lines, as many as it renders, and the repository's lines
-follow. A changed prefix is drift the same way.
 
 The markers are one shape in every comment style, so a reader who
 has seen one has seen them all::
@@ -114,19 +110,3 @@ def unmatched(text: str) -> tuple[str, ...]:
 def marker_lines(leader: str, name: str) -> tuple[str, str]:
     """The opening and closing marker for *name* under *leader*."""
     return OPEN.format(leader=leader, name=name), CLOSE.format(leader=leader, name=name)
-
-
-def tail_split(committed: bytes, rendered: bytes) -> tuple[bytes, bytes]:
-    """*committed* as the render's own lines and the repository's tail.
-
-    The render owns as many lines as it renders; what follows is the
-    repository's. Returns ``(prefix, tail)``.
-    """
-    count = rendered.count(b"\n") + (
-        0 if rendered.endswith(b"\n") or not rendered else 1
-    )
-    lines = committed.split(b"\n")
-    head = b"\n".join(lines[:count])
-    if count and len(lines) > count:
-        head += b"\n"
-    return head, committed[len(head) :]

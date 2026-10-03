@@ -240,11 +240,10 @@ class KindRecord:
     Attributes:
         name: The contract's ``kind`` value.
         backend: The module carrying the kind's build callables.
-        template: The template directory name the kind renders, or
-            empty for a kind with no template of its own.
-        parent: The kind this one extends; the chain renders parent
-            first, then this kind's files over it, and the managed
-            set is the union along the chain.
+        template: The seed tree a package of the kind is born from,
+            or empty for a kind with no seeds of its own.
+        parent: The kind this one extends; a birth writes the
+            parent's seeds first, then this kind's over them.
         tools: The tools the kind requires by existing in a
             workspace, each spelled `name` or `name>=floor`; the
             lock resolves them beside the packages' and the
@@ -258,9 +257,6 @@ class KindRecord:
             workspace of this kind installs them only where the
             machine has none; the union along the chain joins the
             root contract's `[tools] host-allowed`.
-        managed: The rendered files the template keeps matching in
-            a package of this kind; the chain's union is what the
-            drift gate judges.
         ci: The gate roles that apply.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
@@ -289,10 +285,9 @@ class KindRecord:
             of the packages it rendered. None for a kind with no such
             pages. A child kind takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
-            heads their chains with its tools, managed files and
-            template, builds nothing, and is never a package's
-            ``kind``. A concrete kind needs a backend; an abstract
-            one has none.
+            heads their chains with its tools and seed tree, builds
+            nothing, and is never a package's ``kind``. A concrete
+            kind needs a backend; an abstract one has none.
     """
 
     name: str
@@ -302,7 +297,6 @@ class KindRecord:
     tools: tuple[str, ...] = ()
     host_tools: tuple[str, ...] = ()
     host_allowed: tuple[str, ...] = ()
-    managed: tuple[str, ...] = ()
     ci: CiContract = field(default_factory=CiContract)
     artifact: str = "python"
     wheel_identity: str = "pure"
@@ -418,17 +412,15 @@ BASE_TEMPLATE = "package-base"
 
 
 def template_chain(template_kind: str) -> tuple[str, ...]:
-    """The template kinds to render, parent first, leaf last.
+    """The seed trees a package's birth writes, parent first, leaf last.
 
-    Every package template's chain starts at ``package-base``, the
-    shared seed carrier (the docs page and its nav), so a package of
-    any kind ships a docs section without per-template discipline;
-    the child renders after it and wins. The chain derives from the
-    registry: the record whose template is *template_kind* chains
+    Every package's chain starts at ``package-base``, the shared seed
+    tree (the docs page and its nav), so a package of any kind ships a
+    docs section; the child's seeds win over it. The chain derives from
+    the registry: the record whose template is *template_kind* chains
     through its parents' templates, and the ``base`` kind heads every
-    chain, so the base template comes first. A template the registry
-    does not map (a variant such as ``package-extension``) renders
-    over the base alone.
+    chain. A tree the registry does not map (a variant such as
+    ``package-extension``) is written over the base alone.
     """
     by_template = {r.template: r for r in _KINDS.values() if r.template}
     record = by_template.get(template_kind)
@@ -437,18 +429,10 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     else:
         chain = tuple(r.template for r in kind_chain(record.name) if r.template)
     # A kind registered without the base as its parent (a fake, an extension's
-    # own) still renders the base first: the docs seeds live there alone.
+    # own) still gets the base's seeds first: the docs seeds live there alone.
     if template_kind.startswith("package-") and chain[0] != BASE_TEMPLATE:
         chain = (BASE_TEMPLATE, *chain)
     return chain
-
-
-def managed_files(kind_name: str) -> tuple[str, ...]:
-    """The drift-judged rendered files: the chain's union, sorted."""
-    managed: set[str] = set()
-    for record in kind_chain(kind_name):
-        managed.update(record.managed)
-    return tuple(sorted(managed))
 
 
 def kind_tools(present_types: set[str]) -> tuple[str, ...]:
@@ -597,7 +581,6 @@ def _register_builtin() -> None:
             # The build tools; the native format and lint tools ride
             # their check records.
             tools=("cmake", "ninja", "conan", "cmake_conan"),
-            managed=(".clang-format", ".clang-tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),
             wheel_identity="platform",
@@ -619,7 +602,6 @@ def _register_builtin() -> None:
             # MSVC, so it is required on the Windows hosts alone; the
             # .NET SDK it runs on rides as its runtime, there too.
             tools=("cmake", "conan", "ninja", "dotnet_coverage@windows"),
-            managed=(".clang-format", ".clang-tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),
             ci=CiContract(check_verbs=("format", "lint", "build", "test")),

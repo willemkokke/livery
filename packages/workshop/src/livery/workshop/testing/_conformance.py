@@ -491,7 +491,6 @@ def _probe_answers(kind: str = "") -> dict[str, Any]:
         "runner_prog": "fm",
         "project_name": "acme",
         "docs_site_url": "",
-        "template_source_label": "kit",
         "kind": kind,
     }
 

@@ -1,0 +1,19 @@
+# Seeded from the package-python-nanobind seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+kind = "python-nanobind"
+name = "{{ package_name }}"
+description = "{{ package_description }}"
+
+[ci]
+# The runner labels that build this member's platform wheels, one
+# release leg each; the publish job collects and ships the set.
+wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage-floor = 100

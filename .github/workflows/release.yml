@@ -60,36 +60,3 @@ jobs:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: fm ci.run --point=release --job=publish
-  # The home's release aftermath: the (composed) template artifact, tagged
-  # in lockstep with the publishing extension's receipt.
-  templates:
-    needs: [publish]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
-          token: ${{ secrets.FORGE_TOKEN || github.token }}
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          enable-cache: false
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
-          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
-      - name: Enter the workspace
-        run: bash setup.sh github
-      - name: Pin the driver
-        run: fm release.driver --workshop="${{ inputs.workshop }}"
-      - name: Deploy key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}" > ~/.ssh/templates_deploy
-          chmod 600 ~/.ssh/templates_deploy
-      - name: Publish the template artifact
-        env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
-          GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
-        run: fm ci.run --point=release --job=templates

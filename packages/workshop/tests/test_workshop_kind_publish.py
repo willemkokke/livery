@@ -522,23 +522,21 @@ _CONAN_GAP = (
 needs_conan = pytest.mark.skipif(bool(_CONAN_GAP), reason=_CONAN_GAP)
 
 ROOT = Path(__file__).resolve().parents[3]
-TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
     """A rendered cpp-conan package, built into an isolated CONAN_HOME."""
     from livery.workshop._identity import project_facts
-    from livery.workshop._templates import render
+    from workshop_composed import seed_into
 
     home = tmp_path / "conan-home"
     monkeypatch.setenv("CONAN_HOME", str(home))
     destination = tmp_path / "packages" / "geometry"
     answers = project_facts(ROOT)
-    render(
-        str(TEMPLATES),
+    seed_into(
         destination,
+        "package-cpp-conan",
         {
-            "kind": "package-cpp-conan",
             "package_name": "acme-geometry",
             "package_description": "acme-geometry: a native library.",
             "namespace_package": "acme",

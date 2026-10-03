@@ -580,33 +580,6 @@ def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
     }
 
 
-# --- the template source follows the invoking worktree -----------------------
-
-CONTRACT = (
-    "[workspace]\n"
-    "extensions = []\n"
-    'templates = "/old/worktree/packages/workshop/src/livery/workshop/templates"\n'
-    "\n"
-    "[forge]\n"
-    'kind = "gitea"\n'
-)
-
-
-def test_point_templates_refuses_a_contract_without_a_source() -> None:
-    bare = "[workspace]\nextensions = []\n"
-    with pytest.raises(_FAILURES, match="names no template source"):
-        _e2e._point_templates(bare, Path("/new/templates"))
-
-
-def test_point_templates_rewrites_the_source_and_settles() -> None:
-    pointed = _e2e._point_templates(CONTRACT, Path("/new/templates"))
-    assert 'templates = "/new/templates"\n' in pointed
-    assert "/old/worktree" not in pointed
-    assert pointed.startswith("[workspace]\nextensions = []\n")
-    assert pointed.endswith('[forge]\nkind = "gitea"\n')
-    assert _e2e._point_templates(pointed, Path("/new/templates")) == pointed
-
-
 # --- the proofs read the runs' logs: the refusals first ------------------------
 
 _SHA = "c" * 40

@@ -320,7 +320,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     # until the wave's verbs become entries; a point's own name is a
     # job of it too, green and empty until the contract attaches a
     # task.
-    assert _points.jobs_of(root, "release") == ("wheels", "publish", "templates")
+    assert _points.jobs_of(root, "release") == ("wheels", "publish")
     # The wave's verbs are the release's entries, at the dispatched ref.
     assert [e.task for e in _points.entries_for(root, "release", "publish")] == [
         "workflow.release.publish"
@@ -561,12 +561,12 @@ def test_a_dispatched_points_inputs_reach_its_entries(
     # GitLab carries them as pipeline variables, environment by name.
     monkeypatch.delenv("GITHUB_EVENT_PATH")
     monkeypatch.setenv("ref", "def456")
-    _points.run_point(root, "release", "templates", spawn=green)
+    _points.run_point(root, "release", "publish", spawn=green)
     assert seen == [
         [
             "hse",
-            "--profile=fm-profile-release-templates.json",
-            "release.templates",
+            "--profile=fm-profile-workflow-release-publish.json",
+            "workflow.release.publish",
             "--ref=def456",
         ]
     ]

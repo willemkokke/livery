@@ -46,11 +46,12 @@ def _workspace(root: Path) -> None:
     # a workspace without one.
     (package / "tests").mkdir()
     (package / "tests" / "test_mod.py").write_text("def test_it() -> None:\n    pass\n")
-    # The composed files a sync writes, which the gate's template check
-    # judges in every workspace.
-    from livery.workshop._shipped_files import deliver
+    # The composed files a sync writes and the files the contract
+    # generates, which the gate's template check judges in every
+    # workspace.
+    from livery.workshop._templates import apply_project
 
-    deliver(root)
+    apply_project(root)
 
 
 def _build(base: Path) -> None:

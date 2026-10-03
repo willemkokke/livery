@@ -113,8 +113,6 @@ class Job:
         collects: The artifact the job downloads first, ``""`` for none.
         environment: The named deployment environment the job runs in,
             ``""`` for none.
-        deploy_key: The secret written as the job's SSH deploy key,
-            ``""`` for none.
         dispatches: Whether the job starts another workflow through the
             forge's API, which GitHub's workflow token may do only with
             the ``actions: write`` grant.
@@ -122,8 +120,7 @@ class Job:
             point's ``workshop`` input names, over the checkout's own,
             before its one call.
         only: When the job exists at all: ``wheels`` where a member
-            declares wheel platforms, ``home`` where the workspace
-            publishes a template artifact, ``""`` always.
+            declares wheel platforms, ``""`` always.
         step: What the forge's run page calls the one call; the job's
             name capitalised when empty.
         note: The comment the rendered shell prints above the job.
@@ -146,7 +143,6 @@ class Job:
     publishes: str = ""
     collects: str = ""
     environment: str = ""
-    deploy_key: str = ""
     dispatches: bool = False
     driver_pin: bool = False
     only: str = ""
@@ -361,21 +357,6 @@ DECLARED: tuple[Point, ...] = (
                     " carries the repository's token where there is one: the"
                     " job token may not push a ref whose commit carries a"
                     " workflow file that differs from the tip's."
-                ),
-            ),
-            Job(
-                "templates",
-                needs=("publish",),
-                only="home",
-                token="secret",
-                pushes=True,
-                deploy_key="WORKSHOP_TEMPLATES_DEPLOY_KEY",
-                driver_pin=True,
-                step="Publish the template artifact",
-                note=(
-                    "The home's release aftermath: the (composed) template"
-                    " artifact, tagged in lockstep with the publishing"
-                    " extension's receipt."
                 ),
             ),
         ),
@@ -1013,12 +994,11 @@ BUILTIN: tuple[Entry, ...] = (
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check"),
     # The wave, at the squash the dispatch names: each platform's
-    # wheels, then the publish that cuts the receipts, then the home's
-    # template artifact. Each verb decides for itself what the ref
-    # holds: no wheels to build, no publisher in the wave.
+    # wheels, then the publish that cuts the receipts. Each verb decides
+    # for itself what the ref holds: no wheels to build, nothing to
+    # publish.
     Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
     Entry("release", "publish", "workflow.release.publish", ("--ref={ref}",)),
-    Entry("release", "templates", "release.templates", ("--ref={ref}",)),
 )
 
 

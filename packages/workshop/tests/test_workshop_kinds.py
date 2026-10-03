@@ -268,21 +268,3 @@ def test_template_chain_orders_parent_first(restored_registry) -> None:
     )
     # The base itself renders alone: no recursion, no doubling.
     assert template_chain("package-base") == ("package-base",)
-
-
-def test_managed_files_union_along_the_chain(restored_registry) -> None:
-    from livery.workshop._kinds import managed_files
-    from livery.workshop._templates import PACKAGE_MANAGED
-
-    fake = _FakeBackend()
-    register_kind(
-        KindRecord(
-            name="python-fake",
-            backend=fake,
-            parent="python",
-            managed=("CMakeLists.txt",),
-        )
-    )
-    assert managed_files("python-fake") == ("CMakeLists.txt",)
-    # The legacy constant stays pinned to the python kind's set.
-    assert managed_files("python") == PACKAGE_MANAGED

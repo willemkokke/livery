@@ -9,6 +9,12 @@ target. `fm sync` composes them with
 [livery.workshop._fragment_engine.apply][]; the gate's template check
 judges them with [livery.workshop._fragment_engine.drift][].
 
+A later extension takes the place of an earlier one's shipped file by
+declaring it in its declaration module: `REPLACES = {"<owner>:<name>":
+"<reason>"}`, where its own file of the same name is the replacement,
+or `DELETES` with the same shape to remove it. The same declarations
+govern seeds ([livery.workshop._seeds.create][]).
+
 The prose fragments, skills and hooks under the same `content/`
 directory are delivered by `livery.workshop._prose` and
 `livery.workshop._materialise` instead.
@@ -17,12 +23,18 @@ directory are delivered by `livery.workshop._prose` and
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from livery.footman import api as footman
 from livery.footman.api import fail
-from livery.workshop._extensions import SELF, extension_content, stack_names
+from livery.workshop._extensions import (
+    SELF,
+    declaration,
+    extension_content,
+    stack_names,
+)
 from livery.workshop._fragment_engine import (
     PACKAGE_PREFIX,
     Fragment,
@@ -66,6 +78,7 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
                 fragments.append(
                     Fragment(extension, relative, f"{prefix}{relative}", source=source)
                 )
+    fragments = declared(fragments, order)
     fragments += _check_contributions(order)
     from livery.workshop._identity import is_born
 
@@ -75,6 +88,66 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
         # names no project composes none.
         fragments = [f for f in fragments if f.target != PROJECT_FILE]
     return fragments, order
+
+
+#: The declaration module attributes that replace or delete an earlier
+#: extension's shipped file, each `<owner>:<name>` to its reason.
+REPLACES_ATTRIBUTE = "REPLACES"
+DELETES_ATTRIBUTE = "DELETES"
+
+
+def declared(
+    fragments: list[Fragment], order: list[str], *, seeds: bool = False
+) -> list[Fragment]:
+    """*fragments* with each listed extension's `REPLACES` and `DELETES` applied.
+
+    A replacement marks the declaring extension's own fragment of the
+    lower one's name; a deletion adds a fragment that only deletes. The
+    engine's resolution then checks both: the lower fragment exists and
+    comes from an earlier extension. Seed declarations (names under
+    `seeds/`) apply with *seeds* set, every other one without.
+
+    Raises:
+        Failed: for a replacement whose extension ships no file of that
+            name, or a declaration that is not a table of reasons.
+    """
+    from livery.workshop._seeds import SEEDS
+
+    by_ref = {fragment.ref: index for index, fragment in enumerate(fragments)}
+    result = list(fragments)
+    for extension in order:
+        module = declaration(extension)
+        for attribute in (REPLACES_ATTRIBUTE, DELETES_ATTRIBUTE):
+            table: object = getattr(module, attribute, None) or {}
+            if not isinstance(table, dict):
+                fail(
+                    f"{extension}: {attribute} is a table of `<owner>:<name>` = reason"
+                )
+            for ref, reason in cast("dict[object, object]", table).items():
+                name = str(ref).partition(":")[2]
+                if name.startswith(f"{SEEDS}/") != seeds:
+                    continue
+                if attribute == DELETES_ATTRIBUTE:
+                    result.append(
+                        Fragment(
+                            extension,
+                            f"deletes {ref}",
+                            "",
+                            deletes=str(ref),
+                            reason=str(reason),
+                        )
+                    )
+                    continue
+                index = by_ref.get(f"{extension}:{name}")
+                if index is None:
+                    fail(
+                        f"{extension} REPLACES {ref} and ships no {name} of its"
+                        " own to take its place"
+                    )
+                result[index] = replace(
+                    result[index], replaces=str(ref), reason=str(reason)
+                )
+    return result
 
 
 def _check_contributions(order: list[str]) -> list[Fragment]:

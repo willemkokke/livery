@@ -1,6 +1,6 @@
 """``fm new.project``: birth, end to end, one idempotent verb.
 
-Seed the contract, render the project kind, lock and sync, deliver
+Seed the contract, write the project's seeds, lock and sync, deliver
 the extension content, generate the CI files, initialise git, then the
 forge half: create the repository, assert its configuration, push,
 and open the unarmed setup pull request. Every step detects done
@@ -148,9 +148,6 @@ def new_project(
     url: Annotated[
         str, doc("the forge server (empty for github.com and gitlab.com)")
     ] = "",
-    templates: Annotated[
-        str, doc("template source override: a git URL, or a local directory")
-    ] = "",
     description: Annotated[str, doc("one sentence for the virtual root")] = "",
     author: Annotated[str, doc("the authors entry's name (default: git config)")] = "",
     email: Annotated[str, doc("the authors entry's email (default: git config)")] = "",
@@ -230,8 +227,6 @@ def new_project(
             f'copyright-year = "{year}"',
             f"extensions = [{spelled}]",
         ]
-        if templates:
-            lines.append(f"templates = {toml_string(templates)}")
         lines += ["", "[forge]", f'kind = "{forge}"']
         if owner:
             lines.append(f'owner = "{owner}"')
@@ -249,31 +244,17 @@ def new_project(
         contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("  workshop.toml: seeded")
 
-    if (root / "tasks.py").is_file():
-        print("  render: already born")
-    else:
-        from livery.workshop._identity import project_facts
-        from livery.workshop._templates import (
-            render,
-            render_injections,
-            resolve_source,
-        )
+    # The seeds: the files a workspace starts with, which are its own
+    # from then on. One that exists is never touched, so a resumed
+    # birth writes only what a killed one did not.
+    from livery.workshop._identity import project_facts
+    from livery.workshop._seeds import PROJECT, create
+    from livery.workshop._templates import package_injections
 
-        source, ref = resolve_source(root)
-        answers = project_facts(root)
-        render(
-            source,
-            root,
-            {**answers, **render_injections(root, answers)},
-            ref=ref,
-        )
-        if ref:
-            # A remote source's next update merges from the reference
-            # this birth rendered at.
-            from livery.workshop._templates import record_templates_ref
-
-            record_templates_ref(root, ref)
-        print("  render: born")
+    seeded = create(
+        root, root, (PROJECT,), {**project_facts(root), **package_injections(root)}
+    )
+    print(f"  seeds: {len(seeded)} written" if seeded else "  seeds: already written")
 
     # The project file is composed from the answers, and the lock below
     # reads it, so the composed files are written before the first lock.

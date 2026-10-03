@@ -48,7 +48,6 @@ def _data() -> dict[str, object]:
         "namespace_package": "livery",
         "docs_site_url": "",
         "runner_prog": "fm",
-        "template_source_label": "t",
         "project_name": "x",
         "kind": "",
         "slots": all_composed(),
@@ -84,16 +83,6 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
                 "acme", "lint", _noop, fragments=(Fragment(".clang-tidy", "x"),)
             )
         )
-
-
-def test_a_hand_edited_section_is_drift(tmp_path: Path) -> None:
-    from livery.workshop._templates import _drift_line
-
-    rendered = b"[tool.ruff]\nline-length = 88\n"
-    (line,) = _drift_line(
-        "pyproject.toml", b"[tool.ruff]\nline-length = 100\n", rendered
-    )
-    assert line.startswith("pyproject.toml: differs from its render")
 
 
 def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
