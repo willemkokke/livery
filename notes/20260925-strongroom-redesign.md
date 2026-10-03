@@ -267,9 +267,10 @@ Every one of them is now ruled; the decision record says how.
     maximum and normalisation level fixed in the spec and a vector of a
     seeded input with its boundaries. A public gear table makes chunk
     sizes a content fingerprint, so an encrypted space may use a
-    per-key-domain table at the price of dedup across domains. Lean:
-    chunk large blobs by default at publish, with the recipe root on
-    the entry.
+    per-key-domain table at the price of dedup across domains
+    (superseded 2026-10-04: a keyed table does not hide chunk sizes; see
+    the encryption reservation). Lean: chunk large blobs by default at
+    publish, with the recipe root on the entry.
 11. **The shared tier's write protocol.** Our own service, or OCI's
     distribution API used as a shared tier: blobs by sha256, packs as
     blobs, resumable uploads, cross-repository mount, referrers. A tag
@@ -331,6 +332,23 @@ interface the store calls and never implements, since custody is the
 fabric's; rotation as re-encryption at compaction; structured objects
 encrypted like any other under the private models. Compressing before
 encrypting leaks sizes. Recorded, not built, until custody exists.
+
+Chunk sizes are what keyed names leave visible, and a secret chunker
+does not hide them. In 2025, two papers attacked the keyed chunkers of
+deployed backup tools; one recovered the chunking keys of Borg,
+Bupstash, Duplicacy, restic and Tarsnap from the chunk sizes of data
+the attacker knew, with end-to-end attacks on Borg, restic and
+Tarsnap. With the keys, a file's sequence of chunk sizes identifies
+it. So an encrypted space places chunk boundaries with a keyed
+pseudorandom function such as AES, never a keyed gear table, and keeps
+sizes from the tier: the pack index, which lists plain sizes, is
+encrypted or its sizes padded; recipes are encrypted like any
+structured object; and chunks go into packs without regard to the file
+they came from, as restic 0.18 does. The pack format leaves room for an
+encrypted index. The papers: [Chunking Attacks on File Backup Services
+using Content-Defined Chunking](https://arxiv.org/pdf/2504.02095) and
+[Breaking and Fixing Content-Defined
+Chunking](https://research.ibm.com/publications/breaking-and-fixing-content-defined-chunking).
 
 ### The registries
 
@@ -600,6 +618,11 @@ differently tunes through the policy.
   the frozen format.
 - 2026-09-25, Willem: the second name profile is `permissive`.
 - 2026-09-25, this note written. The plan follows rulings 4 to 12.
+- 2026-10-04, at Willem's request: the encryption reservation records
+  the 2025 chunking attacks. A keyed gear table no longer counts as
+  hiding chunk sizes; an encrypted space places boundaries with a keyed
+  pseudorandom function and keeps sizes from the tier, and the pack
+  format leaves room for an encrypted index. Recorded, not built.
 
 ## Open
 
