@@ -1,6 +1,12 @@
 # Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `fm template.apply`; an edit here is drift.
+# Every text file is LF in the repository and in every checkout,
+# whatever a contributor's core.autocrlf says, so a file has the same
+# bytes on every platform; the Windows batch formats need CRLF.
+* text=auto eol=lf
+*.bat eol=crlf
+*.cmd eol=crlf
 # Every change appends to a plan note's decision record, so two
 # changes in flight land at the same tail. A union merge takes both
 # sides' lines there instead of stopping the integrate on a conflict;

@@ -863,6 +863,16 @@ has no file that uses one yet, so the engine carries regions only.
 - The root `.gitignore` and `.gitattributes` become composed files,
   each line owned: the base, each tool, docs, footman's profile, the
   agent, the notes convention. The dead `.forge.dev.env` line goes.
+  The base owns `* text=auto eol=lf` and the CRLF lines for `*.bat`
+  and `*.cmd` (issue #1063 put them in the template first).
+- An extension contributes attribute lines like any other, Git LFS
+  rules (`*.png filter=lfs diff=lfs merge=lfs -text`) included.
+  `[workspace] lfs = true` turns LFS on for the workspace: it requires
+  the `git-lfs` tool, `fm sync` installs LFS's hooks in the checkout,
+  and the emitted CI checks out the LFS objects. While the workspace
+  has LFS off, an extension's LFS lines are left out of
+  `.gitattributes` and `fm sync` names them once, with the setting
+  that would turn them on.
 - `PROJECT_FILES`, `PACKAGE_FILES` and `Fragment(file, text, kind)`
   on check records go.
 
@@ -1319,6 +1329,15 @@ Acceptance:
 - 2026-10-02: the release notes provider, the derived version and the
   member list (the empty shell plan's phases 7 and 8a) are the
   foundations phase 11 composes on.
+- Willem, 2026-10-03: every checkout is LF, as hse does it:
+  `* text=auto eol=lf` in the rendered `.gitattributes`, `*.bat` and
+  `*.cmd` CRLF. The byte comparisons that normalise CRLF today stay as
+  a fallback. A CRLF file written after checkout is named by an
+  `.editorconfig` and an eclint check later (issue #1064).
+- Willem, 2026-10-03: extensions contribute LFS rules to
+  `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
+  6b carries both. Nobody is forced onto LFS: with it off, an
+  extension's LFS lines are left out and named, never refused.
 
 ## Open
 
