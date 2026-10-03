@@ -3,5 +3,5 @@
   ".gitignore": "33c511d98f9f94d8b036d3716c82e536f868eb7f3f0d133cff63fdfbf04ee9e4",
   ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
   ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111",
-  "pyproject.toml": "a15ad0b049e91b871ab96197b8920a5a7f2244f9414b23ab356ef3973429d1ef"
+  "pyproject.toml": "bb066e3c01c0ca75bc745e32c31253f57ed0ca4d193a281f2d4aa7442f64d046"
 }

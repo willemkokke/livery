@@ -941,6 +941,12 @@ and `drift` names an unedited file whose owner is no longer listed,
 since the next sync removes it. Until packages list extensions (phase
 11) the kind chain picks the fragments. Proved by the C++ kind's
 merge-point tests, which build and lint a rendered package.
+A union slot composes in its contributors' order (extension, then
+check), not in registration order: once `fm sync` composed
+`pyproject.toml`, a test that registered a check again moved its line
+in the dev group, and the dogfood sync test failed on the macOS leg
+alone. The same cause fits the one unexplained template-check drift of
+the first slice.
 
 Still open in 6b: the prose fragments, skills, hooks, `.claude/settings.json`
 and the site CSS still go through `livery.workshop._materialise` and
