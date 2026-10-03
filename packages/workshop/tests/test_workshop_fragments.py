@@ -171,10 +171,11 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
 
 
 def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
-    from livery.workshop._templates import read_answers, render_injections
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
-    injected = render_injections(root, read_answers(root / ".copier-answers.yml"))
+    injected = render_injections(root, project_facts(root))
     composed = injected["fragments"]["pyproject.toml"]
     for table in (
         "[tool.ruff]",

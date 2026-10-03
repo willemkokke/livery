@@ -39,6 +39,11 @@ ALLOWED = (
 
 _CONTRACT = (
     "[workspace]\n"
+    'name = "acme-tools"\n'
+    'description = "The acme-tools monorepo (virtual root)."\n'
+    'namespace = "acme"\n'
+    'authors = [{ name = "Acme", email = "dev@acme.example" }]\n'
+    'copyright-year = "2026"\n'
     "extensions = []\n"
     "\n"
     "[forge]\n"

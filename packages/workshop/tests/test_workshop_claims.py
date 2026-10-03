@@ -192,10 +192,11 @@ def test_two_checks_claiming_one_category_under_different_rules_share_one_entry(
 
 
 def test_this_workspace_renders_its_ignores_from_the_claims() -> None:
-    from livery.workshop._templates import read_answers, render_injections
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
-    injected = render_injections(root, read_answers(root / ".copier-answers.yml"))
+    injected = render_injections(root, project_facts(root))
     composed = injected["fragments"]["pyproject.toml"]
     assert '"packages/*/tests/**" = ["D1"]' in composed
     assert '"tests/**" = ["D1"]' in composed

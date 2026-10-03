@@ -527,12 +527,13 @@ TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
     """A rendered cpp-conan package, built into an isolated CONAN_HOME."""
-    from livery.workshop._templates import read_answers, render
+    from livery.workshop._identity import project_facts
+    from livery.workshop._templates import render
 
     home = tmp_path / "conan-home"
     monkeypatch.setenv("CONAN_HOME", str(home))
     destination = tmp_path / "packages" / "geometry"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     render(
         str(TEMPLATES),
         destination,

@@ -31,10 +31,11 @@ name = "workshop"
 url = "{{ python_registry }}"
 {% endif %}
 [tool.uv.workspace]
-# The members, explicitly: the roster lives in the answers and this
-# file is rendered from it, so a glob would only re-derive the same
-# list while letting a stray directory join unnoticed. A non-python
-# member (a cpp-conan package) is no uv project and never appears.
+# The members, explicitly: each is a package with a contract of its
+# own, and this file is rendered from them, so a glob would only
+# re-derive the same list while letting a stray directory join
+# unnoticed. A non-python member (a cpp-conan package) is no uv project
+# and never appears.
 members = [{% for package in py %}"packages/{{ package.dir }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 [tool.uv.sources]

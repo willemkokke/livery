@@ -17,15 +17,15 @@ import pytest
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop._contract import toml_string
+from livery.workshop._identity import project_facts
 from livery.workshop._templates import (
     apply_packages,
     apply_project,
     package_drift,
     project_drift,
-    read_answers,
     render,
 )
-from workshop_composed import compose_into
+from workshop_composed import IDENTITY, compose_into
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -33,12 +33,10 @@ TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _template_instance(tmp_path: Path) -> Path:
-    """A scratch workspace carrying the real template source and answers."""
+    """A scratch workspace carrying the real template source and this identity."""
     shutil.copytree(TEMPLATES, tmp_path / "templates")
-    shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
     (tmp_path / "workshop.toml").write_text(
-        "[workspace]\n"
-        "extensions = []\n"
+        "[workspace]\n" + IDENTITY + "extensions = []\n"
         'templates = "templates"\n'
         "\n"
         "[forge]\n"
@@ -112,11 +110,8 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
     apply_project(root)
     package = root / "packages" / "thing"
     package.mkdir(parents=True)
-    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
-    answers["package_name"] = "livery-thing"
-    (package / ".copier-answers.yml").write_text(
-        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
-    )
+    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
     # Nothing rendered yet: the managed file is named as missing.
     assert package_drift(root) == [
         "packages/thing/cliff.toml: rendered, but missing from the repository"
@@ -139,21 +134,15 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
 def test_a_receipt_without_package_dir_renders_the_right_paths(
     tmp_path: Path,
 ) -> None:
-    # copier omits an answer equal to its default from the receipt,
-    # and package_dir defaults to the destination basename, so a
-    # receipt may not carry it. The re-render happens in a temp
-    # directory: without the explicit override the managed files
-    # would carry the temp name.
+    # The re-render happens in a temp directory, and package_dir comes
+    # from the member's own directory: the managed files carry the
+    # member's path, never the temp name.
     root = _template_instance(tmp_path)
     apply_project(root)
     package = root / "packages" / "thing"
     package.mkdir(parents=True)
-    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
-    answers["package_name"] = "livery-thing"
-    answers.pop("package_dir", None)
-    (package / ".copier-answers.yml").write_text(
-        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
-    )
+    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
     assert "packages/thing/cliff.toml" in apply_packages(root)
     body = (package / "cliff.toml").read_text()
     assert 'include_paths = ["packages/thing/**"]' in body
@@ -183,11 +172,8 @@ def test_the_cliff_remote_carries_the_api_prefix_gitlab_alone_needs(
     apply_project(root)
     package = root / "packages" / "thing"
     package.mkdir(parents=True)
-    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
-    answers["package_name"] = "livery-thing"
-    (package / ".copier-answers.yml").write_text(
-        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
-    )
+    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
     assert "packages/thing/cliff.toml" in apply_packages(root)
     body = (package / "cliff.toml").read_text()
     assert f"[remote.{kind}]" in body
@@ -260,7 +246,7 @@ def _composed(tmp_path: Path, name: str) -> str:
 
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     destination = tmp_path / forge_kind
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     answers.update({"kind": "project", "forge_kind": forge_kind}, **extra)
     answers.update(extra)
     render(TEMPLATES, destination, answers)
@@ -278,7 +264,7 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 
     from livery.workshop._ci_generate import generate
 
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
 
     del answers
     github = _render_kind(tmp_path, "github")
@@ -316,7 +302,7 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 
 def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     render(
         TEMPLATES,
         destination,
@@ -683,7 +669,7 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     from livery.workshop._templates import render
 
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     destination = tmp_path / "branded"
     render(
         TEMPLATES,
@@ -700,16 +686,15 @@ def test_the_rendered_answers_never_store_the_brand(
 ) -> None:
     from livery.workshop._templates import render
 
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     destination = tmp_path / "branded"
     from livery.workshop._templates import compose_fragments
 
     data = {**answers, "runner_prog": "hse"}
     render(TEMPLATES, destination, {**data, "fragments": compose_fragments(data)})
-    stored = (destination / ".copier-answers.yml").read_text()
-    # The brand belongs to the process; a stored copy would pin the
-    # instance to the CLI that happened to render it.
-    assert "runner_prog" not in stored
+    # The brand belongs to the process: the render stores no answers at
+    # all, so nothing pins the instance to the CLI that rendered it.
+    assert not (destination / ".copier-answers.yml").exists()
     # The meter comment rides the brand too: the composed project file
     # takes it from the process, as the render does.
     monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
@@ -776,13 +761,15 @@ def _build_instance_from_git_template(base: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
     subprocess.run(["git", "tag", f"v{__version__}"], cwd=repo, check=True)
     instance = base / "instance"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     render(repo, instance, {**answers, "runner_prog": "fm"})
     # The contract is a birth-time seed the render never writes; the
     # fixture stands in for the birth verb.
     (instance / "workshop.toml").write_text(
         "[workspace]\n"
-        "extensions = []\n"
+        + IDENTITY
+        + f'templates-ref = "v{__version__}"\n'
+        + "extensions = []\n"
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
@@ -804,7 +791,7 @@ def test_the_remote_update_arm_brands_and_reemits(
     # under the branded CLI.
     import livery.footman.api as footman
     from livery.workshop import _templates
-    from livery.workshop._update import _align_answers_source, refresh_rendered
+    from livery.workshop._update import refresh_rendered
 
     made = seeds("template-instance", _build_instance_from_git_template)
     repo, instance = made / "template-repo", made / "instance"
@@ -818,10 +805,6 @@ def test_the_remote_update_arm_brands_and_reemits(
     ]
     assert any(line.startswith("templates = ") for line in lines)
     (instance / "workshop.toml").write_text("\n".join(lines) + "\n")
-    # The answers follow the contract in the same commit: the copied
-    # seed still records the seed's own source, and the refresh aligns
-    # it on the way past, which would leave the tree dirty under copier.
-    _align_answers_source(instance, str(repo))
     import subprocess
 
     subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
@@ -915,20 +898,14 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
     root.mkdir()
     (root / "workshop.toml").write_text(
         "[workspace]\n"
+        'name = "instance"\n'
+        'namespace = "acme"\n'
+        'authors = [{ name = "A", email = "a@example.com" }]\n'
+        'copyright-year = "2026"\n'
         "extensions = []\n"
         f"templates = {toml_string(str(source))}\n"
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
-    )
-    (root / ".copier-answers.yml").write_text(
-        "_src_path: whatever\n"
-        "kind: project\n"
-        "project_name: instance\n"
-        "author_name: A\n"
-        "author_email: a@example.com\n"
-        "copyright_year: '2026'\n"
-        "namespace_package: acme\n"
-        "packages: []\n"
     )
     # A born instance's project file is the one the engine composed.
     return compose_into(root)
@@ -957,7 +934,6 @@ def test_new_package_renders_from_the_artifact_repository(
     new_package("thing")
     assert (root / "packages" / "thing" / "cliff.toml").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
-    assert "acme-thing" in (root / ".copier-answers.yml").read_text()
     assert synced == ["lock", "sync"]
     # The project render resolved remotely too: the roster reached
     # the managed pyproject.
@@ -1043,9 +1019,7 @@ def test_repeated_render_at_one_tag_is_byte_identical(
     render(f"git+file://{repo}", second, dict(data), ref=_ref())
     comparison = filecmp.dircmp(str(first), str(second))
     assert not comparison.left_only and not comparison.right_only
-    # The answers file is a receipt: it records the destination's own
-    # name, so it is provenance, not rendered content.
-    names = [n for n in comparison.common_files if n != ".copier-answers.yml"]
+    names = list(comparison.common_files)
     mismatch, errors = filecmp.cmpfiles(str(first), str(second), names, shallow=False)[
         1:
     ]
@@ -1093,22 +1067,6 @@ def test_a_credentialled_source_never_reaches_a_rendered_byte(
         # machinery wrote must be clean.
         if path.is_file() and path.name != "workshop.toml":
             assert "sekrit" not in path.read_text(errors="ignore"), path
-
-
-def test_the_rewrite_keeps_copiers_commit_receipt(tmp_path: Path) -> None:
-    from livery.workshop._templates import _write_root_answers
-
-    root = tmp_path
-    (root / "workshop.toml").write_text(
-        '[workspace]\nextensions = []\ntemplates = "templates"\n'
-    )
-    (root / ".copier-answers.yml").write_text(
-        "_commit: v0.0.2\n_src_path: whatever\nproject_name: x\n"
-    )
-    _write_root_answers(root, {"project_name": "x"})
-    text = (root / ".copier-answers.yml").read_text()
-    # An update cannot know the old template references without it.
-    assert "_commit: v0.0.2" in text
 
 
 def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):

@@ -20,6 +20,7 @@ from livery.workshop._checks import (
     register_check,
     run_check,
 )
+from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
     CiContract,
     KindRecord,
@@ -33,7 +34,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Neighbours, Package, discover_packages
 from livery.workshop._registries import RegistryTarget
-from livery.workshop._templates import read_answers, render
+from livery.workshop._templates import render
 
 _FAILURES = (BaseException,)
 
@@ -113,7 +114,7 @@ def _package(directory: Path, name: str, kind_name: str) -> Package:
 def _render_cpp(tmp_path: Path) -> Package:
     """A rendered cpp-conan package, straight from the template."""
     destination = tmp_path / "packages" / "native"
-    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers = project_facts(ROOT)
     render(
         str(TEMPLATES),
         destination,
@@ -474,11 +475,15 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
-    answers = dict(read_answers(ROOT / ".copier-answers.yml"))
-    answers["packages"] = [
-        {"dir": "alpha", "name": "acme-alpha", "dev": "acme-alpha"},
-        {"dir": "native", "name": "acme-native", "kind": "cpp-conan"},
-    ]
+    # The members are what discovery finds: a python one and a cpp one.
+    for member, contract, manifest in (
+        ("alpha", 'kind = "python"\nname = "acme-alpha"\n', "pyproject.toml"),
+        ("native", 'kind = "cpp-conan"\nname = "acme-native"\n', "conanfile.py"),
+    ):
+        (destination / "packages" / member).mkdir(parents=True)
+        (destination / "packages" / member / "workshop.toml").write_text(contract)
+        (destination / "packages" / member / manifest).write_text("")
+    answers = dict(project_facts(ROOT))
     from livery.workshop._templates import compose_fragments
 
     data = {**answers, "kind": "project"}

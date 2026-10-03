@@ -31,20 +31,20 @@ import yaml
 import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
-from livery.workshop._contract import load_contract
+from livery.workshop._contract import load_contract, toml_string
 from livery.workshop._extensions import (
     extension_entries,
     stack_entries,
     workspace_root,
 )
 from livery.workshop._fragments import PACKAGE_FILES
+from livery.workshop._identity import identity, package_facts, project_facts
 from livery.workshop._materialise import write_lf
 from livery.workshop._pythons import python_floor
 
 template = group("template", help="The template source and its render gate")
 new = group("new", help="Render new pieces from the template source")
 
-_ANSWERS = ".copier-answers.yml"
 
 #: Where instances take their templates from when the contract is
 #: silent: the published artifact repository, readable anonymously.
@@ -200,16 +200,6 @@ def _root() -> Path:
     return root
 
 
-def read_answers(path: Path) -> dict[str, Any]:
-    """The adopted answers at *path*, copier's own bookkeeping stripped."""
-    if not path.is_file():
-        fail(f"no answers file at {path}: adopt one before rendering")
-    answers = yaml.safe_load(path.read_text("utf-8")) or {}
-    if not isinstance(answers, dict):
-        fail(f"{path} is not a mapping")
-    return {key: value for key, value in answers.items() if not key.startswith("_")}
-
-
 def _requirement_name(spec: str) -> str:
     """The distribution a requirement spec names, extras and floors cut."""
     return re.split(r"[\[<>=!~; ]", spec.strip(), maxsplit=1)[0]
@@ -308,14 +298,20 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
     tables through this.
     """
     from livery.workshop._checks import per_file_ignores
-    from livery.workshop._kinds import record_for_template
+    from livery.workshop._kinds import kind_names, record_for_template
     from livery.workshop._slots import all_composed
 
     roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
     kinds = []
     for entry in roster:
-        record = record_for_template(str(entry.get("kind", "package-python")))
-        name = record.name if record is not None else "python"
+        # A roster entry names its kind's record; a template name maps
+        # to its record, and anything else is python.
+        spelled = str(entry.get("kind", "python"))
+        record = record_for_template(spelled)
+        if spelled in kind_names():
+            name = spelled
+        else:
+            name = record.name if record is not None else "python"
         if name not in kinds:
             kinds.append(name)
     return {
@@ -339,7 +335,6 @@ def package_injections(root: Path) -> dict[str, Any]:
     """
     contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
-    root_answers = read_answers(root / _ANSWERS)
     from livery.workshop._docs_contract import docs_table
 
     return {
@@ -350,7 +345,7 @@ def package_injections(root: Path) -> dict[str, Any]:
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
         "forge_url": str(forge_table.get("url", "")),
-        "project_name": str(root_answers.get("project_name", "")),
+        "project_name": identity(root)["project_name"],
     }
 
 
@@ -539,17 +534,18 @@ def _lf(data: bytes) -> bytes:
     return data.replace(b"\r\n", b"\n")
 
 
-def rendered_files(destination: Path) -> list[Path]:
-    """Every rendered file, the answers file excluded.
+def _member_directories(root: Path) -> list[Path]:
+    """Each member package's directory, in path order: those with a contract."""
+    from livery.workshop._packages import discover_packages
 
-    The answers file records provenance, not content, so the drift
-    comparison never judges it.
-    """
-    return sorted(
-        path
-        for path in destination.rglob("*")
-        if path.is_file() and path.name != _ANSWERS
-    )
+    if not (root / "packages").is_dir():
+        return []
+    return [package.directory for package in discover_packages(root)]
+
+
+def rendered_files(destination: Path) -> list[Path]:
+    """Every rendered file in *destination*, sorted."""
+    return sorted(path for path in destination.rglob("*") if path.is_file())
 
 
 def project_drift(root: Path) -> list[str]:
@@ -558,7 +554,7 @@ def project_drift(root: Path) -> list[str]:
     Empty when every rendered file matches the repository byte for
     byte.
     """
-    answers = read_answers(root / _ANSWERS)
+    answers = project_facts(root)
     data = {**answers, **render_injections(root, answers)}
     if local_template_dir(root) is None:
         fail("no local template source: the render gate needs one")
@@ -736,14 +732,9 @@ def package_drift(root: Path) -> list[str]:
         fail("no local template source: the render gate needs one")
     source, _ref, _owners = render_source(root)
     drift = []
-    packages = root / "packages"
-    for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
-        directory = answers_path.parent
-        # package_dir rides explicitly: copier omits an answer that
-        # equals its default from the receipt, and the default here
-        # is the render destination's basename, a temp directory.
+    for directory in _member_directories(root):
         data = {
-            **read_answers(answers_path),
+            **package_facts(root, directory),
             **package_injections(root),
             "package_dir": directory.name,
             "release_baseline": _release_baseline(directory),
@@ -782,7 +773,7 @@ def apply_project(root: Path) -> list[str]:
     files, the ignore and attribute lines) are written in the same pass,
     so a member added to the answers reaches `pyproject.toml` here.
     """
-    answers = read_answers(root / _ANSWERS)
+    answers = project_facts(root)
     data = {**answers, **render_injections(root, answers)}
     source, ref, _owners = render_source(root)
     changed = []
@@ -862,12 +853,9 @@ def apply_packages(root: Path) -> list[str]:
     """
     source, ref, _owners = render_source(root)
     changed = []
-    for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
-        directory = answers_path.parent
-        # package_dir explicitly, as in package_drift: the receipt
-        # may not carry it, and the destination here is a temp dir.
+    for directory in _member_directories(root):
         data = {
-            **read_answers(answers_path),
+            **package_facts(root, directory),
             **package_injections(root),
             "package_dir": directory.name,
             "release_baseline": _release_baseline(directory),
@@ -1030,7 +1018,7 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     destination = root / "packages" / name
     if destination.exists():
         fail(f"{destination} already exists")
-    answers = read_answers(root / _ANSWERS)
+    answers = identity(root)
 
     namespace = str(answers.get("namespace_package", ""))
     prefix = namespace.replace(".", "-")
@@ -1052,28 +1040,9 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
             root=root,
             ref=ref,
         )
-    _redact_answers_source(destination / _ANSWERS)
-    from livery.workshop._kinds import is_python_kind, record_for_template
-
-    record = record_for_template(kind)
-    members = list(answers.get("packages", []))
-    if record is None or is_python_kind(record.name):
-        # A python member joins the uv workspace and the dev group.
-        # An unmapped template (package-extension) is a python
-        # variant, so it takes the same wiring. A chained kind rides
-        # along by name so the CI emitters can see it (the wheels
-        # matrix exists only where a platform-wheel kind lives).
-        entry = {"dir": name, "name": package_name, "dev": package_name}
-        if record is not None and record.name != "python":
-            entry["kind"] = record.name
-        members.append(entry)
-    else:
-        # A non-python member carries its kind so the project render
-        # can exclude it from the uv workspace and the python
-        # checker scopes; there is no dist to depend on.
-        members.append({"dir": name, "name": package_name, "kind": record.name})
-    answers["packages"] = members
-    _write_root_answers(root, answers)
+    # The member's own contract, which the template just wrote, is what
+    # discovery finds: the roster derives from it, so nothing else is
+    # written here.
     # The files the records render for the kind, the native configs,
     # land with the birth: the template ships none of them.
     from livery.workshop._shipped_files import deliver
@@ -1082,48 +1051,28 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     return f"{namespace}.{slug}" if namespace else slug
 
 
-def _redact_answers_source(path: Path) -> None:
-    """Strip URL credentials from an answers file copier just wrote.
+def templates_ref(root: Path) -> str:
+    """The template reference the workspace was last rendered from; empty if none.
 
-    copier records the clone source verbatim; the committed receipt
-    must never carry a token.
+    `copier update` merges three ways and needs the old reference; the
+    contract's `[workspace] templates-ref` keeps it while copier renders
+    the project.
     """
-    if not path.is_file():
-        return
-    text = path.read_text("utf-8")
-    cleaned = re.sub(
-        r"^(_src_path: )(.+)$",
-        lambda m: m.group(1) + redacted_source(m.group(2)),
-        text,
-        count=1,
-        flags=re.M,
+    workspace = load_contract(root / "workshop.toml").get("workspace") or {}
+    return str(workspace.get("templates-ref", ""))
+
+
+def record_templates_ref(root: Path, ref: str) -> None:
+    """Write *ref* as the contract's `[workspace] templates-ref`, in place."""
+    path = root / "workshop.toml"
+    text = path.read_text(encoding="utf-8")
+    line = f"templates-ref = {toml_string(ref)}"
+    replaced, count = re.subn(
+        r"(?m)^templates-ref = .*$", lambda _m: line, text, count=1
     )
-    if cleaned != text:
-        write_lf(path, cleaned)
-
-
-def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
-    """Rewrite the root answers file, header and bookkeeping kept.
-
-    copier's own receipts survive the rewrite: ``_src_path`` follows
-    the contract (display-safe), and ``_commit`` rides along
-    verbatim, because an update cannot know the old template
-    references without it.
-    """
-    path = root / _ANSWERS
-    commit = ""
-    if path.is_file():
-        raw = yaml.safe_load(path.read_text("utf-8")) or {}
-        if isinstance(raw, dict):
-            commit = str(raw.get("_commit", ""))
-    commit_line = f"_commit: {commit}\n" if commit else ""
-    body = (
-        "# Managed by copier: this instance's identity and template\n"
-        f"# provenance. `{footman.prog()} new.package` appends to `packages`;"
-        " edit other\n"
-        "# values only when the workspace itself changes.\n"
-        f"{commit_line}"
-        f"_src_path: {redacted_source(template_source(root))}\n"
-        + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
-    )
-    write_lf(path, body)
+    if not count:
+        replaced = re.sub(
+            r"(?m)^\[workspace\]\n", lambda m: m.group(0) + line + "\n", text, count=1
+        )
+    if replaced != text:
+        write_lf(path, replaced)

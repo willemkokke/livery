@@ -1008,6 +1008,24 @@ Acceptance, refusals first:
 
 ### Phase 7: seeds and birth without copier
 
+**7a built (issue #1082): the answers move into the contracts.**
+Willem's ruling of 2026-10-03: the identity is `[workspace] name`,
+`description`, `namespace`, `authors = [{ name, email }]` and
+`copyright-year`; everything copier carried goes into `workshop.toml`,
+per project and per package. `livery.workshop._identity` reads them
+under the names the templates spell. The roster is discovery: a python
+member's dev-group extras are its own `dev-extras`, its description its
+own `description`, and a template variant of its kind its own
+`template`. The answers files are gone, root and per package (five of
+the seven package files were stale). Copier, until phase 8, takes the
+facts as render data and writes no answers file; `fm update`'s `copier
+update` reads one written for the run inside the git directory, never
+the working tree, with `_commit` from `[workspace] templates-ref`, which
+a remote birth and every update record. The uv workspace members, their
+sources and the dev group follow path order now. Proved by running: a
+local `fm new.project` wrote the identity into its contract, composed
+`pyproject.toml` from it, and left no answers file.
+
 Deliverables:
 
 - Seeds in extension wheels under `seeds/`; the `create` phase writes

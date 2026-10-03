@@ -34,10 +34,14 @@ def _home(tmp_path: Path) -> Path:
     (member / "workshop.toml").write_text('kind = "python"\nname = "acme-brand"\n')
     (member / "pyproject.toml").write_text('[project]\nname = "acme-brand"\n')
     (overlay / "project" / "BRAND.md.jinja").write_text("# {{ project_name }}\n")
-    (root / ".copier-answers.yml").write_text(
-        "_src_path: whatever\nkind: project\nproject_name: home\n"
-        "author_name: A\nauthor_email: a@e\ncopyright_year: '2026'\n"
-        "namespace_package: acme\npackages: []\n"
+    contract = (root / "workshop.toml").read_text()
+    (root / "workshop.toml").write_text(
+        contract.replace(
+            "[workspace]\n",
+            '[workspace]\nname = "home"\nnamespace = "acme"\n'
+            'authors = [{ name = "A", email = "a@e" }]\ncopyright-year = "2026"\n',
+            1,
+        )
     )
     return root
 
@@ -186,10 +190,14 @@ def test_a_child_renders_from_the_composed_artifact(
     (child / "pyproject.toml").write_text(
         '[project]\nname = "child"\nrequires-python = ">=3.11"\n'
     )
-    (child / ".copier-answers.yml").write_text(
-        "_src_path: whatever\nkind: project\nproject_name: child\n"
-        "author_name: A\nauthor_email: a@e\ncopyright_year: '2026'\n"
-        "namespace_package: kid\npackages: []\n"
+    contract = (child / "workshop.toml").read_text()
+    (child / "workshop.toml").write_text(
+        contract.replace(
+            "[workspace]\n",
+            '[workspace]\nname = "child"\nnamespace = "kid"\n'
+            'authors = [{ name = "A", email = "a@e" }]\ncopyright-year = "2026"\n',
+            1,
+        )
     )
     # The child's brand extension arrives installed, not as a member: the
     # wheel arm of the tree probe answers for it.

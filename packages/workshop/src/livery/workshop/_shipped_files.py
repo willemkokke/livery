@@ -44,10 +44,7 @@ template named like a tool's configuration file (`pyproject.toml`) would
 otherwise be read as one by the tool that searches the tree for it."""
 
 PROJECT_FILE = "pyproject.toml"
-"""The workspace's project file, which renders from the answers."""
-
-ANSWERS = ".copier-answers.yml"
-"""The answers a workshop-born workspace keeps at its root."""
+"""The workspace's project file, which renders from the contract's identity."""
 
 
 def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
@@ -70,9 +67,12 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
                     Fragment(extension, relative, f"{prefix}{relative}", source=source)
                 )
     fragments += _check_contributions(order)
-    if not (root / ANSWERS).is_file():
-        # The project file renders from the answers: the name, the
-        # roster, the floor. A workspace born without them composes none.
+    from livery.workshop._identity import is_born
+
+    if not is_born(root):
+        # The project file renders from the contract's identity: the
+        # name, the namespace, the authors. A workspace whose contract
+        # names no project composes none.
         fragments = [f for f in fragments if f.target != PROJECT_FILE]
     return fragments, order
 
@@ -126,32 +126,17 @@ def _check_contributions(order: list[str]) -> list[Fragment]:
 def _data(root: Path) -> dict[str, Any]:
     """What every shipped template reads.
 
-    The runner's name and the project's always; with the answers, also
-    everything the project's answers and the workspace's state give the
-    render: the roster, the Python floor, the slots, the extension
-    requirements and the registry.
+    The runner's name and the project's always; once the contract names
+    the project, also its identity and everything the workspace's state
+    gives the render: the roster, the Python floor, the slots, the
+    extension requirements and the registry.
     """
-    from livery.workshop._templates import (
-        fragment_data,
-        read_answers,
-        render_injections,
-    )
+    from livery.workshop._identity import is_born, project_facts
+    from livery.workshop._templates import fragment_data, render_injections
 
     data: dict[str, Any] = {"prog": footman.prog(), "project_name": root.resolve().name}
-    if (root / ANSWERS).is_file():
-        answers = read_answers(root / ANSWERS)
-        name = str(answers.get("project_name") or data["project_name"])
-        # The defaults of the questions an answers file may leave out,
-        # spelled as copier.yml spells them until the project is born
-        # from seeds alone.
-        defaults = {
-            "project_name": name,
-            "project_description": f"The {name} monorepo (virtual root).",
-            "author_name": f"{name} authors",
-            "author_email": "",
-            "namespace_package": name.lower().replace("-", "_").replace(" ", "_"),
-        }
-        answers = {**defaults, **answers}
+    if is_born(root):
+        answers = project_facts(root)
         data = fragment_data({**data, **answers, **render_injections(root, answers)})
     return data
 
