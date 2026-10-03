@@ -442,8 +442,9 @@ def sync(
     fragments, skills, and hooks, then the two locks. Both
     halves match their lock the way uv does: `tools.sync` for the
     tools, ``uv sync`` for the environment, each writing its lock when
-    there is none or the declarations have moved past it. Idempotent:
-    re-running it is the recovery procedure.
+    there is none or the declarations have moved past it. Last, the
+    composed and generated files are written again, since both read the
+    locks. Idempotent: re-running it is the recovery procedure.
 
     The three options are uv's and reach both halves: ``--frozen``
     installs each lock as it is and resolves nothing, ``--locked``
@@ -484,6 +485,16 @@ def sync(
     for line in conan_editables(root):
         print(line)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
+    # The locks just moved, and composed and generated files read them
+    # (the locked tools' fragment, the uv pin in setup.sh), so the sync
+    # ends by writing both again: the tree it leaves is settled.
+    from livery.workshop._shipped_files import deliver
+    from livery.workshop._templates import apply_generated
+
+    for line in deliver(root):
+        print(line)
+    for path in apply_generated(root):
+        print(f"  generated: {path}")
     # The receipt records this sync, so the next command's reconcile
     # compares instead of syncing again.
     from livery.workshop._reconcile import record_receipt
