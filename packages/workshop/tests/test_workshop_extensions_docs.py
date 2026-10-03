@@ -77,7 +77,7 @@ def test_the_docs_extension_has_its_own_entry_point_and_the_docs_group() -> None
         if entry.name in ("livery.workshop", "livery.extensions.docs")
     }
     assert found["livery.extensions.docs"] == "livery.extensions.docs._tasks"
-    assert found["livery.workshop"] == "livery.workshop._tasks"
+    assert found["livery.workshop"] == "livery.workshop._mount"
     from livery.footman import registry
 
     with registry.capture():

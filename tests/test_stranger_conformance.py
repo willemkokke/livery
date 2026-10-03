@@ -100,8 +100,9 @@ def test_the_render_carries_no_identity_but_the_answers(tmp_path: Path) -> None:
             if brand in text.lower():
                 offenders.append(f"{path.relative_to(root)}: spells {brand!r}")
     assert offenders == []
-    # The stack arrived through the contract, not a template byte.
-    assert 'plugin("livery.workshop")' in (root / "tasks.py").read_text()
+    # The stack arrives through the project's dependencies, so the
+    # rendered tasks file mounts nothing.
+    assert "plugin(" not in (root / "tasks.py").read_text()
     assert "acme" in (root / "pyproject.toml").read_text()
 
 

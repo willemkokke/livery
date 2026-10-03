@@ -294,6 +294,42 @@ def provider(tmp_path, monkeypatch):
     sys.modules.pop("shared_tasks", None)
 
 
+def test_a_plugin_mounted_inside_a_plugin_keeps_its_own_name(provider):
+    # A provider whose import mounts another plugin: the inner verbs stay
+    # under the inner plugin's name, and only the provider's own carry its.
+    (provider / "outer_tasks.py").write_text(
+        textwrap.dedent(
+            """
+            from livery.footman.api import plugin, task
+
+            @task
+            def own():
+                "The outer provider's own verb."
+
+            plugin("shared")
+            """
+        )
+    )
+    dist = provider / "outer_tasks-1.0.dist-info"
+    dist.mkdir()
+    (dist / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: outer-tasks\nVersion: 1.0\n"
+    )
+    (dist / "entry_points.txt").write_text("[footman.tasks]\nouter = outer_tasks\n")
+    import importlib
+
+    importlib.invalidate_caches()
+    sys.modules.pop("outer_tasks", None)
+    try:
+        with registry.capture() as captured:
+            compose.plugin("outer")
+        assert registry.mounted_from(captured.tasks["own"]) == "outer"
+        assert registry.mounted_from(captured.tasks["lint"]) == "shared"
+        assert captured.groups["docs"].mounted_from == "shared"
+    finally:
+        sys.modules.pop("outer_tasks", None)
+
+
 def test_include_grafts_all(provider):
     with registry.capture() as captured:
         compose.include("shared_tasks")

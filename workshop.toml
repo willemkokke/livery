@@ -5,17 +5,12 @@
 # The extensions, in precedence order, each by the name its
 # distribution declares in the workshop.extensions entry point group.
 # Discovery is this list and nothing else: an extension not named here
-# is not mounted, however it got installed. The base is never listed.
+# is not mounted, however it got installed. The base is never listed,
+# and a plugin (forge's dev verbs, the bench's tools verbs) mounts
+# because this project depends on it directly.
 extensions = [
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
-    # forge, the bench and footman add verbs alone: plugins, listed
-    # here until the workshop mounts a project's plugins by its
-    # dependencies. The bench depends on the handles, so
-    # livery-toolroom rides in with it.
-    "livery.forge",
-    "livery.toolroom.bench",
-    "livery.footman",
 ]
 # Where the rendered files come from: a directory relative to this
 # root, or a git URL (a fork, at your own risk). The update wave

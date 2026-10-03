@@ -605,17 +605,19 @@ def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) ->
     assert not [line for line in project_drift(root) if "retired" in line]
 
 
-def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
-    # The emitted legs run `fm --profile`; the flag exists only where
-    # the tasks file mounts footman.profile, so the render and the
-    # emitter move together, and the trace a local run writes is
-    # ignored like the coverage data beside it.
+def test_every_rendered_project_mounts_the_profiler(tmp_path: Path) -> None:
+    # The emitted legs run `fm --profile`; the flag exists where
+    # footman.profile mounts, which footman declares as a built-in of
+    # every project depending on it directly: the render names footman
+    # in its dev group, and the trace a local run writes is ignored like
+    # the coverage data beside it.
+    from importlib.metadata import entry_points
+
     rendered = _render_kind(tmp_path, "github")
-    tasks = (rendered / "tasks.py").read_text()
-    extension = tasks.index('plugin("livery.workshop")')
-    profiler = tasks.index('plugin("footman.profile")')
-    mount = tasks.index("mount_extensions()")
-    assert extension < profiler < mount
+    assert '"livery-footman' in (rendered / "pyproject.toml").read_text()
+    builtins = {entry.name for entry in entry_points(group="footman.builtin")}
+    assert "footman.profile" in builtins
+    assert "plugin(" not in (rendered / "tasks.py").read_text()
     # One trace per entry, so the rule is a pattern.
     ignored = (rendered / ".gitignore").read_text()
     assert "fm-profile*.json" in ignored
