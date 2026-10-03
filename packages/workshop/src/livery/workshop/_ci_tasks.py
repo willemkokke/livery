@@ -145,9 +145,12 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
     a path-filtered job) keeps its verdict until it re-runs, so
     scoping to the head sha alone would miss it. Each rerun is read
     back: a forge that quietly ignores the request is named, never
-    reported as re-running.
+    reported as re-running. Off main, a run on a commit main already
+    contains is main's verdict (a scheduled nightly, a merge-point
+    run): it is named and left for a re-run from main.
     """
     sha = _head_sha(repo, git)
+    on_main = git.current_branch() == "main"
     newest: dict[str, Run] = {}
     # Newest first; the scan is capped so a repository with a long
     # run history stays cheap. A run on a sha this clone does not
@@ -162,6 +165,25 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
         for run in newest.values()
         if run.status == "completed" and run.conclusion != "success"
     ]
+    from livery.workshop._points import BUILTIN, workflow_of
+
+    release_workflow = workflow_of("release")
+    mains = [
+        run
+        for run in failed
+        if not on_main
+        and run.head_sha != sha
+        and git.is_ancestor(run.head_sha, "origin/main")
+        and (run.workflow or "").rsplit("/", 1)[-1] != release_workflow
+    ]
+    for run in mains:
+        print(
+            f"  {run.workflow} (run {run.id}) failed on {run.head_sha[:10]}, which"
+            " main already has: it is main's verdict, so re-run it from main"
+        )
+    failed = [run for run in failed if run not in mains]
+    if not failed and mains:
+        return
     if not failed:
         running = [run for run in newest.values() if run.status != "completed"]
         for run in running:
@@ -178,11 +200,7 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
         if not running:
             print(f"  nothing failed on this branch as of {sha[:10]}")
         return
-    from livery.workshop._points import BUILTIN, workflow_of
-
-    release_workflow = workflow_of("release")
     verdict_jobs = {entry.job for entry in BUILTIN if entry.task == "ci.verdict"}
-    on_main = git.current_branch() == "main"
     for run in failed:
         workflow = (run.workflow or "").rsplit("/", 1)[-1]
         # A release wave is the train's: its recovery re-dispatches
