@@ -1,0 +1,79 @@
+{"name": "git_lfs", "description": "Store large files outside git, as pointers the checkout resolves", "kind": "download", "min_version": "", "hosts": ["macos-arm", "macos-x64", "linux-x64", "linux-arm", "windows-x64", "windows-arm"], "layout": {"root": "git-lfs-{version}", "entry_points": ["git-lfs"], "paths": ["."]}, "host_layouts": {"windows-x64": {"entry_points": ["git-lfs.exe"]}, "windows-arm": {"entry_points": ["git-lfs.exe"]}, "macos-arm": {"exclude": ["install.sh"]}, "macos-x64": {"exclude": ["install.sh"]}, "linux-x64": {"exclude": ["install.sh"]}, "linux-arm": {"exclude": ["install.sh"]}}}
+{"version": "3.8.0", "date": "2026-10-03", "artifacts": {"macos-arm": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-darwin-arm64-v3.8.0.zip", "sha256": "caff76a7d070d8160c89bc39b6e85d98f24135b6fed038a3b4de2590d25102d8"}, "macos-x64": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-darwin-amd64-v3.8.0.zip", "sha256": "f1c17aeca0b4eaab9ea606226477dbed3b84b56fe0811a9f967d2ea2b2393c53"}, "linux-x64": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-linux-amd64-v3.8.0.tar.gz", "sha256": "e455e00f15d9b95661b8d53498ffb0c3367962cf1ec73c31ab7369516cd6ab8d"}, "linux-arm": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-linux-arm64-v3.8.0.tar.gz", "sha256": "ac9c8efac980bb0505ead384d087e2acb6486fd8498691a2165fa174ec6118c2"}, "windows-x64": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-windows-amd64-v3.8.0.zip", "sha256": "b62e7b8ceddee635f691233d77de8eaa4b213e9209e0173811d8cfa77f7882c1"}, "windows-arm": {"url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.0/git-lfs-windows-arm64-v3.8.0.zip", "sha256": "72403a96eae6689c3a4038c99e5d9e0938ef5552c71a234aef65ef0c314af081"}}, "read": {"platforms": ["macOS"], "extractor": 4, "help": "git lfs <command> [<args>]"}}
+{"verb": "", "help": "git lfs <command> [<args>]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "fetch", "help": "git lfs fetch [options] [<remote> [<ref>...]]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "fetch", "option": "I", "flags": ["-I"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "fetch", "option": "X", "flags": ["-X"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "fetch", "option": "a", "flags": ["-a"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "all", "flags": ["--all"], "negation": "", "help": "Download all objects that are referenced by any commit reachable from the refs provided as arguments", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "d", "flags": ["-d"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Print what would be fetched, without actually fetching anything", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "exclude", "flags": ["--exclude"], "negation": "", "help": "Specify lfs.fetchexclude just for this invocation; see \"Include and exclude\"", "type": "str", "default": null, "choices": []}
+{"verb": "fetch", "option": "include", "flags": ["--include"], "negation": "", "help": "Specify lfs.fetchinclude just for this invocation; see \"Include and exclude\"", "type": "str", "default": null, "choices": []}
+{"verb": "fetch", "option": "j", "flags": ["-j"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "json", "flags": ["--json"], "negation": "", "help": "Writes the details of all object transfer requests as JSON to STDOUT, if the command exits successfully", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "p", "flags": ["-p"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "prune", "flags": ["--prune"], "negation": "", "help": "Prune old and unreferenced objects after fetching, equivalent to running git lfs prune afterwards", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "r", "flags": ["-r"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "recent", "flags": ["--recent"], "negation": "", "help": "Download objects referenced by recent branches & commits in addition to those that would otherwise be downloaded", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "refetch", "flags": ["--refetch"], "negation": "", "help": "Also fetch objects that are already present locally", "type": "bool", "default": null, "choices": []}
+{"verb": "fetch", "option": "stdin", "flags": ["--stdin"], "negation": "", "help": "Read a list of newline-delimited refs from standard input instead of the command line", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "help": "git lfs install [options]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "install", "option": "f", "flags": ["-f"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "file", "flags": ["--file"], "negation": "", "help": "Sets the lfs smudge and clean filters in the Git configuration file specified by the <file> argument", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "force", "flags": ["--force"], "negation": "", "help": "Sets the \"lfs\" smudge and clean filters, overwriting existing values", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "l", "flags": ["-l"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "local", "flags": ["--local"], "negation": "", "help": "Sets the \"lfs\" smudge and clean filters in the local repository's git config, instead of the global git config (~/.gitconfig)", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "m", "flags": ["-m"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "manual", "flags": ["--manual"], "negation": "", "help": "Print instructions for manually updating your hooks to include git-lfs functionality", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "s", "flags": ["-s"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "skip_repo", "flags": ["--skip-repo"], "negation": "", "help": "Skips installation of hooks into the local repository; use if you want to install the LFS filters but not make changes to the hooks", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "skip_smudge", "flags": ["--skip-smudge"], "negation": "", "help": "Skips automatic downloading of objects on clone or pull", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "system", "flags": ["--system"], "negation": "", "help": "Sets the \"lfs\" smudge and clean filters in the system git config, e.g. /etc/gitconfig instead of the global git config (~/.gitconfig)", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "w", "flags": ["-w"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "worktree", "flags": ["--worktree"], "negation": "", "help": "Sets the \"lfs\" smudge and clean filters in the current working tree's git config, instead of the global git config (~/.gitconfig) or local repository's git config ($GIT_DIR/config)", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "help": "git lfs ls-files [<ref>]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "ls_files", "option": "I", "flags": ["-I"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "ls_files", "option": "X", "flags": ["-X"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "ls_files", "option": "a", "flags": ["-a"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "all", "flags": ["--all"], "negation": "", "help": "Inspects the full history of the repository, not the current HEAD (or other provided reference)", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "d", "flags": ["-d"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Show as much information as possible about a LFS file", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "deleted", "flags": ["--deleted"], "negation": "", "help": "Shows the full history of the given reference, including objects that have been deleted", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "exclude", "flags": ["--exclude"], "negation": "", "help": "Exclude paths matching any of these patterns; see \"Fetch settings\"", "type": "str", "default": null, "choices": []}
+{"verb": "ls_files", "option": "include", "flags": ["--include"], "negation": "", "help": "Include paths matching only these patterns; see \"Fetch settings\"", "type": "str", "default": null, "choices": []}
+{"verb": "ls_files", "option": "j", "flags": ["-j"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "json", "flags": ["--json"], "negation": "", "help": "Writes Git LFS file information as JSON to STDOUT, if the command exits successfully", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "l", "flags": ["-l"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "long", "flags": ["--long"], "negation": "", "help": "Show the entire 64 character OID, instead of just first 10", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "n", "flags": ["-n"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "name_only", "flags": ["--name-only"], "negation": "", "help": "Show only the lfs tracked file names", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "s", "flags": ["-s"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "ls_files", "option": "size", "flags": ["--size"], "negation": "", "help": "Show the size of the LFS object between parenthesis at the end of a line", "type": "bool", "default": null, "choices": []}
+{"verb": "pull", "help": "git lfs pull [options] [<remote>]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "pull", "option": "I", "flags": ["-I"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "pull", "option": "X", "flags": ["-X"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "pull", "option": "exclude", "flags": ["--exclude"], "negation": "", "help": "Specify lfs.fetchexclude just for this invocation; see \"Include and exclude\"", "type": "str", "default": null, "choices": []}
+{"verb": "pull", "option": "include", "flags": ["--include"], "negation": "", "help": "Specify lfs.fetchinclude just for this invocation; see \"Include and exclude\"", "type": "str", "default": null, "choices": []}
+{"verb": "push", "help": "git lfs push [options] <remote> [<ref>...]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "push", "option": "a", "flags": ["-a"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "all", "flags": ["--all"], "negation": "", "help": "This pushes all objects to the remote that are referenced by any commit reachable from the refs provided as arguments", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "d", "flags": ["-d"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Print the files that would be pushed, without actually pushing them", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "o", "flags": ["-o"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "object_id", "flags": ["--object-id"], "negation": "", "help": "This pushes only the object OIDs listed at the end of the command, separated by spaces", "type": "bool", "default": null, "choices": []}
+{"verb": "push", "option": "stdin", "flags": ["--stdin"], "negation": "", "help": "Read a list of newline-delimited refs (or object IDs when using --object-id) from standard input instead of the command line", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "help": "git lfs track [options] [<pattern>...]", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "track", "option": "d", "flags": ["-d"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "If enabled, have git lfs track log all actions it would normally take (adding entries to .gitattributes, touching files on disk, etc) without performing any mutative operations to the disk", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "filename", "flags": ["--filename"], "negation": "", "help": "Treat the arguments as literal filenames, not as patterns", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "j", "flags": ["-j"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "json", "flags": ["--json"], "negation": "", "help": "Writes the currently tracked patterns as JSON to STDOUT, if the command exits successfully", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "l", "flags": ["-l"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "lockable", "flags": ["--lockable"], "negation": "", "help": "Make the paths 'lockable', meaning they should be locked to edit them, and will be made read-only in the working copy when not locked", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "no_excluded", "flags": ["--no-excluded"], "negation": "", "help": "Do not list patterns that are excluded in the output; only list patterns that are tracked", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "no_modify_attrs", "flags": ["--no-modify-attrs"], "negation": "", "help": "Makes matched entries stat-dirty so that Git can re-index files you wish to convert to LFS", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "not_lockable", "flags": ["--not-lockable"], "negation": "", "help": "Remove the lockable flag from the paths so they are no longer read-only unless locked", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "v", "flags": ["-v"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "track", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "If enabled, have git lfs track log files which it will touch", "type": "bool", "default": null, "choices": []}
+{"verb": "untrack", "help": "git lfs untrack <path>...", "wraps": false, "positional": "any", "lead": ""}

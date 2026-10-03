@@ -67,10 +67,11 @@ def _package(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
 
 def _base() -> tuple[Declared, ...]:
     """The base's keys: this module's, and those declared beside their readers."""
-    from livery.workshop import _docs_contract, _points, _registries, _tools
+    from livery.workshop import _docs_contract, _lfs, _points, _registries, _tools
 
     return (
         DECLARED
+        + _lfs.DECLARED
         + _registries.DECLARED
         + _docs_contract.DECLARED
         + _tools.declared_keys()

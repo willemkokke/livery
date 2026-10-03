@@ -190,6 +190,10 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         contract = package.directory / "workshop.toml"
         found += _requires(tools_table(contract), site=f"{package.path}/workshop.toml")
     found += _requires(tools_table(root / "workshop.toml"), site="workshop.toml")
+    from livery.workshop._lfs import TOOL, lfs_enabled
+
+    if lfs_enabled(root):
+        found.append(Requirement.parse(TOOL, site="workshop.toml [workspace] lfs"))
     return tuple(found)
 
 
