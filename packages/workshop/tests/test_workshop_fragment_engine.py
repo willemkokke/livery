@@ -158,6 +158,20 @@ def test_an_edited_file_is_kept_and_an_unedited_one_follows_the_render(
     assert "c.txt" not in engine.read_rendered(tmp_path)
 
 
+def test_a_crlf_checkout_of_a_rendered_file_is_the_same_file(tmp_path: Path) -> None:
+    """A Windows checkout's line endings are neither an edit nor drift."""
+    fragment = Fragment("docs", "a", "a.txt", "one\ntwo\n")
+    outputs = _plan(tmp_path, fragment)
+    engine.apply(tmp_path, outputs)
+    (tmp_path / "a.txt").write_bytes(b"one\r\ntwo\r\n")
+    assert engine.drift(tmp_path, outputs) == []
+    assert engine.apply(tmp_path, outputs) == []
+    # Unrendered, it is still unedited, so it goes.
+    assert engine.apply(tmp_path, ()) == [
+        "  removed a.txt: no listed extension renders it"
+    ]
+
+
 # --- composition ----------------------------------------------------------------
 
 

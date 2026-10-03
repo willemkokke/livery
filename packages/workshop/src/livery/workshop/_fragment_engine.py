@@ -394,6 +394,15 @@ def plan(
     return tuple(outputs)
 
 
+def _committed(path: Path) -> bytes:
+    """*path*'s bytes with LF line endings, as the engine writes and compares them.
+
+    A Windows checkout may hold CRLF where the repository has LF; the
+    file is the same file, so neither an edit nor drift.
+    """
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def read_rendered(directory: Path) -> dict[str, str]:
     """The receipts in *directory*, name to digest; empty without any."""
     path = directory / RENDERED_MANIFEST
@@ -465,7 +474,7 @@ def apply(
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(output.body)
             lines.append(f"  wrote {output.path}")
-        elif (existing := target.read_bytes()) == output.body:
+        elif (existing := _committed(target)) == output.body:
             pass
         elif recorded is not None and _digest(existing) == recorded:
             target.write_bytes(output.body)
@@ -486,7 +495,7 @@ def apply(
             target = root / path
             if not target.is_file():
                 continue
-            if _digest(target.read_bytes()) == recorded:
+            if _digest(_committed(target)) == recorded:
                 target.unlink()
                 lines.append(f"  removed {path}: no listed extension renders it")
             else:
@@ -505,7 +514,7 @@ def drift(root: Path, outputs: Sequence[Output]) -> list[str]:
         target = root / output.path
         if not target.is_file():
             lines.append(f"  {output.path}: missing; `{prog()} sync` writes it")
-        elif target.read_bytes() != output.body:
+        elif _committed(target) != output.body:
             owners = ", ".join(output.owners)
             lines.append(f"  {output.path}: differs from what {owners} render")
     return lines
