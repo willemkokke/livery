@@ -786,12 +786,36 @@ def current() -> Context:
     return ctx if ctx is not None else Context()
 
 
-_WALL_ANCHOR: tuple[float, float] = (time.time(), time.perf_counter())
-"""One sampling of both clocks, taken together, so a wall-clock moment maps
-onto the run clock every record in this module keeps: a retroactive
+def _sample_anchor(tries: int = 8) -> tuple[float, float]:
+    """One pairing of the wall clock with the run clock, its error bounded.
+
+    `time.time()` is read between two `perf_counter()` reads and paired
+    with their midpoint; of several such brackets the narrowest wins. A
+    single pair taken one call after the other carries whatever time the
+    process lost between the two calls, and a preempted process on a
+    loaded machine loses tens of milliseconds there: every span of that
+    process then lands that much late beside another process's, a child
+    ending after the parent step that waited for it.
+    """
+    best: tuple[float, float, float] | None = None
+    for _ in range(tries):
+        before = time.perf_counter()
+        wall = time.time()
+        after = time.perf_counter()
+        width = after - before
+        if best is None or width < best[0]:
+            best = (width, wall, (before + after) / 2)
+    assert best is not None
+    return best[1], best[2]
+
+
+_WALL_ANCHOR: tuple[float, float] = _sample_anchor()
+"""One pairing of both clocks, so a wall-clock moment maps onto the run
+clock every record in this module keeps: a retroactive
 `Stream.section(start=…, end=…)` window lands beside spans that were stamped
-live. Module-level on purpose — `perf_counter`'s origin is arbitrary but
-process-wide, so one anchor serves every run in the process."""
+live, and one process's timeline lands beside another's. Module-level on
+purpose — `perf_counter`'s origin is arbitrary but process-wide, so one
+anchor serves every run in the process."""
 
 
 @dataclass(frozen=True)

@@ -3344,3 +3344,19 @@ def test_the_async_refusal_reads_the_call_not_the_function():
 
     _, _, proper_results = drive(build_proper, "proper")
     assert proper_results[0].ok and ran.get("proper")  # awaited: real work
+
+
+def test_the_clock_anchor_skips_a_preempted_reading(monkeypatch):
+    """A process descheduled between its two clock reads misplaces its spans.
+
+    The first bracket lost 50 ms between the run-clock reads; a later
+    one lost none. The anchor pairs the wall clock with the narrow
+    bracket's midpoint, so the 50 ms never enters the mapping.
+    """
+    from livery.footman import context
+
+    perf = iter([10.0, 10.05, 20.0, 20.000002, 30.0, 30.00001])
+    wall = iter([1000.0, 2000.0, 3000.0])
+    monkeypatch.setattr(context.time, "perf_counter", lambda: next(perf))
+    monkeypatch.setattr(context.time, "time", lambda: next(wall))
+    assert context._sample_anchor(tries=3) == pytest.approx((2000.0, 20.000001))
