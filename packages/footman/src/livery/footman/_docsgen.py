@@ -253,6 +253,12 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
     ),
     ("Composing tasks", "", ["include", "plugin", "capture"]),
     (
+        "Installed entry points",
+        "One scan of every installed distribution per process, shared by "
+        "footman's plugin loader and anything built on footman.",
+        ["installed_entry_points", "rescan_entry_points"],
+    ),
+    (
         "The invocation, and editing the discovered tree",
         "`@pre_tasks` runs a hook once per invocation, over the fully-merged "
         "cascade and before anything else — see "

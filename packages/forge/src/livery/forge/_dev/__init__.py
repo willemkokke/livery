@@ -38,11 +38,6 @@ import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
 
-#: The tools these verbs need, read by the workshop without importing
-#: this module: docker runs the containers, and a workspace that never
-#: brings them up does without it.
-TOOLS = ("docker?",)
-
 forge = group("forge", help="livery.forge development")
 dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
 

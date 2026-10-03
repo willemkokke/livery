@@ -1075,13 +1075,9 @@ def test_plugin_claimed_by_two_distributions_teaches(monkeypatch):
             self.dist = dist
             self.group = compose.ENTRY_POINT_GROUP
 
-    import importlib.metadata
+    from livery.footman import _entries
 
-    monkeypatch.setattr(
-        importlib.metadata,
-        "entry_points",
-        lambda **kw: [FakeEP("alpha 1.0"), FakeEP("beta 2.0")],
-    )
+    monkeypatch.setattr(_entries, "_SCAN", (FakeEP("alpha 1.0"), FakeEP("beta 2.0")))
     monkeypatch.setattr(compose, "_module_trees", {})
     with pytest.raises(RegistrationError, match=r"more than one distribution"):
         compose.plugin("twice")
@@ -1290,9 +1286,9 @@ def test_plugin_entry_point_of_the_wrong_type_teaches(monkeypatch):
         def load(self):
             return 42
 
-    import importlib.metadata
+    from livery.footman import _entries
 
-    monkeypatch.setattr(importlib.metadata, "entry_points", lambda **kw: [FakeEP()])
+    monkeypatch.setattr(_entries, "_SCAN", (FakeEP(),))
     monkeypatch.setattr(compose, "_module_trees", {})
     with pytest.raises(RegistrationError, match="got int"):
         compose.plugin("wrong")

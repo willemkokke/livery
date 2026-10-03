@@ -572,12 +572,10 @@ def _own_plugin_flags() -> dict[str, str]:
         return cached
     found: dict[str, str] = {}
     try:
-        from importlib.metadata import entry_points
-
-        from livery.footman import compose
+        from livery.footman import _entries, compose
 
         vouched = _vouched_distributions()
-        for ep in entry_points(group=compose.ENTRY_POINT_GROUP):
+        for ep in _entries.installed_entry_points(compose.ENTRY_POINT_GROUP):
             meta = getattr(ep.dist, "metadata", None)
             if not meta or meta.get("Name", "") not in vouched:
                 continue

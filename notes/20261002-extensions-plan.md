@@ -756,12 +756,19 @@ where the chosen version has an artifact, a tool every site marks
 optional takes the newest version that resolves somewhere, its entry
 says `optional`, and what is left out is the lock's `notes`, printed by
 `fm tools.lock`; `fm tools.sync` names an optional tool its host lacks.
-A plugin the project rung mounts declares `TOOLS = (...)` in its entry
-module, read with `ast` and never imported; forge's dev plugin declares
+A plugin the project rung mounts declares its tools in a data module
+its `workshop.tools` entry point names (issue #1049, which replaced the
+`ast` read: Willem's ruling of 2026-10-03, a data module is cleaner and
+faster, about 0.5 ms against 1.8 ms a plugin); forge's dev plugin declares
 `docker?` and the root contract dropped `docker`. The lock holds the
 same 20 tools, docker now `optional`. The receipt was not given an
 "absent" word: the lock's `optional` and the sync's line carry it, so a
 receipt stays the record of an install.
+
+footman scans the installed entry points once per process, every
+group at once, and `livery.footman.api.installed_entry_points` serves
+footman's loader, its rungs and the workshop's readers from that scan
+(issue #1049): one read of about 2 ms where each group cost one.
 
 5e (`[workspace] platforms`) is not started.
 

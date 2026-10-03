@@ -94,6 +94,7 @@ def test_two_owners_declaring_one_key_refuse_naming_both(
 
     class _Entry:
         name = "acme.extension"
+        group = "workshop.extensions"
 
         @staticmethod
         def load() -> object:
@@ -103,7 +104,9 @@ def test_two_owners_declaring_one_key_refuse_naming_both(
                 CONTRACT_KEYS=(_contract_keys.Declared("root", "forge.kind", ("str",)),)
             )
 
-    monkeypatch.setattr("importlib.metadata.entry_points", lambda group: [_Entry()])
+    from livery.footman import _entries  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setattr(_entries, "_SCAN", (_Entry(),))
     _contract_keys.declarations.cache_clear()
     try:
         assert (

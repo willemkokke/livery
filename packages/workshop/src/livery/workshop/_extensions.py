@@ -73,9 +73,9 @@ def workspace_root(start: Path | None = None) -> Path | None:
 
 def _declared() -> dict[str, EntryPoint]:
     """Every installed extension's entry point, by name."""
-    from importlib.metadata import entry_points
+    from livery.footman.api import installed_entry_points
 
-    return {entry.name: entry for entry in entry_points(group=GROUP)}
+    return {entry.name: entry for entry in installed_entry_points(GROUP)}
 
 
 def declaration(extension: str) -> ModuleType | None:

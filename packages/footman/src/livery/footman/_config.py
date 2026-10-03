@@ -623,11 +623,12 @@ def installed_entry_points() -> tuple[str, ...]:
     from it — is the same on every run whatever order the metadata is read
     in.
     """
-    from importlib.metadata import entry_points
-
+    from livery.footman import _entries
     from livery.footman.compose import ENTRY_POINT_GROUP
 
-    return tuple(sorted({ep.name for ep in entry_points(group=ENTRY_POINT_GROUP)}))
+    return tuple(
+        sorted({ep.name for ep in _entries.installed_entry_points(ENTRY_POINT_GROUP)})
+    )
 
 
 def effective_builtin(brand: tuple[str, ...]) -> tuple[str, ...]:
@@ -680,7 +681,7 @@ def project_builtin(root: Path) -> tuple[str, ...]:
     contributes nothing: depending on a plugin is the choice to have its
     verbs, and a dependency of a dependency is nobody's choice.
     """
-    from importlib.metadata import entry_points
+    from livery.footman import _entries
 
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
@@ -702,7 +703,7 @@ def project_builtin(root: Path) -> tuple[str, ...]:
         dict.fromkeys(name for name in map(_requirement_name, declared) if name)
     )
     offered: dict[str, list[str]] = {}
-    for entry in entry_points(group="footman.builtin"):
+    for entry in _entries.installed_entry_points("footman.builtin"):
         dist = getattr(entry, "dist", None)
         name = _requirement_name(getattr(dist, "name", "") or "") if dist else ""
         if name:

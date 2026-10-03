@@ -284,9 +284,13 @@ def _load_entry_point(name: str) -> Group:
     entry point that resolves to something that isn't a Group or a module
     of tasks.
     """
-    from importlib.metadata import entry_points
+    from livery.footman import _entries
 
-    matches = [ep for ep in entry_points(group=ENTRY_POINT_GROUP) if ep.name == name]
+    matches = [
+        ep
+        for ep in _entries.installed_entry_points(ENTRY_POINT_GROUP)
+        if ep.name == name
+    ]
     if len(matches) > 1:
         dists = ", ".join(str(ep.dist) for ep in matches)
         raise RegistrationError(
@@ -341,9 +345,11 @@ def _resolve_plugin(source: str) -> tuple[str, Group | Task]:
     installed prefix would also resolve fully, both readings are named on
     stderr — a new package must never silently re-point an existing mount.
     """
-    from importlib.metadata import entry_points
+    from livery.footman import _entries
 
-    installed = {ep.name: ep for ep in entry_points(group=ENTRY_POINT_GROUP)}
+    installed = {
+        ep.name: ep for ep in _entries.installed_entry_points(ENTRY_POINT_GROUP)
+    }
     segments = source.split(".")
     prefixes = [
         ".".join(segments[:n])
