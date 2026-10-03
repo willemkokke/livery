@@ -56,8 +56,10 @@ test = [
     # casts; both pure Python, so every platform leg drives them.
     "rich>=13",
     "pyte>=0.8",
-    # The suite drives the toolroom bridge.
+    # The suite drives the toolroom bridge, and the playground renders
+    # the tools' stubs through the store.
     "livery-toolroom>=0.8.0",
+    "livery-toolroom-store>=0.0.0",
 ]
 
 [project.urls]
