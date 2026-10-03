@@ -36,8 +36,6 @@ from livery.workshop._packages import Package
 PROJECT_RENDERED = (
     "pyproject.toml",
     "tasks.py",
-    ".gitignore",
-    ".gitattributes",
     ".vscode/settings.json",
     ".vscode/extensions.json",
 )
@@ -297,6 +295,30 @@ def _rule_generated(
     )
 
 
+def _rule_composed(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del emitted
+    from livery.workshop._fragment_engine import PACKAGE_PREFIX
+    from livery.workshop._shipped_files import shipped
+
+    fragments, _order = shipped(root)
+    owners = [
+        fragment.owner
+        for fragment in fragments
+        if not fragment.target.startswith(PACKAGE_PREFIX)
+        and fragment.target == relative.as_posix()
+    ]
+    if not owners:
+        return None
+    prog = footman.prog()
+    return Provenance(
+        "composed",
+        f"the fragment engine, from {', '.join(dict.fromkeys(owners))}",
+        f"edit inside its regions, or the extension's lines, and run `{prog} sync`",
+    )
+
+
 def _rule_rendered(
     root: Path, relative: Path, emitted: frozenset[str] | None
 ) -> Provenance | None:
@@ -439,6 +461,7 @@ register_channels(
     [
         ChannelRule("materialised", _rule_materialised, 100, "livery.workshop"),
         ChannelRule("generated", _rule_generated, 90, "livery.workshop"),
+        ChannelRule("composed", _rule_composed, 85, "livery.workshop"),
         ChannelRule("rendered", _rule_rendered, 80, "livery.workshop"),
         ChannelRule("seed", _rule_seed, 70, "livery.workshop"),
         ChannelRule("answers", _rule_answers, 60, "livery.workshop"),

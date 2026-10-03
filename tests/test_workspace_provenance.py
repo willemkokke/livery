@@ -38,8 +38,8 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
     expect = {
         "pyproject.toml": "rendered",
         "tasks.py": "rendered",
-        ".gitignore": "rendered",
-        ".gitattributes": "rendered",
+        ".gitignore": "composed",
+        ".gitattributes": "composed",
         ".github/workflows/ci.yml": "generated",
         ".github/CODEOWNERS": "generated",
         "workshop.toml": "contract",

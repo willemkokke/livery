@@ -11,7 +11,8 @@ committed files instead.
 How the fragments of one target combine depends on the target's type:
 
 - a TOML file joins its fragments' tables in extension order;
-- an ignore or attribute file joins their lines, each line once;
+- an ignore or attribute file joins their lines, each line once, and
+  puts the repository's regions after every extension's lines;
 - a JSON file merges their objects key by key;
 - any other file has one owner.
 
@@ -26,7 +27,9 @@ A target is a path at the root, or `package/<path>` for that path in
 every package whose extensions include the owner.
 
 The receipts in `.workshop-rendered`, at the root and in each package,
-record the digest of each file as the engine last wrote it. A file
+record the digest of each file as the engine last wrote it, its
+regions left out, so an edit inside a region does not count as an
+edit of the file. A file
 whose fragments are gone is removed only while it still has those
 bytes; a file edited since is kept and named as the repository's own,
 and so is an edited file the engine would otherwise rewrite. Regions,
@@ -301,17 +304,28 @@ def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
             fail(f"{path}: the tables of {names} do not compose: {error}")
         return text
     if kind == "lines":
+        from livery.workshop._regions import regions_in
+
         seen: set[str] = set()
         lines: list[str] = []
+        regions: list[str] = []
         for _fragment, text in parts:
-            for line in text.splitlines():
+            # A region is the repository's, and its lines come after
+            # every extension's, whichever fragment carries the markers.
+            split = text.splitlines()
+            spans = [(region.first, region.last) for region in regions_in(text)]
+            inside = {n for first, last in spans for n in range(first, last + 1)}
+            regions.extend(split[n - 1] for n in sorted(inside))
+            for number, line in enumerate(split, start=1):
+                if number in inside:
+                    continue
                 keyed = line.strip()
                 if keyed and not keyed.startswith("#"):
                     if keyed in seen:
                         continue
                     seen.add(keyed)
                 lines.append(line)
-        return "\n".join(lines) + "\n"
+        return "\n".join([*lines, *regions]) + "\n"
     merged: dict[str, Any] = {}
     owners: dict[str, str] = {}
     for fragment, text in parts:
@@ -392,6 +406,24 @@ def plan(
             Output(path, text.encode(), tuple(fragment.ref for fragment in members))
         )
     return tuple(outputs)
+
+
+def _owned(body: bytes) -> str:
+    """The digest of what the engine owns in *body*: everything but its regions.
+
+    A region's lines are the repository's, so an edit inside one is not
+    an edit of the engine's file, and a receipt never records them.
+    """
+    from livery.workshop._regions import regions_in
+
+    text = body.decode("utf-8", errors="replace")
+    regions = regions_in(text)
+    if not regions:
+        return _digest(body)
+    lines = text.split("\n")
+    inside = {n for r in regions for n in range(r.first + 1, r.last)}
+    kept = [line for number, line in enumerate(lines, start=1) if number not in inside]
+    return _digest("\n".join(kept).encode())
 
 
 def _committed(path: Path) -> bytes:
@@ -476,7 +508,7 @@ def apply(
             lines.append(f"  wrote {output.path}")
         elif (existing := _committed(target)) == output.body:
             pass
-        elif recorded is not None and _digest(existing) == recorded:
+        elif recorded is not None and _owned(existing) == recorded:
             target.write_bytes(output.body)
             lines.append(f"  updated {output.path}")
         else:
@@ -485,7 +517,7 @@ def apply(
                 " delete it to take the rendered file"
             )
             continue
-        receipts[home][name] = _digest(output.body)
+        receipts[home][name] = _owned(output.body)
     for home in homes:
         for name, recorded in sorted(receipts[home].items()):
             path = f"{home}/{name}" if home else name
@@ -495,7 +527,7 @@ def apply(
             target = root / path
             if not target.is_file():
                 continue
-            if _digest(_committed(target)) == recorded:
+            if _owned(_committed(target)) == recorded:
                 target.unlink()
                 lines.append(f"  removed {path}: no listed extension renders it")
             else:

@@ -95,7 +95,7 @@ def test_this_workspace_renders_its_own_regions_back(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[3]
     answers = read_answers(root / ".copier-answers.yml")
     regions = render_injections(root, answers)["regions"]
-    assert set(regions) >= {"pyproject.toml", ".gitignore", "tasks.py"}
+    assert set(regions) >= {"pyproject.toml", "tasks.py"}
     # The three execution environments this repository declares live in
     # its own region, not in the base template.
     tables = regions["pyproject.toml"]["tables"]

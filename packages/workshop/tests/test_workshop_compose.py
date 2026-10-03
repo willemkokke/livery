@@ -136,12 +136,12 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
         )
     )
     overlay = _overlay(root)
-    (overlay / "project" / ".gitignore.jinja").write_text(
-        (root / "templates/project/.gitignore.jinja").read_text() + "brand-extra/\n"
+    (overlay / "project" / "tasks.py.jinja").write_text(
+        (root / "templates/project/tasks.py.jinja").read_text() + "# brand-extra\n"
     )
     (overlay / "overlay.toml").write_text(
-        '[[replace]]\npath = "project/.gitignore.jinja"\n'
-        'reason = "the brand ignores its own build tree"\n'
+        '[[replace]]\npath = "project/tasks.py.jinja"\n'
+        'reason = "the brand mounts its own tasks"\n'
     )
     (root / ".copier-answers.yml").write_text(
         "_src_path: templates\n"
@@ -155,18 +155,18 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
     )
     source, _ref, owners = render_source(root)
     assert source.endswith("composed-templates")
-    assert owners["project/.gitignore.jinja"] == "acme.brand"
+    assert owners["project/tasks.py.jinja"] == "acme.brand"
     changed = apply_project(root)
-    assert ".gitignore" in changed
-    assert "brand-extra/" in (root / ".gitignore").read_text()
+    assert "tasks.py" in changed
+    assert "# brand-extra" in (root / "tasks.py").read_text()
     assert project_drift(root) == []
     # A doctored composed file names the extension that owns it. Doctored
-    # wholesale, it has also lost its `rules` region's markers, which
+    # wholesale, it has also lost its `tasks` region's markers, which
     # the line names first.
-    (root / ".gitignore").write_text("# doctored\n")
+    (root / "tasks.py").write_text("# doctored\n")
     drift = project_drift(root)
     assert any(
-        ".gitignore: the `rules` region's markers are rendered; restore them,"
+        "tasks.py: the `tasks` region's markers are rendered; restore them,"
         " `fm template.apply` rewrites them (the acme.brand extension owns it)" in line
         for line in drift
     )

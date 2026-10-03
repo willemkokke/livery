@@ -59,7 +59,9 @@ def sync_workspace(root: Path) -> list[str]:
     The engine behind ``fm sync``, separated so tests drive it against
     temporary trees.
     """
-    lines: list[str] = []
+    from livery.workshop._shipped_files import deliver
+
+    lines: list[str] = deliver(root)
     extensions = stack_names(root)
     contents = [
         (extension, content)
