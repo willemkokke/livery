@@ -2044,6 +2044,37 @@ def test_a_stacked_branch_whose_parent_merged_moves_its_own_commits_before_the_p
     )
 
 
+def test_an_armed_stacked_branch_waits_for_its_open_parent_unarmed(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A child of an open parent is never armed; the recovery is named."""
+    fake, git = rig
+    root = git.root
+    _git(root, "checkout", "-b", "feat/0-parent", "origin/main")
+    (root / "parent.txt").write_text("p\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: the parent")
+    git.push("feat/0-parent")
+    _git(root, "checkout", "-B", "feat/1-first", "feat/0-parent")
+    git.record_stack("feat/1-first", "feat/0-parent", git.head_sha())
+    (root / "child.txt").write_text("c\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: the child")
+    # The task resolves the base from the record before the flow runs.
+    number = _submit(
+        fake, git, armed=True, follow_to_verdict=False, base="feat/0-parent"
+    )
+    out = capsys.readouterr().out
+    assert (
+        "  arming: off - feat/0-parent is still open; after it merges, run"
+        " `fm sync` then `fm submit --armed`"
+    ) in out
+    repo = _repo(fake)
+    pr = repo.pr.get(number)
+    assert pr is not None and pr.base_branch == "feat/0-parent"
+    assert not repo.pr.is_armed(number)
+
+
 def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     rig: tuple[FakeForge, SubmitGit],
     capsys: pytest.CaptureFixture[str],
