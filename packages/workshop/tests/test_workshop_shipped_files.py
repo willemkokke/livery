@@ -210,3 +210,24 @@ def test_the_header_lint_leaves_the_engines_templates_alone(tmp_path: Path) -> N
     assert content_lint(tmp_path) == [
         "packages/thing/src/livery/thing/content/fragments/voice.md: missing its header"
     ]
+
+
+def test_a_toml_region_and_its_comment_come_after_every_extensions_tables(
+    tmp_path: Path,
+) -> None:
+    base = Fragment(
+        "livery.workshop",
+        "p",
+        "pyproject.toml",
+        "[project]\nname = 'acme'\n\n# The repository's own tables.\n"
+        "# -- workshop: region tables, yours to edit; the render keeps it --\n"
+        "# -- workshop: end tables --\n",
+    )
+    ruff = Fragment("docs", "t", "pyproject.toml", "[tool.ruff]\nline-length = 88\n")
+    (out,) = engine.plan(tmp_path, (base, ruff), ("livery.workshop", "docs"), {})
+    assert out.body.decode() == (
+        "[project]\nname = 'acme'\n\n[tool.ruff]\nline-length = 88\n\n"
+        "# The repository's own tables.\n"
+        "# -- workshop: region tables, yours to edit; the render keeps it --\n"
+        "# -- workshop: end tables --\n"
+    )

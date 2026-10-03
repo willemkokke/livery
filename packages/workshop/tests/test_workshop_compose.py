@@ -58,7 +58,7 @@ def test_add_and_declared_replace_compose(tmp_path: Path) -> None:
     text = (composed.path / "project" / "README.md.jinja").read_text()
     assert text == "# the brand's own\n"
     assert composed.owners["project/README.md.jinja"] == "acme.brand"
-    assert composed.owners["project/pyproject.toml.jinja"] == "livery.workshop"
+    assert composed.owners["project/tasks.py.jinja"] == "livery.workshop"
     config = (composed.path / "copier.yml").read_text()
     assert "Contributed by the acme.brand extension" in config
     assert "brand_motto" in config
@@ -67,11 +67,11 @@ def test_add_and_declared_replace_compose(tmp_path: Path) -> None:
 def test_an_undeclared_same_path_file_is_refused(tmp_path: Path) -> None:
     root = _home(tmp_path)
     overlay = _overlay(root)
-    (overlay / "project" / "pyproject.toml.jinja").write_text("# patched\n")
+    (overlay / "project" / "tasks.py.jinja").write_text("# patched\n")
     with pytest.raises(_FAILURES) as caught:
         compose_source(root, tmp_path / "out")
     text = str(caught.value)
-    assert "project/pyproject.toml.jinja" in text
+    assert "project/tasks.py.jinja" in text
     assert "acme.brand" in text and "never edits" in text
 
 

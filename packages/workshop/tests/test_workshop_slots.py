@@ -135,8 +135,7 @@ def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
         assert f'    "{requirement}",\n' in text
     assert 'addopts = "-q -n auto --dist=worksteal --import-mode=importlib"' in text
     template = (
-        root
-        / "packages/workshop/src/livery/workshop/templates/project/pyproject.toml.jinja"
+        root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
     assert '"pytest-xdist>=3.6",' not in template
     assert 'addopts = "-q' not in template

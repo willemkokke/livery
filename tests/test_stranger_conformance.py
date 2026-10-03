@@ -77,6 +77,9 @@ def _stranger(destination: Path) -> Path:
         },
     )
     apply_generated(destination)
+    from livery.workshop._shipped_files import deliver
+
+    deliver(destination)
     return destination
 
 

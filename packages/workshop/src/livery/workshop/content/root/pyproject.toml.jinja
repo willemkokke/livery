@@ -1,7 +1,8 @@
 {% set py = packages | selectattr("dev") | list %}{% set native = packages | rejectattr("dev") | list -%}
-# Rendered by the template channel ({{ template_source_label }}, project kind);
-# the gate keeps it matching its render. Edit the source and
-# run `{{ runner_prog }} template.apply`; an edit here is drift.
+# Composed by `{{ prog }} sync` from the base's template and the tables
+# each registered check owns; the gate keeps it matching. Edit inside
+# the region at the end, which is the repository's own; an edit
+# anywhere else is drift.
 # The workspace's virtual root: never built, never published.
 [project]
 name = "{{ project_name }}"
@@ -76,11 +77,7 @@ dev = [
 # to its page in the owning package's section.
 docs-url = "{{ docs_site_url }}tasks/{slug}/"
 
-{% endif %}# The tables the registered checks own, each a check record's
-# fragment for this file, composed in check-name order; a check a
-# extension withdraws takes its tables with it.
-{{ fragments['pyproject.toml'] }}
-[tool.footman.notes]
+{% endif %}[tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or
 # an ambient write is fixed or deliberately classified, never
 # ambient. Loosen a single kind here with a reason, never the star.
@@ -91,4 +88,4 @@ docs-url = "{{ docs_site_url }}tasks/{slug}/"
 # suite, a `[tool.x]` of your own), never a key inside a table the
 # render wrote; a tool with an `extend-` spelling takes that.
 # -- workshop: region tables, yours to edit; the render keeps it --
-{{ (regions.get('pyproject.toml') or {}).get('tables', '') }}# -- workshop: end tables --
+# -- workshop: end tables --

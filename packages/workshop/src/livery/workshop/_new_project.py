@@ -236,7 +236,7 @@ def new_project(
         contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("  workshop.toml: seeded")
 
-    if (root / "pyproject.toml").is_file():
+    if (root / ".copier-answers.yml").is_file():
         print("  render: already born")
     else:
         from livery.workshop._templates import (
@@ -271,6 +271,13 @@ def new_project(
 
         _write_root_answers(root, stored)
         print("  render: born")
+
+    # The project file is composed from the answers, and the lock below
+    # reads it, so the composed files are written before the first lock.
+    from livery.workshop._shipped_files import deliver
+
+    for line in deliver(root):
+        print(line)
 
     from livery.workshop._uv import run_uv
 

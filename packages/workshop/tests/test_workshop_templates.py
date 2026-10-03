@@ -25,6 +25,7 @@ from livery.workshop._templates import (
     read_answers,
     render,
 )
+from workshop_composed import compose_into
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -237,11 +238,11 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert "workshop.toml" not in changed
     assert project_drift(root) == []
     assert apply_project(root) == []  # idempotent: a clean tree changes nothing
-    (root / "pyproject.toml").write_text("# doctored\n")
+    (root / "tasks.py").write_text("# doctored\n")
     drift = project_drift(root)
-    # Doctored wholesale, the file has lost its `tables` region's markers.
+    # Doctored wholesale, the file has lost its `tasks` region's markers.
     assert (
-        "pyproject.toml: the `tables` region's markers are rendered; restore"
+        "tasks.py: the `tasks` region's markers are rendered; restore"
         " them, `fm template.apply` rewrites them" in drift
     )
 
@@ -263,7 +264,7 @@ def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     answers.update({"kind": "project", "forge_kind": forge_kind}, **extra)
     answers.update(extra)
     render(TEMPLATES, destination, answers)
-    return destination
+    return compose_into(destination)
 
 
 def test_each_forge_kind_generates_a_ci_definition_that_lints(
@@ -694,7 +695,9 @@ def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     assert "``hse check``" in tasks
 
 
-def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
+def test_the_rendered_answers_never_store_the_brand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from livery.workshop._templates import render
 
     answers = read_answers(ROOT / ".copier-answers.yml")
@@ -707,7 +710,10 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
     # The brand belongs to the process; a stored copy would pin the
     # instance to the CLI that happened to render it.
     assert "runner_prog" not in stored
-    # The meter comment rides the brand too.
+    # The meter comment rides the brand too: the composed project file
+    # takes it from the process, as the render does.
+    monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
+    compose_into(destination)
     assert "# hse child a test spawns" in (destination / "pyproject.toml").read_text()
 
 
@@ -912,9 +918,6 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
-    (root / "pyproject.toml").write_text(
-        '[project]\nname = "instance"\nrequires-python = ">=3.11"\n'
-    )
     (root / ".copier-answers.yml").write_text(
         "_src_path: whatever\n"
         "kind: project\n"
@@ -925,7 +928,8 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
         "namespace_package: acme\n"
         "packages: []\n"
     )
-    return root
+    # A born instance's project file is the one the engine composed.
+    return compose_into(root)
 
 
 def test_new_package_renders_from_the_artifact_repository(
