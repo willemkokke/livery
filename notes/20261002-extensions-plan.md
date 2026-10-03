@@ -770,7 +770,15 @@ group at once, and `livery.footman.api.installed_entry_points` serves
 footman's loader, its rungs and the workshop's readers from that scan
 (issue #1049): one read of about 2 ms where each group cost one.
 
-5e (`[workspace] platforms`) is not started.
+5e (`[workspace] platforms`) is not started. It carries Willem's
+rulings of 2026-10-03 on the clang tools: `clang-format` and
+`clang-tidy` become two `pypi` records over the `ssciwr` wheels, one
+build per release for every host we lock, macos-x64 included; the
+hand-written records over the third-party static builds go, pinned at
+20.1.0 where PyPI has clang-tidy 22.1.8 and clang-format 23.1.2.
+macos-x64 stays a supported host, proved on a `macos-15-intel` leg; the
+phase opens with an audit naming every record that lacks a macos-x64
+build, and those carry a scope.
 
 Carried from the empty shell plan's phase 12, extended.
 
@@ -998,7 +1006,12 @@ Deliverables:
 
 - The toolchain engine in the base; `[toolchain.<language>]`.
 - The `cpp` extension's families and probes behind seams; the `llvm`
-  and `gcc` records with profiles; the conan profile rendered from the
+  and `gcc` records with profiles; `llvm` has two, `slim` and `full`,
+  and both exclude clang-format and clang-tidy, which come from their
+  own `pypi` records on every host (5e); on macos-arm and macos-x64
+  Xcode at or above its floor answers an `llvm` requirement, the
+  archive serving macos-arm when Xcode is absent and macos-x64
+  refusing with Xcode named; the conan profile rendered from the
   receipt; the lock holding several toolchain versions side by side.
 - Receipts in the run record and, per artifact, in the release series
   (`fm store.show release --key=<tag>`).
@@ -1254,6 +1267,23 @@ Acceptance:
 - Willem: a `run` phase starts a package's executables, after a
   development build of the dependency closure that builds only what
   changed; one affected engine serves the gate, sync and that build.
+- Willem, 2026-10-03: clang-format and clang-tidy come from PyPI
+  (the `ssciwr` wheels) on every host, as two `pypi` records, never
+  from `llvm`: one source with one version everywhere, so the format
+  and lint checks agree across hosts. Xcode's clang-format reports
+  "Apple clang-format version 21.0.0", no upstream release, and is
+  never used for formatting; Xcode ships no clang-tidy. The `edit-only`
+  profile goes; `slim` excludes both tools, and `full` excludes them
+  too, so two copies never compete for one name on PATH. This
+  replaces the toolchain plan's ruling of 2026-09-30 that the
+  smallest `llvm` profile carries them.
+- Willem, 2026-10-03: macos-x64 stays supported. Apple's last Intel
+  release is macOS 26 and GitHub's `macos-15-intel` image is the last
+  x64 one, but the PyPI wheels and Xcode cover the LLVM tools there.
+- Willem, 2026-10-03: a tool two records can provide comes from its
+  own record unless a required collection contains it. No record
+  overlaps once the clang tools leave `llvm`; the rule waits for the
+  first one that does.
 - 2026-10-02: the release notes provider, the derived version and the
   member list (the empty shell plan's phases 7 and 8a) are the
   foundations phase 11 composes on.
