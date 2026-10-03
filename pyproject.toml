@@ -111,11 +111,9 @@ convention = "google"
 "tests/**" = ["D1"]
 "tests/**/*_test.py" = ["D1"]
 "tests/**/test_*.py" = ["D1"]
-# The provenance headers name the template source verbatim, and a
-# source URL or path may be long.
+# The composed tasks.py opens with the header the fragment engine
+# writes, whose lines it does not wrap.
 "tasks.py" = ["E501"]
-"tests/test_workspace_contracts.py" = ["E501"]
-"tests/test_docs_drift.py" = ["E501"]
 # The CI emitters carry workflow YAML as string content, and the
 # check records' fragments carry the rendered files' tables; their
 # lines are the generated files' lines, not prose to wrap.

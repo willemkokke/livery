@@ -39,15 +39,7 @@ PROJECT = "project"
 """The tree a workspace's birth writes."""
 
 #: The base's project seeds, which `fm explain` names as seeds.
-PROJECT_SEEDS = (
-    "tests/test_workspace_contracts.py",
-    "tests/test_docs_drift.py",
-    "docs/index.md",
-    "docs/assets/og-card.png",
-    "docs/assets/site.css",
-    "README.md",
-    "LICENSE",
-)
+PROJECT_SEEDS = ("docs/index.md", "README.md", "LICENSE")
 
 
 def derived(facts: Mapping[str, Any]) -> dict[str, str]:

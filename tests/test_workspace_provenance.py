@@ -51,7 +51,7 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
         "CLAUDE.md": "sync stub",
         "CLAUDE.project.md": "yours",
         "notes/20260830-development-workflows.md": "yours",
-        "tests/test_workspace_contracts.py": "seed",
+        "LICENSE": "seed",
         (
             "packages/workshop/src/livery/workshop/content/"
             "fragments/interaction-voice.md"

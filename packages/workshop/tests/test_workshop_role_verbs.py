@@ -29,6 +29,7 @@ from livery.workshop._checks import (
     unregister_check,
     verb_tree,
 )
+from livery.workshop._extensions import SELF
 from livery.workshop._packages import discover_packages
 
 _FAILURES = (BaseException,)
@@ -306,7 +307,12 @@ def test_a_second_generation_follows_the_registry(empty: None) -> None:
 
 
 def test_the_builtin_checks_generate_the_role_verbs() -> None:
-    tree = {role: set(tools) for role, tools in verb_tree().items()}
+    # The base's own: an extension mounted earlier in this process (the
+    # docs extension's lint checks) adds its checks beside them.
+    tree = {
+        role: {tool for tool, record in tools.items() if record.extension == SELF}
+        for role, tools in verb_tree().items()
+    }
     assert tree == {
         "build": {"compile", "configure"},
         "examples": {"pytest"},

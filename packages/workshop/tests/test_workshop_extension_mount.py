@@ -162,19 +162,25 @@ def test_an_undeclared_extension_is_taken_at_the_current_version() -> None:
 def test_the_gate_names_what_a_extension_registered_and_withdrew(
     restored_checks,
 ) -> None:
-    assert _checks.narrowings() == ()
+    # An extension mounted earlier in this process (the docs extension's
+    # checks) is already named; the lines below are this test's own.
+    before = set(_checks.narrowings())
+
+    def added() -> set[str]:
+        return set(_checks.narrowings()) - before
+
     register_check(CheckRecord("brand", "lint", _noop, extension="acme.brand"))
     unregister_check("typecheck.mypy", by="acme.brand")
-    assert _checks.narrowings() == (
+    assert added() == {
         "  lint.brand: registered by acme.brand",
         "  typecheck.mypy: withdrawn by acme.brand",
-    )
+    }
     # An extension withdrawing its own check narrows nothing the base owned.
     unregister_check("lint.brand", by="acme.brand")
-    assert _checks.narrowings() == ("  typecheck.mypy: withdrawn by acme.brand",)
+    assert added() == {"  typecheck.mypy: withdrawn by acme.brand"}
     # Registering the name again clears the withdrawal.
     register_check(CheckRecord("mypy", "typecheck", _noop))
-    assert _checks.narrowings() == ()
+    assert added() == set()
 
 
 def test_the_doctor_lists_installed_extensions_the_contract_does_not_mount() -> None:

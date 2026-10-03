@@ -463,9 +463,9 @@ def _authored_nav_lines(
     return lines
 
 
-#: The workspace's own css, listed last while it exists: an
-#: instance-owned file, born from the template as an empty sheet,
-#: written by the instance and removable by deleting it.
+#: The workspace's own css, listed last while it exists, so its rules
+#: win over every extension's: a file the workspace adds when it wants
+#: one.
 WORKSPACE_CSS = ("assets/site.css",)
 #: Where the build stages the extensions' site assets, relative to the
 #: docs tree, one directory per extension: machine territory, rebuilt
@@ -473,8 +473,9 @@ WORKSPACE_CSS = ("assets/site.css",)
 EXTENSION_ASSETS = "_extensions"
 #: The directory of an extension's content that holds its site assets.
 CONTENT_ASSETS = "docs/assets"
-#: The link-preview card image's committed home; the image tags are
-#: emitted only while it exists.
+#: The workspace's own link-preview card image. Without it the site
+#: uses the card the last extension ships under its site assets, and
+#: without either it emits no image tags.
 CARD_IMAGE = "docs/assets/og-card.png"
 
 
@@ -593,6 +594,26 @@ def extension_assets(root: Path) -> list[tuple[str, Path]]:
         if assets.is_dir():
             found.append((extension, assets))
     return found
+
+
+def card_path(root: Path) -> str:
+    """The link-preview card's path in the site, or empty when there is none.
+
+    The workspace's own ``docs/assets/og-card.png`` first, then the card
+    the last extension in the workspace's order ships, at the path the
+    build stages it under.
+    """
+    if (root / CARD_IMAGE).is_file():
+        return "assets/og-card.png"
+    name = Path(CARD_IMAGE).name
+    shipped = [
+        extension
+        for extension, assets in extension_assets(root)
+        if (assets / name).is_file()
+    ]
+    if not shipped:
+        return ""
+    return f"{EXTENSION_ASSETS}/{shipped[-1]}/assets/{name}"
 
 
 def stage_extension_assets(root: Path) -> list[str]:
@@ -825,27 +846,31 @@ def overrides_template(root: Path) -> str:
 
     The brand leads on the home page, because that is the URL that
     gets posted and a feed truncates from the right; elsewhere the
-    page leads. The image tags are emitted only while the committed
-    card exists, and every URL is absolute: a preview is fetched by
-    someone else's server, which has no page to resolve a relative
-    path against.
+    page leads. The image tags name the workspace's own card, else the
+    card an extension ships, else are left out. Every URL is absolute:
+    a preview is fetched by someone else's server, which has no page to
+    resolve a relative path against.
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
     description = str(table.get("description", ""))
-    card = (root / CARD_IMAGE).is_file()
+    card = card_path(root)
     image_block = (
-        """
-  {% set image = config.site_url ~ "assets/og-card.png" %}
+        (
+            """
+  {% set image = config.site_url ~ "__CARD__" %}
   <meta property="og:image" content="{{ image }}">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="__ALT__">
   <meta name="twitter:image" content="{{ image }}">"""
-        if card
-        else ""
-    ).replace("__ALT__", description or title)
+            if card
+            else ""
+        )
+        .replace("__ALT__", description or title)
+        .replace("__CARD__", card)
+    )
     return (
         (
             """{% extends "base.html" %}
