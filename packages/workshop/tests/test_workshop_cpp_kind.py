@@ -485,7 +485,9 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
 
     data = {**answers, "kind": "project"}
     render(str(TEMPLATES), destination, {**data, "fragments": compose_fragments(data)})
-    pyproject = (destination / "pyproject.toml").read_text()
+    from workshop_composed import compose_into
+
+    pyproject = (compose_into(destination) / "pyproject.toml").read_text()
     assert '"packages/alpha"' in pyproject
     assert 'members = ["packages/alpha"]' in pyproject
     assert "acme-native" not in pyproject

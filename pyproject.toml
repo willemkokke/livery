@@ -1,6 +1,7 @@
-# Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
-# the gate keeps it matching its render. Edit the source and
-# run `fm template.apply`; an edit here is drift.
+# Composed by `fm sync` from the base's template and the tables
+# each registered check owns; the gate keeps it matching. Edit inside
+# the region at the end, which is the repository's own; an edit
+# anywhere else is drift.
 # The workspace's virtual root: never built, never published.
 [project]
 name = "livery"
@@ -76,9 +77,12 @@ dev = [
 # to its page in the owning package's section.
 docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 
-# The tables the registered checks own, each a check record's
-# fragment for this file, composed in check-name order; a check a
-# extension withdraws takes its tables with it.
+[tool.footman.notes]
+# Every misuse note fails the task at its boundary: a raw spawn or
+# an ambient write is fixed or deliberately classified, never
+# ambient. Loosen a single kind here with a reason, never the star.
+"*" = "error"
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -291,12 +295,6 @@ python-platform = "all"
 python-version = "3.11"
 # The tool stubs `fm tools.restub` writes.
 extra-paths = ["typings"]
-
-[tool.footman.notes]
-# Every misuse note fails the task at its boundary: a raw spawn or
-# an ambient write is fixed or deliberately classified, never
-# ambient. Loosen a single kind here with a reason, never the star.
-"*" = "error"
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[[tool.basedpyright.executionEnvironments]]` for an imported

@@ -287,6 +287,28 @@ def _merge(
     walk(into, part, "")
 
 
+def _regions_apart(text: str) -> tuple[list[str], list[str]]:
+    """*text*'s lines outside its regions, and its regions' lines.
+
+    A region is the repository's, and it comes after every extension's
+    content, whichever fragment carries the markers. The comment lines
+    directly above a region's opening marker travel with it, since they
+    explain it.
+    """
+    from livery.workshop._regions import regions_in
+
+    lines = text.splitlines()
+    moving: set[int] = set()
+    for region in regions_in(text):
+        first = region.first
+        while first > 1 and lines[first - 2].lstrip().startswith(("#", "//")):
+            first -= 1
+        moving.update(range(first, region.last + 1))
+    outside = [line for n, line in enumerate(lines, start=1) if n not in moving]
+    inside = [line for n, line in enumerate(lines, start=1) if n in moving]
+    return outside, inside
+
+
 def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
     """The text of *path* from its rendered *parts*, in the order they apply."""
     kind = composition(path)
@@ -301,7 +323,15 @@ def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
     if kind == "tables":
         import tomllib
 
-        text = "\n".join(text.strip("\n") + "\n" for _fragment, text in parts)
+        kept: list[str] = []
+        tail: list[str] = []
+        for _fragment, text in parts:
+            outside, inside = _regions_apart(text)
+            kept.append("\n".join(outside).strip("\n") + "\n")
+            tail.extend(inside)
+        text = "\n".join(kept)
+        if tail:
+            text += "\n" + "\n".join(tail) + "\n"
         try:
             tomllib.loads(text)
         except tomllib.TOMLDecodeError as error:
@@ -309,21 +339,13 @@ def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
             fail(f"{path}: the tables of {names} do not compose: {error}")
         return text
     if kind == "lines":
-        from livery.workshop._regions import regions_in
-
         seen: set[str] = set()
         lines: list[str] = []
         regions: list[str] = []
         for _fragment, text in parts:
-            # A region is the repository's, and its lines come after
-            # every extension's, whichever fragment carries the markers.
-            split = text.splitlines()
-            spans = [(region.first, region.last) for region in regions_in(text)]
-            inside = {n for first, last in spans for n in range(first, last + 1)}
-            regions.extend(split[n - 1] for n in sorted(inside))
-            for number, line in enumerate(split, start=1):
-                if number in inside:
-                    continue
+            outside, inside = _regions_apart(text)
+            regions.extend(inside)
+            for line in outside:
                 keyed = line.strip()
                 if keyed and not keyed.startswith("#"):
                     if keyed in seen:

@@ -3,7 +3,8 @@
 An extension ships a workspace file as a template in its wheel, under
 `content/root/<path>` for a file at the workspace root and
 `content/package/<path>` for that file in every package listing the
-extension. `fm sync` composes them with
+extension; a `.jinja` suffix on the source is dropped for the
+target. `fm sync` composes them with
 [livery.workshop._fragment_engine.plan][] and writes them with
 [livery.workshop._fragment_engine.apply][]; the gate's template check
 judges them with [livery.workshop._fragment_engine.drift][].
@@ -37,6 +38,17 @@ ROOT_CONTENT = "root"
 PACKAGE_CONTENT = "package"
 """The `content/` subdirectory whose files land in each package."""
 
+TEMPLATE = ".jinja"
+"""The suffix a shipped template may carry, dropped for its target: a
+template named like a tool's configuration file (`pyproject.toml`) would
+otherwise be read as one by the tool that searches the tree for it."""
+
+PROJECT_FILE = "pyproject.toml"
+"""The workspace's project file, which renders from the answers."""
+
+ANSWERS = ".copier-answers.yml"
+"""The answers a workshop-born workspace keeps at its root."""
+
 
 def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
     """Every listed extension's shipped files as fragments, and the order they apply."""
@@ -53,11 +65,15 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
             for source in sorted(base.rglob("*")):
                 if not source.is_file() or "__pycache__" in source.parts:
                     continue
-                relative = source.relative_to(base).as_posix()
+                relative = source.relative_to(base).as_posix().removesuffix(TEMPLATE)
                 fragments.append(
                     Fragment(extension, relative, f"{prefix}{relative}", source=source)
                 )
     fragments += _check_contributions(order)
+    if not (root / ANSWERS).is_file():
+        # The project file renders from the answers: the name, the
+        # roster, the floor. A workspace born without them composes none.
+        fragments = [f for f in fragments if f.target != PROJECT_FILE]
     return fragments, order
 
 
@@ -71,10 +87,19 @@ def _check_contributions(order: list[str]) -> list[Fragment]:
     from livery.workshop._checks import checks_by_name
 
     found: list[Fragment] = []
-    for name, record in checks_by_name().items():
+    for name, record in sorted(checks_by_name().items()):
         if record.extension not in order:
             continue
         for fragment in record.fragments:
+            if fragment.file == PROJECT_FILE:
+                found.append(
+                    Fragment(
+                        record.extension,
+                        f"check {name} tables",
+                        PROJECT_FILE,
+                        fragment.text,
+                    )
+                )
             if fragment.file == ".vscode/settings.json":
                 found.append(
                     Fragment(
@@ -98,13 +123,37 @@ def _check_contributions(order: list[str]) -> list[Fragment]:
     return found
 
 
-def _data(root: Path) -> dict[str, str]:
-    """What every shipped template reads: the runner's name and the project's."""
-    from livery.workshop._templates import read_answers
+def _data(root: Path) -> dict[str, Any]:
+    """What every shipped template reads.
 
-    answers = root / ".copier-answers.yml"
-    named = read_answers(answers).get("project_name") if answers.is_file() else None
-    return {"prog": footman.prog(), "project_name": str(named or root.resolve().name)}
+    The runner's name and the project's always; with the answers, also
+    everything the project's answers and the workspace's state give the
+    render: the roster, the Python floor, the slots, the extension
+    requirements and the registry.
+    """
+    from livery.workshop._templates import (
+        fragment_data,
+        read_answers,
+        render_injections,
+    )
+
+    data: dict[str, Any] = {"prog": footman.prog(), "project_name": root.resolve().name}
+    if (root / ANSWERS).is_file():
+        answers = read_answers(root / ANSWERS)
+        name = str(answers.get("project_name") or data["project_name"])
+        # The defaults of the questions an answers file may leave out,
+        # spelled as copier.yml spells them until the project is born
+        # from seeds alone.
+        defaults = {
+            "project_name": name,
+            "project_description": f"The {name} monorepo (virtual root).",
+            "author_name": f"{name} authors",
+            "author_email": "",
+            "namespace_package": name.lower().replace("-", "_").replace(" ", "_"),
+        }
+        answers = {**defaults, **answers}
+        data = fragment_data({**data, **answers, **render_injections(root, answers)})
+    return data
 
 
 def outputs(root: Path) -> tuple[Output, ...]:

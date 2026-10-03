@@ -183,8 +183,7 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
         assert table in composed
     assert "packages/workshop/src" in composed  # the roster reaches the fragments
     template = (
-        root
-        / "packages/workshop/src/livery/workshop/templates/project/pyproject.toml.jinja"
+        root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
     assert "[tool.ruff]" not in template and "[tool.pytest.ini_options]" not in template
     assert injected["extensions"] == ["charliermarsh.ruff", "detachedfork.basedpyright"]

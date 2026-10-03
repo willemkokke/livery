@@ -146,10 +146,14 @@ def refresh_rendered(root: Path) -> list[str]:
         Path(data_file).unlink(missing_ok=True)
     if result.code != 0:
         fail(f"copier update exited {result.code}:\n{result.stdout}{result.stderr}")
+    from livery.workshop._shipped_files import deliver
     from livery.workshop._templates import apply_generated
 
+    # The composed files come from the installed extensions, not from
+    # the template copier just updated from.
+    composed = [line.strip() for line in deliver(root)]
     generated = apply_generated(root)
-    return [*notes, "copier update ran; review the working tree", *generated]
+    return [*notes, "copier update ran; review the working tree", *composed, *generated]
 
 
 def _align_answers_source(root: Path, source: str) -> list[str]:

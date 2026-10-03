@@ -2,5 +2,6 @@
   ".gitattributes": "777778cbdb9c481540de884a4820c5dbe8ff65dad89d3b07385d1eeb702e0f4d",
   ".gitignore": "33c511d98f9f94d8b036d3716c82e536f868eb7f3f0d133cff63fdfbf04ee9e4",
   ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
-  ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111"
+  ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111",
+  "pyproject.toml": "a15ad0b049e91b871ab96197b8920a5a7f2244f9414b23ab356ef3973429d1ef"
 }

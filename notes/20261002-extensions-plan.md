@@ -910,6 +910,25 @@ onto the first slice's templates, so the composed `.gitignore` and
 the lint now skips `content/root/` and `content/package/`, whose
 composed files carry their own header, and the stamped lines are gone.
 
+**6b, `pyproject.toml` slice built (issue #1076).** The root
+`pyproject.toml` is the base's template in the engine, rendered from
+the answers, the copier injections and the checks' fragment data (one
+`fragment_data` builds it for both renders); each check's tables are a
+fragment its extension owns, in check-name order, and the
+repository's `tables` region, with the comment above it, comes after
+every extension's tables (the rule now holds for TOML and line files
+alike). The defaults of the questions an answers file may leave out
+are spelled beside the data, as copier.yml spells them, until birth
+needs no copier. `apply_project` and the remote update compose the
+engine's files too, so `fm new.package` wires a member into the
+project file; a birth composes them before its first `uv lock`, and
+"born" is the answers file. A workspace without answers composes no
+project file. Against the copier render only the header changed and
+`[tool.footman.notes]` moved above the checks' tables. Not covered:
+an instance's copier-written `pyproject.toml` is kept as an edit on
+its first sync, like any file the engine did not write, and taken by
+deleting it once.
+
 **6b, the channels move onto it.** Deliverables:
 
 - Check fragments (the `[tool.*]` tables, `.vscode` files,

@@ -95,14 +95,16 @@ def test_this_workspace_renders_its_own_regions_back(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[3]
     answers = read_answers(root / ".copier-answers.yml")
     regions = render_injections(root, answers)["regions"]
-    assert set(regions) >= {"pyproject.toml", "tasks.py"}
+    assert set(regions) >= {"tasks.py"}
     # The three execution environments this repository declares live in
-    # its own region, not in the base template.
-    tables = regions["pyproject.toml"]["tables"]
+    # its own region of the composed project file, not in the base's
+    # template.
+    from livery.workshop._regions import contents
+
+    tables = contents(root / "pyproject.toml")["tables"]
     assert "packages/footman/tests" in tables
     template = (
-        root
-        / "packages/workshop/src/livery/workshop/templates/project/pyproject.toml.jinja"
+        root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
     assert "packages/footman" not in template
 
