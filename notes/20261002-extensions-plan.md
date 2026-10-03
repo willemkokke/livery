@@ -784,15 +784,6 @@ hosts and locks six. The tools without a build somewhere carry a scope:
 Windows hosts. `uv` moved from 0.11.26 to 0.12.5, the one version
 the record carries a windows-arm build for.
 
-5f (the clang tools from PyPI) is not started. It carries Willem's
-rulings of 2026-10-03 on the clang tools: `clang-format` and
-`clang-tidy` become two `pypi` records over the `ssciwr` wheels, one
-build per release for every host we lock, macos-x64 included; the
-hand-written records over the third-party static builds go, pinned at
-20.1.0 where PyPI has clang-tidy 22.1.8 and clang-format 23.1.2.
-macos-x64 stays a supported host with no CI leg for now; the phase
-opens with an audit naming every record that lacks a macos-x64 build,
-and those carry a scope.
 **5f built (issue #1057): the clang tools from PyPI.** Both records
 are `pypi` records at the locked 20.1.0, which has no `win_arm64`
 wheel for either, so the scopes narrowed to `clang_format@!windows-arm`
