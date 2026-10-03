@@ -868,7 +868,17 @@ def submit_flow(
         print(f"  Closes #{linked} on merge")
     elif not close:
         print("  closes nothing (--no-close): the branch's issue stays open")
-    if armed_reason:
+    parent, _tip = git.stack(plan.branch)
+    if armed and parent and plan.base == parent:
+        # The forge refuses to arm a pull request into a branch with no
+        # required checks, and arming into the parent would land the
+        # child there, not on main: the arm waits for the parent's merge.
+        armed = False
+        print(
+            f"  arming: off - {parent} is still open; after it merges, run"
+            f" `{footman.prog()} sync` then `{footman.prog()} submit --armed`"
+        )
+    elif armed_reason:
         print(f"  arming: {'on' if armed else 'off'} - decided by {armed_reason}")
     number = push_and_pr(repo, git, plan, closes=linked, armed=armed, force=force)
     if not follow_to_verdict:

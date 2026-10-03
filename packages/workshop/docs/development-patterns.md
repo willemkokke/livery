@@ -61,6 +61,12 @@ targets the parent, so the child's pull request shows only its own
 diff and gets its own CI while the parent's is still running. A
 `--base` flag on `fm submit` always wins over the record.
 
+While the parent is open, `fm submit --armed` from the child opens or
+updates its pull request and leaves it unarmed: arming it would merge
+it into the parent's branch, which has no required checks. After the
+parent merges, `fm sync` and then `fm submit --armed` arm it against
+main.
+
 The child's own commits then follow the parent:
 
 - **The parent moves.** When the parent gains commits or is rebased
