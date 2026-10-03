@@ -36,12 +36,14 @@ def test_a_spelling_outside_the_grammar_refuses() -> None:
         Spec.parse("llvm[a b]", where="here")
 
 
-def test_a_requirement_refuses_what_its_sites_do_not_take_yet() -> None:
-    # Until a site takes options, `?` or `!`, a tool requirement refuses
-    # them as it always did.
-    for text in ("llvm[slim]", "docker?", "tea@!windows"):
-        with pytest.raises(LockError, match="is not a requirement"):
-            Requirement.parse(text, site="here")
+def test_a_tool_requirement_refuses_options_and_takes_the_rest() -> None:
+    with pytest.raises(LockError, match="names options; a tool requirement takes none"):
+        Requirement.parse("llvm[slim]", site="here")
+    requirement = Requirement.parse("docker?>=27@!windows-arm", site="here")
+    assert requirement == Requirement(
+        "docker", "27", "here", (), True, ("windows-arm",)
+    )
+    assert str(requirement) == "docker?>=27@!windows-arm"
 
 
 # Then the parse.

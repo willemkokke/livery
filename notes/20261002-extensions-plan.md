@@ -750,8 +750,20 @@ its sites take them, refuses options, `?` and `!` as before. Willem's
 ruling of 2026-10-03: parse the grammar once and let each site add its
 own rule, the parser being public API like the lock it serves.
 
-5d (`?` and `!` at the tool sites, plugins' tool declarations) and 5e
-(`[workspace] platforms`) are not started.
+**5d built (issue #1047).** A tool requirement takes `?` and `!`. The
+lock resolves required sites as before; an optional site's hosts join
+where the chosen version has an artifact, a tool every site marks
+optional takes the newest version that resolves somewhere, its entry
+says `optional`, and what is left out is the lock's `notes`, printed by
+`fm tools.lock`; `fm tools.sync` names an optional tool its host lacks.
+A plugin the project rung mounts declares `TOOLS = (...)` in its entry
+module, read with `ast` and never imported; forge's dev plugin declares
+`docker?` and the root contract dropped `docker`. The lock holds the
+same 20 tools, docker now `optional`. The receipt was not given an
+"absent" word: the lock's `optional` and the sync's line carry it, so a
+receipt stays the record of an install.
+
+5e (`[workspace] platforms`) is not started.
 
 Carried from the empty shell plan's phase 12, extended.
 

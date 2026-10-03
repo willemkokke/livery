@@ -45,7 +45,6 @@ index = "records"
 # own tests build a native library and an extension against it.
 requires = [
     "git",
-    "docker",
     "coverage",
     "zensical",
     "cmake",

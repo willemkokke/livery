@@ -60,19 +60,31 @@ class Requirement:
         hosts: The hosts the requirement applies to, each a platform
             (``windows``, every locked host of that platform) or a
             host key (``windows-x64``); empty for every locked host.
+        optional: Whether ``?`` marks it optional: locked where the
+            catalogue can serve it, never refused.
+        exclude: The platforms and host keys ``!`` removes from its
+            hosts.
     """
 
     name: str
     floor: str = ""
     site: str = ""
     hosts: tuple[str, ...] = ()
+    optional: bool = False
+    exclude: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, text: str, *, site: str = "") -> Requirement:
-        """A requirement from its spelling, `name`, `name>=floor`, `name@hosts`.
+        """A requirement from its spelling, ``name?>=floor@scope``.
 
-        The hosts after ``@`` are comma-separated platforms or host
-        keys, ``dotnet_coverage@windows`` or ``tea>=1.1@linux,macos-arm``.
+        Every part after the name is optional.
+
+        ``?`` marks it optional. The scope after ``@`` is comma-separated
+        platforms or host keys, each excluded with a leading ``!``:
+        ``dotnet_coverage@windows``, ``tea>=1.1@linux,macos-arm``,
+        ``docker?@!windows-arm``. The grammar is
+        [livery.toolroom.store.api.Spec][]'s; a tool requirement takes
+        no options.
 
         Raises:
             LockError: for a spelling that is none of these, or a
@@ -84,16 +96,29 @@ class Requirement:
             spec = Spec.parse(text, where=where)
         except SpecError as error:
             raise LockError(str(error)) from None
-        if spec.options or spec.optional or spec.scope.exclude:
+        if spec.options:
             raise LockError(
-                f"{where}: {text!r} is not a requirement; spell it `name`,"
-                " `name>=floor`, or either followed by `@hosts`"
+                f"{where}: {text!r} names options; a tool requirement takes"
+                " none, spell it `name?>=floor@scope`"
             )
-        return cls(spec.name, spec.floor, site, spec.scope.include)
+        return cls(
+            spec.name,
+            spec.floor,
+            site,
+            spec.scope.include,
+            spec.optional,
+            spec.scope.exclude,
+        )
 
     def __str__(self) -> str:
-        spelled = f"{self.name}>={self.floor}" if self.floor else self.name
-        return f"{spelled}@{','.join(self.hosts)}" if self.hosts else spelled
+        return str(
+            Spec(
+                self.name,
+                optional=self.optional,
+                floor=self.floor,
+                scope=Scope(self.hosts, self.exclude),
+            )
+        )
 
     def satisfied_by(self, version: str) -> bool:
         """Whether *version* is at or above the floor."""
@@ -101,7 +126,7 @@ class Requirement:
 
     def on(self, locked: Iterable[str]) -> tuple[str, ...]:
         """The hosts of *locked* this requirement applies to, in their order."""
-        return Scope(self.hosts).hosts(locked)
+        return Scope(self.hosts, self.exclude).hosts(locked)
 
 
 @dataclass(frozen=True)
@@ -171,6 +196,8 @@ class Locked:
             the requirement's floor; the workspace's `host-allowed`
             list says so, and the entry carries `allow-host` so every
             checkout and CI agree on which tools may vary.
+        optional: Whether every site that requires the tool marks it
+            optional, so a host it is not locked on lacks it by design.
     """
 
     version: str
@@ -178,6 +205,7 @@ class Locked:
     graph: Graph | None = None
     on: tuple[str, ...] = ()
     allow_host: bool = False
+    optional: bool = False
 
     def applies(self, host: str) -> bool:
         """Whether the tool is locked for *host*."""
@@ -195,6 +223,8 @@ class Locked:
             out["on"] = list(self.on)
         if self.allow_host:
             out["allow-host"] = True
+        if self.optional:
+            out["optional"] = True
         return out
 
 
@@ -205,10 +235,13 @@ class Lock:
     Attributes:
         hosts: The host keys every locked download resolves on.
         tools: Tool name to its locked version and deployments.
+        notes: What the resolution left out and why: an optional tool
+            the catalogue could not serve. Not written to the file.
     """
 
     hosts: tuple[str, ...]
     tools: dict[str, Locked]
+    notes: tuple[str, ...] = field(default=(), compare=False)
 
     def on_host(self, host: str) -> tuple[str, ...]:
         """The tools locked for *host*, in name order."""
@@ -284,8 +317,13 @@ class Lock:
                 raise LockError(
                     f"{path}: {name}: `allow-host` is {allowed!r}, not true or false"
                 )
+            optional = entry.get("optional", False)
+            if not isinstance(optional, bool):
+                raise LockError(
+                    f"{path}: {name}: `optional` is {optional!r}, not true or false"
+                )
             locked[str(name)] = Locked(
-                entry["version"], digests, graph, tuple(scope), allowed
+                entry["version"], digests, graph, tuple(scope), allowed, optional
             )
         return cls(tuple(hosts), locked)
 
@@ -313,6 +351,13 @@ def resolve_lock(
     allowance in its entry, whatever *keep* said of it: the allowance
     is the sites' current word, never a kept one.
 
+    An optional requirement (``?``) is never refused. Its hosts join a
+    tool's entry where the version the required sites chose has an
+    artifact; a tool every site marks optional takes the newest
+    version satisfying its floors that resolves somewhere, is locked
+    where it resolves, and its entry says ``optional``. What is left
+    out, a host or a whole tool, is named in the lock's ``notes``.
+
     Raises:
         LockError: naming the first requirement that cannot be met:
             a tool the catalogue does not list, a floor above every
@@ -328,33 +373,93 @@ def resolve_lock(
     moving = set(upgrade)
     allowed = set(host_allowed)
     tools: dict[str, Locked] = {}
+    notes: list[str] = []
     for name in sorted(by_tool):
         wants = by_tool[name]
+        required = [want for want in wants if not want.optional]
+        must = tuple(
+            host
+            for host in locked_hosts
+            if any(host in want.on(locked_hosts) for want in required)
+        )
+        may = tuple(
+            host
+            for host in locked_hosts
+            if host not in must
+            and any(host in want.on(locked_hosts) for want in wants if want.optional)
+        )
+        if not must and not may:
+            continue
+        sites = ", ".join(sorted({w.site for w in wants if w.site})) or "a requirement"
         try:
             listed = catalogue.listed(name)
         except CatalogueError as error:
-            sites = (
-                ", ".join(sorted({w.site for w in wants if w.site})) or "a requirement"
-            )
+            if not required:
+                notes.append(f"{name}: optional and not catalogued ({error}); left out")
+                continue
             raise LockError(f"{error}; required by {sites}") from None
-        on = tuple(
-            host
-            for host in locked_hosts
-            if any(host in want.on(locked_hosts) for want in wants)
-        )
-        if not on:
-            continue
-        scope = on if on != locked_hosts else ()
         held = keep.tools.get(name) if keep and name not in moving else None
-        version = (
-            held.version
-            if held is not None and _eligible(listed, held.version, wants, on)
-            else _newest(listed, wants, on)
-        )
+        if required:
+            version = (
+                held.version
+                if held is not None and _eligible(listed, held.version, wants, must)
+                else _newest(listed, wants, must)
+            )
+        else:
+            found = _newest_anywhere(listed, wants, may, held)
+            if found is None:
+                notes.append(
+                    f"{name}: optional, and no version satisfying"
+                    f" {', '.join(str(w) for w in wants)} resolves on"
+                    f" {', '.join(may)}; left out"
+                )
+                continue
+            version = found
+        reach = (*must, *(host for host in may if _resolves(listed, version, (host,))))
+        on = tuple(host for host in locked_hosts if host in reach)
+        absent = [host for host in may if host not in on]
+        if absent:
+            notes.append(
+                f"{name}: optional, {version} has no artifact for"
+                f" {', '.join(absent)}; left out there"
+            )
+        scope = on if on != locked_hosts else ()
         tools[name] = replace(
-            _locked(listed, version, on, scope), allow_host=name in allowed
+            _locked(listed, version, on, scope),
+            allow_host=name in allowed,
+            optional=not required,
         )
-    return Lock(locked_hosts, tools)
+    return Lock(locked_hosts, tools, tuple(notes))
+
+
+def _newest_anywhere(
+    listed: Listed,
+    wants: list[Requirement],
+    hosts: tuple[str, ...],
+    held: Locked | None,
+) -> str | None:
+    """For an optional tool: the version to lock, or None when none resolves anywhere.
+
+    The version *held* stands while it still satisfies and resolves on
+    a host it was locked on; otherwise the newest version satisfying
+    every floor that resolves on at least one of *hosts*.
+    """
+
+    def reaches(version: str) -> bool:
+        return any(_resolves(listed, version, (host,)) for host in hosts)
+
+    if (
+        held is not None
+        and held.version in listed.versions
+        and reaches(held.version)
+        and all(want.satisfied_by(held.version) for want in wants)
+    ):
+        return held.version
+    ordered = sorted(listed.versions, key=version_key)
+    for version in reversed(ordered):
+        if all(want.satisfied_by(version) for want in wants) and reaches(version):
+            return version
+    return None
 
 
 def _eligible(

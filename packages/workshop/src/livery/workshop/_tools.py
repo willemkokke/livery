@@ -132,15 +132,16 @@ def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
 
 
 def requirements(root: Path) -> tuple[Requirement, ...]:
-    """Every requirement the five sites declare, in site order.
+    """Every requirement the six sites declare, in site order.
 
     A workspace with no package types requires what the python kind
     does: its own `tasks.py` runs on python. A kind's checks bring the
     tools they run, each requirement naming `check <name>` as its
-    site. An extension's site is
-    `extension <import path>`, read from its plugin module's
-    `WORKSHOP_TOOLS`; an unlisted extension declares nothing here, since
-    listing is the only activation channel.
+    site. An extension's site is `extension <name>`, read from its
+    declaration's `TOOLS`; an unlisted extension declares nothing here,
+    since listing is the only activation channel. A plugin the project
+    mounts through its direct dependencies is `plugin <name>`, read
+    from its entry module ([livery.workshop._tools.plugin_tools][]).
     """
     from livery.toolroom.store.api import LockError, Requirement
     from livery.workshop._extensions import extension_tools
@@ -171,11 +172,72 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
             ]
         except LockError as error:
             fail(str(error))
+    for plugin, declared in plugin_tools(root).items():
+        try:
+            found += [
+                Requirement.parse(text, site=f"plugin {plugin}") for text in declared
+            ]
+        except LockError as error:
+            fail(str(error))
     for package in packages:
         contract = package.directory / "workshop.toml"
         found += _requires(tools_table(contract), site=f"{package.path}/workshop.toml")
     found += _requires(tools_table(root / "workshop.toml"), site="workshop.toml")
     return tuple(found)
+
+
+def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
+    """The tools each plugin the project mounts declares, by its entry point name.
+
+    The plugins are the ``footman.builtin`` names the project's direct
+    dependencies offer, as footman's project rung mounts them. A plugin
+    declares the tools its verbs need as a literal ``TOOLS = (...)`` in
+    its entry module, ``("docker?",)`` for one it can do without. The
+    value is read from the module's source and never imported: importing
+    a plugin outside footman's mount would register its tasks there.
+
+    Raises:
+        Failed: when a plugin's ``TOOLS`` is not a literal tuple or list
+            of strings, naming the plugin.
+    """
+    import ast
+    import importlib.util
+    from importlib.metadata import entry_points
+
+    from livery.footman import _config  # pyright: ignore[reportPrivateUsage]
+
+    modules = {
+        entry.name: entry.value.partition(":")[0]
+        for entry in entry_points(group="footman.tasks")
+    }
+    found: dict[str, tuple[str, ...]] = {}
+    for name in _config.project_builtin(root):
+        module = modules.get(name)
+        spec = importlib.util.find_spec(module) if module else None
+        if spec is None or spec.origin is None or not spec.origin.endswith(".py"):
+            continue
+        tree = ast.parse(Path(spec.origin).read_text("utf-8"))
+        for node in tree.body:
+            if not (
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(t, ast.Name) and t.id == "TOOLS" for t in node.targets
+                )
+            ):
+                continue
+            try:
+                value = ast.literal_eval(node.value)
+            except ValueError:
+                value = None
+            if not isinstance(value, (tuple, list)) or not all(
+                isinstance(text, str) for text in value
+            ):
+                fail(
+                    f"plugin {name}: TOOLS in {module} is not a literal tuple of"
+                    ' requirement strings, ("docker?",)'
+                )
+            found[name] = tuple(value)
+    return found
 
 
 def host_allowed(root: Path) -> tuple[str, ...]:
@@ -533,6 +595,9 @@ def write_lock(
         )
     except LockError as error:
         fail(str(error))
+    # What the resolution left out, an optional tool it could not serve.
+    for note in lock.notes:
+        print(f"  {note}")
     for name in allowed:
         if name not in lock.tools:
             continue
@@ -1237,6 +1302,13 @@ def materialise(
     host = store.host
     here = lock.on_host(host)
     wanted = names or here
+    if not names:
+        for name, entry in sorted(lock.tools.items()):
+            if entry.optional and name not in here:
+                print(
+                    f"  {name}: optional, and not locked for this host ({host});"
+                    " the verbs that need it say so"
+                )
     for name in wanted:
         if name not in lock.tools:
             fail(
