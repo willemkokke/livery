@@ -9,8 +9,9 @@ know; and the project, in the root contract's `[tools] requires`, for
 what belongs to the repository. The sites' requirements union, and `tools.lock` at the
 root holds one version per tool for the whole repository, the newest
 the catalogue lists that satisfies every floor and resolves on every
-locked host. The root contract's `[tools] hosts` names those hosts,
-the three gated ones by default, and `[tools] index` names where the
+supported host. The root contract's `[workspace] hosts` names those
+hosts, every host key when it is absent, and `[tools] index`
+names where the
 catalogue is read from: the published index by URL, a directory
 holding one, or the records that build one.
 
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -77,8 +79,13 @@ from livery.workshop._packages import discover_packages
 TOOLS = "tools"
 """The contract table the requirements, the hosts and the index live under."""
 
-DEFAULT_HOSTS = ("linux-x64", "macos-arm", "windows-x64")
-"""The hosts locked for unless the contract names others: the gated three."""
+WORKSPACE = "workspace"
+"""The contract table the supported hosts live under."""
+
+
+DEFAULT_HOSTS: tuple[str, ...] = ()
+"""The hosts supported when `[workspace] hosts` is absent; empty for
+every host key, which the store names and which is read only then."""
 
 VERDICT_ROLES = ("format", "lint", "typecheck", "typecomplete", "test")
 """The check roles whose tools take no host allowance: the version is the verdict."""
@@ -104,7 +111,7 @@ def declared_keys() -> tuple[Declared, ...]:
         root("tools", "table"),
         root("tools.requires", "strs"),
         root("tools.host-allowed", "strs"),
-        root("tools.hosts", "strs"),
+        root("workspace.hosts", "strs"),
         root("tools.index", "str"),
         root("tools.modes", "table"),
         root("tools.modes.*", "str", values=tuple(MODES)),
@@ -306,12 +313,37 @@ def tool_names(root: Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(requirement.name for requirement in requirements(root)))
 
 
-def locked_hosts(root: Path) -> tuple[str, ...]:
-    """The hosts the repository locks for: `[tools] hosts`, or the gated three."""
-    declared = tools_table(root / "workshop.toml").get("hosts")
+def supported_hosts(root: Path) -> tuple[str, ...]:
+    """The hosts the workspace supports and locks for, in host-key order.
+
+    `[workspace] hosts` names them in the requirement scope tokens:
+    a platform (`macos`), a host key (`linux-arm`), and either with `!`
+    to remove it, a list of removals alone starting from every host.
+    Absent, every host key is supported.
+
+    Raises a refusal for a token that is neither a platform nor a host
+    key, and for a list that is empty or leaves no host.
+    """
+    from livery.toolroom.store.api import HOSTS, Scope, SpecError
+
+    every = DEFAULT_HOSTS or HOSTS
+    path = root / "workshop.toml"
+    table = load_contract(path).get(WORKSPACE) if path.is_file() else None
+    declared = cast("dict[str, object]", table or {}).get("hosts")
     if declared is None:
-        return DEFAULT_HOSTS
-    return tuple(cast("list[str]", declared))
+        return every
+    where = "workshop.toml: [workspace] hosts"
+    tokens = cast("list[str]", declared)
+    if not tokens:
+        fail(f"{where} is empty; name the hosts, or drop the key for every host")
+    try:
+        scope = Scope.parse(",".join(tokens), where=where, spelled=str(tokens))
+    except SpecError as error:
+        fail(str(error))
+    hosts = scope.hosts(every)
+    if not hosts:
+        fail(f"{where} {tokens} leaves no host; name at least one host")
+    return hosts
 
 
 def index_source(root: Path) -> str:
@@ -523,7 +555,7 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
         fresh = resolve_lock(
             listing,
             with_runtimes(tuple(requirements(root)), listing),
-            hosts=locked_hosts(root),
+            hosts=supported_hosts(root),
             keep=held,
             host_allowed=host_allowed(root),
         )
@@ -571,7 +603,7 @@ def write_lock(
         lock = resolve_lock(
             listing,
             with_runtimes(tuple(requirements(root)), listing),
-            hosts=locked_hosts(root),
+            hosts=supported_hosts(root),
             keep=kept,
             upgrade=upgrade,
             host_allowed=allowed,
@@ -1285,6 +1317,17 @@ def materialise(
     listing = catalogue(root, offline=offline)
     store = Store(_home(), sources=sources(root), offline=offline)
     host = store.host
+    supported = supported_hosts(root)
+    if host not in supported:
+        # A runner's label is free text on every forge, so the host
+        # itself is where an unsupported runner can be told apart.
+        reason = (
+            f"this host ({host}) is not one the workspace supports;"
+            f" [workspace] hosts supports {', '.join(supported)}"
+        )
+        if strict or os.environ.get("CI"):
+            fail(reason)
+        print(f"  {reason}")
     here = lock.on_host(host)
     wanted = names or here
     if not names:
