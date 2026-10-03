@@ -99,7 +99,9 @@ def link_problems(root: Path) -> list[str]:
                 elif "_generated" in path_part:
                     continue
             if not resolved.is_file():
-                problems.append(f"{page.relative_to(root)}: {target} does not exist")
+                problems.append(
+                    f"{page.relative_to(root).as_posix()}: {target} does not exist"
+                )
                 continue
             if anchor and resolved.suffix == ".md":
                 slugs = {
@@ -108,7 +110,7 @@ def link_problems(root: Path) -> list[str]:
                 }
                 if anchor not in slugs:
                     problems.append(
-                        f"{page.relative_to(root)}: {target} anchors nothing"
+                        f"{page.relative_to(root).as_posix()}: {target} anchors nothing"
                     )
     return problems
 
