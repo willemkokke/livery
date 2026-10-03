@@ -42,8 +42,8 @@ module declares:
 - `REQUIRES`, the extensions it needs listed before it, which the
   layering check keeps listed and its `--fix` writes at the level each
   declares;
-- `TOOLS`, the tools its own verbs need, `("docker>=27",)`, the
-  fourth site the tool profile reads;
+- `TOOLS`, the tools its own verbs need, `("docker?>=27",)`, one of
+  the sites the tool profile reads;
 - `CONTRACT_KEYS`, the contract keys it reads;
 - `FOR`, a map from a target extension to the module carrying the
   registrations for that target, `{"python": "acme.house.python"}`.
@@ -281,15 +281,22 @@ comments keeps your lines as a tail after the lines the render owns.
 
 ## The tools a workspace requires
 
-Five sites declare tool requirements, each a name with a floor,
-`ruff` or `ruff>=0.16`, and each may name the hosts it applies to,
-`dotnet_coverage@windows` or `tea>=1.1@linux,macos-arm`, a platform
-meaning every locked host of it and a host key itself: a package
-kind, in its record, for what
-operates it, uv for the python kind; the checks that judge a kind,
-each naming its tools, which is how ruff, pytest and the checkers
-reach a python workspace; a listed extension, as `WORKSHOP_TOOLS` on its plugin
-module, for what its own verbs need; a package instance, in its
+Six sites declare tool requirements, each in the one requirement
+grammar, `name?>=floor@scope`: `ruff`, `ruff>=0.16`,
+`dotnet_coverage@windows`, `tea>=1.1@linux,macos-arm`. A scope names
+platforms (every locked host of one) or host keys, each excluded with a
+leading `!`, so `tea@!windows-arm` is every locked host but one. `?`
+marks a tool optional: the lock takes it where the catalogue can serve
+it and never refuses it, its entry says `optional`, and what it left
+out is printed when the lock is written; `fm tools.sync` names an
+optional tool its host lacks. The sites: a package kind, in its record,
+for what operates it, uv for the python kind; the checks that judge a
+kind, each naming its tools, which is how ruff, pytest and the checkers
+reach a python workspace; a listed extension, as `TOOLS` in its
+declaration, for what its own verbs need; a plugin the project mounts
+through its direct dependencies, as a literal `TOOLS = (...)` in its
+entry module, read from the source without importing it, which is how
+forge's dev verbs bring `docker?`; a package instance, in its
 `workshop.toml` under `[tools] requires`, for what its kind cannot
 know; and the project, in the root contract's `[tools] requires`, for
 what belongs to the repository. The root contract's `[tools] index` names where the

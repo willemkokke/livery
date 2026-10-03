@@ -133,6 +133,70 @@ def test_a_scope_names_platforms_or_host_keys_and_refuses_anything_else():
     assert Requirement.parse("tea").on(THREE) == THREE
 
 
+def test_an_optional_tool_absent_is_named_and_never_refused(tmp_path):
+    # Not catalogued at all, an artifact missing on a host, a floor above
+    # every version: an optional tool is left out where it cannot be
+    # served, and the lock says so, never refuses.
+    tea = _archive("tea", ("1.0.0", ("linux-x64", "macos-arm")))
+    catalogue = Catalogue.of_records(_records(tmp_path, tea))
+    lock = resolve_lock(
+        catalogue,
+        [
+            Requirement.parse("tea?", site="plugin acme"),
+            Requirement.parse("ghost?", site="plugin acme"),
+            Requirement.parse("tea?>=9", site="plugin late"),
+        ],
+        hosts=THREE,
+    )
+    assert lock.tools == {}
+    assert any(
+        note.startswith("ghost: optional and not catalogued") for note in lock.notes
+    )
+    assert any(note.startswith("tea: optional, and no version") for note in lock.notes)
+    lock = resolve_lock(
+        catalogue, [Requirement.parse("tea?", site="plugin acme")], hosts=THREE
+    )
+    entry = lock.tools["tea"]
+    assert entry.optional and entry.on == ("linux-x64", "macos-arm")
+    assert lock.notes == (
+        "tea: optional, 1.0.0 has no artifact for windows-x64; left out there",
+    )
+    # Written and read back, the entry keeps the word.
+    path = tmp_path / "tools.lock"
+    lock.save(path)
+    assert json.loads(path.read_text())["tools"]["tea"]["optional"] is True
+    assert Lock.load(path).tools["tea"].optional
+    # A required site wins: the tool is required on its hosts, and the
+    # optional site's hosts join only where the version resolves.
+    lock = resolve_lock(
+        catalogue,
+        [
+            Requirement.parse("tea@linux", site="kind cpp"),
+            Requirement.parse("tea?", site="plugin acme"),
+        ],
+        hosts=THREE,
+    )
+    assert not lock.tools["tea"].optional
+    assert lock.tools["tea"].on == ("linux-x64", "macos-arm")
+    with pytest.raises(LockError, match="no version has host windows-x64"):
+        resolve_lock(catalogue, [Requirement("tea")], hosts=THREE)
+
+
+def test_an_exclusion_scope_removes_its_hosts(tmp_path):
+    tea = _archive("tea", ("1.0.0", THREE))
+    catalogue = Catalogue.of_records(_records(tmp_path, tea))
+    lock = resolve_lock(
+        catalogue, [Requirement.parse("tea@!windows", site="s")], hosts=THREE
+    )
+    assert lock.tools["tea"].on == ("linux-x64", "macos-arm")
+    lock = resolve_lock(
+        catalogue,
+        [Requirement.parse("tea@linux,macos,!macos-arm", site="s")],
+        hosts=THREE,
+    )
+    assert lock.tools["tea"].on == ("linux-x64",)
+
+
 def test_a_scoped_tool_is_locked_on_its_hosts_alone(tmp_path):
     tea = _archive("tea", ("1.0.0", THREE), ("1.1.0", ("linux-x64", "macos-arm")))
     catalogue = Catalogue.of_records(

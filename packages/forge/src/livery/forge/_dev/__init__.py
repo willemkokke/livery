@@ -8,13 +8,13 @@ shared env file in the runner's config directory
 Every verb is idempotent: re-running it is the recovery procedure, and
 every seed probes before acting.
 
-This module is the `footman.tasks` entry point named ``livery.forge``.
-A workspace mounts it by listing ``livery.forge`` in its extensions; a
-repository that does not is never offered these tasks. Unlike the rest
-of livery.forge it imports footman and toolroom, which are present by
-construction: the only loader is footman's own ``plugin()``, and only
-a workshop workspace mounts extensions, so livery-forge still declares no
-dependency.
+This module is the entry point named ``livery.forge`` in
+``footman.tasks`` and ``footman.builtin``: a project that depends on
+livery-forge directly gets these tasks through footman's project rung,
+and one that does not is never offered them. Unlike the rest of
+livery.forge it imports footman and toolroom, which are present by
+construction: the only loader is footman's own ``plugin()``, so
+livery-forge still declares no dependency.
 
 ``fm forge.fixtures.record`` re-records the conformance cassettes and
 registers only in forge's own source checkout, where the test suite
@@ -37,6 +37,11 @@ from typing import Annotated
 import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import doc, fail, group
+
+#: The tools these verbs need, read by the workshop without importing
+#: this module: docker runs the containers, and a workspace that never
+#: brings them up does without it.
+TOOLS = ("docker?",)
 
 forge = group("forge", help="livery.forge development")
 dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
