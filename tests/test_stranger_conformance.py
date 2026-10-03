@@ -57,11 +57,35 @@ _CONTRACT = (
 
 
 #: Our distributions from this checkout, editable as the workshop's own
-#: sources declare them, so uv sees one URL for each.
+#: sources declare them, so uv sees one URL for each. They go in the
+#: composed project file's region, which a sync keeps.
 _LOCAL_SOURCES = "".join(
-    f'livery-{name} = {{ path = "{ROOT / "packages" / name}", editable = true }}\n'
+    f"[tool.uv.sources.livery-{name}]\n"
+    f'path = "{(ROOT / "packages" / name).as_posix()}"\n'
+    "editable = true\n"
     for name in ("workshop", "forge", "toolroom", "footman")
 )
+
+_END_TABLES = "# -- workshop: end tables --"
+
+
+def _drive_locally(root: Path) -> None:
+    """Point *root*'s dependencies and tools at this checkout, for a drive.
+
+    The dev group's distributions come from this checkout's packages,
+    through the composed project file's region, and the tools lock
+    against this checkout's records, as a consumer's lock against the
+    published index. Only the armed drives do this: the paths name this
+    machine, which the identity scan of a plain birth would refuse.
+    """
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text()
+    assert _END_TABLES in text
+    pyproject.write_text(text.replace(_END_TABLES, _LOCAL_SOURCES + _END_TABLES, 1))
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text() + f'\n[tools]\nindex = "{(ROOT / "records").as_posix()}"\n'
+    )
 
 
 def _stranger(destination: Path) -> Path:
@@ -133,14 +157,7 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     )
     subprocess.run(["git", "config", "user.name", "Acme"], cwd=root, check=True)
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=root, check=True)
-    pyproject = root / "pyproject.toml"
-    text = pyproject.read_text()
-    text = text.replace(
-        "[tool.uv.sources]\n",
-        "[tool.uv.sources]\n" + _LOCAL_SOURCES,
-        1,
-    )
-    pyproject.write_text(text)
+    _drive_locally(root)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "commit", "-qm", "chore: birth"], cwd=root, check=True)
     subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
@@ -196,14 +213,7 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
     # The local checkout stands in for the published wheels: the
     # stranger's dev group names the extension distributions, and this
     # suite must prove the loop without an index.
-    pyproject = root / "pyproject.toml"
-    text = pyproject.read_text()
-    text = text.replace(
-        "[tool.uv.sources]\n",
-        "[tool.uv.sources]\n" + _LOCAL_SOURCES,
-        1,
-    )
-    pyproject.write_text(text)
+    _drive_locally(root)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "commit", "-qm", "chore: birth"], cwd=root, check=True)
     subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
@@ -279,7 +289,8 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
         ["uv", "run", "fm", "check"], cwd=root, env=env, capture_output=True, text=True
     )
     assert gate.returncode == 0, f"{gate.stdout}\n{gate.stderr}"
-    assert "packages/geometry (cpp-conan): configure, build, ctest run" in gate.stdout
+    for check in ("build.configure", "build.compile", "test.ctest"):
+        assert f"  {check}: packages/geometry runs (cpp-conan kind)" in gate.stdout
     rehearsed = subprocess.run(
         ["uv", "run", "fm", "workflow.release", "geometry", "ext", "--local"],
         cwd=root,

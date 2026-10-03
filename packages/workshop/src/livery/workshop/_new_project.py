@@ -138,6 +138,22 @@ def _push_target(clone_url: str, token: str) -> str:
     return "origin"
 
 
+def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
+    """The extensions a birth lists, from the running App's builtin providers.
+
+    Footman's own providers and the base are never listed. A stock App
+    (the base among its builtins) lists the site's extension first; the
+    list is in precedence order, so a brand's own extensions follow it
+    and win.
+    """
+    kept = [entry for entry in builtin if not entry.startswith("footman.")]
+    kept = kept or ["livery.workshop"]
+    stack = [entry for entry in kept if entry != "livery.workshop"]
+    if "livery.workshop" in kept:
+        stack.insert(0, "docs")
+    return stack
+
+
 @new_group.task(name="project", expose="global_only", interactive=True)
 def new_project(
     name: Annotated[str, doc("the workspace's name (also the repository name)")],
@@ -199,12 +215,7 @@ def new_project(
     # runtime accessor is footman#536's family).
     from livery.footman import _paths
 
-    builtin = [
-        entry for entry in _paths.builtin() if not entry.startswith("footman.")
-    ] or ["livery.workshop"]
-    stack = [entry for entry in builtin if entry != "livery.workshop"]
-    if "livery.workshop" in builtin:
-        stack.append("docs")
+    stack = birth_extensions(_paths.builtin())
     contract = root / "workshop.toml"
     if contract.is_file():
         print("  workshop.toml: already seeded")

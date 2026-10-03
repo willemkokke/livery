@@ -5,7 +5,7 @@ born and self-hosts, populates its content (a declared replacement of a
 base file, a fragment line, a skill) and builds its wheel; the branded
 App begets a child that installs that wheel; a core improvement
 dev-ships as a base wheel bump and reaches the child through its
-update, while the replaced file stays the brand's, the named forfeit. The
+sync, while the replaced file stays the brand's, the named forfeit. The
 chain creates and destroys its own repositories, and a second run
 resumes quietly.
 
@@ -98,17 +98,22 @@ def _link_the_library(extension: Path, library: Path) -> None:
         )
     )
     native = next(extension.glob("src/**/_native.cpp"))
+    module = 'NB_MODULE(_native, m) { m.def("native_hello", &native_hello); }'
+    source = native.read_text()
+    assert module in source, "the seed's module line moved"
+    # Written as clang-format writes it, so the child's gate finds the
+    # source formatted.
     native.write_text(
-        native.read_text()
-        .replace(
+        source.replace(
             "#include <fmt/format.h>",
             f"#include <fmt/format.h>\n#include <{header.name}>",
-        )
-        .replace(
-            "NB_MODULE(_native, m) {",
+        ).replace(
+            module,
             "NB_MODULE(_native, m) {\n"
             '    m.def("library_version",'
-            f" []() {{ return std::string({namespace}::version()); }});",
+            f" []() {{ return std::string({namespace}::version()); }});\n"
+            '    m.def("native_hello", &native_hello);\n'
+            "}",
         )
     )
     stub = next(extension.glob("src/**/_native.pyi"))
@@ -361,7 +366,8 @@ def _chain(
         assert "already scaffolded" in birth.stdout
         assert "workshop.toml: already seeded" in birth.stdout
     contract = (home / "workshop.toml").read_text()
-    assert 'extensions = ["dummy.brandx"]' in contract
+    # Stock fm's births list the site's extension; the home adds itself.
+    assert 'extensions = ["docs", "dummy.brandx"]' in contract
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
     assert (home / "docs" / "index.md").is_file()
@@ -385,7 +391,7 @@ def _chain(
                 "}\n"
             )
         fragment = member / "src" / "dummy" / BRAND / "content" / "fragments"
-        with (fragment / f"CLAUDE.{BRAND}.md").open("a") as handle:
+        with (fragment / f"rules.{BRAND}.md").open("a") as handle:
             handle.write("\nAlways speak plainly.\n")
         skill = member / "src" / "dummy" / BRAND / "content" / "skills" / "hello"
         skill.mkdir(parents=True, exist_ok=True)
@@ -494,7 +500,7 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
-    assert 'extensions = ["dummy.brandx"]' in child_contract
+    assert 'extensions = ["docs", "dummy.brandx"]' in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's replacement reached the child's composed file.
@@ -502,7 +508,7 @@ def _chain(
     # The brand's content arrived through sync.
     assert (
         "Always speak plainly."
-        in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()
+        in (child / ".workshop" / "fragments" / f"rules.{BRAND}.md").read_text()
     )
     assert (child / ".claude" / "skills" / "hello" / "SKILL.md").exists()
 
@@ -626,7 +632,13 @@ def _chain(
     # The kind's checks, one line each: the registry walks a native
     # package's records in order, and a role the kind lacks skips by
     # name.
-    for check in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+    for check in (
+        "format.clang-format",
+        "build.configure",
+        "build.compile",
+        "test.ctest",
+        "lint.clang-tidy",
+    ):
         assert (
             f"  {check}: packages/geometry runs (cpp-conan kind)" in child_gate.stdout
         )
@@ -674,7 +686,7 @@ def _chain(
         / "workshop"
         / "content"
         / "fragments"
-        / "CLAUDE.workshop.md"
+        / "rules.workshop.md"
     ).open("a") as handle:
         handle.write("\nThe gate's verdict is its exit code.\n")
     # The bump is computed from what the member carries: a spelled
@@ -736,50 +748,13 @@ def _chain(
     # The fragment improvement arrived through the wheel and sync.
     assert (
         "The gate's verdict is its exit code."
-        in (child / ".workshop" / "fragments" / "CLAUDE.workshop.md").read_text()
+        in (child / ".workshop" / "fragments" / "rules.workshop.md").read_text()
     )
-    # The engine refuses a dirty tree rather than guessing; the
-    # child's customisation commits before the wave, as a person's
-    # would.
-    _run(["git", "add", "-A"], child, env)
-    _run(
-        ["git", "commit", "-qm", "chore: settle before the update"],
-        child,
-        env,
-        check=False,
-    )
-    # The update runs the child's gate over its own changes, so the
-    # environment is the one that gate needs: the venv named (ty
-    # refuses an empty-but-set VIRTUAL_ENV) and the conan home the
-    # chain owns.
-    child_env = _hermetic(
-        {
-            **env,
-            "GIT_TERMINAL_PROMPT": "0",
-            "VIRTUAL_ENV": str(child / ".venv"),
-            "CONAN_HOME": str(tmp_path / "conan-home"),
-        },
-        child / ".venv",
-    )
-    updated = _run(
-        [str(child_fm), "workflow.update.templates"],
-        child,
-        child_env,
-        check=False,
-    )
-    # The update leaves its branch on origin under a pull request and
-    # returns the checkout to main, so the branch is read from there.
-    _run(["git", "fetch", "origin", "workflow/update/templates"], child, env)
-    branch = _run(
-        ["git", "ls-remote", "--heads", "origin", "workflow/update/templates"],
-        child,
-        env,
-    )
-    assert "workflow/update/templates" in branch.stdout, updated.stdout + updated.stderr
-    files = _run(["git", "show", "FETCH_HEAD:tasks.py"], child, env).stdout
-    # The core improvement reached the grandchild through the gradient.
-    assert "run the gate before every commit" in files, updated.stdout + updated.stderr
-    ignored = _run(["git", "show", "FETCH_HEAD:.gitignore"], child, env).stdout
+    # So did the composed files: a sync ends by writing them from the
+    # wheels it just installed. The core improvement reached the
+    # grandchild through the gradient.
+    assert "run the gate before every commit" in (child / "tasks.py").read_text()
+    ignored = (child / ".gitignore").read_text()
     # The replaced file did not move: the named forfeit is the brand's
     # declared replace, and the base's new line stays out.
     assert "brandx-build/" in ignored
@@ -787,5 +762,5 @@ def _chain(
     # No extension-owned line changed: the brand's content stands.
     assert (
         "Always speak plainly."
-        in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()
+        in (child / ".workshop" / "fragments" / f"rules.{BRAND}.md").read_text()
     )

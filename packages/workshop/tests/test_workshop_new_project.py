@@ -316,3 +316,18 @@ def test_the_newborn_tool_sync_takes_the_root_and_changes_no_directory(
     _REAL_SYNC_TOOLS(tmp_path)
     assert seen == [tmp_path]
     assert Path.cwd() == before
+
+
+def test_a_birth_lists_the_site_first_and_a_brand_after_it() -> None:
+    from livery.workshop._new_project import birth_extensions
+
+    # The fallback first: an App with no builtins of its own is stock.
+    assert birth_extensions(()) == ["docs"]
+    assert birth_extensions(("footman.profile", "livery.workshop")) == ["docs"]
+    # A brand's extension follows the site's, so it wins.
+    assert birth_extensions(("dummy.brandx", "livery.workshop")) == [
+        "docs",
+        "dummy.brandx",
+    ]
+    # An App that does not carry the base lists its own alone.
+    assert birth_extensions(("acme.only",)) == ["acme.only"]

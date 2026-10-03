@@ -1575,6 +1575,24 @@ Acceptance:
   warm and 213.4s one changed are not comparable: a red gate records
   no proved tree, so the warm and one-changed runs ran whole. The
   gate's rows are re-measured after 7c.
+- 2026-10-03, after 7c: `fm ci.scale` on main c85aff76, 300 members,
+  every verb exit 0: generation 610.0s; `fm sync` 47.3s cold, 13.6s
+  warm, 11.5s one changed; `fm template.check` 6.2s, 3.9s, 3.9s;
+  `fm check` 218.6s cold and whole, 1.1s warm, 50.1s one changed
+  (595.2s, 0.7s, 454.1s at the baseline).
+- 2026-10-03 (issue #1090): the armed drives, run by hand, had gone
+  stale unrun. They now pass, except the release rehearsal: the
+  forge's dev plugin imports `livery.footman.api`, which no released
+  footman ships, so its `lowest-direct` leg fails until footman
+  releases it and the forge's `test` floor rises to it (Willem rules
+  how). What they found: a sync composed `CLAUDE.md` before writing
+  `tools.lock`, which the stub reads, and wrote no generated file, so
+  a lock change left both stale; a sync now ends by writing the
+  composed and generated files again. The `_docs/` ignore line moves
+  to the base, whose python build writes the directory. A branded
+  birth listed the site's extension after the brand's, so it won;
+  the site's comes first now. Supplying one tool from two processes at
+  once collides in the store (issue #1092).
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an
