@@ -2652,8 +2652,12 @@ def tools_artifacts(
     when no forge tag is known for it.
     """
     from livery.toolroom.bench import _ingest, _toolfetch
+    from livery.toolroom.store.api import RecordError
 
-    record = _surfaces.load(_record_path(tool))
+    try:
+        record = _surfaces.load(_record_path(tool))
+    except RecordError as error:
+        fail(f"{_record_path(tool)}: {error}")
     if record is None:
         fail(f"no record of {tool}; the records are {', '.join(_record_names())}")
     driver = _drivers.find(tool)

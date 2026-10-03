@@ -1231,7 +1231,9 @@ def validate(record: Record) -> None:
         if host not in record.hosts:
             raise RecordError(
                 f"{where}: the tool's {host} layout names a host the record"
-                f" lacks; it has {', '.join(record.hosts) or 'none'}"
+                f" lacks; it has {', '.join(record.hosts) or 'none'}. List {host}"
+                " in the record's `hosts` first, and `tools.artifacts` records"
+                " its artifact"
             )
     seen: set[str] = set()
     help_: str | None = None
