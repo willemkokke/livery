@@ -417,6 +417,7 @@ def plan(
     data: Mapping[str, Any],
     *,
     packages: Mapping[str, Sequence[str]] | None = None,
+    package_data: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[Output, ...]:
     """Every file the listed fragments render, composed and with its regions kept.
 
@@ -430,6 +431,8 @@ def plan(
             also sees `package`, the package's path.
         packages: Each package's path, relative to the root, to the
             extensions it lists.
+        package_data: Render data for one package's files, by its
+            path: what differs per package, its kind say.
 
     Returns:
         One output per file, sorted by path.
@@ -450,7 +453,11 @@ def plan(
     for path, members in sorted(grouped.items()):
         members.sort(key=lambda fragment: rank[fragment.owner])
         package = _package_of(path, packaged)
-        seen = {**data, "package": package} if package else dict(data)
+        seen = (
+            {**data, **(package_data or {}).get(package, {}), "package": package}
+            if package
+            else dict(data)
+        )
         contributions = [fragment for fragment in members if fragment.contributes]
         templates = [fragment for fragment in members if not fragment.contributes]
         if contributions:
@@ -610,9 +617,28 @@ def apply(
     return sorted(lines, key=lambda line: line.split()[1])
 
 
-def drift(root: Path, outputs: Sequence[Output]) -> list[str]:
-    """One line per file whose committed bytes are not what it renders."""
+def drift(
+    root: Path, outputs: Sequence[Output], *, packages: Sequence[str] = ()
+) -> list[str]:
+    """One line per file whose committed bytes are not what it renders.
+
+    A receipted file no output renders any more is drift too while it is
+    unedited, since the next apply removes it; an edited one is the
+    repository's and says nothing.
+    """
     lines: list[str] = []
+    rendered = {output.path for output in outputs}
+    for home in ["", *packages]:
+        for name, recorded in sorted(read_rendered(root / home).items()):
+            path = f"{home}/{name}" if home else name
+            target = root / path
+            if path in rendered or not target.is_file():
+                continue
+            if _owned(_committed(target)) == recorded:
+                lines.append(
+                    f"  {path}: written for an owner no longer listed;"
+                    f" `{prog()} sync` removes it"
+                )
     for output in outputs:
         target = root / output.path
         if not target.is_file():

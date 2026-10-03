@@ -156,6 +156,45 @@ def _data(root: Path) -> dict[str, Any]:
     return data
 
 
+def _packaged(
+    root: Path, order: list[str]
+) -> tuple[list[Fragment], dict[str, tuple[str, ...]], dict[str, dict[str, Any]]]:
+    """Each package's per-package files, with the package map and its data.
+
+    A package's `.clang-format` and `.clang-tidy` come from the check
+    whose fragment is the nearest one down the package's kind chain, and
+    render with the kind as data. Until packages list extensions of their
+    own, the kind chain is what picks them.
+    """
+    from livery.workshop._checks import checks_by_name
+    from livery.workshop._fragments import PACKAGE_FILES, package_fragment
+    from livery.workshop._packages import discover_packages
+
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    fragments: list[Fragment] = []
+    for package in packages:
+        for file in PACKAGE_FILES:
+            found = package_fragment(package.kind, file)
+            if found is None:
+                continue
+            text, check = found
+            owner = checks_by_name()[check].extension
+            if owner in order:
+                fragments.append(
+                    Fragment(
+                        owner,
+                        f"check {check} {package.path}",
+                        f"{package.path}/{file}",
+                        text,
+                    )
+                )
+    paths: dict[str, tuple[str, ...]] = {package.path: () for package in packages}
+    data: dict[str, dict[str, Any]] = {
+        package.path: {"kind": package.kind} for package in packages
+    }
+    return fragments, paths, data
+
+
 def outputs(root: Path) -> tuple[Output, ...]:
     """The shipped files as the listed extensions render them for *root*."""
     return _composed(root)[0]
@@ -171,9 +210,18 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
     from livery.workshop._lfs import KEY, lfs_enabled, without_lfs
 
     fragments, order = shipped(root)
-    planned = plan(root, fragments, order, _data(root))
+    per_package, packages, package_data = _packaged(root, order)
+    planned = plan(
+        root,
+        [*fragments, *per_package],
+        order,
+        _data(root),
+        packages=packages,
+        package_data=package_data,
+    )
     if lfs_enabled(root):
         return planned, []
+
     kept: list[Output] = []
     notes: list[str] = []
     for output in planned:
@@ -192,13 +240,27 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
 
 def deliver(root: Path) -> list[str]:
     """Write the shipped files into *root*; one line per file that changed."""
+    from livery.workshop._packages import discover_packages
+
     planned, notes = _composed(root)
-    return notes + apply(root, planned)
+    homes = (
+        [package.path for package in discover_packages(root)]
+        if (root / "packages").is_dir()
+        else []
+    )
+    return notes + apply(root, planned, packages=homes)
 
 
 def shipped_drift(root: Path) -> list[str]:
     """One line per shipped file whose committed bytes are not its render."""
-    return [line.strip() for line in drift(root, outputs(root))]
+    from livery.workshop._packages import discover_packages
+
+    homes = (
+        [package.path for package in discover_packages(root)]
+        if (root / "packages").is_dir()
+        else []
+    )
+    return [line.strip() for line in drift(root, outputs(root), packages=homes)]
 
 
 def relocate(root: Path) -> list[str]:
@@ -277,3 +339,35 @@ def _jsonc(text: str) -> dict[str, Any] | None:
     except ValueError:
         return None
     return cast("dict[str, Any]", loaded) if isinstance(loaded, dict) else None
+
+
+def _package_outputs(member: Path, kind: str) -> tuple[Output, ...]:
+    """The per-package files a package of *kind* renders, relative to *member*."""
+    from livery.workshop._checks import checks_by_name
+    from livery.workshop._fragments import PACKAGE_FILES, package_fragment
+
+    fragments: list[Fragment] = []
+    owners: list[str] = []
+    for file in PACKAGE_FILES:
+        found = package_fragment(kind, file)
+        if found is None:
+            continue
+        text, check = found
+        owner = checks_by_name()[check].extension
+        owners.append(owner)
+        fragments.append(Fragment(owner, f"check {check}", file, text))
+    return plan(member, fragments, list(dict.fromkeys(owners)), {"kind": kind})
+
+
+def settle_package(member: Path, kind: str) -> list[str]:
+    """Compose the per-package files of a package of *kind* at *member* alone.
+
+    What a sync does for one package, without a workspace around it: the
+    conformance kit and a birth's probe settle a package directory this way.
+    """
+    return apply(member, _package_outputs(member, kind))
+
+
+def judge_package(member: Path, kind: str) -> list[str]:
+    """The drift lines for the per-package files of a package of *kind* at *member*."""
+    return [line.strip() for line in drift(member, _package_outputs(member, kind))]
