@@ -162,6 +162,13 @@ def arm(inv: footman.Invocation) -> None:
     # The single-threaded moment: what lands in the environment here is in
     # every task's copy, and so in every child any task spawns.
     os.environ[DROP] = _child_dir
+    os.environ[context.ANCHOR_ENV] = _anchor_text()
+
+
+def _anchor_text() -> str:
+    """This run's clock anchor as its children read it: `<wall>,<run clock>`."""
+    wall, clock = context._WALL_ANCHOR
+    return f"{wall!r},{clock!r}"
 
 
 def _sweep_orphan(path: str) -> None:
