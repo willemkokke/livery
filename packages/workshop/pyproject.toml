@@ -46,15 +46,16 @@ dependencies = [
     # under a current Cython.
     "copier>=9.18.2",
     "pyyaml>=6.0.3",
+    # The fragment engine's renderer: one compiled template per
+    # fragment content, over the subset the engine declares.
+    "minijinja>=2.24",
 ]
 
 [project.optional-dependencies]
 # What this package's own dev loop needs beyond its dependencies:
-# the stubs for its yaml reads, so mypy stays strict, and minijinja,
-# which the extensions plan's phase 1 measures against copier's jinja2
-# before the fragment engine adopts it. The workspace's dev group
-# installs the member as `livery-workshop[dev]`.
-dev = ["types-pyyaml", "minijinja>=2.24"]
+# the stubs for its yaml reads, so mypy stays strict. The workspace's
+# dev group installs the member as `livery-workshop[dev]`.
+dev = ["types-pyyaml"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"

@@ -826,6 +826,22 @@ Acceptance, refusals first:
 
 ### Phase 6: one fragment engine
 
+**6a built (issue #1061).** `livery.workshop._fragment_engine` plans,
+applies and judges fragments: `plan` composes each target by its type
+in extension order and splices the committed regions back, `apply`
+writes with receipts in `.workshop-rendered` and withdraws under
+contract 10, and `drift` compares. minijinja renders with strict
+undefined values, each template compiled once per process and each
+render cached by the digests of its source and data; minijinja moved
+from the workshop's dev extra to its dependencies. A file the engine
+wrote and someone edited is kept and named, whether its owner is gone
+or still renders it. The package receipts' helpers moved from
+`_templates.py` into the engine, which 6b's writers share. Two
+questions 6b answers when the writers move: a JSON file with comments
+(`.vscode/*.json` carries `//` region markers today) cannot merge by
+key, and a tail (contract 12's form for a format without comments)
+has no file that uses one yet, so the engine carries regions only.
+
 **6a, the engine.** Deliverables:
 
 - Fragments owned by extensions, file-based or string or dynamic,
