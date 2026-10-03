@@ -313,7 +313,15 @@ def resolve_task_files(
     return Discovery(files, cfg, root, None)
 
 
-def _base_tree(names: tuple[str, ...], json_mode: bool) -> registry.Group | int:
+#: The project rung of the last invocation: the built-ins its direct
+#: dependencies offered, and the names its `builtin-exclude` kept out.
+#: `--plugins` reads it to say which rung declared what.
+_PROJECT_RUNG: tuple[tuple[str, ...], tuple[str, ...]] = ((), ())
+
+
+def _base_tree(
+    names: tuple[str, ...], json_mode: bool, *, project: tuple[str, ...] = ()
+) -> registry.Group | int:
     """The built-in base: each `footman.tasks` entry point mounted into a
     fresh tree, exactly as a tasks file's `plugin(...)` would mount it — so
     a project that wants the same set mounts it the ordinary way.
@@ -333,6 +341,15 @@ def _base_tree(names: tuple[str, ...], json_mode: bool) -> registry.Group | int:
             try:
                 compose.plugin(name)
             except Exception as exc:
+                if name in project:
+                    # A dependency's own declaration: the project's sync
+                    # installs it, and refusing would refuse that sync.
+                    _error(
+                        f"the project depends on a package declaring the built-in"
+                        f" {name!r}, which did not mount: {exc} — carrying on"
+                        f" without it"
+                    )
+                    continue
                 if name in declared_by_user and name not in _brand.builtin:
                     return _refuse(
                         json_mode,
@@ -1108,7 +1125,17 @@ def _plugins_report(reg: registry.Group) -> int:
             ),
         )
         where = landed.get(ep.name)
-        if ep.name in _builtin():
+        project, excluded = _PROJECT_RUNG
+        if ep.name in excluded:
+            grouped.setdefault(dist_name, []).append(
+                (ep.name, "excluded by builtin-exclude", advertised(ep.name))
+            )
+        elif ep.name in project:
+            desc = described(where) if where else advertised(ep.name)
+            grouped.setdefault(dist_name, []).append(
+                (ep.name, "built in (a project dependency)", desc)
+            )
+        elif ep.name in _builtin():
             # Built into this runner: part of the product wherever there is
             # no project, and an ordinary mount inside one. Which *rung*
             # declared it matters to the reader — the brand's own set is the
@@ -2268,8 +2295,29 @@ def _execute(
     files, cfg = found.files, found.cfg
     json_mode = bool(g.get("json"))
 
+    # The project rung: the built-ins the project's direct dependencies
+    # offer, after the machine's own and before the user's file, then
+    # whatever the project's `builtin-exclude` names left out.
+    try:
+        excluded = _config.builtin_exclude(cfg)
+    except _config.ConfigError as exc:
+        return _refuse(json_mode, str(exc))
+    machine = _builtin()
+    project = (
+        tuple(
+            name
+            for name in _config.project_builtin(Path(found.root))
+            if name not in machine
+        )
+        if found.root
+        else ()
+    )
+    global _PROJECT_RUNG
+    _PROJECT_RUNG = (project, excluded)
+    base_set = tuple(name for name in (*machine, *project) if name not in excluded)
+
     base = registry.Group("root")
-    if (base_set := _builtin()) and not g.get("tasks_file"):
+    if base_set and not g.get("tasks_file"):
         # The built-in set is the cascade's outermost rung — under the user
         # rung, under the project's own files — so the full ladder is
         # project > user > built-in wherever you stand. Everything nearer
@@ -2282,7 +2330,7 @@ def _execute(
         # cascade offers nothing outside a project that did not say it
         # belonged there. (`-f` still means total control: one file, no
         # cascade, no base.)
-        built = _base_tree(base_set, json_mode)
+        built = _base_tree(base_set, json_mode, project=project)
         if isinstance(built, int):
             return built
         base = built

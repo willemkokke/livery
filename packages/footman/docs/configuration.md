@@ -177,6 +177,32 @@ is your machine's business, not any project's, and a project that wants a
 set placed somewhere of its own mounts it the ordinary way in its tasks
 file.
 
+### A project's own built-ins
+
+Inside a project, one more source joins, after the machine's three and
+before your own tasks file: the **project's direct dependencies**. A
+distribution the project's `pyproject.toml` names under
+`[project] dependencies` or in a `[dependency-groups]` list, and that is
+installed, contributes every name it declares in the `footman.builtin`
+entry point group. Depending on a plugin is how a project gets its verbs;
+nothing in the tasks file has to mount it. A distribution installed only
+because something else depends on it contributes nothing.
+
+```toml
+# repo/pyproject.toml
+[dependency-groups]
+dev = ["acme-devkit"]          # its footman.builtin names mount here
+
+[tool.footman]
+builtin-exclude = ["acme.noisy"]   # except this one
+```
+
+`builtin-exclude` is project-level: it keeps a named built-in out of
+this project's cascade, whichever source offered it, and
+`fm --plugins` names each exclusion. A task in the project's own tasks
+file shadows a built-in of the same name, and `inherited()` calls the
+one it shadows.
+
 A package's tasks belong to a project unless one says otherwise:
 `@task(expose="always")` says a task works anywhere,
 `@task(expose="global_only")` says it only makes sense *before* a project

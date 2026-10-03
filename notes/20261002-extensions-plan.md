@@ -723,6 +723,16 @@ Acceptance, refusals first:
 
 ### Phase 5: plugins, tools and platforms
 
+**5a built (issue #1038): the project builtin rung.** Inside a
+project, the `footman.builtin` names of the distributions its
+`pyproject.toml` names directly (`[project] dependencies` and every
+`[dependency-groups]` list) mount after the machine's built-ins and
+before the user's file; `[tool.footman] builtin-exclude` keeps a name
+out and `fm --plugins` labels both. 5b (the rendered `tasks.py` keeps
+only its comment, forge, the bench and footman become plugins), 5c
+(tool declarations, `?` and `!`) and 5d (`[workspace] platforms`) are
+not started.
+
 Carried from the empty shell plan's phase 12, extended.
 
 Deliverables:
