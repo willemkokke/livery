@@ -977,3 +977,26 @@ def test_the_other_lanes_emit_no_cache_action(tmp_path: Path) -> None:
     for files in (gitea, gitlab):
         for content in files.values():
             assert "actions/cache@" not in content
+
+
+def test_the_root_tests_directory_is_checked_only_while_it_exists(
+    tmp_path: Path,
+) -> None:
+    # A newborn has no root tests/: naming it would fail every checker
+    # that reads the list. The fallback first.
+    import tomllib
+
+    (tmp_path / "bare").mkdir()
+    bare = compose_into(tmp_path / "bare")
+    project = tomllib.loads((bare / "pyproject.toml").read_text())
+    tool = project["tool"]
+    assert "tests" not in tool["basedpyright"]["include"]
+    assert "tests" not in tool["mypy"]["files"]
+    assert "tests" not in tool["ruff"]["src"]
+    assert "tests" not in tool["pytest"]["ini_options"]["pythonpath"]
+    (tmp_path / "with" / "tests").mkdir(parents=True)
+    tested = compose_into(tmp_path / "with")
+    tool = tomllib.loads((tested / "pyproject.toml").read_text())["tool"]
+    assert "tests" in tool["basedpyright"]["include"]
+    assert "tests" in tool["mypy"]["files"]
+    assert tool["pytest"]["ini_options"]["testpaths"] == ["tests"]

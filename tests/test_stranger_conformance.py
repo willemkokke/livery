@@ -56,6 +56,14 @@ _CONTRACT = (
 )
 
 
+#: Our distributions from this checkout, editable as the workshop's own
+#: sources declare them, so uv sees one URL for each.
+_LOCAL_SOURCES = "".join(
+    f'livery-{name} = {{ path = "{ROOT / "packages" / name}", editable = true }}\n'
+    for name in ("workshop", "forge", "toolroom", "footman")
+)
+
+
 def _stranger(destination: Path) -> Path:
     """A foreign brand's workspace: contract written, seeds written, files generated."""
     from livery.workshop._identity import project_facts
@@ -129,11 +137,7 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     text = pyproject.read_text()
     text = text.replace(
         "[tool.uv.sources]\n",
-        "[tool.uv.sources]\n"
-        f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
-        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
-        f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
-        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n',
+        "[tool.uv.sources]\n" + _LOCAL_SOURCES,
         1,
     )
     pyproject.write_text(text)
@@ -196,11 +200,7 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
     text = pyproject.read_text()
     text = text.replace(
         "[tool.uv.sources]\n",
-        "[tool.uv.sources]\n"
-        f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
-        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
-        f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
-        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n',
+        "[tool.uv.sources]\n" + _LOCAL_SOURCES,
         1,
     )
     pyproject.write_text(text)

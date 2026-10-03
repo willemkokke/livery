@@ -92,6 +92,9 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     injected: dict[str, Any] = {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
+        # The workspace's own tests directory, which the checkers and
+        # the test runner read only while it exists: a newborn has none.
+        "root_tests": ["tests"] if (root / "tests").is_dir() else [],
         "docs_site_url": str(docs_table(root).get("site-url", "")),
         # The slots the check records fill: the dev group's tool lines,
         # pytest's addopts. An extension's contribution lands here, and a

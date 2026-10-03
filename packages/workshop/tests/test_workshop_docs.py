@@ -1176,26 +1176,47 @@ def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:
     assert 'custom_dir = "overrides"' in config
 
 
-def test_the_override_template_follows_the_committed_card(tmp_path: Path) -> None:
+def test_the_override_template_follows_the_workspace_card_then_the_shipped_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.docs import _site
     from livery.extensions.docs._site import overrides_template
 
     root = _workspace(
         tmp_path,
         docs_table='[docs]\ntitle = "Acme"\ndescription = "Acme, described."\n',
     )
-    # The fallback first: no committed card, no image tags, and the
+    # The fallback first: no card anywhere, no image tags, and the
     # plain summary card instead of the large one.
+    monkeypatch.setattr(_site, "extension_assets", lambda root: [])
     rendered = overrides_template(root)
     assert "og:image" not in rendered
     assert 'content="summary"' in rendered
     assert "og:site_name" in rendered
+    # The docs extension ships a card, staged under its own directory.
+    assets = tmp_path / "shipped"
+    assets.mkdir()
+    (assets / "og-card.png").write_bytes(b"\x89PNG")
+    monkeypatch.setattr(_site, "extension_assets", lambda root: [("docs", assets)])
+    rendered = overrides_template(root)
+    assert 'config.site_url ~ "_extensions/docs/assets/og-card.png"' in rendered
+    assert 'content="summary_large_image"' in rendered
+    # The workspace's own card wins.
     (root / "docs" / "assets").mkdir(parents=True)
     (root / "docs" / "assets" / "og-card.png").write_bytes(b"\x89PNG")
     rendered = overrides_template(root)
+    assert 'config.site_url ~ "assets/og-card.png"' in rendered
     assert 'og:image" content="{{ image }}"' in rendered
-    assert 'content="summary_large_image"' in rendered
     # The alt line is the instance's own description.
     assert "Acme, described." in rendered
+
+
+def test_the_docs_extension_ships_a_card() -> None:
+    from livery.workshop._extensions import extension_content
+
+    content = extension_content("docs")
+    assert content is not None
+    assert (content / "docs" / "assets" / "og-card.png").is_file()
 
 
 def test_the_scoped_preview_carries_the_surface_two_levels_up(

@@ -1066,6 +1066,33 @@ answers file; with its uv sources pointed at this branch's packages,
 newborn's own `fm check` exited 0, configure, build, ctest and
 clang-tidy included. `test_a_born_project_is_green` stays open with 7c.
 
+**7c built (issue #1088): the test and asset seeds go.** The docs test
+seed is two checks of the docs extension, registered as it mounts:
+`lint.doclinks` (internal links and anchors of the authored docs
+resolve) and `lint.docstrings` (every export of every python member in
+the gate's scope has a docstring, probed in one child process of the
+workspace's interpreter). The contracts test seed goes: `layering.graph`
+runs its `verify_workspace`, and the template check already judges the
+uv members, which are composed from discovery. Its member-list
+assertion was also wrong for native members, which have a contract and
+no uv membership; `fm ci.scale` failed on it. The link-preview card is
+the docs extension's site asset, used when the workspace has none of
+its own; the empty `site.css` seed goes, and a workspace's own sheet
+still loads last. A newborn's seeds are `README.md`, `LICENSE` and
+`docs/index.md`. `test_a_born_project_is_green` births a project from
+this checkout, points its uv sources at this checkout's packages, adds
+a python and a cpp-conan member and runs the newborn's gate; it locks
+over the network, so it arms with `WORKSHOP_CONFORMANCE_DRIVE=1`. Its
+first run found a newborn's checkers reading a root `tests/` it no
+longer has; the composed lists name it only while it exists. It passes.
+The stranger drive, the release rehearsal and the descendant chain,
+armed the same way, fail on faults older than this change: no
+`[tools] index` in the stranger's contract, the forge's isolated tests
+importing footman, a stale local Gitea token.
+`fm new.project` writing every list explicit waits for the checks to be
+extensions (phase 9); `CHANGELOG.md` on the first record moves with the
+changelog extension (phase 10).
+
 Deliverables:
 
 - Seeds in extension wheels under `seeds/`; the `create` phase writes
@@ -1539,6 +1566,15 @@ Acceptance:
   (`WORKSHOP_TEMPLATES_DEPLOY_KEY`) have no reader any more.
   `--extensions=<combination>` for `fm new.package` waits for the
   package composition phase; `--kind` stays until then.
+- 2026-10-03, after 7b2: `fm ci.scale` re-run on main 87cb3992, 300
+  members, the same machine while other work was paused: generation
+  625.3s; `fm sync` 53.1s cold, 13.9s warm, 11.7s one changed;
+  `fm template.check` 6.7s, 4.0s, 4.2s (564.5s, 528.7s, 412.0s at the
+  baseline: copier's render is gone). `fm check` exited 1 in every
+  state on the contracts test 7c removes, so its 230.4s cold, 212.5s
+  warm and 213.4s one changed are not comparable: a red gate records
+  no proved tree, so the warm and one-changed runs ran whole. The
+  gate's rows are re-measured after 7c.
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an

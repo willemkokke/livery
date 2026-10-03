@@ -150,7 +150,7 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 RUFF_BASE = r"""[tool.ruff]
 line-length = 88
 target-version = "py{{ python_floor | replace('.', '') }}"
-src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
+src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 [tool.ruff.format]
 # A markdown page is prose: a python fence may hold a snippet directive
@@ -169,11 +169,9 @@ convention = "google"
 # The claims first: each line is a category's patterns for a present
 # kind, with the rules a check withholds there.
 {% for pattern, codes in per_file_ignores %}"{{ pattern }}" = [{% for code in codes %}"{{ code }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-{% endfor %}# The provenance headers name the template source verbatim, and a
-# source URL or path may be long.
+{% endfor %}# The composed tasks.py opens with the header the fragment engine
+# writes, whose lines it does not wrap.
 "tasks.py" = ["E501"]
-"tests/test_workspace_contracts.py" = ["E501"]
-"tests/test_docs_drift.py" = ["E501"]
 # The CI emitters carry workflow YAML as string content, and the
 # check records' fragments carry the rendered files' tables; their
 # lines are the generated files' lines, not prose to wrap.
@@ -182,7 +180,7 @@ convention = "google"
 """
 
 BASEDPYRIGHT = r"""[tool.basedpyright]
-include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
+include = [{% if packages %}"packages", {% endif %}{% for path in root_tests %}"{{ path }}", {% endfor %}"tasks.py"]
 # A conan recipe is conan's input, read by conan's own interpreter
 # where the conan package lives; the workspace venv never has it, so
 # the checker that reads the whole tree skips the recipes. The cpp
@@ -214,8 +212,8 @@ MYPY = r"""[tool.mypy]
 files = [
 {% for package in py %}    "packages/{{ package.dir }}/src",
     "packages/{{ package.dir }}/tests",
-{% endfor %}    "tests",
-    "tasks.py",
+{% endfor %}{% for path in root_tests %}    "{{ path }}",
+{% endfor %}    "tasks.py",
 ]
 mypy_path = [
     "typings",
@@ -325,12 +323,12 @@ core = "ctrace"
 packages = ["packages/", "packages\\"]
 
 [tool.pytest.ini_options]
-testpaths = [{% if packages %}"packages", {% endif %}"tests"]
+testpaths = [{% if packages %}"packages"{% if root_tests %}, {% endif %}{% endif %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 # Test modules are named by their path (`--import-mode=importlib`), so
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endfor %}"tests"]
+pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endfor %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
