@@ -1,7 +1,9 @@
 {
-  // Rendered by the template channel ({{ template_source_label }}, project kind);
-  // the gate keeps it matching its render. Edit the source and
-  // run `{{ runner_prog }} template.apply`; an edit here is drift.
+  // Composed by `{{ prog }} sync` from the base's template and what the
+  // listed extensions and the registered checks contribute; the gate
+  // keeps it matching. Edit inside the region below, which is the
+  // repository's own: `{{ prog }} check --fix` moves a setting added
+  // anywhere else, VS Code's own included, into it.
   //
   // An editor terminal is an entered shell from its first prompt: the
   // profile evaluates the workspace's environment, then hands over to
@@ -9,27 +11,26 @@
   // settings belong in the user's own settings, never here.
   // The repository's own settings, each line ending with a comma.
   // -- workshop: region settings, yours to edit; the render keeps it --
-{{ (regions.get('.vscode/settings.json') or {}).get('settings', '') }}  // -- workshop: end settings --
-  // What the registered checks say to the editor, each a check
-  // record's fragment for this file.
-{{ fragments['.vscode/settings.json'] }}  "terminal.integrated.profiles.osx": {
+  // -- workshop: end settings --
+  // What the registered checks and the listed extensions contribute.
+{{ contributed_entries }}  "terminal.integrated.profiles.osx": {
     "{{ project_name }}": {
       "path": "zsh",
-      "args": ["-c", "eval \"$(uv run -q {{ runner_prog }} --quiet env.emit posix)\"; exec zsh -i"]
+      "args": ["-c", "eval \"$(uv run -q {{ prog }} --quiet env.emit posix)\"; exec zsh -i"]
     }
   },
   "terminal.integrated.defaultProfile.osx": "{{ project_name }}",
   "terminal.integrated.profiles.linux": {
     "{{ project_name }}": {
       "path": "bash",
-      "args": ["-c", "eval \"$(uv run -q {{ runner_prog }} --quiet env.emit posix)\"; exec bash -i"]
+      "args": ["-c", "eval \"$(uv run -q {{ prog }} --quiet env.emit posix)\"; exec bash -i"]
     }
   },
   "terminal.integrated.defaultProfile.linux": "{{ project_name }}",
   "terminal.integrated.profiles.windows": {
     "{{ project_name }}": {
       "path": "pwsh.exe",
-      "args": ["-NoExit", "-Command", "uv run -q {{ runner_prog }} --quiet env.emit pwsh | Invoke-Expression"]
+      "args": ["-NoExit", "-Command", "uv run -q {{ prog }} --quiet env.emit pwsh | Invoke-Expression"]
     }
   },
   "terminal.integrated.defaultProfile.windows": "{{ project_name }}"

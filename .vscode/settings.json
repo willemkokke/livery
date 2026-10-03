@@ -1,7 +1,9 @@
 {
-  // Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
-  // the gate keeps it matching its render. Edit the source and
-  // run `fm template.apply`; an edit here is drift.
+  // Composed by `fm sync` from the base's template and what the
+  // listed extensions and the registered checks contribute; the gate
+  // keeps it matching. Edit inside the region below, which is the
+  // repository's own: `fm check --fix` moves a setting added
+  // anywhere else, VS Code's own included, into it.
   //
   // An editor terminal is an entered shell from its first prompt: the
   // profile evaluates the workspace's environment, then hands over to
@@ -10,8 +12,7 @@
   // The repository's own settings, each line ending with a comma.
   // -- workshop: region settings, yours to edit; the render keeps it --
   // -- workshop: end settings --
-  // What the registered checks say to the editor, each a check
-  // record's fragment for this file.
+  // What the registered checks and the listed extensions contribute.
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
   },

@@ -887,6 +887,29 @@ running: a scratch clone with `lfs = true` locked and installed
 runner fetches LFS objects by itself where its image has git-lfs; the
 image is not ours to change.
 
+**6b, `.vscode` slice built (issue #1074).** `.vscode/settings.json`
+and `.vscode/extensions.json` are the base's text templates in the
+engine, comments and regions kept, and what extensions and registered
+checks say to the editor arrives as data: a fragment that
+`contributes` is a JSON object, merged by key across owners (a key two
+owners set differently refuses, naming both), and the target's one
+template renders the result (`contributed`, `contributed_entries`). A
+check's settings and its marketplace id are its extension's
+contributions, so unregistering the check takes them. The template
+check rewrites under `--fix`: a top-level key or a list item the file
+has and the render lacks (VS Code's UI writes them outside the region)
+moves into the region, and a key the render owns set to another value
+refuses, naming the key and both values (Willem's ruling of
+2026-10-03); the fix then judges, as a rewriter is not judged again
+under `--fix`. Proved by running: a setting added outside the region
+moved on `fm check --fix`, and the gate passed. Apart from the
+headers, both files are byte-identical to the copier render.
+The provenance lint's `--fix` had stamped its extension-content header
+onto the first slice's templates, so the composed `.gitignore` and
+`.gitattributes` carried a header that called an edit a kept override;
+the lint now skips `content/root/` and `content/package/`, whose
+composed files carry their own header, and the stamped lines are gone.
+
 **6b, the channels move onto it.** Deliverables:
 
 - Check fragments (the `[tool.*]` tables, `.vscode` files,

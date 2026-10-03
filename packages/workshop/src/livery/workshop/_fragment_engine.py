@@ -80,6 +80,10 @@ class Fragment:
         deletes: `<owner>:<name>` of a lower fragment this one removes.
         reason: Why the replacement or deletion is wanted; required
             with either.
+        contributes: Whether the fragment is data for its target's one
+            template rather than text: its rendered content is a JSON
+            object, merged by key with every other contribution to the
+            target, and the template reads the result.
     """
 
     owner: str
@@ -93,6 +97,7 @@ class Fragment:
     replaces: str = ""
     deletes: str = ""
     reason: str = ""
+    contributes: bool = False
 
     @property
     def ref(self) -> str:
@@ -339,6 +344,33 @@ def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
     return json.dumps(merged, indent=2) + "\n"
 
 
+def _entries(merged: Mapping[str, Any]) -> str:
+    """*merged* as the members of a JSON object, two spaces in, each with its comma."""
+    lines: list[str] = []
+    for key, value in merged.items():
+        body = json.dumps(value, indent=2).replace("\n", "\n  ")
+        lines.append(f"  {json.dumps(key)}: {body},\n")
+    return "".join(lines)
+
+
+def _contributed(
+    path: str, contributions: list[Fragment], data: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The contributions to *path* merged by key, in the order they apply."""
+    merged: dict[str, Any] = {}
+    owners: dict[str, str] = {}
+    for fragment in contributions:
+        text = _render(fragment, data)
+        try:
+            part = json.loads(text)
+        except ValueError as error:
+            fail(f"{path}: contribution {fragment.ref} is not JSON: {error}")
+        if not isinstance(part, dict):
+            fail(f"{path}: contribution {fragment.ref} is not a JSON object")
+        _merge(merged, cast("dict[str, Any]", part), owners, fragment.ref)
+    return merged
+
+
 def _splice(rendered: str, committed: str) -> str:
     """*rendered* with each region's content taken from *committed*."""
     from livery.workshop._regions import regions_in
@@ -397,8 +429,25 @@ def plan(
         members.sort(key=lambda fragment: rank[fragment.owner])
         package = _package_of(path, packaged)
         seen = {**data, "package": package} if package else dict(data)
-        parts = [(fragment, _render(fragment, seen)) for fragment in members]
-        text = _compose(path, parts)
+        contributions = [fragment for fragment in members if fragment.contributes]
+        templates = [fragment for fragment in members if not fragment.contributes]
+        if contributions:
+            if len(templates) != 1:
+                fail(
+                    f"{path}: contributions need one template to render them;"
+                    f" it has {len(templates)}"
+                )
+            merged = _contributed(path, contributions, seen)
+            seen = {
+                **seen,
+                "contributed": merged,
+                "contributed_entries": _entries(merged),
+            }
+            text = _render(templates[0], seen)
+        else:
+            seen = {**seen, "contributed": {}, "contributed_entries": ""}
+            parts = [(fragment, _render(fragment, seen)) for fragment in members]
+            text = _compose(path, parts)
         committed = root / path
         if committed.is_file():
             text = _splice(text, committed.read_text(encoding="utf-8"))
