@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-footman"
-version = "0.54.0"
+version = "0.55.0"
 description = "A task runner with typed commands, nested groups, and instant shell completion."
 readme = "README.md"
 license = "MIT"
@@ -58,8 +58,8 @@ test = [
     "pyte>=0.8",
     # The suite drives the toolroom bridge, and the playground renders
     # the tools' stubs through the store.
-    "livery-toolroom>=0.8.0",
-    "livery-toolroom-store>=0.0.0",
+    "livery-toolroom>=0.9.0",
+    "livery-toolroom-store>=0.1.0",
 ]
 
 [project.urls]

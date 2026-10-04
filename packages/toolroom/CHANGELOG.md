@@ -5,6 +5,17 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.9.0] - 2026-10-04
+
+### Added
+
+- Examples are files: a package's examples live under docs/examples/ as python files a page includes by snippet, and one harness runs each through the kind's runner, replacing footman's page-as-session harness and its three markers by @willemkokke
+- The extractor is data and the development section is pages: the site's handler blocks render from the kind's data, the prose fragments render one page per section, and the mount refuses two pages at one URL by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Extensions replace layers: each declares itself in the workshop.extensions entry point group, and a workspace lists them by name in [workspace] extensions by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+
 ## [0.8.0] - 2026-09-29
 
 ### Added

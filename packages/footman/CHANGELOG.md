@@ -5,6 +5,51 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.55.0] - 2026-10-04
+
+### Added
+
+- The stubs live in typings/, written from the index, and the toolroom wheel ships none by @willemkokke
+- Stubs for the locked tools only, with sorted imports and a noqa header, declared by a handles module beside them by @willemkokke
+- The store renders stubs from surfaces, and the index holds none by @willemkokke
+- A docs page edit runs the page's own examples in the affected gate by @willemkokke
+- A package's docs section is the package's, and the site assembles its config at build time by @willemkokke
+- Kebab-case is the spelling of every key we define, the migration is gone, and footman warns on an unknown key with the closest one named by @willemkokke
+- An npm kind names its runtime, node has a record from nodejs.org, and basedpyright runs on node by @willemkokke
+- A profiled run carries what it launches by @willemkokke
+- The trace leaves the leg by @willemkokke
+- One run assembles into one timeline by @willemkokke
+- The local command carries the run it caused by @willemkokke
+- Every CI entry keeps a trace, and one switch governs it by @willemkokke
+- A task body can read what the run has already finished by @willemkokke
+- The tools lock and sync in uv's shape, and a newborn locks its own by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+- Examples are files: a package's examples live under docs/examples/ as python files a page includes by snippet, and one harness runs each through the kind's runner, replacing footman's page-as-session harness and its three markers by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Extensions replace layers: each declares itself in the workshop.extensions entry point group, and a workspace lists them by name in [workspace] extensions by @willemkokke
+- A project's direct dependencies mount their footman.builtin names as a rung of the cascade, and builtin-exclude keeps a named one out by @willemkokke
+- Plugins mount through the project builtin rung: the workshop mounts the listed extensions from its own entry module, and the rendered tasks.py keeps only its comment by @willemkokke
+- Footman scans the installed entry points once per process and shares the scan through installed_entry_points, and a plugin declares its tools in a data module by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+
+### Fixed
+
+- The stubs and handles live beside the tools package, never inside its directory by @willemkokke
+- The exit collector is skipped when the run's own installation is gone by @willemkokke
+- A line a run prints leaves the process when it is printed, whatever its output is by @willemkokke
+- Footman's floor on livery-toolroom is 0.8.0, the version its playground tests were written against by @willemkokke
+- Every python in a workspace venv stops importing coverage at startup: coverage's own hook meters the tests' subprocesses, and the floor moves to 7.13 by @willemkokke
+- Each process pairs the wall clock with the narrowest of several run-clock brackets, so a preempted reading no longer shifts its profiled spans by @willemkokke
+- A profiled child maps its spans through its parent's clock anchor, so a wall-clock step between their starts no longer moves the child's timeline by @willemkokke
+- Footman's test extra declares livery-toolroom-store, which its playground tests import by @willemkokke
+
+### Changed
+
+- The global install names livery-footman, the dist a project's lock pins by @willemkokke
+- One seam for a finished row by @willemkokke
+- The contract key type becomes kind by @willemkokke
+
 ## [0.54.0] - 2026-09-16
 
 ### Added
