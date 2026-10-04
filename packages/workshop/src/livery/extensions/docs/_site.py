@@ -150,7 +150,7 @@ def generate_coverage_pages(root: Path) -> list[str]:
         reports = package_coverage_reports(package)
         if not reports:
             continue
-        name = package.directory.name
+        name = package.member
         mount = package.directory / "docs" / GENERATED_DIR
         mount.mkdir(parents=True, exist_ok=True)
         lines = ["# Coverage", ""]
@@ -648,7 +648,7 @@ def _extra_asset_lines(root: Path) -> list[str]:
     js: list[str] = []
     for package in discover_packages(root):
         declared_css, declared_js = package_docs_extras(package)
-        prefix = f"packages/{package.directory.name}/"
+        prefix = f"packages/{package.member}/"
         css += [prefix + _published(entry) for entry in declared_css]
         js += [_js_line(entry, prefix) for entry in declared_js]
     css += [name for name in WORKSPACE_CSS if (root / "docs" / name).is_file()]
@@ -786,7 +786,7 @@ def _extension_block(root: Path, *, relative_to: str = ".") -> list[str]:
     """
     anchor = "" if relative_to == "." else relative_to.rstrip("/") + "/"
     snippet_paths = [relative_to] + [
-        f"{anchor}packages/{package.directory.name}/_generated"
+        f"{anchor}packages/{package.member}/_generated"
         for package in discover_packages(root)
     ]
     appended = [f"{anchor}{path}" for path in abbreviation_files(root)]
@@ -1031,7 +1031,7 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     authored = authored_nav(package)
     if authored is None and not pages and not modules and not changelog and not absent:
         return ([], False)
-    name = package.directory.name
+    name = package.member
     prefix = f"packages/{name}/"
     inner = indent + "    "
     tree, blocks = authored if authored is not None else ([], {})
@@ -1138,7 +1138,7 @@ def generate_changelog_pages(root: Path) -> list[str]:
         target = package.directory / "docs" / GENERATED_DIR / "changelog.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(page, encoding="utf-8")
-        generated.append(package.directory.name)
+        generated.append(package.member)
     return generated
 
 
@@ -1158,7 +1158,7 @@ def _receipt_tags(root: Path) -> list[tuple[str, str, str, str]]:
     )
     if result.code != 0:
         return []
-    names = {p.directory.name: p.name for p in discover_packages(root)}
+    names = {p.member: p.name for p in discover_packages(root)}
     tags: list[tuple[str, str, str, str]] = []
     for line in result.stdout.splitlines():
         match = re.fullmatch(
@@ -1312,7 +1312,7 @@ def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
     if full:
         shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True, exist_ok=True)
-    present = {package.directory.name for package in discover_packages(root)}
+    present = {package.member for package in discover_packages(root)}
     for stale in base.iterdir():
         if stale.name not in present:
             shutil.rmtree(stale, ignore_errors=True)
@@ -1320,7 +1320,7 @@ def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
     mounted: list[str] = []
     for package in discover_packages(root):
         docs = package.directory / "docs"
-        name = package.directory.name
+        name = package.member
         target = base / name
         stamp = stamps / f"{name}.digest"
         if not docs.is_dir():
@@ -1456,9 +1456,9 @@ def named_package(root: Path, name: str) -> Package:
     """The package whose directory is *name*; refuses naming the known."""
     packages = discover_packages(root)
     for package in packages:
-        if package.directory.name == name:
+        if package.member == name:
             return package
-    known = ", ".join(sorted(p.directory.name for p in packages)) or "none"
+    known = ", ".join(sorted(p.member for p in packages)) or "none"
     fail(f"no package {name!r} in this workspace (known: {known})")
 
 
@@ -1507,7 +1507,7 @@ def materialise_preview(root: Path, package: Package) -> Path:
     """
     from livery.workshop._provenance import generated_header
 
-    name = package.directory.name
+    name = package.member
     base = root / PREVIEW / name
     shutil.rmtree(base, ignore_errors=True)
     docs = base / "docs"
@@ -1568,7 +1568,7 @@ def generate_api_pages(root: Path) -> list[str]:
                 f" `{package.kind}` kind declares no extractor.\n",
                 encoding="utf-8",
             )
-            generated.append(package.directory.name)
+            generated.append(package.member)
             continue
         modules = api_modules(package)
         # The generated reference is rebuilt whole: a package that
@@ -1580,7 +1580,7 @@ def generate_api_pages(root: Path) -> list[str]:
             target = base / page
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
-        generated.append(package.directory.name)
+        generated.append(package.member)
     return generated
 
 
@@ -1684,7 +1684,7 @@ def render_coverage_pages(root: Path) -> list[str]:
         renderer = kind_coverage_pages(package.kind)
         if renderer is None:
             print(
-                f"  coverage: {package.directory.name}: the {package.kind} kind"
+                f"  coverage: {package.member}: the {package.kind} kind"
                 " renders no coverage pages; its page states the absence"
             )
             continue
@@ -1729,7 +1729,7 @@ def emit_section_navs(root: Path) -> list[str]:
             + "\n]\n",
             encoding="utf-8",
         )
-        emitted.append(package.directory.name)
+        emitted.append(package.member)
     return emitted
 
 

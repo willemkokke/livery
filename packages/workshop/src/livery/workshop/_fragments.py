@@ -187,7 +187,7 @@ include = [{% if packages %}"packages", {% endif %}{% for path in root_tests %}"
 # members are skipped whole: their kind type-checks nothing. A
 # documentation example is judged for its names by lint and run by
 # the examples check; it is not typed code.
-exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/*/conanfile.py", "packages/*/docs/examples"]
+exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/**/conanfile.py", "packages/**/docs/examples"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.

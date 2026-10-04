@@ -50,16 +50,21 @@ def manifests_receipt_path(root: Path) -> Path:
 
 
 def manifests_digest(root: Path) -> str:
-    """A digest of the root ``pyproject.toml`` and every ``packages/*/pyproject.toml``.
+    """A digest of the root ``pyproject.toml`` and every package's ``pyproject.toml``.
 
     Path order, each path and its bytes, so a member added, removed,
     or edited changes the digest.
     """
     import hashlib
 
+    from livery.workshop._packages import package_directories
+
     digest = hashlib.sha256()
     manifests = sorted(
-        [root / "pyproject.toml", *root.glob("packages/*/pyproject.toml")]
+        [
+            root / "pyproject.toml",
+            *(directory / "pyproject.toml" for directory in package_directories(root)),
+        ]
     )
     for path in manifests:
         if path.is_file():

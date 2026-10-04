@@ -488,8 +488,8 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
     # recipe with it: the checker that reads the tree cannot resolve
     # the conan import, which lives in conan's own interpreter.
     assert (
-        'exclude = ["packages/native", "packages/*/conanfile.py",'
-        ' "packages/*/docs/examples"]'
+        'exclude = ["packages/native", "packages/**/conanfile.py",'
+        ' "packages/**/docs/examples"]'
     ) in pyproject
     assert '"packages/native/src"' not in pyproject
 

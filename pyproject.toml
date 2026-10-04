@@ -173,7 +173,7 @@ include = ["packages", "tests", "tasks.py"]
 # members are skipped whole: their kind type-checks nothing. A
 # documentation example is judged for its names by lint and run by
 # the examples check; it is not typed code.
-exclude = ["packages/*/conanfile.py", "packages/*/docs/examples"]
+exclude = ["packages/**/conanfile.py", "packages/**/docs/examples"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.

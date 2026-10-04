@@ -24,10 +24,21 @@ FILE_VARIABLE = "WORKSHOP_SPEED_FILE"
 _sums: dict[str, dict[str, float]] = defaultdict(lambda: {"seconds": 0.0, "tests": 0})
 
 
+#: The directories a package's tests live under: the path before the
+#: first of them names the package, one level deeper in a group
+#: directory (``packages/extensions/ruff/tests/...``).
+PACKAGE_TREES = frozenset({"tests", "src", "docs"})
+
+
 def package_of(nodeid: str) -> str:
     """The workspace package a test node belongs to (``packages/forge``), or ``""``."""
     parts = nodeid.split("::", 1)[0].split("/")
-    return f"packages/{parts[1]}" if len(parts) >= 2 and parts[0] == "packages" else ""
+    if len(parts) < 3 or parts[0] != "packages":
+        return ""
+    for index in range(2, len(parts) - 1):
+        if parts[index] in PACKAGE_TREES:
+            return "/".join(parts[:index])
+    return "/".join(parts[:2])
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:

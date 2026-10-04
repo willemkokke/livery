@@ -198,7 +198,9 @@ def _conan_cache_step() -> str:
     The cache is the speed extension and Conan Center the origin, so a
     miss costs time, never a red leg.
     """
-    recipes = "packages/*/conanfile.py"
+    # A forge's glob stops at a slash: a package in a group directory
+    # is one level deeper.
+    recipes = "packages/*/conanfile.py', 'packages/*/*/conanfile.py"
     return (
         f"      - uses: {CACHE}\n"
         "        with:\n"
@@ -409,7 +411,9 @@ def _publish_step(job: Job, *, forge: str) -> str:
         f"      - uses: {action}\n"
         "        with:\n"
         f"          name: {job.publishes}-${{{{ matrix.os }}}}\n"
-        "          path: packages/*/dist/*\n"
+        "          path: |\n"
+        "            packages/*/dist/*\n"
+        "            packages/*/*/dist/*\n"
         "          if-no-files-found: ignore\n"
     )
 
@@ -716,7 +720,9 @@ def _gitlab_job(
     if job.deploy:
         lines.append("    - mv site public\n  artifacts:\n    paths: [public]\n")
     elif job.publishes:
-        lines.append('  artifacts:\n    paths: ["packages/*/dist/*"]\n')
+        lines.append(
+            '  artifacts:\n    paths: ["packages/*/dist/*", "packages/*/*/dist/*"]\n'
+        )
     return "".join(lines) + "\n"
 
 

@@ -287,15 +287,13 @@ def _rule_composed(
 ) -> Provenance | None:
     del emitted
     from livery.workshop._fragment_engine import PACKAGE_PREFIX
+    from livery.workshop._packages import member_depth
     from livery.workshop._shipped_files import shipped
 
     fragments, _order = shipped(root)
     # A package's file is composed from the `package/` fragments.
-    inner = (
-        PACKAGE_PREFIX + Path(*relative.parts[2:]).as_posix()
-        if len(relative.parts) > 2 and relative.parts[0] == "packages"
-        else ""
-    )
+    depth = member_depth(root, relative)
+    inner = PACKAGE_PREFIX + Path(*relative.parts[depth:]).as_posix() if depth else ""
     owners = [
         fragment.owner
         for fragment in fragments
@@ -386,12 +384,14 @@ def _rule_member(
 ) -> Provenance | None:
     """A package's own files: its changelog config, its receipts, its content."""
     del emitted
+    from livery.workshop._packages import member_depth
 
-    if len(relative.parts) <= 2 or relative.parts[0] != "packages":
+    depth = member_depth(root, relative)
+    if not depth:
         return None
     prog = footman.prog()
-    member = Path(*relative.parts[:2])
-    rest = Path(*relative.parts[2:]).as_posix()
+    member = Path(*relative.parts[:depth])
+    rest = Path(*relative.parts[depth:]).as_posix()
     if rest == ".workshop-rendered":
         return Provenance(
             "receipts",
@@ -553,8 +553,13 @@ def owned_lines(root: Path, relative: Path) -> list[str]:
 
 def _content_trees(root: Path) -> list[tuple[str, Path]]:
     """Each workspace package's shipped content tree, with its extension name."""
+    from livery.workshop._packages import package_directories
+
     trees = []
-    for src in sorted(root.glob("packages/*/src")):
+    for directory in package_directories(root):
+        src = directory / "src"
+        if not src.is_dir():
+            continue
         for content in sorted(src.rglob("content")):
             if not content.is_dir():
                 continue

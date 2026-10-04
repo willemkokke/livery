@@ -224,8 +224,9 @@ def contract_config(root: Path) -> RepoConfig:
         allow_auto_merge=True,
         required_contexts=(required_context_string(forge_kind, context),),
         # The release train's receipts: once cut, no ordinary push
-        # may delete or move them.
-        protected_tag_patterns=("packages/*/v*",),
+        # may delete or move them. A forge's glob stops at a slash, so
+        # a package in a group directory needs the second pattern.
+        protected_tag_patterns=("packages/*/v*", "packages/*/*/v*"),
         # The same truth spelled for a forge that cannot name
         # contexts: the server refuses merges while the head is not
         # green, the UI's merge button included.

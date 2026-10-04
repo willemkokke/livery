@@ -299,7 +299,9 @@ def test_wheel_platforms_render_the_wheels_matrix_before_the_wave(
         if "upload-artifact" in str(step.get("uses", ""))
     )
     assert upload["name"] == "wheels-${{ matrix.os }}"
-    assert upload["path"] == "packages/*/dist/*"
+    # A forge glob stops at a slash: a package in a group directory is
+    # one level deeper.
+    assert upload["path"] == "packages/*/dist/*\npackages/*/*/dist/*\n"
     assert jobs["publish"]["needs"] == ["wheels"]
     # The wave spells no --prebuilt: it decides from the collected dist.
     assert "--prebuilt" not in text

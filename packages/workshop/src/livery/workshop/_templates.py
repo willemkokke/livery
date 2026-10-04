@@ -376,15 +376,22 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     and a caller adding many members runs them once after the last.
     Refuses an existing directory, naming it.
     """
-    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
-        fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
+    if not re.fullmatch(r"([a-z][a-z0-9-]*/)?[a-z][a-z0-9-]*", name):
+        fail(
+            f"package name {name!r}: use lowercase letters, digits, hyphens,"
+            " and at most one group directory (extensions/ruff)"
+        )
     destination = root / "packages" / name
     if destination.exists():
         fail(f"{destination} already exists")
+    group = destination.parent
+    if group.name != "packages" and (group / "workshop.toml").is_file():
+        fail(f"{group} is a package: a group directory has no workshop.toml")
     facts = identity(root)
     namespace = str(facts.get("namespace_package", ""))
     prefix = namespace.replace(".", "-")
-    package_name = f"{prefix}-{name}" if prefix else name
+    flat = name.replace("/", "-")
+    package_name = f"{prefix}-{flat}" if prefix else flat
     data: dict[str, Any] = {
         **facts,
         # The forge facts ride the contract: a package's changelog

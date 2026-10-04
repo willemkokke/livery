@@ -106,7 +106,7 @@ def discover_release(
             " runs on the merge commit of a workflow.release PR; pass"
             " --ref=<squash sha> when HEAD has moved past it."
         )
-    listed = {p.directory.name: p for p in discover_packages(root)}
+    listed = {p.member: p for p in discover_packages(root)}
     chosen: list[Package] = []
     stated: dict[str, str] = {}
     for name, version in pairs:
@@ -157,7 +157,7 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
             " produce one."
         )
     span = f"{point}..{ref}^"
-    moved = git.log_paths(span, (f"packages/{package.directory.name}",))
+    moved = git.log_paths(span, (f"packages/{package.member}",))
     if moved:
         listed = "\n".join(f"    {s}" for s in moved)
         fail(

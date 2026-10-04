@@ -164,7 +164,7 @@ def unreleased_entry(root: Path, package: Package, version: str = "") -> str:
     """
     args = ["--unreleased", "--strip", "all"]
     if version:
-        args += ["--tag", f"packages/{package.directory.name}/v{version}"]
+        args += ["--tag", f"packages/{package.member}/v{version}"]
     return _run(root, package, *args).strip()
 
 
