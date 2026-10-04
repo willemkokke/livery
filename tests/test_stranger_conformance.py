@@ -168,6 +168,9 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     env = {
         **os.environ,
         "VIRTUAL_ENV": "",
+        # Its own conan home: a sync registers a native member as an
+        # editable, which in the machine's home would outlive the drive.
+        "CONAN_HOME": str(tmp_path / "conan-home"),
         "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
         # The drive is a stranger's machine: the operator's own
         # shared env (tokens, rig addresses) must not leak in
@@ -185,6 +188,18 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "livery-forge",
         ],
         ["uv", "run", "fm", "sync"],
+        # The drive's conan home starts empty, where the first configure
+        # would save a profile without a compiler (issue #1113); a
+        # person's home already holds a detected one, so the drive
+        # detects its own the same way, through the store's conan.
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "import livery.toolroom.tools.api as t;"
+            " t.conan.opts(nofail=False)('profile', 'detect', '--exist-ok')",
+        ],
     ):
         done = subprocess.run(step, cwd=root, env=env, capture_output=True, text=True)
         assert done.returncode == 0, (
@@ -218,7 +233,11 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "chore: birth"], cwd=root, check=True)
     subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
 
-    env = {**os.environ, "VIRTUAL_ENV": ""}
+    env = {
+        **os.environ,
+        "VIRTUAL_ENV": "",
+        "CONAN_HOME": str(tmp_path / "conan-home"),
+    }
     # uv judges a path dependency fresh by its pyproject alone, so the
     # local stand-ins are rebuilt explicitly or an edited source would
     # test yesterday's wheel.

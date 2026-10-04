@@ -269,6 +269,9 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
         "FORGE_TOKEN": token,
         "FORGE_ADMIN_TOKEN": token,
         "VIRTUAL_ENV": "",
+        # Every workspace the chain builds registers its native members
+        # as conan editables: in the chain's own home, never the machine's.
+        "CONAN_HOME": str(tmp_path / "conan-home"),
     }
     # The chain plays a person at a workstation. The suite's own rig
     # marks this session as a CI run, and a verb that behaves

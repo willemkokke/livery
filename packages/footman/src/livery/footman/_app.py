@@ -2142,7 +2142,11 @@ def _uv_handoff(argv: list[str], g: dict[str, object]) -> int | None:
             file=sys.stderr,
         )
     os.environ[_paths.env_var("UV_REEXEC")] = "1"
-    _reexec([uv, "run", "--project", str(root), _brand.prog, *argv])
+    # A project whose own tasks sync the environment says so with
+    # `uv-handoff = "enter"`: uv then enters the environment as it is, and
+    # a project file the tasks have yet to rewrite cannot fail the handoff.
+    entered = ["--no-sync"] if cfg.get("uv-handoff") == "enter" else []
+    _reexec([uv, "run", "--project", str(root), *entered, _brand.prog, *argv])
     return None  # unreachable: _reexec replaces or exits this process
 
 

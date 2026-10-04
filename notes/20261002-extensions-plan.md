@@ -1128,6 +1128,23 @@ kinds of file at its end, and every message and header names it.
 raises the floors, installs, then writes the files the new wheels
 compose, on one branch; the bare `fm workflow.update` runs it for every
 dependency.
+**8b built (issue #1005): removing a member is deleting it and
+syncing.** The composed project file follows discovery, so the sync
+already wrote it without a deleted member; what failed was the step
+before, the runner's handoff, whose `uv run` synced the environment
+from the stale file and stopped. Footman takes a project setting,
+`[tool.footman] uv-handoff = "enter"` (default `"sync"`), that enters
+the environment as it is (`uv run --no-sync`); the workshop composes
+it into the root `pyproject.toml`, since its own verbs bring the
+environment current. The reconcile then warns about the stale lock and
+the sync rewrites both. `test_removing_a_member_needs_only_sync`
+composes it; the armed `test_a_born_project_is_green` deletes a member
+from a newborn and runs `fm sync` from outside its environment. Proved
+by running: a scratch workspace's python member deleted, the branch's
+runner from outside synced it at exit 0 and the project file no longer
+names it. Found doing so (issue #1111, phase 9's): with its last python
+member gone the gate still runs the python checks over the root while
+the tool profile dropped their tools.
 
 Deliverables:
 

@@ -56,6 +56,9 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
             " syncs a scratch workspace over the network"
         )
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    # Its own conan home: a sync registers the native member as an
+    # editable, which in the machine's home would outlive this test.
+    env["CONAN_HOME"] = str(tmp_path / "conan-home")
     # Above any project the runner mounts its own built-ins alone, so the
     # birth reaches the workshop through a user tasks file in a scratch
     # config directory. The config-dir variable names it, since the
@@ -94,3 +97,23 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     gate = _run([fm, "check"], project, env)
     for check in ("lint-doclinks", "lint-docstrings", "test-ctest", "drift-check"):
         assert f"ok   {check}" in gate, gate
+    # Removing a member is deleting its directory and syncing: the
+    # handoff enters the environment as it is, the sync composes the
+    # project file without the member, and the gate is green again.
+    import shutil
+
+    shutil.rmtree(project / "packages" / "thing")
+    # From outside the project's environment, as a person's own `fm`
+    # arrives: the runner hands off to the project, which is the step a
+    # stale project file used to fail.
+    outside = {
+        key: value
+        for key, value in env.items()
+        if key not in ("FOOTMAN_UV_REEXEC", "FOOTMAN_NO_UV")
+    }
+    _run([sys.executable, "-m", "livery.footman", "sync"], project, outside)
+    assert "packages/thing" not in (project / "pyproject.toml").read_text()
+    # What removal owns: every composed and generated file follows. The
+    # whole gate waits on issue #1111: with the last python member gone,
+    # the python checks still run over the root without their tools.
+    _run([fm, "drift.check"], project, env)
