@@ -22,9 +22,7 @@ from livery.workshop._checks import (
     roles,
     run_check,
     unregister_check,
-    verify_roles,
 )
-from livery.workshop._kinds import CiContract, KindRecord, register_kind
 from livery.workshop._packages import Package
 
 _FAILURES = (BaseException,)
@@ -80,18 +78,6 @@ def test_an_unknown_check_name_refuses_naming_the_registry(restored_registries):
         unregister_check("nothing")
 
 
-def test_a_kind_gating_on_a_role_no_check_implements_refuses(restored_registries):
-    register_kind(
-        KindRecord(
-            name="odd-fake",
-            abstract=True,
-            ci=CiContract(check_verbs=("format", "divination")),
-        )
-    )
-    with pytest.raises(_FAILURES, match="'odd-fake' gates on divination"):
-        verify_roles()
-
-
 # Then the fake check: registered, run, narrowed, skipped by name.
 
 
@@ -137,7 +123,7 @@ def test_a_registered_check_runs_narrows_and_is_replaced_by_name(
 def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     restored_registries, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._kinds import gated
+    from livery.workshop._checks import judged_by
 
     ran: list[str] = []
 
@@ -159,10 +145,12 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     assert (
         "  lint.probe: packages/native runs (cpp-conan kind)" in capsys.readouterr().out
     )
-    # A role the kind's contract lacks skips by name, as the gate prints it.
-    assert gated((py, native), "typecheck") == (py,)
+    # A check whose kinds the native member's chain does not meet skips
+    # it by name, as the gate prints it.
+    assert judged_by(check_for("typecheck.basedpyright"), (py, native)) == (py,)
     assert (
-        "typecheck: packages/native skips (cpp-conan kind)" in capsys.readouterr().out
+        "typecheck.basedpyright: packages/native skips (cpp-conan kind)"
+        in capsys.readouterr().out
     )
 
 

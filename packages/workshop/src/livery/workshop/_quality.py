@@ -89,7 +89,6 @@ def walk(
     fixers, the post-edit hook's run. *only* keeps the named checks
     alone, a generated verb's run.
     """
-    _checks.verify_roles()
     for line in _checks.narrowings():
         print(line)
     ctx = replace(ctx, catalogue=_checks.catalogue(ctx))

@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._kinds import (
-    CiContract,
     KindRecord,
     backend_for,
     kind_chain,
@@ -176,7 +175,6 @@ def test_a_registered_kind_dispatches_and_chains(
             template="package-python-fake",
             parent="python",
             tools=("faketool",),
-            ci=CiContract(check_verbs=("format", "test")),
         )
     )
     assert "python-fake" in kind_names()

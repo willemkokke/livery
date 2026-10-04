@@ -10,12 +10,11 @@ builtin records at import, in the order the gate runs its
 rewriters; an extension's plugin registers its own at mount, the way it
 registers a kind, and re-registering a name replaces the record.
 
-Kinds gate on roles, never on tools. A kind's
-[livery.workshop._kinds.CiContract][] names the roles that apply to
-it, a role is the set of checks that implement it, and a check
-names the kinds it judges, so a C++ kind says ``format`` applies
-and whether that means ruff over its recipe or clang-format over
-its sources is the checks' business.
+A check names the kinds it judges, and a package of another kind
+skips it by name: a C++ member is formatted by ruff over its recipe
+and by clang-format over its sources because both checks name its
+kind. A role is the set of checks that implement it, so the roles that
+exist are what the listed extensions register.
 
 A check is named by its role and its tool, ``test.pytest``. Every
 role is a verb and every check a sub-task of it, made by
@@ -180,8 +179,8 @@ class CheckRecord:
         role: What the check implements: ``format``, ``lint``,
             ``typecheck``, ``typecomplete``, ``test``, ``build``,
             ``drift``, ``provenance`` or ``layering``, a string a
-            verb is generated from. A kind's CI contract names roles,
-            and a role a kind does not carry skips by name.
+            verb is generated from. The roles that exist are those
+            of the registered checks.
         run: The judging callable; a refusal is its verdict.
         scope: ``workspace`` for a check that judges the whole in one
             run, ``package`` for one that judges one package at a
@@ -751,24 +750,38 @@ def roles() -> tuple[str, ...]:
     )
 
 
-def verify_roles() -> None:
-    """Refuse a kind whose CI contract names a role no check implements.
+def judges_kind(record: CheckRecord, kind: str) -> bool:
+    """Whether *record* judges a package of *kind*: its kinds meet the kind's chain.
 
-    A kind gates on roles, so a verb in its contract that no
-    registered check answers would skip or run nothing in silence;
-    the refusal names the vocabulary instead.
+    A check that names no kinds judges every package; a kind no record
+    registers (the workspace's own tests unit) is judged by such a
+    check alone.
     """
-    from livery.workshop._kinds import all_kinds
+    from livery.workshop._kinds import kind_chain, kind_names
 
-    known = set(roles())
-    for kind in all_kinds():
-        unknown = [verb for verb in kind.ci.check_verbs if verb not in known]
-        if unknown:
-            fail(
-                f"kind {kind.name!r} gates on {', '.join(unknown)}, which no"
-                f" registered check implements; the roles are"
-                f" {', '.join(sorted(known))}"
-            )
+    if not record.kinds:
+        return True
+    if kind not in kind_names():
+        return False
+    return any(link.name in record.kinds for link in kind_chain(kind))
+
+
+def judged_by(
+    record: CheckRecord, packages: tuple[Package, ...], *, quiet: bool = False
+) -> tuple[Package, ...]:
+    """The *packages* *record* judges, by its kinds; each other one skips by name.
+
+    A package outside the check's kinds prints a skip naming the check,
+    the package and its kind, so a narrowed gate is visible in the
+    output and never passes silently. *quiet* counts without printing.
+    """
+    kept: list[Package] = []
+    for package in packages:
+        if judges_kind(record, package.kind):
+            kept.append(package)
+        elif not quiet:
+            print(f"  {record.name}: {package.path} skips ({package.kind} kind)")
+    return tuple(kept)
 
 
 def _applies(record: CheckRecord, package: Package) -> bool:
@@ -1276,7 +1289,7 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan, _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._invoke import run_batched
-    from livery.workshop._kinds import gated, is_python_kind
+    from livery.workshop._kinds import is_python_kind
 
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
@@ -1284,9 +1297,13 @@ def _register_builtin() -> None:
     def python_kinds(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in _members(ctx) if is_python_kind(p.kind))
 
-    def python_members(ctx: GateContext, role: str, name: str) -> tuple[Package, ...]:
-        """The python members the check *name* judges: by role, then by its option."""
-        judged = tuple(p for p in gated(_members(ctx), role) if is_python_kind(p.kind))
+    def python_members(ctx: GateContext, name: str) -> tuple[Package, ...]:
+        """The python members the check *name* judges: by its kinds, then its option."""
+        judged = tuple(
+            p
+            for p in judged_by(check_for(name), _members(ctx))
+            if is_python_kind(p.kind)
+        )
         return enabled(name, judged)
 
     def claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
@@ -1309,7 +1326,7 @@ def _register_builtin() -> None:
 
         record = check_for(name)
         everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
-        gated_all = gated(everyone, record.role)
+        gated_all = judged_by(record, everyone, quiet=True)
         # The workspace's tests unit rides in the scope, not always among
         # the packages: counted once from either.
         tests_unit = {
@@ -1323,7 +1340,7 @@ def _register_builtin() -> None:
         """The paths a check judges: the named files, the tree, or the members'."""
         if ctx.files:
             return claimed_files(check_for(name), ctx)
-        gated_members = gated(_members(ctx), check_for(name).role)
+        gated_members = judged_by(check_for(name), _members(ctx))
         members = enabled(name, gated_members)
         pythons = tuple(p for p in members if is_python_kind(p.kind))
         natives = tuple(p for p in members if not is_python_kind(p.kind))
@@ -1371,7 +1388,7 @@ def _register_builtin() -> None:
         name = f"typecheck.{tool}"
         if ctx.files:
             return claimed_files(check_for(name), ctx)
-        judged = python_members(ctx, "typecheck", name) + unit(ctx)
+        judged = python_members(ctx, name) + unit(ctx)
         whole = len(judged) == len(python_kinds(ctx)) + len(unit(ctx))
         if not ctx.scoped and whole:
             return ()
@@ -1402,9 +1419,7 @@ def _register_builtin() -> None:
         _python.run_typecheck(only="pyrefly")
 
     def typecomplete_run(ctx: GateContext) -> None:
-        _python.run_typecomplete(
-            python_members(ctx, "typecomplete", "typecomplete.basedpyright")
-        )
+        _python.run_typecomplete(python_members(ctx, "typecomplete.basedpyright"))
 
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
@@ -1414,7 +1429,7 @@ def _register_builtin() -> None:
             record = check_for("test.pytest")
             named = tuple(
                 p
-                for p in (*python_members(ctx, "test", "test.pytest"), *unit(ctx))
+                for p in (*python_members(ctx, "test.pytest"), *unit(ctx))
                 if claimed_files(
                     record, ctx, ROOT_UNIT if p.path == WORKSPACE_TESTS else p.path
                 )
@@ -1423,9 +1438,7 @@ def _register_builtin() -> None:
             return
         # A package whose examples alone changed runs them, not its suite.
         judged = tuple(
-            p
-            for p in python_members(ctx, "test", "test.pytest")
-            if p.path not in ctx.examples
+            p for p in python_members(ctx, "test.pytest") if p.path not in ctx.examples
         )
         record = check_for("test.pytest")
         serial = tuple(p for p in judged if not option_value(record, p, "parallel"))
@@ -1452,7 +1465,7 @@ def _register_builtin() -> None:
     def examples_run(ctx: GateContext) -> None:
         from livery.workshop._kinds import kind_examples
 
-        for package in python_members(ctx, "examples", "examples.pytest"):
+        for package in python_members(ctx, "examples.pytest"):
             if (
                 ctx.scoped
                 and package.path in ctx.tests

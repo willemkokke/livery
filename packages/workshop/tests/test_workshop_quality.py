@@ -285,8 +285,8 @@ def test_the_python_test_entry_maps_a_selection_to_its_files(
 # here asserts that the current shape is the right one.
 #
 # Two properties are pinned elsewhere and are not repeated:
-# `test_workshop_cpp_kind.py` holds both skip prints, `gated()`'s
-# per-verb line and the kind gate's run-beside-skip announcement.
+# `test_workshop_cpp_kind.py` holds both skip prints, `judged_by()`'s
+# per-check line and the kind gate's run-beside-skip announcement.
 
 
 def _whole_gate(

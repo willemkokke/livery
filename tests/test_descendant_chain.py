@@ -650,7 +650,10 @@ def _chain(
         assert (
             f"  {check}: packages/geometry runs (cpp-conan kind)" in child_gate.stdout
         )
-    assert "typecomplete: packages/geometry skips (cpp-conan kind)" in child_gate.stdout
+    assert (
+        "typecomplete.basedpyright: packages/geometry skips (cpp-conan kind)"
+        in child_gate.stdout
+    )
     # One compiled module, both sides of the graph: the member's own
     # test calls fmt through the greeting and the sibling library
     # through its version, and the gate above ran it. Four tests,

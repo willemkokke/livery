@@ -335,3 +335,17 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
     assert _flags(root.groups["format"], "ruff") == {"fix", "safe_fix"}
     assert _flags(typecheck, "default") == set()
     assert set(typecheck.tasks) == {"default", "basedpyright", "mypy", "ty", "pyrefly"}
+
+
+def test_a_role_with_no_listed_check_has_no_verb(registry: None) -> None:
+    # The fallback first: no check of the role, no verb for it.
+    root = Group("root")
+    generate_verbs(root)
+    assert "divination" not in root.groups
+    register_check(CheckRecord("crystal", "divination", _idle))
+    generate_verbs(root)
+    assert "divination" in root.groups
+    # Withdrawn, the role's verb goes with its last check.
+    unregister_check("divination.crystal")
+    generate_verbs(root)
+    assert "divination" not in root.groups
