@@ -21,9 +21,7 @@ from livery.workshop._checks import (
     run_check,
 )
 from livery.workshop._kinds import (
-    CiContract,
     KindRecord,
-    gated,
     is_python_kind,
     kind_for,
     record_for_template,
@@ -269,21 +267,23 @@ def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> No
         discover_packages(tmp_path)
 
 
-def test_python_verbs_skip_by_name(
+def test_python_checks_skip_a_native_member_by_name(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.workshop._checks import judged_by
+
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    for verb in ("typecheck", "typecomplete"):
-        assert gated((py, native), verb) == (py,)
+    for name in ("typecheck.basedpyright", "typecomplete.basedpyright", "test.pytest"):
+        assert judged_by(check_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
-        assert f"{verb}: packages/native skips (cpp-conan kind)" in out
-    # format and lint stay: the conanfile is python and ruff gates it.
-    # test applies too: ctest is the kind's own check under that role,
-    # so the role no longer skips by name for a native package.
-    for verb in ("format", "lint", "test"):
-        assert gated((py, native), verb) == (py, native)
+        assert f"{name}: packages/native skips (cpp-conan kind)" in out
+    # Ruff judges both: the conanfile is python. ctest judges the native
+    # member alone.
+    for name in ("format.ruff", "lint.ruff"):
+        assert judged_by(check_for(name), (py, native)) == (py, native)
         assert "skips" not in capsys.readouterr().out
+    assert judged_by(check_for("test.ctest"), (py, native), quiet=True) == (native,)
 
 
 # The native kind's checks, in the order the walk runs them.
@@ -300,8 +300,11 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
-    for verb in CiContract().check_verbs:
-        assert gated((py,), verb) == (py,)
+    from livery.workshop._checks import checks_by_name, judged_by, judges_kind
+
+    for record in checks_by_name().values():
+        if judges_kind(record, "python"):
+            assert judged_by(record, (py,)) == (py,)
     # No package check judges a python package: the walk schedules
     # none of the native records for a workspace of python packages.
     ctx = GateContext(root=tmp_path, packages=(py,))

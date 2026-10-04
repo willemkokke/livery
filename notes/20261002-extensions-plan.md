@@ -1183,8 +1183,16 @@ fewest calls under the platform's command-line limit) and
 `run_batched` (every call runs, their failures merged into one
 refusal). Ruff's checks and the narrowing type checkers run through
 it. With the default threshold of 1 a scoped gate that reaches every
-unit now runs whole, as an unscoped one does. 9a3 (roles from listed
-checks) is left.
+unit now runs whole, as an unscoped one does.
+
+**9a3 built (issue #1118): a check's kinds decide its packages.**
+`judged_by` keeps the packages whose kind chain meets a check's
+`kinds` and prints a skip naming the check for each other one;
+`CiContract`, `KindRecord.ci`, `gated` and `verify_roles` are gone. The
+roles that exist, and their verbs, are the registered checks'
+(`test_a_role_with_no_listed_check_has_no_verb`), and the kinds
+fragment names each kind's roles from the checks that name it. 9a is
+built.
 
 **9a, the engine and the options.** Deliverables:
 

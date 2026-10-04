@@ -1,12 +1,11 @@
 """The kind registry: what a package kind is, in one record.
 
-A kind answers four questions through one registration: how to
-build (the backend, three callables), what to render (the template
-directory, with a parent chain rendered beneath it), what the
-machine needs (the tools it contributes to the derived profile),
-and what the gate runs (the CI contract naming the verbs that
-apply, so a verb that does not apply skips saying so and never
-passes vacuously).
+A kind answers three questions through one registration: how to
+build (the backend, three callables), what a birth writes (the seed
+tree, with a parent chain written beneath it), and what the machine
+needs (the tools it contributes to the derived profile). What the gate
+runs over a package is the checks' to say: each names the kinds it
+judges, and a package of another kind skips it by name.
 
 Adding a kind means one call: ``register_kind`` with the record.
 The workshop registers ``base`` and ``python`` at import; an extension's
@@ -168,29 +167,6 @@ class Backend(Protocol):
         ...
 
 
-@dataclass(frozen=True)
-class CiContract:
-    """Which gate roles apply to a kind.
-
-    The default is the widest answer (everything applies), so an
-    unregistered override can only widen the gate, never quietly
-    narrow it. A role absent from ``check_verbs`` skips by name in
-    the gate output. A role is the set of registered checks that
-    implement it ([livery.workshop._checks.CheckRecord][]), never a
-    tool: a kind says ``test`` applies, and whether that means
-    pytest or ctest is the checks' business.
-    """
-
-    check_verbs: tuple[str, ...] = (
-        "format",
-        "lint",
-        "typecheck",
-        "typecomplete",
-        "test",
-        "examples",
-    )
-
-
 #: The private-members policies an extractor applies: ``public``
 #: documents what its handler's default filter keeps, ``all`` every
 #: member. The docs assembly composes the policy from the extensions.
@@ -257,7 +233,6 @@ class KindRecord:
             workspace of this kind installs them only where the
             machine has none; the union along the chain joins the
             root contract's `[tools] host-allowed`.
-        ci: The gate roles that apply.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
@@ -297,7 +272,6 @@ class KindRecord:
     tools: tuple[str, ...] = ()
     host_tools: tuple[str, ...] = ()
     host_allowed: tuple[str, ...] = ()
-    ci: CiContract = field(default_factory=CiContract)
     artifact: str = "python"
     wheel_identity: str = "pure"
     tests_need_build: bool = False
@@ -365,23 +339,6 @@ def backend_for(package: Package) -> Backend:
             f" nothing; a package's kind is one of {known}"
         )
     return record.backend
-
-
-def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
-    """The subset whose kind's CI contract carries *verb*.
-
-    Every excluded package prints a skip naming itself, its kind,
-    and the verb, so a narrowed gate is visible in the output and
-    never passes silently.
-    """
-    kept = []
-    for package in packages:
-        record = kind_for(package.kind)
-        if verb in record.ci.check_verbs:
-            kept.append(package)
-        else:
-            print(f"  {verb}: {package.path} skips ({record.name} kind)")
-    return tuple(kept)
 
 
 def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:
@@ -604,7 +561,6 @@ def _register_builtin() -> None:
             tools=("cmake", "conan", "ninja", "dotnet_coverage@windows"),
             native_sources=True,
             host_tools=("cc", "c++"),
-            ci=CiContract(check_verbs=("format", "lint", "build", "test")),
             artifact="conan",
             wheel_identity="",
             tests_need_build=True,

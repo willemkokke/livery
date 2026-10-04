@@ -542,7 +542,8 @@ def render_verbs(root: Path, audience: str | None) -> str:
 
 def render_kinds(root: Path, audience: str | None) -> str:
     """The kinds the present packages are, what each derives from, its gate roles."""
-    from livery.workshop._kinds import kind_chain, kind_for, kind_names
+    from livery.workshop._checks import checks_by_name, judges_kind
+    from livery.workshop._kinds import kind_chain, kind_names
     from livery.workshop._packages import discover_packages
 
     names = set(kind_names())
@@ -572,7 +573,17 @@ def render_kinds(root: Path, audience: str | None) -> str:
             or "nothing"
         )
         paths = ", ".join(sorted(members[kind]))
-        roles = ", ".join(kind_for(kind).ci.check_verbs)
+        # A kind's roles are those of the checks that name it; a check
+        # naming no kinds judges the workspace, never one kind.
+        roles = ", ".join(
+            sorted(
+                {
+                    r.role
+                    for r in checks_by_name().values()
+                    if r.kinds and judges_kind(r, kind)
+                }
+            )
+        )
         if audience == HUMAN:
             lines.append(f"| {kind} | {parents} | {paths} | {roles} |")
         else:

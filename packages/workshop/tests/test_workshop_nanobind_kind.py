@@ -201,14 +201,11 @@ def test_the_kind_chains_from_python() -> None:
     }
     record = kind_for("python-nanobind")
     assert record.parent == "python"
-    assert record.ci.check_verbs == (
-        "format",
-        "lint",
-        "typecheck",
-        "typecomplete",
-        "test",
-        "examples",
-    )
+    # Its roles are those of the checks whose kinds its chain meets.
+    from livery.workshop._checks import checks_by_name, judges_kind
+
+    roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
+    assert {"format", "lint", "typecheck", "typecomplete", "test", "examples"} <= roles
     assert record.host_tools == ("cc", "c++")
 
 
