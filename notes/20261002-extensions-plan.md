@@ -1166,6 +1166,14 @@ Acceptance:
 
 ### Phase 9: checks as tools
 
+**9a1 built (issue #1115): the option tables.** A package's
+`[checks.<tool>]`, `[checks.<tool>.<role>]` and `[roles.<role>]` reach
+a check's options, resolved role, then tool, then check, deeper
+winning key by key; each table is judged against what the checks it
+reaches declare. A table spelled role first refuses naming its new
+address. 9a2 (the invocation declarations and the engine) and 9a3
+(roles from listed checks) are left.
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1627,6 +1635,9 @@ Acceptance:
   at its wave version (`bump_set_floors`). A failed release's rollback
   now restores the files the stamper writes, a namespace package's
   `api.py` among them.
+- 2026-10-04, 9a1: `[roles.<role>]` and `[checks.<tool>]` are equally
+  deep; the tool's table outranks the role's, since it names fewer
+  checks. A further role's table reaches the check like its own.
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an

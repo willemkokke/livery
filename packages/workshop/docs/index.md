@@ -118,25 +118,27 @@ under both. A verb offers exactly the flags its checks read:
 `--fix` and `--safe-fix` where a check can fix, `--point` where one
 selects tests by CI point, so `fm test --point=nightly` runs the
 nightly's tests and `fm test.ctest` offers no point at all. A role
-whose verb already exists is served by it: the template check is
-`fm template.check`, the provenance check `fm provenance`.
+whose verb already exists is served by it: the provenance check is
+`fm provenance`.
 
-A check's `options` are what a package may set under
-`[checks.<role>.<tool>]` in its own contract, each with a type and a
-default; every check carries `enabled`, and pytest's test check
-carries `parallel`:
+A check's `options` are what a package may set in its own contract,
+each with a type and a default; every check carries `enabled`, and
+pytest's test check carries `parallel`. Three tables reach them:
 
 ```toml
-[checks.typecomplete.basedpyright]
-enabled = false        # skipped by name in the gate's output
+[checks.basedpyright]              # every check of the tool
+[checks.basedpyright.typecomplete] # the tool's check of that role
+enabled = false                    # skipped by name in the gate's output
 
-[checks.test.pytest]
-parallel = false       # this package's suite runs under -n 0, in a run of its own
+[roles.test]                       # every check of the role, whatever its tool
+parallel = false                   # the suites run under -n 0, each in a run of its own
 ```
 
-An option a check does not declare, a check that does not exist, an
-option set on a role rather than on one of its checks, and a value of
-the wrong type each refuse, naming the vocabulary.
+The deeper table wins key by key: a role's table, then the tool's,
+then the check's. An option no check the table reaches declares, a
+tool or role no registered check has, and a value of the wrong type
+each refuse, naming the vocabulary; a table spelled role first,
+`[checks.<role>.<tool>]`, names the address that replaces it.
 
 An extension's kinds and checks are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the extension registers,
@@ -263,15 +265,15 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
-A rendered file is the template's, judged byte for byte, and some of
+A composed file is the extensions', judged byte for byte, and some of
 them carry lines of your own. Those lines live in a region: a pair of
-marker comments the render writes, such as
+marker comments the composition writes, such as
 `# -- workshop: region tables, yours to edit; the render keeps it --`
-and `# -- workshop: end tables --`. The render reads what stands
+and `# -- workshop: end tables --`. `fm sync` reads what stands
 between the markers from the committed file and writes it back in
-place, so `fm template.apply` keeps your lines and `fm template.check`
-still compares the whole file: an edit inside a region is yours, an
-edit outside it is drift, and a removed marker is drift too. The root
+place, so it keeps your lines and `fm drift` still compares the whole
+file: an edit inside a region is yours, an edit outside it is drift,
+and a removed marker is drift too. The root
 `pyproject.toml` carries a `tables` region for your own tables, the
 root `.gitignore` a `rules` region, `.vscode/settings.json` a
 `settings` region, `tasks.py` a `tasks` region below the mount, and a
@@ -547,11 +549,9 @@ absence.
   this one or a named one, its worktree with it. `fm status`,
   `fm ci.*`, and `fm doctor` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/).
-- `fm template.check` keeps rendered files byte-identical to the
-  template source the contract names (`[workspace] templates`: a
-  local directory, or a fork URL at its own risk), and refuses a
-  committed `tasks` nav block that lags the package's advertised
-  task tree, naming `fm docs.task-reference` as the remedy;
+- `fm drift` keeps the composed and generated files byte-identical
+  to what the listed extensions and the contract write, and names
+  `fm sync` as the remedy;
   `fm new.package` renders a member and wires it in.
 - `fm release.prepare` and `fm release.verify` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
@@ -609,8 +609,8 @@ Pythons calling the task through `fm ci.run`, with the job token and
 nothing more: a permission, a secret or an environment in the table
 refuses, as does a builtin name, a name two packages claim, a cadence
 that is not one, or a task no extension mounts. Removing the package
-removes its workflow: `fm template.check` reports the file as retired
-and `fm template.apply` deletes it.
+removes its workflow: `fm drift` reports the file as retired and
+`fm sync` deletes it.
 On GitLab the clock is a pipeline schedule, a project setting rather
 than a line in the pipeline document: `fm workflow.configure` creates
 one per point that runs on the clock, named `workshop: <point>`, and

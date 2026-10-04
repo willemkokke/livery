@@ -141,12 +141,16 @@ DECLARED: tuple[Declared, ...] = (
     _package("release.prove-floors", "bool"),
     _package("categories", "table"),
     _package("categories.*", "strs"),
-    # A check's options, [checks.<role>.<tool>]: the check registry
-    # judges which roles, tools and options exist.
+    # A check's options, [checks.<tool>], [checks.<tool>.<role>] and
+    # [roles.<role>]: the check registry judges which tools, roles and
+    # options exist.
     _package("checks", "table"),
     _package("checks.*", "table"),
-    _package("checks.*.*", "table"),
+    _package("checks.*.*", "any"),
     _package("checks.*.*.*", "any"),
+    _package("roles", "table"),
+    _package("roles.*", "table"),
+    _package("roles.*.*", "any"),
     _package("qa", "table"),
     _package("qa.coverage-floor", "number", "str"),
     _package("qa.coverage-epsilon", "number"),

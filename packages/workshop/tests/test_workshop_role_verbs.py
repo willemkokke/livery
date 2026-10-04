@@ -120,21 +120,21 @@ def test_two_checks_at_one_address_refuse(registry: None) -> None:
     register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
 
 
-def test_options_on_a_further_roles_address_refuse_naming_the_check(
+def test_a_further_roles_table_reaches_the_check(
     tmp_path: Path, registry: None
 ) -> None:
+    from livery.workshop._checks import check_for, option_value
+
     register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
     member = tmp_path / "packages" / "x"
     member.mkdir(parents=True)
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[checks.style.acme]\nenabled = false\n'
+        'kind = "python"\nname = "livery-x"\n[checks.acme.style]\nenabled = false\n'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
-    (problem,) = option_problems(discover_packages(tmp_path))
-    assert problem == (
-        "packages/x/workshop.toml: [checks.style.acme] names the check lint.acme by"
-        " a further role; its options live under [checks.lint.acme]"
-    )
+    packages = discover_packages(tmp_path)
+    assert option_problems(packages) == []
+    assert option_value(check_for("lint.acme"), packages[0], "enabled") is False
 
 
 def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(

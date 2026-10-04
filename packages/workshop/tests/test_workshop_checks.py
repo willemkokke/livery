@@ -187,26 +187,69 @@ def _member_with(tmp_path: Path, checks: str) -> Package:
     return package
 
 
-def test_an_option_on_an_unknown_check_or_an_undeclared_option_refuses(
+def test_an_option_on_an_unknown_address_or_an_undeclared_option_refuses(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._checks import check_for, option_problems, option_value
 
-    package = _member_with(tmp_path, "[checks.nothing.x]\nenabled = false\n")
+    package = _member_with(tmp_path, "[checks.nothing]\nenabled = false\n")
     (problem,) = option_problems((package,))
     assert problem.startswith(
-        "packages/x/workshop.toml: [checks.nothing.x] names no registered check"
+        "packages/x/workshop.toml: [checks.nothing] reaches no registered check;"
+        " the tools are"
     )
-    package = _member_with(tmp_path, "[checks.test.pytest]\nworkers = 3\n")
+    package = _member_with(tmp_path, "[roles.nothing]\nenabled = false\n")
     (problem,) = option_problems((package,))
-    assert "declares no option 'workers'; its options are parallel, enabled" in problem
-    package = _member_with(tmp_path, '[checks.test.pytest]\nparallel = "no"\n')
+    assert "[roles.nothing] names no role a registered check has" in problem
+    # The old address, role first, names the new one.
+    package = _member_with(tmp_path, "[checks.test.pytest]\nparallel = false\n")
     (problem,) = option_problems((package,))
-    assert problem.endswith("[checks.test.pytest] parallel is bool, not 'no'")
+    assert problem.endswith(
+        "[checks.test.pytest] names a role then a tool; a check's own table is"
+        " [checks.pytest.test]"
+    )
+    package = _member_with(tmp_path, "[checks.test]\nparallel = false\n")
+    (problem,) = option_problems((package,))
+    assert problem.endswith(
+        "[checks.test] names a role; a role's options are [roles.test]"
+    )
+    package = _member_with(tmp_path, "[checks.pytest.test]\nworkers = 3\n")
+    (problem,) = option_problems((package,))
+    assert "sets 'workers', which no check it reaches declares" in problem
+    package = _member_with(tmp_path, '[checks.pytest.test]\nparallel = "no"\n')
+    (problem,) = option_problems((package,))
+    assert problem.endswith("[checks.pytest.test] parallel is bool, not 'no'")
     with pytest.raises(_FAILURES, match="parallel is bool"):
         option_value(check_for("test.pytest"), package, "parallel")
     with pytest.raises(_FAILURES, match="declares no option 'workers'"):
         option_value(check_for("test.pytest"), package, "workers")
+
+
+def test_the_deeper_table_wins_key_by_key(tmp_path: Path) -> None:
+    from livery.workshop._checks import check_for, option_problems, option_value
+
+    record = check_for("test.pytest")
+    # The fallback first: nothing set, the default.
+    package = _member_with(tmp_path, "")
+    assert option_value(record, package, "parallel") is True
+    package = _member_with(tmp_path, "[roles.test]\nparallel = false\n")
+    assert option_value(record, package, "parallel") is False
+    # The tool's table outranks the role's, the check's outranks both.
+    package = _member_with(
+        tmp_path,
+        "[roles.test]\nparallel = false\n[checks.pytest]\nparallel = true\n",
+    )
+    assert option_value(record, package, "parallel") is True
+    package = _member_with(
+        tmp_path,
+        "[roles.test]\nenabled = false\n"
+        "[checks.pytest]\nparallel = true\n"
+        "[checks.pytest.test]\nparallel = false\n",
+    )
+    assert option_value(record, package, "parallel") is False
+    # Key by key: the role's `enabled` still reaches the check.
+    assert option_value(record, package, "enabled") is False
+    assert option_problems((package,)) == []
 
 
 def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
@@ -222,21 +265,11 @@ def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
         _FAILURES, match=r"checks is an integer \(3\); it takes a table"
     ):
         discover_packages(tmp_path)
-    # A check's options live in its own table, never on its role: the
-    # role's table holds one table per tool.
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[checks.test]\nparallel = false\n'
+        'kind = "python"\nname = "livery-x"\n[checks]\npytest = 3\n'
     )
     with pytest.raises(
-        _FAILURES,
-        match=r"checks.test.parallel is a boolean \(False\); it takes a table",
-    ):
-        discover_packages(tmp_path)
-    member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[checks]\ntest = 3\n'
-    )
-    with pytest.raises(
-        _FAILURES, match=r"checks.test is an integer \(3\); it takes a table"
+        _FAILURES, match=r"checks.pytest is an integer \(3\); it takes a table"
     ):
         discover_packages(tmp_path)
 
@@ -247,7 +280,7 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
     from livery.workshop._checks import check_for, enabled, option_value
 
     package = _member_with(
-        tmp_path, "[checks.typecomplete.basedpyright]\nenabled = false\n"
+        tmp_path, "[checks.basedpyright.typecomplete]\nenabled = false\n"
     )
     record = check_for("typecomplete.basedpyright")
     assert option_value(record, package, "enabled") is False
@@ -266,7 +299,7 @@ def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
     from livery.workshop._backends import _python
     from livery.workshop._checks import GateContext, check_for
 
-    serial = _member_with(tmp_path, "[checks.test.pytest]\nparallel = false\n")
+    serial = _member_with(tmp_path, "[checks.pytest.test]\nparallel = false\n")
     other = tmp_path / "packages" / "y"
     other.mkdir()
     other.joinpath("workshop.toml").write_text('kind = "python"\nname = "livery-y"\n')
