@@ -912,12 +912,17 @@ def pending_release_waves(
     Every release squash in the base's recent history is consulted, so
     a later release never strands an earlier died wave, and a checkout
     standing on a release branch still finds the squash it was merged
-    as. Each entry is the squash sha and its missing receipt tags.
+    as. A later release squash naming a package takes over that
+    package's uncut receipt, so a squash abandoned for a new release
+    (`fm workflow.release --abandon`) is never offered again. Each
+    entry is the squash sha and its missing receipt tags.
     """
     from livery.workshop._publish import discover_release
 
     cut = set(git.remote_tags())
     pending: list[tuple[str, tuple[str, ...]]] = []
+    # Newest first: the packages a later release squash names.
+    taken: set[str] = set()
     for sha, subject in git.recent_commits(50, ref=_base_ref(git, base)):
         if not subject.startswith("chore(release): released"):
             continue
@@ -925,8 +930,9 @@ def pending_release_waves(
         missing = tuple(
             f"{package.path}/v{version}"
             for package, version in released
-            if f"{package.path}/v{version}" not in cut
+            if f"{package.path}/v{version}" not in cut and package.path not in taken
         )
+        taken.update(package.path for package, _version in released)
         if missing:
             pending.append((sha, missing))
     pending.reverse()
@@ -983,6 +989,13 @@ def workflow_release(
     workshop: Annotated[
         str, doc("a released livery-workshop version to drive a re-dispatched wave")
     ] = "",
+    abandon: Annotated[
+        bool,
+        doc(
+            "prepare a new release over a died wave of this set instead of"
+            " re-dispatching it"
+        ),
+    ] = False,
 ) -> None:
     """Release a set of packages: the branch decides the act.
 
@@ -998,7 +1011,9 @@ def workflow_release(
     ``--local`` is everything that stays on this machine, on either
     branch mode. ``--workshop`` applies only to the recovery of a
     died wave: the named release drives the wave in place of the
-    squash's own workshop.
+    squash's own workshop. ``--abandon`` gives up that recovery: when
+    no released workshop can drive the died wave, a new release of
+    the set takes its uncut receipts over.
     """
     from livery.workshop._dev_release import dev_release
     from livery.workshop._extensions import workspace_root
@@ -1030,6 +1045,19 @@ def workflow_release(
     print(f"  act: release train, from '{branch}'")
     pending = pending_release_wave_for(root, git, members)
     repo = this_repository(root)
+    if abandon:
+        if pending is None:
+            fail(
+                "--abandon gives up a died wave of this set, and no release"
+                " squash has an uncut receipt in it; drop the flag to prepare"
+                " a release"
+            )
+        squash, missing = pending
+        print(
+            f"  release squash {squash[:12]} abandoned; this release takes over"
+            f" its uncut receipts: {', '.join(uncut_in_set(missing, members))}"
+        )
+        pending = None
     if pending is not None:
         squash, missing = pending
         print(f"  release squash {squash[:12]} has uncut receipts:")
@@ -1046,6 +1074,10 @@ def workflow_release(
     for squash, missing in pending_release_waves(root, git):
         # An uncut receipt outside this set is that set's recovery,
         # named so a person can run it; this release goes ahead.
+        inside = uncut_in_set(missing, members)
+        missing = tuple(tag for tag in missing if tag not in inside)
+        if not missing:
+            continue
         others = " ".join(sorted({tag.split("/")[1] for tag in missing}))
         print(
             f"  release squash {squash[:12]} has uncut receipts outside this"
