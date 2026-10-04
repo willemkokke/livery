@@ -9,6 +9,11 @@
 - A check's options are addressed by tool, by the tool's check, and by role, deeper winning key by key by @willemkokke
 - A check declares its transport and threshold, and the engine splits its paths into the fewest calls, merges their failures, and runs whole at the threshold by @willemkokke
 - A check's own kinds decide which packages it judges, and a kind's role list and verify_roles go by @willemkokke
+- A release pull request behind main under its set re-derives instead of merging, and a failed prepare's rollback restores what it staged by @willemkokke
+
+### Fixed
+
+- Every release squash touches the manifest, which records its mining point, so the wave publishes it and a takeover at the same versions has a commit by @willemkokke
 
 ## [0.4.0] - 2026-10-04
 
