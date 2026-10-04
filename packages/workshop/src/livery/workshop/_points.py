@@ -984,6 +984,12 @@ BUILTIN: tuple[Entry, ...] = (
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.
     Entry("gate", "gate", "ci.verified.stamp"),
+    # Last, so the forge's merge follows it as closely as it can: a
+    # release pull request whose base moved under its set is refused
+    # before the merge, where the publish would refuse it after. Green
+    # off a release branch. The stamp before it holds either way: it
+    # records the tree, and the tree is green.
+    Entry("gate", "gate", "workflow.release.check-fresh"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     Entry("merge", "dispatch", "workflow.release.dispatch"),
     # The janitor after the stamp, on the merge point alone: every

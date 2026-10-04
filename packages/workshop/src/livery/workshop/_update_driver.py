@@ -86,6 +86,14 @@ class UpdateDriver:
     def base(self) -> str:
         return "main"
 
+    def discard(self) -> None:
+        """Refuse: an update has no release set, so nothing makes it stale.
+
+        Only a release's moved set re-derives; an update behind its
+        base merges the base in instead.
+        """
+        fail(f"{self.name} never re-derives: an update has no release set")
+
     def prepare(self) -> Submission | None:
         """Do the flavor's work, or resume what a killed run committed.
 

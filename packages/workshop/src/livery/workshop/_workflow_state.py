@@ -209,16 +209,27 @@ def blocker(sig: Signals) -> Blocker:
     return Blocker.NONE
 
 
-def base_moved_in_paths(git: GitOps, base: str, paths: tuple[str, ...]) -> bool:
-    """Whether ``origin/<base>`` carries commits HEAD lacks touching *paths*.
+def base_moved_in_paths(
+    git: GitOps, base: str, paths: tuple[str, ...], *, head: str = "HEAD"
+) -> bool:
+    """Whether ``origin/<base>`` carries commits *head* lacks touching *paths*.
 
     The staleness probe for a release set: pure local git, empty
     *paths* is never stale. Movement outside the set's paths is
-    harmless by construction and reads False.
+    harmless by construction and reads False. *head* is the release
+    branch's tip; the checkout the act runs from is usually the base
+    itself, so its own HEAD says nothing about the branch. A tip this
+    clone does not hold reads False: the release pull request's own
+    freshness check is the guard that never guesses.
     """
+    from livery.workshop._git_ops import GitError
+
     if not paths:
         return False
-    out = git.log_paths(f"HEAD..origin/{base}", paths)
+    try:
+        out = git.log_paths(f"{head}..origin/{base}", paths)
+    except GitError:
+        return False
     return bool(out)
 
 
@@ -278,7 +289,10 @@ def gather(
             ci_state = status.state
             if kind is WorkflowKind.RELEASE:
                 stale = base_moved_in_paths(
-                    git, base, tuple(f"packages/{m}" for m in members)
+                    git,
+                    base,
+                    tuple(f"packages/{m}" for m in members),
+                    head=pr.head_sha or "HEAD",
                 )
         elif pr_state == "merged" and kind is WorkflowKind.RELEASE:
             tags = set(repo.tags())
