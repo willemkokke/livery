@@ -72,13 +72,18 @@ dev = [
 {% for requirement in slots['python.dev-group'] %}    "{{ requirement }}",
 {% endfor %}]
 
-{% if docs_site_url %}[tool.footman]
-# Task names in --list/--tree/--help (and --json rows) link into the
+[tool.footman]
+# Every verb brings the environment current from the lock itself, and
+# `{{ prog }} sync` rewrites this file before it syncs: the runner's
+# handoff enters the environment as it is, so a member deleted from
+# packages/ never fails the command that removes it from here.
+uv-handoff = "enter"
+{% if docs_site_url %}# Task names in --list/--tree/--help (and --json rows) link into the
 # published task reference; the alias tree there redirects each task
 # to its page in the owning package's section.
 docs-url = "{{ docs_site_url }}tasks/{slug}/"
-
-{% endif %}[tool.footman.notes]
+{% endif %}
+[tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or
 # an ambient write is fixed or deliberately classified, never
 # ambient. Loosen a single kind here with a reason, never the star.

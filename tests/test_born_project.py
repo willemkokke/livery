@@ -94,3 +94,20 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     gate = _run([fm, "check"], project, env)
     for check in ("lint-doclinks", "lint-docstrings", "test-ctest", "drift-check"):
         assert f"ok   {check}" in gate, gate
+    # Removing a member is deleting its directory and syncing: the
+    # handoff enters the environment as it is, the sync composes the
+    # project file without the member, and the gate is green again.
+    import shutil
+
+    shutil.rmtree(project / "packages" / "thing")
+    # From outside the project's environment, as a person's own `fm`
+    # arrives: the runner hands off to the project, which is the step a
+    # stale project file used to fail.
+    outside = {
+        key: value
+        for key, value in env.items()
+        if key not in ("FOOTMAN_UV_REEXEC", "FOOTMAN_NO_UV")
+    }
+    _run([sys.executable, "-m", "livery.footman", "sync"], project, outside)
+    assert "packages/thing" not in (project / "pyproject.toml").read_text()
+    _run([fm, "check"], project, env)

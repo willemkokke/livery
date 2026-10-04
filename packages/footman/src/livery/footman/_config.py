@@ -159,6 +159,16 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "its own PEP 723 dependencies.",
     ),
     (
+        "uv-handoff",
+        "`sync` / `enter`",
+        "`sync`",
+        "How the handoff to the project's environment enters it: `sync` lets "
+        "uv bring it current first, `enter` takes it as it is "
+        "(`uv run --no-sync`), for a project whose own tasks bring the "
+        "environment current: a stale project file then reaches the task that "
+        "rewrites it instead of failing the handoff.",
+    ),
+    (
         "builtins.discovery-mode",
         "`auto` / `manual` / `internal` / `none`",
         "`auto`",

@@ -73,6 +73,11 @@ dev = [
 ]
 
 [tool.footman]
+# Every verb brings the environment current from the lock itself, and
+# `fm sync` rewrites this file before it syncs: the runner's
+# handoff enters the environment as it is, so a member deleted from
+# packages/ never fails the command that removes it from here.
+uv-handoff = "enter"
 # Task names in --list/--tree/--help (and --json rows) link into the
 # published task reference; the alias tree there redirects each task
 # to its page in the owning package's section.

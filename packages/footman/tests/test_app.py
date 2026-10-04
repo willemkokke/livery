@@ -1828,6 +1828,25 @@ def test_handoff_execs_the_projects_footman(uv_project, monkeypatch):
     ]
 
 
+def test_a_project_that_syncs_itself_is_entered_without_a_sync(uv_project, monkeypatch):
+    # The default first: the handoff lets uv sync the environment.
+    calls = _capture_exec(monkeypatch)
+    with pytest.raises(SystemExit):
+        _app.run(["hi"])
+    assert calls == [["/fake/uv", "run", "--project", str(uv_project), "fm", "hi"]]
+    # `uv-handoff = "enter"`: uv enters the environment as it is.
+    (uv_project / "pyproject.toml").write_text(
+        "[project]\nname='x'\n[tool.footman]\nuv-handoff = 'enter'\n"
+    )
+    monkeypatch.delenv("FOOTMAN_UV_REEXEC", raising=False)
+    calls.clear()
+    with pytest.raises(SystemExit):
+        _app.run(["hi"])
+    assert calls == [
+        ["/fake/uv", "run", "--project", str(uv_project), "--no-sync", "fm", "hi"]
+    ]
+
+
 def test_handoff_probes_the_dash_c_target_without_moving(
     uv_project, tmp_path_factory, monkeypatch
 ):

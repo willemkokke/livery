@@ -1000,3 +1000,31 @@ def test_the_root_tests_directory_is_checked_only_while_it_exists(
     assert "tests" in tool["basedpyright"]["include"]
     assert "tests" in tool["mypy"]["files"]
     assert tool["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
+
+def test_removing_a_member_needs_only_sync(tmp_path: Path) -> None:
+    # The composed project file follows discovery: a deleted member's
+    # directory takes its every line with it on the next compose. And
+    # the runner's handoff enters the environment without syncing, so
+    # the stale file cannot fail the `fm sync` that rewrites it.
+    import tomllib
+
+    root = tmp_path / "ws"
+    for name in ("alpha", "beta"):
+        member = root / "packages" / name
+        member.mkdir(parents=True)
+        (member / "workshop.toml").write_text(
+            f'kind = "python"\nname = "livery-{name}"\n'
+        )
+        (member / "pyproject.toml").write_text(f'[project]\nname = "livery-{name}"\n')
+    compose_into(root)
+    composed = (root / "pyproject.toml").read_text()
+    assert '"packages/beta"' in composed and "livery-beta" in composed
+    assert tomllib.loads(composed)["tool"]["footman"]["uv-handoff"] == "enter"
+    import shutil
+
+    shutil.rmtree(root / "packages" / "beta")
+    compose_into(root)
+    composed = (root / "pyproject.toml").read_text()
+    assert "beta" not in composed
+    assert '"packages/alpha"' in composed
