@@ -1290,6 +1290,12 @@ its `pre` the `build` role over the dependency closure.
 phase 12) under `livery.extensions`, each its own distribution; the
 backends move into them; kinds, `KindRecord` and the kind registry go;
 this repository's packages list their extensions.
+The `conan` extension owns the conan cache, and a workspace's builds
+never share the machine's: sibling packages resolve the same way in
+development and at release, with no editables left in the machine's
+conan home (#1112); a container build (the nanobind wheel's manylinux
+image) never reuses a binary built against the host's newer glibc,
+since conan's package ID does not see glibc.
 
 **11c, the release train through phases.** Deliverables, carried from
 the empty shell plan's phases 5 and 6: `stamp`, `build`, `prove`,
@@ -1688,6 +1694,11 @@ Acceptance:
   Code first) as an extension of its own, one editor at a time. A
   config file that exists only after the first `fm sync` is
   acceptable.
+- Willem, 2026-10-04: the conan cache handling is part of this
+  refactor (11b). A pinned Linux sysroot is a later improvement, not
+  phase 12: the toolchain plan's host sysroot stands. Python wheels
+  already have their glibc floor through cibuildwheel's manylinux
+  image; a `cpp-conan` package's floor waits for the sysroot.
 - 2026-10-04, 9b1: a seed's import path follows its distribution name,
   each hyphen after the namespace's prefix one namespace level
   (`acme-toolroom-store` imports as `acme.toolroom.store`), as hse's
