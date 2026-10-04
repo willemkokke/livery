@@ -1119,6 +1119,16 @@ Acceptance:
 Copier, the overlays and the template artifact went with 7b2 (see
 there); the verbs and the member removal are left.
 
+**8a built (issue #1109): the template verbs go.** The drift check is
+the check record `drift.check` (`fm drift`, `fm drift.check`), judging
+the composed and generated files; `--fix` writes them. `fm
+template.apply` and `fm template.check` are gone: `fm sync` writes both
+kinds of file at its end, and every message and header names it.
+`fm workflow.update.templates` is gone: one update moves the lock,
+raises the floors, installs, then writes the files the new wheels
+compose, on one branch; the bare `fm workflow.update` runs it for every
+dependency.
+
 Deliverables:
 
 - copier leaves the workshop's dependencies.

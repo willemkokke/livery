@@ -92,5 +92,5 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     _run([fm, "new.package", "thing"], project, env)
     _run([fm, "new.package", "geometry", "--kind=package-cpp-conan"], project, env)
     gate = _run([fm, "check"], project, env)
-    for check in ("lint-doclinks", "lint-docstrings", "test-ctest", "template-check"):
+    for check in ("lint-doclinks", "lint-docstrings", "test-ctest", "drift-check"):
         assert f"ok   {check}" in gate, gate

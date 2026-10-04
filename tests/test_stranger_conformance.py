@@ -233,7 +233,7 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
             "livery-forge",
         ],
         ["uv", "run", "fm", "sync"],
-        ["uv", "run", "fm", "template.check"],
+        ["uv", "run", "fm", "drift.check"],
         ["uv", "run", "fm", "check"],
     ):
         done = subprocess.run(step, cwd=root, env=env, capture_output=True, text=True)

@@ -191,7 +191,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
             between()
 
     monkeypatch.setattr("livery.workshop._quality._scoped_check", _scoped)
-    monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
+    monkeypatch.setattr("livery.workshop._quality.drift_check", lambda: None)
     monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
     _quality.check(fix=True)
     # The walk ran the fixers, and the row names the tree they left.
@@ -249,7 +249,7 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
         seen.append((tuple(p.path for p in subset), dict(tests or {})))
 
     monkeypatch.setattr("livery.workshop._quality._scoped_check", _scoped)
-    monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
+    monkeypatch.setattr("livery.workshop._quality.drift_check", lambda: None)
     monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
     _quality.check()
     out = capsys.readouterr().out

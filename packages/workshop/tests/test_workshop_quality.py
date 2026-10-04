@@ -330,7 +330,7 @@ def _whole_gate(
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.setattr(_quality, "parallel", watched)
-    monkeypatch.setattr(_quality, "template_check", named("template.check"))
+    monkeypatch.setattr(_quality, "drift_check", named("drift.check"))
     monkeypatch.setattr(
         "livery.workshop._packages.verify_workspace", named("layering.graph")
     )
@@ -393,7 +393,7 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
             "layering.graph",
             "lint.ruff",
             "provenance.check",
-            "template.check",
+            "drift.check",
             *PYTHON_JUDGES,
         )
     )
@@ -406,7 +406,7 @@ def test_a_workspace_without_python_starts_no_python_check(
     _quality._run_check(full=True, fix=False, base="")
     # The checks without claims read what their own body decides; the
     # python ones claim .py files, and none is there to read.
-    assert sorted(ran[1:-1]) == ["layering.graph", "provenance.check", "template.check"]
+    assert sorted(ran[1:-1]) == ["drift.check", "layering.graph", "provenance.check"]
     out = capsys.readouterr().out
     for name in ("format.ruff", "lint.ruff", *PYTHON_JUDGES):
         assert f"  {name}: no file it reads in the workspace; not run" in out
@@ -424,7 +424,7 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     assert ran[:opened] == [
         "format.ruff",
         "lint.ruff",
-        "template.check",
+        "drift.check",
         "provenance.check",
         "layering.graph",
     ]

@@ -10,7 +10,7 @@ runner bare. Between entries the per-command reconcile
 
 The script is a generated artifact like the CI workflows: emitted by
 ``livery.workshop._ci_generate.generate``, written by
-``fm template.apply``, judged by the drift gate. POSIX only; a
+``fm sync``, judged by the drift check. POSIX only; a
 Windows CI leg runs it under the runner's bash, and a pwsh spelling
 is deferred to the tool-store port.
 """

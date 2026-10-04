@@ -186,7 +186,7 @@ def _warn_unmounted_extensions(root: Path) -> None:
         f"{footman.prog()}: the contract declares extensions"
         f" ({', '.join(declared)}) that this run never mounted; extensions"
         f" mount from tasks.py now, so run `{footman.prog()}"
-        " template.apply` to re-render it\n"
+        " sync` to compose it again\n"
     )
 
 

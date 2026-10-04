@@ -377,7 +377,7 @@ def test_the_branch_routes_the_act(
     _git(root, "checkout", "main")
     workflow_release("core", local=True)
     assert routed == ["dev", "train-local"]
-    _git(root, "checkout", "-b", "workflow/update/templates")
+    _git(root, "checkout", "-b", "workflow/update/dependencies")
     workflow_release("core", local=True)
     assert routed == ["dev", "train-local", "train-local"]
     # Detached HEAD is a taught stop: the branch decides the act.

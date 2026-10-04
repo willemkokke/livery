@@ -225,7 +225,7 @@ def test_every_verb_is_timed_in_every_state_the_cold_gate_whole(
     assert [t.name for t in timings] == [
         f"{verb} {state}"
         for state in ("cold", "warm", "one changed")
-        for verb in ("sync", "template.check", "check")
+        for verb in ("sync", "drift.check", "check")
     ]
     assert calls[2] == ("check", "--full") and calls[5] == ("check",)
     assert module.read_text().endswith('"""F."""\n\n\nSCALE_EDIT = 1\n')

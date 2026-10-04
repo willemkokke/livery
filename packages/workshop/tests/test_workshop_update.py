@@ -154,7 +154,7 @@ def test_a_current_instance_updates_to_nothing(
 ) -> None:
     root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     run_workflow(
         driver, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
     )
@@ -170,7 +170,7 @@ def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
     root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     git.create_branch("feat/elsewhere")
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         run_workflow(
             driver,
@@ -178,7 +178,7 @@ def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
             git,
             current_user="fake-user",
         )
-    assert "workflow/update/templates" in str(caught.value)
+    assert "workflow/update/dependencies" in str(caught.value)
     _git(root, "checkout", "main")
     (root / "stray.txt").write_text("dirty\n")
     with pytest.raises(_FAILURES) as caught:
@@ -202,13 +202,13 @@ def test_a_changed_instance_submits_through_the_engine(
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
-    driver = UpdateDriver(root, git, "templates", armed=True)
+    driver = UpdateDriver(root, git, "dependencies", armed=True)
     run_workflow(
         driver, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
     )
     pr = fake.repository("willemkokke", "livery").pr.get(1)
     assert pr is not None and pr.merged
-    assert pr.title == "chore: update templates"
+    assert pr.title == "chore: update dependencies"
 
 
 def test_a_killed_update_resumes_without_redoing_the_work(
@@ -224,7 +224,7 @@ def test_a_killed_update_resumes_without_redoing_the_work(
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
     # The kill: prepare commits, then the process dies before submit.
-    dead = UpdateDriver(root, git, "templates", armed=False)
+    dead = UpdateDriver(root, git, "dependencies", armed=False)
     submission = dead.prepare()
     assert submission is not None  # committed, never submitted
     # The re-run resumes: the work function must not run again.
@@ -235,7 +235,7 @@ def test_a_killed_update_resumes_without_redoing_the_work(
         return []
 
     monkeypatch.setattr(UpdateDriver, "_work", _tracked_work)
-    again = UpdateDriver(root, git, "templates", armed=False)
+    again = UpdateDriver(root, git, "dependencies", armed=False)
     run_workflow(
         again, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
     )
@@ -250,10 +250,10 @@ def test_foreign_commits_on_the_update_branch_stop_with_options(
 ) -> None:
     root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
-    git.create_branch("workflow/update/templates")
+    git.create_branch("workflow/update/dependencies")
     (root / "hand.txt").write_text("hand-made\n")
     git.commit_all("feat: someone's own work")
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         driver.prepare()
     message = str(caught.value)
@@ -342,13 +342,13 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
     monkeypatch.setattr(
         "livery.workshop._update_driver.run_uv", lambda *args, root: None
     )
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         driver.prepare()
     message = str(caught.value)
     assert "gate is red" in message and "resume" in message
     # Nothing was committed: the changes wait on the branch.
-    assert git.current_branch() == "workflow/update/templates"
+    assert git.current_branch() == "workflow/update/dependencies"
     assert git.subjects_ahead("main") == []
     assert not git.is_clean()
 
@@ -371,11 +371,13 @@ def test_sync_and_the_gate_run_between_the_work_and_the_commit(
         "livery.workshop._update_driver.run_gate",
         lambda root: events.append("gate"),
     )
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     submission = driver.prepare()
     assert submission is not None
-    assert events == ["sync", "gate"]
-    assert git.subjects_ahead("main") == ["chore: update templates"]
+    # The lock moves, the environment installs it, the composed files
+    # are written from it, and the gate judges the result.
+    assert events == ["lock", "sync", "gate"]
+    assert git.subjects_ahead("main") == ["chore: update dependencies"]
 
 
 def test_the_reexec_guard_prevents_a_loop(
@@ -401,7 +403,7 @@ def test_the_reexec_guard_prevents_a_loop(
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _no_spawn)
     # The guard: inside the re-executed child, never spawn again.
     monkeypatch.setenv("WORKSHOP_UPDATE_REEXEC", "1")
-    driver = UpdateDriver(root, git, "templates", armed=False)
+    driver = UpdateDriver(root, git, "dependencies", armed=False)
     assert driver.prepare() is not None
     assert spawned == []
 
@@ -428,12 +430,12 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
 
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _record)
     monkeypatch.delenv("WORKSHOP_UPDATE_REEXEC", raising=False)
-    driver = UpdateDriver(root, git, "templates", armed=True)
+    driver = UpdateDriver(root, git, "dependencies", armed=True)
     with pytest.raises(SystemExit) as caught:
         driver.prepare()
     assert caught.value.code == 7  # the child's verdict is the verdict
     command, flag = spawned[0]
-    assert command == ["uv", "run", "fm", "workflow.update.templates", "--armed"]
+    assert command == ["uv", "run", "fm", "workflow.update.dependencies", "--armed"]
     assert flag == "1"
 
 
@@ -454,7 +456,7 @@ def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
-    _drive("templates", armed=True)  # returns, no SystemExit: exit 0
+    _drive("dependencies", armed=True)  # returns, no SystemExit: exit 0
     out = capsys.readouterr().out
     assert "submitting unarmed" in out
     assert "still parked" in out
@@ -507,7 +509,7 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     monkeypatch.setattr(
         "livery.workshop._update_driver.wait_for_releases", _finishing_wait
     )
-    ud._drive("templates", armed=True)
+    ud._drive("dependencies", armed=True)
     out = capsys.readouterr().out
     # The parked submit names the release; the wait's own announcement
     # is asserted in the bounded-wait test, where a release is live
@@ -520,14 +522,14 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     # origin, so the branch is where the refresh is observable; the
     # act dropped its local copy, so origin's copy is read.)
     log = subprocess.run(
-        ["git", "log", "--format=%s", "--stat", "origin/workflow/update/templates"],
+        ["git", "log", "--format=%s", "--stat", "origin/workflow/update/dependencies"],
         cwd=root,
         capture_output=True,
         text=True,
         check=True,
     ).stdout
     assert "floors.md" in log
-    assert log.count("chore: update templates") == 2
+    assert log.count("chore: update dependencies") == 2
 
 
 def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
@@ -547,13 +549,13 @@ def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     # First invocation parks (bounded wait, then exit 0): the kill.
-    _drive("templates", armed=True)
+    _drive("dependencies", armed=True)
     parked = repo.pr.get(2)
     assert parked is not None and not parked.merged
     # The release finishes while nothing is running; the re-run
     # resumes from parked and completes.
     _finish_release(fake, root)
-    _drive("templates", armed=True)
+    _drive("dependencies", armed=True)
     resumed = repo.pr.get(2)
     assert resumed is not None and resumed.merged
 

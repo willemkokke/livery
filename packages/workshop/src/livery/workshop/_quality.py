@@ -28,7 +28,7 @@ from livery.workshop._state import RunContext
 # Re-exported by name: the render check's record looks it up on this
 # module at run time, which is where the gate's characterisation tests
 # patch it.
-from livery.workshop._templates import template_check as template_check
+from livery.workshop._templates import drift_check as drift_check
 
 
 def _packages() -> tuple[Package, ...]:
@@ -571,14 +571,14 @@ def _run_check(
                             point=point,
                             safe=safe,
                         )
-                        # The render and provenance checks are the gate
+                        # The drift and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
                         # runs them too, since a new module changes the
                         # generated site configuration and the drift
                         # would otherwise surface only in CI's gate job.
                         from livery.workshop._provenance import provenance_check
 
-                        template_check()
+                        drift_check()
                         provenance_check()
                         _remember_local(
                             root_for_ci,

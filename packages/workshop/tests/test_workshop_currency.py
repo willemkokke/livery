@@ -324,7 +324,7 @@ def test_the_untouchables_skip_with_their_notes(
     clone, origin = _rig(seeds)
     _advance_main(tmp_path, origin)
     # A workflow branch belongs to the engine.
-    _git(clone, "checkout", "-b", "workflow/update/templates")
+    _git(clone, "checkout", "-b", "workflow/update/dependencies")
     before = _git(clone, "rev-parse", "HEAD").strip()
     bring_current(clone, GitOps(clone), interactive=False)
     assert _git(clone, "rev-parse", "HEAD").strip() == before

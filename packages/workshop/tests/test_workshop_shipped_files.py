@@ -71,26 +71,26 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     assert "mine/\n# -- workshop: end rules --" in ignored
 
 
-def test_the_template_check_names_a_composed_files_drift(
+def test_the_drift_check_names_a_composed_files_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import apply_generated, template_check
+    from livery.workshop._templates import apply_generated, drift_check
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr("livery.workshop._templates._root", lambda: root)
     with pytest.raises(Failed) as refused:
-        template_check()
+        drift_check()
     assert "  .gitignore: missing; `fm sync` writes it" in str(refused.value)
-    assert "a composed file: run `fm sync`" in str(refused.value)
+    assert "run `fm sync`, which writes them again" in str(refused.value)
     deliver(root)
     # The generated files are judged beside the composed ones.
     with pytest.raises(Failed, match=r"\.github/workflows/ci\.yml: generated, but"):
-        template_check()
+        drift_check()
     apply_generated(root)
-    template_check()
+    drift_check()
     (root / ".gitattributes").write_text("* text\n")
     with pytest.raises(Failed, match=r"\.gitattributes: differs from what"):
-        template_check()
+        drift_check()
 
 
 def test_lfs_rules_are_left_out_and_named_until_the_workspace_turns_lfs_on(

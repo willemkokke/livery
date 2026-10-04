@@ -179,7 +179,7 @@ class CheckRecord:
             its role: ``pytest`` in ``fm test.pytest``.
         role: What the check implements: ``format``, ``lint``,
             ``typecheck``, ``typecomplete``, ``test``, ``build``,
-            ``template``, ``provenance`` or ``layering``, a string a
+            ``drift``, ``provenance`` or ``layering``, a string a
             verb is generated from. A kind's CI contract names roles,
             and a role a kind does not carry skips by name.
         run: The judging callable; a refusal is its verdict.
@@ -936,7 +936,7 @@ def generate_verbs(into: Group | None = None) -> None:
     ``fm test`` runs every check of the test role and ``fm test.pytest``
     the one, each offering exactly the flags its checks read. A role
     or a sub-task whose address a verb already holds is served by that
-    verb, ``fm template.check`` and ``fm provenance``, and nothing is
+    verb, ``fm provenance``, and nothing is
     made there. Run again after extensions registered or withdrew checks,
     it makes what is new, remakes a verb whose flags changed, and
     removes a verb whose check is gone.
@@ -952,7 +952,7 @@ def generate_verbs(into: Group | None = None) -> None:
         parent = target.groups.get(role)
         default = None if parent is None else parent.default_task
         # The generator owns the role's verb in a group it made; a
-        # group of another verb's, template's, gets no default.
+        # group of another verb's gets no default.
         owned = parent is None or (default is not None and _is_made(default))
         if parent is None:
             parent = target.group(role, help=f"The {role} checks, one task each")
@@ -1362,7 +1362,7 @@ def _register_builtin() -> None:
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
 
-        _quality.template_check()
+        _quality.drift_check()
 
     def render_fix(ctx: GateContext) -> None:
         # A rewriter is not judged again under --fix, so the fix judges
@@ -1375,7 +1375,7 @@ def _register_builtin() -> None:
             print(line)
         for path in apply_generated(ctx.root):
             print(f"  generated: {path}")
-        _quality.template_check()
+        _quality.drift_check()
 
     def provenance_run(ctx: GateContext) -> None:
         from livery.workshop import _provenance
@@ -1647,7 +1647,7 @@ def _register_builtin() -> None:
             tools=("pytest",),
             claims=(Claim("example", suffixes=py),),
         ),
-        CheckRecord("check", "template", render_run, fix=render_fix, in_scoped=False),
+        CheckRecord("check", "drift", render_run, fix=render_fix, in_scoped=False),
         CheckRecord(
             "check",
             "provenance",

@@ -320,7 +320,7 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
         "layering": {"graph"},
         "lint": {"clang-tidy", "ruff"},
         "provenance": {"check"},
-        "template": {"check"},
+        "drift": {"check"},
         "test": {"ctest", "pytest"},
         "typecheck": {"basedpyright", "mypy", "pyrefly", "ty"},
         "typecomplete": {"basedpyright"},

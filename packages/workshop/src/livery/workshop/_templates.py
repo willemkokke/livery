@@ -1,10 +1,10 @@
-"""The workspace's generated files: the drift check, the applier, new members.
+"""The workspace's generated files: the drift check, the writer, new members.
 
 The listed extensions' files are composed by the fragment engine
 (`livery.workshop._shipped_files`); the CI files and the codeowners file
-are generated from the contract. ``fm template.check`` judges both
-against the repository and is part of ``fm check``; ``fm template.apply``
-writes both, which is the recovery procedure for drift. ``fm
+are generated from the contract. `drift_check` judges both against the
+repository as the gate's `fm drift.check`; `apply_project` writes both,
+and `fm sync` runs it, which is the recovery for drift. ``fm
 new.package`` writes a member's seeds (`livery.workshop._seeds`) into
 ``packages/<name>`` and adds it to the project files.
 """
@@ -25,9 +25,6 @@ from livery.workshop._extensions import (
 from livery.workshop._identity import identity
 from livery.workshop._pythons import python_floor
 
-template = group(
-    "template", help="The composed and generated files, and their drift check"
-)
 new = group("new", help="Create a project or a package from the extensions' seeds")
 
 
@@ -306,11 +303,11 @@ def apply_generated(root: Path) -> list[str]:
     return changed
 
 
-@template.task(name="check")
-def template_check() -> None:
+def drift_check() -> None:
     """Fail when a composed or generated file drifts from what writes it.
 
-    Part of the gate.
+    The gate's drift check, `fm drift.check`. `fm sync` writes both
+    kinds of file, so it is the recovery for every line this names.
     """
     from livery.workshop._shipped_files import shipped_drift
 
@@ -319,26 +316,10 @@ def template_check() -> None:
     if not drift:
         return
     fail(
-        "committed files drift from their generation:\n  "
+        "committed files drift from what writes them:\n  "
         + "\n  ".join(drift)
-        + f"\n  a composed file: run `{footman.prog()} sync`; a generated one:"
-        f" run `{footman.prog()} template.apply`"
+        + f"\n  run `{footman.prog()} sync`, which writes them again"
     )
-
-
-@template.task(name="apply")
-def template_apply() -> None:
-    """Write the composed and generated files over the workspace.
-
-    The recovery procedure for drift. Seeds are never rewritten.
-    Idempotent: a clean tree changes nothing.
-    """
-    root = _root()
-    changed = apply_project(root)
-    for name in changed:
-        print(f"  rendered: {name}")
-    if not changed:
-        print("  everything already matches what writes it")
 
 
 @new.task(name="package")
