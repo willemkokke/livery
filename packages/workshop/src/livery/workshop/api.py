@@ -27,7 +27,7 @@ from livery.workshop._packages import (
     verify_workspace,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Edge",

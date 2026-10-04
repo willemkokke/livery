@@ -1,5 +1,187 @@
 # Changelog
 
+## [0.4.0] - 2026-10-04
+
+### Added
+
+- The three declaration sites, the catalogue, and the lock by @willemkokke
+- Receipts, materialisation on sync, and the modes by @willemkokke
+- The stubs live in typings/, written from the index, and the toolroom wheel ships none by @willemkokke
+- Stubs for the locked tools only, with sorted imports and a noqa header, declared by a handles module beside them by @willemkokke
+- The steady state costs the stats: a nothing-moved gate, records digested once, a lazy catalogue by @willemkokke
+- The store renders stubs from surfaces, and the index holds none by @willemkokke
+- Pyrefly has a record, a stub and a place in the python kind's lock by @willemkokke
+- Every forge refuses a missing credential in one shape, GitLab falls back to glab, and the lane names its own variables by @willemkokke
+- An armed release follows its pull request to the squash and the wave to its verdict by @willemkokke
+- The record is one file per tool with one line per option by @willemkokke
+- The six-host verification point, every downloaded tool installs, runs and reads on its host by @willemkokke
+- A test whose child exits on a console control event reports who shared the console by @willemkokke
+- Git-cliff comes from its own release, required by the base kind every package kind derives from by @willemkokke
+- Ruff and pyrefly come from their own releases, and ty, uv and prek list from theirs by @willemkokke
+- Basedpyright comes through bun: the store supplies bun-install, and bun is its locked dependency by @willemkokke
+- The site's URL scheme: packages, tasks, releases and tools, with _generated in no published path by @willemkokke
+- The sidebar's machine sections are marker blocks the author may place, and land in a fixed order otherwise by @willemkokke
+- A docs page edit runs the page's own examples in the affected gate by @willemkokke
+- A package's docs section is the package's, and the site assembles its config at build time by @willemkokke
+- The tool store and uv's cache are restored on every GitHub job and saved when their lock moved by @willemkokke
+- Fm start takes --from=<branch>, and fm submit targets the recorded parent until it merges by @willemkokke
+- Kebab-case is the spelling of every key we define, the migration is gone, and footman warns on an unknown key with the closest one named by @willemkokke
+- Conan is a tool store record from its own releases, and the cpp backend's refusal names the store by @willemkokke
+- An npm kind names its runtime, node has a record from nodejs.org, and basedpyright runs on node by @willemkokke
+- The watch prints every job's move as it happens, stamped with the elapsed time, and names a red job with its failure lines at once by @willemkokke
+- Every watch line opens with the time since the watch began by @willemkokke
+- The extension compiles against the library at HEAD and a third-party package through the store's cmake-conan provider, and the store's downloaded kinds are one download by @willemkokke
+- The pypi and python kinds name their source; uv is the installer, not the kind by @willemkokke
+- A conan member's caches ride its own release, and every declared floor is built against by @willemkokke
+- The lane keeps conan's home on the working drive and caches it around the native legs by @willemkokke
+- The metrics row keeps what each task's own steps took, so a checker that moved is named by @willemkokke
+- Both native kinds render CMake presets, so an editor opens them with no verb by @willemkokke
+- The native kinds format and lint their sources, with the two clang tools in the store by @willemkokke
+- The lock names a delegated tool's resolved graph, and fm tools.lock writes it by @willemkokke
+- A delegated tool installs the graph the lock pins, resolving nothing and checking every artifact by @willemkokke
+- A profiled run carries what it launches by @willemkokke
+- The trace leaves the leg by @willemkokke
+- One run assembles into one timeline by @willemkokke
+- The local command carries the run it caused by @willemkokke
+- A skipped gate is an event on the timeline by @willemkokke
+- Every CI entry keeps a trace, and one switch governs it by @willemkokke
+- The commit a merge made, and a gate that skips a deleted test by @willemkokke
+- A job's setup and teardown are drawn, so its parts add up by @willemkokke
+- One walk follows a commit through everything CI did by @willemkokke
+- The layering lint reads what the sources use, and each kind answers for its own by @willemkokke
+- An issue's thread has a verb to write to it by @willemkokke
+- The tools lock and sync in uv's shape, and a newborn locks its own by @willemkokke
+- The check registry: every gate member is a registered check by @willemkokke
+- The layering check's fix mode writes the edge the graph already reaches by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+- A layer declares its API version and its dependencies, and the gate names what a layer registered or withdrew by @willemkokke
+- A package may opt out of publishing: [release] publish = false by @willemkokke
+- A layer declares its tools and its contributions by target, and the layering check parses once by @willemkokke
+- The category and channel registries: what a file is and who wrote it, extensible by a layer by @willemkokke
+- Slots the records fill, options a package sets, and the check's tools on its record by @willemkokke
+- A check record owns its configuration: fragments, the editor files, and withdrawal by @willemkokke
+- A check claims its files, and the render reads the claim by @willemkokke
+- Prose fragments serve two readers: sections, a registry, and the entry file from it by @willemkokke
+- Coverage measured by kind: the seam and the gcc and clang measurers by @willemkokke
+- The dotnet kind: .NET as a runtime record on every host, NuGet tools through it, pwsh as a download by @willemkokke
+- The MSVC measurer and the Windows toolchain environment for the cpp-conan kind by @willemkokke
+- Host-scoped tool requirements: a tool required on some hosts alone by @willemkokke
+- The conformance loop's cpp-conan member, its runner on Debian, and the fixes the pass found by @willemkokke
+- The host allowance for store tools: a tool on PATH serves when allowed and satisfying, the store installs otherwise by @willemkokke
+- The loop runs its scenarios by name and prints a timing table per pass by @willemkokke
+- Local development environments by name in host mode, and the loop runs on one by @willemkokke
+- Extraction belongs to the kind: the kind record names its API extractor, and a kind without one names the absence on the site by @willemkokke
+- Policy belongs to the layer: whether private members are documented is a slot a layer fills, read by the kind's extractor by @willemkokke
+- Assets belong to the layers: a layer's css is staged into the build from its wheel, in layer order with the workspace's own last, and the theme block is a slot a theme layer fills by @willemkokke
+- Examples are files: a package's examples live under docs/examples/ as python files a page includes by snippet, and one harness runs each through the kind's runner, replacing footman's page-as-session harness and its three markers by @willemkokke
+- The docs layer: the site's assembly, verbs and slots move to livery.workshop.layers.docs, the base keeps the docs contract, the nav blocks and a registry of layer-rendered files, and the layers namespace spans distributions by @willemkokke
+- The site's jobs come with the docs layer: a mounted layer contributes jobs and entries to a builtin point, the verdict waits for the ones that gate, and the base declares neither the docs job nor the deploy by @willemkokke
+- The extractor is data and the development section is pages: the site's handler blocks render from the kind's data, the prose fragments render one page per section, and the mount refuses two pages at one URL by @willemkokke
+- The conformance kit: livery.workshop.testing judges what a layer registers, starting with the backend protocol, the nearest kind's fragment, and the category tables, and the nearest kind now wins where the kind chain was read parent first by @willemkokke
+- The role verbs go: fm check takes paths and walks the registry over exactly those files, --safe-fix is the fixers' in-flight mode, --point selects a point's tests, and the post-edit hook runs the fixers through the walk by @willemkokke
+- A check is its role and its tool, and the role verbs are generated from the registry: fm test runs the test role's checks and fm test.pytest one, each verb offering exactly the flags its checks declare by @willemkokke
+- The conformance kit judges a check's after list and a layer's contribution modules, and a for entry naming an undeclared contribution no longer crashes every fm command by @willemkokke
+- The conformance kit renders a layer's fragments: a composed file that stops parsing and a file that drifts from its render are named, and a withdrawn check's file follows contract 11 by @willemkokke
+- The conformance kit walks the gate over a layer's checks: every fixer rewrites before any judge, a check with no file to read is named and never started, and every check names its layer by @willemkokke
+- The base names no package kind: a vocabulary test with an allowance that only falls, and a kind's coverage pages come from its kind record, generated by docs.coverage-pages by @willemkokke
+- The deterministic CBOR codec is livery.strongroom.cbor, reached by its own path, and the livery-cbor distribution retires by @willemkokke
+- Fm sync and fm integrate remove the ignored files a removed package leaves under packages/, and discovery's refusal of such a directory names the sync that removes it by @willemkokke
+- A coverage record keeps each row a write replaced or removed for a day, so a run's union finds what its legs skipped after main's run moved the record on by @willemkokke
+- Fm ci.scale times sync, template.check and check over a generated 300-member workspace, weekly in the nightly's scale job onto the metrics series by @willemkokke
+- Every workshop.toml key is declared by the layer that reads it, and a contract holds nothing else: an unknown key, an unlisted layer's key, a wrong type or value refuses on read by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Extensions replace layers: each declares itself in the workshop.extensions entry point group, and a workspace lists them by name in [workspace] extensions by @willemkokke
+- Plugins mount through the project builtin rung: the workshop mounts the listed extensions from its own entry module, and the rendered tasks.py keeps only its comment by @willemkokke
+- A tool requirement takes ? and !: an optional tool is locked where it can be served and never refused, and a plugin declares the tools its verbs need by @willemkokke
+- Footman scans the installed entry points once per process and shares the scan through installed_entry_points, and a plugin declares its tools in a data module by @willemkokke
+- [workspace] hosts declares the supported hosts, the lock covers them all, and a sync elsewhere refuses in CI by @willemkokke
+- One fragment engine: targets composed by type in extension order, minijinja renders cached by digest, receipts that keep an edited file by @willemkokke
+- Every checkout is LF: the rendered .gitattributes pins eol=lf whatever core.autocrlf says, with .bat and .cmd as CRLF by @willemkokke
+- .gitignore and .gitattributes are composed by the fragment engine on sync, each line shipped by the extension that needs it by @willemkokke
+- Git LFS is a workspace setting: extensions ship LFS rules, composed while [workspace] lfs is on and named while it is off, with a git_lfs record, its hooks and LFS checkouts in CI by @willemkokke
+- The vscode files are composed: extensions and checks contribute settings and recommendations as data to one template, and check --fix moves what VS Code added into the region by @willemkokke
+- Pyproject.toml is composed: the base's template rendered from the answers, each check's tables a fragment of its extension, the repository's region last by @willemkokke
+- A package's clang-format and clang-tidy are composed by the fragment engine, and the separate settle path goes by @willemkokke
+- Skills and hooks are engine link outputs, and settings.json, the prose fragments and the CLAUDE.md stub engine files, withdrawn by the receipt rule by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+- A birth writes the extensions' seeds through the fragment engine's resolution, and copier, the overlays and the template artifact go by @willemkokke
+- A newborn's test and asset seeds become docs extension checks and content, and a born project's gate is proved green by @willemkokke
+- The floor leg is the [release] prove-floors setting, workspace default overridable per package, and a failed release's rollback restores the version in api.py by @willemkokke
+- A died release wave can be abandoned: --abandon prepares a new release over it, and a later release squash takes over a package's uncut receipt by @willemkokke
+
+### Fixed
+
+- The merge point's dispatch job carries actions: write on GitHub, and a refused dispatch is red by @willemkokke
+- The stubs and handles live beside the tools package, never inside its directory by @willemkokke
+- A machine's gate reads the state store from the last fetched snapshot and never reaches origin by @willemkokke
+- A system tool is held to the highest of the record's floor and the sites' floors, and the site is named by @willemkokke
+- Git-cliff stays off Windows ARM, where it has no wheel and its sdist does not build by @willemkokke
+- The project ignore file covers .DS_Store, so Finder never dirties a tree a workflow verb refuses by @willemkokke
+- Fm enters the environment for its own process, and the editor's terminal enters it on open by @willemkokke
+- The entry contract leads PATH in its own order, the venv ahead of the tools by @willemkokke
+- A gone branch's coverage record lingers a day, so main's run for its squash can still carry from it by @willemkokke
+- Fm submit refuses a branch with no commits beyond its base before pushing anything by @willemkokke
+- Ci.rerun names a run still in progress, ci.logs names the failure above the tail, and commit refuses plainly when git cannot write the object by @willemkokke
+- The tool store lives on the runner's working drive on a GitHub job, beside uv's cache by @willemkokke
+- The workflow caches the tool store alone, swept of the artifacts it extracted, and nothing of uv's by @willemkokke
+- A sync whose first act moved the checkout hands the rest to a fresh process on the new code by @willemkokke
+- The shipped .claude/settings.json is JSON a strict reader accepts by @willemkokke
+- The fragment sweep removes only what a delivery wrote by @willemkokke
+- The re-exec hands its guard to the replacement instead of writing it here by @willemkokke
+- A merged parent's child submits against main by @willemkokke
+- The job runner names the leg it pushes for by @willemkokke
+- The native kinds find conan where the leg puts it by @willemkokke
+- The ignore list follows where a profiled run writes by @willemkokke
+- The sweep takes only the traces it wrote, and keeps more of them by @willemkokke
+- A check's prerequisites run through their tasks, once per gate by @willemkokke
+- The lock check compares entries without their graphs by @willemkokke
+- An allowance ahead of its requirement is kept and named by the lock, and the loop's pass series is declared with the others by @willemkokke
+- The entry script keeps a cache placement the job already sets, so a persistent runner's jobs find their store warm by @willemkokke
+- The gate walks the registry in one place: every fixer that applies runs one at a time before the judges, a check with no file to read starts no process, and the python backend composes nothing by @willemkokke
+- A package's tests run whole whenever any of its test or source files changed: the gate stops narrowing a suite to the changed test files by @willemkokke
+- Every python in a workspace venv stops importing coverage at startup: coverage's own hook meters the tests' subprocesses, and the floor moves to 7.13 by @willemkokke
+- A stacked branch moves only its own commits when its parent moves or merges: fm start --from records where the branch starts, and fm sync and fm submit rebase from there by @willemkokke
+- A submit whose pull request merged finishes clean when the janitor already swept its worktree by @willemkokke
+- Fm issue.show prints the whole issue when git cannot reach origin: it finds the branch among the local branches and the remote-tracking refs, and a failed lookup costs only the pull request line by @willemkokke
+- Fm sync names git's own words when a rebase stops on anything but a conflict, a commit the signer refused say, instead of reporting conflicts by @willemkokke
+- A submit's self-heal hands the merged checkout to a fresh fm submit, so the gate judges the merged tree with the code it carries, never the code the follow loaded by @willemkokke
+- The extension mount names what it cannot mount and goes on, so fm sync can install a missing declaration; the gate refuses the same problems by @willemkokke
+- An optional tool the host cannot supply is named and never refused, strict or not by @willemkokke
+- An armed submit of a stacked branch leaves it unarmed while its parent is open, and names the sync and submit that arm it after by @willemkokke
+- Ci.rerun off main names a red run on a commit main already has and leaves it to main, so a branch no longer re-runs main's nightly by @willemkokke
+- The armed drives pass again: a sync ends by writing the composed and generated files, a birth lists the site's extension before a brand's, and the base ignores the docs its build writes by @willemkokke
+- A nanobind container build mounts the stores its provider and conan paths name by @willemkokke
+- Release verification reads __version__ from the files the stamper writes, a namespace root's api.py among them by @willemkokke
+- Speed.judge says it is a CI verb before it looks for a workspace by @willemkokke
+
+### Changed
+
+- The project ignore file covers a root docs/_generated/, and the modular docs plan is complete by @willemkokke
+- A page on efficient development patterns: submit and move on, parallel worktrees, stacking, what the forge does with several green pull requests by @willemkokke
+- The kind hierarchy plan sequences compile-time consumption as phases 7 and 8, and the merge path may depend on a token-reached service by @willemkokke
+- A test workspace locks for the host running the test, measured on a Windows ARM round that leaves the matrix by @willemkokke
+- The chain proves one first-party and one third-party symbol in the child's extension by @willemkokke
+- Conan and ctest run through their store handles, and receipts say where the store put them by @willemkokke
+- Git and ssh run through their handles, and a test refuses a literal program name by @willemkokke
+- Layer fragments get their own folder under .workshop by @willemkokke
+- A run as one timeline has a page by @willemkokke
+- The edge kind describes what it decides and what it does not by @willemkokke
+- An assembled trace lands with the checkout's other records, and the newest stay by @willemkokke
+- The trace window holds a working week by @willemkokke
+- The profiles page names the directory a trace lands in by @willemkokke
+- The stdlib-only rule reads the plugin the metadata names by @willemkokke
+- Pin what the gate is, before the check registry replaces it by @willemkokke
+- The contract key type becomes kind by @willemkokke
+- The workshop member carries types-pyyaml as its dev extra by @willemkokke
+- The layer template is package-layer by @willemkokke
+- Birth tests never reach the network: the tool-sync engine is faked for every caller, and a fetch the fakes miss refuses naming its host by @willemkokke
+- The base derives a package's next version from its commits; git-cliff only writes the changelog entry by @willemkokke
+- The release member list is the only record of what a release contains: discovery, the title check and the recovery read it, and the changelogs are no longer read by @willemkokke
+- A verb that reaches no forge and no tool store loads neither: the forge, store and strongroom roots serve their names on first use, and the workshop and the bench import the store where they use it by @willemkokke
+- Release notes are a registration the release train calls: prepare, verify, the dev release and the docs layer ask the provider, and with none the train stamps and writes no notes by @willemkokke
+- Minijinja renders every template and check fragment byte-identical to copier's jinja2, pinned by a parity test until the templates go by @willemkokke
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
