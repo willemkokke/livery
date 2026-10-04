@@ -84,6 +84,21 @@ def test_verify_lists_every_disagreement(seeds: Seeds) -> None:
     assert "CHANGELOG.md has no '## 0.2.0' entry" in str(caught.value)
 
 
+def test_verify_reads_the_version_where_the_stamper_writes_it(seeds: Seeds) -> None:
+    # The refusal first: no module declares the version.
+    root = _workspace(seeds)
+    package = root / "packages" / "tool" / "src" / "livery" / "tool"
+    (package / "__init__.py").unlink()
+    with pytest.raises(_FAILURES) as caught:
+        verify_release(root, "packages/tool/v0.2.0")
+    assert 'no api.py or __init__.py under src/ declares __version__ = "0.2.0"' in str(
+        caught.value
+    )
+    # A namespace root keeps its version in its api.py.
+    (package / "api.py").write_text('__version__ = "0.2.0"\n')
+    assert verify_release(root, "packages/tool/v0.2.0").version == "0.2.0"
+
+
 def test_verify_refuses_an_unreleased_floor(seeds: Seeds) -> None:
     root = _workspace(seeds)
     contract = root / "packages" / "tool" / "workshop.toml"
