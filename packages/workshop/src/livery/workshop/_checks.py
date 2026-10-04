@@ -367,11 +367,29 @@ def _typed(option: Option, value: object) -> bool:
     return isinstance(value, expected)
 
 
+def option_addresses(record: CheckRecord) -> tuple[str, ...]:
+    """The tables that reach *record*'s options, shallowest first.
+
+    ``roles.<role>`` for each role the check answers to, then
+    ``checks.<tool>``, then ``checks.<tool>.<role>`` for each role: a
+    later table wins key by key. The tool's table outranks the role's,
+    since it names fewer checks.
+    """
+    roles = (record.role, *record.roles)
+    return (
+        *(f"roles.{role}" for role in roles),
+        f"checks.{record.tool}",
+        *(f"checks.{record.tool}.{role}" for role in roles),
+    )
+
+
 def option_value(record: CheckRecord, package: Package, name: str) -> object:
     """What *package* sets for *record*'s option *name*, or the option's default.
 
-    Refuses an option the record does not declare and a value of the
-    wrong type, naming the record's options.
+    The deepest table that sets it wins
+    ([livery.workshop._checks.option_addresses][]). Refuses an option
+    the record does not declare and a value of the wrong type, naming
+    the record's options.
     """
     declared = {option.name: option for option in (*record.options, ENABLED)}
     if name not in declared:
@@ -380,58 +398,86 @@ def option_value(record: CheckRecord, package: Package, name: str) -> object:
             f" {', '.join(declared)}"
         )
     option = declared[name]
-    for check, options in package.checks:
-        if check != record.name:
-            continue
-        for key, value in options:
+    tables = dict(package.checks)
+    found: object = option.default
+    for address in option_addresses(record):
+        for key, value in tables.get(address, ()):
             if key != name:
                 continue
             if not _typed(option, value):
                 fail(
-                    f"{package.path}/workshop.toml: [checks.{record.name}] {name} is"
+                    f"{package.path}/workshop.toml: [{address}] {name} is"
                     f" {option.kind}, not {value!r}"
                 )
-            return value
-    return option.default
+            found = value
+    return found
+
+
+def _reached(address: str) -> tuple[CheckRecord, ...]:
+    """The registered checks a table *address* reaches."""
+    kind, _, rest = address.partition(".")
+    if kind == "roles":
+        return tuple(r for r in _CHECKS.values() if rest in (r.role, *r.roles))
+    tool, _, role = rest.partition(".")
+    return tuple(
+        r
+        for r in _CHECKS.values()
+        if r.tool == tool and (not role or role in (r.role, *r.roles))
+    )
 
 
 def option_problems(packages: tuple[Package, ...]) -> list[str]:
-    """Every ``[checks.<role>.<tool>]`` entry no check declares, one line each.
+    """Every option table or key no registered check takes, one line each.
 
-    Read by the layering check, so a package that sets an option on a
-    check that does not exist, or one the check does not declare, is
-    refused with the vocabulary named.
+    Read by the layering check, so a package that addresses a tool, a
+    check or a role that does not exist, or sets an option none of the
+    checks it reaches declares, is refused with the vocabulary named.
     """
     problems: list[str] = []
+    tools = sorted({r.tool for r in _CHECKS.values()})
+    roles = sorted({role for r in _CHECKS.values() for role in (r.role, *r.roles)})
     for package in packages:
-        for check, options in package.checks:
-            record = _CHECKS.get(check)
-            holder = answering(check)
-            if record is None and holder is not None:
-                problems.append(
-                    f"{package.path}/workshop.toml: [checks.{check}] names the"
-                    f" check {holder} by a further role; its options live under"
-                    f" [checks.{holder}]"
-                )
+        where = f"{package.path}/workshop.toml"
+        for address, options in package.checks:
+            reached = _reached(address)
+            if not reached:
+                kind, _, rest = address.partition(".")
+                first, _, second = rest.partition(".")
+                if kind == "checks" and first in roles and second in tools:
+                    problems.append(
+                        f"{where}: [{address}] names a role then a tool; a check's"
+                        f" own table is [checks.{second}.{first}]"
+                    )
+                elif kind == "checks" and first in roles and not second:
+                    problems.append(
+                        f"{where}: [{address}] names a role; a role's options are"
+                        f" [roles.{first}]"
+                    )
+                elif kind == "roles":
+                    problems.append(
+                        f"{where}: [{address}] names no role a registered check"
+                        f" has; the roles are {', '.join(roles)}"
+                    )
+                else:
+                    problems.append(
+                        f"{where}: [{address}] reaches no registered check; the"
+                        f" tools are {', '.join(tools)}"
+                    )
                 continue
-            if record is None:
-                problems.append(
-                    f"{package.path}/workshop.toml: [checks.{check}] names no"
-                    f" registered check; the checks are {', '.join(_CHECKS)}"
-                )
-                continue
-            declared = {option.name: option for option in (*record.options, ENABLED)}
+            declared: dict[str, Option] = {ENABLED.name: ENABLED}
+            for record in reached:
+                declared.update({option.name: option for option in record.options})
             for key, value in options:
                 option = declared.get(key)
                 if option is None:
                     problems.append(
-                        f"{package.path}/workshop.toml: [checks.{check}] declares no"
-                        f" option {key!r}; its options are {', '.join(declared)}"
+                        f"{where}: [{address}] sets {key!r}, which no check it"
+                        f" reaches declares; their options are"
+                        f" {', '.join(sorted(declared))}"
                     )
                 elif not _typed(option, value):
                     problems.append(
-                        f"{package.path}/workshop.toml: [checks.{check}] {key} is"
-                        f" {option.kind}, not {value!r}"
+                        f"{where}: [{address}] {key} is {option.kind}, not {value!r}"
                     )
     return problems
 

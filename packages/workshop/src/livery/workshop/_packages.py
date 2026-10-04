@@ -63,10 +63,12 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
-        checks: The options the package sets on its checks, from the
-            contract's ``[checks.<role>.<tool>]`` tables, check name to
+        checks: The options the package sets on its checks, by the
+            table that sets them: ``checks.<tool>`` (every check of the
+            tool), ``checks.<tool>.<role>`` (one check) and
+            ``roles.<role>`` (every check of the role), each to its
             ``(option, value)`` pairs; the check registry validates
-            them against what each record declares.
+            them against what the checks they reach declare.
         categories: The package's own reassignments of its paths
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
@@ -246,14 +248,28 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             for category, patterns in contract.get("categories", {}).items()
         ]
         options: list[tuple[str, tuple[tuple[str, object], ...]]] = []
-        for role, tools in contract.get("checks", {}).items():
-            for tool, table in tools.items():
-                options.append(
-                    (
-                        f"{role}.{tool}",
-                        tuple((str(key), value) for key, value in table.items()),
-                    )
+        for tool, table in contract.get("checks", {}).items():
+            # Scalars are the tool's own options; a table is one of its
+            # checks, by role.
+            own = tuple(
+                (str(key), value)
+                for key, value in table.items()
+                if not isinstance(value, dict)
+            )
+            if own or not table:
+                options.append((f"checks.{tool}", own))
+            options.extend(
+                (
+                    f"checks.{tool}.{role}",
+                    tuple((str(key), value) for key, value in nested.items()),
                 )
+                for role, nested in table.items()
+                if isinstance(nested, dict)
+            )
+        options.extend(
+            (f"roles.{role}", tuple((str(key), value) for key, value in table.items()))
+            for role, table in contract.get("roles", {}).items()
+        )
         options_by_check = tuple(options)
         publish = bool(release.get("publish", True))
         packages.append(
