@@ -172,7 +172,7 @@ def test_a_failed_commits_staged_stamp_and_manifest_roll_back(
     (root / MANIFEST).write_text(_manifest(mined, ("core", "0.4.0")))
     # What a commit a signing agent refused leaves: everything staged.
     _git(root, "add", "-A")
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    core = next(p for p in discover_packages(root) if p.member == "core")
     rollback_prepare(root, (core,))
     assert _git(root, "status", "--porcelain") == ""
     assert changelog.read_text() == before
@@ -185,14 +185,14 @@ def test_a_first_releases_manifest_goes_on_rollback(
     _git(root, "checkout", "main")
     (root / MANIFEST).write_text(_manifest(mined, ("core", "0.3.0")))
     _git(root, "add", "-A")
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    core = next(p for p in discover_packages(root) if p.member == "core")
     rollback_prepare(root, (core,))
     assert not (root / MANIFEST).exists()
     assert _git(root, "status", "--porcelain") == ""
 
 
 def _core(root: Path) -> MemberPlan:
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    core = next(p for p in discover_packages(root) if p.member == "core")
     return MemberPlan(core, "0.3.0")
 
 

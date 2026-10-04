@@ -580,7 +580,7 @@ class ReleaseDriver:
         if self._previous is None:
             return set()
         previous_mined, previous_pairs = self._previous
-        now = tuple((plan.package.directory.name, plan.version) for plan in plans)
+        now = tuple((plan.package.member, plan.version) for plan in plans)
         if tuple(sorted(previous_pairs)) != tuple(sorted(now)):
             return set()
         kept: set[str] = set()
@@ -592,7 +592,7 @@ class ReleaseDriver:
             except GitError:
                 continue  # an unreadable span proves nothing: run the legs
             if not moved:
-                kept.add(plan.package.directory.name)
+                kept.add(plan.package.member)
         return kept
 
     def prepare(self) -> Submission | None:
@@ -653,7 +653,7 @@ class ReleaseDriver:
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
             for plan in plans:
-                if plan.package.directory.name in kept:
+                if plan.package.member in kept:
                     print(
                         f"  {plan.package.name} v{plan.version}: legs kept from the"
                         " discarded prepare; the base did not move its directory"
