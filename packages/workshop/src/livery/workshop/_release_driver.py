@@ -26,7 +26,7 @@ from livery.forge.api import ForgeError, Repository, Run
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package, discover_packages, receipt_member
 from livery.workshop._release import prepare_release
 from livery.workshop._versions import derive_version
 from livery.workshop._workflow_engine import Submission, run_workflow
@@ -86,7 +86,7 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
         released = _last_released(root, package)
         derived = derive_version(root, package, released=released)
         if not derived or derived == released:
-            unchanged.append(package.directory.name)
+            unchanged.append(package.member)
             continue
         plans.append(MemberPlan(package=package, version=derived))
     if unchanged:
@@ -115,7 +115,7 @@ def _write_manifest(root: Path, plans: tuple[MemberPlan, ...]) -> None:
         "schema": 1,
         "members": [
             {
-                "dir": plan.package.directory.name,
+                "dir": plan.package.member,
                 "name": plan.package.name,
                 "version": plan.version,
             }
@@ -164,7 +164,7 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     import re
 
     versions = {plan.package.name: plan.version for plan in plans}
-    dirs = {plan.package.name: plan.package.directory for plan in plans}
+    members = {plan.package.name: plan.package.member for plan in plans}
     changed: list[str] = []
     for plan in plans:
         for home in ("pyproject.toml", "workshop.toml", "conanfile.py"):
@@ -187,9 +187,9 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
                     rf"\g<1>{version}\g<2>",
                     text,
                 )
-                directory = re.escape(dirs[name].name)
+                member = re.escape(members[name])
                 text = re.sub(
-                    rf'(path = "packages/{directory}"'
+                    rf'(path = "packages/{member}"'
                     rf'[^[]*?floor = ")[^"]+(")',
                     rf"\g<1>{version}\g<2>",
                     text,
@@ -489,7 +489,7 @@ class ReleaseDriver:
         self._repo = repo
         self._git = git
         self._members = members
-        self.members = tuple(p.directory.name for p in members)
+        self.members = tuple(p.member for p in members)
         self.name = release_name(self.members)
         self.armed = armed
         self._force = force_unverified_base
@@ -968,9 +968,9 @@ def pending_release_wave_for(
 def uncut_in_set(
     missing: tuple[str, ...], members: tuple[Package, ...]
 ) -> tuple[str, ...]:
-    """The uncut receipts, `packages/<dir>/v<x>`, that belong to *members*."""
-    names = {member.directory.name for member in members}
-    return tuple(tag for tag in missing if tag.split("/")[1] in names)
+    """The uncut receipts, `packages/<member>/v<x>`, that belong to *members*."""
+    names = {member.member for member in members}
+    return tuple(tag for tag in missing if receipt_member(tag) in names)
 
 
 release_group = workflow.group("release", help="The release train")
@@ -1078,7 +1078,7 @@ def workflow_release(
         missing = tuple(tag for tag in missing if tag not in inside)
         if not missing:
             continue
-        others = " ".join(sorted({tag.split("/")[1] for tag in missing}))
+        others = " ".join(sorted({receipt_member(tag) for tag in missing}))
         print(
             f"  release squash {squash[:12]} has uncut receipts outside this"
             f" set: {', '.join(missing)}; `{footman.prog()} workflow.release"

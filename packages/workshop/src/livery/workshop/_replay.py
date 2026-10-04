@@ -212,7 +212,7 @@ def replay_flow(
     """
     import livery.toolroom.tools.api as toolroom
 
-    member = package.directory.name
+    member = package.member
     replay = Replay(
         member, package.name, latest_release(registry, package.name), extras
     )

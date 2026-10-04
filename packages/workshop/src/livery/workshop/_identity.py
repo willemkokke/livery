@@ -107,7 +107,7 @@ def roster(root: Path) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for package in discover_packages(root):
         entry = {
-            "dir": package.directory.name,
+            "dir": package.member,
             "name": package.name,
             "kind": package.kind,
         }
@@ -144,7 +144,7 @@ def package_facts(root: Path, directory: Path) -> dict[str, Any]:
             contract.get("description")
             or f"{name}: a {project['project_name']} workspace package."
         ),
-        "package_dir": directory.name,
+        "package_dir": directory.relative_to(root / "packages").as_posix(),
         "namespace_package": project["namespace_package"],
         "author_name": project["author_name"],
         "author_email": project["author_email"],

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from livery.footman.api import fail
 from livery.workshop._checks import NONE, PACKAGES, CheckRecord, GateContext
+from livery.workshop._packages import member_depth, package_directories
 
 EXTENSION = "livery.extensions.docs"
 
@@ -46,13 +47,11 @@ def _slug(heading: str) -> str:
 
 def _docs_trees(root: Path) -> list[Path]:
     trees = [root / "docs"]
-    packages = root / "packages"
-    if packages.is_dir():
-        trees += sorted(
-            member / "docs"
-            for member in packages.iterdir()
-            if (member / "docs").is_dir()
-        )
+    trees += [
+        member / "docs"
+        for member in package_directories(root)
+        if (member / "docs").is_dir()
+    ]
     return [tree for tree in trees if tree.is_dir()]
 
 
@@ -91,10 +90,11 @@ def link_problems(root: Path) -> list[str]:
                 resolved = (page.parent / path_part).resolve()
                 if path_part == "changelog.md" and "packages" in page.parts:
                     continue
-                mounted = re.fullmatch(r"packages/([^/]+)/(.+)", path_part)
-                if mounted:
+                depth = member_depth(root, Path(path_part))
+                if depth:
+                    parts = Path(path_part).parts
                     resolved = (
-                        root / "packages" / mounted.group(1) / "docs" / mounted.group(2)
+                        root.joinpath(*parts[:depth]) / "docs" / Path(*parts[depth:])
                     ).resolve()
                 elif "_generated" in path_part:
                     continue

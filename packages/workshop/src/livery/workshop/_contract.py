@@ -109,7 +109,8 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
 def load_contract(path: Path) -> dict[str, Any]:
     """Parse the contract at *path* and judge its keys; a refusal names the file.
 
-    A contract under ``packages/<name>/`` is a package's, judged
+    A contract under ``packages/<name>/`` or ``packages/<group>/<name>/``
+    is a package's, judged
     against the extensions its workspace's root contract lists; any other
     is a root contract, judged against the extensions it lists itself.
     Every problem is listed in one refusal
@@ -118,8 +119,9 @@ def load_contract(path: Path) -> dict[str, Any]:
     from livery.workshop._contract_keys import judge, listed_extensions
 
     data = parse_contract(path.read_text("utf-8"), where=str(path))
-    if path.parent.parent.name == "packages":
-        root = path.parent.parent.parent / CONTRACT
+    workspace = _package_workspace(path)
+    if workspace is not None:
+        root = workspace / CONTRACT
         listed = listed_extensions(_root_tables(root)) if root.is_file() else None
         problems = judge(data, contract="package", where=str(path), listed=listed)
     else:
@@ -129,6 +131,20 @@ def load_contract(path: Path) -> dict[str, Any]:
     if problems:
         fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
     return data
+
+
+def _package_workspace(path: Path) -> Path | None:
+    """The workspace root of the package contract at *path*; None for a root's.
+
+    A package sits at ``packages/<name>/`` or, in a group directory, at
+    ``packages/<group>/<name>/``; a group has no contract of its own.
+    """
+    if path.parent.parent.name == "packages":
+        return path.parent.parent.parent
+    group = path.parent.parent
+    if group.parent.name == "packages" and not (group / CONTRACT).is_file():
+        return group.parent.parent
+    return None
 
 
 def _root_tables(path: Path) -> dict[str, Any]:
@@ -144,9 +160,12 @@ def contract_paths(root: Path) -> list[Path]:
     paths = [root / CONTRACT]
     packages = root / "packages"
     if packages.is_dir():
-        paths += sorted(
-            directory / CONTRACT
-            for directory in packages.iterdir()
-            if directory.is_dir()
-        )
+        found: list[Path] = []
+        for directory in (p for p in packages.iterdir() if p.is_dir()):
+            if (directory / CONTRACT).is_file():
+                found.append(directory / CONTRACT)
+            else:
+                # A group directory: its packages are one level down.
+                found += (p / CONTRACT for p in directory.iterdir() if p.is_dir())
+        paths += sorted(found)
     return [path for path in paths if path.is_file()]

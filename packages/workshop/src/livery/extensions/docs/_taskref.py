@@ -221,7 +221,7 @@ def generate_task_reference(root: Path) -> list[str]:
     aliases.mkdir(parents=True)
     rendered: list[str] = []
     for package, trees in providing:
-        owner = package.directory.name
+        owner = package.member
         out = package.directory / "docs" / "_generated" / "tasks"
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)

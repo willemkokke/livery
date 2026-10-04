@@ -146,11 +146,10 @@ def _steps_by_task(
 
 
 def _package_of(nodeid: str) -> str:
-    """The workspace package a test node belongs to, or ``""``."""
-    parts = nodeid.split("::", 1)[0].split("/")
-    if len(parts) >= 2 and parts[0] == "packages":
-        return parts[1]
-    return ""
+    """The member a test node belongs to (``forge``, ``extensions/ruff``), or ``""``."""
+    from livery.workshop._pytest_speed import package_of
+
+    return package_of(nodeid).removeprefix("packages/")
 
 
 def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:

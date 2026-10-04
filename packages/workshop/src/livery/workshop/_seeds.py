@@ -45,20 +45,27 @@ PROJECT_SEEDS = ("docs/index.md", "README.md", "LICENSE")
 def derived(facts: Mapping[str, Any]) -> dict[str, str]:
     """The names a package's seeds derive from its name and its namespace.
 
-    `project_slug` is the module name inside the namespace (`acme-tools`
-    in `acme` is `tools`), `source_path` the directory under `src/` and
-    `tests/`, and `import_path` the dotted import.
+    The distribution name decides the import path, as it does in this
+    repository: each hyphen after the namespace's own prefix is one
+    namespace level (`acme-tools-store` in `acme` imports as
+    `acme.tools.store`). The directory decides nothing, so a package
+    in a group directory (`extensions/ruff`, named `acme-extensions-ruff`)
+    imports as `acme.extensions.ruff`. `project_slug` is the last
+    level, `source_path` the directory under `src/` and `tests/`, and
+    `import_path` the dotted import.
     """
     namespace = str(facts.get("namespace_package", ""))
     name = str(facts.get("package_name", ""))
     prefix = namespace.replace(".", "-") + "-" if namespace else ""
-    slug = name.removeprefix(prefix).replace("-", "_")
+    levels = name.removeprefix(prefix).split("-")
     if not namespace:
-        return {"project_slug": slug, "source_path": slug, "import_path": slug}
+        # A workspace without a namespace keeps one top-level module.
+        levels = ["_".join(levels)]
+    module = [*namespace.split("."), *levels] if namespace else levels
     return {
-        "project_slug": slug,
-        "source_path": f"{namespace.replace('.', '/')}/{slug}",
-        "import_path": f"{namespace}.{slug}",
+        "project_slug": levels[-1],
+        "source_path": "/".join(module),
+        "import_path": ".".join(module),
     }
 
 

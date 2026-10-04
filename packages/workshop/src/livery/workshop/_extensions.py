@@ -546,8 +546,13 @@ def closure_problems(start: Path | None = None) -> list[str]:
 
 def _package_lists(root: Path) -> list[tuple[Path, tuple[str, ...]]]:
     """Each package contract under *root* with the extensions it lists, read raw."""
+    from livery.workshop._packages import package_directories
+
     found: list[tuple[Path, tuple[str, ...]]] = []
-    for contract in sorted(root.glob("packages/*/workshop.toml")):
+    for directory in package_directories(root):
+        contract = directory / "workshop.toml"
+        if not contract.is_file():
+            continue
         listed = tomllib.loads(contract.read_text("utf-8")).get("extensions") or []
         found.append((contract, tuple(str(name) for name in listed)))
     return found

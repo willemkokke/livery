@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import takewhile
 from pathlib import Path
@@ -58,7 +59,8 @@ class Package:
     Attributes:
         directory: The package directory.
         path: The identity path from the workspace root
-            (``packages/forge``).
+            (``packages/forge``, or ``packages/extensions/ruff`` for a
+            package in a group directory).
         name: The distribution name (``livery-forge``).
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
@@ -88,6 +90,21 @@ class Package:
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
     checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
+
+    @property
+    def member(self) -> str:
+        """The package's path under ``packages/``: ``forge``, ``extensions/ruff``.
+
+        It names the package in a release tag
+        (``packages/<member>/v<version>``) and everywhere else a
+        package is addressed by its place rather than its
+        distribution name.
+        """
+        return self.path.removeprefix(f"{PACKAGES_DIR}/")
+
+
+#: The directory every package lives under, relative to the root.
+PACKAGES_DIR = "packages"
 
 
 #: How git sees a directory under ``packages/`` that has no contract.
@@ -176,15 +193,92 @@ def _no_contract(root: Path, directory: Path) -> str:
     The classification asks git, which costs a process or three, and
     runs only here, on the way to a refusal.
     """
+    member = directory.relative_to(root / PACKAGES_DIR).as_posix()
     if leftover(root, directory).state != RESIDUE:
-        return f"{directory.name}: no workshop.toml"
+        return f"{member}: no workshop.toml"
     import livery.footman.api as footman
 
     return (
-        f"{directory.name}: no workshop.toml, and git tracks nothing under"
-        f" packages/{directory.name}: it holds only ignored files, what a removed"
+        f"{member}: no workshop.toml, and git tracks nothing under"
+        f" {PACKAGES_DIR}/{member}: it holds only ignored files, what a removed"
         f" package leaves behind. `{footman.prog()} sync` removes the directory"
     )
+
+
+def is_group(directory: Path) -> bool:
+    """Whether *directory* under ``packages/`` groups packages rather than being one.
+
+    A group has no ``workshop.toml`` of its own and at least one
+    subdirectory that has one. Groups do not nest.
+    """
+    if (directory / "workshop.toml").is_file():
+        return False
+    return any((child / "workshop.toml").is_file() for child in directory.iterdir())
+
+
+def package_directories(root: Path) -> tuple[Path, ...]:
+    """Every directory under ``packages/`` that should hold a package, sorted by path.
+
+    A package lives at ``packages/<name>/`` or, inside a group
+    directory, at ``packages/<group>/<name>/``. The directories are
+    returned whether or not they carry a contract;
+    [livery.workshop.api.discover_packages][] judges them. Reach for
+    this where a glob would assume one level.
+    """
+    packages_dir = root / PACKAGES_DIR
+    if not packages_dir.is_dir():
+        return ()
+    found: list[Path] = []
+    for directory in (p for p in packages_dir.iterdir() if p.is_dir()):
+        if is_group(directory):
+            found.extend(p for p in directory.iterdir() if p.is_dir())
+        else:
+            found.append(directory)
+    return tuple(sorted(found, key=lambda path: path.as_posix()))
+
+
+def receipt_member(tag: str) -> str:
+    """The member a release receipt *tag* names, or ``""`` for another tag.
+
+    ``packages/extensions/ruff/v1.2.0`` names ``extensions/ruff``.
+    """
+    head, _, version = tag.rpartition("/v")
+    if not version or not head.startswith(f"{PACKAGES_DIR}/"):
+        return ""
+    return head.removeprefix(f"{PACKAGES_DIR}/")
+
+
+def member_depth(root: Path, relative: Path) -> int:
+    """How many leading parts of *relative* name a package's directory.
+
+    2 for ``packages/forge/...``, 3 for ``packages/<group>/<name>/...``
+    in a group directory, 0 for a path outside ``packages/`` or one
+    that is the package directory itself or above it.
+    """
+    parts = relative.parts
+    if len(parts) <= 2 or parts[0] != PACKAGES_DIR:
+        return 0
+    group = root / PACKAGES_DIR / parts[1]
+    if group.is_dir() and is_group(group):
+        return 3 if len(parts) > 3 else 0
+    return 2
+
+
+def member_of(relative: str, members: Iterable[str]) -> str:
+    """The member of *members* whose directory holds *relative*, or ``""``.
+
+    *relative* is a posix path from the workspace root
+    (``packages/extensions/ruff/src/x.py``); *members* are package
+    members as [livery.workshop.api.Package][] names them
+    (``extensions/ruff``). The longest match wins.
+    """
+    found = ""
+    for member in members:
+        if relative.startswith(f"{PACKAGES_DIR}/{member}/") and len(member) > len(
+            found
+        ):
+            found = member
+    return found
 
 
 def root_marks(src: Path) -> list[Path]:
@@ -215,12 +309,10 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
 
     problems = []
     packages = []
-    packages_dir = root / "packages"
     # A workspace born a moment ago has no members yet; zero packages
     # is a legal answer, not a missing directory.
-    if not packages_dir.is_dir():
-        return ()
-    for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
+    for directory in package_directories(root):
+        member = directory.relative_to(root / PACKAGES_DIR).as_posix()
         contract_file = directory / "workshop.toml"
         if not contract_file.is_file():
             problems.append(_no_contract(root, directory))
@@ -231,7 +323,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             requires_pyproject(kind_name)
             and not (directory / "pyproject.toml").is_file()
         ):
-            problems.append(f"{directory.name}: no pyproject.toml")
+            problems.append(f"{member}: no pyproject.toml")
             continue
         depends = tuple(
             Edge(
@@ -275,7 +367,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         packages.append(
             Package(
                 directory=directory,
-                path=f"packages/{directory.name}",
+                path=f"{PACKAGES_DIR}/{member}",
                 name=str(contract.get("name", "")),
                 kind=kind_name,
                 depends=depends,

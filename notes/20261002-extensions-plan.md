@@ -1194,6 +1194,19 @@ roles that exist, and their verbs, are the registered checks'
 fragment names each kind's roles from the checks that name it. 9a is
 built.
 
+**9b1 built (issue #1123): the group directory.** Discovery finds a
+package at `packages/<group>/<name>/`; a group has no `workshop.toml`
+and groups do not nest. A package's member is its path under
+`packages/` (`extensions/ruff`), so its receipt is
+`packages/extensions/ruff/v<x>` and every `packages/<member>` path
+holds at either depth. The places that walked or split one level
+(`package_directories`, `member_depth`, `receipt_member`, and the test
+node's package in `package_of`) know the group; a forge glob, which
+stops at a slash, names both depths (the CI files, the protected tag
+patterns), and a basedpyright or gitignore glob takes `**`.
+`fm new.package extensions/ruff` names the distribution
+`<namespace>-extensions-ruff`.
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1211,6 +1224,11 @@ built.
   fragments and tools.
 - Discovery allows the group directory; receipt tags take the longer
   path; the affected graph, CODEOWNERS and provenance follow.
+- No root file names a package: every list the root composes per
+  package becomes a glob or goes, so adding a package changes only
+  `uv.lock` outside its own directory. Each tool's configuration
+  leaves `pyproject.toml` for a file of the tool's own, written by
+  the tool's extension.
 - This repository lists the eight.
 
 Acceptance, refusals first:
@@ -1658,6 +1676,24 @@ Acceptance:
 - 2026-10-04, 9a1: `[roles.<role>]` and `[checks.<tool>]` are equally
   deep; the tool's table outranks the role's, since it names fewer
   checks. A further role's table reaches the check like its own.
+- Willem, 2026-10-04: listing every package in the root
+  `pyproject.toml` does not scale to hundreds of packages, so the
+  per-package lists become globs ("I think it is required"); and as
+  much tool configuration as possible moves out of `pyproject.toml`.
+  Where it goes, for now: each tool's own file at the root under the
+  name the tool looks for (`ruff.toml`, `mypy.ini`,
+  `pyrightconfig.json`, ...), so every editor and every bare call
+  finds it. Likely later: the files under the workshop's own
+  directory, handed to each tool by flag, with editor support (VS
+  Code first) as an extension of its own, one editor at a time. A
+  config file that exists only after the first `fm sync` is
+  acceptable.
+- 2026-10-04, 9b1: a seed's import path follows its distribution name,
+  each hyphen after the namespace's prefix one namespace level
+  (`acme-toolroom-store` imports as `acme.toolroom.store`), as hse's
+  scaffold does and as this repository is laid out; the directory
+  decides nothing. Before, hyphens became underscores
+  (`acme.toolroom_store`). hse's `--namespace` override is not ported.
 - Willem, 2026-10-03: extensions contribute LFS rules to
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an

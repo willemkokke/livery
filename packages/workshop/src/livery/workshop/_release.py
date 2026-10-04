@@ -259,7 +259,7 @@ def release_replay(
     from livery.workshop._state import run_context
 
     root = _root()
-    packages = {p.directory.name: p for p in discover_packages(root)}
+    packages = {p.member: p for p in discover_packages(root)}
     package = packages.get(member)
     if package is None:
         fail(

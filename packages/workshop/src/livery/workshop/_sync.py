@@ -522,17 +522,15 @@ def sweep_residue(root: Path) -> list[str]:
         UNKNOWN,
         UNTRACKED,
         leftover,
+        package_directories,
     )
 
-    packages_dir = root / "packages"
-    if not packages_dir.is_dir():
-        return []
     lines: list[str] = []
-    for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
+    for directory in package_directories(root):
         if (directory / "workshop.toml").is_file():
             continue
         found = leftover(root, directory)
-        name = f"packages/{directory.name}"
+        name = directory.relative_to(root).as_posix()
         shown = ", ".join(found.paths[:3]) + (
             f" and {len(found.paths) - 3} more" if len(found.paths) > 3 else ""
         )

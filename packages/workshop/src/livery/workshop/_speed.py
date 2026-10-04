@@ -344,8 +344,9 @@ def _slowest(row: dict[str, Any]) -> dict[str, float]:
 
 
 def _package_of(nodeid: str) -> str:
-    parts = nodeid.split("::", 1)[0].split("/")
-    return f"packages/{parts[1]}" if len(parts) >= 2 and parts[0] == "packages" else ""
+    from livery.workshop._pytest_speed import package_of
+
+    return package_of(nodeid)
 
 
 def _grown(

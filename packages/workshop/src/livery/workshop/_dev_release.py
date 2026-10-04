@@ -148,7 +148,7 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
             f" would carry the released code under {released}.dev<N>, which"
             f" sorts below {released} and can satisfy no floor that names"
             f" it. Pin the released {released} instead, or drop"
-            f" {package.directory.name} from the set."
+            f" {package.member} from the set."
         )
     distance, sha = describe_distance(git, package)
     when = stamp or datetime.now(UTC).strftime("%Y%m%d")

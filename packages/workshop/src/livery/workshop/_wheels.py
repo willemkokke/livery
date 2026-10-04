@@ -87,7 +87,7 @@ def wheel_runners(root: Path) -> list[str]:
 def member_roster(root: Path) -> list[dict[str, str]]:
     """Every member as the emitter facts carry it: directory, name, kind."""
     return [
-        {"dir": package.directory.name, "name": package.name, "kind": package.kind}
+        {"dir": package.member, "name": package.name, "kind": package.kind}
         for package in discover_packages(root)
     ]
 

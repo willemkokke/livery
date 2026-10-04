@@ -10,5 +10,5 @@ docs/_generated/
 docs/_extensions/
 docs/development/
 .docs-preview/
-packages/*/docs/_generated/
-packages/*/_generated/
+packages/**/docs/_generated/
+packages/**/_generated/

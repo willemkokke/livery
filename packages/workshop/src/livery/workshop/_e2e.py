@@ -146,9 +146,9 @@ def dev_members(root: Path) -> tuple[str, ...]:
     pending = [workshop]
     while pending:
         package = pending.pop(0)
-        if package.directory.name in ordered:
+        if package.member in ordered:
             continue
-        ordered.append(package.directory.name)
+        ordered.append(package.member)
         pending.extend(
             by_path[edge.path] for edge in package.depends if edge.path in by_path
         )
@@ -638,7 +638,7 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     # floor naming it. The loop pins the release instead, and drops
     # the member's stale rehearsal wheels from the registry, which a
     # first-index resolve would otherwise pick over the release.
-    packages = {package.directory.name: package for package in discover_packages(root)}
+    packages = {package.member: package for package in discover_packages(root)}
     changed: list[str] = []
     released: dict[str, str] = {}
     for member in dev_members(root):

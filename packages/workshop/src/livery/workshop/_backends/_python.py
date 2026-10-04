@@ -1227,7 +1227,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
         return []
     rendered: list[str] = []
     for package in packages:
-        name = package.directory.name
+        name = package.member
         result = tools.coverage.opts(
             cwd=root, env=unmetered, nofail=True, recorded=False
         )(
@@ -2284,7 +2284,7 @@ def package_python_paths(package: Package) -> list[str]:
 
 def api_sources(package: Package) -> list[str]:
     """The handler's search paths for *package*: its sources, then its declared ones."""
-    name = package.directory.name
+    name = package.member
     found = [f"packages/{name}/src"] if api_pages(package) else []
     found += [f"packages/{name}/{extra}" for extra in package_python_paths(package)]
     return found

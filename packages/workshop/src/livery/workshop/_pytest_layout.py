@@ -22,21 +22,24 @@ UNNAMED = ("conftest.py", "__init__.py")
 
 
 def offenders(root: Path) -> list[tuple[Path, str]]:
-    """Helper modules under ``packages/*/tests/`` without their package's prefix.
+    """Helper modules under a package's ``tests/`` without their package's prefix.
 
     Each entry is the module and the name it wants. A directory under
     ``packages`` counts when it carries a ``workshop.toml``; test files
-    and the files every directory may hold are never offenders.
+    and the files every directory may hold are never offenders. The
+    prefix is the package's path under ``packages/``, so a package in
+    a group directory carries the group's name too
+    (``extensions_ruff_``).
     """
+    from livery.workshop._packages import package_directories
+
     found: list[tuple[Path, str]] = []
-    packages = root / "packages"
-    if not packages.is_dir():
-        return found
-    for package in sorted(packages.iterdir()):
+    for package in package_directories(root):
         tests = package / "tests"
         if not (package / "workshop.toml").is_file() or not tests.is_dir():
             continue
-        prefix = package.name.replace("-", "_") + "_"
+        member = package.relative_to(root / "packages").as_posix()
+        prefix = member.replace("-", "_").replace("/", "_") + "_"
         for module in sorted(tests.glob("*.py")):
             if module.name.startswith("test_") or module.name in UNNAMED:
                 continue

@@ -474,7 +474,8 @@ def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None
     assert "path: ${{ runner.temp }}/conan" in native
     assert (
         "key: conan-${{ runner.os }}-${{ runner.arch }}"
-        "-${{ hashFiles('packages/*/conanfile.py') }}" in native
+        "-${{ hashFiles('packages/*/conanfile.py', 'packages/*/*/conanfile.py') }}"
+        in native
     )
     assert "restore-keys: conan-${{ runner.os }}-${{ runner.arch }}-" in native
     # One job only: the publish job attaches what the legs built.

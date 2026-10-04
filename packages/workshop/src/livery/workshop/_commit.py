@@ -33,7 +33,7 @@ def scope_of(root: Path, paths: list[str]) -> str:
     for package in discover_packages(root):
         prefix = package.path + "/"
         if any(path.startswith(prefix) for path in paths):
-            names.add(package.directory.name)
+            names.add(package.member)
     return ",".join(sorted(names))
 
 

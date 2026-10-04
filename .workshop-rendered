@@ -1,9 +1,9 @@
 {
   ".gitattributes": "777778cbdb9c481540de884a4820c5dbe8ff65dad89d3b07385d1eeb702e0f4d",
-  ".gitignore": "299b3ea21684d867d7e208c310bd3eadc0c5684a19c61dc4c165f6e29ff0a3cf",
+  ".gitignore": "8c474c6300fa4e2efe9ff147bd03a9cc8cc713eb0cad566b0ed9b9d5d5918953",
   ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
   ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111",
   "CLAUDE.md": "cc6ccfb7b6c3b25a9b1674aedb29724686142d1075d161247893f21e75926c00",
-  "pyproject.toml": "017bd300a472c5cc35bdbf9a3f20dab8d5815fed52c9aa77bf7174651e2227e6",
+  "pyproject.toml": "29c829a0d56b328170ab3677a0b1fba58b2f3461a65f547cd47e4587dd8a51fc",
   "tasks.py": "7e8d6b67ae153fbb7f4cd6d10f3a8dc41fd50573fcd9e7a64ee3cf6d8129df1d"
 }
