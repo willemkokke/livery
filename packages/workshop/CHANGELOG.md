@@ -6,6 +6,9 @@
 
 - The template verbs go: the drift check is drift.check, fm sync writes the composed and generated files, and one workflow.update moves the lock and what it composes by @willemkokke
 - Removing a member is deleting it and running fm sync: the runner's handoff enters a project that syncs itself without syncing it first by @willemkokke
+- A check's options are addressed by tool, by the tool's check, and by role, deeper winning key by key by @willemkokke
+- A check declares its transport and threshold, and the engine splits its paths into the fewest calls, merges their failures, and runs whole at the threshold by @willemkokke
+- A check's own kinds decide which packages it judges, and a kind's role list and verify_roles go by @willemkokke
 
 ## [0.4.0] - 2026-10-04
 
