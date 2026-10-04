@@ -70,6 +70,23 @@ follows the pull request to its squash and the wave to its verdict,
 the way `fm submit --armed` follows a feature pull request, and ends
 with the wave's exit; unarmed, it returns at once.
 
+A release pull request merges only while its base has not moved
+under the set. The gate job's last step, `workflow.release.check-fresh`,
+reads the release's manifest, which names the members and the commit
+the prepare mined at, and refuses the pull request when the base has
+gained a commit under a member's directory since then: merged, that
+squash would ship code its changelog does not cover, and its publish
+would refuse it where nothing can change it. A move elsewhere in the
+repository is no reason to wait. An armed release then re-derives in
+place: it prepares again from the moved base and force-pushes the
+branch, so the same pull request carries the new stamps, entries and
+mining point, and follows it again. A member the base did not move,
+in a set whose versions all stay the same, keeps its legs' verdict,
+so only the moved members build and test again. A base that keeps
+moving under the set stops the act after three prepares, naming the
+commits; an unarmed release re-derives when `fm workflow.release
+<set>` runs again.
+
 When no released workshop can drive a died wave (its own workshop
 was the fault, and releasing a fixed one needs the packages that
 wave was to publish), `fm workflow.release <set> --abandon` gives

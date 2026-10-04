@@ -494,10 +494,14 @@ class _StubDriver:
         self.armed = armed
         self._git = git
         self.merged_calls = 0
+        self.discarded = 0
 
     @property
     def branch(self) -> str:
         return f"workflow/{self.name}"
+
+    def discard(self) -> None:
+        self.discarded += 1
 
     @property
     def base(self) -> str:

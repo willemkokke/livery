@@ -82,6 +82,10 @@ class WorkflowDriver(Protocol):
         """Do the work; idempotent, called fresh and for recovery."""
         ...
 
+    def discard(self) -> None:
+        """Give the prepared branch up, so the next prepare starts from the base."""
+        ...
+
     def on_merged(self) -> None:
         """After the merge: a release publishes and tags; else nothing."""
         ...
@@ -155,6 +159,14 @@ def run_workflow(
             _merge_default(git, driver.base)
             continue
 
+        # A stale set re-derives in place: the prepare starts from the
+        # base again and the push replaces the branch under the same
+        # pull request.
+        force = False
+        if action is WorkflowAction.REPREPARE:
+            driver.discard()
+            force = True
+
         if action is WorkflowAction.TIDY_THEN_START:
             target = decision.tidy_target
             tidy_leftover(repo, git, target or wf, base=driver.base)
@@ -205,6 +217,7 @@ def run_workflow(
             armed_reason="the workflow engine",
             gate=False,
             follow_to_verdict=False,
+            force=force,
         )
         _leave_reserved(git, driver, started)
         if arm and driver.watch > 0 and not _merged(repo, git, driver.branch):

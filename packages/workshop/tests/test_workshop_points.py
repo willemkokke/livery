@@ -426,6 +426,11 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "--needs=check,docs",
         ],
         ["hse", "--profile=fm-profile-ci-verified-stamp.json", "ci.verified.stamp"],
+        [
+            "hse",
+            "--profile=fm-profile-workflow-release-check-fresh.json",
+            "workflow.release.check-fresh",
+        ],
     ]
 
 
@@ -594,9 +599,15 @@ def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(
 ) -> None:
     root = _root(tmp_path)
     merge = [entry.task for entry in _points.entries_for(root, "merge", "gate")]
-    assert merge[-2:] == ["ci.verified.stamp", "janitor"]
+    assert merge[-3:] == [
+        "ci.verified.stamp",
+        "workflow.release.check-fresh",
+        "janitor",
+    ]
     gate = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
-    assert "janitor" not in gate and gate[-1] == "ci.verified.stamp"
+    # The freshness check last, so the merge it allows follows it as
+    # closely as the forge can.
+    assert "janitor" not in gate and gate[-1] == "workflow.release.check-fresh"
 
 
 def test_the_check_legs_are_one_per_runner_and_gate_python(tmp_path: Path) -> None:
@@ -685,6 +696,7 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
         "speed.judge",
         "--needs=check,docs",
         "ci.verified.stamp",
+        "workflow.release.check-fresh",
     ]
     assert min(e["ts"] for e in drawn) == 0.0  # the file starts at its own zero
     assert "pushed" in capsys.readouterr().out
