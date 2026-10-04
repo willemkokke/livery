@@ -246,12 +246,20 @@ def _attribute(
     named: without *before* there is nothing to compare with, and a
     change the package set does not explain configures every gate.
     """
+    from livery.workshop._fragment_engine import RENDERED_MANIFEST
     from livery.workshop._root_attribution import (
         LOCK,
         explained,
         lock_affected,
         package_delta,
     )
+
+    # The render's receipt records each composed file's digest. It
+    # configures no gate: every file it names is judged on its own,
+    # and the drift check that reads it runs on every gate.
+    paths = [path for path in paths if path != RENDERED_MANIFEST]
+    if not paths:
+        return set()
 
     point = before if isinstance(before, str) else before()
     if git is None or not point:

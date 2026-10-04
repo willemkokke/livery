@@ -204,6 +204,16 @@ def test_adding_a_package_affects_that_package_alone(tmp_path: Path) -> None:
     assert [package.path for package in scope.packages] == ["packages/extensions/ruff"]
 
 
+def test_the_render_receipt_alone_affects_no_package(tmp_path: Path) -> None:
+    root, before = _workspace(tmp_path)
+    (root / ".workshop-rendered").write_text('{"pyproject.toml": "abc"}\n')
+    paths = _paths(root, before)
+    scope = affected_from_paths(
+        root, discover_packages(root), paths, git=GitOps(root), before=before
+    )
+    assert scope is not None and scope.packages == ()
+
+
 def test_removing_a_package_affects_nothing_else(tmp_path: Path) -> None:
     root, _seed = _workspace(tmp_path)
     _member(root, "b")
