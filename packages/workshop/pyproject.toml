@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-workshop"
-version = "0.3.0"
+version = "0.4.0"
 description = "The livery ecosystem's devkit: the task surface, extensions, templates, and content."
 readme = "README.md"
 license = "MIT"
@@ -18,26 +18,26 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "livery-forge>=0.4.0",
+    "livery-forge>=0.5.0",
     # The floors on deps the dev toolchain also carries align with
     # the lock: the release train's floor leg shares one venv with
     # the locked toolchain, so a floor below the toolchain's pin is
     # a claim the leg cannot test (its movement guard refuses the
     # silent un-starving). 0.52.2 is the first livery-footman: the
     # workshop imports livery.footman directly, never the shim.
-    "livery-footman>=0.52.2",
+    "livery-footman>=0.55.0",
     # 0.7.0 is the first livery-toolroom with the livery.toolroom
     # namespace, whose tools module the workshop imports; the release
     # act's lowest-direct leg installs the floor and proves it.
-    "livery-toolroom>=0.7.0",
+    "livery-toolroom>=0.9.0",
     # The tool records, the catalogue and the lock: what `fm tools.*`
     # resolves against.
-    "livery-toolroom-store>=0.0.0",
+    "livery-toolroom-store>=0.1.0",
     # The digest grammar and the registry of algorithms that may name
     # bytes. Already installed through the tool store's own edge; the
     # floor is the one that edge carries, since raising one is a
     # decision and the release's lowest-direct leg proves it.
-    "livery-strongroom>=0.1.0",
+    "livery-strongroom>=0.3.0",
     # The fragment engine's renderer: one compiled template per
     # fragment content, over the subset the engine declares.
     "minijinja>=2.24",

@@ -25,6 +25,11 @@
    "dir": "forge",
    "name": "livery-forge",
    "version": "0.5.0"
+  },
+  {
+   "dir": "workshop",
+   "name": "livery-workshop",
+   "version": "0.4.0"
   }
  ]
 }
