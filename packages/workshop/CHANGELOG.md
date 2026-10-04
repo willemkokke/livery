@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0] - 2026-10-04
+
+### Added
+
+- The template verbs go: the drift check is drift.check, fm sync writes the composed and generated files, and one workflow.update moves the lock and what it composes by @willemkokke
+- Removing a member is deleting it and running fm sync: the runner's handoff enters a project that syncs itself without syncing it first by @willemkokke
+
 ## [0.4.0] - 2026-10-04
 
 ### Added
