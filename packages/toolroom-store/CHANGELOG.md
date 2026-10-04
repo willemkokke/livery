@@ -9,6 +9,27 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.1.0] - 2026-10-04
+
+### Added
+
+- The host allowance for store tools: a tool on PATH serves when allowed and satisfying, the store installs otherwise by @willemkokke
+- Examples are files: a package's examples live under docs/examples/ as python files a page includes by snippet, and one harness runs each through the kind's runner, replacing footman's page-as-session harness and its three markers by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Spec and Scope parse the one requirement grammar, name[options]?>=floor@scope, and Requirement parses through them by @willemkokke
+- A tool requirement takes ? and !: an optional tool is locked where it can be served and never refused, and a plugin declares the tools its verbs need by @willemkokke
+- Git LFS is a workspace setting: extensions ship LFS rules, composed while [workspace] lfs is on and named while it is off, with a git_lfs record, its hooks and LFS checkouts in CI by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+
+### Fixed
+
+- Tools.artifacts refuses a record that does not load in one line naming the file, and the layout refusal says to list the host first by @willemkokke
+
+### Changed
+
+- A verb that reaches no forge and no tool store loads neither: the forge, store and strongroom roots serve their names on first use, and the workshop and the bench import the store where they use it by @willemkokke
+
 ## [0.0.0] - 2026-09-29
 
 ### Added

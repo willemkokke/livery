@@ -872,7 +872,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-store"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/toolroom-store" }
 dependencies = [
     { name = "livery-strongroom" },
