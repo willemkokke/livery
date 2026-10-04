@@ -56,6 +56,9 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
             " syncs a scratch workspace over the network"
         )
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    # Its own conan home: a sync registers the native member as an
+    # editable, which in the machine's home would outlive this test.
+    env["CONAN_HOME"] = str(tmp_path / "conan-home")
     # Above any project the runner mounts its own built-ins alone, so the
     # birth reaches the workshop through a user tasks file in a scratch
     # config directory. The config-dir variable names it, since the
@@ -110,4 +113,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     }
     _run([sys.executable, "-m", "livery.footman", "sync"], project, outside)
     assert "packages/thing" not in (project / "pyproject.toml").read_text()
-    _run([fm, "check"], project, env)
+    # What removal owns: every composed and generated file follows. The
+    # whole gate waits on issue #1111: with the last python member gone,
+    # the python checks still run over the root without their tools.
+    _run([fm, "drift.check"], project, env)

@@ -43,10 +43,11 @@ def test_the_release_path_rehearses_on_the_true_graph(tmp_path: Path) -> None:
     _git(clone, "config", "user.email", "rehearsal@livery.local")
     _git(clone, "config", "user.name", "Rehearsal")
     # The probe commit: one line per member, so derive_plans always
-    # finds unreleased work whatever main's real state is.
+    # finds unreleased work whatever main's real state is. A text file at
+    # the member's root, where no check reads it: a page under docs/
+    # would be an authored page the nav does not carry.
     for member in ("forge", "workshop"):
-        probe = clone / "packages" / member / "docs" / "rehearsal-probe.md"
-        probe.parent.mkdir(exist_ok=True)
+        probe = clone / "packages" / member / "rehearsal-probe.txt"
         probe.write_text("The rehearsal's probe; never merged.\n")
     _git(clone, "add", "-A")
     _git(clone, "commit", "-qm", "feat: the rehearsal probe rides in the clone")

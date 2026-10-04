@@ -238,11 +238,18 @@ def edit_member(root: Path, name: str) -> Path:
     return module
 
 
-def _environment() -> dict[str, str]:
-    """The children's environment: this one, minus the venv it names."""
+def _environment(root: Path) -> dict[str, str]:
+    """The children's environment: this one, minus the venv it names.
+
+    The conan home is the fixture's own, beside the workspace: a sync
+    registers every native member as a conan editable, and in the
+    machine's home those would outlive the fixture and answer for any
+    later package of the same name.
+    """
     from livery.workshop._e2e import unsigned_environment
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env["CONAN_HOME"] = str(root.parent / "conan-home")
     return {**env, **unsigned_environment(env)}
 
 
@@ -257,7 +264,7 @@ def run_verb(root: Path, verb: tuple[str, ...], *, name: str) -> Timing:
     result = footman.run(
         [sys.executable, "-m", "livery.footman", "--yes", *verb],
         cwd=root,
-        env=_environment(),
+        env=_environment(root),
         nofail=True,
         timeout=7200.0,
     )
