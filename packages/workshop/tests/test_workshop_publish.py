@@ -390,6 +390,63 @@ def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     assert pending_release_wave(root, git) is None
 
 
+def test_abandon_refuses_without_a_died_wave_and_prepares_over_one(
+    train, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _release_driver
+    from livery.workshop._release_driver import pending_release_waves
+
+    root, git, _registry, _spans = train
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: object()
+    )
+    prepared: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        _release_driver,
+        "ReleaseDriver",
+        lambda _root, _repo, _git, members, **_kw: prepared.append(
+            tuple(m.directory.name for m in members)
+        ),
+    )
+    monkeypatch.setattr(_release_driver, "run_workflow", lambda *_a: None)
+    # The refusal first: nothing died, so there is nothing to abandon.
+    with pytest.raises(_FAILURES, match="no release squash has an uncut receipt"):
+        _release_driver.workflow_release("base", abandon=True)
+    assert prepared == []
+    # A died wave of the set: --abandon prepares a new release over it
+    # and names what it takes over, where a plain run re-dispatches.
+    older = _squash(root, ("base", "left"))
+    _release_driver.workflow_release("base", "left", abandon=True)
+    out = capsys.readouterr().out
+    assert (
+        f"release squash {older[:12]} abandoned; this release takes over its"
+        " uncut receipts: packages/base/v0.3.0, packages/left/v0.3.0" in out
+    )
+    assert prepared == [("base", "left")]
+    # Once the new release squash lands, the abandoned one is pending
+    # for nothing it named; the new squash carries the receipts.
+    (root / "packages" / "base" / "fixed.txt").write_text("the fix\n")
+    newer = _squash(root, ("base", "left"))
+    assert [sha for sha, _ in pending_release_waves(root, git)] == [newer]
+
+
+def test_a_later_release_squash_takes_over_a_packages_uncut_receipt(train) -> None:
+    from livery.workshop._release_driver import pending_release_waves
+
+    root, git, _registry, _spans = train
+    older = _squash(root, ("base", "left"))
+    newer = _squash(root, ("left",))
+    # The older squash keeps what no later squash names; the later one
+    # carries the package they share.
+    assert pending_release_waves(root, git) == (
+        (older, ("packages/base/v0.3.0",)),
+        (newer, ("packages/left/v0.3.0",)),
+    )
+
+
 def test_uncut_receipts_are_matched_to_the_requested_set(train) -> None:
     # The fallback first: an uncut receipt outside the set names no
     # recovery for it, so the requested release goes ahead.
