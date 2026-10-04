@@ -103,13 +103,14 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     unit = workspace_suite(tmp_path)
     assert unit is not None
     _quality._scoped_check((unit,))
-    # Style and types over the directory itself, the tests run as the
-    # one suite, no type-completeness, and no kind check for it.
+    # The unit is every unit this workspace has, so style and types run
+    # over the configured whole; the tests run as the one suite, no
+    # type-completeness, and no kind check for it.
     by_verb = {c["verb"]: c for c in calls}
-    assert by_verb["format.ruff"]["paths"] == ("tests",)
-    assert by_verb["lint.ruff"]["paths"] == ("tests",)
+    assert by_verb["format.ruff"]["paths"] == (".",)
+    assert by_verb["lint.ruff"]["paths"] == (".",)
     for tool in ("basedpyright", "mypy"):
-        assert by_verb[f"typecheck.{tool}"]["paths"] == ("tests",)
+        assert "paths" not in by_verb[f"typecheck.{tool}"]
     # ty and pyrefly read their configured whole whatever the scope.
     for tool in ("ty", "pyrefly"):
         assert "paths" not in by_verb[f"typecheck.{tool}"]
@@ -121,6 +122,11 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     ran.clear()
     calls.clear()
     package = _package(tmp_path)
+    # A second member outside the scope, so the run narrows.
+    other = tmp_path / "packages" / "two"
+    (other / "tests").mkdir(parents=True)
+    (other / "pyproject.toml").write_text('[project]\nname = "livery-two"\n')
+    (other / "workshop.toml").write_text('kind = "python"\nname = "livery-two"\n')
     _quality._scoped_check((package, unit))
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.ruff"]["paths"] == ("packages/one/tests", "tests")

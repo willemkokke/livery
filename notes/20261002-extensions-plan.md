@@ -1171,8 +1171,20 @@ Acceptance:
 a check's options, resolved role, then tool, then check, deeper
 winning key by key; each table is judged against what the checks it
 reaches declare. A table spelled role first refuses naming its new
-address. 9a2 (the invocation declarations and the engine) and 9a3
-(roles from listed checks) are left.
+address.
+
+**9a2 built (issue #1117): transport, threshold, and the engine.** A
+check record declares `transport` (`argv`; `file` and `config` named
+and refused until a tool needs them) and `threshold` beside its unit
+(`scope`) and `narrowing`. `livery.workshop._invoke` holds the engine:
+`runs_whole` (a scoped check at its threshold share of the units runs
+its configured whole, unless a member turned it off), `batches` (the
+fewest calls under the platform's command-line limit) and
+`run_batched` (every call runs, their failures merged into one
+refusal). Ruff's checks and the narrowing type checkers run through
+it. With the default threshold of 1 a scoped gate that reaches every
+unit now runs whole, as an unscoped one does. 9a3 (roles from listed
+checks) is left.
 
 **9a, the engine and the options.** Deliverables:
 
