@@ -100,12 +100,18 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
     return tuple(plans)
 
 
-def _write_manifest(root: Path, plans: tuple[MemberPlan, ...]) -> None:
+def _write_manifest(
+    root: Path, plans: tuple[MemberPlan, ...], *, mined_at: str
+) -> None:
     """Write the release set's record for the squash's discovery.
 
     The publish wave and the title check read it at the ref, so a
     recovery re-prepare whose stamps already sit on the base still
     names every member; see [livery.workshop._publish.MANIFEST][].
+    The record carries *mined_at*, which differs for every prepare,
+    so every release squash touches the file: the dispatch finds the
+    squash as the last commit touching it, and a prepare that takes
+    over an abandoned squash at the same versions still has a commit.
     """
     import json
 
@@ -113,6 +119,7 @@ def _write_manifest(root: Path, plans: tuple[MemberPlan, ...]) -> None:
 
     payload = {
         "schema": 1,
+        "mined-at": mined_at,
         "members": [
             {
                 "dir": plan.package.directory.name,
@@ -537,7 +544,7 @@ class ReleaseDriver:
             if floor_changes:
                 print(f"  floors raised within the set: {', '.join(floor_changes)}")
             release_dirs = _wheel_dists(plans)
-            _write_manifest(self._root, plans)
+            _write_manifest(self._root, plans, mined_at=mined_at)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
                 backend_for(plan.package).build(plan.package, self._root)

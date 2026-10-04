@@ -476,6 +476,23 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
 
     recorded = read_manifest(rig.file_at(f"origin/{driver.branch}", MANIFEST))
     assert recorded == (("core", "0.3.0"),)
+    # The same members at the same versions, and still a commit: the
+    # manifest records the point this prepare mined at, so the branch
+    # touches it (a forge refuses a pull request with no commits) and
+    # the dispatch finds this squash, never the abandoned one, as the
+    # last commit touching it.
+    import json
+
+    branch_manifest = json.loads(rig.file_at(f"origin/{driver.branch}", MANIFEST))
+    assert branch_manifest["mined-at"] == sha
+    touched = subprocess.run(
+        ["git", "log", "--format=%H", f"{sha}..origin/{driver.branch}", "--", MANIFEST],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert touched
 
 
 def test_recovery_reads_the_branch_and_rebuilds_nothing(
