@@ -22,8 +22,7 @@ from livery.footman.api import fail
 from livery.workshop._backends import _python
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-    from pathlib import Path
+    from collections.abc import Mapping, Sequence
 
     from livery.workshop._packages import Package
     from livery.workshop._tools import Receipt
@@ -245,8 +244,8 @@ def conan_environment(root: Path) -> dict[str, str]:
     conan_home = os.environ.get("CONAN_HOME") or str(Path.home() / ".conan2")
     env = {"CMAKE_CONAN_PROVIDER": provider, "CONAN_HOME": conan_home}
     if sys.platform.startswith("linux"):
-        mounts = " ".join(
-            f"-v {path}:{path}" for path in (str(root), str(home.root), conan_home)
+        mounts = container_mounts(
+            (root, home.root, Path(conan_home), Path(provider).parent, Path(conan))
         )
         env["CIBW_ENVIRONMENT_PASS_LINUX"] = (
             "CMAKE_CONAN_PROVIDER CONAN_HOME CONAN_INSTALL_ARGS"
@@ -254,6 +253,23 @@ def conan_environment(root: Path) -> dict[str, str]:
         env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
         env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{conan}:$PATH"'
     return env
+
+
+def container_mounts(paths: Sequence[Path]) -> str:
+    """The docker arguments that mount each of *paths* at its own path.
+
+    A path inside one already mounted adds nothing, so it is left out.
+    The provider and conan are mounted beside the store because the
+    entered environment can name another store than this process's
+    (a test's isolated store under a CI leg's), and the container sees
+    only what is mounted.
+    """
+    kept: list[Path] = []
+    for path in paths:
+        if not any(path == held or path.is_relative_to(held) for held in kept):
+            kept = [held for held in kept if not held.is_relative_to(path)]
+            kept.append(path)
+    return " ".join(f"-v {path}:{path}" for path in kept)
 
 
 def _receipted_env(held: Mapping[str, Receipt], name: str, variable: str) -> str:
