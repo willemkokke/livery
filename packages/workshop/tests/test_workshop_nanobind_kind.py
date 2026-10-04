@@ -437,6 +437,35 @@ def test_the_build_rig_skips_where_the_native_tools_are_not_here(
     assert "is not here" in str(skipped.value) or "toolchain" in str(skipped.value)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the container mounts are Linux's, in POSIX paths"
+)
+def test_the_container_mounts_every_store_its_paths_name() -> None:
+    # The fallback first: one path is one mount.
+    assert _python_nanobind.container_mounts((Path("/w"),)) == "-v /w:/w"
+    # The entered provider and conan live in another store than this
+    # process's: each gets its own mount, and a path inside one already
+    # mounted adds nothing.
+    mounts = _python_nanobind.container_mounts(
+        (
+            Path("/w"),
+            Path("/isolated/toolroom"),
+            Path("/w/conan-home"),
+            Path("/runner/toolroom/tools/cmake_conan@0.19.0"),
+            Path("/runner/toolroom/tools/conan@2.32.0/bin"),
+        )
+    )
+    assert mounts.split(" -v ") == [
+        "-v /w:/w",
+        "/isolated/toolroom:/isolated/toolroom",
+        "/runner/toolroom/tools/cmake_conan@0.19.0"
+        ":/runner/toolroom/tools/cmake_conan@0.19.0",
+        "/runner/toolroom/tools/conan@2.32.0/bin:/runner/toolroom/tools/conan@2.32.0/bin",
+    ]
+    # A later path that holds an earlier one replaces it.
+    assert _python_nanobind.container_mounts((Path("/s/a"), Path("/s"))) == "-v /s:/s"
+
+
 def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -506,7 +535,10 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     assert env["CONAN_HOME"] == str(tmp_path / "conan-home")
     if sys.platform.startswith("linux"):
         assert f"-v {tmp_path}:{tmp_path}" in env["CIBW_CONTAINER_ENGINE"]
-        assert f"-v {home.root}:{home.root}" in env["CIBW_CONTAINER_ENGINE"]
+        # The store lives inside the workspace here, so the workspace's
+        # mount carries it and it gets none of its own.
+        assert home.root.is_relative_to(tmp_path)
+        assert f"-v {home.root}:" not in env["CIBW_CONTAINER_ENGINE"]
         assert str(conan_bin) in env["CIBW_ENVIRONMENT_LINUX"]
     else:
         assert "CIBW_CONTAINER_ENGINE" not in env
