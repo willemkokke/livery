@@ -27,8 +27,8 @@ github-secrets = ["pynacl>=1.5"]
 # dependencies: livery.forge is stdlib-only at import time, and the
 # plugin loads only through footman's own plugin().
 test = [
-    "livery-footman>=0.53.0",
-    "livery-toolroom>=0.7.0",
+    "livery-footman>=0.55.0",
+    "livery-toolroom>=0.9.0",
 ]
 
 [project.entry-points."footman.tasks"]
