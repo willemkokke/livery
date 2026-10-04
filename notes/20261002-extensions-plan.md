@@ -1224,11 +1224,12 @@ patterns), and a basedpyright or gitignore glob takes `**`.
   fragments and tools.
 - Discovery allows the group directory; receipt tags take the longer
   path; the affected graph, CODEOWNERS and provenance follow.
-- No root file names a package: every list the root composes per
-  package becomes a glob or goes, so adding a package changes only
-  `uv.lock` outside its own directory. Each tool's configuration
-  leaves `pyproject.toml` for a file of the tool's own, written by
-  the tool's extension.
+- Adding or removing a package affects that package and its
+  dependents, not every package (issue #1127): a composed root file's
+  change that the package set explains, and a `uv.lock` change, are
+  attributed to the packages they are about. The root's lists stay
+  explicit. Each tool's configuration leaves `pyproject.toml` for a
+  file of the tool's own, written by the tool's extension.
 - This repository lists the eight.
 
 Acceptance, refusals first:
@@ -1694,6 +1695,16 @@ Acceptance:
   Code first) as an extension of its own, one editor at a time. A
   config file that exists only after the first `fm sync` is
   acceptable.
+- Willem, 2026-10-05: the worry behind "no root file names a
+  package" is invalidation: a root change gates the whole monorepo.
+  The affected engine attributes the change instead (#1127, the root
+  file composed from the head's package set; `uv.lock` per package's
+  resolution), and the root keeps its explicit lists, so a bare
+  `uv sync` keeps every member and mypy stays one invocation. Globs
+  were measured and set aside: uv refuses `packages/*/*` (it matches
+  `src/` and `tests/`), a native member still needs an `exclude`
+  line, a member list only `--all-packages` installs breaks a bare
+  `uv sync`, and mypy's `mypy_path` cannot glob.
 - Willem, 2026-10-04: the conan cache handling is part of this
   refactor (11b). A pinned Linux sysroot is a later improvement, not
   phase 12: the toolchain plan's host sysroot stands. Python wheels

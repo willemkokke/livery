@@ -523,7 +523,13 @@ def _run_check(
                     f"  since tree {reflex.base_tree[:12]}: {len(reflex.paths)}"
                     " path(s) changed"
                 )
-                scope = affected_from_paths(root_for_ci, packages, reflex.paths)
+                scope = affected_from_paths(
+                    root_for_ci,
+                    packages,
+                    reflex.paths,
+                    git=git,
+                    before=reflex.base_tree,
+                )
                 if scope is not None:
                     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
