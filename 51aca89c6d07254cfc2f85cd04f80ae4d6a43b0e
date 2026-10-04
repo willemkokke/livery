@@ -1,0 +1,1 @@
+{"branch": "feat/892-phase-4b-the-check-claims-its-files", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36513109255", "schema": 1, "scope": "full", "sha": "d9dd914b881da65d0d895acbd5717b748b2e4960", "tree": "51aca89c6d07254cfc2f85cd04f80ae4d6a43b0e", "when": "2026-09-29T02:42:39.144995+00:00"}

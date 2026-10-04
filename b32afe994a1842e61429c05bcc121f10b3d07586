@@ -1,0 +1,1 @@
+{"branch": "feat/every-ci-entry-profiled", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36331515850", "schema": 1, "scope": "full", "sha": "aa37ffde89b36c84025c66b63efa79edeff40186", "tree": "b32afe994a1842e61429c05bcc121f10b3d07586", "when": "2026-09-27T16:23:28.631878+00:00"}

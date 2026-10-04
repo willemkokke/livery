@@ -1,0 +1,1 @@
+{"branch": "chore/coverage-spike-windows", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36546346121", "schema": 1, "scope": "full", "sha": "13d422f6a8d7da90213c4896a4e531c81f660e7f", "tree": "e0a9746d069810226d261f99ba1e75e146a3a13a", "when": "2026-09-29T09:13:02.874109+00:00"}

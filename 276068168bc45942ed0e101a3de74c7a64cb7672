@@ -1,0 +1,1 @@
+{"branch": "chore/the-trace-window-holds-a-working-week", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36363968665", "schema": 1, "scope": "full", "sha": "8c1824a772575aafdab05be99226dbc1d3ed83d9", "tree": "276068168bc45942ed0e101a3de74c7a64cb7672", "when": "2026-09-28T01:04:51.865105+00:00"}

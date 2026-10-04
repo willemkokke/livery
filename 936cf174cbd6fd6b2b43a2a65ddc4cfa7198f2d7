@@ -1,0 +1,1 @@
+{"branch": "refactor/860-the-contract-key-type-becomes-kind", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36403544548", "schema": 1, "scope": "full", "sha": "5b3d87915d6eb5a6120e41586cadc4101c53fcb1", "tree": "936cf174cbd6fd6b2b43a2a65ddc4cfa7198f2d7", "when": "2026-09-28T09:38:43.762349+00:00"}

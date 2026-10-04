@@ -1,0 +1,1 @@
+{"branch": "docs/examples-check-timing", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36704523726", "schema": 1, "scope": "full", "sha": "9a3d88a57ce325f41a3cfe5ee9c4c75037864fc4", "tree": "2ad22c2a5e3c2d9f0640577b61797126120f164d", "when": "2026-09-30T11:01:05.640207+00:00"}
