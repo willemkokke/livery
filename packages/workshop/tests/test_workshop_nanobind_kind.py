@@ -535,7 +535,10 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     assert env["CONAN_HOME"] == str(tmp_path / "conan-home")
     if sys.platform.startswith("linux"):
         assert f"-v {tmp_path}:{tmp_path}" in env["CIBW_CONTAINER_ENGINE"]
-        assert f"-v {home.root}:{home.root}" in env["CIBW_CONTAINER_ENGINE"]
+        # The store lives inside the workspace here, so the workspace's
+        # mount carries it and it gets none of its own.
+        assert home.root.is_relative_to(tmp_path)
+        assert f"-v {home.root}:" not in env["CIBW_CONTAINER_ENGINE"]
         assert str(conan_bin) in env["CIBW_ENVIRONMENT_LINUX"]
     else:
         assert "CIBW_CONTAINER_ENGINE" not in env
