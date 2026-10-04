@@ -72,10 +72,12 @@ def speed_judge() -> None:
     listed as unavailable with the reason and refused, since a
     machine's clock is not a leg the marks are taken on.
     """
-    root = _root()
+    # The CI question first: outside a run the verb refuses with that
+    # reason wherever it stands, a workspace or not.
     run = run_context()
     if run is None:
         fail("not a CI run: the speed marks are judged on the CI legs")
+    root = _root()
     if not _speed.enabled(root):
         print(
             f"  speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
