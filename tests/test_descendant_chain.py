@@ -438,7 +438,7 @@ def _chain(
         # assembles the config from it, so nothing committed changes and
         # later builds are no-ops on a clean tree.
         _run([fm, f"{BRAND}.docsgen"], home, _hermetic(env, home / ".venv"))
-        _run([fm, "template.apply"], home, _hermetic(env, home / ".venv"))
+        _run([fm, "drift.check", "--fix"], home, _hermetic(env, home / ".venv"))
         _run(["git", "add", "-A"], home, env)
         _run(["git", "commit", "-qm", "feat: populate the brand"], home, env)
 
@@ -536,7 +536,12 @@ def _chain(
         _hermetic({**env, "FORGE_ADMIN_TOKEN": token}, tool),
         check=not resumed,
     )
-    _run([str(brand_cli), "template.apply"], child, _hermetic(env, tool), check=False)
+    _run(
+        [str(brand_cli), "drift.check", "--fix"],
+        child,
+        _hermetic(env, tool),
+        check=False,
+    )
     rendered_gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert "Environment rung" in rendered_gate
     assert "RUNG_PYTHON_PUBLISH_INDEX" in rendered_gate

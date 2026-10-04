@@ -118,7 +118,7 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
         check_for("test.pytest"), python
     )
     # A check without claims judges nothing by this measure.
-    assert judged_files(check_for("template.check"), python) == ()
+    assert judged_files(check_for("drift.check"), python) == ()
     # A category is a role, not a language: ruff claims the native
     # package's configuration and reaches its conanfile.py alone, while
     # its C++ sources are the clang checks' and CMakeLists.txt is nobody's.

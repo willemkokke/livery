@@ -2,7 +2,7 @@
 
 The budgets of a sync and a gate are set from a measured baseline,
 and judged against the CI store. `fm ci.scale` builds the workspace
-that baseline is measured on, times `fm sync`, `fm template.check`
+that baseline is measured on, times `fm sync`, `fm drift.check`
 and `fm check` there, and prints the timings. Inside CI it also
 records them as one ``scale`` job on the run's file of the
 ``metrics`` series ([livery.workshop._metrics][]), so `fm ci.timings`
@@ -70,7 +70,7 @@ _TAGS = {
 #: The verbs timed, in the order each state runs them.
 VERBS: tuple[tuple[str, ...], ...] = (
     ("sync",),
-    ("template.check",),
+    ("drift.check",),
     ("check",),
 )
 
@@ -360,7 +360,7 @@ def ci_scale(
         str, doc("build the fixture in this new directory and keep it")
     ] = "",
 ) -> None:
-    """Time sync, template.check and check over a generated workspace.
+    """Time sync, drift.check and check over a generated workspace.
 
     Copies the committed tree at HEAD, adds the generated members,
     and times each verb cold, warm with nothing changed, and after

@@ -414,7 +414,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "--profile=fm-profile-workflow-release-check-title.json",
             "workflow.release.check-title",
         ],
-        ["hse", "--profile=fm-profile-template-check.json", "template.check"],
+        ["hse", "--profile=fm-profile-drift-check.json", "drift.check"],
         ["hse", "--profile=fm-profile-provenance.json", "provenance"],
         ["hse", "--profile=fm-profile-coverage-union.json", "coverage.union"],
         ["hse", "--profile=fm-profile-ci-metrics-collect.json", "ci.metrics.collect"],
@@ -678,7 +678,7 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
     drawn = json.loads(text)["traceEvents"]
     assert [e["name"] for e in drawn] == [
         "workflow.release.check-title",
-        "template.check",
+        "drift.check",
         "provenance",
         "coverage.union",
         "ci.metrics.collect",

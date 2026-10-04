@@ -158,7 +158,7 @@ def test_declared_but_unmounted_extensions_teach_the_rerender(
     monkeypatch.setattr(_extensions, "MOUNTED", False)
     _warn_unmounted_extensions(tmp_path)
     err = capsys.readouterr().err
-    assert "acme.brand" in err and "template.apply" in err
+    assert "acme.brand" in err and "sync` to compose it again" in err
     # Mounted, or an empty list: silence.
     monkeypatch.setattr(_extensions, "MOUNTED", True)
     _warn_unmounted_extensions(tmp_path)

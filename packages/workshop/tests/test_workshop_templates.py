@@ -277,7 +277,7 @@ def test_the_emitters_call_the_running_brand(
             spoken = (
                 "hse check" in content
                 or "hse workflow" in content
-                or "hse template.apply" in content
+                or "hse sync" in content
             )
             assert spoken, path
             # No emitted word spells fm under a brand: the meter is
@@ -695,19 +695,19 @@ def _build_instance(base: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=instance, check=True)
 
 
-def test_an_update_rebrands_and_reemits(
+def test_a_write_under_a_brand_rebrands_and_reemits(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Rebranding an instance is exactly an update under the branded CLI:
-    # the composed files and the workflows take the running brand.
+    # Rebranding an instance is exactly a write of its composed and
+    # generated files under the branded CLI: they take the running brand.
     import livery.footman.api as footman
-    from livery.workshop._update import refresh_rendered
+    from livery.workshop._templates import apply_project
 
     instance = seeds("born-instance", _build_instance) / "instance"
     assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
     monkeypatch.setattr(footman, "prog", lambda: "hse")
-    changed = refresh_rendered(instance)
-    assert changed  # the update reported work
+    changed = apply_project(instance)
+    assert changed  # the write reported work
     tasks = (instance / "tasks.py").read_text()
     assert "Run with ``hse <task>``" in tasks and "``fm <task>``" not in tasks
     gate = (instance / ".github/workflows/ci.yml").read_text()

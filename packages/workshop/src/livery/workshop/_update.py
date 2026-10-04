@@ -1,10 +1,9 @@
 """The update family's file movers.
 
 The pieces ``workflow.update`` drives: raise ``[[depends]]`` floors
-to the latest released tags, refresh the files the installed
-extensions compose, and read the newest release per package from the
-tags. The driver that branches,
-commits, and submits lives beside this module.
+to the latest released tags, and read the newest release per package
+from the tags. The driver that branches, commits, and submits lives
+beside this module.
 """
 
 from __future__ import annotations
@@ -81,15 +80,3 @@ def _bump_edge_floor(text: str, dep_path: str, old: str, new: str) -> str:
     if count != 1:
         fail(f"the edge on {dep_path} has no floor {old!r} line to bump")
     return text[:anchor] + bumped
-
-
-def refresh_rendered(root: Path) -> list[str]:
-    """Refresh the composed and generated files; what changed.
-
-    The installed extensions are the source: the fragment engine writes
-    their files, and the CI files and codeowners are generated from the
-    contract, so an instance moves to exactly what its workshop ships.
-    """
-    from livery.workshop._templates import apply_project
-
-    return apply_project(root)

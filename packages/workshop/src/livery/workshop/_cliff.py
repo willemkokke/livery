@@ -105,8 +105,8 @@ def config_path(package: Package) -> Path:
     if not path.is_file():
         fail(
             f"{package.path} has no {CONFIG_NAME}:"
-            f" run `{footman.prog()} template.apply`"
-            " (or re-render the package) so the changelog contract exists"
+            f" run `{footman.prog()} sync`, which composes it from the base's"
+            " fragment"
         )
     return path
 

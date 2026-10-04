@@ -1044,7 +1044,7 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
     # so the lock settles on the same pins once more afterwards; an
     # unchanged pyproject makes that a no-op.
     _lock_pins(root, pins)
-    _loop_fm(root, "template.apply")
+    _loop_fm(root, "drift.check", "--fix")
     _lock_pins(root, pins)
     # Cleanliness is the truth, not this run's edits: a resumed
     # half-wired workspace still commits and pushes here.
@@ -1441,7 +1441,7 @@ def _ensure_members(root: Path) -> None:
         # The baseline is a render input: cliff.toml was rendered before
         # the append, so it must settle again or the gate names it as
         # drift.
-        _loop_fm(root, "template.apply")
+        _loop_fm(root, "drift.check", "--fix")
         git.commit_all(
             f"feat({name}): a loop member\n\nBorn through new.package on"
             " the dev wheels, with the release baseline seeded so the"

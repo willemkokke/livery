@@ -149,7 +149,7 @@ def test_a_finished_other_is_tidied_with_its_target_named() -> None:
 
 
 def test_an_unknown_other_is_left_strictly_alone() -> None:
-    other = _wf(WorkflowState.UNKNOWN, name="update/templates")
+    other = _wf(WorkflowState.UNKNOWN, name="update/dependencies")
     decision = _decide(
         members=(), kind=WorkflowKind.UPDATE, name="update/deps", others=(other,)
     )
@@ -160,20 +160,20 @@ def test_dirty_tree_stops_except_a_preparing_update_on_its_branch() -> None:
     assert _decide(dirty=True).action is WorkflowAction.STOP
     resumed = _decide(
         kind=WorkflowKind.UPDATE,
-        name="update/templates",
+        name="update/dependencies",
         members=(),
-        wf=_wf(WorkflowState.PREPARING, name="update/templates"),
+        wf=_wf(WorkflowState.PREPARING, name="update/dependencies"),
         dirty=True,
-        branch="workflow/update/templates",
+        branch="workflow/update/dependencies",
     )
     assert resumed.action is WorkflowAction.START  # mid-conflict resume
     # From any other branch the dirt is unrelated work: preparing
     # would carry it onto the workflow branch, so the stop holds.
     elsewhere = _decide(
         kind=WorkflowKind.UPDATE,
-        name="update/templates",
+        name="update/dependencies",
         members=(),
-        wf=_wf(WorkflowState.PREPARING, name="update/templates"),
+        wf=_wf(WorkflowState.PREPARING, name="update/dependencies"),
         dirty=True,
     )
     assert elsewhere.action is WorkflowAction.STOP
@@ -264,9 +264,9 @@ def test_blocker_order_conflicts_red_stale_disarmed() -> None:
 
 def test_names_carry_kind_and_members() -> None:
     assert kind_of("release/forge+workshop") is WorkflowKind.RELEASE
-    assert kind_of("update/templates") is WorkflowKind.UPDATE
+    assert kind_of("update/dependencies") is WorkflowKind.UPDATE
     assert members_of("release/forge+workshop") == ("forge", "workshop")
-    assert members_of("update/templates") == ()
+    assert members_of("update/dependencies") == ()
 
 
 # --- gather and abort against the fake, refusals first ---
@@ -330,12 +330,12 @@ def test_abort_refusals_teach_before_anything_tears_down(
     fake, git = rig
     repo = _repo(fake)
     live = _wf(WorkflowState.IN_PROGRESS, name="release/forge", author="colleague")
-    other = _wf(WorkflowState.PREPARING, name="update/templates")
+    other = _wf(WorkflowState.PREPARING, name="update/dependencies")
     # Several, non-interactive: refuse listing each by name.
     with pytest.raises(_FAILURES) as caught:
         abort_policy(repo, git, (live, other), "", force=False, interactive=False)
     message = str(caught.value)
-    assert "release/forge" in message and "update/templates" in message
+    assert "release/forge" in message and "update/dependencies" in message
     # A live workflow refuses without force, naming the author.
     with pytest.raises(_FAILURES) as caught:
         abort_policy(repo, git, (live, other), "release/forge", force=False)
@@ -355,20 +355,20 @@ def test_abort_tears_down_a_safe_leftover_and_reconciles(
 ) -> None:
     fake, git = rig
     repo = _repo(fake)
-    git.create_branch("workflow/update/templates")
+    git.create_branch("workflow/update/dependencies")
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
-    git.push("workflow/update/templates")
-    fake.push(OWNER, NAME, "workflow/update/templates")
+    git.push("workflow/update/dependencies")
+    fake.push(OWNER, NAME, "workflow/update/dependencies")
     reconciled: list[bool] = []
     monkeypatch.setattr(
         "livery.workshop._workflow_tasks._reconcile_configuration",
         lambda _git, _sha: reconciled.append(True),
     )
-    leftover = _wf(WorkflowState.FAILED, name="update/templates")
+    leftover = _wf(WorkflowState.FAILED, name="update/dependencies")
     abort_policy(repo, git, (leftover,), "", force=False)
-    assert not repo.branch_exists("workflow/update/templates")
-    assert not git.local_branch_exists("workflow/update/templates")
+    assert not repo.branch_exists("workflow/update/dependencies")
+    assert not git.local_branch_exists("workflow/update/dependencies")
     assert reconciled == [True]
     # Idempotent: nothing left is quiet success.
     abort_policy(repo, git, (), "", force=False)
@@ -490,7 +490,7 @@ class _StubDriver:
     watch: float = 0.0
 
     def __init__(self, git: GitOps, *, armed: bool) -> None:
-        self.name = "update/templates"
+        self.name = "update/dependencies"
         self.armed = armed
         self._git = git
         self.merged_calls = 0
@@ -564,7 +564,7 @@ def test_an_act_started_on_the_reserved_branch_stays_there(
     from livery.workshop._workflow_engine import run_workflow
 
     fake, git = engine_rig
-    git.create_branch("workflow/update/templates")
+    git.create_branch("workflow/update/dependencies")
     driver = _StubDriver(git, armed=True)
     run_workflow(driver, _repo(fake), git, current_user="fake-user")
     pr = _repo(fake).pr.get(1)
@@ -617,7 +617,7 @@ def test_an_update_parks_unarmed_while_a_release_flies(
     out = capsys.readouterr().out
     assert "submitting" in out and "unarmed" in out
     assert "raises floors" in out  # the note teaches why the re-run is a gain
-    update_pr = _repo(fake).pr.find_by_head("workflow/update/templates")
+    update_pr = _repo(fake).pr.find_by_head("workflow/update/dependencies")
     assert update_pr is not None
     assert not _repo(fake).pr.is_armed(update_pr.number)
 
@@ -640,7 +640,7 @@ def test_a_merged_workflow_is_found_by_sha_after_branch_deletion(
     merged = repo.pr.get(1)
     assert merged is not None and merged.merged
     assert merged.head_branch == ""  # the forge stripped it at the merge
-    assert repo.pr.find_by_head("workflow/update/templates") is None
+    assert repo.pr.find_by_head("workflow/update/dependencies") is None
     states = workflow_states(repo, git)
     assert [wf.state for wf in states] == [WorkflowState.SUCCEEDED]
 
@@ -675,14 +675,14 @@ def test_the_interactive_picker_asks_and_silence_stops(
     fake, git = rig
     repo = _repo(fake)
     first = _wf(WorkflowState.FAILED, name="release/forge")
-    second = _wf(WorkflowState.PREPARING, name="update/templates")
+    second = _wf(WorkflowState.PREPARING, name="update/dependencies")
     # Declining the select aborts nothing, ever.
     monkeypatch.setattr("livery.footman.api.select", lambda message, options: None)
     with pytest.raises(SystemExit) as caught:
         abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     assert "nothing aborted" in str(caught.value)
     # A picked number tears that one down.
-    git.create_branch("workflow/update/templates")
+    git.create_branch("workflow/update/dependencies")
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
     git.switch("main")
@@ -694,7 +694,7 @@ def test_the_interactive_picker_asks_and_silence_stops(
         lambda _git, _sha: None,
     )
     abort_policy(repo, git, (first, second), "", force=False, interactive=True)
-    assert not git.local_branch_exists("workflow/update/templates")
+    assert not git.local_branch_exists("workflow/update/dependencies")
 
 
 def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
@@ -816,7 +816,7 @@ def test_engine_tidies_its_own_leftover_then_starts_fresh(
     git.switch("main")
     # In production the forge IS origin, so its branch deletion removes
     # the real ref; the split rig mirrors that by hand.
-    _git(git.root, "push", "origin", ":workflow/update/templates")
+    _git(git.root, "push", "origin", ":workflow/update/dependencies")
     # The fake's squash never reaches the real origin, so main still
     # lacks the marker and the next update genuinely has work.
     again = _StubDriver(git, armed=True)
@@ -890,7 +890,7 @@ def test_active_names_degrade_to_local_when_the_remote_is_gone(
     from livery.workshop._workflow_state import active_workflow_names
 
     fake, git = rig
-    git.create_branch("workflow/update/templates")
+    git.create_branch("workflow/update/dependencies")
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
     monkeypatch.setattr(
@@ -898,7 +898,7 @@ def test_active_names_degrade_to_local_when_the_remote_is_gone(
         "remote_branches",
         lambda self, prefix: (_ for _ in ()).throw(RuntimeError("offline")),
     )
-    assert active_workflow_names(_repo(fake), git) == ("update/templates",)
+    assert active_workflow_names(_repo(fake), git) == ("update/dependencies",)
 
 
 def test_the_required_context_speaks_each_forge_grammar() -> None:

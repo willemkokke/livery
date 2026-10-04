@@ -1,14 +1,13 @@
 """``workflow.update``: the update family on the engine.
 
-Two verbs side by side and a default that runs both:
-``workflow.update.templates`` moves the whole workspace to the
-installed workshop's template version (one workspace-atomic act;
-there is no per-package template update, one source at one version
-has nothing for it to mean), and
-``workflow.update.dependencies [names...]`` brings dependencies
-current in both of their homes: the lock for external dependencies,
-and the floors for workspace siblings, which the lock cannot move
-because they resolve from source.
+One update: ``workflow.update.dependencies [names...]`` brings
+dependencies current in both of their homes, the lock for external
+dependencies and the floors for workspace siblings, which the lock
+cannot move because they resolve from source; the bare
+``workflow.update`` runs it for every dependency. The extensions are
+dependencies like any other: the update installs what the lock moved
+to and writes the files the new wheels compose, so a new workshop
+and its files arrive in one pull request.
 
 An update prepared while a release flies parks unarmed and waits,
 watching the releases; when the last completes it re-runs itself,
@@ -33,7 +32,7 @@ from livery.footman.api import doc, fail
 from livery.forge.api import Repository
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
-from livery.workshop._update import bump_floors, refresh_rendered
+from livery.workshop._update import bump_floors
 from livery.workshop._uv import run_uv
 from livery.workshop._workflow_engine import (
     PARKS_UPDATES,
@@ -137,6 +136,12 @@ class UpdateDriver:
             git.create_branch(self.branch)
         toolchain_before = _locked_workshop(self._root)
         notes = self._work()
+        # The new wheels ship the files they compose: install them, then
+        # write those files, so the lock and what it brings land together.
+        run_uv("sync", root=self._root)
+        from livery.workshop._templates import apply_project
+
+        notes += [f"composed: {path}" for path in apply_project(self._root)]
         if git.is_clean():
             if resumed:
                 # A refresh with nothing new: the committed work stands.
@@ -145,7 +150,6 @@ class UpdateDriver:
             git.switch(self.base)
             git.delete_local_branch(self.branch)
             return None
-        run_uv("sync", root=self._root)
         run_gate(self._root)
         title = f"chore: {self.name.replace('/', ' ')}"
         git.commit_all(title + "\n\n" + "\n".join(f"- {n}" for n in notes))
@@ -165,10 +169,6 @@ class UpdateDriver:
 
     def _work(self) -> list[str]:
         notes: list[str] = []
-        if self.name.endswith("/templates"):
-            notes += bump_floors(self._root, self._git)
-            notes += [f"render: {line}" for line in refresh_rendered(self._root)]
-            return notes
         # A named workspace sibling resolves from source, so the lock
         # cannot move it: its movement is the floor, and only the
         # named floors move. External names go to the lock. Bare
@@ -324,21 +324,6 @@ def _drive(
 update_group = workflow.group("update", help="Bring the workspace current")
 
 
-@update_group.task(name="templates")
-def update_templates(
-    armed: Annotated[bool, doc("arm the update's PR to merge on green")] = False,
-) -> None:
-    """Move the workspace to the installed workshop's template version.
-
-    One workspace-atomic act: the project render and every package's
-    managed files together, plus the sibling floors the releases
-    since last time earned. In the monorepo the source is HEAD, so
-    this reduces to floors and environment; template edits there are
-    ordinary feature branches.
-    """
-    _drive("templates", armed=armed)
-
-
 @update_group.task(name="dependencies")
 def update_dependencies(
     *names: str,
@@ -359,8 +344,7 @@ def update_dependencies(
 def update_default(
     armed: Annotated[bool, doc("arm the update's PR to merge on green")] = False,
 ) -> None:
-    """Both updates: templates, then dependencies, one branch each."""
-    _drive("templates", armed=armed)
+    """Bring every dependency current: the bare `workflow.update.dependencies`."""
     _drive("dependencies", armed=armed)
 
 

@@ -62,7 +62,7 @@ class WorkflowDriver(Protocol):
     names coexist.
     """
 
-    name: str  # "release/forge+workshop" | "update/templates" | ...
+    name: str  # "release/forge+workshop" | "update/dependencies" | ...
     kind: WorkflowKind
     armed: bool
     members: tuple[str, ...]  # a release's package directories

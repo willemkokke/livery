@@ -2,11 +2,10 @@
 
 Workflow files are mechanical forge knowledge, emitted here from the
 workspace contract (``workshop.toml``) and the derived Python matrix,
-written as managed generated artifacts; the templates carry none of
-it, and the render gate compares the committed files against these
-same pure functions, offline. Change an emitter, run
-``fm template.apply``, and every kind's files move together; a
-template update is never the vehicle.
+written as managed generated artifacts, and the drift check compares
+the committed files against these same pure functions, offline.
+Change an emitter, run ``fm sync``, and every kind's files move
+together.
 
 Every job enters through the emitted ``setup.sh`` (the entry
 contract: uv at the lock's pin, the venv synced against the lock,
