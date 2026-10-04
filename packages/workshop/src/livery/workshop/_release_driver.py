@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import contextlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -213,9 +215,14 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
 
     The error being unwound is the one worth seeing, so this cleans
     quietly: each member's changelog, pyproject, contract, and
-    version files return to HEAD, and so does the workspace lock the
-    stamp refreshed.
+    version files return to HEAD, and so do the set's manifest and the
+    workspace lock the stamp refreshed. Each restore reads HEAD, never
+    the index: a commit that failed (a signing agent that refused) has
+    already staged every change, and a restore from the index would
+    keep them.
     """
+    from livery.workshop._publish import MANIFEST
+
     paths: list[str] = []
     for package in members:
         base = package.directory.relative_to(root)
@@ -243,11 +250,26 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
                 for home in backend_for(package).stamp_version(package).homes()
                 if home.is_file()
             )
-    tools.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
-    # The lock the stamp refreshed, restored alone: an untracked lock
-    # in the same pathspec would refuse the whole checkout, taking
-    # every other restore down with it.
-    tools.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", "uv.lock")
+    tools.git.opts(cwd=root, nofail=True, recorded=False)(
+        "checkout", "HEAD", "--", *paths
+    )
+    # The lock the stamp refreshed and the manifest, each restored
+    # alone: a file HEAD lacks in the same pathspec would refuse the
+    # whole checkout, taking every other restore down with it.
+    for alone in ("uv.lock", MANIFEST):
+        tools.git.opts(cwd=root, nofail=True, recorded=False)(
+            "checkout", "HEAD", "--", alone
+        )
+    # A first release's manifest has no HEAD to return to: it goes, so
+    # the switch back to the base does not carry it along.
+    tracked = tools.git.opts(cwd=root, nofail=True, recorded=False)(
+        "cat-file", "-e", f"HEAD:{MANIFEST}"
+    )
+    if tracked.code != 0:
+        tools.git.opts(cwd=root, nofail=True, recorded=False)(
+            "rm", "--cached", "--quiet", "--ignore-unmatch", "--", MANIFEST
+        )
+        (root / MANIFEST).unlink(missing_ok=True)
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
@@ -504,6 +526,11 @@ class ReleaseDriver:
         # An armed release follows its pull request for as long as it
         # would wait for the wave; the engine's own tests pass zero.
         self.watch = wave_timeout
+        # Set by `discard`: the next prepare starts from the base, and
+        # the given-up branch's manifest says which members' legs
+        # still hold.
+        self._fresh = False
+        self._previous: tuple[str, tuple[tuple[str, str], ...]] | None = None
 
     @property
     def branch(self) -> str:
@@ -513,6 +540,61 @@ class ReleaseDriver:
     def base(self) -> str:
         return "main"
 
+    def discard(self) -> None:
+        """Give up the prepared branch: the base moved in the set's paths.
+
+        The next prepare derives the set again from the base and
+        force-pushes the branch, so the open pull request carries the
+        new stamps, entries and ``Mined-At``. The given-up branch's
+        manifest is kept: a member whose directory the base did not
+        move since that prepare, at the same versions for the whole
+        set, keeps its legs' verdict instead of running them again.
+        """
+        import json
+
+        from livery.workshop._publish import MANIFEST, read_manifest
+
+        git = self._git
+        git.fetch()
+        text = git.file_at(f"origin/{self.branch}", MANIFEST)
+        pairs = read_manifest(text) if text else None
+        mined = ""
+        if pairs:
+            with contextlib.suppress(ValueError, TypeError, AttributeError):
+                mined = str(json.loads(text).get("mined-at") or "")
+        self._previous = (mined, pairs) if pairs and mined else None
+        if git.current_branch() == self.branch:
+            git.switch(self.base)
+        if git.local_branch_exists(self.branch):
+            git.delete_local_branch(self.branch)
+        self._fresh = True
+
+    def legs_kept(self, plans: tuple[MemberPlan, ...], mined_at: str) -> set[str]:
+        """The members whose legs from the discarded prepare still hold.
+
+        Only when the whole set keeps its versions (a co-member's new
+        version moves the floors every other member is tested at), and
+        then each member the base did not touch between the two mining
+        points.
+        """
+        if self._previous is None:
+            return set()
+        previous_mined, previous_pairs = self._previous
+        now = tuple((plan.package.directory.name, plan.version) for plan in plans)
+        if tuple(sorted(previous_pairs)) != tuple(sorted(now)):
+            return set()
+        kept: set[str] = set()
+        for plan in plans:
+            try:
+                moved = self._git.log_paths(
+                    f"{previous_mined}..{mined_at}", (plan.package.path,)
+                )
+            except GitError:
+                continue  # an unreadable span proves nothing: run the legs
+            if not moved:
+                kept.add(plan.package.directory.name)
+        return kept
+
     def prepare(self) -> Submission | None:
         """Derive, stamp, and commit the set; recover an existing branch.
 
@@ -521,8 +603,9 @@ class ReleaseDriver:
         holds, and titles come from the ref, never the working tree.
         """
         git = self._git
-        if git.local_branch_exists(self.branch) or self._repo.branch_exists(
-            self.branch
+        if not self._fresh and (
+            git.local_branch_exists(self.branch)
+            or self._repo.branch_exists(self.branch)
         ):
             if git.current_branch() != self.branch:
                 if not git.local_branch_exists(self.branch):
@@ -537,6 +620,7 @@ class ReleaseDriver:
         require_verified_base(self._repo, git, self.base, force=self._force)
         plans = derive_plans(self._root, self._members)
         mined_at = git.head_sha()
+        kept = self.legs_kept(plans, mined_at)
         git.create_branch(self.branch)
         prepared = False
         try:
@@ -569,6 +653,12 @@ class ReleaseDriver:
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
             for plan in plans:
+                if plan.package.directory.name in kept:
+                    print(
+                        f"  {plan.package.name} v{plan.version}: legs kept from the"
+                        " discarded prepare; the base did not move its directory"
+                    )
+                    continue
                 validate_member(self._root, plan, release_dirs)
             prepared = True
         finally:
@@ -1097,15 +1187,71 @@ def workflow_release(
             " release squash has an uncut receipt; drop the flag to prepare"
             " a release"
         )
-    driver = ReleaseDriver(
-        root,
+    run_release(
+        partial(
+            ReleaseDriver,
+            root,
+            repo,
+            git,
+            members,
+            armed=armed,
+            force_unverified_base=force_unverified_base,
+        ),
         repo,
         git,
-        members,
         armed=armed,
-        force_unverified_base=force_unverified_base,
     )
-    run_workflow(driver, repo, git)
+
+
+def run_release(
+    make_driver: Callable[[], ReleaseDriver],
+    repo: Repository,
+    git: GitOps,
+    *,
+    armed: bool,
+) -> None:
+    """Drive a release through the engine; an armed one re-derives a stale set.
+
+    An armed release whose follow ends red because the base moved
+    under its set prepares again on the moved base and follows again,
+    up to [livery.workshop._release_driver.REDERIVE_LIMIT] prepares
+    in all; any other red is the release's verdict and exits with it.
+    """
+    for attempt in range(1, REDERIVE_LIMIT + 1):
+        driver = make_driver()
+        try:
+            run_workflow(driver, repo, git)
+            return
+        except SystemExit:
+            if (
+                not armed
+                or attempt == REDERIVE_LIMIT
+                or not set_moved(repo, git, driver.name)
+            ):
+                raise
+            print(
+                f"  {driver.branch}: the base moved under the set while its pull"
+                f" request waited; re-deriving ({attempt} of"
+                f" {REDERIVE_LIMIT - 1} re-derives)"
+            )
+
+
+#: How many times an armed release prepares in all: the first prepare
+#: and its re-derives on a base that keeps moving under the set. A
+#: base that moves faster than a release can prepare is a repository
+#: where releases need merges held, and saying so beats looping.
+REDERIVE_LIMIT = 3
+
+
+def set_moved(repo: Repository, git: GitOps, name: str) -> bool:
+    """Whether release *name*'s open pull request is stale in its set's paths."""
+    from livery.workshop._workflow_state import workflow_states
+
+    git.fetch()
+    return any(
+        wf.name == name and wf.blocker.name == "STALE_SET"
+        for wf in workflow_states(repo, git)
+    )
 
 
 @release_group.task(name="dispatch")
@@ -1191,6 +1337,71 @@ def workflow_release_check_title(
             " member list; restore it or re-run workflow.release."
         )
     print(f"  title matches the prepared release: {expected}")
+
+
+@release_group.task(name="check-fresh", hidden=True)
+def workflow_release_check_fresh(
+    head: Annotated[str, doc("the pull request's head branch")] = "",
+    base: Annotated[str, doc("the branch it merges into")] = "",
+) -> None:
+    """Refuse a release pull request whose base moved in its set's paths.
+
+    The gate job runs this last, so the time between the check and
+    the merge it allows is as short as the forge makes it. The
+    release's manifest names its members and the commit the prepare
+    mined at; a commit the base gained since then under a member's
+    directory is code the stamped changelog does not cover, and the
+    squash's publish would refuse it after the merge, where nothing
+    can fix the squash. Refused here, the pull request waits while
+    `workflow.release` re-derives it in place. Without ``--head`` the
+    branches come from the runner's event payload; a run that is not
+    a pull request, or one off a release branch, is green and says so.
+    """
+    import json
+
+    from livery.workshop._extensions import workspace_root
+    from livery.workshop._publish import MANIFEST, read_manifest
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    if not head:
+        from livery.workshop._state import event_payload
+
+        pull = (event_payload() or {}).get("pull_request") or {}
+        if not pull:
+            print("  not a pull request: nothing to check")
+            return
+        head = str((pull.get("head") or {}).get("ref") or "")
+        base = base or str((pull.get("base") or {}).get("ref") or "")
+    if not head.startswith("workflow/release/"):
+        print(f"  {head or 'this branch'} is not a release branch: nothing to check")
+        return
+    base = base or "main"
+    git = GitOps(root)
+    text = git.file_at("HEAD", MANIFEST)
+    pairs = read_manifest(text) if text else None
+    mined = ""
+    if pairs:
+        with contextlib.suppress(ValueError, TypeError, AttributeError):
+            mined = str(json.loads(text).get("mined-at") or "")
+    if not pairs or not mined:
+        print(f"  {MANIFEST} records no mining point: nothing to check")
+        return
+    git.fetch()
+    paths = tuple(f"packages/{directory}" for directory, _ in pairs)
+    moved = git.log_paths(f"{mined}..origin/{base}", paths)
+    if moved:
+        listed = "\n".join(f"    {subject}" for subject in moved)
+        members = " ".join(directory for directory, _ in pairs)
+        fail(
+            f"{base} moved under this release since its prepare at"
+            f" {mined[:12]}:\n{listed}\n  Merged, the squash would ship code"
+            " its changelog does not cover. `"
+            f"{footman.prog()} workflow.release {members}` re-derives it in"
+            " place; an armed release does that itself."
+        )
+    print(f"  fresh: {base} has not moved under {', '.join(paths)} since {mined[:12]}")
 
 
 @release_group.task(name="publish", hidden=True)
