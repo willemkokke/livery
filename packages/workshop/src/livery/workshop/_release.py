@@ -86,10 +86,16 @@ def verify_release(
     if notes is not None:
         problems += notes.verify(package, version)
     if requires_pyproject(package.kind):
-        inits = list((package.directory / "src").rglob("__init__.py"))
+        # The modules the kind's stamper writes the version into: a
+        # namespace root's api.py, or a regular package's __init__.py.
+        modules = [
+            home
+            for home in backend_for(package).stamp_version(package).homes()
+            if home.suffix == ".py" and home.is_file()
+        ]
         stamp = f'__version__ = "{version}"'
-        if not any(stamp in init.read_text("utf-8") for init in inits):
-            problems.append(f"no __init__.py under src/ declares {stamp}")
+        if not any(stamp in module.read_text("utf-8") for module in modules):
+            problems.append(f"no api.py or __init__.py under src/ declares {stamp}")
     released = set(GitOps(root).tags())
     for edge in package.depends:
         if not edge.floor:
