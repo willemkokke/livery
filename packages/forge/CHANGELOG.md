@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.5.0] - 2026-10-04
+
+### Added
+
+- Every forge refuses a missing credential in one shape, GitLab falls back to glab, and the lane names its own variables by @willemkokke
+- A package's docs section is the package's, and the site assembles its config at build time by @willemkokke
+- The watch prints every job's move as it happens, stamped with the elapsed time, and names a red job with its failure lines at once by @willemkokke
+- A forge release takes assets: upload_asset and assets on the protocol, on GitHub, Gitea, GitLab and the fake by @willemkokke
+- A conan member's caches ride its own release, and every declared floor is built against by @willemkokke
+- The commit a merge made, and a gate that skips a deleted test by @willemkokke
+- The layering lint reads what the sources use, and each kind answers for its own by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+- The conformance loop's cpp-conan member, its runner on Debian, and the fixes the pass found by @willemkokke
+- Every workshop.toml key is declared by the layer that reads it, and a contract holds nothing else: an unknown key, an unlisted layer's key, a wrong type or value refuses on read by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Extensions replace layers: each declares itself in the workshop.extensions entry point group, and a workspace lists them by name in [workspace] extensions by @willemkokke
+- Plugins mount through the project builtin rung: the workshop mounts the listed extensions from its own entry module, and the rendered tasks.py keeps only its comment by @willemkokke
+- A tool requirement takes ? and !: an optional tool is locked where it can be served and never refused, and a plugin declares the tools its verbs need by @willemkokke
+- Footman scans the installed entry points once per process and shares the scan through installed_entry_points, and a plugin declares its tools in a data module by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+
+### Fixed
+
+- The dev rig's runner image is glibc, node's Debian image with the runner binaries pinned by @willemkokke
+
+### Changed
+
+- The contract key type becomes kind by @willemkokke
+- A verb that reaches no forge and no tool store loads neither: the forge, store and strongroom roots serve their names on first use, and the workshop and the bench import the store where they use it by @willemkokke
+
 ## [0.4.0] - 2026-09-16
 
 ### Added
