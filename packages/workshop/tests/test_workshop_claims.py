@@ -157,7 +157,15 @@ def test_a_scoped_run_hands_a_native_member_the_files_its_claims_reach(
     native = _native(tmp_path)
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(_python, "run_format", lambda **kwargs: calls.append(kwargs))
-    ctx = GateContext(root=tmp_path, packages=(native,), subset=(native,))
+    # A second member outside the scope: the run narrows to the native one.
+    other = Package(
+        directory=tmp_path / "packages" / "py",
+        path="packages/py",
+        name="acme-py",
+        kind="python",
+        depends=(),
+    )
+    ctx = GateContext(root=tmp_path, packages=(native, other), subset=(native,))
     check_for("format.ruff").run(ctx)
     # No directory of the native member is ruff's to walk, so its
     # conanfile.py comes by name and nothing else does.

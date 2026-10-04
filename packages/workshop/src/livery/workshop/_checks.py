@@ -190,6 +190,14 @@ class CheckRecord:
             ``paths`` (the subset's directories), ``packages`` (the
             subset's members) or ``none`` (the whole is always
             checked). A package check narrows by its packages.
+        transport: How a path list reaches the tool
+            ([livery.workshop._invoke.TRANSPORTS][]): ``argv``, on its
+            command line, split into the fewest calls the platform
+            allows; ``file`` and ``config`` are named for the tools
+            that read one.
+        threshold: The share of affected units at or above which a
+            narrowed check runs over its configured whole instead; 1
+            narrows until every unit is affected.
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
             check that only judges.
@@ -245,6 +253,8 @@ class CheckRecord:
     run: Callable[[GateContext], None]
     scope: str = WORKSPACE
     narrowing: str = NONE
+    transport: str = "argv"
+    threshold: float = 1.0
     fix: Callable[[GateContext], None] | None = None
     kinds: tuple[str, ...] = ()
     tests_only: bool = False
@@ -319,6 +329,23 @@ def register_check(record: CheckRecord) -> None:
         fail(
             f"check {record.name!r} reads {', '.join(unknown)}, which no verb"
             f" offers; the flags are {', '.join(FLAGS)}"
+        )
+    from livery.workshop._invoke import ARGV, TRANSPORTS
+
+    if record.transport not in TRANSPORTS:
+        fail(
+            f"check {record.name!r}: transport is one of {', '.join(TRANSPORTS)},"
+            f" not {record.transport!r}"
+        )
+    if record.transport != ARGV:
+        fail(
+            f"check {record.name!r}: the engine passes paths by {ARGV!r} alone"
+            f" so far; {record.transport!r} waits for a tool that needs it"
+        )
+    if not 0 < record.threshold <= 1:
+        fail(
+            f"check {record.name!r}: threshold is a share of the units, above 0"
+            f" and at most 1, not {record.threshold!r}"
         )
     if record.narrowing not in (PATHS, PACKAGES, NONE):
         fail(
@@ -1248,6 +1275,7 @@ def _register_builtin() -> None:
     """
     from livery.workshop._backends import _cpp_conan, _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._invoke import run_batched
     from livery.workshop._kinds import gated, is_python_kind
 
     def unit(ctx: GateContext) -> tuple[Package, ...]:
@@ -1270,6 +1298,27 @@ def _register_builtin() -> None:
         record = check_for(name)
         return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
 
+    def whole_reached(ctx: GateContext, name: str, chosen: int) -> bool:
+        """Whether a scoped check over *chosen* units should run its whole.
+
+        At the check's threshold share of every unit it judges, provided
+        no member anywhere turned it off: the whole would reach that
+        member too.
+        """
+        from livery.workshop._invoke import runs_whole
+
+        record = check_for(name)
+        everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
+        gated_all = gated(everyone, record.role)
+        # The workspace's tests unit rides in the scope, not always among
+        # the packages: counted once from either.
+        tests_unit = {
+            p.path for p in (*ctx.packages, *ctx.judged) if p.path == WORKSPACE_TESTS
+        }
+        units = len(gated_all) + len(tests_unit)
+        on = all(option_value(record, p, "enabled") for p in gated_all)
+        return on and runs_whole(chosen, units, record.threshold)
+
     def paths(ctx: GateContext, name: str) -> tuple[str, ...]:
         """The paths a check judges: the named files, the tree, or the members'."""
         if ctx.files:
@@ -1285,24 +1334,37 @@ def _register_builtin() -> None:
             return chosen or _python.SRC
         judged = tuple(p for p in ctx.subset if p in pythons or p in unit(ctx))
         present = tuple(p for p in natives if p in ctx.subset)
+        if whole_reached(ctx, name, len(judged) + len(present)):
+            return _python.SRC
         return _python.package_paths(judged) + claimed(name, present)
 
     def format_run(ctx: GateContext) -> None:
-        _python.run_format(check=True, paths=paths(ctx, "format.ruff"))
+        run_batched(
+            paths(ctx, "format.ruff"),
+            lambda batch: _python.run_format(check=True, paths=batch),
+        )
 
     def format_fix(ctx: GateContext) -> None:
-        _python.run_format(
-            check=False, safe_fix=ctx.safe, paths=paths(ctx, "format.ruff")
+        run_batched(
+            paths(ctx, "format.ruff"),
+            lambda batch: _python.run_format(
+                check=False, safe_fix=ctx.safe, paths=batch
+            ),
         )
 
     def lint_run(ctx: GateContext) -> None:
-        _python.run_lint(fix=False, paths=paths(ctx, "lint.ruff"))
+        run_batched(
+            paths(ctx, "lint.ruff"),
+            lambda batch: _python.run_lint(fix=False, paths=batch),
+        )
 
     def lint_fix(ctx: GateContext) -> None:
-        if ctx.safe:
-            _python.run_lint(safe_fix=True, paths=paths(ctx, "lint.ruff"))
-            return
-        _python.run_lint(fix=True, paths=paths(ctx, "lint.ruff"))
+        run_batched(
+            paths(ctx, "lint.ruff"),
+            lambda batch: _python.run_lint(
+                fix=not ctx.safe, safe_fix=ctx.safe, paths=batch
+            ),
+        )
 
     def typecheck_paths(ctx: GateContext, tool: str) -> tuple[str, ...]:
         """The paths one type checker reads: the named files, the members', or all."""
@@ -1313,15 +1375,22 @@ def _register_builtin() -> None:
         whole = len(judged) == len(python_kinds(ctx)) + len(unit(ctx))
         if not ctx.scoped and whole:
             return ()
+        if ctx.scoped and whole and whole_reached(ctx, name, len(judged)):
+            return ()
         return _python.package_paths(judged)
 
+    def typecheck_batched(ctx: GateContext, tool: str) -> None:
+        chosen = typecheck_paths(ctx, tool)
+        if not chosen:  # the configured whole, in one call
+            _python.run_typecheck(only=tool)
+            return
+        run_batched(chosen, lambda batch: _python.run_typecheck(paths=batch, only=tool))
+
     def basedpyright_run(ctx: GateContext) -> None:
-        _python.run_typecheck(
-            paths=typecheck_paths(ctx, "basedpyright"), only="basedpyright"
-        )
+        typecheck_batched(ctx, "basedpyright")
 
     def mypy_run(ctx: GateContext) -> None:
-        _python.run_typecheck(paths=typecheck_paths(ctx, "mypy"), only="mypy")
+        typecheck_batched(ctx, "mypy")
 
     # ty and pyrefly check their configured whole whatever the scope.
     def ty_run(ctx: GateContext) -> None:
