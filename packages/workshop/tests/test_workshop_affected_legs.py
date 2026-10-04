@@ -167,7 +167,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
 
     monkeypatch.setattr(
         "livery.workshop._graph.affected_from_paths",
-        lambda root, packages, paths: Scope((x,)),
+        lambda root, packages, paths, **attribution: Scope((x,)),
     )
 
     judged: list[bool] = []

@@ -14,7 +14,7 @@ the reflex and the CI legs scope work to it.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,7 +105,14 @@ def affected_packages(
                 " registered kind; failing open to everything"
             )
             return None
-    scope = affected_from_paths(root, packages, git.changed_paths(base))
+    scope = affected_from_paths(
+        root,
+        packages,
+        git.changed_paths(base),
+        git=git,
+        # Asked only for a change outside every package.
+        before=lambda: git.merge_base(base),
+    )
     return None if scope is None else scope.packages
 
 
@@ -140,7 +147,12 @@ def docs_page(packages: tuple[Package, ...], path: str) -> Package | None:
 
 
 def affected_from_paths(
-    root: Path, packages: tuple[Package, ...], paths: Iterable[str]
+    root: Path,
+    packages: tuple[Package, ...],
+    paths: Iterable[str],
+    *,
+    git: GitOps | None = None,
+    before: str | Callable[[], str] = "",
 ) -> Scope | None:
     """What a change to *paths* reaches: the packages, and the tests that stand alone.
 
@@ -154,8 +166,15 @@ def affected_from_paths(
     the workspace's own tests runs that unit whole. A docs page
     reaches nothing: the site build reads it. An example file reaches
     its package's examples check
-    and no suite, unless source of the package changed too. ``None``
-    means everything, an empty scope nothing a gate reads.
+    and no suite, unless source of the package changed too. A file
+    outside every package reaches everything, unless *before* (the
+    commit or tree the paths were taken from) shows the change is
+    about the packages added or removed, or, for ``uv.lock``, about
+    the members whose resolution it moves
+    ([livery.workshop._root_attribution][]): then it reaches those.
+    *before* may be a function answering it, asked only when a path
+    outside every package needs it.
+    ``None`` means everything, an empty scope nothing a gate reads.
     """
     from livery.workshop._categories import EXAMPLE, TEST, category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
@@ -168,6 +187,7 @@ def affected_from_paths(
     suites: set[str] = set()
     examples: set[str] = set()
     tests_changed = False
+    outside: list[str] = []
     for path in paths:
         if docs_page(packages, path) is not None:
             continue
@@ -188,8 +208,12 @@ def affected_from_paths(
                     seeds.add(package.path)
                 break
         else:
-            print(f"  {path}: outside the packages; everything runs")
+            outside.append(path)
+    if outside:
+        attributed = _attribute(root, packages, outside, git=git, before=before)
+        if attributed is None:
             return None
+        seeds |= attributed
     reached = {package.path for package in dependents_closure(packages, seeds)}
     alone = tuple(
         sorted(path for path in examples if path not in reached and path not in suites)
@@ -206,6 +230,55 @@ def affected_from_paths(
         print(f"  {WORKSPACE_TESTS}/: changed and gone; everything runs")
         return None
     return Scope((*members, unit), {}, alone)
+
+
+def _attribute(
+    root: Path,
+    packages: tuple[Package, ...],
+    paths: list[str],
+    *,
+    git: GitOps | None,
+    before: str | Callable[[], str],
+) -> set[str] | None:
+    """The packages the changes to *paths*, all outside every package, are about.
+
+    None means everything, and the first path that forces it is
+    named: without *before* there is nothing to compare with, and a
+    change the package set does not explain configures every gate.
+    """
+    from livery.workshop._root_attribution import (
+        LOCK,
+        explained,
+        lock_affected,
+        package_delta,
+    )
+
+    point = before if isinstance(before, str) else before()
+    if git is None or not point:
+        print(f"  {paths[0]}: outside the packages; everything runs")
+        return None
+    delta = package_delta(git, point, packages)
+    seeds = {package.path for package in delta.added}
+    for path in paths:
+        if delta.holds(path):
+            continue  # a removed package's own files: nothing depends on it now
+        old = git.file_at(point, path)
+        target = root / path
+        new = target.read_text("utf-8") if target.is_file() else ""
+        if path == LOCK:
+            moved = lock_affected(old, new, delta)
+            if moved is None:
+                print(
+                    f"  {path}: a resolution beyond the members moved; everything runs"
+                )
+                return None
+            seeds |= moved
+            continue
+        if not explained(old, new, delta):
+            print(f"  {path}: outside the packages; everything runs")
+            return None
+        print(f"  {path}: names only the packages added or removed")
+    return seeds
 
 
 @graph.task(name="affected")
