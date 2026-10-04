@@ -70,6 +70,13 @@ follows the pull request to its squash and the wave to its verdict,
 the way `fm submit --armed` follows a feature pull request, and ends
 with the wave's exit; unarmed, it returns at once.
 
+When no released workshop can drive a died wave (its own workshop
+was the fault, and releasing a fixed one needs the packages that
+wave was to publish), `fm workflow.release <set> --abandon` gives
+the wave up: a new release of the set prepares over it and takes
+over its uncut receipts. From then on the abandoned squash is
+pending for nothing a later release squash names.
+
 Authors are credited by asking the forge, which a private repository
 answers only for a caller it can authenticate. Set the forge's token
 variable (`GITHUB_TOKEN`, `GITEA_TOKEN`, `GITLAB_TOKEN`) and the
