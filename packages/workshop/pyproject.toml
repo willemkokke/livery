@@ -25,7 +25,7 @@ dependencies = [
     # a claim the leg cannot test (its movement guard refuses the
     # silent un-starving). 0.52.2 is the first livery-footman: the
     # workshop imports livery.footman directly, never the shim.
-    "livery-footman>=0.55.0",
+    "livery-footman>=0.56.0",
     # 0.7.0 is the first livery-toolroom with the livery.toolroom
     # namespace, whose tools module the workshop imports; the release
     # act's lowest-direct leg installs the floor and proves it.

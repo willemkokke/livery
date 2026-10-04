@@ -5,6 +5,12 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.56.0] - 2026-10-04
+
+### Added
+
+- Removing a member is deleting it and running fm sync: the runner's handoff enters a project that syncs itself without syncing it first by @willemkokke
+
 ## [0.55.0] - 2026-10-04
 
 ### Added
