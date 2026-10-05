@@ -43,19 +43,34 @@ _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
 PUBLISHED_INDEX = "https://docs.willem.net/livery/tools/"
 
 
-def _sync_tools(root: Path) -> None:
-    """Write the newborn's first `tools.lock` and install what it names.
+def _sync_newborn(root: Path) -> None:
+    """Run `sync` in the newborn with the runner its own environment holds.
 
-    Without this a newborn's own gate reaches for checkers the store
-    never installed: the lock says what to install and nothing writes
-    one for a project that has never had one. Idempotent, like every
-    other step of the birth. The engine takes the newborn's root as a
-    value: this runs inside the birth's own task, and a task may not
-    change the process directory.
+    The newborn's tools lock, its content, and its composed and
+    generated files depend on the extensions it lists: their checks
+    name tools and render lines. Its environment holds them at the
+    versions it locked, and the process running the birth may hold
+    other versions of them or none, so the newborn's own runner writes
+    them, with its stack mounted as every later sync mounts it.
+
+    Raises:
+        Failed: when the newborn's environment has no runner, naming it.
     """
-    from livery.workshop._tool_tasks import sync_tools
+    import sys
 
-    sync_tools(root)
+    from livery.workshop._pythons import scripts_dir
+
+    prog = footman.prog()
+    runner = scripts_dir(root / ".venv") / (
+        f"{prog}.exe" if sys.platform == "win32" else prog
+    )
+    if not runner.is_file():
+        fail(
+            f"{runner} is missing: the newborn's environment has no {prog} to"
+            f" sync it with. `uv sync` in {root} installs it; then run the"
+            " birth again"
+        )
+    footman.run([str(runner), "sync"], cwd=root)
 
 
 def _git(root: Path, *args: str) -> str:
@@ -280,20 +295,9 @@ def new_project(
     run_uv("sync", root=root)
     print("  environment: locked and synced")
 
-    _sync_tools(root)
-
-    from livery.workshop._sync import sync_workspace
-
-    for line in sync_workspace(root):
-        print(line)
-
-    from livery.workshop._templates import apply_project
-
-    for changed in apply_project(root):
-        print(f"  rendered: {changed}")
-
     if extension:
         _add_extension(root, extension)
+    _sync_newborn(root)
 
     if not (root / ".git").is_dir():
         _git(root, "init", "-q", "--initial-branch=main")
@@ -390,11 +394,11 @@ def _add_extension(root: Path, extension: str) -> None:
     """Scaffold *extension* and self-host it: contract 19's home shape.
 
     The extension package renders from the ``package-extension``
-    kind; the contract's stack gains its import path last, so the
-    home composes with its own overlay at HEAD from the first
-    commit. Idempotent: an already-listed extension walks past.
+    kind; the contract's stack gains its import path last, and the
+    newborn's sync after it composes the home with its own overlay, so
+    the first commit carries it. Idempotent: an already-listed
+    extension walks past.
     """
-    from livery.workshop._sync import sync_workspace
     from livery.workshop._templates import wire_package
 
     if (root / "packages" / extension).exists():
@@ -417,14 +421,6 @@ def _add_extension(root: Path, extension: str) -> None:
         text = text[: match.start()] + appended + text[match.end() :]
         contract.write_text(text, encoding="utf-8")
         print(f"  extensions: {import_path} self-hosted, last in the stack")
-    # The stack changed: re-deliver content and re-render through the
-    # composed source, so the home's files carry its own overlay.
-    from livery.workshop._templates import apply_project as reapply
-
-    for line in sync_workspace(root):
-        print(line)
-    for changed in reapply(root):
-        print(f"  rendered: {changed}")
 
 
 def _pushed_by_us(root: Path, clone_url: str) -> bool:

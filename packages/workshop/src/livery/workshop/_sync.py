@@ -437,11 +437,12 @@ def sync(
 
     The one-stop: fast-forward or rebase the current branch (asking
     before anything conflicted or shared; a branch started on another
-    with ``fm start --from`` follows its parent), remove what a removed
-    package left under ``packages/``, fetch origin's state store into
-    the checkout's mirror for the gate to read, then every extension's
-    fragments, skills, and hooks, then the two locks. Both
-    halves match their lock the way uv does: `tools.sync` for the
+    with ``fm start --from`` follows its parent; a directory with no git
+    history, no repository or no commit, has nothing to follow), remove
+    what a removed package left under ``packages/``, fetch origin's
+    state store into the checkout's mirror for the gate to read, then
+    every extension's fragments, skills, and hooks, then the two locks.
+    Both halves match their lock the way uv does: `tools.sync` for the
     tools, ``uv sync`` for the environment, each writing its lock when
     there is none or the declarations have moved past it. Last, the
     composed and generated files are written again, since both read the
@@ -484,7 +485,9 @@ def sync(
     # Neither mode changes what a commit holds.
     local_only = locked or frozen
     git = GitOps(root)
-    if not local_only:
+    if not local_only and not git.has_commits():
+        print("  no git history here: nothing to bring current")
+    elif not local_only:
         before = git.head_sha()
         bring_current(root, git, interactive=footman.attended())
         continue_on_moved_code(root, before, git.head_sha())

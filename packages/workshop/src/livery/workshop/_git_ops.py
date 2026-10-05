@@ -141,6 +141,13 @@ class GitOps:
         """The commit HEAD points at."""
         return self._run("rev-parse", "HEAD").strip()
 
+    def has_commits(self) -> bool:
+        """Whether HEAD names a commit; false with no commit or no repository."""
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "rev-parse", "--verify", "-q", "HEAD"
+        )
+        return result.code == 0
+
     def head_subject(self) -> str:
         """HEAD's commit subject."""
         return self._run("log", "-1", "--format=%s").strip()

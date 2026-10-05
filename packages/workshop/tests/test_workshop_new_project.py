@@ -12,10 +12,10 @@ from livery.forge.testing import FakeForge
 from livery.workshop import _new_project as _newborn_module
 from livery.workshop._new_project import new_project
 
-#: The birth's tool sync, bound at import, before the module's fixture
-#: stubs it for every birth below: the one test of the real function
-#: calls this.
-_REAL_SYNC_TOOLS = _newborn_module._sync_tools
+#: The newborn's own sync, bound at import, before the module's fixture
+#: stubs it for every birth below: the tests of the real function call
+#: this.
+_REAL_SYNC_NEWBORN = _newborn_module._sync_newborn
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -72,6 +72,20 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
         (root / "tools.lock").write_text('{"schema": 1, "hosts": [], "tools": {}}\n')
 
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _locked)
+
+    # The newborn's own `fm sync` runs in its environment, which the
+    # suite never builds: this does in-process what that sync writes.
+    def _newborn_sync(root: Path) -> None:
+        from livery.workshop._sync import sync_workspace
+        from livery.workshop._templates import apply_project
+
+        for line in sync_workspace(root):
+            print(line)
+        _locked(root)
+        for changed in apply_project(root):
+            print(f"  rendered: {changed}")
+
+    monkeypatch.setattr("livery.workshop._new_project._sync_newborn", _newborn_sync)
 
     # Nothing in a birth test reaches the network: a fetch that escapes
     # the fakes refuses here, naming its host, instead of reading the
@@ -302,19 +316,32 @@ def test_a_newborn_names_the_index_and_holds_a_lock(
     assert (tmp_path / "acme-tools" / "tools.lock").is_file()
 
 
-def test_the_newborn_tool_sync_takes_the_root_and_changes_no_directory(
+def test_the_newborn_is_synced_by_the_runner_its_environment_holds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The birth runs inside a task, and a task may not change directory."""
-    from livery.workshop import _tool_tasks
+    import sys
 
-    seen: list[Path] = []
-    monkeypatch.setattr(
-        _tool_tasks, "sync_tools", lambda root, **kwargs: seen.append(root)
+    from livery.workshop._pythons import scripts_dir
+
+    # The refusal first: an environment with no runner of its own.
+    with pytest.raises(_FAILURES) as caught:
+        _REAL_SYNC_NEWBORN(tmp_path)
+    assert "the newborn's environment has no fm to sync it with" in str(caught.value)
+    runner = scripts_dir(tmp_path / ".venv") / (
+        "fm.exe" if sys.platform == "win32" else "fm"
     )
+    runner.parent.mkdir(parents=True)
+    runner.write_text("")
+    seen: list[tuple[list[str], object]] = []
+
+    def _run(argv: list[str], *, cwd: object = None, **kwargs: object) -> None:
+        seen.append((argv, cwd))
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
     before = Path.cwd()
-    _REAL_SYNC_TOOLS(tmp_path)
-    assert seen == [tmp_path]
+    _REAL_SYNC_NEWBORN(tmp_path)
+    assert seen == [([str(runner), "sync"], tmp_path)]
     assert Path.cwd() == before
 
 
