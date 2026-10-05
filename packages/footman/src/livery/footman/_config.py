@@ -166,7 +166,8 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "uv bring it current first, `enter` takes it as it is "
         "(`uv run --no-sync`), for a project whose own tasks bring the "
         "environment current: a stale project file then reaches the task that "
-        "rewrites it instead of failing the handoff.",
+        "rewrites it instead of failing the handoff. An environment without "
+        "the runner, as in a fresh clone, is synced either way.",
     ),
     (
         "builtins.discovery-mode",

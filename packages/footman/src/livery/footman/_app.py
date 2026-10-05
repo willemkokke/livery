@@ -2145,7 +2145,16 @@ def _uv_handoff(argv: list[str], g: dict[str, object]) -> int | None:
     # A project whose own tasks sync the environment says so with
     # `uv-handoff = "enter"`: uv then enters the environment as it is, and
     # a project file the tasks have yet to rewrite cannot fail the handoff.
-    entered = ["--no-sync"] if cfg.get("uv-handoff") == "enter" else []
+    # Entering needs a runner to enter. An environment without one (a fresh
+    # clone, a new worktree, a sync that never finished) is synced instead,
+    # or uv would run whichever runner is on PATH, and nothing the project
+    # installs would mount there.
+    entered = (
+        ["--no-sync"]
+        if cfg.get("uv-handoff") == "enter"
+        and _script.venv_executable(root, _brand.prog).is_file()
+        else []
+    )
     _reexec([uv, "run", "--project", str(root), *entered, _brand.prog, *argv])
     return None  # unreachable: _reexec replaces or exits this process
 
