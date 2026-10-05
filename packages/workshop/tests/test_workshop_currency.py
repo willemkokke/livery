@@ -770,7 +770,7 @@ def test_the_sync_sweeps_before_anything_discovers_packages(
     package = _leave_residue(root, "gone")
     seen: list[tuple[str, ...]] = []
 
-    def deliver(at: Path, *, locked: bool = False) -> list[str]:
+    def deliver(at: Path, *, local_only: bool = False) -> list[str]:
         seen.append(tuple(package.name for package in discover_packages(at)))
         return []
 

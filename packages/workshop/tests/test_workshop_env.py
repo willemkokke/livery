@@ -646,6 +646,37 @@ def test_the_cascade_hook_enters_the_environment_for_the_process(
     ]
 
 
+def test_the_cascade_hook_enters_the_tools_its_repair_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A checkout that never synced has no receipt when the hook first
+    # enters the environment; the repair writes them after it.
+    from typing import cast
+
+    import livery.footman.api as footman
+    from livery.workshop import _env_tasks
+
+    ruff = str(tmp_path / "store" / "ruff")
+
+    def repairing(root: Path) -> bool:
+        _receipt(root, "ruff", paths=(ruff,))
+        return True
+
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: True)
+    monkeypatch.setattr("livery.workshop._reconcile.apply", repairing)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    monkeypatch.setenv("PATH", "/usr/bin")
+    _env_tasks.apply_cascade(cast(footman.Invocation, None))
+    assert os.environ["PATH"].split(os.pathsep) == [
+        str(venv_bin(tmp_path)),
+        ruff,
+        "/usr/bin",
+    ]
+
+
 def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

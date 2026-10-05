@@ -102,8 +102,9 @@ def apply_cascade(inv: footman.Invocation) -> None:
     try:
         from livery.workshop import _reconcile
 
-        if _reconcile.is_cli_process():
-            _reconcile.apply(root)
+        if _reconcile.is_cli_process() and _reconcile.apply(root):
+            # The repair wrote receipts this process entered without.
+            apply_entry(root)
     except Exception as error:
         import sys
 
@@ -724,16 +725,17 @@ def _uv_drift(root: Path) -> str:
 
 
 def tool_profile(root: Path) -> tuple[str, ...]:
-    """The tools the three declaration sites require, each once.
+    """The tools the three declaration sites require on this host, each once.
 
     The kinds the present packages declare, the packages' own
     contracts and the project's, as `livery.workshop._tools` reads
     them; a workspace with no package requires what the python kind
-    does, since its `tasks.py` runs on python.
+    does, since its `tasks.py` runs on python. A requirement scoped to
+    other hosts alone is none here.
     """
-    from livery.workshop._tools import tool_names
+    from livery.workshop._tools import this_host, tool_names
 
-    return tool_names(root)
+    return tool_names(root, this_host())
 
 
 def served_by(receipt: Receipt) -> str:

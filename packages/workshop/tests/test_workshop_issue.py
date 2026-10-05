@@ -311,6 +311,43 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     assert git.current_branch() == "main"
 
 
+def test_a_start_run_again_syncs_the_worktree_its_first_run_left_unsynced(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The first start made the worktree and its sync failed, as with no
+    # network; running the start again is the recovery, so it syncs.
+    from types import SimpleNamespace
+
+    _root, fake, _git = rig
+    created = fake.repository("willemkokke", "livery").issue.create("tree work")
+    codes = [1, 0]
+    provisioned: list[str] = []
+
+    import livery.toolroom.tools.api as toolroom
+
+    def _uv(*args: str) -> SimpleNamespace:
+        provisioned.append("uv " + " ".join(args))
+        return SimpleNamespace(code=codes.pop(0), stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.tools",
+        SimpleNamespace(
+            uv=SimpleNamespace(opts=lambda **_k: _uv),
+            code=toolroom.code,
+            ToolError=toolroom.ToolError,
+        ),
+    )
+    monkeypatch.setattr("livery.workshop._sweep.sweep_worktrees", lambda home, **_k: [])
+    start(str(created.number), open="none")
+    assert "sync` in the worktree failed" in capsys.readouterr().out
+    start(str(created.number), open="none")
+    out = capsys.readouterr().out
+    assert "already started" in out and "failed" not in out
+    assert len([call for call in provisioned if "fm sync" in call]) == 2
+
+
 def test_start_refuses_without_a_ref_naming_the_three_forms(
     rig: tuple[Path, FakeForge, GitOps],
 ) -> None:

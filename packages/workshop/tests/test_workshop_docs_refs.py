@@ -92,6 +92,63 @@ def test_a_reference_that_names_something_passes(
     assert _problems(tmp_path, f"See [{reference}][].") == []
 
 
+# A workspace's sources need not be a namespace: a member may be a
+# regular package, or one module that is the distribution's whole source.
+
+
+def _layout_problems(tmp_path: Path, layout: str, docstring: str) -> list[str]:
+    src = tmp_path / "packages" / "thing" / "src"
+    if layout == "package":
+        package = src / "toolbox"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(
+            '"""The toolbox."""\n\nfrom toolbox._impl import Widget as Widget\n'
+        )
+        (package / "_impl.py").write_text(IMPL)
+        user = package / "_user.py"
+        user.write_text(f'"""{docstring}"""\n')
+    else:
+        src.mkdir(parents=True)
+        user = src / "tool.py"
+        user.write_text(IMPL.replace("The widget's home.", docstring, 1))
+    return reference_problems(tmp_path, [user], [src])
+
+
+@pytest.mark.parametrize(
+    ("layout", "reference"),
+    [
+        ("package", "toolbox._impl.Gadget"),
+        ("package", "toolbox.Gadget"),  # a re-export that is not there
+        ("package", "toolbox._imp.Widget"),  # a misspelt module
+        ("module", "tool.Gadget"),
+        ("module", "tool.Widget.spin"),
+    ],
+)
+def test_a_reference_into_a_package_or_a_module_that_names_nothing_is_refused(
+    tmp_path: Path, layout: str, reference: str
+) -> None:
+    problems = _layout_problems(tmp_path, layout, f"See [{reference}][].")
+    assert len(problems) == 1
+    assert f":1: [{reference}][] names nothing" in problems[0]
+
+
+@pytest.mark.parametrize(
+    ("layout", "reference"),
+    [
+        ("package", "toolbox"),
+        ("package", "toolbox._impl.Widget.turn"),
+        ("package", "toolbox.Widget"),  # re-exported by the package itself
+        ("module", "tool"),
+        ("module", "tool.Widget.size"),
+        ("module", "tool.VALUE"),
+    ],
+)
+def test_a_reference_into_a_package_or_a_module_that_names_something_passes(
+    tmp_path: Path, layout: str, reference: str
+) -> None:
+    assert _layout_problems(tmp_path, layout, f"See [{reference}][].") == []
+
+
 def test_a_reference_outside_every_members_namespace_is_left_to_the_site(
     tmp_path: Path,
 ) -> None:

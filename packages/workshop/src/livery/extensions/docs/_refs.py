@@ -1,6 +1,6 @@
 """The cross-references in docstrings, resolved the way the API site resolves them.
 
-A docstring names another object as ``[livery.pkg.module.Name][]``, and
+A docstring names another object as ``[pkg.module.Name][]``, and
 the site build turns the name into a link; one that names nothing
 stops the strict build. `lint.docrefs` finds them in the changed
 sources and resolves each with griffe, the library the site build
@@ -67,17 +67,30 @@ def docstring_references(source: Path) -> list[tuple[int, str]]:
 
 
 def namespaces(sources: list[Path]) -> set[str]:
-    """The top-level names the members' sources provide: ``livery``."""
-    return {
-        child.name
-        for src in sources
-        for child in src.iterdir()
-        if child.is_dir() and child.name.isidentifier()
-    }
+    """The top-level names the members' sources provide.
+
+    A package directory, namespace or regular, gives its name, and so
+    does a module that is a distribution's whole source (``tool.py``
+    gives ``tool``).
+    """
+    names: set[str] = set()
+    for src in sources:
+        for child in src.iterdir():
+            if child.is_dir() and child.name.isidentifier():
+                names.add(child.name)
+            elif child.suffix == ".py" and child.stem.isidentifier():
+                names.add(child.stem)
+    return names
 
 
 class Resolver:
-    """Resolves dotted names against the workspace's sources, one package at a time."""
+    """Resolves dotted names against the workspace's sources, one top-level name a load.
+
+    griffe loads the whole top-level package, namespace or regular,
+    whatever dotted path it is handed, so one load per top-level name
+    is all a walk needs; a load per subpackage would parse the same
+    namespace again for each.
+    """
 
     def __init__(self, sources: list[Path]) -> None:
         """Read *sources*, every member's ``src`` directory, on demand."""
@@ -87,26 +100,18 @@ class Resolver:
         self._loader: Any = griffe.GriffeLoader(
             search_paths=[str(src) for src in sources], allow_inspection=False
         )
-        self._sources = sources
+        self._tops = namespaces(sources)
         self._loaded: set[str] = set()
 
-    def _package_of(self, path: str) -> str:
-        """The longest prefix of *path* that is a package directory in a source."""
-        parts = path.split(".")
-        for end in range(len(parts), 0, -1):
-            prefix = parts[:end]
-            if any(src.joinpath(*prefix).is_dir() for src in self._sources):
-                return ".".join(prefix)
-        return ""
-
     def _load(self, path: str) -> bool:
-        """Load the package holding *path*; whether anything new was loaded."""
-        package = self._package_of(path)
-        if not package or package in self._loaded:
+        """Load the top-level package of *path*; whether anything new was loaded."""
+        top = path.split(".")[0]
+        if top not in self._tops or top in self._loaded:
             return False
-        self._loaded.add(package)
+        self._loaded.add(top)
         try:
-            self._loader.load(package)
+            # A dotted name, never a path: the working directory has no say.
+            self._loader.load(top, try_relative_path=False)
         except (ImportError, KeyError):
             return False
         return True
