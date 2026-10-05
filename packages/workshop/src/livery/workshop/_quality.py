@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
+    from livery.workshop._gate_record import Plan
     from livery.workshop._influence import Changes
     from livery.workshop._verified import Verified
 
@@ -191,51 +192,40 @@ def verified_already(root: Path) -> Verified | None:
     return found
 
 
-def _changes_since(base: str) -> Changes | None:
-    """The paths this branch changed since its merge base with *base*; None if unknown.
+def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
+    """Where this CI leg measures its change from, said in one line.
 
-    None, with git's words, when git cannot compute the merge base: the
-    workspace checks then judge everything, as the packages do.
+    The reflex's rule over CI's record ([livery.workshop._gate_record.leg_plan][]):
+    the proved tree nearest HEAD's, an earlier push's merge included,
+    or the merge base with *base* when the record proves none. A merge
+    base git cannot compute (a shallow checkout, a base the fetch did
+    not bring) falls open to everything, with git's words.
     """
-    from livery.workshop._git_ops import GitError, GitOps
-    from livery.workshop._influence import Changes
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
 
-    root = workspace_root()
-    if root is None:
-        return None
-    git = GitOps(root)
-    try:
-        return Changes(root, tuple(git.changed_paths(base)), git.merge_base(base))
-    except GitError as error:
-        print(
-            f"  changes: no merge base with origin/{base}; every file is read ({error})"
-        )
-        return None
-
-
-def _affected(base: str = "main") -> tuple[Package, ...] | None:
-    """The affected subset for the gate; None means everything.
-
-    A merge base git cannot compute (a shallow checkout, a base the
-    fetch did not bring) falls open to everything with git's words
-    printed, the same way an unregistered kind does.
-    """
-    from livery.workshop._git_ops import GitError, GitOps
-    from livery.workshop._graph import affected_packages
-
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     git.fetch()
-    try:
-        return affected_packages(root, git, base=base)
-    except GitError as error:
-        print(
-            f"  affected: no merge base with origin/{base}; failing open to"
-            f" everything ({error})"
-        )
+    step = _gate_record.leg_plan(root, git, base=base, branch=run.head_ref)
+    count = f"{len(step.paths)} path(s) changed"
+    if step.mode == _gate_record.MERGE_BASE:
+        print(f"  from the merge base, tree {step.base_tree[:12]}: {step.why}; {count}")
+    elif step.mode == "step":
+        print(f"  since tree {step.base_tree[:12]} ({step.why}): {count}")
+    else:
+        print(f"  affected: {step.why}; failing open to everything")
+    return step
+
+
+def _affected(root: Path, step: Plan) -> tuple[Package, ...] | None:
+    """The packages *step*'s paths reach; None means everything."""
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._graph import affected_by
+
+    if step.mode == "full":
         return None
+    scope = affected_by(root, GitOps(root), step.paths, before=step.base_tree)
+    return None if scope is None else scope.packages
 
 
 @task
@@ -272,9 +262,12 @@ def check(
     whatever the record says. ty and pyrefly always check their
     configured whole either way.
 
-    Inside CI the legs gate the pull request's own changes against its
-    base when the contract declares ``[ci] affected-legs``, or the
-    whole workspace; the local record is never read or written there.
+    Inside CI, when the contract declares ``[ci] affected-legs``, a
+    pull request's legs measure by the same rule from CI's own record:
+    from the proved tree nearest the checkout's, an earlier push's
+    merge among them, or from the merge base with the pull request's
+    base when the record proves none. Without the key they run the
+    whole workspace. The local record is never read or written there.
 
     ``--fix`` runs format and lint in their fix modes: each prints
     what it found, rewrites what is mechanical, and still fails on
@@ -496,14 +489,16 @@ def _run_check(
         if not nightly and root_for_ci is not None and run is not None
         else ""
     )
-    if ci_base:
+    if ci_base and root_for_ci is not None and run is not None:
+        from livery.workshop._influence import Changes
+
         print(f"  affected-legs: the scoped gate against origin/{ci_base}")
-        subset = _affected(ci_base)
+        step = _leg_plan(root_for_ci, ci_base, run)
+        subset = _affected(root_for_ci, step)
         if subset is not None:
             packages = _packages()
-            changes = _changes_since(ci_base)
-            if root_for_ci is not None and run is not None:
-                subset = _with_unstored_suites(root_for_ci, run, packages, subset)
+            changes = Changes(root_for_ci, step.paths, step.base_tree)
+            subset = _with_unstored_suites(root_for_ci, run, packages, subset)
             if not subset:
                 # The same walk as a local run: the workspace checks whose
                 # inputs changed judge, and no package's checks run.
@@ -511,9 +506,13 @@ def _run_check(
                     print("  no package affected: the workspace checks run")
                     _scoped_check((), fix=fix, point=point, changes=changes)
                 else:
-                    say_skipped(f"nothing affected: {_nothing_reason(ci_base)}")
-                if root_for_ci is not None and run is not None:
-                    _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
+                    say_skipped(f"nothing affected: {_nothing_reason(step.paths)}")
+                _verified.write_marker(
+                    root_for_ci,
+                    _verified.NOTHING,
+                    leg=run.leg,
+                    base_tree=step.base_tree,
+                )
                 return
             from livery.workshop._coverage_store import WORKSPACE_TESTS
 
@@ -521,13 +520,13 @@ def _run_check(
             if len(members) < len(packages):
                 names = ", ".join(package.path for package in subset)
                 print(f"  affected: {names}")
-                if root_for_ci is not None and run is not None:
-                    _verified.write_marker(
-                        root_for_ci,
-                        _verified.AFFECTED,
-                        tuple(package.path for package in subset),
-                        leg=run.leg,
-                    )
+                _verified.write_marker(
+                    root_for_ci,
+                    _verified.AFFECTED,
+                    tuple(package.path for package in subset),
+                    leg=run.leg,
+                    base_tree=step.base_tree,
+                )
                 _scoped_check(subset, fix=fix, point=point, changes=changes)
                 return
     proved_tree = ""
@@ -713,18 +712,10 @@ def say_skipped(text: str) -> None:
         footman.mark(f"skipped: {text}")
 
 
-def _nothing_reason(base: str) -> str:
+def _nothing_reason(changed: tuple[str, ...]) -> str:
     """Why nothing is affected: only prose and site files changed, or nothing."""
-    from livery.workshop._git_ops import GitError, GitOps
     from livery.workshop._graph import is_prose, is_site
 
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
-    try:
-        changed = GitOps(root).changed_paths(base)
-    except GitError:
-        return "the branch changes no files"
     quiet = [path for path in changed if is_prose(path) or is_site(path)]
     if changed and len(quiet) == len(changed):
         return (

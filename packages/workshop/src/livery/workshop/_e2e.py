@@ -296,6 +296,23 @@ def _lane(kind: str) -> Lane:
     return lane
 
 
+def _enter_host(values: Mapping[str, str], env: str) -> None:
+    """Run the pass on the host-mode environment *env*, whose *values* these are.
+
+    The forge's URL and token go into the pass's own environment as
+    well as `CURRENT`. The cascade filled them when the pass started,
+    before the bring-up seeded the environment, and every child the
+    pass starts (the birth, the loop's own fm) copies that
+    environment, so each would otherwise reach the forge with a token
+    the environment no longer holds.
+    """
+    CURRENT.name, CURRENT.mode = env, "host"
+    CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
+    CURRENT.label = values["LABELS"].split(",")[0]
+    lane = LANES["gitea"]
+    os.environ[lane.url_var], os.environ[lane.token_var] = CURRENT.url, CURRENT.token
+
+
 def _dev_forge(kind: str) -> tuple[Forge, str]:
     """The seeded local forge and its token; refusal teaches.
 
@@ -836,6 +853,14 @@ def _birth(kind: str, url: str) -> Path:
     if result.code != 0:
         fail(f"the loop's birth exited {result.code}:\n{result.stderr}")
     return home / E2E_REPO
+
+
+def _has_remote(root: Path) -> bool:
+    """Whether the loop's workspace at *root* has its forge remote."""
+    import livery.toolroom.tools.api as toolroom
+
+    probe = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
+    return probe("remote", "get-url", "origin").code == 0
 
 
 def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
@@ -2433,13 +2458,15 @@ def _born(pass_: Pass) -> None:
             print(line)
     elif pass_.fresh and root.exists():
         shutil.rmtree(root, ignore_errors=True)
-    if (root / ".git").is_dir():
+    if (root / ".git").is_dir() and _has_remote(root):
         # A resumed birth pushes before it returns, so an existing
         # workspace authenticates first; birth resets the remote, so
         # it authenticates again after. Main then fast-forwards onto
         # the merges the loop itself made: without the reconcile,
         # birth's foreign-repo guard reads our own squash as a
-        # stranger's history and refuses.
+        # stranger's history and refuses. A birth that failed before
+        # the forge held the repository left no remote, and resumes
+        # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
     root = _birth(forge, pass_.url)
@@ -2667,10 +2694,7 @@ if _WORKSHOP_TESTS.is_dir():
             CURRENT.name, CURRENT.mode = env, "docker"
         else:
             _devenv.up_host(place, ("host",))
-            values = place.values()
-            CURRENT.name, CURRENT.mode = env, "host"
-            CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
-            CURRENT.label = values["LABELS"].split(",")[0]
+            _enter_host(place.values(), env)
         # Every commit the pass makes, the driver's, the birth's and
         # the loop's own fm's, is unsigned: the setting rides the
         # task's environment into each child.

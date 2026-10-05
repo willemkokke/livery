@@ -314,6 +314,53 @@ def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
     )
 
 
+def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The forge refused the repository, so the workspace has a commit
+    # and no remote; authenticating that remote would fail every rerun.
+    import subprocess
+
+    root = tmp_path / _e2e.E2E_REPO
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    calls: list[str] = []
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-abc"))
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+
+    def _authenticate(root: Path, token: str, kind: str = "gitea") -> None:
+        calls.append("authenticate")
+
+    def _birth(kind: str, url: str) -> Path:
+        calls.append("birth")
+        return root
+
+    monkeypatch.setattr(_e2e, "_authenticate_remote", _authenticate)
+    monkeypatch.setattr(_e2e, "_align_main", lambda root: calls.append("align"))
+    monkeypatch.setattr(_e2e, "_birth", _birth)
+
+    class _Stop(Exception):
+        pass
+
+    def _stop(kind: str) -> None:
+        raise _Stop
+
+    monkeypatch.setattr(_e2e, "provision", _stop)
+    with pytest.raises(_Stop):
+        _e2e._born(_e2e.Pass("gitea", "http://localhost:1"))  # pyright: ignore[reportPrivateUsage]
+    assert calls == ["birth", "authenticate"]
+    # A workspace the forge holds authenticates and aligns before it resumes.
+    subprocess.run(
+        ["git", "remote", "add", "origin", "http://localhost:1/x.git"],
+        cwd=root,
+        check=True,
+    )
+    calls.clear()
+    with pytest.raises(_Stop):
+        _e2e._born(_e2e.Pass("gitea", "http://localhost:1"))  # pyright: ignore[reportPrivateUsage]
+    assert calls == ["authenticate", "align", "birth", "authenticate"]
+
+
 def test_the_tree_reset_keeps_what_sync_materialises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -918,6 +965,39 @@ def test_a_host_environment_is_the_lane_s_alias_the_forge_and_the_workspace_s_ho
     assert lane.alias == "http://gitea:3000"
     home = _e2e._loop_home("gitea")  # pyright: ignore[reportPrivateUsage]
     assert home == tmp_path / "workshop-e2e" / "gitea"
+
+
+def test_a_host_pass_hands_its_children_the_environments_own_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The cascade read the shared file when the pass started, before the
+    # bring-up seeded a new token; a child copying the pass's environment
+    # would reach the forge with the stale one and get a 401.
+    import os
+
+    monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
+    monkeypatch.setenv("GITEA_URL", "http://localhost:1")
+    monkeypatch.setenv("GITEA_TOKEN", "stale")
+    values = {
+        "GITEA_URL": "http://localhost:43210",
+        "GITEA_TOKEN": "token-abc",
+        "LABELS": "scratch-macos-arm-01,macos",
+    }
+    _e2e._enter_host(values, "scratch")  # pyright: ignore[reportPrivateUsage]
+    assert (os.environ["GITEA_URL"], os.environ["GITEA_TOKEN"]) == (
+        "http://localhost:43210",
+        "token-abc",
+    )
+    assert (
+        _e2e.Current(
+            "scratch",
+            "host",
+            "http://localhost:43210",
+            "token-abc",
+            "scratch-macos-arm-01",
+        )
+        == _e2e.CURRENT
+    )
 
 
 def test_the_forge_credentials_come_from_the_environment_in_host_mode(

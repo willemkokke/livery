@@ -326,6 +326,26 @@ class GitOps:
         """
         return self._run("merge-base", "HEAD", f"origin/{base}").strip()
 
+    def merge_parents(self) -> tuple[str, str] | None:
+        """HEAD's two parents when HEAD is a merge: the base, then the head merged in.
+
+        A pull request's run on GitHub checks out the merge the forge
+        made of the pull request's head onto its base branch; any other
+        checkout answers None.
+        """
+        line = self._run("rev-list", "--parents", "-n", "1", "HEAD").split()
+        return (line[1], line[2]) if len(line) == 3 else None
+
+    def merge_tree(self, base: str, head: str) -> str:
+        """The tree a merge of *head* onto *base* yields, written to this clone.
+
+        No working tree or index is touched; only the objects are
+        written. Raises GitError on a conflict, with git's words.
+        """
+        return (
+            self._run("merge-tree", "--write-tree", base, head).splitlines()[0].strip()
+        )
+
     def changed_paths(self, base: str) -> list[str]:
         """Repo-relative paths this branch touches, committed or not.
 

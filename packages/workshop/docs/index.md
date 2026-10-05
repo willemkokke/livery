@@ -457,8 +457,13 @@ absence.
   changed reads everything. A diff that reaches no package and no
   file a check reads runs nothing. A workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
-  gate against the pull request's base branch, the workspace checks
-  selected the same way, and the gate job after
+  gate, measured by the same rule from CI's own record: from the
+  proved tree nearest the checkout's, or from the merge base with the
+  pull request's base branch when the record proves none. A pull
+  request's run on GitHub tests the merge of its head onto the base
+  branch, so its row names the two commits merged, and the next push's
+  run rebuilds that merge and gates only what changed since it. The
+  workspace checks are selected the same way, and the gate job after
   a green verdict stamps the tree it proved on the `workshop/verified`
   record, so a later run of the same tree, such as main's run after
   a squash of a branch on its tip, skips the gate in seconds. A
