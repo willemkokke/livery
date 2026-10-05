@@ -56,11 +56,13 @@ def installer_url(pin: str) -> str:
 # full of shell braces.
 _SCRIPT = """\
 # The entry contract: uv at the lock's pin -> the venv synced against
-# the lock, its native members left for later -> the tools installed
-# and the stubs written -> the environment entered here -> the native
-# members built against it. Source it to enter this shell; `setup.sh
-# github` persists the emission (GITHUB_ENV/GITHUB_PATH) for the CI
-# steps after it, which then call __PROG__ bare.
+# the lock, its native members left for later -> `__PROG__ sync --locked`,
+# the one a person runs, changing nothing a commit holds: the tools
+# installed, the stubs and the checkout's own files written -> the
+# environment entered here -> the native members built against it.
+# Source it to enter this shell; `setup.sh github` persists the
+# emission (GITHUB_ENV/GITHUB_PATH) for the CI steps after it, which
+# then call __PROG__ bare.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf __INSTALLER__ | sh >&2
@@ -108,15 +110,19 @@ _sync "${_native[@]}" \\
 # per-command reconcile compares the two and re-syncs on drift.
 [ -f "$_root/uv.lock" ] && cp "$_root/uv.lock" "$_root/.venv/.workshop-sync-receipt"
 _run() { uv run --project "$_root" --no-sync __PROG__ "$@"; }
-# The tools the lock holds, installed exactly as it holds them and
-# never re-resolved here, with a receipt each, and the stubs the type
-# checkers read rendered into typings/. The emission below puts the
-# receipts' paths on PATH, so a
-# tool the venv does not carry (an archive from its own release)
-# resolves for the gate. Not fatal: a tool the store could not supply
-# is named, and the gate says which check that cost.
-_run tools.sync --frozen >&2 \\
-    || echo "setup: the tools were not materialised; the gate names what is missing" >&2
+# The sync a person runs, in the mode that changes nothing a commit
+# holds: the branch stays, no tracked file is written. It installs
+# the tools the lock holds, with a receipt each, and the stubs the type
+# checkers read into typings/, and writes the checkout's own untracked
+# files (the agent's fragments, skills and settings), so a job holds
+# what a person's checkout holds. A lock that is not current refuses
+# here, naming the lock. A tool the store could not supply is named and
+# not fatal: the gate says which check that cost. The emission below
+# puts the receipts' paths on PATH, so a tool the venv does not carry
+# (an archive from its own release) resolves for the gate.
+_run sync --locked >&2 \\
+    || { echo "setup: __PROG__ sync --locked refused; its message names why" >&2; \\
+         return 1 2>/dev/null || exit 1; }
 # Entered here, whether sourced or run: the native members build in
 # this shell, and a sourcing shell keeps it.
 eval "$(_run env.emit posix)"

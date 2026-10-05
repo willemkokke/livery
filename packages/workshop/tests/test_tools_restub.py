@@ -306,11 +306,11 @@ def test_the_entry_script_materialises_the_tools_before_it_emits(
     root.mkdir()
     (root / "uv.lock").write_text('[[package]]\nname = "uv"\nversion = "0.11.0"\n')
     script = entry_script(root)
-    assert "_run tools.sync --frozen >&2" in script
-    assert '|| echo "setup: the tools were not materialised' in script
+    assert "_run sync --locked >&2" in script
+    assert "sync --locked refused; its message names why" in script
     assert (
         script.index("uv sync")
-        < script.index("tools.sync --frozen")
+        < script.index("_run sync --locked")
         < script.index("env.emit")
     )
 

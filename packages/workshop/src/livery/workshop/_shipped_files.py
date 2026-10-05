@@ -309,15 +309,28 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
     return (*kept, *_agent_outputs(root, order)), notes
 
 
-def deliver(root: Path) -> list[str]:
+def deliver(root: Path, *, locked: bool = False) -> list[str]:
     """Write the shipped files into *root*; one line per file that changed.
 
     A pass that changed anything is followed by one more: a rendered
     fragment may read a file the same pass wrote (the verbs fragment
     reads `tasks.py`), and the second pass renders it from what is now
     on disk, so a sync leaves a tree the next sync finds settled.
+    *locked* writes only the local outputs git does not track
+    ([livery.workshop._fragment_engine.apply_untracked][]): what a
+    commit holds is judged by the drift check, never rewritten.
     """
     from livery.workshop._packages import discover_packages
+
+    if locked:
+        from livery.workshop._fragment_engine import apply_untracked
+
+        planned, notes = _composed(root)
+        lines = apply_untracked(root, planned)
+        if lines:
+            planned, _notes = _composed(root)
+            lines += apply_untracked(root, planned)
+        return notes + lines
 
     homes = (
         [package.path for package in discover_packages(root)]
@@ -341,7 +354,16 @@ def shipped_drift(root: Path) -> list[str]:
         if (root / "packages").is_dir()
         else []
     )
-    return [line.strip() for line in drift(root, outputs(root), packages=homes)]
+    from livery.workshop._fragment_engine import tracked_local
+
+    found = outputs(root)
+    lines = [line.strip() for line in drift(root, found, packages=homes)]
+    return lines + [
+        f"{path}: written for this checkout alone, and git tracks it;"
+        f" `git rm --cached {path}` stops tracking it, and its directory's"
+        " .gitignore keeps it out"
+        for path in tracked_local(root, found)
+    ]
 
 
 def relocate(root: Path) -> list[str]:

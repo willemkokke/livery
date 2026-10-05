@@ -1695,6 +1695,25 @@ Acceptance:
   Code first) as an extension of its own, one editor at a time. A
   config file that exists only after the first `fm sync` is
   acceptable.
+- Willem, 2026-10-05: CI and a person's checkout differ in nothing
+  that matters. Kept as real differences: CI judges and never
+  rewrites (`--fix` refuses there), and it runs more hosts. Going: CI
+  is set up by `fm sync --locked`, which changes nothing a commit
+  holds and writes the checkout's own untracked files (#1133); those
+  files are environment, made current by the sync and never judged by
+  the gate; `fm submit` checks the locks before it pushes. CI's check
+  legs measure from the nearest proved tree, as the local gate does
+  (#1134).
+- Willem, 2026-10-05: each workspace check runs when the files it
+  reads change, on those files (#1132): `lint.doclinks` per changed
+  page, every page when a file is deleted or renamed or a heading is
+  removed; `layering.graph` only when a contract or manifest changed,
+  its import rules split out per file; `drift.check` on a tracked
+  output or a declared input of one when the affected engine detects
+  it; `provenance` per changed content file. The inputs are declared
+  as data on each record and evaluated in one engine module, the first
+  influence rule phase 15 extracts; drift's input map is the one
+  sync's consumer reads there.
 - Willem, 2026-10-05: the worry behind "no root file names a
   package" is invalidation: a root change gates the whole monorepo.
   The affected engine attributes the change instead (#1127, the root

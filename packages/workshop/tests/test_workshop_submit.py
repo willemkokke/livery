@@ -703,6 +703,37 @@ def test_a_pull_request_the_forge_never_runs_classifies_as_conflicts_at_once(
     assert "the forge runs nothing for it" in verdict.detail
 
 
+def test_a_lock_that_is_not_current_refuses_before_the_gate_and_the_push(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The check CI's setup makes, made here first: the refusal names
+    # the lock and the sync that writes it, and neither the gate's
+    # minutes nor the push are spent on a branch CI would refuse.
+    fake, git = rig
+    gates: list[bool] = []
+    monkeypatch.setattr(
+        "livery.workshop._submit._gate",
+        lambda fix=False, *, root, base="main": gates.append(True),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._sync.stale_locks",
+        lambda root: ["uv.lock is not current (the lockfile needs to be updated)"],
+    )
+    with pytest.raises(_FAILURES) as caught:
+        _submit(fake, git, armed=False, follow_to_verdict=False, gate=True)
+    assert "uv.lock is not current" in str(caught.value)
+    assert "sync` writes it" in str(caught.value)
+    assert gates == []
+    heads = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", git.current_branch()],
+        cwd=git.root,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    assert heads.stdout == ""
+
+
 def test_an_ambiguous_title_default_refuses_on_first_open(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
