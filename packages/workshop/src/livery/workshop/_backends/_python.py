@@ -1801,20 +1801,19 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """
     import shutil
 
-    from livery.workshop._docs_contract import materialise_module_docs
+    from livery.workshop._docs_contract import module_docs
 
-    # The wheel-embedded _docs refresh whole from packages/<name>/docs
-    # here, so the wheel can never carry docs older than the tree it
-    # was built from. Machine territory: gitignored, never hand-edited.
-    materialise_module_docs(package)
     dist = package.directory / "dist"
     shutil.rmtree(dist, ignore_errors=True)
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
-    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False, env=env)(
-        "build", "--out-dir", str(dist)
-    )
+    # The wheel embeds the docs copied whole from packages/<name>/docs
+    # for this build, so it never carries docs older than its tree.
+    with module_docs(package):
+        result = tools.uv.opts(
+            cwd=package.directory, nofail=True, recorded=False, env=env
+        )("build", "--out-dir", str(dist))
     if result.code != 0:
         fail(
             f"uv build ({package.name}) exited {result.code}:\n"

@@ -1766,6 +1766,14 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
+    from livery.workshop._coverage_store import workspace_suite
+
+    # The workspace's own tests are a unit once the tests leg landed
+    # them, and the member's change moves their closure, so the leg
+    # runs them too; a fresh birth has none, and every count is one
+    # fewer.
+    tests = workspace_suite(root) is not None
+    units = 4 if tests else 3
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run, logs = _completed_run(repo, head, event="pull_request")
@@ -1778,7 +1786,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "affected-legs: the scoped gate against origin/main",
             "affected: packages/loop-echo",
             "coverage store: packages/loop-echo stored for closure",
-            "coverage store: tests stored for closure",
+            *(("coverage store: tests stored for closure",) if tests else ()),
         ),
         forbidden=(
             "affected: packages/loop-cpp",
@@ -1804,8 +1812,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "accepted: the loop proves an accepted lowering",
             "new mark: 100.0%",
             "coverage: the union of 1 leg(s) and 2 reused suite(s)",
-            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14: 2 fresh,"
-            " 2 carried, 0 removed",
+            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14:"
+            f" {units - 2} fresh, 2 carried, 0 removed",
             "speed packages/loop-echo on check-ubuntu-latest-3.14: ",
             "recorded as proved green by run",
             " on top of tree ",
@@ -1844,9 +1852,9 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
             "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            "coverage: the union of 0 leg(s) and 4 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 4 carried,"
-            " 0 removed",
+            f"coverage: the union of 0 leg(s) and {units} reused suite(s)",
+            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {units}"
+            " carried, 0 removed",
         ),
         forbidden=("unjudged this run",),
     )

@@ -12,6 +12,8 @@ walk and the provenance lines answer with.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from livery.footman.api import fail
@@ -145,6 +147,23 @@ def materialise_module_docs(package: Package) -> Path | None:
         return None
     shutil.copytree(docs, target)
     return target
+
+
+@contextmanager
+def module_docs(package: Package) -> Generator[Path | None]:
+    """The wheel-embedded ``_docs``, in the source tree for one build alone.
+
+    Materialised whole on entry, as `materialise_module_docs` does, and
+    removed on exit, after a failed build too. A copy left behind puts
+    the docs' example files under the package's source, where every
+    checker that walks the tree judges them as the package's own code.
+    """
+    target = materialise_module_docs(package)
+    try:
+        yield target
+    finally:
+        if target is not None:
+            shutil.rmtree(target, ignore_errors=True)
 
 
 #: The publish seam each forge kind defaults to.
