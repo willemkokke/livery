@@ -49,6 +49,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RateBudget,
     RegistryKind,
     Release,
     RepoConfig,
@@ -406,6 +407,10 @@ class _GiteaRepository:
     def name(self) -> str:
         """The repository name the view is bound to."""
         return self._name
+
+    def rate_budget(self) -> RateBudget | None:
+        """The API budget the server reported on this client's last response."""
+        return self._client.budget
 
     def ensure_pages(self, *, build_type: str = "workflow") -> None:
         """Decline: Gitea ships no Pages to configure.

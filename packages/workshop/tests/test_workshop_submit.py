@@ -1150,6 +1150,72 @@ def test_the_follow_polls_through_dropped_connections(
     assert "giving up" not in out and "parked unarmed" in out
 
 
+def test_the_follow_waits_out_a_spent_budget_and_carries_on(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A spent budget is not the pull request's verdict and not an
+    # outage: the watch names the reset, waits for it, and reads the
+    # verdict after, with no transient counted against it.
+    import time
+
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    slept: list[float] = []
+    monkeypatch.setattr("livery.workshop._verdict.time.sleep", slept.append)
+    fake.faults.rate_limited = 2
+    fake.faults.rate_limit_reset = time.time() + 300
+    with pytest.raises(SystemExit) as caught:
+        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+    assert caught.value.code == EXIT_DISARMED
+    assert len([wait for wait in slept if wait > 290]) == 2
+    out = capsys.readouterr().out
+    assert "the forge's API rate limit is spent" in out
+    assert "then watching again" in out
+    assert "forge unreachable" not in out
+
+
+def test_ci_status_wait_waits_out_a_spent_budget(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import runs_status_flow
+
+    fake, git = rig
+    repo = _repo(fake)
+    sha = git.head_sha()
+    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    slept: list[float] = []
+    monkeypatch.setattr("livery.workshop._verdict.time.sleep", slept.append)
+    # Without --wait the refusal is the caller's, with its reset named.
+    fake.faults.rate_limited = 1
+    with pytest.raises(ForgeError):
+        runs_status_flow(repo, git)
+    fake.faults.rate_limited = 1
+    fake.faults.rate_limit_reset = None
+    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=5) == 0
+    assert 60.0 in slept
+    assert "waiting 60s, then watching again" in capsys.readouterr().out
+
+
+def test_a_watch_slows_its_polls_while_the_budget_is_low() -> None:
+    from livery.forge.api import RateBudget
+    from livery.workshop._verdict import paced
+
+    now = 1000.0
+    # Unknown, or ample: the interval as asked.
+    assert paced(15, None, now=now) == 15
+    assert paced(15, RateBudget(4000, 5000, now + 600), now=now) == 15
+    # Low: the polls left (about ten requests each) spread over the
+    # time until it renews.
+    assert paced(15, RateBudget(50, 5000, now + 600), now=now) == 120
+    # Never faster than asked, however late in the window.
+    assert paced(15, RateBudget(50, 5000, now + 10), now=now) == 15
+
+
 def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
     rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
 ) -> None:

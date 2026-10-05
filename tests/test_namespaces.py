@@ -151,6 +151,8 @@ EXPORTS: dict[str, list[str]] = {
         "Protection",
         "PullRequest",
         "PullRequests",
+        "RateBudget",
+        "RateLimited",
         "Registry",
         "RegistryKind",
         "Release",

@@ -10,17 +10,22 @@ traffic by construction argument alone.
 
 from __future__ import annotations
 
+import email.utils
 import http.client
 import json
+import math
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Callable
+from email.message import Message
 from http.client import HTTPMessage
 from typing import IO, Any, Protocol
 
-from livery.forge._errors import ForgeError
+from livery.forge._errors import ForgeError, RateLimited
+from livery.forge._types import RateBudget
 
 #: Items asked for per page. Every forge here clamps at or above 50, so
 #: a batch shorter than this means the last page has been reached.
@@ -78,6 +83,83 @@ def default_opener() -> Opener:
     return urllib.request.build_opener(_RefuseRedirect())
 
 
+def _header(headers: Message | None, *names: str) -> str:
+    """The first of *names* the response carries, or empty."""
+    if headers is None:
+        return ""
+    for name in names:
+        value = headers.get(name)
+        if value:
+            return value.strip()
+    return ""
+
+
+def spent(status: int, headers: Message | None) -> bool:
+    """Whether a refusal says the API budget is spent, not that access is denied.
+
+    A 429 always is. A 403 is when the primary budget reads zero
+    (GitHub's ``X-RateLimit-Remaining: 0``) or the server asks the
+    caller to come back later (``Retry-After``, GitHub's secondary
+    limit); any other 403 is a permission the token lacks.
+    """
+    if status == 429:
+        return True
+    if status != 403:
+        return False
+    remaining = _header(headers, "X-RateLimit-Remaining", "RateLimit-Remaining")
+    return remaining == "0" or bool(_header(headers, "Retry-After"))
+
+
+def reset_time(headers: Message | None, *, now: float) -> float | None:
+    """When the budget returns, as seconds since the epoch; None when unsaid.
+
+    ``Retry-After`` wins, in seconds or as an HTTP date; else the reset
+    the budget headers name (GitHub's ``X-RateLimit-Reset``, GitLab's
+    ``RateLimit-Reset``), which are epoch seconds.
+    """
+    retry = _header(headers, "Retry-After")
+    if retry:
+        if retry.isdigit():
+            return now + int(retry)
+        try:
+            return email.utils.parsedate_to_datetime(retry).timestamp()
+        except (TypeError, ValueError):
+            pass
+    reset = _header(headers, "X-RateLimit-Reset", "RateLimit-Reset")
+    if reset.isdigit():
+        return float(reset)
+    return None
+
+
+def read_budget(headers: Message | None) -> RateBudget | None:
+    """The budget a response reports, or None when it reports none."""
+    remaining = _header(headers, "X-RateLimit-Remaining", "RateLimit-Remaining")
+    limit = _header(headers, "X-RateLimit-Limit", "RateLimit-Limit")
+    if not (remaining.isdigit() and limit.isdigit()):
+        return None
+    return RateBudget(
+        remaining=int(remaining),
+        limit=int(limit),
+        reset_at=reset_time(headers, now=time.time()),
+    )
+
+
+def limit_message(
+    status: int, method: str, endpoint: str, reset_at: float | None, now: float
+) -> str:
+    """The refusal for a spent budget, naming when it returns."""
+    if reset_at is None:
+        when = "the forge did not say when it resets"
+    else:
+        clock = time.strftime("%H:%M", time.localtime(reset_at))
+        minutes = max(0, math.ceil((reset_at - now) / 60))
+        when = f"it resets at {clock}, in {minutes} min"
+    return (
+        f"HTTP {status} on {method} {endpoint}: the forge's API rate limit is"
+        f" spent; {when}"
+    )
+
+
 class JsonClient:
     """An authenticated JSON API client for one server.
 
@@ -108,6 +190,9 @@ class JsonClient:
         self._headers = headers
         self._opener = opener if opener is not None else default_opener()
         self._timeout = timeout
+        #: The API budget the server reported on its last response; None
+        #: before any, or from a server that reports none.
+        self.budget: RateBudget | None = None
 
     def request(
         self,
@@ -303,6 +388,16 @@ class JsonClient:
             if exc.code in none_on:
                 return None
             detail = exc.read().decode(errors="replace")
+            if spent(exc.code, exc.headers):
+                reset_at = reset_time(exc.headers, now=time.time())
+                raise RateLimited(
+                    limit_message(exc.code, method, endpoint, reset_at, time.time()),
+                    reset_at=reset_at,
+                    status=exc.code,
+                    method=method,
+                    endpoint=endpoint,
+                    detail=detail,
+                ) from exc
             if 300 <= exc.code < 400:
                 location = exc.headers.get("Location", "") if exc.headers else ""
                 raise ForgeError(
@@ -335,6 +430,7 @@ class JsonClient:
                 method=method,
                 endpoint=endpoint,
             ) from exc
+        self.budget = read_budget(getattr(response, "headers", None)) or self.budget
         try:
             body: bytes = response.read()
         except (OSError, http.client.HTTPException) as exc:

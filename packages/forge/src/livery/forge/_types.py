@@ -90,6 +90,22 @@ ItemState: TypeAlias = Literal["open", "closed"]
 
 
 @dataclass(frozen=True)
+class RateBudget:
+    """The API budget a forge reports on its responses.
+
+    Attributes:
+        remaining: The requests left in the current window.
+        limit: The requests the window allows.
+        reset_at: When the window renews, as seconds since the epoch;
+            None when the forge does not say.
+    """
+
+    remaining: int
+    limit: int
+    reset_at: float | None = None
+
+
+@dataclass(frozen=True)
 class RepoInfo:
     """What livery.forge.api.Forge.get_repo reports about an existing repository.
 

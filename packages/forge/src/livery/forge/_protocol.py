@@ -49,6 +49,7 @@ from livery.forge._types import (
     Job,
     Protection,
     PullRequest,
+    RateBudget,
     RegistryKind,
     Release,
     RepoConfig,
@@ -562,6 +563,15 @@ class Repository(Protocol):
         alone, and a different build type is moved to it. Raises
         livery.forge.api.Unsupported where the forge has no Pages API to
         configure (capability ``pages_config``).
+        """
+        ...
+
+    def rate_budget(self) -> RateBudget | None:
+        """The API budget the forge last reported to this view's client.
+
+        None before any response, and from a forge that reports none. A
+        caller that polls reads it to space its requests out before the
+        budget is spent, which ends every other caller's work with it.
         """
         ...
 

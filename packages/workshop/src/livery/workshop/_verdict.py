@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import livery.footman.api as footman
-from livery.forge.api import ForgeError, Repository
+from livery.forge.api import ForgeError, RateBudget, RateLimited, Repository
 from livery.workshop._git_ops import GitOps
 
 EXIT_CONFLICTS = 10
@@ -48,6 +48,84 @@ EXIT_PENDING = 18
 
 #: Consecutive unreadable polls before a watch gives up with 15.
 _UNREACHABLE_BUDGET = 5
+
+
+#: The share of the forge's API budget below which a watch slows its
+#: polling, so one long watch never spends what every other caller needs.
+LOW_BUDGET = 0.2
+
+#: About how many requests one poll of a watch makes: the pull request,
+#: its checks and their jobs.
+REQUESTS_PER_POLL = 10
+
+#: How long a watch waits when the forge refuses with no reset time.
+UNSAID_RESET = 60.0
+
+
+def paced(interval: float, budget: RateBudget | None, *, now: float) -> float:
+    """The seconds to wait before the next poll, given what is left of the budget.
+
+    *interval* while the budget is ample or unknown. Below
+    [livery.workshop._verdict.LOW_BUDGET] of it, the polls left are
+    spread over the time until it renews, so the watch never spends it.
+    """
+    if budget is None or budget.limit <= 0 or budget.reset_at is None:
+        return interval
+    if budget.remaining >= budget.limit * LOW_BUDGET:
+        return interval
+    polls = max(budget.remaining // REQUESTS_PER_POLL, 1)
+    return max(interval, (budget.reset_at - now) / polls)
+
+
+def _duration(seconds: float) -> str:
+    """*seconds* as a person reads a wait: seconds under two minutes, minutes above."""
+    if seconds < 120:
+        return f"{seconds:.0f}s"
+    return f"{seconds / 60:.0f} min"
+
+
+def wait_for_reset(error: RateLimited, *, now: float) -> float:
+    """The seconds a watch waits for a spent budget: until it returns, and a margin."""
+    if error.reset_at is None:
+        return UNSAID_RESET
+    return max(error.reset_at - now, 0.0) + 5.0
+
+
+class Pace:
+    """A watch's waits between polls of the forge.
+
+    The interval while the API budget is ample; slower while it is low
+    ([livery.workshop._verdict.paced][]), said once; and a spent budget
+    waited out until it returns, said with the forge's own refusal.
+    """
+
+    def __init__(self, interval: float) -> None:
+        """Pace polls *interval* seconds apart while the budget allows."""
+        self.interval = interval
+        self._slowed = False
+
+    def rest(self, repo: Repository) -> None:
+        """Sleep until the next poll, slowed while *repo*'s forge budget is low."""
+        wait = paced(self.interval, repo.rate_budget(), now=time.time())
+        slowed = wait > self.interval
+        if slowed and not self._slowed:
+            print(
+                f"  the forge's API budget is low; polling every {wait:.0f}s"
+                " until it renews"
+            )
+        self._slowed = slowed
+        time.sleep(wait)
+
+    def wait_out(self, error: RateLimited) -> float:
+        """Sleep until a spent budget returns; the seconds waited.
+
+        A caller with a deadline moves it by the wait: the forge's
+        budget, not the work being watched, took the time.
+        """
+        wait = wait_for_reset(error, now=time.time())
+        print(f"  {error}; waiting {_duration(wait)}, then watching again")
+        time.sleep(wait)
+        return wait
 
 
 class Transient:
@@ -437,13 +515,17 @@ def follow(
     during a poll is a retry: printed once, polled through at the
     interval, and only a run of them that reaches the budget
     (livery.workshop._verdict.Transient) raises 15, naming the last
-    error and the pull request.
+    error and the pull request. A spent API budget is neither: the
+    watch says when it returns, waits for it, and moves its deadline by
+    the wait; a low one slows the polls
+    ([livery.workshop._verdict.paced][]).
     """
     deadline = time.monotonic() + timeout
     transient = Transient(interval=interval)
     green_polls = 0
     confirm_streak = 0
     last_state = ""
+    pace = Pace(interval)
     jobs = JobWatch()
     while True:
         try:
@@ -453,6 +535,11 @@ def follow(
             # line it may lead to: a red leg is named while the others
             # run, with its failure lines, so the fix starts at once.
             jobs.report(repo, _head_of(repo, branch))
+        except RateLimited as exc:
+            # Not the pull request's verdict and not an outage: the
+            # budget returns at a known time, so the watch waits for it.
+            deadline += pace.wait_out(exc)
+            continue
         except ForgeError as exc:
             if transient.note(exc):
                 print(transient.giving_up(_pull_request_words(repo, branch)))
@@ -492,7 +579,7 @@ def follow(
             print(f"  still in flight after {timeout:.0f}s")
             _record_ending(repo, verdict, branch, git.root)
             raise SystemExit(EXIT_TIMEOUT)
-        time.sleep(interval)
+        pace.rest(repo)
 
 
 def _pull_request_words(repo: Repository, branch: str) -> str:
