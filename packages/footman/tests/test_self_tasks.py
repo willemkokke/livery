@@ -81,6 +81,33 @@ def test_install_carries_your_packages_over(tool_env, spawned):
     assert "uv" in cmd and "acme-devkit" in cmd
 
 
+def test_install_says_when_it_cannot_read_the_version_it_ended_on(
+    tool_env, spawned, capsys
+):
+    self_.install()
+    assert (
+        "livery-footman: the installed version could not be read"
+        in capsys.readouterr().out
+    )
+
+
+def test_install_reads_the_index_again_and_says_the_version_it_ended_on(
+    tool_env, spawned, capsys
+):
+    # uv answers from its cached index, which can predate a release by
+    # minutes: right after one, an install that refreshed nothing found
+    # nothing newer and said nothing about it.
+    site = tool_env / "lib" / "python3.14" / "site-packages"
+    (site / "livery_footman-0.57.0.dist-info").mkdir(parents=True)
+    self_.install()
+    (cmd,) = [c for c in spawned if "install" in c]
+    refreshed = [
+        cmd[i + 1] for i, part in enumerate(cmd) if part == "--refresh-package"
+    ]
+    assert refreshed == ["livery-footman", "uv", "acme-devkit"]
+    assert "livery-footman 0.57.0 is installed" in capsys.readouterr().out
+
+
 def test_add_unions_rather_than_replaces(tool_env, spawned):
     self_.add("second-pkg")
     (cmd,) = [c for c in spawned if "install" in c]

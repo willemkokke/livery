@@ -115,13 +115,35 @@ def _install(extras: tuple[str, ...]) -> None:
     """One `uv tool install`, carrying the whole requirement set.
 
     `--upgrade` means the command never has to ask whether this is a first
-    install or a move to the latest: both are the same sentence. uv's own
-    output is the report; nothing here paraphrases it.
+    install or a move to the latest: both are the same sentence. Every
+    requirement is refreshed as well: uv otherwise answers from its cached
+    copy of the index, which can predate a release by minutes, so a run
+    right after one would find nothing newer. uv's own output is the
+    report, and nothing here paraphrases it; the version the runner ends
+    on is said after it, so a run that changed nothing is visible.
     """
+    added = sorted(set(extras))
     cmd = [_uv(), "tool", "install", "--upgrade", _dist(), "--with", "uv"]
-    for name in sorted(set(extras)):
+    for name in added:
         cmd += ["--with", name]
+    for name in (_dist(), "uv", *added):
+        cmd += ["--refresh-package", name]
     run(cmd)
+    version = _installed_version()
+    if version:
+        print(f"{_dist()} {version} is installed")
+    else:
+        print(f"{_dist()}: the installed version could not be read")
+
+
+def _installed_version() -> str:
+    """The runner's version in its tool environment, from its metadata; or empty."""
+    env = _tool_dir() / _dist()
+    stem = _dist().replace("-", "_")
+    for site in ("lib/python*/site-packages", "Lib/site-packages"):
+        for found in env.glob(f"{site}/{stem}-*.dist-info"):
+            return found.name[len(stem) + 1 : -len(".dist-info")]
+    return ""
 
 
 def _rediscover() -> tuple[str, ...] | None:
