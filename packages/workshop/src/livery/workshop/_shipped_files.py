@@ -309,20 +309,20 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
     return (*kept, *_agent_outputs(root, order)), notes
 
 
-def deliver(root: Path, *, locked: bool = False) -> list[str]:
+def deliver(root: Path, *, local_only: bool = False) -> list[str]:
     """Write the shipped files into *root*; one line per file that changed.
 
     A pass that changed anything is followed by one more: a rendered
     fragment may read a file the same pass wrote (the verbs fragment
     reads `tasks.py`), and the second pass renders it from what is now
     on disk, so a sync leaves a tree the next sync finds settled.
-    *locked* writes only the local outputs git does not track
+    *local_only* writes only the local outputs git does not track
     ([livery.workshop._fragment_engine.apply_untracked][]): what a
     commit holds is judged by the drift check, never rewritten.
     """
     from livery.workshop._packages import discover_packages
 
-    if locked:
+    if local_only:
         from livery.workshop._fragment_engine import apply_untracked
 
         planned, notes = _composed(root)

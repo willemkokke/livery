@@ -476,6 +476,39 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     assert calls and calls[0][0][1:] == ["add", "--global", "cspell@9.0.0"]
 
 
+def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repair each command runs first supplies the tools from the machine's store.
+
+    A start whose sync failed leaves a checkout holding the lock and no
+    receipt, so the gate's PATH holds no tool. The store already has
+    them from another checkout's sync; nothing is installed again and
+    nothing is downloaded.
+    """
+    import shutil
+
+    from livery.workshop import _reconcile
+    from livery.workshop._fragment_engine import LOCAL_RECEIPT
+
+    root = _workspace(tmp_path, monkeypatch)
+    _tools.write_lock(root)
+    _tools.materialise(root)
+    shutil.rmtree(_tools.receipts_dir(root))
+    assert _tools.emission(root) == ((), {})
+
+    def installing_again(argv: list[str], env: dict[str, str]) -> int:
+        raise AssertionError(f"installed again: {argv}")
+
+    monkeypatch.setattr(_engine, "run_installer", installing_again)
+    (root / LOCAL_RECEIPT).parent.mkdir(parents=True)
+    (root / LOCAL_RECEIPT).write_text("{}\n")
+    assert _reconcile.repair(root)[0] == "  tools: 2 receipt(s), all present"
+    held = _tools.receipts(root)
+    assert _tools.emission(root)[0] == (held["ruff"].paths[0], held["tea"].paths[0])
+    assert _reconcile.repair(root) == []
+
+
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

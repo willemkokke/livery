@@ -42,21 +42,21 @@ from livery.workshop._extensions import (
 from livery.workshop._materialise import write_lf
 
 
-def sync_workspace(root: Path, *, locked: bool = False) -> list[str]:
+def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
     """Deliver every extension's content into *root*; the summary lines.
 
     The engine behind ``fm sync``, separated so tests drive it against
-    temporary trees. *locked* writes no file a commit holds: the local
-    outputs alone, and no seed.
+    temporary trees. *local_only* writes no file a commit holds: the
+    local outputs alone, and no seed.
     """
     from livery.workshop._lfs import install_hooks, lfs_enabled
     from livery.workshop._shipped_files import deliver
 
-    lines: list[str] = deliver(root, locked=locked)
+    lines: list[str] = deliver(root, local_only=local_only)
     if lfs_enabled(root):
         lines += install_hooks(root)
     project = root / "CLAUDE.project.md"
-    if not locked and not project.is_file():
+    if not local_only and not project.is_file():
         write_lf(
             project,
             "# This repository\n\nThe repository's own facts: nobody else"
@@ -450,11 +450,14 @@ def sync(
     The three options are uv's and reach both halves: ``--frozen``
     installs each lock as it is and resolves nothing, ``--locked``
     refuses when a lock is not current, and ``--offline`` uses what the
-    machine already holds. ``--locked`` also changes nothing a commit
-    holds: the branch is not moved and no tracked file is written,
-    while the checkout's own untracked files are, so CI's setup runs it
-    and a job holds what a person's checkout holds. Judging the tracked
-    files stays the drift check's.
+    machine already holds. As uv's two leave its lock unchanged, ours
+    change nothing a commit holds: the branch is not moved and no
+    tracked file is written, while the checkout's own untracked files
+    are. They differ as uv's do, in whether the locks are judged:
+    ``--locked`` refuses a stale one, so CI's setup runs it and a job
+    holds what a person's checkout holds; ``--frozen`` takes them as
+    they are, which is how a command repairs a checkout that lacks its
+    own files. Judging the tracked files stays the drift check's.
 
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
@@ -478,8 +481,10 @@ def sync(
                 + "; ".join(problems)
                 + f". `{footman.prog()} sync` writes the locks; commit them"
             )
+    # Neither mode changes what a commit holds.
+    local_only = locked or frozen
     git = GitOps(root)
-    if not locked:
+    if not local_only:
         before = git.head_sha()
         bring_current(root, git, interactive=footman.attended())
         continue_on_moved_code(root, before, git.head_sha())
@@ -489,7 +494,7 @@ def sync(
         print(line)
     for line in fetch_store_lines(root):
         print(line)
-    for line in sync_workspace(root, locked=locked):
+    for line in sync_workspace(root, local_only=local_only):
         print(line)
     # The tools come before `uv sync`: a native member's build under uv
     # runs cmake, conan and the provider the store supplies, and a
@@ -507,9 +512,9 @@ def sync(
     from livery.workshop._shipped_files import deliver
     from livery.workshop._templates import apply_generated
 
-    for line in deliver(root, locked=locked):
+    for line in deliver(root, local_only=local_only):
         print(line)
-    if not locked:
+    if not local_only:
         for path in apply_generated(root):
             print(f"  generated: {path}")
     # The receipt records this sync, so the next command's reconcile

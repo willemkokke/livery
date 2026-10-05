@@ -199,10 +199,50 @@ def _say(message: str) -> None:
         sys.stderr.write(message.encode("ascii", "replace").decode("ascii") + "\n")
 
 
+def repair(root: Path) -> list[str]:
+    """Write what this checkout lacks of its own; the lines that say what.
+
+    A checkout holds two things of its own that git does not: a receipt
+    per locked tool, which puts the tools on PATH, and the files the
+    extensions write for it alone, whose receipt says they were
+    delivered. A worktree whose start never synced holds neither, and
+    its first gate finds no tool. Each is written from what the machine
+    already holds, as ``sync --frozen --offline`` writes it: no network,
+    and nothing a commit holds changed. A checkout holding both costs
+    two file checks.
+    """
+    from livery.toolroom.store.api import LOCK_FILE
+    from livery.workshop._fragment_engine import LOCAL_RECEIPT
+    from livery.workshop._tools import receipts_dir
+
+    lines: list[str] = []
+    if (root / LOCK_FILE).is_file() and not any(receipts_dir(root).glob("*.json")):
+        from livery.workshop._sync import materialise_tools
+
+        lines += materialise_tools(root, offline=True)
+    if not (root / LOCAL_RECEIPT).is_file():
+        from livery.workshop._shipped_files import deliver
+
+        lines += deliver(root, local_only=True)
+    return lines
+
+
 def apply(root: Path) -> None:
-    """Reconcile, report, and re-run the command on changed code."""
+    """Reconcile, repair, report, and re-run the command on changed code."""
     import livery.footman.api as footman
 
+    try:
+        repaired = repair(root)
+    except Exception as error:  # a repair never stops the command it precedes
+        _say(
+            f"{footman.prog()}: this checkout's own files could not be written: {error}"
+        )
+        repaired = []
+    if repaired:
+        _say(
+            f"{footman.prog()}: this checkout lacked its own files (a start that"
+            " never synced); wrote them from what the machine holds"
+        )
     result = reconcile(root)
     if result.failure:
         _say(f"{footman.prog()}: environment reconcile incomplete: {result.failure}")
