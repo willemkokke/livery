@@ -419,19 +419,19 @@ def leg_plan(root: Path, git: GitOps, *, base: str, branch: str) -> Plan:
     with remote_snapshot(root, fetch=("verified",)):
         rows, unread = _verified.proved(root)
     candidates = [merge_base, *git.first_parent_trees(REACH)]
-    if merged is not None:
-        candidates += _rebuilt(git, rows, branch)
-    best = _fewest(git, tree, candidates, lambda candidate: candidate in rows)
+    rebuilt = _rebuilt(git, rows, branch) if merged is not None else []
+    best = _fewest(
+        git, tree, [*candidates, *rebuilt], lambda candidate: candidate in rows
+    )
     if best is not None:
         base_tree, paths = best
         row = rows[base_tree]
-        return Plan(
-            "step",
-            tree,
-            base_tree=base_tree,
-            paths=paths,
-            why=f"proved by run {row.run}",
+        why = (
+            f"run {row.run}'s merge of {row.head_sha[:12]} onto {row.base_sha[:12]}"
+            if base_tree in rebuilt and base_tree not in candidates
+            else f"proved by run {row.run}"
         )
+        return Plan("step", tree, base_tree=base_tree, paths=paths, why=why)
     why = (
         f"CI's record could not be read ({unread})"
         if unread

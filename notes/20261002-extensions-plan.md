@@ -1704,6 +1704,17 @@ Acceptance:
   the gate; `fm submit` checks the locks before it pushes. CI's check
   legs measure from the nearest proved tree, as the local gate does
   (#1134).
+- 2026-10-05, #1134: as ruled, a pull request's run on GitHub keeps
+  testing the merge ref, and its record row names the two commits it
+  merged. The next run rebuilds that merge with `git merge-tree
+  --write-tree` and uses it when the rebuilt tree id equals the row's,
+  instead of taking the paths from the two heads and the two bases:
+  the workspace checks and the root-file attribution read the content
+  of the tree a step is measured from, and a rebuilt tree is in the
+  clone where a set of paths has no tree behind it. A leg that checks
+  out the head itself finds the earlier push's tree in its history by
+  the local rule. The docs job's skip still compares against the
+  merge base.
 - Willem, 2026-10-05: each workspace check runs when the files it
   reads change, on those files (#1132): `lint.doclinks` per changed
   page, every page when a file is deleted or renamed or a heading is

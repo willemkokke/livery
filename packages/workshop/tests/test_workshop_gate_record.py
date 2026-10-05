@@ -484,9 +484,10 @@ def test_a_second_push_steps_from_the_first_pushs_merge(work: Path) -> None:
     _stamped(work, main)
     step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
     assert (step.mode, step.base_tree, step.paths) == ("step", main, ("one.txt",))
+    assert step.why == "proved by run 8"
     # The first push's run proved its merge and named the two commits.
     _stamped(work, first, merged=(base, head))
     _pushed_again(work, "two.txt")
     step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
     assert (step.mode, step.base_tree, step.paths) == ("step", first, ("two.txt",))
-    assert step.why == "proved by run 8"
+    assert step.why == f"run 8's merge of {head[:12]} onto {base[:12]}"
