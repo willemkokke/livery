@@ -1039,29 +1039,15 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
         )
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
-    pyproject = root / "pyproject.toml"
-    text = pyproject.read_text("utf-8")
-    marker = "[[tool.uv.index]]"
-    if marker not in text:
-        # Bootstrap only: birth's pyproject predates the registry in
-        # the contract, and the lock below must already read the loop
-        # index to find the dev wheels. The re-render after the lock
-        # replaces this edit with the template's own wiring, and from
-        # then on this branch never fires again. The index table
-        # lands before the next table header, inside [tool.uv].
-        next_table = "\n[tool.uv.workspace]"
-        wired = text.replace(
-            next_table,
-            f'\n{marker}\nname = "loop"\nurl = "{loop_index}"\n' + next_table,
-            1,
-        )
-        if wired == text:
-            fail(
-                "the workspace's pyproject has no [tool.uv.workspace]"
-                " table to anchor the loop index on; the template moved"
-                " and this wiring must follow it"
-            )
-        pyproject.write_text(wired, "utf-8")
+    # Birth's pyproject predates the registry in the contract, and the
+    # lock below must already read the loop index to find the dev
+    # wheels, before the loop's own fm can run them. The pass's own
+    # workshop renders it, the code the dev wheels are built from, as
+    # it rendered the birth. From nothing: an edit an earlier pass
+    # committed would be a local override the render keeps and drift
+    # refuses.
+    (root / "pyproject.toml").unlink(missing_ok=True)
+    _render_with_the_pass(root)
     # Lock first, render second: the loop's fm syncs its venv from
     # the lock, so the render runs the workshop this pass published,
     # and the workflows it emits are the emitter under test. The
@@ -1370,6 +1356,30 @@ def _fresh_branch(root: Path, name: str) -> None:
 
     _align_main(root)
     toolroom.git.opts(cwd=root)("switch", "-C", name)
+
+
+def _render_with_the_pass(root: Path) -> None:
+    """Render the loop's files at *root* with this pass's own workshop.
+
+    A child of the pass's interpreter, as the birth is, with the uv
+    handoff off: the loop's lock pins the workshop the loop last
+    locked, and the handoff would run that one instead.
+    """
+    import sys
+
+    result = footman.run(
+        [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"],
+        cwd=root,
+        env={**os.environ, "FOOTMAN_NO_UV": "1"},
+        nofail=True,
+        timeout=900.0,
+    )
+    print(result.stdout.rstrip("\n"))
+    if result.code != 0:
+        fail(
+            f"the pass's render of the loop exited {result.code}:"
+            f"\n{result.stdout}{result.stderr}"
+        )
 
 
 def _loop_fm(
