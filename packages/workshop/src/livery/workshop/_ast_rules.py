@@ -149,7 +149,7 @@ class RuleContext:
         files: The root-relative sources the run judges; None for every
             one. A rule that walks the sources itself keeps to these,
             and a rule over a package's references judges each package
-            holding one ([livery.workshop._ast_rules.in_scope][]).
+            holding one ([livery.workshop._ast_rules.RuleContext.packages_in_scope][]).
     """
 
     root: Path
