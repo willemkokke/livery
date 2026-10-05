@@ -296,6 +296,23 @@ def _lane(kind: str) -> Lane:
     return lane
 
 
+def _enter_host(values: Mapping[str, str], env: str) -> None:
+    """Run the pass on the host-mode environment *env*, whose *values* these are.
+
+    The forge's URL and token go into the pass's own environment as
+    well as `CURRENT`. The cascade filled them when the pass started,
+    before the bring-up seeded the environment, and every child the
+    pass starts (the birth, the loop's own fm) copies that
+    environment, so each would otherwise reach the forge with a token
+    the environment no longer holds.
+    """
+    CURRENT.name, CURRENT.mode = env, "host"
+    CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
+    CURRENT.label = values["LABELS"].split(",")[0]
+    lane = LANES["gitea"]
+    os.environ[lane.url_var], os.environ[lane.token_var] = CURRENT.url, CURRENT.token
+
+
 def _dev_forge(kind: str) -> tuple[Forge, str]:
     """The seeded local forge and its token; refusal teaches.
 
@@ -2667,10 +2684,7 @@ if _WORKSHOP_TESTS.is_dir():
             CURRENT.name, CURRENT.mode = env, "docker"
         else:
             _devenv.up_host(place, ("host",))
-            values = place.values()
-            CURRENT.name, CURRENT.mode = env, "host"
-            CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
-            CURRENT.label = values["LABELS"].split(",")[0]
+            _enter_host(place.values(), env)
         # Every commit the pass makes, the driver's, the birth's and
         # the loop's own fm's, is unsigned: the setting rides the
         # task's environment into each child.

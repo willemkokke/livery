@@ -920,6 +920,32 @@ def test_a_host_environment_is_the_lane_s_alias_the_forge_and_the_workspace_s_ho
     assert home == tmp_path / "workshop-e2e" / "gitea"
 
 
+def test_a_host_pass_hands_its_children_the_environments_own_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The cascade read the shared file when the pass started, before the
+    # bring-up seeded a new token; a child copying the pass's environment
+    # would reach the forge with the stale one and get a 401.
+    import os
+
+    monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
+    monkeypatch.setenv("GITEA_URL", "http://localhost:1")
+    monkeypatch.setenv("GITEA_TOKEN", "stale")
+    values = {
+        "GITEA_URL": "http://localhost:43210",
+        "GITEA_TOKEN": "token-abc",
+        "LABELS": "scratch-macos-arm-01,macos",
+    }
+    _e2e._enter_host(values, "scratch")  # pyright: ignore[reportPrivateUsage]
+    assert (os.environ["GITEA_URL"], os.environ["GITEA_TOKEN"]) == (
+        "http://localhost:43210",
+        "token-abc",
+    )
+    assert _e2e.Current(
+        "scratch", "host", "http://localhost:43210", "token-abc", "scratch-macos-arm-01"
+    ) == _e2e.CURRENT
+
+
 def test_the_forge_credentials_come_from_the_environment_in_host_mode(
     host_environment: _e2e.Current, monkeypatch: pytest.MonkeyPatch
 ) -> None:
