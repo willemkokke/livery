@@ -312,9 +312,28 @@ def _host_probe_gap(listing: Catalogue, name: str, version: str, host: str) -> s
     return ""
 
 
-def tool_names(root: Path) -> tuple[str, ...]:
-    """The tools the sites require, each once, in the order first declared."""
-    return tuple(dict.fromkeys(requirement.name for requirement in requirements(root)))
+def tool_names(root: Path, host: str = "") -> tuple[str, ...]:
+    """The tools the sites require, each once, in the order first declared.
+
+    With *host*, the tools required there: a requirement scoped to other
+    hosts alone (``dotnet_coverage@windows``) requires nothing on it.
+    """
+    return tuple(
+        dict.fromkeys(
+            requirement.name
+            for requirement in requirements(root)
+            if not host or requirement.on((host,))
+        )
+    )
+
+
+def this_host() -> str:
+    """This machine's host key as the store names it: ``macos-arm``."""
+    import platform
+
+    from livery.toolroom.store.api import host_key
+
+    return host_key(platform.system(), platform.machine())
 
 
 def supported_hosts(root: Path) -> tuple[str, ...]:
@@ -1769,7 +1788,7 @@ def drift(root: Path) -> dict[str, str]:
     lock = current_lock(root)
     held = receipts(root)
     found: dict[str, str] = {}
-    for name in tool_names(root):
+    for name in tool_names(root, this_host()):
         if lock is None or name not in lock.tools:
             found[name] = f"not locked; run `{prog()} tools.lock`"
             continue

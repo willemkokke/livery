@@ -562,6 +562,26 @@ def test_add_declares_locks_and_writes_a_receipt_with_no_network(
 # --- drift ------------------------------------------------------------------------
 
 
+def test_a_tool_required_on_other_hosts_alone_is_no_requirement_here(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither supplied nor missed: env.check judges the tools this host needs."""
+    from workshop_hosts import HERE
+
+    root = _workspace(tmp_path, monkeypatch)
+    elsewhere = "linux" if HERE.startswith("windows") else "windows"
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror"]\n'
+        f'requires = ["tea", "ruff@{elsewhere}"]\n'
+    )
+    _tools.write_lock(root)
+    assert "ruff" in json.loads((root / "tools.lock").read_text())["tools"]
+    _tools.materialise(root)
+    assert set(_tools.receipts(root)) == {"tea"}
+    assert _tools.drift(root) == {"tea": ""}
+    assert _env_tasks.tool_profile(root) == ("tea",)
+
+
 def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
