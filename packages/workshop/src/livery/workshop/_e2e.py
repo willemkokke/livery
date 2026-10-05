@@ -855,6 +855,14 @@ def _birth(kind: str, url: str) -> Path:
     return home / E2E_REPO
 
 
+def _has_remote(root: Path) -> bool:
+    """Whether the loop's workspace at *root* has its forge remote."""
+    import livery.toolroom.tools.api as toolroom
+
+    probe = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
+    return probe("remote", "get-url", "origin").code == 0
+
+
 def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     """Embed the lane token in the scratch workspace's remote.
 
@@ -2450,13 +2458,15 @@ def _born(pass_: Pass) -> None:
             print(line)
     elif pass_.fresh and root.exists():
         shutil.rmtree(root, ignore_errors=True)
-    if (root / ".git").is_dir():
+    if (root / ".git").is_dir() and _has_remote(root):
         # A resumed birth pushes before it returns, so an existing
         # workspace authenticates first; birth resets the remote, so
         # it authenticates again after. Main then fast-forwards onto
         # the merges the loop itself made: without the reconcile,
         # birth's foreign-repo guard reads our own squash as a
-        # stranger's history and refuses.
+        # stranger's history and refuses. A birth that failed before
+        # the forge held the repository left no remote, and resumes
+        # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
     root = _birth(forge, pass_.url)
