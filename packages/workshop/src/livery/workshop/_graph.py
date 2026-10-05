@@ -54,6 +54,40 @@ NOTES = "notes/"
 SITE_CONFIG = "zensical.toml"
 SITE_DOCS = "docs/"
 
+#: Files at the root that configure no package's checks: the licence,
+#: the CI files and the code-owners file the forge reads, the editor's
+#: and the agent's settings, git's own files, the entry script, the
+#: release's member list, the site's theme and the render's receipt.
+#: A workspace check that reads one still judges it.
+NO_PACKAGE = (
+    "LICENSE",
+    ".github/**",
+    ".gitea/**",
+    ".gitlab/**",
+    ".gitlab-ci.yml",
+    "CODEOWNERS",
+    "docs/CODEOWNERS",
+    ".vscode/**",
+    ".claude/**",
+    ".gitattributes",
+    ".gitignore",
+    "setup.sh",
+    ".release-manifest.json",
+    "overrides/**",
+    ".workshop-rendered",
+)
+
+
+def reaches_no_package(path: str) -> bool:
+    """Whether *path* is a root file no package's checks read.
+
+    A change to one gates no package; the workspace checks that read it
+    still judge it ([livery.workshop._checks.selected][]).
+    """
+    from livery.workshop._categories import matches
+
+    return any(matches(pattern, path) for pattern in NO_PACKAGE)
+
 
 def is_site(path: str) -> bool:
     """Whether *path* is the site's own: the root ``zensical.toml`` or ``docs/`` tree.
@@ -191,7 +225,7 @@ def affected_from_paths(
     for path in paths:
         if docs_page(packages, path) is not None:
             continue
-        if is_prose(path) or is_site(path):
+        if is_prose(path) or is_site(path) or reaches_no_package(path):
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
             tests_changed = True
@@ -246,20 +280,12 @@ def _attribute(
     named: without *before* there is nothing to compare with, and a
     change the package set does not explain configures every gate.
     """
-    from livery.workshop._fragment_engine import RENDERED_MANIFEST
     from livery.workshop._root_attribution import (
         LOCK,
         explained,
         lock_affected,
         package_delta,
     )
-
-    # The render's receipt records each composed file's digest. It
-    # configures no gate: every file it names is judged on its own,
-    # and the drift check that reads it runs on every gate.
-    paths = [path for path in paths if path != RENDERED_MANIFEST]
-    if not paths:
-        return set()
 
     point = before if isinstance(before, str) else before()
     if git is None or not point:

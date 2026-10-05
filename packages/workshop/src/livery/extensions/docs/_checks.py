@@ -22,7 +22,15 @@ import sys
 from pathlib import Path
 
 from livery.footman.api import fail
-from livery.workshop._checks import NONE, PACKAGES, CheckRecord, GateContext
+from livery.workshop._checks import (
+    NONE,
+    PACKAGES,
+    CheckRecord,
+    GateContext,
+    check_for,
+    selected_files,
+)
+from livery.workshop._influence import Changes, Inputs
 from livery.workshop._packages import member_depth, package_directories
 
 EXTENSION = "livery.extensions.docs"
@@ -69,16 +77,20 @@ def _pages(root: Path) -> list[Path]:
     return pages
 
 
-def link_problems(root: Path) -> list[str]:
+def link_problems(root: Path, pages: frozenset[str] | None = None) -> list[str]:
     """Every unresolvable link or anchor in the authored docs under *root*.
 
     A link into `packages/<name>/`, where the site mounts each member's
     docs, maps back to that package's `docs/`; a generated target and a
     package's changelog page are written at build time, and the strict
-    build judges them.
+    build judges them. *pages* keeps the judgment to those
+    root-relative pages; every link still resolves against the whole
+    tree.
     """
     problems: list[str] = []
     for page in _pages(root):
+        if pages is not None and page.relative_to(root).as_posix() not in pages:
+            continue
         text = page.read_text("utf-8")
         for target in _LINK_RE.findall(text):
             if target.startswith(("http://", "https://", "mailto:")):
@@ -208,8 +220,29 @@ def undocumented_exports(root: Path, members: list[Path]) -> list[str]:
     return [str(name) for name in found["missing"]]
 
 
+def headings_removed(changes: Changes) -> bool:
+    """Whether a changed markdown file lost a heading, an anchor a link may name.
+
+    A link in an unchanged page may point at it, so the link check
+    then judges every page.
+    """
+    for path in changes.paths:
+        if not path.endswith(".md"):
+            continue
+        before = changes.text_before(path)
+        if not before:
+            continue
+        now = changes.root / path
+        after = now.read_text("utf-8") if now.is_file() else ""
+        had = {_slug(heading) for heading in _HEADING_RE.findall(before)}
+        has = {_slug(heading) for heading in _HEADING_RE.findall(after)}
+        if had - has:
+            return True
+    return False
+
+
 def doclinks_run(ctx: GateContext) -> None:
-    problems = link_problems(ctx.root)
+    problems = link_problems(ctx.root, selected_files(check_for("lint.doclinks"), ctx))
     if problems:
         fail("links that resolve nothing:\n  " + "\n  ".join(problems))
 
@@ -234,7 +267,18 @@ def docstrings_run(ctx: GateContext) -> None:
 
 
 CHECKS = (
-    CheckRecord("doclinks", "lint", doclinks_run, narrowing=NONE, extension=EXTENSION),
+    CheckRecord(
+        "doclinks",
+        "lint",
+        doclinks_run,
+        narrowing=NONE,
+        extension=EXTENSION,
+        inputs=Inputs(
+            reads=("docs/**/*.md", "packages/**/docs/**/*.md"),
+            on_removal=True,
+            widen=headings_removed,
+        ),
+    ),
     CheckRecord(
         "docstrings",
         "lint",

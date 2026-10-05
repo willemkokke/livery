@@ -61,7 +61,14 @@ def _record(
 
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr(
-        "livery.workshop._packages.verify_workspace", named("layering.graph")
+        "livery.workshop._packages.verify_graph", named("layering.graph")
+    )
+    monkeypatch.setattr(
+        "livery.workshop._packages.verify_imports", named("layering.imports")
+    )
+    monkeypatch.setattr(_quality, "drift_check", named("drift.check"))
+    monkeypatch.setattr(
+        "livery.workshop._provenance.check_content", named("provenance.check")
     )
     monkeypatch.setattr(_python, "run_format", named("format.ruff"))
     monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
@@ -84,12 +91,31 @@ def test_a_fixing_gate_refuses_inside_ci(
 def test_the_scoped_gate_runs_every_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._influence import Changes
+
     ran, _ = _record(monkeypatch, tmp_path)
-    _quality._scoped_check((_package(tmp_path),))
-    # A python package has no per-package check, and the layering
-    # check runs in a scoped gate.
+    package = _package(tmp_path)
+    # A scoped gate that knows nothing of what changed reads every
+    # input of every workspace check.
+    _quality._scoped_check((package,))
     assert sorted(ran) == sorted(
-        ("format.ruff", "layering.graph", "lint.ruff", *PYTHON_JUDGES)
+        (
+            "format.ruff",
+            "layering.graph",
+            "layering.imports",
+            "lint.ruff",
+            "drift.check",
+            "provenance.check",
+            *PYTHON_JUDGES,
+        )
+    )
+    # A source change reaches the import rules and none of the
+    # workspace checks that read no source.
+    ran.clear()
+    source = "packages/one/src/one/a.py"
+    _quality._scoped_check((package,), changes=Changes(tmp_path, (source,)))
+    assert sorted(ran) == sorted(
+        ("format.ruff", "layering.imports", "lint.ruff", *PYTHON_JUDGES)
     )
 
 
@@ -138,12 +164,15 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
 ) -> None:
     # The serial rewrites were the silent half of the drift: built
     # outside the block, dropped without even a refusal.
+    from livery.workshop._influence import Changes
+
     ran, calls = _record(monkeypatch, tmp_path)
     package = _package(tmp_path)
-    _quality._scoped_check((package,), fix=True)
+    source = Changes(tmp_path, ("packages/one/src/one/a.py",))
+    _quality._scoped_check((package,), fix=True, changes=source)
     assert ran[:2] == ["format.ruff", "lint.ruff"]
     assert sorted(ran) == sorted(
-        ("format.ruff", "layering.graph", "lint.ruff", *PYTHON_JUDGES)
+        ("format.ruff", "layering.imports", "lint.ruff", *PYTHON_JUDGES)
     )
     rewrites = {c["verb"]: c for c in calls[:2]}
     assert rewrites["format.ruff"]["check"] is False
@@ -173,13 +202,16 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
         ran.clear()
         between: list[list[str]] = []
         _quality._scoped_check(
-            (package,), fix=True, between=lambda: between.append(list(ran))
+            (package,),
+            fix=True,
+            between=lambda: between.append(list(ran)),
+            changes=source,
         )
     finally:
         _checks.restore(state)
     fixed = between[0]
     assert fixed[:2] == ["format.ruff", "lint.ruff"]
-    assert "layering.graph" in fixed and "acme-fix" in fixed
+    assert "layering.imports" in fixed and "acme-fix" in fixed
     assert sorted(ran[len(fixed) :]) == list(PYTHON_JUDGES)
     assert "acme-judged" not in ran
 
@@ -338,10 +370,13 @@ def _whole_gate(
     monkeypatch.setattr(_quality, "parallel", watched)
     monkeypatch.setattr(_quality, "drift_check", named("drift.check"))
     monkeypatch.setattr(
-        "livery.workshop._packages.verify_workspace", named("layering.graph")
+        "livery.workshop._packages.verify_graph", named("layering.graph")
     )
     monkeypatch.setattr(
-        "livery.workshop._provenance.provenance_check", named("provenance.check")
+        "livery.workshop._packages.verify_imports", named("layering.imports")
+    )
+    monkeypatch.setattr(
+        "livery.workshop._provenance.check_content", named("provenance.check")
     )
     monkeypatch.setattr(_python, "run_format", named("format.ruff"))
     monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
@@ -397,6 +432,7 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
         (
             "format.ruff",
             "layering.graph",
+            "layering.imports",
             "lint.ruff",
             "provenance.check",
             "drift.check",
@@ -412,7 +448,12 @@ def test_a_workspace_without_python_starts_no_python_check(
     _quality._run_check(full=True, fix=False, base="")
     # The checks without claims read what their own body decides; the
     # python ones claim .py files, and none is there to read.
-    assert sorted(ran[1:-1]) == ["drift.check", "layering.graph", "provenance.check"]
+    assert sorted(ran[1:-1]) == [
+        "drift.check",
+        "layering.graph",
+        "layering.imports",
+        "provenance.check",
+    ]
     out = capsys.readouterr().out
     for name in ("format.ruff", "lint.ruff", *PYTHON_JUDGES):
         assert f"  {name}: no file it reads in the workspace; not run" in out
@@ -433,6 +474,7 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
         "drift.check",
         "provenance.check",
         "layering.graph",
+        "layering.imports",
     ]
     assert sorted(ran[opened + 1 : -1]) == sorted(PYTHON_JUDGES)
     assert ran[-1] == ">parallel"

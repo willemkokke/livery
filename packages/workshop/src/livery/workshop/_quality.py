@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
+    from livery.workshop._influence import Changes
     from livery.workshop._verified import Verified
 
 import livery.footman.api as footman
@@ -50,6 +51,7 @@ def _context(
     point: str = "",
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
+    changes: Changes | None = None,
 ) -> GateContext:
     """This workspace's gate context: the root, every package, and the run's scope."""
     root = workspace_root()
@@ -65,6 +67,7 @@ def _context(
         files=files,
         safe=safe,
         point=point,
+        changes=changes,
     )
 
 
@@ -186,6 +189,28 @@ def verified_already(root: Path) -> Verified | None:
         f" at {found.sha[:12]}{basis}; skipping the gate"
     )
     return found
+
+
+def _changes_since(base: str) -> Changes | None:
+    """The paths this branch changed since its merge base with *base*; None if unknown.
+
+    None, with git's words, when git cannot compute the merge base: the
+    workspace checks then judge everything, as the packages do.
+    """
+    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._influence import Changes
+
+    root = workspace_root()
+    if root is None:
+        return None
+    git = GitOps(root)
+    try:
+        return Changes(root, tuple(git.changed_paths(base)), git.merge_base(base))
+    except GitError as error:
+        print(
+            f"  changes: no merge base with origin/{base}; every file is read ({error})"
+        )
+        return None
 
 
 def _affected(base: str = "main") -> tuple[Package, ...] | None:
@@ -476,10 +501,17 @@ def _run_check(
         subset = _affected(ci_base)
         if subset is not None:
             packages = _packages()
+            changes = _changes_since(ci_base)
             if root_for_ci is not None and run is not None:
                 subset = _with_unstored_suites(root_for_ci, run, packages, subset)
             if not subset:
-                say_skipped(f"nothing affected: {_nothing_reason(ci_base)}")
+                # The same walk as a local run: the workspace checks whose
+                # inputs changed judge, and no package's checks run.
+                if _checks.workspace_selected(_context(subset=(), changes=changes)):
+                    print("  no package affected: the workspace checks run")
+                    _scoped_check((), fix=fix, point=point, changes=changes)
+                else:
+                    say_skipped(f"nothing affected: {_nothing_reason(ci_base)}")
                 if root_for_ci is not None and run is not None:
                     _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
                 return
@@ -496,7 +528,7 @@ def _run_check(
                         tuple(package.path for package in subset),
                         leg=run.leg,
                     )
-                _scoped_check(subset, fix=fix, point=point)
+                _scoped_check(subset, fix=fix, point=point, changes=changes)
                 return
     proved_tree = ""
     if run is None and root_for_ci is not None:
@@ -532,14 +564,26 @@ def _run_check(
                 )
                 if scope is not None:
                     from livery.workshop._coverage_store import WORKSPACE_TESTS
+                    from livery.workshop._influence import Changes
 
                     subset = scope.packages
                     members = [p for p in subset if p.path != WORKSPACE_TESTS]
+                    changes = Changes(
+                        root_for_ci, tuple(reflex.paths), reflex.base_tree
+                    )
                     if not subset:
-                        say_skipped(
-                            "nothing affected: only prose and site files changed"
-                            " since the proved tree"
-                        )
+                        # No package's checks: the workspace checks whose
+                        # inputs changed still judge what changed.
+                        if not _checks.workspace_selected(
+                            _context(subset=(), changes=changes)
+                        ):
+                            say_skipped(
+                                "nothing affected: no file a check reads changed"
+                                " since the proved tree"
+                            )
+                        else:
+                            print("  no package affected: the workspace checks run")
+                            _scoped_check((), fix=fix, safe=safe, changes=changes)
                         _remember_local(
                             root_for_ci,
                             run,
@@ -575,16 +619,8 @@ def _run_check(
                             between=measure_step,
                             point=point,
                             safe=safe,
+                            changes=changes,
                         )
-                        # The drift and provenance checks are the gate
-                        # job's in CI, once per run; a local narrowed gate
-                        # runs them too, since a new module changes the
-                        # generated site configuration and the drift
-                        # would otherwise surface only in CI's gate job.
-                        from livery.workshop._provenance import provenance_check
-
-                        drift_check()
-                        provenance_check()
                         _remember_local(
                             root_for_ci,
                             run,
@@ -838,15 +874,17 @@ def _scoped_check(
     between: Callable[[], None] | None = None,
     point: str = "",
     safe: bool = False,
+    changes: Changes | None = None,
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
 
-    A workspace check that does not run in a scoped gate (the render
-    gate, whose inputs a package-scoped change cannot touch) is left
-    out by its record. *tests* names, per package path, the test files
-    that stand for the package's suite in this run; *examples* the
-    packages whose examples alone changed; *between* runs after the
-    fixers under ``--fix``, as [livery.workshop._quality.walk][] says.
+    A workspace check with declared inputs judges what *changes*
+    touched of them, and nothing when they touched none
+    ([livery.workshop._checks.selected][]). *tests* names, per package
+    path, the test files that stand for the package's suite in this
+    run; *examples* the packages whose examples alone changed;
+    *between* runs after the fixers under ``--fix``, as
+    [livery.workshop._quality.walk][] says.
     """
     walk(
         _context(
@@ -856,6 +894,7 @@ def _scoped_check(
             examples=examples,
             point=point,
             safe=safe,
+            changes=changes,
         ),
         between=between,
     )

@@ -965,11 +965,6 @@ BUILTIN: tuple[Entry, ...] = (
     # is judged. It runs here so the legs never wait for a job of
     # its own.
     Entry("gate", "gate", "workflow.release.check-title"),
-    # The drift check and the provenance check live here, not in the
-    # check legs: a scoped leg skips them, and this job runs once on
-    # every run, whatever the legs narrowed to.
-    Entry("gate", "gate", "drift.check"),
-    Entry("gate", "gate", "provenance"),
     # The union before the collect: its per-package percentages ride
     # the run's row beside the timings.
     Entry("gate", "gate", "coverage.union"),

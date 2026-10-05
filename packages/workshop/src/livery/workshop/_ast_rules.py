@@ -146,10 +146,36 @@ class RuleContext:
     Attributes:
         root: The workspace root.
         packages: Every package the workspace carries.
+        files: The root-relative sources the run judges; None for every
+            one. A rule that walks the sources itself keeps to these,
+            and a rule over a package's references judges each package
+            holding one ([livery.workshop._ast_rules.in_scope][]).
     """
 
     root: Path
     packages: tuple[Package, ...]
+    files: frozenset[str] | None = None
+
+    def in_scope(self, path: Path) -> bool:
+        """Whether *path*, absolute, is a source this run judges."""
+        if self.files is None:
+            return True
+        try:
+            relative = path.relative_to(self.root).as_posix()
+        except ValueError:
+            return False
+        return relative in self.files
+
+    def packages_in_scope(self) -> tuple[Package, ...]:
+        """The packages holding a source this run judges, every one without a scope."""
+        if self.files is None:
+            return self.packages
+        files = self.files
+        return tuple(
+            package
+            for package in self.packages
+            if any(path.startswith(f"{package.path}/") for path in files)
+        )
 
 
 Judge = Callable[[tuple[ParsedModule, ...], RuleContext], list[str]]
@@ -200,22 +226,40 @@ def ast_rules() -> tuple[AstRule, ...]:
 
 
 def parsed_modules(
-    root: Path, packages: tuple[Package, ...]
+    root: Path, packages: tuple[Package, ...], files: frozenset[str] | None = None
 ) -> tuple[ParsedModule, ...]:
-    """Every python source the workspace holds, parsed once.
+    """Every python source the workspace holds, or the named ones, parsed once.
 
     The root's own ``tasks.py``, then each package's ``src`` and
-    ``tests`` trees in package order. A file that does not parse is
-    left out: the syntax gate names it.
+    ``tests`` trees in package order. *files* keeps the root-relative
+    sources it names, and a named file that no longer exists is left
+    out. A file that does not parse is left out: the syntax gate names
+    it.
     """
+
+    def wanted(source: Path) -> bool:
+        return files is None or source.relative_to(root).as_posix() in files
+
     found: list[ParsedModule] = []
     tasks = root / "tasks.py"
-    if tasks.is_file():
+    if tasks.is_file() and wanted(tasks):
         _collect(found, None, tasks, root, "root", tasks.parent)
     for package in packages:
         for area in ("src", "tests"):
             base = package.directory / area
             if not base.is_dir():
+                continue
+            if files is not None:
+                prefix = f"{package.path}/{area}/"
+                named = sorted(
+                    root / path
+                    for path in files
+                    if path.startswith(prefix)
+                    and path.endswith(".py")
+                    and (root / path).is_file()
+                )
+                for source in named:
+                    _collect(found, package, source, root, area, base)
                 continue
             for source in sorted(base.rglob("*.py")):
                 _collect(found, package, source, root, area, base)

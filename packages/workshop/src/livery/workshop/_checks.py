@@ -46,6 +46,7 @@ from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
+    from livery.workshop._influence import Changes, Inputs, Selection
     from livery.workshop._packages import Package
 
 #: A check's scope: the whole workspace in one run, or one package at a time.
@@ -89,6 +90,11 @@ class GateContext:
             None.
         selection: The test files selected for that package, relative
             to it, else empty.
+        changes: What changed since the tree the run measures from,
+            which selects what each workspace check with declared
+            inputs judges ([livery.workshop._influence.select][]); None
+            when the run knows nothing of it, and then each judges
+            everything.
     """
 
     root: Path
@@ -103,6 +109,7 @@ class GateContext:
     catalogue: Mapping[str, tuple[tuple[str, str], ...]] | None = None
     package: Package | None = None
     selection: tuple[str, ...] = ()
+    changes: Changes | None = None
 
     @property
     def scoped(self) -> bool:
@@ -208,9 +215,11 @@ class CheckRecord:
         tests_only: Whether a package check still runs when the
             package's change is confined to its tests. A build and
             the tests do; a formatter does not.
-        in_scoped: Whether a workspace check runs in a package-scoped
-            gate at all. The render gate does not: its inputs are
-            root answers a package-scoped change cannot touch.
+        inputs: The files a workspace check reads, so a run judges it
+            only when one of them, or what widens it, changed, and then
+            only the changed ones when it judges per file
+            ([livery.workshop._influence.Inputs][]). None for a check
+            that narrows by its packages alone.
         after: The checks this one runs after, by name: a build
             after its configure, a ctest after its build. Each runs
             through its task before this one's body, once per gate
@@ -257,7 +266,7 @@ class CheckRecord:
     fix: Callable[[GateContext], None] | None = None
     kinds: tuple[str, ...] = ()
     tests_only: bool = False
-    in_scoped: bool = True
+    inputs: Inputs | None = None
     after: tuple[str, ...] = ()
     extension: str = BASE_EXTENSION
     tools: tuple[str, ...] = ()
@@ -1116,8 +1125,129 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
 
 def _applies_now(record: CheckRecord, ctx: GateContext) -> bool:
     if record.scope == WORKSPACE:
-        return record.in_scoped or not ctx.scoped
+        if record.inputs is not None:
+            # Listed, so the walk says when no file it reads changed.
+            return True
+        # A check without declared inputs narrows by its packages, so a
+        # scope that holds none leaves it nothing to judge. Running it
+        # would read the empty scope as the whole: the test check would
+        # start the whole suite. Named files are a scope of their own,
+        # which the check's claims judge.
+        return bool(ctx.files) or not (ctx.scoped and not ctx.subset)
     return any(record in _package_records(ctx, p) for p in _members(ctx))
+
+
+def workspace_selected(ctx: GateContext) -> tuple[str, ...]:
+    """The workspace checks with declared inputs that this run's changes select."""
+    return tuple(
+        record.name
+        for record in _CHECKS.values()
+        if record.scope == WORKSPACE
+        and record.inputs is not None
+        and selected(record, ctx).runs
+    )
+
+
+def selected_files(record: CheckRecord, ctx: GateContext) -> frozenset[str] | None:
+    """The files *record* judges in this run; None for every file it reads."""
+    selection = selected(record, ctx)
+    return None if selection.whole else frozenset(selection.files)
+
+
+#: What never counts as a manifest or a composed file's input, though it
+#: sits beside them: prose, and the licence.
+NOT_INPUTS = ("**/*.md", "LICENSE", "**/LICENSE")
+
+
+def package_files(root: Path) -> tuple[str, ...]:
+    """The files directly in each package's directory, as patterns.
+
+    The contract and the native manifests are among them, whatever the
+    package's kind calls its manifest, so the base names none of them.
+    """
+    from livery.workshop._packages import package_directories
+
+    return tuple(
+        f"{directory.relative_to(root).as_posix()}/*"
+        for directory in package_directories(root)
+    )
+
+
+def _graph_files(root: Path) -> tuple[str, ...]:
+    """What the graph is made of: the contracts, the native manifests, a root src/."""
+    return ("workshop.toml", "src/**", *package_files(root))
+
+
+#: The files the generated outputs land in, for every forge: the CI
+#: files, the entry script and the code-owners file.
+GENERATED = (
+    ".github/workflows/*.yml",
+    ".gitea/workflows/*.yml",
+    ".gitlab-ci.yml",
+    "setup.sh",
+    ".github/CODEOWNERS",
+    ".gitlab/CODEOWNERS",
+    ".gitea/CODEOWNERS",
+    "CODEOWNERS",
+    "docs/CODEOWNERS",
+)
+
+
+def _drift_reads(root: Path) -> tuple[str, ...]:
+    """The tracked outputs drift judges: the receipted composed ones and the generated.
+
+    Read from the render's receipts, never by rendering: listing what
+    is composed must cost less than composing it.
+    """
+    from livery.workshop._fragment_engine import read_rendered
+    from livery.workshop._packages import package_directories
+
+    found = list(GENERATED)
+    found += list(read_rendered(root))
+    for directory in package_directories(root):
+        home = directory.relative_to(root).as_posix()
+        found += [f"{home}/{name}" for name in read_rendered(directory)]
+    return tuple(found)
+
+
+def _drift_widens(root: Path) -> tuple[str, ...]:
+    """What every tracked output is made from: contracts, manifests, locks, extensions.
+
+    A listed extension whose sources live in a member package composes
+    from them, so a change under them may move any output.
+    """
+    from livery.workshop._extensions import extension_names
+    from livery.workshop._influence import provider_of
+    from livery.workshop._packages import discover_packages
+
+    packages = discover_packages(root)
+    providers = {provider_of(name, packages) for name in extension_names(root)}
+    return (
+        "workshop.toml",
+        *package_files(root),
+        "uv.lock",
+        "tools.lock",
+        *(f"{provider}/src/**" for provider in sorted(providers) if provider),
+    )
+
+
+def selected(record: CheckRecord, ctx: GateContext) -> Selection:
+    """What *record* judges in this run, by its declared inputs.
+
+    Everything for a check that declares none. The run's changes
+    select, or the named files of `fm check <paths>` when there are no
+    changes; a run with neither judges everything.
+    """
+    from livery.workshop._influence import WHOLE, Changes, provider_of, select
+
+    if record.inputs is None:
+        return WHOLE
+    changes = ctx.changes
+    if changes is None and ctx.files:
+        changes = Changes(ctx.root, ctx.files)
+    return select(
+        record.inputs, changes, provider=provider_of(record.extension, ctx.packages)
+    )
 
 
 #: The unit of every file under no package: the root's own files,
@@ -1192,6 +1322,8 @@ def reads_files(
     except over named files, which a check without claims cannot say
     it reads.
     """
+    if record.inputs is not None:
+        return selected(record, ctx).runs
     if not record.claims:
         return not ctx.files
     if ctx.catalogue is None:
@@ -1240,10 +1372,16 @@ def with_files(names: tuple[str, ...], ctx: GateContext) -> tuple[str, ...]:
         else "the workspace"
     )
     for name in names:
-        if reads_files(_CHECKS[name], ctx):
+        record = _CHECKS[name]
+        if reads_files(record, ctx):
             kept.append(name)
-        else:
-            print(f"  {name}: no file it reads in {where}; not run")
+            continue
+        said = (
+            "the changed files"
+            if record.inputs is not None and ctx.changes is not None
+            else where
+        )
+        print(f"  {name}: no file it reads in {said}; not run")
     return tuple(kept)
 
 
@@ -1288,6 +1426,7 @@ def _register_builtin() -> None:
     """
     from livery.workshop._backends import _cpp_conan, _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._influence import Inputs
     from livery.workshop._invoke import run_batched
     from livery.workshop._kinds import is_python_kind
 
@@ -1490,7 +1629,7 @@ def _register_builtin() -> None:
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
 
-        _quality.drift_check()
+        _quality.drift_check(files=selected_files(check_for("drift.check"), ctx))
 
     def render_fix(ctx: GateContext) -> None:
         # A rewriter is not judged again under --fix, so the fix judges
@@ -1508,30 +1647,45 @@ def _register_builtin() -> None:
     def provenance_run(ctx: GateContext) -> None:
         from livery.workshop import _provenance
 
-        _provenance.provenance_check()
+        _provenance.check_content(
+            files=selected_files(check_for("provenance.check"), ctx)
+        )
 
     def provenance_fix(ctx: GateContext) -> None:
         from livery.workshop import _provenance
 
-        _provenance.provenance_check(fix=True)
+        _provenance.check_content(
+            fix=True, files=selected_files(check_for("provenance.check"), ctx)
+        )
 
-    def layering_run(ctx: GateContext) -> None:
-        from livery.workshop._packages import verify_workspace
+    def graph_run(ctx: GateContext) -> None:
+        from livery.workshop._packages import verify_graph
 
-        verify_workspace(ctx.root)
+        verify_graph(ctx.root)
 
-    def layering_fix(ctx: GateContext) -> None:
-        from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
+    def graph_fix(ctx: GateContext) -> None:
         from livery.workshop._extensions import write_extensions
-        from livery.workshop._packages import verify_workspace
-        from livery.workshop._uv import run_uv
+        from livery.workshop._packages import verify_graph
 
         for line in write_extensions(ctx.root):
             print(line)
+        verify_graph(ctx.root)
+
+    def imports_run(ctx: GateContext) -> None:
+        from livery.workshop._packages import verify_imports
+
+        verify_imports(ctx.root, selected_files(check_for("layering.imports"), ctx))
+
+    def imports_fix(ctx: GateContext) -> None:
+        from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
+        from livery.workshop._packages import verify_imports
+        from livery.workshop._uv import run_uv
+
+        files = selected_files(check_for("layering.imports"), ctx)
         # Every rule's fix runs here, inside the one rewrite and over
         # the one parse; the judgments follow in the check's judge.
-        context = RuleContext(root=ctx.root, packages=ctx.packages)
-        modules = parsed_modules(ctx.root, ctx.packages)
+        context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)
+        modules = parsed_modules(ctx.root, ctx.packages, files)
         written: list[str] = []
         for rule in ast_rules():
             if rule.fix is not None:
@@ -1542,7 +1696,7 @@ def _register_builtin() -> None:
             # A new requirement moves the lock; the fix leaves the tree
             # consistent, as a person would after editing by hand.
             run_uv("lock", root=ctx.root)
-        verify_workspace(ctx.root)
+        verify_imports(ctx.root, files)
 
     def package_of(ctx: GateContext) -> Package:
         assert ctx.package is not None
@@ -1775,15 +1929,38 @@ def _register_builtin() -> None:
             tools=("pytest",),
             claims=(Claim("example", suffixes=py),),
         ),
-        CheckRecord("check", "drift", render_run, fix=render_fix, in_scoped=False),
+        CheckRecord(
+            "check",
+            "drift",
+            render_run,
+            fix=render_fix,
+            inputs=Inputs(reads=_drift_reads, widens=_drift_widens, ignores=NOT_INPUTS),
+        ),
         CheckRecord(
             "check",
             "provenance",
             provenance_run,
             fix=provenance_fix,
-            in_scoped=False,
+            inputs=Inputs(reads=("packages/**/src/**/content/**",)),
         ),
-        CheckRecord("graph", "layering", layering_run, fix=layering_fix),
+        CheckRecord(
+            "graph",
+            "layering",
+            graph_run,
+            fix=graph_fix,
+            inputs=Inputs(reads=_graph_files, per_file=False, ignores=NOT_INPUTS),
+        ),
+        CheckRecord(
+            "imports",
+            "layering",
+            imports_run,
+            fix=imports_fix,
+            inputs=Inputs(
+                reads=("tasks.py", "packages/**/*.py"),
+                widens=_graph_files,
+                ignores=NOT_INPUTS,
+            ),
+        ),
         CheckRecord(
             "configure",
             "build",

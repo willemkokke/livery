@@ -386,6 +386,9 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
 def verify_workspace(root: Path) -> tuple[Package, ...]:
     """The layering lint: check every workspace invariant, or raise.
 
+    The graph's invariants ([livery.workshop._packages.verify_graph][]) and
+    the rules over every python source
+    ([livery.workshop._packages.verify_imports][]) together, in one refusal.
     Returns the discovered packages when everything holds. Raises
     ValueError listing every violation verbatim otherwise:
 
@@ -402,9 +405,72 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       ``plugin()``, and only a workshop workspace mounts extensions, so
       both are present whenever it loads.
     """
+    packages = discover_packages(root)
+    problems = graph_problems(root, packages) + import_problems(root, packages)
+    if problems:
+        raise ValueError(
+            "the workspace breaks its layering:\n  " + "\n  ".join(problems)
+        )
+    return packages
+
+
+def verify_graph(root: Path) -> tuple[Package, ...]:
+    """The graph half of the layering lint: the contracts and the native manifests.
+
+    Each edge agrees with its native manifest, the graph is acyclic,
+    the extensions a contract lists close over what they require, each
+    contract's check options name what exists, and the root is no
+    package. What it reads is the contracts and the manifests, so a run
+    whose change touched none of them skips it. Returns the discovered
+    packages; raises ValueError listing every violation otherwise.
+    """
+    packages = discover_packages(root)
+    problems = graph_problems(root, packages)
+    if problems:
+        raise ValueError(
+            "the workspace breaks its layering:\n  " + "\n  ".join(problems)
+        )
+    return packages
+
+
+def verify_imports(
+    root: Path, files: frozenset[str] | None = None
+) -> tuple[Package, ...]:
+    """The rules over the python sources: each module's imports and references.
+
+    *files* names the root-relative sources in scope; None judges
+    every one. A rule over a module judges the named ones, and a rule
+    over a package's references judges each package holding one.
+    Returns the discovered packages; raises ValueError listing every
+    violation otherwise.
+    """
+    packages = discover_packages(root)
+    problems = import_problems(root, packages, files)
+    if problems:
+        raise ValueError(
+            "the workspace breaks its layering:\n  " + "\n  ".join(problems)
+        )
+    return packages
+
+
+def import_problems(
+    root: Path, packages: tuple[Package, ...], files: frozenset[str] | None = None
+) -> list[str]:
+    """Every registered rule's findings over the sources in scope, by rule name."""
+    # The rules over the sources, builtin and registered alike, read
+    # the one parse; each problem carries its rule's name.
+    context = RuleContext(root=root, packages=packages, files=files)
+    modules = parsed_modules(root, packages, files)
+    problems: list[str] = []
+    for rule in ast_rules():
+        problems.extend(f"{rule.name}: {line}" for line in rule.judge(modules, context))
+    return problems
+
+
+def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
+    """Every violation of the graph's invariants, verbatim; empty when they hold."""
     from livery.workshop._kinds import is_python_kind, kind_for, kind_names
 
-    packages = discover_packages(root)
     by_path = {package.path: package for package in packages}
     names_by_path = {package.path: package.name for package in packages}
     problems: list[str] = []
@@ -483,17 +549,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             " package lives under packages/<name>/, one directory per"
             " package, and a project shipping one package has one"
         )
-    # The rules over the sources, builtin and registered alike, read
-    # the one parse; each problem carries its rule's name.
-    context = RuleContext(root=root, packages=packages)
-    modules = parsed_modules(root, packages)
-    for rule in ast_rules():
-        problems.extend(f"{rule.name}: {line}" for line in rule.judge(modules, context))
-    if problems:
-        raise ValueError(
-            "the workspace breaks its layering:\n  " + "\n  ".join(problems)
-        )
-    return packages
+    return problems
 
 
 @dataclass(frozen=True)
@@ -584,7 +640,7 @@ def _version_key(version: str) -> tuple[int, ...]:
 
 
 def undeclared_references(
-    packages: tuple[Package, ...],
+    packages: tuple[Package, ...], *, only: set[str] | None = None
 ) -> tuple[list[tuple[Package, Package, str, str]], list[tuple[Package, Package]]]:
     """Sibling references no edge declares, split by what the graph reaches.
 
@@ -595,7 +651,8 @@ def undeclared_references(
     so it can introduce neither a cycle nor an upward edge, and it is
     returned as (package, dependency, edge kind, floor). Anything else
     is a new dependency for a person to decide, returned as
-    (package, dependency).
+    (package, dependency). *only* judges the packages at those paths
+    and walks the graph over every one.
     """
     from livery.workshop._kinds import kind_for, kind_names
 
@@ -604,6 +661,8 @@ def undeclared_references(
     refused: list[tuple[Package, Package]] = []
     for package in packages:
         if package.kind not in kind_names():
+            continue
+        if only is not None and package.path not in only:
             continue
         referenced = getattr(
             kind_for(package.kind).backend, "referenced_siblings", None
@@ -760,7 +819,7 @@ def _terminal_calls(tree: ast.Module) -> list[str]:
 
 
 def _terminal_is_asked_through_the_runner(
-    root: Path, packages: tuple[Package, ...]
+    root: Path, packages: tuple[Package, ...], context: RuleContext | None = None
 ) -> list[str]:
     """Violations of the one-answer rule: ask the runner, never the terminal.
 
@@ -779,6 +838,8 @@ def _terminal_is_asked_through_the_runner(
     for source in sources:
         if not source.is_file():
             continue
+        if context is not None and not context.in_scope(source):
+            continue
         parsed = parsed_source(source)
         if parsed is None or not _imports_the_runner(parsed.tree):
             continue
@@ -792,7 +853,9 @@ def _terminal_is_asked_through_the_runner(
     return problems
 
 
-def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str]:
+def _forge_is_stdlib_only(
+    root: Path, packages: tuple[Package, ...], context: RuleContext | None = None
+) -> list[str]:
     """Violations of the forge's stdlib-at-import-time rule.
 
     A module the package declares as a footman task entry point is
@@ -821,6 +884,8 @@ def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str
         # the runner brings inside a declared plugin module.
         dotted = ".".join(source.relative_to(base).parts)
         dotted = dotted.removesuffix(".py").removesuffix(".__init__")
+        if context is not None and not context.in_scope(source):
+            continue
         livery_ok = {"livery.forge"}
         if any(
             dotted == module or dotted.startswith(module + ".") for module in plugins
@@ -859,22 +924,30 @@ def _runner_terminal(
 ) -> list[str]:
     """The one-answer rule as a registered rule; its own walk reads the shared parse."""
     del modules
-    return _terminal_is_asked_through_the_runner(context.root, context.packages)
+    return _terminal_is_asked_through_the_runner(
+        context.root, context.packages, context
+    )
 
 
 def _forge_stdlib(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
     """The forge's stdlib rule as a registered rule."""
     del modules
-    return _forge_is_stdlib_only(context.root, context.packages)
+    return _forge_is_stdlib_only(context.root, context.packages, context)
 
 
 def _sibling_references(
     modules: tuple[ParsedModule, ...], context: RuleContext
 ) -> list[str]:
-    """The undeclared sibling references, by what the graph reaches."""
+    """The undeclared sibling references, by what the graph reaches.
+
+    A package's references come from all of its sources, so a package
+    holding a source in scope is judged whole, and one holding none
+    keeps its verdict.
+    """
     del modules
     problems: list[str] = []
-    writable, refused = undeclared_references(context.packages)
+    judged = {package.path for package in context.packages_in_scope()}
+    writable, refused = undeclared_references(context.packages, only=judged)
     for package, dependency, kind, floor in writable:
         problems.append(
             f"{package.path}: uses {dependency.name} through a sibling that"

@@ -251,7 +251,9 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     monkeypatch.setattr(
         _python, "run_test", lambda **kwargs: calls.append(("test", kwargs))
     )
-    monkeypatch.setattr(_quality, "drift_check", lambda: calls.append(("render", None)))
+    monkeypatch.setattr(
+        _quality, "drift_check", lambda files=None: calls.append(("render", None))
+    )
     import contextlib
 
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)

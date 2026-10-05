@@ -431,17 +431,31 @@ absence.
   history that CI's record holds: a fresh branch off main starts
   proved, and one cut before main's own run is green pays for that
   merge's changes in its first step. A change outside the packages
-  runs everything and roots a new chain, with two exceptions. Prose and the site's
-  own files, a file under `notes/`, a markdown file anywhere, the root
-  `docs/` tree, or the root `zensical.toml`, affect no package, so a
-  diff confined to them runs no gate and the site build judges them.
+  runs everything and roots a new chain, with exceptions. Prose and
+  the site's own files, a file under `notes/`, a markdown file
+  anywhere, the root `docs/` tree, or the root `zensical.toml`, affect
+  no package, and neither do the root files no package's checks read:
+  the licence, the CI files and the code-owners file, the editor's
+  and the agent's settings, git's own files, `setup.sh`, the release's
+  member list, `overrides/`, and the render's receipt. A change that
+  adds or removes a package is that package's: the entries naming it
+  in the root files, and the lock's entries it moves, reach it alone.
   The workspace's own `tests/` directory is a unit of its own: a
   change under it formats, lints, type-checks, and runs those tests
-  alone, and the record supplies every package's suite. A
-  workspace that declares
+  alone, and the record supplies every package's suite.
+  Each workspace check runs when a file it reads changed, and judges
+  those files: `lint.doclinks` the changed pages, and every page when
+  a file is deleted or moved or a heading is removed; `layering.graph`
+  only when a contract or a manifest changed; `layering.imports`, the
+  rules over the python sources, the changed sources, and every one
+  when the graph changed; `drift.check` a tracked composed or
+  generated file when it, or what it is made from, changed;
+  `provenance.check` the changed content files. A check whose own code
+  changed reads everything. A diff that reaches no package and no
+  file a check reads runs nothing. A workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
-  gate against the pull request's base branch; the gate job runs
-  the render gate and the provenance check on every run, and after
+  gate against the pull request's base branch, the workspace checks
+  selected the same way, and the gate job after
   a green verdict stamps the tree it proved on the `workshop/verified`
   record, so a later run of the same tree, such as main's run after
   a squash of a branch on its tip, skips the gate in seconds. A

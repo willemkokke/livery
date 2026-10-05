@@ -850,7 +850,7 @@ def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
         assert "packages/forge/src/ok.py" in seen
         # The fix runs inside the layering check's rewrite, and the
         # judge that follows it passes.
-        record = check_for("layering.graph")
+        record = check_for("layering.imports")
         assert record.fix is not None
         context = GateContext(
             root=tmp_path, packages=discover_packages(tmp_path), fix=True
