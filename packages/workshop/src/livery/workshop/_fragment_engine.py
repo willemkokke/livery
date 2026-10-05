@@ -664,6 +664,44 @@ def _write_local(root: Path, receipts: Mapping[str, str]) -> None:
     )
 
 
+def apply_untracked(root: Path, outputs: Sequence[Output]) -> list[str]:
+    """Write the local *outputs* git does not track, and nothing else.
+
+    The write `fm sync --locked` makes: a checkout's own files (the
+    agent's fragments, skills and settings) are made current, and no
+    file a commit holds is written, removed or receipted. A local
+    output git tracks is left as it is; the drift check names it.
+    """
+    local = [output for output in outputs if output.local]
+    if not local:
+        return []
+    tracked = set(tracked_local(root, local))
+    return _apply_local(
+        root, [output for output in local if output.path not in tracked]
+    )
+
+
+def tracked_local(root: Path, outputs: Sequence[Output]) -> list[str]:
+    """The local outputs among *outputs* that git tracks, in path order.
+
+    A local output is the checkout's own, written for it alone and
+    ignored through its directory's managed `.gitignore`; a tracked one
+    was committed before that, and stays tracked whatever the ignore
+    file says. Empty when git cannot answer.
+    """
+    import livery.toolroom.tools.api as tools
+
+    local = [output.path for output in outputs if output.local]
+    if not local:
+        return []
+    listed = tools.git.opts(cwd=root, nofail=True, recorded=False)(
+        "ls-files", "--", *local
+    )
+    if listed.code != 0:
+        return []
+    return sorted(set(listed.stdout.splitlines()) & set(local))
+
+
 def _apply_local(root: Path, outputs: Sequence[Output]) -> list[str]:
     """Link or write the checkout's own outputs, and withdraw what is gone.
 

@@ -276,15 +276,17 @@ def test_a_native_member_installs_after_the_tools_are_in_the_environment(
     def step(line: str) -> str:
         if line.startswith("sync "):
             return "sync"
-        for tag in ("tools.sync", "env.emit posix", "env.emit --github"):
+        for tag in ("sync --locked", "env.emit posix", "env.emit --github"):
             if tag in line:
                 return tag
         return ""
 
+    # The workshop's own sync runs in the mode that changes nothing a
+    # commit holds, after the bootstrap sync and before the emission.
     order = [tag for tag in map(step, lines) if tag]
     assert order == [
         "sync",
-        "tools.sync",
+        "sync --locked",
         "env.emit posix",
         "sync",
         "env.emit --github",
@@ -640,6 +642,6 @@ def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
     # A placement the job already carries stands; the temp is the fallback.
     assert f'{data_var}="${{{data_var}:-$RUNNER_TEMP/footman}}"' in script
     assert placed < script.index("uv sync --project")
-    assert script.index(f'{data_var}="') < script.index("tools.sync --frozen")
+    assert script.index(f'{data_var}="') < script.index("sync --locked >&2")
     assert script.count(f"export UV_CACHE_DIR {data_var}") == 1
     assert "__DATA_DIR_VAR__" not in script

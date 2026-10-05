@@ -1,1 +1,0 @@
-../../packages/workshop/src/livery/workshop/content/hooks/fm-hook.sh

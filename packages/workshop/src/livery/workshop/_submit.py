@@ -856,6 +856,17 @@ def submit_flow(
                 f" `{footman.prog()} submit`"
             )
         refuse_ambiguous_title(git, plan)
+    # The check CI's setup makes with `sync --locked`, made before the
+    # push and before the gate's minutes: a lock that is not current
+    # refuses here, on this machine.
+    from livery.workshop._sync import stale_locks
+
+    for problem in stale_locks(git.root):
+        fail(
+            f"{problem}. CI's setup refuses a lock that is not current:"
+            f" `{footman.prog()} sync` writes it; commit it, then re-run"
+            f" `{footman.prog()} submit`"
+        )
     if gate:
         _gate(fix, root=git.root, base=base)
         if fix and not git.is_clean():

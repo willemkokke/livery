@@ -42,20 +42,21 @@ from livery.workshop._extensions import (
 from livery.workshop._materialise import write_lf
 
 
-def sync_workspace(root: Path) -> list[str]:
+def sync_workspace(root: Path, *, locked: bool = False) -> list[str]:
     """Deliver every extension's content into *root*; the summary lines.
 
     The engine behind ``fm sync``, separated so tests drive it against
-    temporary trees.
+    temporary trees. *locked* writes no file a commit holds: the local
+    outputs alone, and no seed.
     """
     from livery.workshop._lfs import install_hooks, lfs_enabled
     from livery.workshop._shipped_files import deliver
 
-    lines: list[str] = deliver(root)
+    lines: list[str] = deliver(root, locked=locked)
     if lfs_enabled(root):
         lines += install_hooks(root)
     project = root / "CLAUDE.project.md"
-    if not project.is_file():
+    if not locked and not project.is_file():
         write_lf(
             project,
             "# This repository\n\nThe repository's own facts: nobody else"
@@ -449,7 +450,11 @@ def sync(
     The three options are uv's and reach both halves: ``--frozen``
     installs each lock as it is and resolves nothing, ``--locked``
     refuses when a lock is not current, and ``--offline`` uses what the
-    machine already holds.
+    machine already holds. ``--locked`` also changes nothing a commit
+    holds: the branch is not moved and no tracked file is written,
+    while the checkout's own untracked files are, so CI's setup runs it
+    and a job holds what a person's checkout holds. Judging the tracked
+    files stays the drift check's.
 
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
@@ -463,17 +468,28 @@ def sync(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    if locked:
+        # Refused before anything runs, naming the lock and the sync that
+        # writes it: uv's own refusal would name uv's command instead.
+        problems = stale_locks(root)
+        if problems:
+            fail(
+                "--locked: "
+                + "; ".join(problems)
+                + f". `{footman.prog()} sync` writes the locks; commit them"
+            )
     git = GitOps(root)
-    before = git.head_sha()
-    bring_current(root, git, interactive=footman.attended())
-    continue_on_moved_code(root, before, git.head_sha())
+    if not locked:
+        before = git.head_sha()
+        bring_current(root, git, interactive=footman.attended())
+        continue_on_moved_code(root, before, git.head_sha())
     # Before anything discovers packages: a removed package's leftover
     # directory refuses discovery until it goes.
     for line in sweep_residue(root):
         print(line)
     for line in fetch_store_lines(root):
         print(line)
-    for line in sync_workspace(root):
+    for line in sync_workspace(root, locked=locked):
         print(line)
     # The tools come before `uv sync`: a native member's build under uv
     # runs cmake, conan and the provider the store supplies, and a
@@ -491,15 +507,56 @@ def sync(
     from livery.workshop._shipped_files import deliver
     from livery.workshop._templates import apply_generated
 
-    for line in deliver(root):
+    for line in deliver(root, locked=locked):
         print(line)
-    for path in apply_generated(root):
-        print(f"  generated: {path}")
+    if not locked:
+        for path in apply_generated(root):
+            print(f"  generated: {path}")
     # The receipt records this sync, so the next command's reconcile
     # compares instead of syncing again.
     from livery.workshop._reconcile import record_receipt
 
     record_receipt(root)
+
+
+def stale_locks(root: Path) -> list[str]:
+    """What is not current about *root*'s locks; empty when both are.
+
+    The two locks `sync --locked` refuses on: `uv.lock` against the
+    project's declarations (``uv lock --check``) and `tools.lock`
+    against its sites. A workspace without a lock has nothing here to
+    judge.
+    """
+    import livery.toolroom.tools.api as tools
+    from livery.toolroom.store.api import LOCK_FILE
+    from livery.workshop._tools import lock_is_current
+
+    problems: list[str] = []
+    if (root / "uv.lock").is_file():
+        result = tools.uv.opts(cwd=root, nofail=True, recorded=False)("lock", "--check")
+        if result.code != 0:
+            said = [
+                line.strip()
+                for line in (result.stderr or result.stdout).splitlines()
+                if line.strip()
+            ]
+            if any("needs to be updated" in line for line in said):
+                problems.append(
+                    "uv.lock is not current: the declarations moved past it"
+                )
+            else:
+                # Not a verdict on the lock: uv could not resolve to
+                # compare (no network, an index refused), in its words.
+                error = next((line for line in said if line.startswith("error")), "")
+                problems.append(
+                    "uv.lock could not be checked"
+                    + (f" ({error or said[-1]})" if said else "")
+                )
+    if (root / LOCK_FILE).is_file():
+        current, why = lock_is_current(root)
+        if not current:
+            problems.append(f"{LOCK_FILE} is not current ({why})")
+    return problems
 
 
 def sweep_residue(root: Path) -> list[str]:
