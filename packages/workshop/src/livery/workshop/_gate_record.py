@@ -19,6 +19,9 @@ HEAD's tree and skips its gate when the chain reaches a root, saying
 so. The rows key the working tree's id, which a commit that takes
 everything shares, so a check before the commit proves the commit.
 
+A CI check leg chooses where to measure from by the same rule
+(`leg_plan`), over CI's own record alone.
+
 The record is a local series of the state store
 ([livery.workshop._state][]): it lives in the checkout's git
 directory, shared by its worktrees, is written only by a green local
@@ -30,13 +33,14 @@ not the machine's Python or tools, which drift under the same tree.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from livery.workshop import _state
 from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._verified import tree_id
+from livery.workshop._verified import Verified, tree_id
 
 #: How many rows the record keeps, newest first.
 KEEP = 200
@@ -49,6 +53,9 @@ REACH = 50
 #: green check of a dirty tree is the next check's base after one more
 #: edit, without a diff per row of the whole window.
 NEAR = 20
+
+#: How many of a branch's earlier merge rows a leg rebuilds, newest first.
+MERGES = 5
 
 SERIES = _state.Series("gate-record", window=KEEP, ci_only=False, local=True)
 
@@ -123,9 +130,12 @@ class Plan:
     Attributes:
         mode: ``proved`` when the chain already proves the working
             tree, ``step`` when a proved tree is in reach and the delta
-            from it is what runs, ``full`` when none is.
+            from it is what runs, ``full`` when none is. A CI leg's
+            plan is ``merge-base`` (`MERGE_BASE`) instead of ``full``
+            while git has a merge base with the base branch.
         tree: The working tree's id, the row a green run records.
-        base_tree: The proved tree a step builds on; empty otherwise.
+        base_tree: The tree a step builds on, proved but for a
+            ``merge-base`` step; empty otherwise.
         paths: The paths a step's delta touches.
         why: The reason, for the line the gate prints.
     """
@@ -135,6 +145,12 @@ class Plan:
     base_tree: str = ""
     paths: tuple[str, ...] = ()
     why: str = ""
+
+
+#: A CI leg's mode when no proved tree is in reach: the step is taken
+#: from the merge base with the base branch, which the record does not
+#: prove, as every leg did before the record existed.
+MERGE_BASE = "merge-base"
 
 
 def rows(root: Path) -> tuple[tuple[Row, ...], str]:
@@ -333,18 +349,124 @@ def plan(
     if proof is not None:
         return Plan("proved", tree, why=proof.describe())
     near = list(dict.fromkeys(row.tree for row in found if _fresh(row, moment)))
-    best: tuple[int, str, tuple[str, ...]] | None = None
-    for candidate in dict.fromkeys([*git.first_parent_trees(REACH), *near[:NEAR]]):
-        if candidate == tree:
-            continue
-        if chain(git, candidate, roots=roots, now=now, found=found) is None:
+    best = _fewest(
+        git,
+        tree,
+        [*git.first_parent_trees(REACH), *near[:NEAR]],
+        lambda candidate: (
+            chain(git, candidate, roots=roots, now=now, found=found) is not None
+        ),
+    )
+    if best is not None:
+        return Plan("step", tree, base_tree=best[0], paths=best[1])
+    return Plan("full", tree, why=why or unread or "no proved tree in reach")
+
+
+def _fewest(
+    git: GitOps,
+    tree: str,
+    candidates: Iterable[str],
+    proved: Callable[[str], bool],
+) -> tuple[str, tuple[str, ...]] | None:
+    """The proved candidate with the fewest paths changed to *tree*, and those paths.
+
+    A candidate equal to *tree*, one *proved* refuses, and one git
+    cannot diff (a tree this clone no longer has) are passed over.
+    """
+    best: tuple[str, tuple[str, ...]] | None = None
+    for candidate in dict.fromkeys(candidates):
+        if candidate == tree or not proved(candidate):
             continue
         try:
             paths = tuple(git.tree_diff(candidate, tree))
         except GitError:
             continue
-        if best is None or len(paths) < best[0]:
-            best = (len(paths), candidate, paths)
+        if best is None or len(paths) < len(best[1]):
+            best = (candidate, paths)
+    return best
+
+
+def leg_plan(root: Path, git: GitOps, *, base: str, branch: str) -> Plan:
+    """Where a CI check leg measures its change from; the reflex's rule on CI's record.
+
+    The candidates are the merge base with *base*, HEAD's first-parent
+    history `REACH` commits deep, and, on a merge checkout, the merges
+    *branch*'s earlier runs proved. A pull request's run on GitHub
+    tests the merge of its head onto the base branch, a commit no later
+    clone holds, so its row names the two commits it merged; the merge
+    is rebuilt from them, `MERGES` rows deep, and counts only when it
+    yields the row's tree, which also puts that tree in this clone for
+    every reader of the step's base. Of the candidates the record
+    proves in full, the one with the fewest paths changed to HEAD's
+    tree is the step's base: the earlier push's merge, when the base
+    branch has not moved far, or the base branch's tip. With none, or
+    a record that cannot be read, the step is taken from the merge
+    base (`MERGE_BASE`), and *why* says so. Without a merge base the
+    mode is ``full``.
+    """
+    from livery.workshop import _verified
+    from livery.workshop._state import remote_snapshot
+
+    tree = tree_id(git)
+    try:
+        merge_base = tree_id(git, git.merge_base(base))
+    except GitError as error:
+        return Plan("full", tree, why=f"no merge base with origin/{base} ({error})")
+    try:
+        merged = git.merge_parents()
+    except GitError:
+        merged = None
+    with remote_snapshot(root, fetch=("verified",)):
+        rows, unread = _verified.proved(root)
+    candidates = [merge_base, *git.first_parent_trees(REACH)]
+    if merged is not None:
+        candidates += _rebuilt(git, rows, branch)
+    best = _fewest(git, tree, candidates, lambda candidate: candidate in rows)
     if best is not None:
-        return Plan("step", tree, base_tree=best[1], paths=best[2])
-    return Plan("full", tree, why=why or unread or "no proved tree in reach")
+        base_tree, paths = best
+        row = rows[base_tree]
+        return Plan(
+            "step",
+            tree,
+            base_tree=base_tree,
+            paths=paths,
+            why=f"proved by run {row.run}",
+        )
+    why = (
+        f"CI's record could not be read ({unread})"
+        if unread
+        else "CI's record proves no tree in reach"
+    )
+    try:
+        paths = tuple(git.tree_diff(merge_base, tree))
+    except GitError as error:
+        return Plan(
+            "full", tree, why=f"{why}, and the merge base's diff failed ({error})"
+        )
+    return Plan(MERGE_BASE, tree, base_tree=merge_base, paths=paths, why=why)
+
+
+def _rebuilt(git: GitOps, rows: Mapping[str, Verified], branch: str) -> list[str]:
+    """The trees of *branch*'s earlier merge runs this clone can rebuild exactly.
+
+    A row whose commits this clone lacks, a force-push having dropped
+    the head say, or whose rebuilt merge differs from its tree, is
+    passed over.
+    """
+    if not branch:
+        return []
+    merges = [
+        row
+        for row in rows.values()
+        if row.branch == branch and row.head_sha and row.base_sha
+    ]
+    rebuilt: list[str] = []
+    for row in merges[:MERGES]:
+        if not (git.sha_of(row.head_sha) and git.sha_of(row.base_sha)):
+            continue
+        try:
+            if git.merge_tree(row.base_sha, row.head_sha) == row.tree:
+                rebuilt.append(row.tree)
+        except GitError:
+            continue
+    return rebuilt

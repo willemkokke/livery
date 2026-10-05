@@ -138,10 +138,9 @@ def test_a_narrowed_leg_or_a_missing_row_leaves_the_tree_unstamped(work: Path) -
         == ""
     )
     line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
-    # A narrowed leg composes only with a verified base; this tree's
-    # base is itself, unrecorded, so the tree stays unstamped.
-    assert "check (b) ran narrowed on base tree" in line
-    assert "not proved in full" in line
+    # A narrowed leg composes only with the tree it measured from, and
+    # this one named none, so the tree stays unstamped.
+    assert "check (b) named no tree its narrowed gate measured from" in line
     assert _verified.record(work, _verified.tree_id(GitOps(work))) == (None, "")
 
 
@@ -201,7 +200,8 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: RUN)
     monkeypatch.setattr(
-        "livery.workshop._quality._affected", lambda base="main": pytest.fail("ran")
+        "livery.workshop._quality._leg_plan",
+        lambda root, base, run: pytest.fail("ran"),
     )
     _quality.check()
     assert _verified.read_marker(work)["scope"] == _verified.VERIFIED
@@ -216,10 +216,13 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
         "scope": "affected",
         "packages": ["packages/x"],
         "leg": "",
+        "base_tree": "",
     }
     _verified.write_marker(work, _verified.FULL, leg="check-a")
     assert _verified.read_marker(work)["leg"] == "check-a"
-    _verified.write_marker(work, _verified.AFFECTED, ("packages/x",))
+    _verified.write_marker(
+        work, _verified.AFFECTED, ("packages/x",), base_tree="b" * 40
+    )
     trace = _trace(work / "fm-profile.json")
     assert (
         _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace) == ""
@@ -231,6 +234,7 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
         "scope": "affected",
         "packages": ["packages/x"],
         "leg": "",
+        "base_tree": "b" * 40,
     }
 
 
@@ -246,12 +250,26 @@ PULL = _state.RunContext(
 )
 
 
-def _rows(work: Path, run: _state.RunContext, scopes: dict[str, str]) -> None:
-    """The run's metrics row: one check leg per name, with the scope it left."""
+def _rows(
+    work: Path,
+    run: _state.RunContext,
+    scopes: dict[str, str],
+    bases: dict[str, str] | None = None,
+) -> None:
+    """The run's metrics row: one check leg per name, with the scope it left.
+
+    *bases* names, per leg, the tree its narrowed gate measured from.
+    """
     entry = {
         "schema": _metrics.SCHEMA,
         "jobs": {
-            name: {"scope": {"scope": scope, "packages": []}}
+            name: {
+                "scope": {
+                    "scope": scope,
+                    "packages": [],
+                    "base_tree": (bases or {}).get(name, ""),
+                }
+            }
             for name, scope in scopes.items()
         },
     }
@@ -276,8 +294,6 @@ def _branch_commit(work: Path, name: str) -> None:
 
 
 def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> None:
-    from livery.workshop._git_ops import GitError
-
     git = GitOps(work)
     # A leg that left no scope: no stamp, the leg named.
     _rows(work, PULL, {"check (a)": "affected", "check (b)": "unknown"})
@@ -288,11 +304,20 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
     _branch_commit(work, "feat/one")
     base = _verified.tree_id(git, "origin/main")
     tree = _verified.tree_id(git)
-    _rows(work, PULL, {"check (a)": "affected", "check (b)": "nothing"})
+    both = {"check (a)": base, "check (b)": base}
+    _rows(work, PULL, {"check (a)": "affected", "check (b)": "nothing"}, both)
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line.startswith("  verified: no stamp")
     assert f"base tree {base[:12]}" in line and "not proved in full" in line
     assert _verified.record(work, tree) == (None, "")
+    # Legs that measured from different trees compose with neither.
+    apart = {"check (a)": base, "check (b)": "c" * 40}
+    _rows(work, PULL, {"check (a)": "affected", "check (b)": "nothing"}, apart)
+    line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
+    assert "the legs measured from different trees (check (a) from" in line
+    assert "check (b) from cccccccccccc" in line
+    assert _verified.record(work, tree) == (None, "")
+    _rows(work, PULL, {"check (a)": "affected", "check (b)": "nothing"}, both)
     # A base row of another scope is no proof either.
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
@@ -305,16 +330,15 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
         line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line.startswith("  verified: no stamp") and f"base tree {base[:12]}" in line
     assert _verified.record(work, tree) == (None, "")
-    # No merge base, as a shallow checkout has none: no stamp, git's words.
+    # A base row the store cannot read: no stamp, its words.
     with pytest.MonkeyPatch.context() as patch:
-
-        def _none(self: GitOps, base: str) -> str:
-            raise GitError("fatal: no merge base found")
-
-        patch.setattr("livery.workshop._git_ops.GitOps.merge_base", _none)
+        patch.setattr(
+            "livery.workshop._verified.record",
+            lambda root, tree: (None, "the record could not be read: down"),
+        )
         line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line.startswith("  verified: no stamp")
-    assert "no merge base with origin/main" in line and "fatal: no merge base" in line
+    assert f"the base tree {base[:12]} could not be read" in line
     assert _verified.record(work, tree) == (None, "")
 
 
@@ -327,7 +351,7 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     assert stamped == ""
     _branch_commit(work, "feat/one")
     tree = _verified.tree_id(git)
-    _rows(work, PULL, {"check (a)": "affected"})
+    _rows(work, PULL, {"check (a)": "affected"}, {"check (a)": base})
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line == (
         f"  verified: tree {tree[:12]} recorded as proved green by run 1014"
@@ -355,7 +379,7 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     later = _state.RunContext(
         "gitea", "1015", "pull_request", "refs/pull/2/merge", base_ref="main"
     )
-    _rows(work, later, {"check (a)": "nothing"})
+    _rows(work, later, {"check (a)": "nothing"}, {"check (a)": tree})
     line = _verified.stamp_from_metrics(work, later, sha="a" * 40)
     assert f"on top of tree {tree[:12]} (run 1014)" in line
     found, _ = _verified.record(work, _verified.tree_id(git))
@@ -364,3 +388,25 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     _rows(work, later, {"check (a)": "verified"})
     line = _verified.stamp_from_metrics(work, later, sha="a" * 40)
     assert "already recorded" in line
+
+
+def test_a_merge_checkouts_stamp_names_the_two_commits_it_merged(work: Path) -> None:
+    git = GitOps(work)
+    base = _git(work, "rev-parse", "HEAD").strip()
+    _branch_commit(work, "feat/one")
+    head = _git(work, "rev-parse", "HEAD").strip()
+    _git(work, "checkout", "-q", "--detach", base)
+    _git(work, "merge", "-q", "--no-ff", "--no-edit", "feat/one")
+    _rows(work, PULL, {"check (a)": "full"})
+    line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
+    tree = _verified.tree_id(git)
+    assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1014"
+    found, _ = _verified.record(work, tree)
+    assert found is not None
+    assert (found.base_sha, found.head_sha, found.branch) == (base, head, "feat/one")
+    # A checkout that is no merge names none.
+    _git(work, "checkout", "-q", "feat/one")
+    _rows(work, PULL, {"check (a)": "full"})
+    _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
+    found, _ = _verified.record(work, _verified.tree_id(git))
+    assert found is not None and (found.base_sha, found.head_sha) == ("", "")

@@ -378,3 +378,115 @@ def test_the_plan_is_proved_a_step_or_full(work: Path, unverified: None) -> None
     later = _gate_record.plan(work, git)
     assert later.mode == "step" and later.base_tree == step.tree
     assert later.paths == ("a.txt", "b.txt")
+
+
+# --- a CI leg's plan: the reflex's rule over CI's record ---------------------------
+
+PULL = _state.RunContext(
+    "github",
+    "8",
+    "pull_request",
+    "refs/pull/1/merge",
+    base_ref="main",
+    head_ref="feat/one",
+)
+
+
+def _stamped(work: Path, tree: str, *, merged: tuple[str, str] | None = None) -> None:
+    """*tree* on CI's record in full, as a run of feat/one stamps it."""
+    from livery.workshop import _verified
+
+    with pytest.MonkeyPatch.context() as ci:
+        ci.setattr(_state, "run_context", lambda environ=None: PULL)
+        why = _verified.stamp(
+            work,
+            PULL,
+            tree=tree,
+            sha="a" * 40,
+            legs=("check (a)",),
+            branch="feat/one",
+            merged=merged,
+        )
+    assert why == ""
+
+
+def _merged(work: Path, branch: str) -> tuple[str, str, str]:
+    """Check out *branch* merged onto origin/main, as a pull request's run does.
+
+    Returns the base commit, the head commit, and the merge's tree.
+    """
+    base = _git(work, "rev-parse", "origin/main").strip()
+    head = _git(work, "rev-parse", branch).strip()
+    _git(work, "checkout", "-q", "--detach", base)
+    _git(work, "merge", "-q", "--no-ff", "--no-edit", branch)
+    return base, head, tree_id(GitOps(work))
+
+
+def _pushed_again(work: Path, name: str) -> None:
+    """A further commit on feat/one, and its merge checked out."""
+    _git(work, "checkout", "-q", "feat/one")
+    _commit(work, name)
+    _merged(work, "feat/one")
+
+
+def test_a_leg_with_no_proved_tree_steps_from_the_merge_base_and_says_why(
+    work: Path, tmp_path: Path
+) -> None:
+    git = GitOps(work)
+    main = tree_id(git)
+    _git(work, "checkout", "-q", "-b", "feat/one")
+    _commit(work, "one.txt")
+    _merged(work, "feat/one")
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    assert step.mode == _gate_record.MERGE_BASE
+    assert (step.base_tree, step.paths) == (main, ("one.txt",))
+    assert step.why == "CI's record proves no tree in reach"
+    # A record the store cannot read steps the same way, in its words.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    assert step.mode == _gate_record.MERGE_BASE and step.base_tree == main
+    assert step.why.startswith("CI's record could not be read (")
+
+
+def test_a_leg_without_a_merge_base_runs_everything(work: Path) -> None:
+    step = _gate_record.leg_plan(work, GitOps(work), base="gone", branch="feat/one")
+    assert step.mode == "full"
+    assert step.why.startswith("no merge base with origin/gone (")
+
+
+def test_a_merge_row_counts_only_when_its_commits_rebuild_its_tree(work: Path) -> None:
+    git = GitOps(work)
+    _git(work, "checkout", "-q", "-b", "feat/one")
+    _commit(work, "one.txt")
+    base, head, first = _merged(work, "feat/one")
+    # A head this clone lacks, as after a force-push, and commits that
+    # rebuild another tree than the row's: neither row is a candidate.
+    _stamped(work, first, merged=(base, "f" * 40))
+    _stamped(work, "e" * 40, merged=(base, head))
+    _pushed_again(work, "two.txt")
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    assert step.mode == _gate_record.MERGE_BASE
+    assert step.paths == ("one.txt", "two.txt")
+    # Another branch's merge is not rebuilt for this one.
+    _stamped(work, first, merged=(base, head))
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/two")
+    assert step.mode == _gate_record.MERGE_BASE
+
+
+def test_a_second_push_steps_from_the_first_pushs_merge(work: Path) -> None:
+    git = GitOps(work)
+    main = tree_id(git)
+    _git(work, "checkout", "-q", "-b", "feat/one")
+    _commit(work, "one.txt")
+    base, head, first = _merged(work, "feat/one")
+    assert git.merge_parents() == (base, head)
+    # main's own run proved its tree: the first push steps from it.
+    _stamped(work, main)
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    assert (step.mode, step.base_tree, step.paths) == ("step", main, ("one.txt",))
+    # The first push's run proved its merge and named the two commits.
+    _stamped(work, first, merged=(base, head))
+    _pushed_again(work, "two.txt")
+    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    assert (step.mode, step.base_tree, step.paths) == ("step", first, ("two.txt",))
+    assert step.why == "proved by run 8"

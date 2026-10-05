@@ -13,14 +13,20 @@ pays in full.
 The record is advisory in the safe direction only: a missing entry,
 an unreachable store, another tree, or a narrowed scope runs the
 gate, and a stamp that cannot be written prints why. A leg leaves
-its scope in a marker file beside its trace. The stamp says
-``full`` when every check leg ran the whole gate, and also when the
-legs ran narrowed on top of a tree the record already names as
-full: every package a narrowed leg skipped is byte for byte the
-base tree's, and so is every root file the gate reads, so their
-verdicts carry over from the base's run, and the row names that
-base. Without a full row for the base, a narrowed run stamps
-nothing.
+its scope in a marker file beside its trace, with the tree its
+narrowed gate measured from. The stamp says ``full`` when every
+check leg ran the whole gate, and also when the legs ran narrowed
+on top of a tree the record already names as full: every package a
+narrowed leg skipped is byte for byte the base tree's, and so is
+every root file the gate reads, so their verdicts carry over from
+the base's run, and the row names that base. Without a full row for
+the base, a narrowed run stamps nothing.
+
+A pull request's run on GitHub tests the merge the forge made of the
+pull request's head onto its base branch, a commit no later clone
+holds. Its row names the two commits it merged, so the next run can
+rebuild that merge and measure from it
+([livery.workshop._gate_record.leg_plan][]).
 """
 
 from __future__ import annotations
@@ -77,6 +83,10 @@ class Verified:
         branch: The pull request branch whose run proved the tree, the
             base of the coverage record main's run copies at the merge;
             empty for main's own run and for a row that never said.
+        head_sha: On a run that tested a merge, the pull request's head
+            it merged; empty otherwise.
+        base_sha: On a run that tested a merge, the base branch's
+            commit it merged onto; empty otherwise.
     """
 
     tree: str
@@ -87,6 +97,8 @@ class Verified:
     base_tree: str = ""
     base_run: str = ""
     branch: str = ""
+    head_sha: str = ""
+    base_sha: str = ""
 
 
 def tree_id(git: GitOps, ref: str = "HEAD") -> str:
@@ -95,18 +107,30 @@ def tree_id(git: GitOps, ref: str = "HEAD") -> str:
 
 
 def write_marker(
-    root: Path, scope: str, packages: tuple[str, ...] = (), *, leg: str = ""
+    root: Path,
+    scope: str,
+    packages: tuple[str, ...] = (),
+    *,
+    leg: str = "",
+    base_tree: str = "",
 ) -> None:
     """Leave the leg's scope, the suites it ran, and its label beside its trace.
 
     The metrics row, the stamp, and the coverage union read it back:
     *packages* are the suites the leg ran under a narrowed or a
-    measured scope, and *leg* the label the record keys the leg's
-    measurements by.
+    measured scope, *leg* the label the record keys the leg's
+    measurements by, and *base_tree* the tree a narrowed gate measured
+    from, which the stamp composes with.
     """
     (root / MARKER).write_text(
         json.dumps(
-            {"scope": scope, "packages": list(packages), "leg": leg}, sort_keys=True
+            {
+                "scope": scope,
+                "packages": list(packages),
+                "leg": leg,
+                "base_tree": base_tree,
+            },
+            sort_keys=True,
         ),
         encoding="utf-8",
     )
@@ -114,7 +138,12 @@ def write_marker(
 
 def read_marker(root: Path) -> dict[str, Any]:
     """The leg's scope marker, or ``{"scope": "unknown"}`` when it left none."""
-    unknown: dict[str, Any] = {"scope": "unknown", "packages": [], "leg": ""}
+    unknown: dict[str, Any] = {
+        "scope": "unknown",
+        "packages": [],
+        "leg": "",
+        "base_tree": "",
+    }
     path = root / MARKER
     if not path.is_file():
         return unknown
@@ -128,6 +157,7 @@ def read_marker(root: Path) -> dict[str, Any]:
         "scope": str(loaded.get("scope", "unknown")),
         "packages": [str(p) for p in loaded.get("packages", []) or []],
         "leg": str(loaded.get("leg", "") or ""),
+        "base_tree": str(loaded.get("base_tree", "") or ""),
     }
 
 
@@ -141,20 +171,36 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
     row, why = SERIES.row(root, tree)
     if row is None:
         return None, why
-    entry = row.data
-    return (
-        Verified(
-            tree=tree,
-            run=str(entry.get("run", "")),
-            sha=str(entry.get("sha", "")),
-            scope=str(entry.get("scope", "")),
-            legs=tuple(str(leg) for leg in entry.get("legs", [])),
-            base_tree=str(entry.get("base_tree", "")),
-            base_run=str(entry.get("base_run", "")),
-            branch=str(entry.get("branch", "") or ""),
-        ),
-        "",
+    return _entry(tree, row.data), ""
+
+
+def _entry(tree: str, entry: dict[str, Any]) -> Verified:
+    """The row of *tree* as the record's own type."""
+    return Verified(
+        tree=tree,
+        run=str(entry.get("run", "")),
+        sha=str(entry.get("sha", "")),
+        scope=str(entry.get("scope", "")),
+        legs=tuple(str(leg) for leg in entry.get("legs", [])),
+        base_tree=str(entry.get("base_tree", "")),
+        base_run=str(entry.get("base_run", "")),
+        branch=str(entry.get("branch", "") or ""),
+        head_sha=str(entry.get("head_sha", "") or ""),
+        base_sha=str(entry.get("base_sha", "") or ""),
     )
+
+
+def proved(root: Path) -> tuple[dict[str, Verified], str]:
+    """Every full row, by tree, newest first, in one read; or ``({}, reason)``.
+
+    A row of a narrowed scope proves nothing and is left out, as a
+    file that is not a row of the record's schema is.
+    """
+    found = SERIES.rows(root)
+    if found.failed:
+        return {}, found.reason
+    rows = (_entry(row.name, row.data) for row in found.rows)
+    return {entry.tree: entry for entry in rows if entry.scope == FULL}, ""
 
 
 def held(root: Path, trees: Iterable[str]) -> tuple[set[str], str]:
@@ -181,6 +227,7 @@ def stamp(
     legs: tuple[str, ...],
     base: Verified | None = None,
     branch: str = "",
+    merged: tuple[str, str] | None = None,
 ) -> str:
     """Record *tree* as proved green by *run*; ``""`` or the reason.
 
@@ -188,7 +235,9 @@ def stamp(
     ran narrowed on top of *base*, a full row the caller read from
     the record; a composed row names that base and its run. *branch*
     is the pull request branch the run came from, so main's run after
-    the squash finds the branch's coverage record to copy.
+    the squash finds the branch's coverage record to copy. *merged*
+    are the base branch's commit and the head a merge checkout joined,
+    so the branch's next run can rebuild the merge.
     """
     entry: dict[str, object] = {
         "tree": tree,
@@ -200,6 +249,8 @@ def stamp(
     }
     if branch:
         entry["branch"] = branch
+    if merged is not None:
+        entry["base_sha"], entry["head_sha"] = merged
     basis = ""
     if base is not None:
         entry["base_tree"] = base.tree
@@ -219,10 +270,11 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     step put before the verdict; each check leg's row carries the
     scope its marker named. Every leg full: the tree is stamped.
     Legs narrowed (``affected``, or ``nothing`` for a prose-only
-    diff): the tree is stamped when the merge base with the run's
-    base branch is a tree the record names as full, and the row
-    names that base; otherwise nothing is written and the line
-    says which proof is missing. Returns the line to print.
+    diff): the tree is stamped when every narrowed leg measured from
+    one tree and the record names that tree as full, and the row
+    names that base; otherwise nothing is written and the line says
+    which proof is missing. On a merge checkout the row also names
+    the two commits merged. Returns the line to print.
     """
     from livery.workshop._metrics import SERIES as METRICS
     from livery.workshop._metrics import run_file
@@ -249,8 +301,20 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     tree = tree_id(git)
     if all(scope in PROVED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
+    try:
+        merged = git.merge_parents()
+    except GitError as error:
+        return f"  verified: no stamp, HEAD's parents could not be read ({error})"
     if all(scope in (FULL, *PROVED) for scope in scopes.values()):
-        why = stamp(root, run, tree=tree, sha=sha, legs=legs, branch=run.head_ref)
+        why = stamp(
+            root,
+            run,
+            tree=tree,
+            sha=sha,
+            legs=legs,
+            branch=run.head_ref,
+            merged=merged,
+        )
         if why:
             return f"  verified: no stamp, {why}"
         return (
@@ -259,25 +323,42 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     # Narrowed legs prove the packages they ran; the base tree's row
     # proves the rest, since those packages and every root file the
     # gate reads are the base's bytes, or the legs would have widened.
-    branch = run.base_ref or "main"
-    try:
-        git.fetch()
-        base = tree_id(git, git.merge_base(branch))
-    except GitError as error:
-        return f"  verified: no stamp, no merge base with origin/{branch} ({error})"
+    narrowed = {
+        name: scope for name, scope in scopes.items() if scope not in (FULL, *PROVED)
+    }
+    bases = {
+        name: str((jobs[name].get("scope") or {}).get("base_tree", "") or "")
+        for name in narrowed
+    }
+    unnamed = sorted(name for name, base in bases.items() if not base)
+    if unnamed:
+        return (
+            f"  verified: no stamp, {', '.join(unnamed)} named no tree its"
+            " narrowed gate measured from"
+        )
+    if len(set(bases.values())) > 1:
+        named = ", ".join(f"{name} from {base[:12]}" for name, base in bases.items())
+        return f"  verified: no stamp, the legs measured from different trees ({named})"
+    base = next(iter(bases.values()))
     base_row, why = record(root, base)
     if why:
         return (
             f"  verified: no stamp, the base tree {base[:12]} could not be read ({why})"
         )
-    narrowed = ", ".join(name for name, scope in scopes.items() if scope != FULL)
     if base_row is None or base_row.scope != FULL:
         return (
-            f"  verified: no stamp, {narrowed} ran narrowed on base tree {base[:12]},"
-            " which the record has not proved in full"
+            f"  verified: no stamp, {', '.join(narrowed)} ran narrowed on base tree"
+            f" {base[:12]}, which the record has not proved in full"
         )
     why = stamp(
-        root, run, tree=tree, sha=sha, legs=legs, base=base_row, branch=run.head_ref
+        root,
+        run,
+        tree=tree,
+        sha=sha,
+        legs=legs,
+        base=base_row,
+        branch=run.head_ref,
+        merged=merged,
     )
     if why:
         return f"  verified: no stamp, {why}"

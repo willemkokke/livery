@@ -10,8 +10,8 @@ import pytest
 
 from livery.workshop import _coverage_store, _quality, _verified
 from livery.workshop._backends import _python
+from livery.workshop._gate_record import Plan
 from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._influence import Changes
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
@@ -46,6 +46,20 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
     )
 
 
+def _stepping(
+    monkeypatch: pytest.MonkeyPatch, *paths: str, bases: list[str] | None = None
+) -> list[str]:
+    """Hand the leg a plan stepping from tree ``b...`` over *paths*; the bases asked."""
+    asked = [] if bases is None else bases
+
+    def _plan(root: Path, base: str, run: RunContext) -> Plan:
+        asked.append(base)
+        return Plan("step", "t" * 40, base_tree="b" * 40, paths=tuple(paths))
+
+    monkeypatch.setattr("livery.workshop._quality._leg_plan", _plan)
+    return asked
+
+
 def _refusal(action: Callable[[], object]) -> str:
     with pytest.raises(BaseException) as caught:
         action()
@@ -77,20 +91,74 @@ def test_the_full_gate_outside_ci_without_the_key_or_off_a_pull_request(
 def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._git_ops import GitError
+    root = _root(tmp_path, "affected-legs = true\n")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@x", "-c", "user.name=T", "commit", "-qm", "seed"],
+        cwd=root,
+        check=True,
+    )
+    monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    step = _quality._leg_plan(root, "develop", _run("pull_request", "develop"))
+    assert step.mode == "full"
+    assert _quality._affected(root, step) is None
+    out = capsys.readouterr().out
+    assert "affected: no merge base with origin/develop (" in out
+    assert "failing open to everything" in out
+
+
+def test_a_leg_says_where_it_measures_from_and_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _gate_record
 
     root = _root(tmp_path, "affected-legs = true\n")
-    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    plans = iter(
+        [
+            Plan(
+                _gate_record.MERGE_BASE,
+                "t" * 40,
+                base_tree="m" * 40,
+                paths=("a.py",),
+                why="CI's record proves no tree in reach",
+            ),
+            Plan(
+                "step",
+                "t" * 40,
+                base_tree="b" * 40,
+                paths=("a.py", "b.py"),
+                why="proved by run 8",
+            ),
+        ]
+    )
+    asked: list[tuple[str, str]] = []
 
-    def _no_base(root: Path, git: object, *, base: str = "main") -> None:
-        raise GitError("fatal: Not a valid commit name origin/develop")
+    def _plan(root: Path, git: object, *, base: str, branch: str) -> Plan:
+        asked.append((base, branch))
+        return next(plans)
 
-    monkeypatch.setattr("livery.workshop._graph.affected_packages", _no_base)
-    assert _quality._affected("develop") is None
-    out = capsys.readouterr().out
-    assert "no merge base with origin/develop; failing open to everything" in out
-    assert "Not a valid commit name" in out
+    monkeypatch.setattr(_gate_record, "leg_plan", _plan)
+    run = RunContext(
+        "github",
+        "7",
+        "pull_request",
+        "refs/pull/3/merge",
+        base_ref="main",
+        head_ref="feat/x",
+    )
+    _quality._leg_plan(root, "main", run)
+    assert (
+        "from the merge base, tree mmmmmmmmmmmm: CI's record proves no tree in"
+        " reach; 1 path(s) changed" in capsys.readouterr().out
+    )
+    _quality._leg_plan(root, "main", run)
+    assert (
+        "since tree bbbbbbbbbbbb (proved by run 8): 2 path(s) changed"
+        in capsys.readouterr().out
+    )
+    assert asked == [("main", "feat/x"), ("main", "feat/x")]
 
 
 # --- the happy path ----------------------------------------------------------
@@ -288,21 +356,14 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     monkeypatch.setattr(
         "livery.workshop._state.run_context", lambda: _run("pull_request", "develop")
     )
-    bases: list[str] = []
-
-    def _subset(base: str = "main") -> tuple[()]:
-        bases.append(base)
-        return ()
-
-    monkeypatch.setattr("livery.workshop._quality._affected", _subset)
-    monkeypatch.setattr(
-        "livery.workshop._quality._changes_since", lambda base: Changes(root, ())
-    )
+    bases = _stepping(monkeypatch)
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
     _quality.check()
     out = capsys.readouterr().out
     assert bases == ["develop"]
     assert "affected-legs: the scoped gate against origin/develop" in out
     assert "nothing affected" in out
+    assert read_marker(root)["base_tree"] == "b" * 40
 
 
 # --- the coverage store decides which skipped suites run anyway ---------------
@@ -380,7 +441,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     monkeypatch.setattr(
         "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
     )
-    monkeypatch.setattr("livery.workshop._quality._affected", lambda base="main": (x,))
+    _stepping(monkeypatch, "packages/x/a.py")
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: (x,))
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
     # The record holds y at the current closure and z at another: one
     # read decides both, and only z runs.
@@ -418,6 +480,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
         "scope": "affected",
         "packages": ["packages/x", "packages/z"],
         "leg": "check-a",
+        "base_tree": "b" * 40,
     }
     # An unreadable record runs every skipped suite and names the reason;
     # every suite widened is the whole gate, so the widening is asked
@@ -498,8 +561,9 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     monkeypatch.setattr(
         "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
     )
+    _stepping(monkeypatch, "tests/test_it.py")
     monkeypatch.setattr(
-        "livery.workshop._quality._affected", lambda base="main": (unit,)
+        "livery.workshop._quality._affected", lambda root, step: (unit,)
     )
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
     held = {
@@ -526,6 +590,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
         "scope": "affected",
         "packages": ["tests"],
         "leg": "check-a",
+        "base_tree": "b" * 40,
     }
     # A suite the records cannot supply widens the subset, and the unit
     # stays in it.
@@ -605,6 +670,7 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
         "scope": "measured",
         "packages": ["packages/y", "tests"],
         "leg": "check-a",
+        "base_tree": "",
     }
 
 
@@ -616,14 +682,8 @@ def test_a_prose_only_diff_says_so_and_skips(
     monkeypatch.setattr(
         "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
     )
-    monkeypatch.setattr("livery.workshop._quality._affected", lambda base="main": ())
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.merge_base", lambda self, base: "b" * 40
-    )
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.changed_paths",
-        lambda self, base: ["notes/plan.md", "packages/x/README.md"],
-    )
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
+    _stepping(monkeypatch, "notes/plan.md", "packages/x/README.md")
     for changed in ("notes/plan.md", "packages/x/README.md", "notes/a.md"):
         (root / changed).parent.mkdir(parents=True, exist_ok=True)
         (root / changed).write_text("# changed\n")
@@ -646,14 +706,9 @@ def test_a_prose_only_diff_says_so_and_skips(
     assert read_marker(root)["scope"] == "nothing"
     # The site's own files count the same way: a docs-only change
     # with the root zensical.toml among it runs no gate on the legs.
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.changed_paths",
-        lambda self, base: ["zensical.toml", "docs/assets/logo.svg", "notes/a.md"],
-    )
+    _stepping(monkeypatch, "zensical.toml", "docs/assets/logo.svg", "notes/a.md")
     _quality.check()
     assert "only prose and site files changed (3 file(s)" in capsys.readouterr().out
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.changed_paths", lambda self, base: []
-    )
+    _stepping(monkeypatch)
     _quality.check()
     assert "nothing affected: the branch changes no files" in capsys.readouterr().out

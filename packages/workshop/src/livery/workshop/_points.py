@@ -216,9 +216,11 @@ DECLARED: tuple[Point, ...] = (
                     "The check legs: the tests run metered, and only they."
                     " The leg's measured suites ride its per-run ref on the"
                     " state store, and the gate job unions them with main's"
-                    " record and judges once. The scoped gate diffs against"
-                    " the merge base with the pull request's base branch,"
-                    " which a shallow clone lacks."
+                    " record and judges once. The scoped gate measures from"
+                    " the proved tree nearest the checkout's, an earlier"
+                    " push's merge rebuilt from its two commits among them,"
+                    " or from the merge base with the pull request's base"
+                    " branch; each needs history a shallow clone lacks."
                 ),
             ),
             Job(
@@ -237,8 +239,9 @@ DECLARED: tuple[Point, ...] = (
                     " the floors, collect the run's timing rows, ask the"
                     " forge for the jobs it needs, and stamp the tree a green"
                     " run proved; a red run is judged too. The stamp composes"
-                    " a narrowed run with its base tree's record through the"
-                    " merge base, which a shallow clone lacks."
+                    " a narrowed run with the record of the tree its legs"
+                    " measured from, and names the two commits a merge"
+                    " checkout joined."
                 ),
             ),
         ),

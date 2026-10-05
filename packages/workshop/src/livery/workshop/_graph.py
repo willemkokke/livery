@@ -125,13 +125,34 @@ def affected_packages(
     anyway, so no package's suite has to run for it. An empty tuple
     means the branch changes nothing a gate reads.
     """
+    scope = affected_by(
+        root,
+        git,
+        git.changed_paths(base),
+        # Asked only for a change outside every package.
+        before=lambda: git.merge_base(base),
+    )
+    return None if scope is None else scope.packages
+
+
+def affected_by(
+    root: Path,
+    git: GitOps,
+    paths: Iterable[str],
+    *,
+    before: str | Callable[[], str],
+) -> Scope | None:
+    """What *paths*, changed since *before*, reach among the workspace's packages.
+
+    `affected_from_paths` over the packages discovered under *root*,
+    behind the guard every narrowed gate passes first: a package of a
+    kind no extension registers has edges the registry cannot vouch
+    for, so nothing is narrowed, and the package is named. ``None``
+    means everything.
+    """
     from livery.workshop._kinds import kind_names
 
     packages = discover_packages(root)
-    # The fail-open guard: a package of an unregistered kind has an
-    # edge story the registry cannot vouch for, so no narrowing is
-    # honest. Everything runs, and the reason is printed rather than
-    # silently widening the gate.
     for package in packages:
         if package.kind not in kind_names():
             print(
@@ -139,15 +160,7 @@ def affected_packages(
                 " registered kind; failing open to everything"
             )
             return None
-    scope = affected_from_paths(
-        root,
-        packages,
-        git.changed_paths(base),
-        git=git,
-        # Asked only for a change outside every package.
-        before=lambda: git.merge_base(base),
-    )
-    return None if scope is None else scope.packages
+    return affected_from_paths(root, packages, paths, git=git, before=before)
 
 
 @dataclass(frozen=True)
