@@ -1828,6 +1828,20 @@ Acceptance:
   before the ruling: an untyped function in the codec fails the
   `api`'s verification once the codec is declared, and passes it while
   undeclared.
+- Willem, 2026-10-05: an extension is tested end to end without a
+  release. The loop's birth locks the newborn before the pass
+  publishes anything, so `fm ci.e2e` first builds the dev wheels of
+  the workshop and of every extension a birth lists (the dev act with
+  no index to publish to) into a local simple index under the lane's
+  home, and runs the birth with that index first in `UV_INDEX`. uv
+  takes a package from the first index that has it and admits a
+  prerelease where that index holds nothing else, so the dev wheels
+  win and everything else comes from PyPI; `UV_FIND_LINKS` would not
+  do, since a folder named there only adds candidates and PyPI's
+  stable release beats a dev wheel (both measured with uv 0.12.7).
+  The wiring after the birth is unchanged. Releasing to unblock the
+  loop is not the fix: the permission to release intermediate
+  versions was for this migration only.
 - 2026-10-05, 9b2: a package's roots are its build's `module-name`
   where the manifest declares one, the modules its wheel ships, and
   the `api.py` and `__init__.py` marks otherwise. The layering check's

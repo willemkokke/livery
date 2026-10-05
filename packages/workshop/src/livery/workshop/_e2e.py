@@ -30,6 +30,7 @@ from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge.api import Forge, Job, Repository, Run
+    from livery.workshop._git_ops import GitOps
 
 #: The seeded organisation and the loop's one scratch repository.
 E2E_OWNER = "livery"
@@ -606,14 +607,25 @@ def _loop_home(kind: str) -> Path:
 def _dev_pins(root: Path, head: str, members: tuple[str, ...]) -> dict[str, str]:
     """The dev versions this pass built for *members*, by distribution name.
 
-    Read from the newest wheel in each member's ``dist``, which the
-    dev act just filled, and checked against *head*: a dev version's
-    local segment is ``<branch>.<sha>.<date>``, ``.dirty`` appended
-    for a tree no commit describes, so a wheel a previous pass left
-    behind can never pin the loop. Refuses, naming the member, when
-    a dist holds no wheel or its newest wheel is another commit's.
+    Read from the wheels [livery.workshop._e2e._dev_wheels][] finds.
     """
-    pins: dict[str, str] = {}
+    return {
+        name: wheel.name.split("-", 2)[1]
+        for name, wheel in _dev_wheels(root, head, members).items()
+    }
+
+
+def _dev_wheels(root: Path, head: str, members: tuple[str, ...]) -> dict[str, Path]:
+    """The wheel this pass built for each of *members*, by distribution name.
+
+    The newest wheel in each member's ``dist``, which the dev act just
+    filled, checked against *head*: a dev version's local segment is
+    ``<branch>.<sha>.<date>``, ``.dirty`` appended for a tree no
+    commit describes, so a wheel a previous pass left behind can never
+    pin the loop. Refuses, naming the member, when a dist holds no
+    wheel or its newest wheel is another commit's.
+    """
+    found: dict[str, Path] = {}
     for member in members:
         dist = root / "packages" / member / "dist"
         wheels = sorted(dist.glob("*.whl"), key=lambda wheel: wheel.stat().st_mtime)
@@ -632,8 +644,103 @@ def _dev_pins(root: Path, head: str, members: tuple[str, ...]) -> dict[str, str]
                 f" {sha or 'no commit'}, not from HEAD {head[:12]}: the dev"
                 f" act did not build this pass's {member}"
             )
-        pins[name.replace("_", "-")] = version
-    return pins
+        found[name.replace("_", "-")] = wheels[-1]
+    return found
+
+
+def _dev_split(root: Path, git: GitOps) -> tuple[list[str], dict[str, str]]:
+    """The dev members this pass builds, and the release each other one pins, by member.
+
+    A member nothing unreleased touches cannot be built as a dev
+    wheel: that number would sort below its release and satisfy no
+    floor naming it. The loop pins the release instead, and drops the
+    member's stale rehearsal wheels from the registry, which a
+    first-index resolve would otherwise pick over the release.
+    """
+    from livery.workshop._dev_release import unchanged_since_release
+    from livery.workshop._packages import discover_packages
+
+    packages = {package.member: package for package in discover_packages(root)}
+    changed: list[str] = []
+    released: dict[str, str] = {}
+    for member in dev_members(root):
+        version = unchanged_since_release(root, git, packages[member])
+        if version:
+            released[member] = version
+        else:
+            changed.append(member)
+    return changed, released
+
+
+def write_dev_index(folder: Path, wheels: Collection[Path]) -> Path:
+    """Lay *wheels* out at *folder* as a simple index uv reads; *folder*.
+
+    One directory per project, named as PEP 503 normalises it, holding
+    the project's wheels and a page that links them, and a root page
+    that links the projects. Whatever *folder* held before goes, so a
+    wheel an earlier pass built is never offered again.
+    """
+    if folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True)
+    projects: dict[str, list[Path]] = {}
+    for wheel in wheels:
+        name = re.sub(r"[-_.]+", "-", wheel.name.split("-", 1)[0]).lower()
+        projects.setdefault(name, []).append(wheel)
+    for name, files in sorted(projects.items()):
+        (folder / name).mkdir()
+        for wheel in files:
+            shutil.copy2(wheel, folder / name / wheel.name)
+        _index_page(folder / name, sorted(wheel.name for wheel in files))
+    _index_page(folder, [f"{name}/" for name in sorted(projects)])
+    return folder
+
+
+def _index_page(directory: Path, targets: list[str]) -> None:
+    """Write *directory*'s ``index.html``: one link per target."""
+    links = "".join(f'<a href="{target}">{target}</a>\n' for target in targets)
+    (directory / "index.html").write_text(
+        f"<!DOCTYPE html>\n<html><body>\n{links}</body></html>\n", "utf-8"
+    )
+
+
+def _dev_index(kind: str) -> str:
+    """Build this pass's dev wheels as a local index; its URL, empty when none changed.
+
+    The birth locks the newborn before the pass publishes anything,
+    and every extension the birth lists is in that first lock,
+    released or not. So the dev act runs here first with no index to
+    publish to, which leaves each changed member's wheel in its
+    ``dist/``, and [livery.workshop._e2e.write_dev_index][] lays the
+    wheels out under the lane's home. The birth names the index in
+    ``UV_INDEX``: uv takes a package from the first index that has it
+    and admits a prerelease where that index holds nothing else, so
+    the newborn resolves the dev wheels, and every other package from
+    PyPI. A folder named in ``UV_FIND_LINKS`` would not do: it only
+    adds candidates, and a stable release on PyPI wins over a dev
+    wheel (measured).
+    """
+    from livery.footman.api import run
+    from livery.workshop._dev_release import INDEX_VAR
+    from livery.workshop._extensions import workspace_root
+    from livery.workshop._git_ops import GitOps
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    git = GitOps(root)
+    changed, _released = _dev_split(root, git)
+    if not changed:
+        return ""
+    # No index to publish to, so the act builds and stops there.
+    built = {key: value for key, value in os.environ.items() if key != INDEX_VAR}
+    run([footman.prog(), "--yes", "workflow.release", *changed], cwd=root, env=built)
+    wheels = _dev_wheels(root, git.head_sha(), tuple(changed))
+    folder = write_dev_index(
+        _loop_home(kind).parent / f"{kind}-dev-index", wheels.values()
+    )
+    print(f"  dev wheels: {len(wheels)} built into {folder}, the index the birth reads")
+    return folder.as_uri()
 
 
 def _publish_dev_wheels(kind: str) -> dict[str, str]:
@@ -650,7 +757,6 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     loop's lock to pin exactly.
     """
     from livery.footman.api import run
-    from livery.workshop._dev_release import unchanged_since_release
     from livery.workshop._extensions import workspace_root
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import discover_packages
@@ -660,24 +766,13 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
         fail("no workspace: no workshop.toml above the working directory")
     _, token = _dev_forge(kind)
     git = GitOps(root)
-    # A member nothing unreleased touches cannot be built as a dev
-    # wheel: that number would sort below its release and satisfy no
-    # floor naming it. The loop pins the release instead, and drops
-    # the member's stale rehearsal wheels from the registry, which a
-    # first-index resolve would otherwise pick over the release.
     packages = {package.member: package for package in discover_packages(root)}
-    changed: list[str] = []
-    released: dict[str, str] = {}
-    for member in dev_members(root):
-        version = unchanged_since_release(root, git, packages[member])
-        if version:
-            released[packages[member].name] = version
-            print(
-                f"  {member}: nothing unreleased since {version}; the loop pins"
-                " the release"
-            )
-        else:
-            changed.append(member)
+    changed, pinned = _dev_split(root, git)
+    released = {packages[member].name: version for member, version in pinned.items()}
+    for member, version in pinned.items():
+        print(
+            f"  {member}: nothing unreleased since {version}; the loop pins the release"
+        )
     if released:
         purged = _purge(
             kind, os.environ.get(_lane(kind).url_var, ""), token, names=released
@@ -826,7 +921,7 @@ def _unpushed_commits(root: Path) -> list[str]:
     return [line for line in listed.stdout.splitlines() if line.strip()]
 
 
-def _birth(kind: str, url: str) -> Path:
+def _birth(kind: str, url: str, index: str = "") -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: seeds, git, repository,
@@ -835,11 +930,15 @@ def _birth(kind: str, url: str) -> Path:
     a task run in-process starts from the run's pinned environment,
     and the pass's own settings, its unsigned commits, would never
     reach the birth's git. Re-running resumes, so this is the recovery
-    procedure too.
+    procedure too. *index*, when given, is searched before any other
+    index the environment names ([livery.workshop._e2e._dev_index][]).
     """
     import sys
 
     home = _loop_home(kind)
+    env = {**os.environ, **unsigned_environment(os.environ)}
+    if index:
+        env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
     result = footman.run(
         [
@@ -855,7 +954,7 @@ def _birth(kind: str, url: str) -> Path:
             "--description=The workshop's local CI loop. Scratch; recreated freely.",
         ],
         cwd=home,
-        env={**os.environ, **unsigned_environment(os.environ)},
+        env=env,
         nofail=True,
         timeout=900.0,
     )
@@ -2497,7 +2596,7 @@ def _born(pass_: Pass) -> None:
         # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
-    root = _birth(forge, pass_.url)
+    root = _birth(forge, pass_.url, index=_dev_index(forge))
     _authenticate_remote(root, lane_token, forge)
     provision(forge)
     # After the project exists: GitLab's registry belongs to the
@@ -2688,12 +2787,15 @@ if _WORKSHOP_TESTS.is_dir():
         (birth, the verified skip, the members, the scoped leg),
         ``release`` (develop and the release act), ``points`` (the
         nightly, the dispatched gate, the contributed point) and
-        ``all``; a scenario's needs run first, once. ``birth`` births
-        or resumes the loop's workspace through ``fm new.project``
-        (repository, protection, setup pull request), provisions the
-        secrets, wires the workspace to the workshop's own dev wheels,
-        and follows the pushed head's runs to their verdicts on the
-        real runner. Re-running is the recovery procedure at every
+        ``all``; a scenario's needs run first, once. ``birth`` builds
+        the workshop's dev wheels, and those of the extensions a birth
+        lists, into a local index, births or resumes the loop's
+        workspace through ``fm new.project`` from that index (so an
+        extension the birth lists needs no release), with its
+        repository, protection and setup pull request, provisions the
+        secrets, wires the workspace to the dev wheels in the forge's
+        registry, and follows the pushed head's runs to their verdicts
+        on the real runner. Re-running is the recovery procedure at every
         step. The pass ends with a table, each scenario's time and
         runs, and records the same rows on the local ``loop`` series.
         ``--fresh`` starts over from nothing: the loop's repository on

@@ -327,11 +327,12 @@ def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
     calls: list[str] = []
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-abc"))
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.setattr(_e2e, "_dev_index", lambda kind: "")
 
     def _authenticate(root: Path, token: str, kind: str = "gitea") -> None:
         calls.append("authenticate")
 
-    def _birth(kind: str, url: str) -> Path:
+    def _birth(kind: str, url: str, index: str = "") -> Path:
         calls.append("birth")
         return root
 
@@ -655,6 +656,104 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     assert "forge: nothing unreleased since 0.3.0; the loop pins the release" in out
     assert "1 stale rehearsal release(s)" in out
     assert ("dev wheel(s) of the dirty tree dropped" in out) is not clean
+
+
+def test_no_dev_index_when_every_member_pins_its_release(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr(_e2e, "_dev_split", lambda root, git: ([], {"forge": "0.3.0"}))
+    ran: list[object] = []
+    monkeypatch.setattr("livery.footman.api.run", lambda *a, **k: ran.append(a))
+    assert _e2e._dev_index("gitea") == ""
+    assert ran == []
+
+
+def test_the_dev_index_lays_out_each_project_with_its_wheels(tmp_path: Path) -> None:
+    built = tmp_path / "dist"
+    built.mkdir()
+    wheels = [
+        built / "livery_workshop-0.6.0.dev1+feat.x.gabc1234.20261005-py3-none-any.whl",
+        built
+        / "livery_extensions_ruff-0.1.0.dev1+feat.x.gabc1234.20261005-py3-none-any.whl",
+    ]
+    for wheel in wheels:
+        wheel.write_bytes(b"wheel")
+    folder = tmp_path / "index"
+    (folder / "stale").mkdir(parents=True)
+    assert _e2e.write_dev_index(folder, wheels) == folder
+    # An earlier pass's layout is gone, and each project is its
+    # normalised name with its wheel and a page linking it.
+    assert sorted(path.name for path in folder.iterdir()) == [
+        "index.html",
+        "livery-extensions-ruff",
+        "livery-workshop",
+    ]
+    page = (folder / "livery-workshop" / "index.html").read_text()
+    assert f'<a href="{wheels[0].name}">' in page
+    assert (folder / "livery-workshop" / wheels[0].name).read_bytes() == b"wheel"
+    root_page = (folder / "index.html").read_text()
+    assert '<a href="livery-extensions-ruff/">' in root_page
+    assert '<a href="livery-workshop/">' in root_page
+
+
+def test_the_birth_reads_the_dev_index_before_any_other(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    seen: list[dict[str, str]] = []
+
+    def _run(argv: list[str], *, env: dict[str, str], **kwargs: object) -> object:
+        seen.append(dict(env))
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.setenv("UV_INDEX", "https://mirror.example/simple")
+    _e2e._birth("gitea", "http://localhost:1")
+    assert seen[-1]["UV_INDEX"] == "https://mirror.example/simple"
+    _e2e._birth("gitea", "http://localhost:1", index="file:///dev-index")
+    assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
+
+
+def test_the_dev_index_is_built_without_publishing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps",
+        lambda root: SimpleNamespace(head_sha=lambda: HEAD),
+    )
+    monkeypatch.setattr(
+        _e2e, "_dev_split", lambda root, git: (["workshop", "extensions/ruff"], {})
+    )
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path / "home" / kind)
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "http://registry.example/pypi")
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def _run(argv: list[str], *, env: dict[str, str], **kwargs: object) -> None:
+        calls.append((argv, dict(env)))
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
+    wheel = tmp_path / "livery_workshop-0.6.0.dev1-py3-none-any.whl"
+    wheel.write_bytes(b"wheel")
+    monkeypatch.setattr(
+        _e2e, "_dev_wheels", lambda root, head, members: {"livery-workshop": wheel}
+    )
+    url = _e2e._dev_index("gitea")
+    ((argv, env),) = calls
+    assert argv[-3:] == ["workflow.release", "workshop", "extensions/ruff"]
+    assert "PYTHON_PUBLISH_INDEX" not in env
+    folder = tmp_path / "home" / "gitea-dev-index"
+    assert url == folder.as_uri()
+    assert (folder / "livery-workshop" / wheel.name).is_file()
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
