@@ -1,0 +1,10 @@
+# This package's own ruff settings, on top of the workspace's root
+# ruff.toml, which the ruff extension writes.
+extend = "../../ruff.toml"
+
+# Added to the workspace's claims, which the extended root renders;
+# a per-file-ignores table of our own would replace them.
+[lint.extend-per-file-ignores]
+# The suite's refusal tests quote the messages they expect in full,
+# which runs past the column; the messages are the contract.
+"tests/**" = ["D1", "E501"]

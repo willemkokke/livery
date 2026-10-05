@@ -1,10 +1,10 @@
-"""The base names no package kind: the vocabulary test of contract 10.
+"""The base names no package kind and no extension's tool: the vocabulary test.
 
-The workshop's base (``livery.workshop`` outside ``_backends`` and
-``extensions``) reaches a kind through the kind registry, never by
-importing a backend or by spelling the kind's words. This test scans
-the base's sources for both, and for every extension's import of a
-backend.
+The workshop's base (``livery.workshop`` outside ``_backends``) reaches
+a kind through the kind registry, never by importing a backend or by
+spelling the kind's words, and names no tool a listed extension's
+checks bring. This test scans the base's sources for all three, and
+every extension's (``livery.extensions``) for an import of a backend.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
@@ -24,12 +24,12 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src"
+ROOT = Path(__file__).resolve().parents[3]
 MANIFESTS = ("pyproject.toml", "conanfile.py")
 BACKEND_IMPORT = "import a backend"
 
 #: The base's own python runtime: (module, word) to (count, reason).
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
-    ("_checks", "pyproject.toml"): (2, "the ruff fragments of the root pyproject"),
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
     ("_coverage_store", "pyproject.toml"): (1, "the root pins the gate reads"),
     ("_docs_contract", "container"): (2, "a docs publish seam, not an artifact"),
@@ -50,9 +50,9 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 #: What the base still knows of a kind: (module, word) to count. Only falls.
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_checks", BACKEND_IMPORT): 1,
-    ("_checks", "cpp-conan"): 6,
+    ("_checks", "cpp-conan"): 5,
     ("_checks", "pyproject.toml"): 6,
-    ("_checks", "python"): 2,
+    ("_checks", "python"): 1,
     ("_checks", "python-nanobind"): 1,
     ("_ci_generate", "conanfile.py"): 1,
     ("_devenv", "conan"): 2,
@@ -140,20 +140,21 @@ def scan(src: Path, words: set[str]) -> tuple[Counter[tuple[str, str]], list[str
         if "templates" in relative.parts:
             continue
         dotted = ".".join(relative.with_suffix("").parts).removesuffix(".__init__")
+        if dotted.startswith("livery.extensions."):
+            tree = ast.parse(path.read_text("utf-8"))
+            extensions += [
+                f"{dotted}:{node.lineno}"
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.Import, ast.ImportFrom))
+                and _imports_a_backend(node)
+            ]
+            continue
         if not dotted.startswith("livery.workshop."):
             continue
         module = dotted.removeprefix("livery.workshop.")
         if module.startswith("_backends"):
             continue
         tree = ast.parse(path.read_text("utf-8"))
-        if module.startswith("extensions."):
-            extensions += [
-                f"{module}:{node.lineno}"
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.Import, ast.ImportFrom))
-                and _imports_a_backend(node)
-            ]
-            continue
         skip = _docstrings(tree)
         for node in ast.walk(tree):
             if _imports_a_backend(node):
@@ -206,8 +207,74 @@ def test_the_base_names_no_kind_beyond_its_allowance() -> None:
 
 
 def test_no_extension_imports_a_backend() -> None:
-    _, extensions = scan(SRC, _words())
-    assert extensions == []
+    # Every member's sources: the extensions that ship in the base's
+    # wheel and the ones in their own.
+    found: list[str] = []
+    for src in sorted(ROOT.glob("packages/**/src")):
+        if (src / "livery" / "extensions").is_dir():
+            found += scan(src, _words())[1]
+    assert found == []
+
+
+#: The tools an extension's checks bring that the base still names:
+#: (module, tool) to (count, reason).
+TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
+    ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
+}
+
+
+def _extension_tools() -> set[str]:
+    """The tools the installed extensions' checks name."""
+    from importlib.metadata import entry_points
+
+    tools: set[str] = set()
+    for entry in entry_points(group="workshop.extensions"):
+        for record in getattr(entry.load(), "CHECKS", ()):
+            tools.update((record.tool, *record.tools))
+    return tools
+
+
+def tool_scan(src: Path, tools: set[str]) -> Counter[tuple[str, str]]:
+    """The base's string constants naming one of *tools*, by (module, tool).
+
+    A constant names a tool when the tool is one of its words: ``ruff``,
+    ``ruff>=0.16`` and ``format.ruff`` all do. Docstrings are prose and
+    left out, as the kind scan leaves them.
+    """
+    import re
+
+    found: Counter[tuple[str, str]] = Counter()
+    for path in sorted((src / "livery" / "workshop").rglob("*.py")):
+        module = ".".join(
+            path.relative_to(src / "livery" / "workshop").with_suffix("").parts
+        )
+        tree = ast.parse(path.read_text("utf-8"))
+        skip = _docstrings(tree)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in skip
+            ):
+                words = set(re.split(r"[^A-Za-z0-9_-]+", node.value))
+                for tool in tools & words:
+                    found[(module, tool)] += 1
+    return found
+
+
+def test_the_base_names_no_tool_an_extension_brings() -> None:
+    import livery.workshop.api
+
+    if not Path(livery.workshop.api.__file__).resolve().is_relative_to(ROOT):
+        # The release train's isolated leg installs the workshop's wheel
+        # alone, and no extension that depends on the workshop is there
+        # to say which tools it brings.
+        pytest.skip("the scan reads the extensions this checkout installs")
+    tools = _extension_tools()
+    assert "ruff" in tools  # the scan has something to look for
+    found = tool_scan(SRC, tools)
+    allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
+    assert dict(found) == allowed
 
 
 def _base_module(tmp_path: Path, name: str, text: str) -> Path:
@@ -282,13 +349,11 @@ def test_every_runtime_entry_states_its_reason(key: tuple[str, str]) -> None:
 
 
 def test_a_extension_importing_a_backend_is_named(tmp_path: Path) -> None:
-    src = _base_module(
-        tmp_path,
-        "extensions/site/_pages.py",
-        "def f():\n    from livery.workshop._backends._python import x\n",
-    )
-    _, extensions = scan(src, set())
-    assert extensions == ["extensions.site._pages:2"]
+    module = tmp_path / "livery" / "extensions" / "site" / "_pages.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("def f():\n    from livery.workshop._backends._python import x\n")
+    _, extensions = scan(tmp_path, set())
+    assert extensions == ["livery.extensions.site._pages:2"]
 
 
 def _loaded_by(statement: str, prefixes: tuple[str, ...]) -> list[str]:

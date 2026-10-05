@@ -80,7 +80,7 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    assert extension_names(ROOT) == ("docs",)
+    assert extension_names(ROOT) == ("docs", "ruff")
 
 
 def test_outside_a_workspace_there_are_no_extensions(tmp_path: Path) -> None:
@@ -166,3 +166,61 @@ def test_declared_but_unmounted_extensions_teach_the_rerender(
     monkeypatch.setattr(_extensions, "MOUNTED", False)
     _warn_unmounted_extensions(tmp_path)
     assert capsys.readouterr().err == ""
+
+
+def test_a_declaration_whose_checks_are_not_records_refuses_naming_what_it_found() -> (
+    None
+):
+    from types import ModuleType
+
+    from livery.workshop._extensions import register_declared_checks
+
+    module = ModuleType("acme_declaration")
+    module.CHECKS = ["lint.acme"]  # type: ignore[attr-defined]
+    with pytest.raises(
+        RuntimeError,
+        match=r"extension 'acme' declares CHECKS as a list; it takes a tuple",
+    ):
+        register_declared_checks("acme", module)
+    module.CHECKS = ("lint.acme",)  # type: ignore[attr-defined]
+    with pytest.raises(RuntimeError, match=r"declares CHECKS with a str among them"):
+        register_declared_checks("acme", module)
+
+
+def test_declared_checks_register_under_the_listed_name(registry_state: None) -> None:
+    from types import ModuleType
+
+    from livery.workshop._checks import CheckRecord, GateContext, checks_by_name
+    from livery.workshop._extensions import register_declared_checks
+
+    def idle(ctx: GateContext) -> None:
+        del ctx
+
+    module = ModuleType("acme_declaration")
+    assert register_declared_checks("acme", module) is False
+    module.CHECKS = (  # type: ignore[attr-defined]
+        CheckRecord("acme", "lint", idle, extension="whatever.it.says"),
+    )
+    assert register_declared_checks("acme", module) is True
+    assert checks_by_name()["lint.acme"].extension == "acme"
+
+
+def test_an_uninstalled_extension_is_taken_at_the_family_s_distribution() -> None:
+    from livery.workshop._extensions import distribution_of
+
+    # A short name is one of the base's family, never the index's
+    # package of that bare name; an import path folds its dots.
+    assert distribution_of("not-installed-anywhere") == (
+        "livery-extensions-not-installed-anywhere"
+    )
+    assert distribution_of("acme.thing") == "acme-thing"
+    assert distribution_of("ruff") == "livery-extensions-ruff"
+
+
+@pytest.fixture
+def registry_state():
+    from livery.workshop import _checks
+
+    state = _checks.snapshot()
+    yield
+    _checks.restore(state)

@@ -26,7 +26,7 @@ _sums: dict[str, dict[str, float]] = defaultdict(lambda: {"seconds": 0.0, "tests
 
 #: The directories a package's tests live under: the path before the
 #: first of them names the package, one level deeper in a group
-#: directory (``packages/extensions/ruff/tests/...``).
+#: directory (``packages/extensions/widgets/tests/...``).
 PACKAGE_TREES = frozenset({"tests", "src", "docs"})
 
 

@@ -27,9 +27,10 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
+livery-extensions-ruff = { workspace = true }
 livery-footman = { workspace = true }
 livery-forge = { workspace = true }
 livery-strongroom = { workspace = true }
@@ -52,6 +53,7 @@ dev = [
     # Typed tool handles tasks.py runs through.
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
+    "livery-extensions-ruff",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
     "livery-strongroom",
@@ -89,42 +91,6 @@ docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 # ambient. Loosen a single kind here with a reason, never the star.
 "*" = "error"
 
-[tool.ruff]
-line-length = 88
-target-version = "py311"
-src = ["packages/footman/src", "packages/footman/tests", "packages/forge/src", "packages/forge/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
-
-[tool.ruff.format]
-# A markdown page is prose: a python fence may hold a snippet directive
-# or code shown as it is, and a documentation example file keeps the
-# layout its page shows, so the formatter leaves both alone.
-exclude = ["*.md", "packages/*/docs/examples/**", "docs/examples/**"]
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.per-file-ignores]
-# The claims first: each line is a category's patterns for a present
-# kind, with the rules a check withholds there.
-"packages/*/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "F841", "I", "RUF", "SIM", "UP"]
-"packages/*/tests/**" = ["D1"]
-"packages/*/tests/**/*_test.py" = ["D1"]
-"packages/*/tests/**/test_*.py" = ["D1"]
-"tests/**" = ["D1"]
-"tests/**/*_test.py" = ["D1"]
-"tests/**/test_*.py" = ["D1"]
-# The composed tasks.py opens with the header the fragment engine
-# writes, whose lines it does not wrap.
-"tasks.py" = ["E501"]
-# The CI emitters carry workflow YAML as string content, and the
-# check records' fragments carry the rendered files' tables; their
-# lines are the generated files' lines, not prose to wrap.
-"**/_ci_generate.py" = ["E501"]
-"**/_fragments.py" = ["E501"]
-
 [tool.coverage.run]
 # The tests measure, and every process they start, every
 # fm child a test spawns included: inside CI the test
@@ -159,7 +125,7 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
+pythonpath = ["packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
@@ -195,6 +161,8 @@ reportMissingModuleSource = false
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
 files = [
+    "packages/extensions/ruff/src",
+    "packages/extensions/ruff/tests",
     "packages/footman/src",
     "packages/footman/tests",
     "packages/forge/src",
@@ -214,6 +182,8 @@ files = [
 ]
 mypy_path = [
     "typings",
+    "packages/extensions/ruff/src",
+    "packages/extensions/ruff/tests",
     "packages/footman/src",
     "packages/footman/tests",
     "packages/forge/src",
@@ -268,7 +238,7 @@ warn_unused_ignores = false
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+project-includes = ["packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -291,7 +261,7 @@ unnecessary-type-conversion = "error"
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = ["packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+include = ["packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.

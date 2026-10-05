@@ -175,6 +175,19 @@ def test_a_crlf_checkout_of_a_rendered_file_is_the_same_file(tmp_path: Path) -> 
 # --- composition ----------------------------------------------------------------
 
 
+def test_a_template_that_reads_contributions_renders_when_none_came(
+    tmp_path: Path,
+) -> None:
+    # The template carries comments, so composing it as a plain JSON part
+    # would read them as broken JSON: it renders from an empty merge.
+    template = '{\n  // the contributions\n{{ contributed_entries }}  "own": 1\n}\n'
+    (output,) = _plan(
+        tmp_path,
+        Fragment("livery.workshop", "s", ".vscode/settings.json", template),
+    )
+    assert output.body == b'{\n  // the contributions\n  "own": 1\n}\n'
+
+
 def test_each_target_type_composes_its_fragments_in_extension_order(
     tmp_path: Path,
 ) -> None:

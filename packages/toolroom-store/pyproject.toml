@@ -43,13 +43,3 @@ Repository = "https://github.com/willemkokke/livery"
 # PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
 module-name = "livery.toolroom.store"
 namespace = true
-
-[tool.ruff]
-extend = "../../pyproject.toml"
-
-# Added to the workspace's claims, which the extended root renders;
-# a per-file-ignores table of our own would replace them.
-[tool.ruff.lint.extend-per-file-ignores]
-# The suite's refusal tests quote the messages they expect in full,
-# which runs past the column; the messages are the contract.
-"tests/**" = ["D1", "E501"]

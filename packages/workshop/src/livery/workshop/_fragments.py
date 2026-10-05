@@ -147,38 +147,6 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 # The builtin fragments, moved from the base template verbatim: each
 # tool's table where the tool reads one file per project.
 
-RUFF_BASE = r"""[tool.ruff]
-line-length = 88
-target-version = "py{{ python_floor | replace('.', '') }}"
-src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-
-[tool.ruff.format]
-# A markdown page is prose: a python fence may hold a snippet directive
-# or code shown as it is, and a documentation example file keeps the
-# layout its page shows, so the formatter leaves both alone.
-exclude = ["*.md", "packages/*/docs/examples/**", "docs/examples/**"]
-"""
-
-RUFF_LINT = r"""[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.per-file-ignores]
-# The claims first: each line is a category's patterns for a present
-# kind, with the rules a check withholds there.
-{% for pattern, codes in per_file_ignores %}"{{ pattern }}" = [{% for code in codes %}"{{ code }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-{% endfor %}# The composed tasks.py opens with the header the fragment engine
-# writes, whose lines it does not wrap.
-"tasks.py" = ["E501"]
-# The CI emitters carry workflow YAML as string content, and the
-# check records' fragments carry the rendered files' tables; their
-# lines are the generated files' lines, not prose to wrap.
-"**/_ci_generate.py" = ["E501"]
-"**/_fragments.py" = ["E501"]
-"""
-
 BASEDPYRIGHT = r"""[tool.basedpyright]
 include = [{% if packages %}"packages", {% endif %}{% for path in root_tests %}"{{ path }}", {% endfor %}"tasks.py"]
 # A conan recipe is conan's input, read by conan's own interpreter
@@ -367,9 +335,4 @@ Checks: >
   -bugprone-easily-swappable-parameters
 WarningsAsErrors: "*"
 HeaderFilterRegex: "^$"
-"""
-
-#: The editor: ruff formats python in the editor as in the gate.
-RUFF_SETTINGS = """\
-{"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}}
 """

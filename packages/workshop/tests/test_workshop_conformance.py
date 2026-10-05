@@ -231,7 +231,9 @@ def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_
             "lint",
             _idle,
             extension=EXTENSION,
-            fragments=(Fragment("pyproject.toml", "[tool.ruff]\nline-length = 100\n"),),
+            fragments=(
+                Fragment("pyproject.toml", "[tool.basedpyright]\nstrict = []\n"),
+            ),
         )
     )
     subject = replace(subject, checks=(*subject.checks, check_for("lint.acme-table")))
@@ -239,7 +241,8 @@ def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_
     assert len(found) == 2, found
     assert found[0].startswith(
         "fragment-drift: pyproject.toml: composed with the fragment of"
-        " lint.acme-table, it is not TOML: Cannot declare ('tool', 'ruff') twice"
+        " lint.acme-table, it is not TOML: Cannot declare ('tool', 'basedpyright')"
+        " twice"
     )
     assert found[1].startswith(f"fragment-drift: {TIDY}: does not render: ")
 
@@ -474,8 +477,8 @@ def test_the_builtin_kinds_and_checks_pass_every_clause() -> None:
         "cpp-conan",
     }
     assert {record.name for record in subject.checks} >= {
-        "format.ruff",
-        "lint.ruff",
+        "format.clang-format",
+        "typecheck.mypy",
         "test.pytest",
     }
     assert judge(subject) == []

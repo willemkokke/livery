@@ -45,6 +45,8 @@ module declares:
 - `TOOLS`, the tools its own verbs need, `("docker?>=27",)`, one of
   the sites the tool profile reads;
 - `CONTRACT_KEYS`, the contract keys it reads;
+- `CHECKS`, the check records it adds to the gate, a tuple the mount
+  registers under the listed name, which the gate prints beside each;
 - `FOR`, a map from a target extension to the module carrying the
   registrations for that target, `{"python": "acme.house.python"}`.
 
@@ -186,6 +188,17 @@ under `development/`, and renders each kind's API extractor from its
 data: the handler's name, a package's pages and search paths, the
 inventories, and the handler's options as a table.
 
+The formatter and the linter are an extension with a distribution of
+its own, `livery-extensions-ruff`, listed as `ruff`. Listed, it
+registers `format.ruff` and `lint.ruff`, which join the `format` and
+`lint` roles, and `fm sync` writes the root `ruff.toml` they read,
+which a bare `ruff` reads too. A package's own settings go in its own
+`ruff.toml`, which extends the root one with `extend = "../../ruff.toml"`;
+its per-file ignores go under `[lint.extend-per-file-ignores]`, because
+a `per-file-ignores` table of its own replaces the workspace's.
+Unlisted, the extension registers nothing and writes nothing.
+`fm new.project` lists `docs` and `ruff`.
+
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the
 snippets extension: a fence whose one line is the snippet marker
@@ -202,18 +215,19 @@ runs the package's directory. A `conftest.py` beside the examples is
 the package's setup around them, never an example: it reaches every
 example item through the `example` marker, as footman's does to run
 each inside a captured registry, and naming it runs every example.
-The `example` category is claimed by `lint.ruff`, for names only, by
-`examples.pytest` and by the site; a page's prose reaches the site
+The `example` category is claimed by the ruff extension's `lint.ruff`,
+for names only, by `examples.pytest` and by the site; a page's prose reaches the site
 build and no test, and an example file reaches the examples check and
 the site.
 
 A check record also owns its configuration. Its `fragments`, one per
-rendered file, are what the render writes for it: the format, lint,
-typecheck and test records carry every `[tool.*]` table of the root
-`pyproject.toml`, composed in check-name order where the base template
-leaves the `fragments` block, and a check an extension withdraws takes its
+rendered file, are what the render writes for it: the typecheck and
+test records carry the `[tool.*]` tables of the root `pyproject.toml`,
+composed in check-name order where the base template leaves the
+`fragments` block, and a check an extension withdraws takes its
 tables with it. A tool that reads one file per project gets its
-section there; a tool that searches upward from each file, clang-format
+section there, or a file of its own that its extension writes, as
+ruff's `ruff.toml`; a tool that searches upward from each file, clang-format
 and clang-tidy in a native package, gets a managed file where it looks,
 rendered from the record's fragment for the package's kind and judged
 by the drift gate, with a `.workshop-rendered` receipt beside it so a
@@ -231,8 +245,8 @@ withholds there and the suffixes it reads. A category is a role, not
 a language, so ruff claims a native package's configuration and
 reaches its `conanfile.py` alone, which a scoped gate hands it by
 name. `fm explain` prints the checks whose claims reach a file, and
-the lint check's category-shaped per-file ignores render from the
-claims over the present kinds' tables, so the docstring rules stop at
+the per-file ignores in `ruff.toml` render from the claims over the
+present kinds' tables, so the docstring rules stop at
 the tests of every kind without a table typed by hand.
 
 An extension's prose, its voice, its standards, its rules, is a set of
@@ -274,10 +288,11 @@ between the markers from the committed file and writes it back in
 place, so it keeps your lines and `fm drift` still compares the whole
 file: an edit inside a region is yours, an edit outside it is drift,
 and a removed marker is drift too. The root
-`pyproject.toml` carries a `tables` region for your own tables, the
-root `.gitignore` a `rules` region, `.vscode/settings.json` a
-`settings` region, `tasks.py` a `tasks` region below the mount, and a
-package's `cliff.toml` an `own` region. `fm explain <file>` names a
+`pyproject.toml` carries a `tables` region for your own tables, as
+does the root `ruff.toml`; the root `.gitignore` carries a `rules`
+region, `.vscode/settings.json` a `settings` region, `tasks.py` a
+`tasks` region below the mount, and a package's `cliff.toml` an `own`
+region. `fm explain <file>` names a
 file's regions and their lines. A managed file whose format has no
 comments keeps your lines as a tail after the lines the render owns.
 
@@ -397,7 +412,12 @@ absence.
 
 - `fm check`: format, lint, four gating type checkers, public-API
   type-completeness, the tests with per-package coverage floors, and
-  the render gate. Every gate walks the check registry the same way,
+  the render gate. Type-completeness covers what each root declares:
+  a namespace root's `api`, or a root that is a regular package. A
+  public package beneath a root keeps its own import path and is
+  declared in the root's `api` as well, imported under `TYPE_CHECKING`
+  and listed in `__all__`, and the verifier follows the declaration
+  into it; `py.typed` sits at the distribution's root. Every gate walks the check registry the same way,
   whole or narrowed, on a machine or on a leg: under `--fix` every
   fixer that applies rewrites first, one at a time, then every judge
   runs in one parallel block, a check that rewrote not judged again;

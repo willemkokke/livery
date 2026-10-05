@@ -142,15 +142,15 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     """The extensions a birth lists, from the running App's builtin providers.
 
     Footman's own providers and the base are never listed. A stock App
-    (the base among its builtins) lists the site's extension first; the
-    list is in precedence order, so a brand's own extensions follow it
-    and win.
+    (the base among its builtins) lists the site's extension and the
+    python formatter's first, as ruled; the list is in precedence
+    order, so a brand's own extensions follow them and win.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
     stack = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack.insert(0, "docs")
+        stack[:0] = ["docs", "ruff"]
     return stack
 
 

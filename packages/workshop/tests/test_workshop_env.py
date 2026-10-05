@@ -33,6 +33,7 @@ from livery.workshop._envfile import (
     set_value,
 )
 from livery.workshop._hooks import HookEvent, ToolInput, post_edit, stop
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -317,7 +318,7 @@ def test_the_github_emission_persists_the_moved_temp(
 
 def test_the_tool_profile_derives_from_package_types(tmp_path: Path) -> None:
     profile = tool_profile(tmp_path)  # no packages: the python kind's tools
-    assert "uv" in profile and "ruff" in profile and "ty" in profile
+    assert "uv" in profile and "mypy" in profile and "ty" in profile
 
 
 # --- clean: the protections before the removals ---
@@ -403,9 +404,13 @@ def _event(**kwargs: object) -> HookEvent:
     return HookEvent(**kwargs)  # type: ignore[arg-type]
 
 
-def test_post_edit_is_best_effort_and_touches_only_python(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_post_edit_is_best_effort_and_asks_only_the_fixers_that_claim_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
+    from typing import cast
+
+    import workshop_python_checks as fake_checks
+
     # The hook walks the workspace's registry from the project root,
     # where a real hook runs.
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
@@ -414,37 +419,33 @@ def test_post_edit_is_best_effort_and_touches_only_python(
     # variables, under which a fix refuses.
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    victim = tmp_path / "messy.py"
-    victim.write_text("x=1\n")
-    post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
-    assert victim.read_text() == "x = 1\n"  # ruff format ran
-    # A missing file and a non-Python file are silent no-ops.
+    calls: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        fake_checks, "run_format", lambda **kw: calls.append(("format", kw))
+    )
+    monkeypatch.setattr(
+        fake_checks, "run_lint", lambda **kw: calls.append(("lint", kw))
+    )
+    # A missing file and a non-python file are silent no-ops.
     post_edit(_event(tool_input=ToolInput(file_path=str(tmp_path / "gone.py"))))
     other = tmp_path / "notes.md"
     other.write_text("#Heading\n")
     post_edit(_event(tool_input=ToolInput(file_path=str(other))))
-    assert other.read_text() == "#Heading\n"
-
-
-def test_post_edit_never_removes_an_import_mid_edit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    (tmp_path / "workshop.toml").write_text("[workspace]\n")
-    monkeypatch.chdir(tmp_path)
-    # A desk's edit: the gate's own test run sets the runner's
-    # variables, under which a fix refuses.
-    monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    # An edit in flight adds the import before the code that uses
-    # it; the hook firing between the two edits must fix everything
-    # else and leave the import standing (measured deleted, twice in
-    # one session, before this held).
-    victim = tmp_path / "wip.py"
-    victim.write_text("import os\nx=1\n")
+    assert calls == []
+    # An edit in flight adds the import before the code that uses it,
+    # so the fixers run in the mode that removes no code.
+    victim = tmp_path / "messy.py"
+    victim.write_text("x=1\n")
     post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
-    healed = victim.read_text()
-    assert "import os" in healed  # the not-yet-used import survives
-    assert "x = 1" in healed  # everything else still heals
+    assert [
+        (name, {k: v for k, v in kw.items() if k != "paths"}) for name, kw in calls
+    ] == [
+        ("format", {"check": False, "safe_fix": True}),
+        ("lint", {"fix": False, "safe_fix": True}),
+    ]
+    for _name, kw in calls:
+        paths = cast("tuple[str, ...]", kw["paths"])
+        assert [Path(path).resolve() for path in paths] == [victim.resolve()]
 
 
 def _transcript(tmp_path: Path, result_text: str) -> Path:

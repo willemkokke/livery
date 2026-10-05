@@ -18,6 +18,8 @@ copyright-year = "2026"
 extensions = [
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
+    # The python formatter and linter, configured by the root ruff.toml.
+    "ruff",
 ]
 
 [docs]

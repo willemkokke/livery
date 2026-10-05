@@ -267,7 +267,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     assert {r.name for r in declared} == {
         "git_cliff",
         "uv",
-        "ruff",
         "pytest",
         "basedpyright",
         "mypy",
@@ -279,8 +278,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     sites = {(r.name, r.site) for r in declared}
     assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
     assert {
-        ("ruff", "check format.ruff"),
-        ("ruff", "check lint.ruff"),
         ("pytest", "check test.pytest"),
         ("basedpyright", "check typecheck.basedpyright"),
         ("basedpyright", "check typecomplete.basedpyright"),
@@ -302,7 +299,7 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     source = (Path(_tools.__file__).parent / "_env_tasks.py").read_text(
         encoding="utf-8"
     )
-    assert '"ruff", "pytest"' not in source
+    assert '"mypy", "pytest"' not in source
 
 
 def test_the_three_sites_union_and_each_names_itself(
@@ -323,7 +320,7 @@ def test_the_three_sites_union_and_each_names_itself(
     sites = {(r.name, r.site) for r in _tools.requirements(root)}
     assert ("cspell", "packages/member/workshop.toml") in sites
     assert ("git-cliff", "workshop.toml") in sites
-    assert ("ruff", "workshop.toml") in sites and ("ruff", "check format.ruff") in sites
+    assert ("ruff", "workshop.toml") in sites
     lock = _tools.write_lock(root)
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
@@ -332,15 +329,14 @@ def test_the_three_sites_union_and_each_names_itself(
         THREE
     )
     # The kinds first, as declared: the base's tool, then python's.
-    assert _tools.tool_names(root)[:3] == ("git_cliff", "uv", "ruff")
+    assert _tools.tool_names(root)[:2] == ("git_cliff", "uv")
 
 
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
         "git_cliff",  # the base kind's, first in the chain
         "uv",  # the python kind's own
-        "ruff",  # then the checks' tools, in the checks' registration order
-        "basedpyright",
+        "basedpyright",  # then the checks' tools, in their registration order
         "mypy",
         "ty",
         "pyrefly",
@@ -375,8 +371,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    # Seven of the python kind, the base kind's git_cliff, and this one.
-    assert "git-cliff 2.1.0" in out and "tools.lock: 9 tool(s)" in out
+    # Six of the python kind, the base kind's git_cliff, and this one.
+    assert "git-cliff 2.1.0" in out and "tools.lock: 8 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
@@ -422,22 +418,22 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
     root = _workspace(tmp_path, monkeypatch)
     _tool_tasks.tools_lock()
     before = Lock.load(root / "tools.lock")
-    assert before.tools["ruff"].version == "1.1.0"
-    # A newer ruff arrives; the lock stands until asked.
-    _records(root, Record("ruff", kind="pypi", deltas=_read("1.0.0", "1.1.0", "1.2.0")))
+    assert before.tools["mypy"].version == "1.1.0"
+    # A newer mypy arrives; the lock stands until asked.
+    _records(root, Record("mypy", kind="pypi", deltas=_read("1.0.0", "1.1.0", "1.2.0")))
     _tool_tasks.tools_lock()
-    assert Lock.load(root / "tools.lock").tools["ruff"].version == "1.1.0"
+    assert Lock.load(root / "tools.lock").tools["mypy"].version == "1.1.0"
     capsys.readouterr()
-    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
+    _tool_tasks.tools_lock(upgrade_tool=["mypy"])
     out = capsys.readouterr().out
-    assert "ruff 1.2.0  moved" in out
+    assert "mypy 1.2.0  moved" in out
     after = Lock.load(root / "tools.lock")
-    assert after.tools["ruff"].version == "1.2.0"
-    assert {n: e for n, e in after.tools.items() if n != "ruff"} == {
-        n: e for n, e in before.tools.items() if n != "ruff"
+    assert after.tools["mypy"].version == "1.2.0"
+    assert {n: e for n, e in after.tools.items() if n != "mypy"} == {
+        n: e for n, e in before.tools.items() if n != "mypy"
     }  # one entry moved, the diff names one version
-    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
-    assert "nothing moved: ruff already at the newest" in capsys.readouterr().out
+    _tool_tasks.tools_lock(upgrade_tool=["mypy"])
+    assert "nothing moved: mypy already at the newest" in capsys.readouterr().out
     with pytest.raises(Failed, match=r"black is not a tool the sites require"):
         _tool_tasks.tools_lock(upgrade_tool=["black"])
 
@@ -785,9 +781,9 @@ def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
     receipts = _tools.receipts_dir(root)
     receipts.mkdir(parents=True)
     (receipts / "tea.json").write_text("{}")
-    (receipts / "ruff.json").write_text("{}")
+    (receipts / "mypy.json").write_text("{}")
     outcomes = _tools.materialise(root, strict=False)
-    assert "tea" not in supplied and "ruff" in supplied
+    assert "tea" not in supplied and "mypy" in supplied
     assert all(made.receipt is None for made in outcomes)
     assert not (receipts / "tea.json").exists()
 
@@ -842,7 +838,7 @@ def test_a_runner_on_an_unsupported_host_refuses(
     assert f"  {unsupported}\n" in capsys.readouterr().out
     reported = [made.failure for made in outcomes if made.failure]
     assert any(f"tea 1.0.0: not locked for {HERE}" in why for why in reported)
-    assert "tea" not in supplied and "ruff" in supplied
+    assert "tea" not in supplied and "mypy" in supplied
 
 
 def test_the_supported_hosts_read_the_scope_tokens_and_refuse_a_bad_list(
@@ -908,7 +904,7 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "index"\n')
     monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
     assert _tools.write_lock(root) == _tools.write_lock(root)
-    assert _tools.write_lock(root).tools["ruff"].version == "1.1.0"
+    assert _tools.write_lock(root).tools["mypy"].version == "1.1.0"
 
 
 def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
@@ -928,7 +924,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told
-    for name in ("ruff", "basedpyright"):
+    for name in ("git_cliff", "basedpyright"):
         assert name in told
     # The declaration, then the two verbs, in the order a reader runs them.
     assert "[tools]" in told and "index =" in told
@@ -1149,12 +1145,12 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The allowance is refused where a version is a verdict, an entry, or a typo."""
-    root = _workspace(tmp_path, monkeypatch, tools='host-allowed = ["ruff"]\n')
+    root = _workspace(tmp_path, monkeypatch, tools='host-allowed = ["mypy"]\n')
     with pytest.raises(
         Failed,
         match=(
-            r"host-allowed names ruff, whose version is a verdict:"
-            r" format\.ruff, lint\.ruff read it"
+            r"host-allowed names mypy, whose version is a verdict:"
+            r" typecheck\.mypy reads it"
         ),
     ):
         _tools.write_lock(root)

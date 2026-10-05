@@ -534,6 +534,22 @@ def test_dev_members_are_the_workshop_s_closure_once_each(tmp_path: Path) -> Non
     )
 
 
+def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
+    # An extension depends on the workshop, so the workshop's closure
+    # never reaches it, and a newborn listing it would install nothing.
+    _member(tmp_path, "workshop", "toolroom")
+    _member(tmp_path, "toolroom")
+    _member(tmp_path, "unlisted", "workshop")
+    home = tmp_path / "packages" / "extensions" / "ruff"
+    home.mkdir(parents=True)
+    (home / "workshop.toml").write_text(
+        'kind = "python"\nname = "livery-extensions-ruff"\n'
+        '\n[[depends]]\npath = "packages/workshop"\nkind = "runtime"\nfloor = "0"\n'
+    )
+    (home / "pyproject.toml").write_text('[project]\nname = "livery-extensions-ruff"\n')
+    assert _e2e.dev_members(tmp_path) == ("workshop", "extensions/ruff", "toolroom")
+
+
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:
     (tmp_path / "packages" / "workshop" / "dist").mkdir(parents=True)
     with pytest.raises(_FAILURES, match="built nothing for workshop"):

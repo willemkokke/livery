@@ -30,6 +30,7 @@ from livery.workshop._prose import (
     unregister_section,
 )
 from livery.workshop._sync import sync_workspace
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 WORKSHOP_CONTENT = Path(livery.workshop.api.__file__).resolve().parent / "content"
 
@@ -320,7 +321,7 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
 
 
 def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_reader(
-    tmp_path: Path, restored
+    tmp_path: Path, restored, python_checks: object
 ) -> None:
     root = _workspace(tmp_path)
     register_check(
@@ -329,7 +330,8 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
         )
     )
     # Without a package only the workspace's own checks are in the gate:
-    # neither the test extension's nor ruff, which judges no kind present.
+    # neither the test extension's nor the python formatter, which judges
+    # no kind present.
     agent = render_gate(root, AGENT)
     assert "acme-native" not in agent and "format" not in agent
     assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
@@ -338,7 +340,7 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
     agent = render_gate(root, AGENT)
     assert "- lint.acme-native: judges cpp-conan packages" in agent
     assert (
-        "- format.ruff: judges python, cpp-conan packages; rewrites under --fix"
+        "- format.fake: judges python, cpp-conan packages; rewrites under --fix"
         in agent
     )
     assert "typecheck" not in agent
@@ -351,7 +353,7 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
     human = render_gate(root, HUMAN)
     assert human != agent
     assert "| lint.acme-native | none | cpp-conan | no |" in human
-    assert "| format.ruff | ruff | python, cpp-conan | yes |" in human
+    assert "| format.fake | fake | python, cpp-conan | yes |" in human
 
 
 def test_a_shipped_fragment_lands_byte_for_byte_and_an_edit_is_kept_and_named(

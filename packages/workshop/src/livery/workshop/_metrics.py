@@ -146,7 +146,7 @@ def _steps_by_task(
 
 
 def _package_of(nodeid: str) -> str:
-    """The member a test node belongs to (``forge``, ``extensions/ruff``), or ``""``."""
+    """The member a test node is of: ``forge``, ``extensions/widgets``, or empty."""
     from livery.workshop._pytest_speed import package_of
 
     return package_of(nodeid).removeprefix("packages/")

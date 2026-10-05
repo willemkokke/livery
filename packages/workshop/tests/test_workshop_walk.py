@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import workshop_python_checks as fake_checks
 from livery.workshop import _checks
 from livery.workshop._checks import (
     PACKAGE,
@@ -22,6 +23,7 @@ from livery.workshop._checks import (
     with_files,
 )
 from livery.workshop._packages import discover_packages
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 
 def _repository(tmp_path: Path) -> Path:
@@ -199,6 +201,7 @@ def test_named_paths_become_the_files_they_name(tmp_path: Path) -> None:
 def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     tmp_path: Path,
     registry: None,
+    python_checks: object,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -218,13 +221,9 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 
         return body
 
-    for name in (
-        "run_format",
-        "run_lint",
-        "run_typecheck",
-        "run_typecomplete",
-        "run_test",
-    ):
+    for name in ("run_format", "run_lint"):
+        monkeypatch.setattr(fake_checks, name, spy(name))
+    for name in ("run_typecheck", "run_typecomplete", "run_test"):
         monkeypatch.setattr(_python, name, spy(name))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
     monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
@@ -257,7 +256,10 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 
 
 def test_the_fixers_only_walk_judges_nothing(
-    tmp_path: Path, registry: None, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    registry: None,
+    python_checks: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop import _quality
     from livery.workshop._backends import _python
@@ -274,13 +276,9 @@ def test_the_fixers_only_walk_judges_nothing(
 
         return body
 
-    for name in (
-        "run_format",
-        "run_lint",
-        "run_typecheck",
-        "run_typecomplete",
-        "run_test",
-    ):
+    for name in ("run_format", "run_lint"):
+        monkeypatch.setattr(fake_checks, name, spy(name))
+    for name in ("run_typecheck", "run_typecomplete", "run_test"):
         monkeypatch.setattr(_python, name, spy(name))
 
     def fix(ctx: GateContext) -> None:

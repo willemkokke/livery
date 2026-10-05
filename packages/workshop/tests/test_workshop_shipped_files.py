@@ -184,12 +184,18 @@ def test_check_fix_moves_what_vscode_added_into_the_region(
     settings = root / ".vscode/settings.json"
     rendered = settings.read_text()
     # The refusal first: a setting the render owns, changed by hand.
-    owned = rendered.replace('"charliermarsh.ruff"', '"ms-python.black-formatter"')
+    owned = rendered.replace(
+        '"terminal.integrated.defaultProfile.osx": "ws"',
+        '"terminal.integrated.defaultProfile.osx": "zsh"',
+    )
+    assert owned != rendered
     settings.write_text(owned)
     with pytest.raises(Failed) as refused:
         relocate(root)
-    assert "[python]: the render sets" in str(refused.value)
-    assert '"ms-python.black-formatter"' in str(refused.value)
+    assert "terminal.integrated.defaultProfile.osx: the render sets" in str(
+        refused.value
+    )
+    assert '"zsh"' in str(refused.value)
     # VS Code's UI adds a key before the closing brace, and a recommendation
     # inside the list; both move into the regions and the files match.
     settings.write_text(rendered.replace("\n}\n", ',\n  "editor.rulers": [88]\n}\n'))

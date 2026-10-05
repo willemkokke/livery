@@ -61,9 +61,9 @@ def verify_release(
     """Check *tag* against the tree; every finding fails verbatim.
 
     The agreements checked: the tag names an existing package; the
-    kind's own version homes (pyproject and one ``__version__`` for
-    a python kind, the recipe's ``version`` for conan) carry the
-    tag's version; the release notes provider, when one is mounted,
+    kind's own version homes (pyproject, and one ``__version__`` for
+    a python kind with a root module, the recipe's ``version`` for
+    conan) carry the tag's version; the release notes provider, when one is mounted,
     finds the version's notes sound; and
     every ``[[depends]]`` floor names a version whose release tag
     exists, so nothing ships depending on an unreleased floor.
@@ -88,13 +88,17 @@ def verify_release(
     if requires_pyproject(package.kind):
         # The modules the kind's stamper writes the version into: a
         # namespace root's api.py, or a regular package's __init__.py.
+        # A package with neither, one with no public names, carries its
+        # version in its manifest alone.
         modules = [
             home
             for home in backend_for(package).stamp_version(package).homes()
             if home.suffix == ".py" and home.is_file()
         ]
         stamp = f'__version__ = "{version}"'
-        if not any(stamp in module.read_text("utf-8") for module in modules):
+        if modules and not any(
+            stamp in module.read_text("utf-8") for module in modules
+        ):
             problems.append(f"no api.py or __init__.py under src/ declares {stamp}")
     released = set(GitOps(root).tags())
     for edge in package.depends:

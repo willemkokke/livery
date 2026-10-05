@@ -37,7 +37,8 @@ def test_the_codec_imports_the_stdlib_and_itself_alone() -> None:
 
 def test_importing_the_store_loads_no_part_of_the_codec() -> None:
     # A fresh interpreter, so this suite's own imports do not count: the
-    # codec is reached by its own path, never through strongroom's root.
+    # The root declares the codec and serves it on first use, so importing
+    # the root loads none of it; its import path stays its own.
     script = (
         "import sys, livery.strongroom;"
         " print(sorted(m for m in sys.modules"

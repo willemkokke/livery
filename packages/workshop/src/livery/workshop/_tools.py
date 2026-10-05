@@ -1,6 +1,6 @@
 """The tools a workspace requires: four declaration sites, one lock, receipts.
 
-A tool requirement is a name with a floor, `ruff` or `ruff>=0.16`, and
+A tool requirement is a name with a floor, `git` or `git>=2.40`, and
 four sites declare them: a package kind, in its record, for the tools
 its checks run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
@@ -275,9 +275,10 @@ def host_allowed(root: Path) -> tuple[str, ...]:
             )
             fail(f"{where}, which takes no allowance: {reason}")
         if name in verdicts:
+            readers = sorted(verdicts[name])
             fail(
-                f"{where}, whose version is a verdict:"
-                f" {', '.join(sorted(verdicts[name]))} read it"
+                f"{where}, whose version is a verdict: {', '.join(readers)}"
+                f" {'reads' if len(readers) == 1 else 'read'} it"
             )
     return names
 
@@ -1560,8 +1561,8 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     declares the handles, one import and one `name: Class[Result]` per
     stub written, and the installed tools package's index imports every
     name from it. The handles cannot live in the stubs package's own
-    index: a package's index binds its submodules, and `ruff` would name
-    `ruff.pyi` rather than the handle. Nothing is written inside the
+    index: a package's index binds its submodules, and `uv` would name
+    `uv.pyi` rather than the handle. Nothing is written inside the
     tools package's own directory, and a tree left there is removed:
     it shadows the package for a checker run on explicit paths. Without
     a lock nothing is written.
@@ -1707,8 +1708,8 @@ def handles_index(names: list[str]) -> str:
     """The `handles` module declaring the handles of *names*, in order.
 
     The installed tools package's own index imports every name from
-    this module, so the handle `ruff` types as `Ruff[Result]` exactly
-    when `stubs/ruff.pyi` is beside it.
+    this module, so the handle `uv` types as `Uv[Result]` exactly
+    when `stubs/uv.pyi` is beside it.
     """
     from livery.toolroom.store.api import class_name
 

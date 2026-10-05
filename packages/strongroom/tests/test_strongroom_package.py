@@ -74,6 +74,7 @@ def test_imports_and_carries_a_version() -> None:
 
 def test_the_public_surface_is_pinned() -> None:
     assert set(package.__all__) == {
+        "cbor",
         "ALGORITHMS",
         "Algorithm",
         "Clock",

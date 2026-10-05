@@ -57,6 +57,13 @@ TOOLS_ATTRIBUTE = "TOOLS"
 #: code branches on what is listed.
 FOR_ATTRIBUTE = "FOR"
 
+#: The attribute an extension's declaring module declares its checks
+#: with, as data: a tuple of check records. The mount registers them
+#: for a listed extension alone, each under the extension's listed
+#: name, so the files they deliver and the drift check's widening
+#: follow the list.
+CHECKS_ATTRIBUTE = "CHECKS"
+
 
 def workspace_root(start: Path | None = None) -> Path | None:
     """The nearest ancestor carrying a ``workshop.toml``, or None.
@@ -103,11 +110,21 @@ def levels_of(extension: str) -> tuple[str, ...]:
 
 
 def distribution_of(extension: str) -> str:
-    """The distribution that ships *extension*: its entry point's, else by name."""
+    """The distribution that ships *extension*: its entry point's, else by convention.
+
+    An extension no installed distribution declares, a newborn's list
+    written before its environment exists, say, is taken at the
+    convention: an import path names its distribution with its dots as
+    hyphens, and a short name is one of the base's own family,
+    ``<namespace>-extensions-<name>``, never the index's package of
+    that bare name.
+    """
     entry = _declared().get(extension)
     if entry is not None and entry.dist is not None:
         return entry.dist.name
-    return extension.replace(".", "-")
+    if "." in extension:
+        return extension.replace(".", "-")
+    return f"{SELF.partition('.')[0]}-extensions-{extension}"
 
 
 def _workspace_table(root: Path) -> dict[str, Any] | None:
@@ -298,6 +315,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 " list it in each package's `extensions` instead"
             )
             continue
+        if register_declared_checks(extension, module):
+            mounted.append(extension)
         name = getattr(module, "PLUGIN", None)
         if name and name not in builtin:
             try:
@@ -309,7 +328,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                     f" group, and `{prog()} sync` installs it"
                 )
             else:
-                mounted.append(extension)
+                if extension not in mounted:
+                    mounted.append(extension)
         present.append(extension)
         _graft_contributions(present, declared, active, grafted)
     # An extension's checks registered as it mounted; their verbs join the
@@ -357,6 +377,40 @@ def _graft_contributions(
                     f" the module does not import: {error}"
                 ) from error
             grafted.add((owner, target))
+
+
+def register_declared_checks(extension: str, module: ModuleType) -> bool:
+    """Register the checks *module* declares for *extension*; whether it declares any.
+
+    Each record registers under the extension's listed name, whatever
+    it says, since the list is what decides which extension a check
+    belongs to.
+
+    Raises:
+        RuntimeError: when the declaration is not a tuple of check
+            records, an extension's mistake no sync repairs, said in
+            one sentence rather than an error further on, as a wrong
+            API version is.
+    """
+    from dataclasses import replace
+
+    from livery.workshop._checks import CheckRecord, register_check
+
+    declared = getattr(module, CHECKS_ATTRIBUTE, ())
+    if not isinstance(declared, tuple):
+        wrong = f"as a {type(declared).__name__}"
+    else:
+        strays = [type(r).__name__ for r in declared if not isinstance(r, CheckRecord)]
+        wrong = f"with a {strays[0]} among them" if strays else ""
+    if wrong:
+        raise RuntimeError(
+            f"extension {extension!r} declares {CHECKS_ATTRIBUTE} {wrong}; it"
+            " takes a tuple of check records. Install a release of the"
+            " extension written for this workshop."
+        )
+    for record in declared:
+        register_check(replace(record, extension=extension))
+    return bool(declared)
 
 
 def check_api_version(extension: str, module: ModuleType) -> None:

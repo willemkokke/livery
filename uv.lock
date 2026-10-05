@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "livery",
+    "livery-extensions-ruff",
     "livery-footman",
     "livery-forge",
     "livery-strongroom",
@@ -728,6 +729,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "coverage", extra = ["toml"] },
+    { name = "livery-extensions-ruff" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
     { name = "livery-strongroom" },
@@ -751,6 +753,7 @@ docs = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.13" },
+    { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
@@ -767,6 +770,21 @@ dev = [
 docs = [
     { name = "mkdocstrings-python", specifier = ">=1.11" },
     { name = "zensical", specifier = ">=0.0.50" },
+]
+
+[[package]]
+name = "livery-extensions-ruff"
+version = "0.0.0"
+source = { editable = "packages/extensions/ruff" }
+dependencies = [
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
 ]
 
 [[package]]

@@ -163,10 +163,28 @@ def test_the_monorepo_is_in_sync() -> None:
         # re-point the repository's real links at the scratch venv.
         # The dogfood check means the editable checkout syncing itself.
         pytest.skip("dogfood: only the editable checkout syncs itself")
-    before = _tracked_state()
-    first = sync_workspace(ROOT)
-    assert sync_workspace(ROOT) == []
-    after = _tracked_state()
+    from livery.workshop import _checks
+    from livery.workshop._extensions import (
+        declaration,
+        extension_names,
+        register_declared_checks,
+    )
+
+    # A sync runs after the mount, which registers the listed
+    # extensions' checks and with them what they deliver; the registry
+    # is put back after.
+    state = _checks.snapshot()
+    try:
+        for name in extension_names(ROOT):
+            module = declaration(name)
+            if module is not None:
+                register_declared_checks(name, module)
+        before = _tracked_state()
+        first = sync_workspace(ROOT)
+        assert sync_workspace(ROOT) == []
+        after = _tracked_state()
+    finally:
+        _checks.restore(state)
     # A failure names what moved, so a runner-only difference is readable
     # from the log alone.
     moved = subprocess.run(

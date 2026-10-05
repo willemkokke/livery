@@ -1,0 +1,12 @@
+# This package's own ruff settings, on top of the workspace's root
+# ruff.toml, which the ruff extension writes.
+extend = "../../ruff.toml"
+
+# Added to the workspace's claims, which the extended root renders;
+# a per-file-ignores table of our own would replace them.
+[lint.extend-per-file-ignores]
+# The imported sources predate the workspace's pydocstyle rule;
+# their docstring conformance is a tracked content pass, not a
+# cut-time rewrite. Retired by that pass.
+"src/**" = ["D105", "D102", "D107", "D205", "D301", "D415"]
+"tests/**" = ["D1", "D205", "D301", "D415", "E501"]

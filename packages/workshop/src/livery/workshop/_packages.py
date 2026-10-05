@@ -59,7 +59,7 @@ class Package:
     Attributes:
         directory: The package directory.
         path: The identity path from the workspace root
-            (``packages/forge``, or ``packages/extensions/ruff`` for a
+            (``packages/forge``, or ``packages/extensions/widgets`` for a
             package in a group directory).
         name: The distribution name (``livery-forge``).
         kind: The package kind, as the contract's ``kind`` declares
@@ -93,7 +93,7 @@ class Package:
 
     @property
     def member(self) -> str:
-        """The package's path under ``packages/``: ``forge``, ``extensions/ruff``.
+        """The package's path under ``packages/``: ``forge``, ``extensions/widgets``.
 
         It names the package in a release tag
         (``packages/<member>/v<version>``) and everywhere else a
@@ -240,7 +240,7 @@ def package_directories(root: Path) -> tuple[Path, ...]:
 def receipt_member(tag: str) -> str:
     """The member a release receipt *tag* names, or ``""`` for another tag.
 
-    ``packages/extensions/ruff/v1.2.0`` names ``extensions/ruff``.
+    ``packages/extensions/widgets/v1.2.0`` names ``extensions/widgets``.
     """
     head, _, version = tag.rpartition("/v")
     if not version or not head.startswith(f"{PACKAGES_DIR}/"):
@@ -268,9 +268,9 @@ def member_of(relative: str, members: Iterable[str]) -> str:
     """The member of *members* whose directory holds *relative*, or ``""``.
 
     *relative* is a posix path from the workspace root
-    (``packages/extensions/ruff/src/x.py``); *members* are package
+    (``packages/extensions/widgets/src/x.py``); *members* are package
     members as [livery.workshop.api.Package][] names them
-    (``extensions/ruff``). The longest match wins.
+    (``extensions/widgets``). The longest match wins.
     """
     found = ""
     for member in members:
@@ -290,6 +290,27 @@ def root_marks(src: Path) -> list[Path]:
     """
     marks = [*src.rglob("__init__.py"), *src.rglob("api.py")]
     return sorted(marks, key=lambda path: (len(path.parts), path))
+
+
+def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
+    """The src and tests directories the *packages* own, as they exist.
+
+    The workspace's own tests, a unit whose directory is the tests
+    themselves, contribute that directory.
+    """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+
+    paths = []
+    for package in packages:
+        if package.path == WORKSPACE_TESTS:
+            if package.directory.is_dir():
+                paths.append(package.path)
+            continue
+        for name in ("src", "tests"):
+            directory = package.directory / name
+            if directory.is_dir():
+                paths.append(f"{package.path}/{name}")
+    return tuple(paths)
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:

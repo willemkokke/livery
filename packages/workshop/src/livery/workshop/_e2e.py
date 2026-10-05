@@ -125,25 +125,35 @@ def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
 
 
 def dev_members(root: Path) -> tuple[str, ...]:
-    """The members whose dev wheels the loop eats: the workshop and its closure.
+    """The members whose dev wheels the loop eats: the workshop and what a birth lists.
 
-    Directory names, the workshop first and each dependency after the
-    first member that names it, once. An edge of every kind counts:
-    the wheel the runner installs resolves all of them from the
-    loop's registry, and a member the closure does not reach
-    publishes nothing there.
+    Directory names, the workshop first, then each member that ships
+    an extension a birth lists, and each dependency after the first
+    member that names it, once. An edge of every kind counts: the
+    wheel the runner installs resolves all of them from the loop's
+    registry, and a member the closure does not reach publishes
+    nothing there. An extension depends on the workshop, never the
+    other way round, so the workshop's closure alone leaves the
+    newborn's listed extensions nothing to install.
 
     Raises:
         Failed: when *root* has no workshop member to eat.
     """
+    from livery.workshop._extensions import SELF, distribution_of
+    from livery.workshop._new_project import birth_extensions
     from livery.workshop._packages import discover_packages
 
     by_path = {package.path: package for package in discover_packages(root)}
     workshop = by_path.get(DEV_MEMBER)
     if workshop is None:
         fail(f"{root}: no {DEV_MEMBER} member; the loop eats the workshop's dev wheels")
+    stock = {distribution_of(name) for name in birth_extensions([SELF])}
+    shipping = sorted(
+        (p for p in by_path.values() if p.name in stock and p is not workshop),
+        key=lambda package: package.path,
+    )
     ordered: list[str] = []
-    pending = [workshop]
+    pending = [workshop, *shipping]
     while pending:
         package = pending.pop(0)
         if package.member in ordered:

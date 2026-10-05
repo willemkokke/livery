@@ -30,6 +30,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Neighbours, Package, discover_packages
 from livery.workshop._registries import RegistryTarget
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -268,7 +269,7 @@ def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> No
 
 
 def test_python_checks_skip_a_native_member_by_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], python_checks: object
 ) -> None:
     from livery.workshop._checks import judged_by
 
@@ -278,9 +279,9 @@ def test_python_checks_skip_a_native_member_by_name(
         assert judged_by(check_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
         assert f"{name}: packages/native skips (cpp-conan kind)" in out
-    # Ruff judges both: the conanfile is python. ctest judges the native
-    # member alone.
-    for name in ("format.ruff", "lint.ruff"):
+    # A python formatter and linter judge both: the conanfile is python.
+    # ctest judges the native member alone.
+    for name in ("format.fake", "lint.fake"):
         assert judged_by(check_for(name), (py, native)) == (py, native)
         assert "skips" not in capsys.readouterr().out
     assert judged_by(check_for("test.ctest"), (py, native), quiet=True) == (native,)
@@ -460,11 +461,9 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     )
     from livery.workshop._checks import tools_for_kind
 
-    # ruff rides in too: it judges the package's conanfile.py.
     assert {tool for tool, _ in tools_for_kind("cpp-conan")} == {
         "clang_format",
         "clang_tidy",
-        "ruff",
     }
 
 

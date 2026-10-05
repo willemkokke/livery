@@ -373,6 +373,17 @@ def _compose(path: str, parts: list[tuple[Fragment, str]]) -> str:
     return json.dumps(merged, indent=2) + "\n"
 
 
+def _collects(fragment: Fragment, data: Mapping[str, Any]) -> bool:
+    """Whether *fragment* is the template its target's contributions render into.
+
+    It reads ``contributed`` or ``contributed_entries``. With nothing
+    contributed it still renders, from an empty merge: composed as a
+    plain part instead, its comments would read as broken JSON. A
+    dynamic fragment is never asked, so it renders once.
+    """
+    return fragment.dynamic is None and "contributed" in fragment.template(data)
+
+
 def _entries(merged: Mapping[str, Any]) -> str:
     """*merged* as the members of a JSON object, two spaces in, each with its comma."""
     lines: list[str] = []
@@ -467,7 +478,7 @@ def plan(
         )
         contributions = [fragment for fragment in members if fragment.contributes]
         templates = [fragment for fragment in members if not fragment.contributes]
-        if contributions:
+        if contributions or (len(templates) == 1 and _collects(templates[0], seen)):
             if len(templates) != 1:
                 fail(
                     f"{path}: contributions need one template to render them;"
