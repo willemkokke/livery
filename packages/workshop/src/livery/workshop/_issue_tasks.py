@@ -313,7 +313,6 @@ def issue_comment(
 _PLAIN_BRANCH_RE = re.compile(rf"^({'|'.join(_KINDS)})/([a-z0-9][a-z0-9-]*)$")
 
 
-@footman.task(interactive=True)
 def _provision(path: Path) -> None:
     """Sync the worktree at *path*, so its first gate finds what it reads; idempotent.
 
@@ -327,6 +326,7 @@ def _provision(path: Path) -> None:
         print(f"  Note: `{footman.prog()} sync` in the worktree failed; run it there")
 
 
+@footman.task(interactive=True)
 def start(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
