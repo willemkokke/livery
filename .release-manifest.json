@@ -1,16 +1,11 @@
 {
  "schema": 1,
- "mined-at": "dd9d8220018f73e9d3e9145a0caa7f31874860a1",
+ "mined-at": "8a651f7e66476bb3561fe7f036839e775b4f609b",
  "members": [
   {
    "dir": "footman",
    "name": "livery-footman",
-   "version": "0.56.0"
-  },
-  {
-   "dir": "workshop",
-   "name": "livery-workshop",
-   "version": "0.5.0"
+   "version": "0.57.0"
   }
  ]
 }
