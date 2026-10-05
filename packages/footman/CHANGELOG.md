@@ -5,6 +5,12 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.57.0] - 2026-10-05
+
+### Added
+
+- A checkout that never synced is set up by its first command, fm sync --frozen changes nothing a commit holds, fm env.check judges this host's tools, and lint.docrefs reads any source layout by @willemkokke
+
 ## [0.56.0] - 2026-10-04
 
 ### Added
