@@ -348,6 +348,17 @@ def test_a_start_run_again_syncs_the_worktree_its_first_run_left_unsynced(
     assert len([call for call in provisioned if "fm sync" in call]) == 2
 
 
+def test_start_is_a_verb_and_its_helper_is_not() -> None:
+    # A helper defined between a task's decorator and its function takes
+    # the decorator: the verb vanishes, and every test calling start()
+    # directly stays green.
+    from livery.workshop import _issue_tasks
+
+    assert hasattr(_issue_tasks.start, "opts")
+    assert getattr(_issue_tasks.start, "_footman_interactive", False)
+    assert not hasattr(_issue_tasks._provision, "opts")  # pyright: ignore[reportPrivateUsage]
+
+
 def test_start_refuses_without_a_ref_naming_the_three_forms(
     rig: tuple[Path, FakeForge, GitOps],
 ) -> None:
