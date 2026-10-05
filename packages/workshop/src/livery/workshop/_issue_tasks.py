@@ -314,6 +314,19 @@ _PLAIN_BRANCH_RE = re.compile(rf"^({'|'.join(_KINDS)})/([a-z0-9][a-z0-9-]*)$")
 
 
 @footman.task(interactive=True)
+def _provision(path: Path) -> None:
+    """Sync the worktree at *path*, so its first gate finds what it reads; idempotent.
+
+    A failure is said and not fatal: the worktree exists, and running
+    the start again, or a sync in it, repairs it.
+    """
+    provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
+        "run", footman.prog(), "sync"
+    )
+    if provision.code != 0:
+        print(f"  Note: `{footman.prog()} sync` in the worktree failed; run it there")
+
+
 def start(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
@@ -418,6 +431,11 @@ def start(
             print(f"  {line}")
         if path.is_dir() or git.local_branch_exists(branch):
             print(f"  already started: {branch} at {path}")
+            if path.is_dir():
+                # A start that failed after the worktree existed (a sync
+                # that met no network) left it unsynced; running the
+                # start again is the recovery, so it syncs again.
+                _provision(path)
             if agent:
                 _launch_agent(agent, path, briefing, branch, prompt)
                 return
@@ -427,13 +445,7 @@ def start(
         git._run("worktree", "add", str(path), "-b", branch, f"origin/{base}")
         print(f"  worktree {path} on {started}")
         _record_parent(git, branch, from_)
-        provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
-            "run", footman.prog(), "sync"
-        )
-        if provision.code != 0:
-            print(
-                f"  Note: `{footman.prog()} sync` in the worktree failed; run it there"
-            )
+        _provision(path)
         if agent:
             _launch_agent(agent, path, briefing, branch, prompt)
             return

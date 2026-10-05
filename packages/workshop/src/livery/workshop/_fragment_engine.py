@@ -626,7 +626,13 @@ def apply(
 
 
 LOCAL_RECEIPT = ".workshop/rendered/receipts.json"
-"""The checkout's own receipts: what the engine linked or copied for it alone."""
+"""The checkout's own receipts: what the engine linked or copied for it alone.
+
+Written by every delivery, empty when there is nothing of its own, so
+its presence says the checkout's own files were delivered at all; a
+checkout without it never had them, which the per-command repair reads
+([livery.workshop._reconcile.repair][]).
+"""
 
 _IGNORE_HEADER = (
     "# Managed by `{prog} sync`: the entries below are linked or copied from\n"
@@ -655,9 +661,6 @@ def _read_local(root: Path) -> dict[str, str]:
 
 def _write_local(root: Path, receipts: Mapping[str, str]) -> None:
     path = root / LOCAL_RECEIPT
-    if not receipts:
-        path.unlink(missing_ok=True)
-        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
         (json.dumps(dict(sorted(receipts.items())), indent=2) + "\n").encode()
@@ -672,9 +675,9 @@ def apply_untracked(root: Path, outputs: Sequence[Output]) -> list[str]:
     file a commit holds is written, removed or receipted. A local
     output git tracks is left as it is; the drift check names it.
     """
+    # Even with nothing of its own, the delivery runs: it withdraws what
+    # an earlier one wrote and leaves the receipt that says it ran.
     local = [output for output in outputs if output.local]
-    if not local:
-        return []
     tracked = set(tracked_local(root, local))
     return _apply_local(
         root, [output for output in local if output.path not in tracked]

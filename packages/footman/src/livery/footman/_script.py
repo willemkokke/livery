@@ -263,11 +263,16 @@ def project_home(cwd: Path) -> Path | None:
     return root
 
 
+def venv_executable(root: Path, name: str) -> Path:
+    """Where *root*'s project environment keeps the executable *name*."""
+    if os.name == "nt":
+        return root / ".venv" / "Scripts" / f"{name}.exe"
+    return root / ".venv" / "bin" / name
+
+
 def venv_python(root: Path) -> Path:
     """Where *root*'s project environment keeps its interpreter."""
-    if os.name == "nt":
-        return root / ".venv" / "Scripts" / "python.exe"
-    return root / ".venv" / "bin" / "python"
+    return venv_executable(root, "python")
 
 
 def heal_project(uv: str, root: Path) -> bool:

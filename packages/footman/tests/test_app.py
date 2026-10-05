@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import _app, _manifest, _paths, _progress
+from livery.footman import _app, _manifest, _paths, _progress, _script
 from livery.footman._executor import EX_USAGE
 from livery.footman._split import Segment
 
@@ -1828,6 +1828,27 @@ def test_handoff_execs_the_projects_footman(uv_project, monkeypatch):
     ]
 
 
+def test_a_project_that_syncs_itself_is_synced_while_it_has_no_runner_to_enter(
+    uv_project, monkeypatch
+):
+    # A fresh clone or worktree: entering would run the runner on PATH,
+    # where nothing the project installs mounts, so uv syncs first.
+    (uv_project / "pyproject.toml").write_text(
+        "[project]\nname='x'\n[tool.footman]\nuv-handoff = 'enter'\n"
+    )
+    calls = _capture_exec(monkeypatch)
+    with pytest.raises(SystemExit):
+        _app.run(["hi"])
+    assert calls == [["/fake/uv", "run", "--project", str(uv_project), "fm", "hi"]]
+    # An environment uv made and never filled is synced the same way.
+    (uv_project / ".venv").mkdir()
+    monkeypatch.delenv("FOOTMAN_UV_REEXEC", raising=False)
+    calls.clear()
+    with pytest.raises(SystemExit):
+        _app.run(["hi"])
+    assert calls == [["/fake/uv", "run", "--project", str(uv_project), "fm", "hi"]]
+
+
 def test_a_project_that_syncs_itself_is_entered_without_a_sync(uv_project, monkeypatch):
     # The default first: the handoff lets uv sync the environment.
     calls = _capture_exec(monkeypatch)
@@ -1838,6 +1859,9 @@ def test_a_project_that_syncs_itself_is_entered_without_a_sync(uv_project, monke
     (uv_project / "pyproject.toml").write_text(
         "[project]\nname='x'\n[tool.footman]\nuv-handoff = 'enter'\n"
     )
+    runner = _script.venv_executable(uv_project, "fm")
+    runner.parent.mkdir(parents=True)
+    runner.write_text("")
     monkeypatch.delenv("FOOTMAN_UV_REEXEC", raising=False)
     calls.clear()
     with pytest.raises(SystemExit):

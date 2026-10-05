@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     pass
 
 import os
-import platform
 import secrets
 import shutil
 import signal
@@ -97,9 +96,9 @@ def cache_dir() -> Path:
 
 def this_host() -> str:
     """This machine's host key, `macos-arm`."""
-    from livery.toolroom.store.api import host_key
+    from livery.workshop._tools import this_host as here
 
-    return host_key(platform.system(), platform.machine())
+    return here()
 
 
 def runner_label(env: str, host: str, number: int) -> str:

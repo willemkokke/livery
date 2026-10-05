@@ -124,9 +124,12 @@ def test_a_locked_sync_with_a_stale_lock_refuses_before_it_does_anything(
     assert "sync` writes the locks; commit them" in message
 
 
-def test_a_locked_sync_moves_no_branch_and_writes_no_tracked_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("mode", ["locked", "frozen"])
+def test_a_locked_or_frozen_sync_moves_no_branch_and_writes_no_tracked_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
+    # As uv's two modes leave its lock alone, ours leave whatever a
+    # commit holds; they differ only in whether the locks are judged.
     from livery.workshop import _reconcile, _shipped_files, _sync, _templates, _uv
 
     root = _repository(tmp_path)
@@ -139,12 +142,12 @@ def test_a_locked_sync_moves_no_branch_and_writes_no_tracked_file(
     def sync_tools(at: Path, **kwargs: object) -> None:
         asked["tools"] = kwargs
 
-    def sync_workspace(at: Path, *, locked: bool = False) -> list[str]:
-        asked["workspace"] = locked
+    def sync_workspace(at: Path, *, local_only: bool = False) -> list[str]:
+        asked["workspace"] = local_only
         return []
 
-    def deliver(at: Path, *, locked: bool = False) -> list[str]:
-        asked["deliver"] = locked
+    def deliver(at: Path, *, local_only: bool = False) -> list[str]:
+        asked["deliver"] = local_only
         return []
 
     def run_uv(*args: str, root: Path) -> None:
@@ -161,10 +164,19 @@ def test_a_locked_sync_moves_no_branch_and_writes_no_tracked_file(
     monkeypatch.setattr(_shipped_files, "deliver", deliver)
     monkeypatch.setattr(_templates, "apply_generated", refused)
     monkeypatch.setattr(_reconcile, "record_receipt", lambda at: None)
-    _sync.sync(locked=True)
+    if mode == "locked":
+        _sync.sync(locked=True)
+    else:
+        # A stale lock is no refusal here: the locks are taken as they are.
+        monkeypatch.setattr(_sync, "stale_locks", refused)
+        _sync.sync(frozen=True)
     assert asked["workspace"] is True and asked["deliver"] is True
-    assert asked["tools"] == {"frozen": False, "locked": True, "offline": False}
-    assert "--locked" in _args(asked["uv"])
+    assert asked["tools"] == {
+        "frozen": mode == "frozen",
+        "locked": mode == "locked",
+        "offline": False,
+    }
+    assert f"--{mode}" in _args(asked["uv"])
 
 
 def _args(value: object) -> tuple[str, ...]:
