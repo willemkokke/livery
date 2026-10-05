@@ -2,7 +2,9 @@
 
 `lint.doclinks` reads the authored markdown of the workspace's `docs/`
 and of every member's `docs/`, and refuses a link to a file that does
-not exist or an anchor no heading of the target makes. `lint.docstrings`
+not exist or an anchor no heading of the target makes. `lint.docrefs`
+resolves the cross-references in the changed sources' docstrings
+([livery.extensions.docs._refs][]). `lint.docstrings`
 imports each python member's top package in a child process and refuses
 a name in its `__all__` whose object has no docstring, nor a string
 literal under its assignment (a type alias carries no runtime
@@ -241,6 +243,52 @@ def headings_removed(changes: Changes) -> bool:
     return False
 
 
+def names_removed(changes: Changes) -> bool:
+    """Whether a changed python source lost a name a cross-reference may point at.
+
+    A reference in an unchanged docstring may name it, so the
+    reference check then reads every source.
+    """
+    from livery.extensions.docs._refs import defined_names
+
+    for path in changes.paths:
+        if not path.endswith(".py"):
+            continue
+        before = changes.text_before(path)
+        if not before:
+            continue
+        now = changes.root / path
+        after = now.read_text("utf-8") if now.is_file() else ""
+        if defined_names(before) - defined_names(after):
+            return True
+    return False
+
+
+#: The python sources a cross-reference lives in and points at.
+SOURCES = ("packages/**/src/**/*.py",)
+
+
+def docrefs_run(ctx: GateContext) -> None:
+    from livery.extensions.docs._refs import reference_problems
+    from livery.workshop._packages import package_directories
+
+    sources = [
+        directory / "src"
+        for directory in package_directories(ctx.root)
+        if (directory / "src").is_dir()
+    ]
+    files = selected_files(check_for("lint.docrefs"), ctx)
+    if files is None:
+        judged = sorted(path for src in sources for path in src.rglob("*.py"))
+    else:
+        judged = sorted(
+            ctx.root / path for path in files if (ctx.root / path).is_file()
+        )
+    problems = reference_problems(ctx.root, judged, sources)
+    if problems:
+        fail("cross-references that name nothing:\n  " + "\n  ".join(problems))
+
+
 def doclinks_run(ctx: GateContext) -> None:
     problems = link_problems(ctx.root, selected_files(check_for("lint.doclinks"), ctx))
     if problems:
@@ -267,6 +315,14 @@ def docstrings_run(ctx: GateContext) -> None:
 
 
 CHECKS = (
+    CheckRecord(
+        "docrefs",
+        "lint",
+        docrefs_run,
+        narrowing=NONE,
+        extension=EXTENSION,
+        inputs=Inputs(reads=SOURCES, widen=names_removed),
+    ),
     CheckRecord(
         "doclinks",
         "lint",

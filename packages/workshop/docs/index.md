@@ -445,7 +445,10 @@ absence.
   alone, and the record supplies every package's suite.
   Each workspace check runs when a file it reads changed, and judges
   those files: `lint.doclinks` the changed pages, and every page when
-  a file is deleted or moved or a heading is removed; `layering.graph`
+  a file is deleted or moved or a heading is removed; `lint.docrefs`
+  the cross-references in the changed sources' docstrings, resolved as
+  the API site resolves them, and every source's when a changed one
+  lost a name; `layering.graph`
   only when a contract or a manifest changed; `layering.imports`, the
   rules over the python sources, the changed sources, and every one
   when the graph changed; `drift.check` a tracked composed or
