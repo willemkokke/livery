@@ -11,6 +11,7 @@ import pytest
 from livery.workshop import _coverage_store, _quality, _verified
 from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitError, GitOps
+from livery.workshop._influence import Changes
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
@@ -124,11 +125,15 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
 
     monkeypatch.setattr(_gate_record, "remember", _remember)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: ())
+    # The changed file is on disk: a path that is not reads as deleted,
+    # which every link checker must answer by reading every page.
+    (root / "notes").mkdir(exist_ok=True)
+    (root / "notes" / "x.md").write_text("# x\n")
     _quality.check(base="develop")
     assert bases == ["develop"]
     out = capsys.readouterr().out
     assert "since tree bbbbbbbbbbbb: 1 path(s) changed" in out
-    assert "nothing affected: only prose and site files changed" in out
+    assert "nothing affected: no file a check reads changed" in out
     assert recorded == [{"tree": "t" * 40, "packages": (), "base_tree": "b" * 40}]
     _quality.check()
     assert bases == ["develop", "main"]
@@ -181,6 +186,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
         between: Callable[[], None] | None = None,
         point: str = "",
         safe: bool = False,
+        changes: object = None,
     ) -> None:
         # The walk's fixers rewrite, then the hook between them and the
         # judges measures the tree the judges read.
@@ -245,6 +251,7 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
         between: Callable[[], None] | None = None,
         point: str = "",
         safe: bool = False,
+        changes: object = None,
     ) -> None:
         seen.append((tuple(p.path for p in subset), dict(tests or {})))
 
@@ -288,6 +295,9 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
         return ()
 
     monkeypatch.setattr("livery.workshop._quality._affected", _subset)
+    monkeypatch.setattr(
+        "livery.workshop._quality._changes_since", lambda base: Changes(root, ())
+    )
     _quality.check()
     out = capsys.readouterr().out
     assert bases == ["develop"]
@@ -608,9 +618,24 @@ def test_a_prose_only_diff_says_so_and_skips(
     )
     monkeypatch.setattr("livery.workshop._quality._affected", lambda base="main": ())
     monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.merge_base", lambda self, base: "b" * 40
+    )
+    monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps.changed_paths",
         lambda self, base: ["notes/plan.md", "packages/x/README.md"],
     )
+    for changed in ("notes/plan.md", "packages/x/README.md", "notes/a.md"):
+        (root / changed).parent.mkdir(parents=True, exist_ok=True)
+        (root / changed).write_text("# changed\n")
+    (root / "packages" / "x" / "workshop.toml").write_text(
+        'kind = "python"\nname = "acme-x"\n'
+    )
+    (root / "packages" / "x" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-x"\n'
+    )
+    (root / "zensical.toml").write_text("")
+    (root / "docs" / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "assets" / "logo.svg").write_text("<svg/>")
     _quality.check()
     out = capsys.readouterr().out
     assert (

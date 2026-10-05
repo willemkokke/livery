@@ -49,6 +49,31 @@ def _idle(ctx: GateContext) -> None:
     del ctx
 
 
+def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
+    tmp_path: Path, registry: None
+) -> None:
+    # The refusal that matters most first: an empty scope read as the
+    # whole would start every package's suite, and a test that drives
+    # the gate would then run the gate inside itself.
+    from livery.workshop._influence import Changes, Inputs
+
+    root = _repository(tmp_path)
+    register_check(CheckRecord("whole", "lint", _idle))
+    register_check(
+        CheckRecord("pages", "lint", _idle, inputs=Inputs(reads=("docs/**/*.md",)))
+    )
+    ctx = GateContext(
+        root=root,
+        packages=discover_packages(root),
+        subset=(),
+        changes=Changes(root, ("docs/a.md",)),
+    )
+    names = _checks.judges(ctx)
+    assert "lint.whole" not in names
+    assert "lint.pages" in names
+    assert "lint.pages" in with_files(names, ctx)
+
+
 # The fallback first: without a listing, every check that applies runs.
 
 
@@ -201,13 +226,15 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
         "run_test",
     ):
         monkeypatch.setattr(_python, name, spy(name))
-    monkeypatch.setattr("livery.workshop._packages.verify_workspace", spy("layering"))
-    # A source file: the style and type checks take it, and the
-    # package's whole suite runs, since its tests measure that source.
+    monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
+    monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
+    # A source file: the style and type checks take it, the import rules
+    # judge it, and the package's whole suite runs, since its tests
+    # measure that source. The graph is not made of sources.
     _quality.check(str(root / "packages" / "one" / "src" / "one" / "__init__.py"))
     ran = {name for name, _ in calls}
-    assert {"run_format", "run_lint", "run_typecheck", "run_test"} <= ran
-    assert "layering" not in ran
+    assert {"run_format", "run_lint", "run_typecheck", "run_test", "imports"} <= ran
+    assert "graph" not in ran
     source = str(root / "packages" / "one" / "src" / "one" / "__init__.py")
     assert dict(calls)["run_format"]["paths"] == (source,)
     suite = dict(calls)["run_test"]

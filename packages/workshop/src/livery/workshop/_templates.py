@@ -303,16 +303,22 @@ def apply_generated(root: Path) -> list[str]:
     return changed
 
 
-def drift_check() -> None:
+def drift_check(files: frozenset[str] | None = None) -> None:
     """Fail when a composed or generated file drifts from what writes it.
 
     The gate's drift check, `fm drift.check`. `fm sync` writes both
     kinds of file, so it is the recovery for every line this names.
+    *files* keeps the findings to those root-relative files: the tree
+    a change is measured from was judged already, so only a file the
+    change touched can have drifted since, unless an input of every
+    file changed, and then the caller passes None.
     """
     from livery.workshop._shipped_files import shipped_drift
 
     root = _root()
     drift = shipped_drift(root) + project_drift(root)
+    if files is not None:
+        drift = [line for line in drift if line.split(":", 1)[0] in files]
     if not drift:
         return
     fail(

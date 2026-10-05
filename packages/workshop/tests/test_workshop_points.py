@@ -406,16 +406,15 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     monkeypatch.delenv("CI_PIPELINE_SOURCE")
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
-    # The render gate and the provenance check live in the gate job,
-    # the one place a scoped leg cannot skip them.
+    # The drift and provenance checks are the legs' own walk, selected
+    # by what changed, as a local gate selects them; the gate job holds
+    # none of them.
     assert seen == [
         [
             "hse",
             "--profile=fm-profile-workflow-release-check-title.json",
             "workflow.release.check-title",
         ],
-        ["hse", "--profile=fm-profile-drift-check.json", "drift.check"],
-        ["hse", "--profile=fm-profile-provenance.json", "provenance"],
         ["hse", "--profile=fm-profile-coverage-union.json", "coverage.union"],
         ["hse", "--profile=fm-profile-ci-metrics-collect.json", "ci.metrics.collect"],
         ["hse", "--profile=fm-profile-speed-judge.json", "speed.judge"],
@@ -689,8 +688,6 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
     drawn = json.loads(text)["traceEvents"]
     assert [e["name"] for e in drawn] == [
         "workflow.release.check-title",
-        "drift.check",
-        "provenance",
         "coverage.union",
         "ci.metrics.collect",
         "speed.judge",

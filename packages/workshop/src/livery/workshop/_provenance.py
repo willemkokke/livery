@@ -570,8 +570,13 @@ def _content_trees(root: Path) -> list[tuple[str, Path]]:
     return trees
 
 
-def content_lint(root: Path, *, fix: bool = False) -> list[str]:
+def content_lint(
+    root: Path, *, fix: bool = False, files: frozenset[str] | None = None
+) -> list[str]:
     """Extension content files missing their computed header; ``fix`` writes it.
+
+    *files* keeps the lint to those root-relative files; None lints
+    every content file.
 
     Only the workspace's own packages are linted: an installed
     extension's content is its home repository's to keep. Files without
@@ -587,6 +592,8 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
     for extension, content in _content_trees(root):
         for path in sorted(content.rglob("*")):
             if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            if files is not None and path.relative_to(root).as_posix() not in files:
                 continue
             # A template the fragment engine composes into a workspace file
             # carries that file's own header; this one would land in it.
@@ -622,10 +629,19 @@ def provenance_check(
     writes the computed text, and the render and emitters inject
     theirs into everything they write.
     """
+    check_content(fix=fix)
+
+
+def check_content(*, fix: bool = False, files: frozenset[str] | None = None) -> None:
+    """The provenance check over the content files in scope; refuses a missing header.
+
+    The engine behind `fm provenance` and the gate's check: *files*
+    keeps it to those root-relative files, None to every content file.
+    """
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    findings = content_lint(root, fix=fix)
+    findings = content_lint(root, fix=fix, files=files)
     for line in findings:
         print(f"  {line}")
     if findings and not fix:
