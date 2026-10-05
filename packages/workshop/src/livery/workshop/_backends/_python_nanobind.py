@@ -396,9 +396,8 @@ def build_wheels(
         Failed: when cibuildwheel exits non-zero, or the wheels it
             wrote carry no platform tag.
     """
-    from livery.workshop._docs_contract import materialise_module_docs
+    from livery.workshop._docs_contract import module_docs
 
-    materialise_module_docs(package)
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
@@ -424,9 +423,18 @@ def build_wheels(
         env.setdefault("CIBW_ARCHS", "native")
     for key, value in conan_environment(root).items():
         env.setdefault(key, value)
-    result = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
-        "tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist)
-    )
+    with module_docs(package):
+        result = tools.uv.opts(
+            cwd=package.directory, env=env, nofail=True, recorded=False
+        )(
+            "tool",
+            "run",
+            "--from",
+            CIBUILDWHEEL,
+            "cibuildwheel",
+            "--output-dir",
+            str(dist),
+        )
     if result.code != 0:
         # A native build's failure sits well above its end: a CMake
         # configure line, a compiler diagnostic, a linker's reason.

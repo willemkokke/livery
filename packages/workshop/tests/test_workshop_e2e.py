@@ -361,6 +361,35 @@ def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
     assert calls == ["authenticate", "align", "birth", "authenticate"]
 
 
+def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The render the lock needs runs before the loop's venv holds the dev
+    # wheels: a failed one stops the pass with its own words.
+    import sys
+    from types import SimpleNamespace
+
+    seen: list[tuple[list[str], object, str]] = []
+    code = [3]
+
+    def run(argv: list[str], **kw: object) -> SimpleNamespace:
+        env = kw["env"]
+        assert isinstance(env, dict)
+        seen.append((argv, kw["cwd"], str(env.get("FOOTMAN_NO_UV", ""))))
+        return SimpleNamespace(
+            code=code[0], stdout="  updated pyproject.toml\n", stderr="no index"
+        )
+
+    monkeypatch.setattr("livery.footman.api.run", run)
+    with pytest.raises(_FAILURES, match="the pass's render of the loop exited 3"):
+        _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    code[0] = 0
+    _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    argv = [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"]
+    assert seen == [(argv, tmp_path, "1"), (argv, tmp_path, "1")]
+    assert "updated pyproject.toml" in capsys.readouterr().out
+
+
 def test_the_tree_reset_keeps_what_sync_materialises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

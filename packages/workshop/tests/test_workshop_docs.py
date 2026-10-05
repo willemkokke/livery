@@ -19,7 +19,11 @@ from livery.extensions.docs._site import (
     zensical_config,
 )
 from livery.footman.api import Failed
-from livery.workshop._docs_contract import materialise_module_docs, module_docs_dir
+from livery.workshop._docs_contract import (
+    materialise_module_docs,
+    module_docs,
+    module_docs_dir,
+)
 from livery.workshop._navblocks import NAV_BEGIN, NAV_END
 from livery.workshop._packages import discover_packages
 
@@ -115,6 +119,24 @@ def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
     # Index first, then the rest sorted, all at the mount path.
     assert core["core"][0] == {"Index": "packages/core/index.md"}
     assert core["core"][1] == {"guide": "packages/core/guide.md"}
+
+
+def test_a_builds_docs_copy_is_gone_after_the_build_failed_or_not(
+    tmp_path: Path,
+) -> None:
+    # Left in the source tree, the docs' example files read as the
+    # package's own code to every checker that walks it.
+    root = _workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    target = module_docs_dir(core)
+    assert target is not None
+    with pytest.raises(RuntimeError, match="the build failed"), module_docs(core):
+        assert (target / "guide.md").is_file()
+        raise RuntimeError("the build failed")
+    assert not target.exists()
+    with module_docs(core) as copied:
+        assert copied == target and (target / "guide.md").is_file()
+    assert not target.exists()
 
 
 def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:

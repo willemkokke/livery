@@ -1039,29 +1039,15 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
         )
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
-    pyproject = root / "pyproject.toml"
-    text = pyproject.read_text("utf-8")
-    marker = "[[tool.uv.index]]"
-    if marker not in text:
-        # Bootstrap only: birth's pyproject predates the registry in
-        # the contract, and the lock below must already read the loop
-        # index to find the dev wheels. The re-render after the lock
-        # replaces this edit with the template's own wiring, and from
-        # then on this branch never fires again. The index table
-        # lands before the next table header, inside [tool.uv].
-        next_table = "\n[tool.uv.workspace]"
-        wired = text.replace(
-            next_table,
-            f'\n{marker}\nname = "loop"\nurl = "{loop_index}"\n' + next_table,
-            1,
-        )
-        if wired == text:
-            fail(
-                "the workspace's pyproject has no [tool.uv.workspace]"
-                " table to anchor the loop index on; the template moved"
-                " and this wiring must follow it"
-            )
-        pyproject.write_text(wired, "utf-8")
+    # Birth's pyproject predates the registry in the contract, and the
+    # lock below must already read the loop index to find the dev
+    # wheels, before the loop's own fm can run them. The pass's own
+    # workshop renders it, the code the dev wheels are built from, as
+    # it rendered the birth. From nothing: an edit an earlier pass
+    # committed would be a local override the render keeps and drift
+    # refuses.
+    (root / "pyproject.toml").unlink(missing_ok=True)
+    _render_with_the_pass(root)
     # Lock first, render second: the loop's fm syncs its venv from
     # the lock, so the render runs the workshop this pass published,
     # and the workflows it emits are the emitter under test. The
@@ -1370,6 +1356,30 @@ def _fresh_branch(root: Path, name: str) -> None:
 
     _align_main(root)
     toolroom.git.opts(cwd=root)("switch", "-C", name)
+
+
+def _render_with_the_pass(root: Path) -> None:
+    """Render the loop's files at *root* with this pass's own workshop.
+
+    A child of the pass's interpreter, as the birth is, with the uv
+    handoff off: the loop's lock pins the workshop the loop last
+    locked, and the handoff would run that one instead.
+    """
+    import sys
+
+    result = footman.run(
+        [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"],
+        cwd=root,
+        env={**os.environ, "FOOTMAN_NO_UV": "1"},
+        nofail=True,
+        timeout=900.0,
+    )
+    print(result.stdout.rstrip("\n"))
+    if result.code != 0:
+        fail(
+            f"the pass's render of the loop exited {result.code}:"
+            f"\n{result.stdout}{result.stderr}"
+        )
 
 
 def _loop_fm(
@@ -1756,6 +1766,14 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
+    from livery.workshop._coverage_store import workspace_suite
+
+    # The workspace's own tests are a unit once the tests leg landed
+    # them, and the member's change moves their closure, so the leg
+    # runs them too; a fresh birth has none, and every count is one
+    # fewer.
+    tests = workspace_suite(root) is not None
+    units = 4 if tests else 3
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run, logs = _completed_run(repo, head, event="pull_request")
@@ -1768,7 +1786,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "affected-legs: the scoped gate against origin/main",
             "affected: packages/loop-echo",
             "coverage store: packages/loop-echo stored for closure",
-            "coverage store: tests stored for closure",
+            *(("coverage store: tests stored for closure",) if tests else ()),
         ),
         forbidden=(
             "affected: packages/loop-cpp",
@@ -1794,8 +1812,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "accepted: the loop proves an accepted lowering",
             "new mark: 100.0%",
             "coverage: the union of 1 leg(s) and 2 reused suite(s)",
-            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14: 2 fresh,"
-            " 2 carried, 0 removed",
+            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14:"
+            f" {units - 2} fresh, 2 carried, 0 removed",
             "speed packages/loop-echo on check-ubuntu-latest-3.14: ",
             "recorded as proved green by run",
             " on top of tree ",
@@ -1834,9 +1852,9 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
             "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            "coverage: the union of 0 leg(s) and 4 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 4 carried,"
-            " 0 removed",
+            f"coverage: the union of 0 leg(s) and {units} reused suite(s)",
+            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {units}"
+            " carried, 0 removed",
         ),
         forbidden=("unjudged this run",),
     )
