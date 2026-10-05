@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._errors import ForgeError, RateLimited, Unsupported
 from livery.forge._protocol import (
     Checks,
     Issues,
@@ -45,6 +45,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RateBudget,
     RegistryKind,
     Release,
     RepoConfig,
@@ -104,6 +105,13 @@ class Faults:
             raise livery.forge.api.ForgeError with no status, as the
             client does when the server closes the connection
             without a response mid-poll. The next call answers.
+        rate_limited: The next N of those same calls raise
+            livery.forge.api.RateLimited, as a forge does once the
+            caller's API budget is spent; checked before
+            `drop_connections`.
+        rate_limit_reset: The reset time a `rate_limited` refusal
+            names, as seconds since the epoch; None for a forge that
+            does not say.
     """
 
     lose_arm_schedule: int = 0
@@ -111,9 +119,20 @@ class Faults:
     wedge_status_queue: bool = False
     slow_status_reads: int = 0
     drop_connections: int = 0
+    rate_limited: int = 0
+    rate_limit_reset: float | None = None
 
     def drop(self, endpoint: str) -> None:
-        """Raise the dropped-connection error while `drop_connections` is armed."""
+        """Raise the armed poll fault: a spent budget first, then a dropped one."""
+        if self.rate_limited > 0:
+            self.rate_limited -= 1
+            raise RateLimited(
+                f"HTTP 403 on GET {endpoint}: the forge's API rate limit is spent",
+                reset_at=self.rate_limit_reset,
+                status=403,
+                method="GET",
+                endpoint=endpoint,
+            )
         if self.drop_connections > 0:
             self.drop_connections -= 1
             raise ForgeError(
@@ -235,6 +254,9 @@ class FakeForge:
     ) -> None:
         """Build an empty forge for *user* with *capabilities*."""
         self.faults: Faults = Faults()
+        #: The API budget every repository view reports; None, as a forge
+        #: that reports none, until a test sets one.
+        self.budget: RateBudget | None = None
         self._token = token
         self._user = user
         self._version = version
@@ -628,6 +650,10 @@ class _FakeRepository:
     def name(self) -> str:
         """The repository name the view is bound to."""
         return self._name
+
+    def rate_budget(self) -> RateBudget | None:
+        """The budget the fake was told to report: its ``budget`` attribute."""
+        return self._fake.budget
 
     def ensure_pages(self, *, build_type: str = "workflow") -> None:
         """Record the Pages state the way the forge would."""

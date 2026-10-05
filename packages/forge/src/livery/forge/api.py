@@ -22,6 +22,7 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.forge._errors import ForgeError as ForgeError
+    from livery.forge._errors import RateLimited as RateLimited
     from livery.forge._errors import Unsupported as Unsupported
     from livery.forge._gitea import GiteaForge as GiteaForge
     from livery.forge._gitea import gitea_configured_host as gitea_configured_host
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
     from livery.forge._types import Label as Label
     from livery.forge._types import Protection as Protection
     from livery.forge._types import PullRequest as PullRequest
+    from livery.forge._types import RateBudget as RateBudget
     from livery.forge._types import RegistryKind as RegistryKind
     from livery.forge._types import Release as Release
     from livery.forge._types import RepoConfig as RepoConfig
@@ -109,6 +111,8 @@ __all__ = [
     "Protection",
     "PullRequest",
     "PullRequests",
+    "RateBudget",
+    "RateLimited",
     "Registry",
     "RegistryKind",
     "Release",
@@ -171,6 +175,8 @@ _EXPORTS: dict[str, str] = {
     "Releases": "livery.forge._protocol",
     "RepoConfig": "livery.forge._types",
     "RepoInfo": "livery.forge._types",
+    "RateBudget": "livery.forge._types",
+    "RateLimited": "livery.forge._errors",
     "Repository": "livery.forge._protocol",
     "Review": "livery.forge._types",
     "ReviewState": "livery.forge._types",

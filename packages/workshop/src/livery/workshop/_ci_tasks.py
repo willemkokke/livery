@@ -34,6 +34,7 @@ from livery.forge.api import (
     Forge,
     ForgeError,
     Job,
+    RateLimited,
     Repository,
     Run,
     Unsupported,
@@ -47,6 +48,7 @@ from livery.workshop._verdict import (
     EXIT_TIMEOUT,
     EXIT_UNREACHABLE,
     JobWatch,
+    Pace,
     Transient,
     classify,
     follow,
@@ -361,11 +363,15 @@ def follow_run(
 
     deadline = time.monotonic() + timeout
     transient = Transient(interval=interval)
+    pace = Pace(interval)
     last = ""
     quiet_since = time.monotonic()
     while True:
         try:
             current = next((r for r in point_runs(repo, point) if r.id == run.id), run)
+        except RateLimited as exc:
+            deadline += pace.wait_out(exc)
+            continue
         except ForgeError as exc:
             if transient.note(exc):
                 print(transient.giving_up(f"{point} run {run.id} {run.url}"))
@@ -390,7 +396,7 @@ def follow_run(
         if time.monotonic() >= deadline:
             print(f"  still {current.status} after {timeout:.0f}s; {current.url}")
             return EXIT_TIMEOUT
-        time.sleep(interval)
+        pace.rest(repo)
 
 
 def dispatch_flow(
@@ -553,6 +559,7 @@ def runs_status_flow(
         nothing = f"no runs yet for {sha[:10]}"
     deadline = time.monotonic() + timeout
     transient = Transient(interval=interval)
+    pace = Pace(interval)
     seen_runs: dict[int, str] = {}
     jobs = JobWatch()
     while True:
@@ -561,6 +568,11 @@ def runs_status_flow(
                 runs = point_runs(repo, point)[:1]
             else:
                 runs = repo.checks.runs(head_sha=sha)
+        except RateLimited as exc:
+            if not wait:
+                raise
+            deadline += pace.wait_out(exc)
+            continue
         except ForgeError as exc:
             if not wait:
                 raise
@@ -587,7 +599,7 @@ def runs_status_flow(
         if time.monotonic() >= deadline:
             print(f"  still pending after {timeout:.0f}s")
             return EXIT_TIMEOUT
-        time.sleep(interval)
+        pace.rest(repo)
 
 
 @ci.task(name="status")

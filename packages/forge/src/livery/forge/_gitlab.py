@@ -57,6 +57,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RateBudget,
     RegistryKind,
     Release,
     RepoConfig,
@@ -534,6 +535,10 @@ class _GitlabRepository:
     def name(self) -> str:
         """The project name the view is bound to."""
         return self._name
+
+    def rate_budget(self) -> RateBudget | None:
+        """The API budget the server reported on this client's last response."""
+        return self._client.budget
 
     def ensure_pages(self, *, build_type: str = "workflow") -> None:
         """Decline: GitLab Pages rides pipeline artifacts, not a config API.

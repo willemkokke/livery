@@ -33,6 +33,8 @@ def test_the_surface_is_declared() -> None:
         "Protection",
         "PullRequest",
         "PullRequests",
+        "RateBudget",
+        "RateLimited",
         "Registry",
         "RegistryKind",
         "Release",

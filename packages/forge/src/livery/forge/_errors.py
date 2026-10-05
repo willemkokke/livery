@@ -36,6 +36,35 @@ class ForgeError(Exception):
         self.detail = detail
 
 
+class RateLimited(ForgeError):
+    """Raised when the forge refuses a request because its API budget is spent.
+
+    Asking again before the budget returns gets the same answer. A
+    caller that can wait (a watch that follows a pull request) sleeps
+    until then and continues; one that cannot names the time.
+
+    Attributes:
+        reset_at: When the budget returns, as seconds since the epoch;
+            None when the forge did not say.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reset_at: float | None,
+        status: int | None = None,
+        method: str = "",
+        endpoint: str = "",
+        detail: str = "",
+    ) -> None:
+        """Carry *message*, the request facts, and when the budget returns."""
+        super().__init__(
+            message, status=status, method=method, endpoint=endpoint, detail=detail
+        )
+        self.reset_at = reset_at
+
+
 class Unsupported(Exception):
     """Raised when a forge cannot honour a protocol operation.
 
