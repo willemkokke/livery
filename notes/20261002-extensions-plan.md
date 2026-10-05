@@ -1724,6 +1724,21 @@ Acceptance:
   `src/` and `tests/`), a native member still needs an `exclude`
   line, a member list only `--all-packages` installs breaks a bare
   `uv sync`, and mypy's `mypy_path` cannot glob.
+- Willem, 2026-10-05: `fm sync --locked` and `--frozen` keep uv's
+  meanings. Neither moves the branch or writes a file a commit holds;
+  `--locked` refuses a stale lock, `--frozen` takes the locks as they
+  are (#1140).
+- Willem, 2026-10-05: a worktree `fm start` makes gates at once
+  (#1140). Running the start again syncs a worktree whose sync failed.
+  Every command first writes what a checkout that never synced lacks:
+  the tool receipts from the machine's store, offline, and the
+  checkout's own untracked files. footman's `enter` handoff syncs an
+  environment that has no runner to enter.
+- Willem, 2026-10-05: a test that runs on every workspace the
+  workshop manages names no import package of its own. A workspace
+  can have any name and need not be a namespace package, so
+  `lint.docrefs` reads namespace packages, regular packages and
+  single-module distributions alike (#1140).
 - Willem, 2026-10-04: the conan cache handling is part of this
   refactor (11b). A pinned Linux sysroot is a later improvement, not
   phase 12: the toolchain plan's host sysroot stands. Python wheels
