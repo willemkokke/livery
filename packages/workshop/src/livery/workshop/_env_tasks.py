@@ -102,8 +102,9 @@ def apply_cascade(inv: footman.Invocation) -> None:
     try:
         from livery.workshop import _reconcile
 
-        if _reconcile.is_cli_process():
-            _reconcile.apply(root)
+        if _reconcile.is_cli_process() and _reconcile.apply(root):
+            # The repair wrote receipts this process entered without.
+            apply_entry(root)
     except Exception as error:
         import sys
 

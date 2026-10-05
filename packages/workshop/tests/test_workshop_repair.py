@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -45,8 +46,32 @@ def test_a_failed_repair_is_said_and_the_command_goes_on(
 
     monkeypatch.setattr(_reconcile, "repair", broken)
     monkeypatch.setattr(_reconcile, "reconcile", lambda root: _reconcile.Reconciled())
-    _reconcile.apply(tmp_path)
+    assert not _reconcile.apply(tmp_path)
     assert "could not be written: no space left on device" in capsys.readouterr().err
+
+
+def test_a_process_the_repair_starts_repairs_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A delivery lists the workspace's tasks through the runner; that
+    # child's own repair finds the files still missing, and would
+    # deliver again, and so on without end.
+    (tmp_path / "tools.lock").write_text("{}\n")
+    called = _calls(monkeypatch)
+    children: list[list[str]] = []
+
+    def deliver(root: Path, *, local_only: bool = False) -> list[str]:
+        called.append(f"deliver local_only={local_only}")
+        children.append(_reconcile.repair(root))  # the child inherits the marker
+        return ["  wrote .workshop/fragments/rules.md"]
+
+    monkeypatch.setattr("livery.workshop._shipped_files.deliver", deliver)
+    monkeypatch.delenv("WORKSHOP_REPAIRING", raising=False)
+    assert _reconcile.repair(tmp_path)
+    assert children == [[]]
+    assert called == ["tools offline=True", "deliver local_only=True"]
+    # The command that follows runs in the environment it started with.
+    assert "WORKSHOP_REPAIRING" not in os.environ
 
 
 def test_a_checkout_that_never_synced_gets_its_tools_and_its_own_files(

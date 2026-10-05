@@ -24,6 +24,11 @@ from pathlib import Path
 
 _GUARD = "WORKSHOP_RECONCILE_REEXEC"
 
+#: Set while a repair runs, so the processes it starts repair nothing. A
+#: delivery lists the workspace's tasks through the runner; that child
+#: would find the files still missing and deliver again, without end.
+_REPAIRING = "WORKSHOP_REPAIRING"
+
 #: The receipt's name under ``.venv``: a byte copy of ``uv.lock`` as
 #: the venv last saw it. The emitted ``setup.sh`` writes the same
 #: file after its own sync, so the two mechanisms share one record.
@@ -209,26 +214,40 @@ def repair(root: Path) -> list[str]:
     its first gate finds no tool. Each is written from what the machine
     already holds, as ``sync --frozen --offline`` writes it: no network,
     and nothing a commit holds changed. A checkout holding both costs
-    two file checks.
+    two file checks. A process a repair started repairs nothing.
     """
     from livery.toolroom.store.api import LOCK_FILE
     from livery.workshop._fragment_engine import LOCAL_RECEIPT
     from livery.workshop._tools import receipts_dir
 
+    if os.environ.get(_REPAIRING):
+        return []
     lines: list[str] = []
-    if (root / LOCK_FILE).is_file() and not any(receipts_dir(root).glob("*.json")):
-        from livery.workshop._sync import materialise_tools
+    # Set for this process's children and removed after them, so the
+    # command that follows runs in the environment it started with.
+    os.environ[_REPAIRING] = "1"
+    try:
+        if (root / LOCK_FILE).is_file() and not any(receipts_dir(root).glob("*.json")):
+            from livery.workshop._sync import materialise_tools
 
-        lines += materialise_tools(root, offline=True)
-    if not (root / LOCAL_RECEIPT).is_file():
-        from livery.workshop._shipped_files import deliver
+            lines += materialise_tools(root, offline=True)
+        if not (root / LOCAL_RECEIPT).is_file():
+            from livery.workshop._shipped_files import deliver
 
-        lines += deliver(root, local_only=True)
+            lines += deliver(root, local_only=True)
+    finally:
+        os.environ.pop(_REPAIRING, None)
     return lines
 
 
-def apply(root: Path) -> None:
-    """Reconcile, repair, report, and re-run the command on changed code."""
+def apply(root: Path) -> bool:
+    """Repair, reconcile, report, and re-run the command on changed code.
+
+    Returns:
+        Whether the repair wrote anything. The caller entered the
+        environment before it, from receipts the repair may have written
+        since, so it enters again.
+    """
     import livery.footman.api as footman
 
     try:
@@ -246,12 +265,12 @@ def apply(root: Path) -> None:
     result = reconcile(root)
     if result.failure:
         _say(f"{footman.prog()}: environment reconcile incomplete: {result.failure}")
-        return
-    if not result.synced:
-        return
-    _say(f"{footman.prog()}: environment synced from uv.lock")
-    if result.changed:
-        _reexec(root)
+        return bool(repaired)
+    if result.synced:
+        _say(f"{footman.prog()}: environment synced from uv.lock")
+        if result.changed:
+            _reexec(root)
+    return bool(repaired)
 
 
 def _reexec(root: Path) -> None:
