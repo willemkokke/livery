@@ -280,10 +280,16 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     members = {p.name: p for p in discover_packages(tmp_path)}
     calls: list[str] = []
 
+    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
+    workspace.write_text("packages:\n  - path: packages/geometry\n")
+
     class _Backend:
         def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
             del root, epoch
-            calls.append(f"build {package.name}")
+            # Every build resolves a sibling to the package this leg
+            # created: the workspace is aside while it runs.
+            seen = "workspace" if workspace.exists() else "aside"
+            calls.append(f"build {package.name} ({seen})")
             dist = package.directory / "dist"
             dist.mkdir(exist_ok=True)
             if package.kind == "python-nanobind":
@@ -291,9 +297,6 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
                     ""
                 )
             return dist
-
-    def _forget(package: Package) -> None:
-        calls.append(f"forget {package.name}")
 
     def _save(package: Package, version: str, into: Path) -> Path:
         calls.append(f"save {package.name} {version}")
@@ -307,7 +310,6 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
         calls.append(f"floors {package.name} {sorted(released)}")
 
     monkeypatch.setattr("livery.workshop._backends.backend_for", lambda _p: _Backend())
-    monkeypatch.setattr(_cpp_conan, "forget_editable", _forget)
     monkeypatch.setattr(_cpp_conan, "save_cache", _save)
     monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
     monkeypatch.setattr(
@@ -320,9 +322,10 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     monkeypatch.chdir(tmp_path)
     release_wheels(SimpleNamespace(env={}))  # type: ignore[arg-type]  # context stand-in
     assert calls == [
-        "forget geometry",
-        "build geometry",
+        "build geometry (aside)",
         "save geometry 0.1.0",
-        "build ext",
+        "build ext (aside)",
         "floors ext ['packages/ext', 'packages/geometry']",
     ]
+    # The leg puts the workspace back for whatever runs after it.
+    assert workspace.read_text() == "packages:\n  - path: packages/geometry\n"

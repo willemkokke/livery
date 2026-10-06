@@ -225,11 +225,11 @@ def conan_environment(root: Path) -> dict[str, str]:
     `CMAKE_PROJECT_TOP_LEVEL_INCLUDES`, which CMake reads from no
     environment variable of its own, so every configure resolves
     `find_package` through conan. `CONAN_HOME` is made explicit so a
-    container build shares this machine's cache and its editables. On
-    Linux cibuildwheel
+    container build shares this machine's cache. On Linux cibuildwheel
     builds in a container with its own filesystem, so the workspace,
     the store and the conan home are mounted at their host paths and
-    the store's conan joins the container's PATH. Both are read from
+    the store's conan joins the container's PATH; the workspace brings
+    its conanws.yml, so a sibling resolves from its source there too. Both are read from
     the entered environment first, then from this checkout's
     receipts, which name the versions its lock pins.
 

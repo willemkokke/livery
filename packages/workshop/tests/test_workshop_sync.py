@@ -53,7 +53,6 @@ def test_sync_runs_where_git_has_no_history(
     monkeypatch.setattr(_sync, "sweep_residue", _step("sweep", []))
     monkeypatch.setattr(_sync, "fetch_store_lines", _step("store", []))
     monkeypatch.setattr(_sync, "sync_workspace", _step("content", []))
-    monkeypatch.setattr(_sync, "conan_editables", _step("conan", []))
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _step("tools"))
     monkeypatch.setattr("livery.workshop._uv.run_uv", _step("uv"))
     monkeypatch.setattr("livery.workshop._shipped_files.deliver", _step("deliver", []))
@@ -73,7 +72,6 @@ def test_sync_runs_where_git_has_no_history(
         "store",
         "content",
         "tools",
-        "conan",
         "uv",
         "deliver",
         "generated",

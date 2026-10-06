@@ -14,7 +14,7 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     CMakeLists.txt resolves each requirement here. A third-party
     package comes from Conan Center; a workspace sibling is named at
     the contract's floor ("acme-geometry/[>=0.1.0]") and resolves to
-    its source tree while the sibling is registered editable.
+    its source tree through the workspace's conanws.yml.
     """
 
     settings = "os", "compiler", "build_type", "arch"

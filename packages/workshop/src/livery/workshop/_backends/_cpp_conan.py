@@ -1,8 +1,10 @@
 """The C/C++ backend: the build callables for ``type = "cpp-conan"``.
 
 The gate verb configures and builds with cmake and ninja and runs
-the ctest suite through the generated ``test`` target. Packaging,
-the saved caches, and the editable registrations go through conan.
+the ctest suite through the generated ``test`` target. Packaging and
+the saved caches go through conan, and the workspace's conan members
+resolve from their sources through the conan workspace file
+(`WORKSPACE_FILE`) at the root.
 
 Every tool this module runs is a tool of the store, reached through
 its toolroom handle, so the version is the one this checkout's lock
@@ -22,6 +24,8 @@ import re
 import shutil
 import sys
 import tempfile
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 from xml.etree import ElementTree
@@ -290,17 +294,73 @@ def cache_name(name: str, version: str, host: str = "") -> str:
     )
 
 
-def forget_editable(package: Package) -> None:
-    """Unregister *package* as editable; silent when it was not one.
+#: The conan workspace file at the workspace root.
+WORKSPACE_FILE = "conanws.yml"
 
-    The workspace registers every conan member editable so a sibling
-    compiles against its source at HEAD. A leg that builds what the
-    release ships must resolve the created package instead, and an
-    editable registration outranks the cache.
+
+def workspace_members(packages: Iterable[Package]) -> tuple[Package, ...]:
+    """The members of *packages* whose kind packages them with conan, by path."""
+    from livery.workshop._kinds import kind_for
+
+    return tuple(
+        sorted(
+            (p for p in packages if kind_for(p.kind).artifact == "conan"),
+            key=lambda p: p.path,
+        )
+    )
+
+
+def workspace_file(members: Iterable[Package]) -> str:
+    """The `WORKSPACE_FILE` that resolves *members* from their sources.
+
+    Conan finds the file by walking up from the directory a command
+    runs in, so a command inside the workspace resolves each member
+    from its source tree, and one outside resolves it from the cache
+    or a remote. Nothing is registered in the conan home, so a
+    workspace leaves nothing behind, and each checkout of a repository
+    resolves to its own sources. An entry names its member by path
+    alone: conan reads the reference from the recipe's ``name`` and
+    ``version``, so the file stays right when a release stamps the
+    version.
     """
-    result = _conan(package.directory, "editable", "remove", str(package.directory))
-    if result.code == 0:
-        print(f"  {package.name}: editable registration removed for this leg")
+    lines = [
+        "# The conan workspace: a conan command run inside this folder",
+        "# resolves each package below from its source tree. Rendered from",
+        "# the members whose kind packages with conan; the gate keeps it",
+        "# matching.",
+        "packages:",
+        *(f"  - path: {member.path}" for member in members),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def root_files(members: tuple[Package, ...]) -> dict[str, str]:
+    """The files the kind writes at the root: the conan workspace over *members*."""
+    return {WORKSPACE_FILE: workspace_file(members)}
+
+
+@contextmanager
+def workspace_aside(root: Path) -> Generator[None]:
+    """Hide *root*'s conan workspace for the block, so members resolve from the cache.
+
+    A release leg builds what the release ships: a member's
+    ``conan create`` and an extension's wheel resolve a sibling to the
+    package the leg created, never to its source tree. Conan finds the
+    workspace from the directory a command runs in and has no switch
+    to ignore it, so the file moves aside for the block and comes back
+    after it, a failure included. A leg killed inside the block leaves
+    the file aside, and the next ``sync`` writes it again.
+    """
+    path = root / WORKSPACE_FILE
+    if not path.is_file():
+        yield
+        return
+    aside = path.with_name(f"{WORKSPACE_FILE}.aside")
+    os.replace(path, aside)
+    try:
+        yield
+    finally:
+        os.replace(aside, path)
 
 
 def save_cache(package: Package, version: str, into: Path) -> Path:

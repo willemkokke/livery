@@ -337,15 +337,6 @@ def release_wheels(
     if not native and not conan_members:
         print("  no native members in this release; nothing to build")
         return
-    for package, version in conan_members:
-        # The workspace registers each conan member editable, which
-        # points a consumer at the source tree. A release leg builds
-        # the package the release ships, so the registration goes
-        # first and the extension resolves the created package.
-        _cpp_conan.forget_editable(package)
-        backend_for(package).build(package, root, epoch=epoch)
-        archive = _cpp_conan.save_cache(package, version, package.directory / "dist")
-        print(f"  {package.name}: {archive.name}")
     # The full set for this platform: the python matrix's interpreters,
     # and both libc flavours kept (an empty CIBW_SKIP reads as no skip,
     # and its presence stops the local narrowing's setdefault). Set on
@@ -354,12 +345,21 @@ def release_wheels(
     # refused as an environment write meant to travel sideways.
     ctx.env.setdefault("CIBW_BUILD", cibw_build_set(python_matrix(root)))
     ctx.env.setdefault("CIBW_SKIP", "")
-    for package in native:
-        dist = backend_for(package).build(package, root, epoch=epoch)
-        wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
-        print(f"  {package.name}: {wheels}")
-    for package in native:
-        _python_nanobind.floor_legs(package, root, released, epoch=epoch)
+    # A release leg builds the packages the release ships, so a sibling
+    # resolves to the package this leg created, never to its source
+    # tree: the conan workspace is set aside for every build.
+    with _cpp_conan.workspace_aside(root):
+        for package, version in conan_members:
+            backend_for(package).build(package, root, epoch=epoch)
+            dist = package.directory / "dist"
+            archive = _cpp_conan.save_cache(package, version, dist)
+            print(f"  {package.name}: {archive.name}")
+        for package in native:
+            dist = backend_for(package).build(package, root, epoch=epoch)
+            wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
+            print(f"  {package.name}: {wheels}")
+        for package in native:
+            _python_nanobind.floor_legs(package, root, released, epoch=epoch)
 
 
 @release.task(name="driver", hidden=True)

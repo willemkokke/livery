@@ -37,8 +37,9 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
         """Use conan's standard cmake layout under build/; headers live in src/.
 
         The source include directory is what a consumer sees while
-        this package is registered editable, so it names src/ where
-        the headers are, not conan's default include/.
+        the workspace's conanws.yml resolves this package from its
+        source, so it names src/ where the headers are, not conan's
+        default include/.
         """
         cmake_layout(self)
         self.cpp.source.includedirs = ["src"]
