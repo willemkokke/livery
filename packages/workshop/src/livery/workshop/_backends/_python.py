@@ -4,10 +4,8 @@ One invocation covers every Python package at once: the checkers read
 their scopes from the workspace's own configuration, so the whole
 repository is linted exactly as CI lints it, and a tracked file
 outside any package still cannot pass the gate and fail the build.
-The affected engine narrows the same verbs to a package subset by
-passing explicit paths; ty and pyrefly always check their configured
-whole, because their runs cost seconds and their configs pin the
-platform matrix.
+ty and pyrefly always check their configured whole, because their
+runs cost seconds and their configs pin the platform matrix.
 """
 
 from __future__ import annotations
@@ -28,7 +26,6 @@ import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import fail
 from livery.toolroom.tools.api import (
-    mypy,
     pyrefly,
     pytest,
     ty,
@@ -48,33 +45,16 @@ if TYPE_CHECKING:
 PY_SUFFIXES = (".py", ".pyi")
 
 
-def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
-    """Type-check with the three gating checkers in parallel, or with *only* one.
+def run_typecheck(only: str = "") -> None:
+    """Type-check with the two gating checkers in parallel, or with *only* one.
 
-    mypy is strict on livery.* and checks every test body as consumer
-    code, once per platform (linux from config, darwin and win32 by
-    flag), since mypy has no all-platforms mode. ty and pyrefly check
-    every platform at once at the scopes pyproject pins. All three
-    gate: a checker livery uses is a checker the tree is clean
-    against.
-
-    *paths* narrows mypy to the affected subset; ty and pyrefly keep
-    their configured whole either way. *only* names one checker,
-    ``mypy``, ``ty`` or ``pyrefly``, the way each is a check of the
-    typecheck role.
+    ty and pyrefly check every platform at once at the scopes their
+    configuration pins, the configured whole whatever a run reaches.
+    Both gate: a checker the workspace uses is a checker the tree is
+    clean against. *only* names one checker, ``ty`` or ``pyrefly``,
+    the way each is a check of the typecheck role.
     """
     from livery.footman.api import parallel, step
-
-    # Each mypy run gets its own cache dir: the SQLite cache does not
-    # tolerate three concurrent writers on one file.
-    def mypy_linux() -> None:
-        mypy(*paths, cache_dir=".mypy_cache/linux")
-
-    def mypy_darwin() -> None:
-        mypy(*paths, platform="darwin", cache_dir=".mypy_cache/darwin")
-
-    def mypy_win32() -> None:
-        mypy(*paths, platform="win32", cache_dir=".mypy_cache/win32")
 
     def run_ty() -> None:
         ty.check()
@@ -83,7 +63,6 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
         pyrefly("check")
 
     steps = {
-        "mypy": (step(mypy_linux), step(mypy_darwin), step(mypy_win32)),
         "ty": (step(run_ty, title="ty"),),
         "pyrefly": (step(run_pyrefly, title="pyrefly"),),
     }

@@ -136,8 +136,8 @@
       "hosts": {},
       "graph": {
         "file": "mypy.txt",
-        "digest": "sha256:3695c6276bb01fd9ae55d16e0ef19b7ced4a3ab0b25639f4a1ad3bb9a395192e",
-        "by": "uv 0.11.26"
+        "digest": "sha256:9e4fca9422918240969ac46e9e06dade248f6f709e231c7cb51432b8bc1fb3b8",
+        "by": "uv 0.12.5"
       }
     },
     "node": {

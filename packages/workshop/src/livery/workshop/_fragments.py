@@ -147,59 +147,6 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 # The builtin fragments, moved from the base template verbatim: each
 # tool's table where the tool reads one file per project.
 
-MYPY = r"""[tool.mypy]
-# {{ namespace_package }}.* is fully strict; tests and tasks.py run the
-# usage-checking half (check_untyped_defs, on via strict), so every
-# test body type-checks as consumer code without demanding `-> None`
-# on every def. Narrow suppressions live inline as
-# `# type: ignore[code]` with a reason; pyright-only suppressions use
-# `# pyright: ignore` so warn_unused_ignores keeps this checker's set
-# honest.
-files = [
-{% for package in py %}    "packages/{{ package.dir }}/src",
-    "packages/{{ package.dir }}/tests",
-{% endfor %}{% for path in root_tests %}    "{{ path }}",
-{% endfor %}    "tasks.py",
-]
-mypy_path = [
-    "typings",
-{% for package in py %}    "packages/{{ package.dir }}/src",
-    "packages/{{ package.dir }}/tests",
-{% endfor %}]
-# PEP 420 namespace in a src layout: mypy needs both to derive module
-# names without an __init__.py trail.
-namespace_packages = true
-explicit_package_bases = true
-# Deterministic world, whatever host runs the check. linux is the
-# bare-run default; the typecheck task adds darwin and win32 runs,
-# since mypy has no all-platforms mode.
-platform = "linux"
-python_version = "{{ python_floor }}"
-strict = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_calls = false
-disallow_untyped_decorators = false
-# The public surface's re-export discipline is policed by verifytypes
-# and the public-surface test instead.
-implicit_reexport = true
-
-[[tool.mypy.overrides]]
-module = "{{ namespace_package }}.*"
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_calls = true
-disallow_untyped_decorators = true
-
-[[tool.mypy.overrides]]
-# The generated tool stubs carry the suppressions their generator
-# placed for its own reading of each tool; which of them fire varies
-# with flags this config does not share, and an unused one there is
-# the generator's business, not drift.
-module = "*.toolroom.stubs.*"
-warn_unused_ignores = false
-"""
-
 TY = r"""[tool.ty]
 # Scope: the packages themselves; the consumer seam in tests is the
 # path-narrowing type checkers' to read.

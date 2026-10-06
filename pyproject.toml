@@ -27,10 +27,11 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/mypy", "packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
+livery-extensions-mypy = { workspace = true }
 livery-extensions-ruff = { workspace = true }
 livery-footman = { workspace = true }
 livery-forge = { workspace = true }
@@ -55,6 +56,7 @@ dev = [
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
     "livery-extensions-basedpyright",
+    "livery-extensions-mypy",
     "livery-extensions-ruff",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
@@ -127,95 +129,11 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
+pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/mypy/tests", "packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
 addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
-
-[tool.mypy]
-# livery.* is fully strict; tests and tasks.py run the
-# usage-checking half (check_untyped_defs, on via strict), so every
-# test body type-checks as consumer code without demanding `-> None`
-# on every def. Narrow suppressions live inline as
-# `# type: ignore[code]` with a reason; pyright-only suppressions use
-# `# pyright: ignore` so warn_unused_ignores keeps this checker's set
-# honest.
-files = [
-    "packages/extensions/basedpyright/src",
-    "packages/extensions/basedpyright/tests",
-    "packages/extensions/ruff/src",
-    "packages/extensions/ruff/tests",
-    "packages/footman/src",
-    "packages/footman/tests",
-    "packages/forge/src",
-    "packages/forge/tests",
-    "packages/strongroom/src",
-    "packages/strongroom/tests",
-    "packages/toolroom/src",
-    "packages/toolroom/tests",
-    "packages/toolroom-bench/src",
-    "packages/toolroom-bench/tests",
-    "packages/toolroom-store/src",
-    "packages/toolroom-store/tests",
-    "packages/workshop/src",
-    "packages/workshop/tests",
-    "tests",
-    "tasks.py",
-]
-mypy_path = [
-    "typings",
-    "packages/extensions/basedpyright/src",
-    "packages/extensions/basedpyright/tests",
-    "packages/extensions/ruff/src",
-    "packages/extensions/ruff/tests",
-    "packages/footman/src",
-    "packages/footman/tests",
-    "packages/forge/src",
-    "packages/forge/tests",
-    "packages/strongroom/src",
-    "packages/strongroom/tests",
-    "packages/toolroom/src",
-    "packages/toolroom/tests",
-    "packages/toolroom-bench/src",
-    "packages/toolroom-bench/tests",
-    "packages/toolroom-store/src",
-    "packages/toolroom-store/tests",
-    "packages/workshop/src",
-    "packages/workshop/tests",
-]
-# PEP 420 namespace in a src layout: mypy needs both to derive module
-# names without an __init__.py trail.
-namespace_packages = true
-explicit_package_bases = true
-# Deterministic world, whatever host runs the check. linux is the
-# bare-run default; the typecheck task adds darwin and win32 runs,
-# since mypy has no all-platforms mode.
-platform = "linux"
-python_version = "3.11"
-strict = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_calls = false
-disallow_untyped_decorators = false
-# The public surface's re-export discipline is policed by verifytypes
-# and the public-surface test instead.
-implicit_reexport = true
-
-[[tool.mypy.overrides]]
-module = "livery.*"
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_calls = true
-disallow_untyped_decorators = true
-
-[[tool.mypy.overrides]]
-# The generated tool stubs carry the suppressions their generator
-# placed for its own reading of each tool; which of them fire varies
-# with flags this config does not share, and an unused one there is
-# the generator's business, not drift.
-module = "*.toolroom.stubs.*"
-warn_unused_ignores = false
 
 [tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
@@ -223,7 +141,7 @@ warn_unused_ignores = false
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -246,7 +164,7 @@ unnecessary-type-conversion = "error"
 # Scope: the packages themselves; the consumer seam in tests is the
 # path-narrowing type checkers' to read.
 [tool.ty.src]
-include = ["packages/extensions/basedpyright/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+include = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.

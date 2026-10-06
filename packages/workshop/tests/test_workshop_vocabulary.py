@@ -51,7 +51,7 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_checks", BACKEND_IMPORT): 1,
     ("_checks", "cpp-conan"): 5,
-    ("_checks", "pyproject.toml"): 5,
+    ("_checks", "pyproject.toml"): 4,
     ("_checks", "python"): 1,
     ("_checks", "python-nanobind"): 1,
     ("_ci_generate", "conanfile.py"): 1,

@@ -219,6 +219,12 @@ the repository's own settings go in its region at the end. Listed as
 API is type-complete. `fm new.project` lists `docs`, `ruff` and
 `basedpyright`.
 
+mypy is an extension of its own as well, `livery-extensions-mypy`,
+listed as `mypy`. Listed, it registers `typecheck.mypy`, which checks
+linux, darwin and win32 with a cache each under `.workshop/.cache/mypy/`,
+and `fm sync` writes the root `mypy.ini`, which a bare `mypy` reads. A
+new project does not list it.
+
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the
 snippets extension: a fence whose one line is the snippet marker

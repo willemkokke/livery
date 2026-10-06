@@ -9,7 +9,6 @@ __pycache__/
 fm-profile*.json
 fm-gate.json
 .claude/worktrees/
-.mypy_cache/
 .workshop/
 typings/
 .repo.env.local

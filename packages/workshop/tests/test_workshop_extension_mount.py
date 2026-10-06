@@ -170,16 +170,16 @@ def test_the_gate_names_what_a_extension_registered_and_withdrew(
         return set(_checks.narrowings()) - before
 
     register_check(CheckRecord("brand", "lint", _noop, extension="acme.brand"))
-    unregister_check("typecheck.mypy", by="acme.brand")
+    unregister_check("typecheck.pyrefly", by="acme.brand")
     assert added() == {
         "  lint.brand: registered by acme.brand",
-        "  typecheck.mypy: withdrawn by acme.brand",
+        "  typecheck.pyrefly: withdrawn by acme.brand",
     }
     # An extension withdrawing its own check narrows nothing the base owned.
     unregister_check("lint.brand", by="acme.brand")
-    assert added() == {"  typecheck.mypy: withdrawn by acme.brand"}
+    assert added() == {"  typecheck.pyrefly: withdrawn by acme.brand"}
     # Registering the name again clears the withdrawal.
-    register_check(CheckRecord("mypy", "typecheck", _noop))
+    register_check(CheckRecord("pyrefly", "typecheck", _noop))
     assert added() == set()
 
 

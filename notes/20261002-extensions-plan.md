@@ -3,8 +3,8 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff and basedpyright slices built (issues
-#1149 and #1159), and phases 10 to 15 are not started. It is the one plan from now until the end of
+9b is in progress, its ruff, basedpyright and mypy slices built
+(issues #1149, #1159 and #1164), and phases 10 to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1261,6 +1261,21 @@ runtime kind whatever the members are, so the tools of that kind's
 checks stay in the profile when its last member goes
 (`test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes`).
 
+**9b4 built (issue #1164): mypy is its own extension.**
+`livery-extensions-mypy`, in `packages/extensions/mypy/` and listed as
+`mypy`, declares `typecheck.mypy`: every call checks linux, darwin and
+win32 in parallel, each with a cache of its own under
+`.workshop/.cache/mypy/`, and each platform's verdict gates. It writes
+the root `mypy.ini`, which a bare `mypy` reads first; its `files` and
+`mypy_path` stay explicit, a line per python member's `src` and
+`tests`, since mypy derives a module's name in a namespace package from
+the `mypy_path` entries and takes no glob there. `[tool.mypy]` left
+`pyproject.toml`, the `.mypy_cache/` line left the root `.gitignore`,
+and mypy's line in the dev group is the extension's contribution. A
+new project does not list it; this repository does. The base's tests
+that needed a type checker as an example name pyrefly, the last of the
+three to leave.
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1945,6 +1960,9 @@ Acceptance:
   (`Backend.public_modules`, `livery.workshop.api.public_modules`), so
   the extension names no python layout; the python backend keeps the
   `api` convention until phase 11 moves it.
+- 2026-10-06, 9b4: a bare `mypy` checks linux and shares the check's
+  linux cache (`cache_dir = .workshop/.cache/mypy/linux` in
+  `mypy.ini`); the check's darwin and win32 runs name their own.
 
 ## Open
 

@@ -23,6 +23,8 @@ extensions = [
     # The type checker, configured by the root pyrightconfig.json, and
     # the check that every public API is type-complete.
     "basedpyright[typecomplete]",
+    # The type checker on every platform, configured by the root mypy.ini.
+    "mypy",
 ]
 
 [docs]

@@ -100,7 +100,7 @@ def test_the_records_fill_the_dev_group_and_addopts_and_a_withdrawn_check_leaves
     from livery.workshop._checks import check_for, register_check, unregister_check
 
     group = _list("python.dev-group")
-    assert "pytest>=8.0" in group and "mypy>=1.14" in group
+    assert "pytest>=8.0" in group and "pytest-xdist>=3.6" in group
     assert _list("python.test.addopts") == [
         "-q",
         "-n auto",
@@ -116,11 +116,11 @@ def test_the_records_fill_the_dev_group_and_addopts_and_a_withdrawn_check_leaves
     assert "hypothesis>=6" not in _list("python.dev-group")
     # Unregistering the check that contributes withdraws its lines;
     # registering it again restores them.
-    record = check_for("typecheck.mypy")
-    unregister_check("typecheck.mypy", by="acme.brand")
-    assert "mypy>=1.14" not in _list("python.dev-group")
+    record = check_for("test.pytest")
+    unregister_check("test.pytest", by="acme.brand")
+    assert "pytest-xdist>=3.6" not in _list("python.dev-group")
     register_check(record)
-    assert "mypy>=1.14" in _list("python.dev-group")
+    assert "pytest-xdist>=3.6" in _list("python.dev-group")
 
 
 def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
@@ -150,8 +150,8 @@ def test_a_union_composes_the_same_whatever_order_its_checks_registered() -> Non
     before = all_composed()["python.dev-group"]
     state = _checks.snapshot()
     try:
-        record = _checks.checks_by_name()["typecheck.mypy"]
-        _checks.unregister_check("typecheck.mypy", by="a test")
+        record = _checks.checks_by_name()["test.pytest"]
+        _checks.unregister_check("test.pytest", by="a test")
         _checks.register_check(record)
         assert all_composed()["python.dev-group"] == before
     finally:
