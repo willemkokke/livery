@@ -22,19 +22,23 @@ check that narrows by paths (``narrowing=PATHS``) reads them from
 [livery.workshop.api.WHOLE][] for the tool's configured whole, and
 calls its tool through [livery.workshop.api.run_batched][]; one that
 narrows by packages (``narrowing=PACKAGES``) reads them from
-[livery.workshop.api.scoped_packages][]. A package's public modules are
+[livery.workshop.api.scoped_packages][], and one that judges a package
+at a time (``scope=PACKAGE``) reads its files from
+[livery.workshop.api.scoped_files][]. A package's public modules are
 its kind's answer, [livery.workshop.api.public_modules][].
 """
 
 from __future__ import annotations
 
 from livery.workshop._checks import (
+    PACKAGE,
     PACKAGES,
     PATHS,
     WHOLE,
     CheckRecord,
     Claim,
     GateContext,
+    scoped_files,
     scoped_packages,
     scoped_paths,
 )
@@ -57,6 +61,7 @@ from livery.workshop._packages import (
 __version__ = "0.5.0"
 
 __all__ = [
+    "PACKAGE",
     "PACKAGES",
     "PATHS",
     "WHOLE",
@@ -73,6 +78,7 @@ __all__ = [
     "public_modules",
     "rewrite_nav_block",
     "run_batched",
+    "scoped_files",
     "scoped_packages",
     "scoped_paths",
     "verify_workspace",

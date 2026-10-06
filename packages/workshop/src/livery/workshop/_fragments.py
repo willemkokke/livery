@@ -25,9 +25,6 @@ from typing import Any
 #: file refuses at registration.
 PROJECT_FILES = ("pyproject.toml", ".vscode/settings.json", ".vscode/extensions.json")
 
-#: The per-package files a fragment may address, rendered per kind.
-PACKAGE_FILES = (".clang-format", ".clang-tidy")
-
 
 @dataclass(frozen=True)
 class Fragment:
@@ -63,18 +60,13 @@ def verify(fragments: tuple[Fragment, ...], check: str) -> None:
                     " the whole workspace and names no kind"
                 )
             continue
-        if fragment.file in PACKAGE_FILES:
-            if not fragment.kind:
-                raise ValueError(
-                    f"check {check!r}: a fragment for {fragment.file} is rendered"
-                    " per package and names the kind it is for"
-                )
+        if fragment.kind:
             continue
         raise ValueError(
             f"check {check!r}: a fragment for {fragment.file!r} names a file the"
             f" render does not write; the project files are"
-            f" {', '.join(PROJECT_FILES)} and the package files"
-            f" {', '.join(PACKAGE_FILES)}"
+            f" {', '.join(PROJECT_FILES)}, and a fragment that names a kind is"
+            " rendered in each package of it"
         )
 
 
@@ -114,6 +106,27 @@ def compose_project(data: dict[str, Any]) -> dict[str, str]:
                     found[fragment.file] += "\n"
                 found[fragment.file] += rendered
     return found
+
+
+def package_files() -> tuple[str, ...]:
+    """The per-package files the registered checks' fragments render, sorted.
+
+    A fragment that names a kind is rendered in each package of that
+    kind's chain, so the files a package of a native kind carries are
+    the registered checks' to say, and leave with them.
+    """
+    from livery.workshop._checks import checks_by_name
+
+    return tuple(
+        sorted(
+            {
+                fragment.file
+                for record in checks_by_name().values()
+                for fragment in record.fragments
+                if fragment.kind
+            }
+        )
+    )
 
 
 def package_fragment(kind_name: str, file: str) -> tuple[str, str] | None:
@@ -190,20 +203,10 @@ addopts = "{{ slots['python.test.addopts'] | join(' ') }}"
 """
 
 #: The native tools search upward from each file for their own
-#: configuration, so a package of a native kind carries these files,
+#: configuration, so a package of a native kind carries this file,
 #: rendered from the record and judged by the drift gate; a package's
 #: own additions ride the tool's inheritance, a deeper file with
 #: ``InheritParentConfig``.
-CLANG_FORMAT = """\
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A file deeper in the tree with
-# `BasedOnStyle: InheritParentConfig` carries this package's own lines.
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 88
-PointerAlignment: Left
-"""
-
 CLANG_TIDY = """\
 # Rendered by the template channel for the {{ kind }} kind; the gate keeps
 # it matching its render. A `.clang-tidy` deeper in the tree with
@@ -211,7 +214,7 @@ CLANG_TIDY = """\
 #
 # The families a gate can hold green from the first commit: the bug
 # and portability checks, and the performance ones. readability-* is
-# left out on purpose, since its opinions collide with clang-format's
+# left out on purpose, since its opinions collide with the formatter's
 # and with each other. A finding is an error, so the gate's verdict
 # stays its exit code.
 Checks: >

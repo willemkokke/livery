@@ -398,7 +398,9 @@ def _rule_member(
             "what the render wrote into this package for the checks' files",
             f"never by hand; `{prog} sync` keeps it",
         )
-    if rest in (".clang-format", ".clang-tidy"):
+    from livery.workshop._fragments import package_files
+
+    if rest in package_files():
         return Provenance(
             "rendered",
             "a check record's fragment for this package's kind",

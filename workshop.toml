@@ -30,7 +30,8 @@ extensions = [
     "ty",
     # The type checker over every platform at once, configured by the
     # root pyrefly.toml.
-    "pyrefly",
+    "pyrefly",    # The C and C++ formatter, in each native package's .clang-format.
+    "clang-format",
 ]
 
 [docs]

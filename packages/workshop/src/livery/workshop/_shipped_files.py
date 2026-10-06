@@ -219,19 +219,20 @@ def _packaged(
 ) -> tuple[list[Fragment], dict[str, tuple[str, ...]], dict[str, dict[str, Any]]]:
     """Each package's per-package files, with the package map and its data.
 
-    A package's `.clang-format` and `.clang-tidy` come from the check
-    whose fragment is the nearest one down the package's kind chain, and
+    A package's own files, its native tools' configuration, come from the
+    check whose fragment is the nearest one down the package's kind chain, and
     render with the kind as data. Until packages list extensions of their
     own, the kind chain is what picks them.
     """
     from livery.workshop._checks import checks_by_name
-    from livery.workshop._fragments import PACKAGE_FILES, package_fragment
+    from livery.workshop._fragments import package_files, package_fragment
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     fragments: list[Fragment] = []
+    files = package_files()
     for package in packages:
-        for file in PACKAGE_FILES:
+        for file in files:
             found = package_fragment(package.kind, file)
             if found is None:
                 continue
@@ -447,11 +448,11 @@ def _jsonc(text: str) -> dict[str, Any] | None:
 def _package_outputs(member: Path, kind: str) -> tuple[Output, ...]:
     """The per-package files a package of *kind* renders, relative to *member*."""
     from livery.workshop._checks import checks_by_name
-    from livery.workshop._fragments import PACKAGE_FILES, package_fragment
+    from livery.workshop._fragments import package_files, package_fragment
 
     fragments: list[Fragment] = []
     owners: list[str] = []
-    for file in PACKAGE_FILES:
+    for file in package_files():
         found = package_fragment(kind, file)
         if found is None:
             continue

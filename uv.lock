@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "livery",
     "livery-extensions-basedpyright",
+    "livery-extensions-clang-format",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-ruff",
@@ -734,6 +735,7 @@ source = { virtual = "." }
 dev = [
     { name = "coverage", extra = ["toml"] },
     { name = "livery-extensions-basedpyright" },
+    { name = "livery-extensions-clang-format" },
     { name = "livery-extensions-mypy" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-ruff" },
@@ -762,6 +764,7 @@ docs = [
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.13" },
     { name = "livery-extensions-basedpyright", editable = "packages/extensions/basedpyright" },
+    { name = "livery-extensions-clang-format", editable = "packages/extensions/clang-format" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
@@ -795,6 +798,23 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+
+[[package]]
+name = "livery-extensions-clang-format"
+version = "0.0.0"
+source = { editable = "packages/extensions/clang-format" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
