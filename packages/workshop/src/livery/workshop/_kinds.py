@@ -130,6 +130,14 @@ class Backend(Protocol):
         """The names other packages reference this one's code by."""
         ...
 
+    def public_modules(self, package: Package) -> tuple[str, ...]:
+        """The modules that declare the package's public API, by import path.
+
+        What a type-completeness check verifies; empty for a package
+        whose kind has no importable API.
+        """
+        ...
+
     def referenced_siblings(
         self, package: Package, around: Neighbours
     ) -> dict[str, str]:
@@ -339,6 +347,15 @@ def backend_for(package: Package) -> Backend:
             f" nothing; a package's kind is one of {known}"
         )
     return record.backend
+
+
+def public_modules(package: Package) -> tuple[str, ...]:
+    """The modules that declare *package*'s public API, as its kind reads them.
+
+    What a type-completeness check verifies, by import path. A kind
+    with no importable API answers nothing.
+    """
+    return backend_for(package).public_modules(package)
 
 
 def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:

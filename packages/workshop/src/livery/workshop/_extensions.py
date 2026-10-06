@@ -14,12 +14,14 @@ import re
 import tomllib
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman.api import prog
 
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
+
+    from livery.toolroom.store.api import Spec
 
 #: The base. Never listed and never mounted by name: importing its
 #: plugin module is the base arriving.
@@ -63,6 +65,13 @@ FOR_ATTRIBUTE = "FOR"
 #: name, so the files they deliver and the drift check's widening
 #: follow the list.
 CHECKS_ATTRIBUTE = "CHECKS"
+
+#: The attribute an extension's declaring module declares its options
+#: with: a map from each option's name to what listing it turns on.
+#: A workspace turns an option on in its entry,
+#: ``basedpyright[typecomplete]``, and a check record that names the
+#: option in ``listed_with`` registers only then.
+OPTIONS_ATTRIBUTE = "OPTIONS"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
@@ -157,22 +166,105 @@ def missing_list(root: Path) -> str:
     )
 
 
+def listing(text: str) -> Spec:
+    """An entry of an ``extensions`` list, as the requirement grammar reads it.
+
+    An entry is a name, or a name with the options it turns on,
+    ``basedpyright[typecomplete]``. A spelling the grammar does not
+    read is taken whole as a name: no distribution declares it, so
+    the mount names it, and the layering check refuses the spelling.
+    """
+    from livery.toolroom.store.api import Spec, SpecError
+
+    try:
+        return Spec.parse(text, where="[workspace] extensions")
+    except SpecError:
+        return Spec(text)
+
+
+def _listed(start: Path | None) -> list[Any]:
+    """The root contract's ``[workspace] extensions`` entries, raw; empty without."""
+    root = workspace_root(start)
+    workspace = None if root is None else _workspace_table(root)
+    return list(workspace.get("extensions") or []) if workspace else []
+
+
+def _spelling(entry: Any) -> str:
+    """How an entry spells its extension: the string, or a table entry's ``name``."""
+    return str(entry.get("name", "")) if isinstance(entry, dict) else str(entry)
+
+
 def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     """Each listed extension as ``(name, distribution)``, in list order.
 
-    An entry is a name, or a table ``{ name = "...", for = [...] }``.
-    Empty outside a workspace and when the contract has no list: the
-    mount refuses that, and a reader has nothing to read.
+    An entry is a name, or a table ``{ name = "...", for = [...] }``;
+    either name may carry options, which
+    [livery.workshop._extensions.extension_options][] reads. Empty
+    outside a workspace and when the contract has no list: the mount
+    refuses that, and a reader has nothing to read.
     """
-    root = workspace_root(start)
-    workspace = None if root is None else _workspace_table(root)
-    if not workspace:
-        return ()
     entries: list[tuple[str, str]] = []
-    for entry in workspace.get("extensions") or []:
-        name = str(entry.get("name", "")) if isinstance(entry, dict) else str(entry)
+    for entry in _listed(start):
+        name = listing(_spelling(entry)).name
         entries.append((name, distribution_of(name)))
     return tuple(entries)
+
+
+def extension_options(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each listed extension's options, as its entry spells them, in list order.
+
+    ``basedpyright[typecomplete]`` lists ``basedpyright`` with
+    ``typecomplete``; an entry without brackets has none. Empty
+    outside a workspace.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for entry in _listed(start):
+        spec = listing(_spelling(entry))
+        found[spec.name] = spec.options
+    return found
+
+
+def declared_options(extension: str) -> dict[str, str]:
+    """The options *extension* declares, each name to what it turns on.
+
+    Empty for the base, for an extension that declares none, and for
+    one no installed distribution declares.
+    """
+    module = None if extension == SELF else declaration(extension)
+    return {} if module is None else _module_options(extension, module)
+
+
+def _module_options(extension: str, module: ModuleType) -> dict[str, str]:
+    """The options *module* declares for *extension*.
+
+    Raises:
+        RuntimeError: when the declaration is not a map of names to
+            what each turns on, an extension's mistake no sync repairs.
+    """
+    declared = getattr(module, OPTIONS_ATTRIBUTE, {})
+    if not isinstance(declared, dict) or not all(
+        isinstance(name, str) and isinstance(text, str)
+        for name, text in declared.items()  # pyright: ignore[reportUnknownVariableType]
+    ):
+        raise RuntimeError(
+            f"extension {extension!r} declares {OPTIONS_ATTRIBUTE} as {declared!r}; it"
+            " is a map from each option to what listing it turns on,"
+            ' {"typecomplete": "verifies that the public API is type-complete"}'
+        )
+    return {str(name): str(text) for name, text in declared.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+
+
+def _undeclared(extension: str, options: tuple[str, ...]) -> str:
+    """Why *extension* cannot take *options*; empty when it declares every one."""
+    known = declared_options(extension)
+    unknown = [option for option in options if option not in known]
+    if not unknown:
+        return ""
+    return (
+        f"[workspace] extensions lists {extension} with"
+        f" {', '.join(repr(option) for option in unknown)}, which it does not"
+        f" declare; its options are {', '.join(known) or 'none'}"
+    )
 
 
 def stack_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
@@ -239,19 +331,11 @@ def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | 
     deleted, which is a project's opt-out from that target's
     opinions.
     """
-    root = workspace_root(start)
-    workspace = None if root is None else _workspace_table(root)
-    if not workspace:
-        return {}
     found: dict[str, tuple[str, ...] | None] = {}
-    for entry in workspace.get("extensions") or []:
-        if isinstance(entry, dict):
-            targets = entry.get("for")
-            found[str(entry.get("name", ""))] = (
-                None if targets is None else tuple(str(name) for name in targets)
-            )
-        else:
-            found[str(entry)] = None
+    for entry in _listed(start):
+        name = listing(_spelling(entry)).name
+        targets = entry.get("for") if isinstance(entry, dict) else None
+        found[name] = None if targets is None else tuple(str(t) for t in targets)
     return found
 
 
@@ -271,12 +355,13 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     the workspace level are named on stderr and skipped, never refused:
     the mount runs on every command, ``fm sync`` among them, which is
     what installs a missing declaration, so a refusal here would stop
-    the command that repairs it. The gate's layering check and
-    ``fm extensions`` refuse the same problems. An extension whose
-    declaration names
-    no ``PLUGIN`` registers what it declares and mounts no verbs. A
-    plugin a branded App already mounts as a builtin is skipped:
-    claiming its tasks again puts the same task in one rung twice.
+    the command that repairs it. An option the extension does not
+    declare is named the same way and left off. The gate's layering
+    check and ``fm extensions`` refuse the same problems. An extension
+    whose declaration names no ``PLUGIN`` registers what it declares
+    and mounts no verbs. A plugin a branded App already mounts as a
+    builtin is skipped: claiming its tasks again puts the same task in
+    one rung twice.
     """
     # footman does not expose the brand's builtin set publicly yet;
     # the private read retires when footman joins the workspace.
@@ -292,6 +377,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     mounted = []
     declared = contributions(start)
     active = resolved_targets(start)
+    options = extension_options(start)
     # The base is present before this walk; every extension joins once
     # its mount ran.
     present = [SELF]
@@ -320,7 +406,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 " list it in each package's `extensions` instead"
             )
             continue
-        if register_declared_checks(extension, module):
+        listed = options.get(extension, ())
+        if why := _undeclared(extension, listed):
+            _note(f"{why}; the mount leaves it off")
+        if register_declared_checks(extension, module, listed):
             mounted.append(extension)
         name = getattr(module, "PLUGIN", None)
         if name and name not in builtin:
@@ -384,18 +473,22 @@ def _graft_contributions(
             grafted.add((owner, target))
 
 
-def register_declared_checks(extension: str, module: ModuleType) -> bool:
+def register_declared_checks(
+    extension: str, module: ModuleType, options: tuple[str, ...] = ()
+) -> bool:
     """Register the checks *module* declares for *extension*; whether it declares any.
 
     Each record registers under the extension's listed name, whatever
     it says, since the list is what decides which extension a check
-    belongs to.
+    belongs to. A record that names an option in ``listed_with``
+    registers only when *options*, the entry's, turn it on.
 
     Raises:
         RuntimeError: when the declaration is not a tuple of check
-            records, an extension's mistake no sync repairs, said in
-            one sentence rather than an error further on, as a wrong
-            API version is.
+            records, or a record names an option the extension does
+            not declare: an extension's mistake no sync repairs, said
+            in one sentence rather than an error further on, as a
+            wrong API version is.
     """
     from dataclasses import replace
 
@@ -413,9 +506,20 @@ def register_declared_checks(extension: str, module: ModuleType) -> bool:
             " takes a tuple of check records. Install a release of the"
             " extension written for this workshop."
         )
-    for record in declared:
+    records = cast("tuple[CheckRecord, ...]", declared)
+    known = _module_options(extension, module)
+    for record in records:
+        if record.listed_with and record.listed_with not in known:
+            raise RuntimeError(
+                f"extension {extension!r} registers {record.name} with the option"
+                f" {record.listed_with!r}, which its {OPTIONS_ATTRIBUTE} does not"
+                f" declare; its options are {', '.join(known) or 'none'}"
+            )
+    for record in records:
+        if record.listed_with and record.listed_with not in options:
+            continue
         register_check(replace(record, extension=extension))
-    return bool(declared)
+    return bool(records)
 
 
 def check_api_version(extension: str, module: ModuleType) -> None:
@@ -544,6 +648,7 @@ def describe_extensions(start: Path | None = None) -> list[str]:
     who = requirers(start)
     tools = extension_tools(start)
     targets = resolved_targets(start)
+    listed = extension_options(start)
     lines: list[str] = [f"  {SELF} (the base)"]
     for name in names:
         needed = who.get(name, ())
@@ -553,6 +658,9 @@ def describe_extensions(start: Path | None = None) -> list[str]:
             lines.append(f"    tools: {', '.join(tools[name])}")
         if targets.get(name):
             lines.append(f"    for: {', '.join(targets[name])}")
+        for option, text in declared_options(name).items():
+            state = "on" if option in listed.get(name, ()) else "off"
+            lines.append(f"    option {option} ({state}): {text}")
     return lines
 
 
@@ -600,6 +708,40 @@ def closure_problems(start: Path | None = None) -> list[str]:
         if why := missing_list(root):
             problems.append(why)
         problems += level_problems(root)
+        problems += listing_problems(root)
+    return problems
+
+
+def listing_problems(root: Path) -> list[str]:
+    """Each ``[workspace] extensions`` entry spelled wrong or with an undeclared option.
+
+    An entry is a name with the options it turns on. It takes no
+    version, ``?`` or scope: an extension's version comes from its
+    wheel's metadata, and the lock pins it. An extension no installed
+    distribution declares is
+    [livery.workshop._extensions.level_problems][]'s to name.
+    """
+    from livery.toolroom.store.api import Spec, SpecError
+
+    problems: list[str] = []
+    for entry in _listed(root):
+        spelled = _spelling(entry)
+        try:
+            spec = Spec.parse(spelled, where="[workspace] extensions")
+        except SpecError:
+            spec = None
+        if spec is None or spec.optional or spec.floor or spec.scope:
+            problems.append(
+                f"[workspace] extensions lists {spelled!r}; an entry is a name with"
+                " the options it turns on, `name` or `name[option,option]`, and no"
+                " version or scope: the lock pins an extension's version from its"
+                " wheel"
+            )
+            continue
+        if declaration(spec.name) is not None and (
+            why := _undeclared(spec.name, spec.options)
+        ):
+            problems.append(why)
     return problems
 
 
@@ -734,17 +876,17 @@ def write_extensions(root: Path) -> list[str]:
 def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bool]:
     """*text* with *owner*'s entry carrying ``for = [targets]``, and whether it does.
 
-    Written once: the string entry becomes a table entry, a table entry
-    gains the key, and an entry in a shape this does not read is left
-    for a person, with the judge naming nothing since a missing ``for``
-    is not a problem.
+    Written once: the string entry becomes a table entry with the
+    same spelling, options included, a table entry gains the key, and
+    an entry in a shape this does not read is left for a person, with
+    the judge naming nothing since a missing ``for`` is not a problem.
     """
     listed = ", ".join(f'"{target}"' for target in targets)
-    table = f'{{ name = "{owner}", for = [{listed}] }}'
-    line = re.compile(rf'^(\s*)"{re.escape(owner)}",?\s*(#.*)?$', re.M)
+    line = re.compile(rf'^(\s*)"({_entry_pattern(owner)})",?\s*(#.*)?$', re.M)
     match = line.search(text)
     if match is not None:
-        comment = f"  {match.group(2)}" if match.group(2) else ""
+        comment = f"  {match.group(3)}" if match.group(3) else ""
+        table = f'{{ name = "{match.group(2)}", for = [{listed}] }}'
         return (
             text[: match.start()]
             + f"{match.group(1)}{table},{comment}"
@@ -752,7 +894,7 @@ def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bo
             True,
         )
     entry = re.compile(
-        rf'^(\s*\{{ name = "{re.escape(owner)}"(?:, [a-z]+ = [^,}}]+)*)'
+        rf'^(\s*\{{ name = "{_entry_pattern(owner)}"(?:, [a-z]+ = [^,}}]+)*)'
         r" \}(,?\s*(?:#.*)?)$",
         re.M,
     )
@@ -764,37 +906,58 @@ def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bo
             + text[match.end() :],
             True,
         )
-    inline = re.compile(r"^(extensions = \[)(.*?)(\])", re.M | re.S)
-    match = inline.search(text)
+    match = _INLINE.search(text)
     if match is None:
         return text, False
-    items = [item.strip() for item in match.group(2).split(",") if item.strip()]
-    target = f'"{owner}"'
-    if target not in items:
+    items = _items(match.group(2))
+    index = _string_item(items, owner)
+    if index is None:
         return text, False
-    items[items.index(target)] = table
+    items[index] = f"{{ name = {items[index]}, for = [{listed}] }}"
     return text[: match.start()] + "extensions = [" + ", ".join(items) + "]" + text[
         match.end() :
     ], True
 
 
+#: An inline ``extensions = [...]`` list: its body runs to the bracket
+#: that closes it, past an entry's own brackets and a table's.
+_INLINE = re.compile(r'^(extensions = \[)((?:"[^"]*"|\{[^}]*\}|[^\]"{}])*)(\])', re.M)
+
+
+def _entry_pattern(name: str) -> str:
+    """A pattern for *name* as an entry spells it: the name, with its options if any."""
+    return rf'{re.escape(name)}(?:\[[^\]"]*\])?'
+
+
+def _items(body: str) -> list[str]:
+    """The entries of an inline ``extensions = [...]`` body, as written."""
+    return re.findall(r'\{[^}]*\}|"[^"]*"', body)
+
+
+def _string_item(items: list[str], name: str) -> int | None:
+    """Where *name*'s string entry is among *items*; None without one."""
+    for index, item in enumerate(items):
+        if item.startswith('"') and listing(item.strip('"')).name == name:
+            return index
+    return None
+
+
 def _insert_extension(text: str, needed: str, *, before: str) -> tuple[str, bool]:
     """*text* with *needed* listed before *before*'s entry, and whether it was."""
-    pattern = re.compile(rf'^(\s*)"{re.escape(before)}",?\s*(#.*)?$', re.M)
+    pattern = re.compile(rf'^(\s*)"{_entry_pattern(before)}",?\s*(#.*)?$', re.M)
     match = pattern.search(text)
     if match is not None:
         indent = match.group(1)
         line = f'{indent}"{needed}",  # required by {before}\n'
         return text[: match.start()] + line + text[match.start() :], True
-    inline = re.compile(r"^(extensions = \[)(.*?)(\])", re.M | re.S)
-    match = inline.search(text)
+    match = _INLINE.search(text)
     if match is None:
         return text, False
-    items = [item.strip() for item in match.group(2).split(",") if item.strip()]
-    target = f'"{before}"'
-    if target not in items:
+    items = _items(match.group(2))
+    index = _string_item(items, before)
+    if index is None:
         return text, False
-    items.insert(items.index(target), f'"{needed}"')
+    items.insert(index, f'"{needed}"')
     return text[: match.start()] + "extensions = [" + ", ".join(items) + "]" + text[
         match.end() :
     ], True
@@ -802,7 +965,7 @@ def _insert_extension(text: str, needed: str, *, before: str) -> tuple[str, bool
 
 def _append_to_list(text: str, name: str) -> str:
     """*text* with *name* last in its ``extensions`` list, added when absent."""
-    found = re.search(r"^(extensions = \[)(.*?)(\])", text, re.M | re.S)
+    found = _INLINE.search(text)
     if found is None:
         # A top-level key: before the first table, or it joins that table.
         line = f'extensions = ["{name}"]\n'
@@ -810,7 +973,7 @@ def _append_to_list(text: str, name: str) -> str:
         if table is None:
             return text.rstrip("\n") + "\n" + line
         return text[: table.start()] + line + "\n" + text[table.start() :]
-    items = [item.strip() for item in found.group(2).split(",") if item.strip()]
+    items = _items(found.group(2))
     items.append(f'"{name}"')
     return (
         text[: found.start()]

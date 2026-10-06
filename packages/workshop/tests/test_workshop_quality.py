@@ -21,11 +21,9 @@ from workshop_python_checks import python_checks_fixture  # noqa: F401
 # below record them: one type check per type checker.
 PYTHON_JUDGES = (
     "test.pytest",
-    "typecheck.basedpyright",
     "typecheck.mypy",
     "typecheck.pyrefly",
     "typecheck.ty",
-    "typecomplete.basedpyright",
 )
 
 
@@ -75,7 +73,6 @@ def _record(
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(_python, "run_typecheck", typecheck)
-    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
     return ran, calls
 
@@ -132,17 +129,15 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     assert unit is not None
     _quality._scoped_check((unit,))
     # The unit is every unit this workspace has, so style and types run
-    # over the configured whole; the tests run as the one suite, no
-    # type-completeness, and no kind check for it.
+    # over the configured whole; the tests run as the one suite, and no
+    # kind check for it.
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
-    for tool in ("basedpyright", "mypy"):
+    # Every type checker reads its configured whole: mypy because the
+    # unit is every unit, ty and pyrefly whatever the scope.
+    for tool in ("mypy", "ty", "pyrefly"):
         assert "paths" not in by_verb[f"typecheck.{tool}"]
-    # ty and pyrefly read their configured whole whatever the scope.
-    for tool in ("ty", "pyrefly"):
-        assert "paths" not in by_verb[f"typecheck.{tool}"]
-    assert by_verb["typecomplete.basedpyright"]["args"] == ((),)
     assert by_verb["test.pytest"]["packages"] == (unit,)
     assert by_verb["test.pytest"]["scoped"] is True
     # Beside a package, the unit rides along and the package keeps its
@@ -285,26 +280,20 @@ def _namespace_root(member: Path, name: str) -> Path:
     return root
 
 
-def test_typecomplete_verifies_what_each_root_declares(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    verified: list[object] = []
-    monkeypatch.setattr(
-        _python, "basedpyright", lambda **kw: verified.append(kw["verifytypes"])
-    )
-    # A root with nothing public, an extension's, verifies nothing.
+def test_the_public_modules_are_what_each_root_declares(tmp_path: Path) -> None:
+    from livery.workshop.api import public_modules
+
+    # A root with nothing public, an extension's, declares nothing.
     bare = _python_member(
         tmp_path, "ext", '[tool.uv.build-backend]\nmodule-name = "acme.ext"\n'
     )
     (bare.directory / "src" / "acme" / "ext").mkdir(parents=True)
-    _python.run_typecomplete((bare,))
-    assert verified == []
-    # A namespace root's api declares its public packages too, so the
-    # verifier reaches them through it: one call.
+    assert public_modules(bare) == ()
+    # A namespace root's api declares its public packages too, so a
+    # verifier reaches them through it: one module.
     package = _python_member(tmp_path, "one")
     _namespace_root(package.directory, "one")
-    _python.run_typecomplete((bare, package))
-    assert verified == ["acme.one.api"]
+    assert public_modules(package) == ("acme.one.api",)
 
 
 def test_a_root_with_nothing_public_verifies_nothing(tmp_path: Path) -> None:
@@ -458,7 +447,6 @@ def _whole_gate(
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(_python, "run_typecheck", typecheck)
-    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
 
     def rewritten(root: object, run: object, tree: str) -> str:

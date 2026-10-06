@@ -38,21 +38,6 @@ def test_regions_are_read_with_their_lines_and_content(tmp_path: Path) -> None:
     )
 
 
-def test_this_workspaces_own_tables_live_in_its_region() -> None:
-    root = Path(__file__).resolve().parents[3]
-    # The three execution environments this repository declares live in
-    # its own region of the composed project file, not in the base's
-    # template.
-    from livery.workshop._regions import contents
-
-    tables = contents(root / "pyproject.toml")["tables"]
-    assert "packages/footman/tests" in tables
-    template = (
-        root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
-    ).read_text()
-    assert "packages/footman" not in template
-
-
 def test_explain_names_a_managed_files_regions(tmp_path: Path) -> None:
     from livery.workshop._provenance import owned_lines
 

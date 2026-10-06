@@ -223,7 +223,7 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 
     for name in ("run_format", "run_lint"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    for name in ("run_typecheck", "run_typecomplete", "run_test"):
+    for name in ("run_typecheck", "run_test"):
         monkeypatch.setattr(_python, name, spy(name))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
     monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
@@ -278,7 +278,7 @@ def test_the_fixers_only_walk_judges_nothing(
 
     for name in ("run_format", "run_lint"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    for name in ("run_typecheck", "run_typecomplete", "run_test"):
+    for name in ("run_typecheck", "run_test"):
         monkeypatch.setattr(_python, name, spy(name))
 
     def fix(ctx: GateContext) -> None:

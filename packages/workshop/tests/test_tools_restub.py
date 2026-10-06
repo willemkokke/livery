@@ -114,6 +114,9 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
     register_kind(
         KindRecord(name="bare", backend=python.backend, template=python.template)
     )
+    # The root's own files are of the bare kind too, so nothing beyond
+    # what the contract requires is a requirement.
+    monkeypatch.setattr("livery.workshop._tools.ROOT_KIND", "bare")
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )

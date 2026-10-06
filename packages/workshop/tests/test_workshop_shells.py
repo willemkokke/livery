@@ -143,9 +143,6 @@ def test_check_affected_scopes_or_says_nothing(
     monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
     monkeypatch.setattr(
-        _python, "run_typecomplete", lambda subset: ran.append("complete")
-    )
-    monkeypatch.setattr(
         _python,
         "run_test",
         lambda **kwargs: ran.append("test"),
@@ -191,7 +188,7 @@ def test_check_affected_scopes_or_says_nothing(
     _quality.check()
     out = capsys.readouterr().out
     assert "affected: packages/thing" in out
-    assert set(ran) == {"format", "lint", "types", "complete", "test"}
+    assert set(ran) == {"format", "lint", "types", "test"}
 
 
 def test_a_dispatched_run_sets_the_verified_record_aside(
@@ -210,9 +207,6 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     )
     monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
-    monkeypatch.setattr(
-        _python, "run_typecomplete", lambda subset: ran.append("complete")
-    )
     monkeypatch.setattr(_python, "run_test", lambda **kwargs: ran.append("test"))
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps
@@ -231,7 +225,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     _quality.check()
     out = capsys.readouterr().out
     assert "dispatched: the whole gate, the verified record set aside" in out
-    assert set(ran) == {"format", "lint", "types", "complete", "test"}
+    assert set(ran) == {"format", "lint", "types", "test"}
 
 
 def test_check_fix_rewrites_serially_then_judges_the_rest(
@@ -255,9 +249,6 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
         _python, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
     )
     monkeypatch.setattr(
-        _python, "run_typecomplete", lambda subset: calls.append(("complete", None))
-    )
-    monkeypatch.setattr(
         _python, "run_test", lambda **kwargs: calls.append(("test", kwargs))
     )
     monkeypatch.setattr(
@@ -278,7 +269,7 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     name1, kw1 = calls[2]
     assert name0 == "format" and isinstance(kw0, dict) and kw0["check"] is False
     assert name1 == "lint" and isinstance(kw1, dict) and kw1["fix"] is True
-    assert {name for name, _ in calls[3:]} == {"types", "complete", "test"}
+    assert {name for name, _ in calls[3:]} == {"types", "test"}
     # The row names the tree the rewrite left, not the one the plan measured.
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps

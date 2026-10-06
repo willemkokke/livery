@@ -20,6 +20,9 @@ extensions = [
     "docs",
     # The python formatter and linter, configured by the root ruff.toml.
     "ruff",
+    # The type checker, configured by the root pyrightconfig.json, and
+    # the check that every public API is type-complete.
+    "basedpyright[typecomplete]",
 ]
 
 [docs]

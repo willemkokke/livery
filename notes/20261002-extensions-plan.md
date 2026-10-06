@@ -3,8 +3,8 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff slice built (issue #1149), and phases 10
-to 15 are not started. It is the one plan from now until the end of
+9b is in progress, its ruff and basedpyright slices built (issues
+#1149 and #1159), and phases 10 to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1235,6 +1235,32 @@ extension has no public names, so it has neither `api.py` nor
 finds nothing public in it, and its version lives in its manifest
 alone.
 
+**9b3 built (issue #1159): basedpyright is its own extension.**
+`livery-extensions-basedpyright`, in `packages/extensions/basedpyright/`
+and listed as `basedpyright`, declares `typecheck.basedpyright` and,
+behind its `typecomplete` option, `typecomplete.basedpyright`. An
+extension's options are built: its declaring module maps each option
+to what it turns on (`OPTIONS`), an entry turns one on as
+`basedpyright[typecomplete]`, read through
+`livery.toolroom.store.api.Spec`, and a check record that names the
+option in `listed_with` registers only then. An entry with a version,
+`?` or a scope refuses, and so does an option the extension does not
+declare, naming the ones it does; the mount names the option and
+leaves it off. `fm extensions` prints each option and whether it is
+on. The extension writes the root `pyrightconfig.json`, the file the
+editor and a bare `basedpyright` read, with a `settings` region at
+the end; `[tool.basedpyright]` left `pyproject.toml`, and this
+repository's `executionEnvironments` moved into the region. A new
+project lists `basedpyright` without the option; this repository
+lists `basedpyright[typecomplete]`. The bodies read what the base
+names (`scoped_paths` with `WHOLE`, `scoped_packages`, and
+`public_modules`, a kind's answer, all in `livery.workshop.api`); the
+base's type checkers share `scoped_paths`, and its own copy of that
+narrowing went. #1111 is folded in: the root's files are the base's
+runtime kind whatever the members are, so the tools of that kind's
+checks stay in the profile when its last member goes
+(`test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes`).
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1897,6 +1923,28 @@ Acceptance:
   root with no marks takes its docs copy from the declared root.
   `verify_release` asks for a `__version__` only where a root module
   exists.
+- 2026-10-06, 9b3: an extension declares its options as data, a map
+  from each option to what it turns on, and a check record names the
+  option that registers it (`listed_with`). The entry is read by the
+  one requirement grammar, `Spec`, and the extension site's rule
+  takes options alone: a version comes from the wheel, and the lock
+  pins it.
+- 2026-10-06, 9b3: basedpyright's configuration is the root
+  `pyrightconfig.json`, which basedpyright reads with comments and
+  trailing commas. Its region comes last: basedpyright takes the last
+  of two equal keys and says nothing, so a key the repository sets
+  there wins over the rendered one. The fragment engine composes every
+  `.json` file from plain JSON parts, so the file is a template that
+  takes the listed extensions' contributions, as `.vscode/settings.json`
+  is.
+- 2026-10-06, 9b3: a check that reaches its whole calls basedpyright
+  with no path. Handed `.`, basedpyright checks every file under the
+  root and ignores the configured `include` (its `exclude` still
+  holds), so `WHOLE` is public for a body to compare against.
+- 2026-10-06, 9b3: a package's public modules are a kind's answer
+  (`Backend.public_modules`, `livery.workshop.api.public_modules`), so
+  the extension names no python layout; the python backend keeps the
+  `api` convention until phase 11 moves it.
 
 ## Open
 

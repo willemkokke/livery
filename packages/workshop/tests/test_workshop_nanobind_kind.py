@@ -196,7 +196,7 @@ def test_the_kind_chains_from_python() -> None:
     from livery.workshop._checks import tools_for_kind
 
     # clang-tidy judges the cpp-conan kind alone, so its tool is not here.
-    assert {"clang_format", "basedpyright", "pytest"} <= {
+    assert {"clang_format", "mypy", "pytest"} <= {
         tool for tool, _ in tools_for_kind("python-nanobind")
     }
     record = kind_for("python-nanobind")
@@ -205,7 +205,7 @@ def test_the_kind_chains_from_python() -> None:
     from livery.workshop._checks import checks_by_name, judges_kind
 
     roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
-    assert {"format", "lint", "typecheck", "typecomplete", "test", "examples"} <= roles
+    assert {"format", "lint", "typecheck", "test", "examples"} <= roles
     assert record.host_tools == ("cc", "c++")
 
 

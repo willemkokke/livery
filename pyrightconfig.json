@@ -1,0 +1,39 @@
+{
+  // Written by `fm sync` from the basedpyright extension; the
+  // gate keeps it matching. Edit inside the region at the end, which is
+  // the repository's own; an edit anywhere else is drift.
+  "include": ["packages", "tests", "tasks.py"],
+  // A conan recipe is conan's input, read by conan's own interpreter
+  // where the conan package lives; the workspace venv never has it, so
+  // the checker that reads the whole tree skips the recipes. The cpp
+  // members are skipped whole: their kind type-checks nothing. A
+  // documentation example is judged for its names by lint and run by
+  // the examples check; it is not typed code.
+  "exclude": ["packages/**/conanfile.py", "packages/**/docs/examples"],
+  // The editor and the command line resolve the same environment: the
+  // workspace members are editable installs in .venv, so basedpyright
+  // looks there whatever interpreter the editor has selected.
+  "venvPath": ".",
+  "venv": ".venv",
+  // The tool stubs `fm tools.restub` writes; the default
+  // stub path, named so every type checker visibly reads one directory.
+  "stubPath": "typings",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "reportMissingModuleSource": false,
+  // What the listed extensions contribute.
+  // The repository's own settings, each line ending with a comma. A key
+  // set here wins over the same key above: basedpyright reads the last.
+  // -- workshop: region settings, yours to edit; the render keeps it --
+  // The imported footman, toolroom and bench tests drive their
+  // packages' internals by design (`_app`, `_paths`, module attributes
+  // they monkeypatch): each suite is its framework's own, and its
+  // subjects are private modules, which basedpyright reads as
+  // private-import use.
+  "executionEnvironments": [
+    { "root": "packages/footman/tests", "reportPrivateImportUsage": false },
+    { "root": "packages/toolroom/tests", "reportPrivateImportUsage": false },
+    { "root": "packages/toolroom-bench/tests", "reportPrivateImportUsage": false },
+  ],
+  // -- workshop: end settings --
+}

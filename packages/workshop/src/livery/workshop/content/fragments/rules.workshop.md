@@ -126,10 +126,11 @@ This is the final form; there are no typing clean-up passes later.
   every tests directory shares one `pythonpath`; the session refuses
   to start otherwise, naming the module and the name it wants. A
   function a test hands to a spawned process lives in such a helper.
-- Four type checkers gate, none advisory: basedpyright with warnings
-  as errors, mypy strict on the namespace (linux, darwin, and win32),
-  ty, and pyrefly. the typecomplete check requires every public API to be
-  100% type-complete.
+- The type checkers gate, none advisory: mypy strict on the namespace
+  (linux, darwin, and win32), ty, pyrefly, and basedpyright with
+  warnings as errors where the workspace lists it. Listed as
+  `basedpyright[typecomplete]`, it also requires every public API to
+  be 100% type-complete.
 - A suppression is narrow, inline with the code, and carries a reason:
   `# type: ignore[code]`. Pyright-only suppressions use
   `# pyright: ignore[...]` so mypy's unused-ignore check stays honest.

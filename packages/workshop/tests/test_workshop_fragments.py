@@ -166,30 +166,45 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
     root = Path(__file__).resolve().parents[3]
     injected = render_injections(root, project_facts(root))
     composed = injected["fragments"]["pyproject.toml"]
-    for table in (
-        "[tool.basedpyright]",
-        "[tool.mypy]",
-        "[tool.pytest.ini_options]",
-    ):
+    for table in ("[tool.mypy]", "[tool.pytest.ini_options]"):
         assert table in composed
     assert "packages/workshop/src" in composed  # the roster reaches the fragments
     template = (
         root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
-    assert "[tool.basedpyright]" not in template
+    assert "[tool.mypy]" not in template
     assert "[tool.pytest.ini_options]" not in template
-    assert injected["extensions"] == ["detachedfork.basedpyright"]
+    # The base's own checks carry no editor extension: the listed
+    # extensions' do, and none is mounted here.
+    assert injected["extensions"] == []
 
 
 def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
     from livery.workshop._checks import editor_extensions, tools_for_kind
 
-    unregister_check("typecheck.basedpyright", by="acme.brand")
-    unregister_check("typecomplete.basedpyright", by="acme.brand")
+    for role in ("typecheck", "typecomplete"):
+        register_check(
+            CheckRecord(
+                "acme",
+                role,
+                _noop,
+                kinds=("python",),
+                tools=("acme",),
+                fragments=(Fragment("pyproject.toml", "[tool.acme]\nstrict = true\n"),)
+                if role == "typecheck"
+                else (),
+                editor_extension="acme.checker",
+            )
+        )
     composed = compose_project(_data())
-    assert "[tool.basedpyright" not in composed["pyproject.toml"]
-    assert "detachedfork.basedpyright" not in editor_extensions()
-    assert "basedpyright" not in {tool for tool, _ in tools_for_kind("python")}
+    assert "[tool.acme]" in composed["pyproject.toml"]
+    assert "acme.checker" in editor_extensions()
+    unregister_check("typecheck.acme", by="acme.brand")
+    unregister_check("typecomplete.acme", by="acme.brand")
+    composed = compose_project(_data())
+    assert "[tool.acme" not in composed["pyproject.toml"]
+    assert "acme.checker" not in editor_extensions()
+    assert "acme" not in {tool for tool, _ in tools_for_kind("python")}
     assert "[tool.mypy]" in composed["pyproject.toml"]
 
 

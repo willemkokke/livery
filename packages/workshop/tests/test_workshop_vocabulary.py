@@ -51,7 +51,7 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_checks", BACKEND_IMPORT): 1,
     ("_checks", "cpp-conan"): 5,
-    ("_checks", "pyproject.toml"): 6,
+    ("_checks", "pyproject.toml"): 5,
     ("_checks", "python"): 1,
     ("_checks", "python-nanobind"): 1,
     ("_ci_generate", "conanfile.py"): 1,
@@ -82,7 +82,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_replay", "python"): 2,
     ("_sync", "cpp-conan"): 1,
     ("_templates", "python"): 4,
-    ("_tools", "python"): 2,
+    ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 
@@ -220,6 +220,10 @@ def test_no_extension_imports_a_backend() -> None:
 #: (module, tool) to (count, reason).
 TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
+    ("_new_project", "basedpyright"): (
+        1,
+        "fm new.project writes the stock list, as ruled",
+    ),
 }
 
 

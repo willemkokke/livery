@@ -195,15 +195,16 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     """The extensions a birth lists, from the running App's builtin providers.
 
     Footman's own providers and the base are never listed. A stock App
-    (the base among its builtins) lists the site's extension and the
-    python formatter's first, as ruled; the list is in precedence
-    order, so a brand's own extensions follow them and win.
+    (the base among its builtins) lists the site's extension, the
+    python formatter's and the type checker's first, as ruled; the
+    list is in precedence order, so a brand's own extensions follow
+    them and win.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
     stack = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack[:0] = ["docs", "ruff"]
+        stack[:0] = ["docs", "ruff", "basedpyright"]
     return stack
 
 
@@ -241,7 +242,8 @@ def new_project(
         str,
         doc(
             "the extensions the workspace lists, comma-separated in precedence"
-            " order; the stock list by default"
+            " order, each as name or name[option,option]; the stock list by"
+            " default"
         ),
     ] = "",
     resume: Annotated[bool, hidden] = False,
@@ -304,7 +306,8 @@ def new_project(
     # runtime accessor is footman#536's family).
     from livery.footman import _paths
 
-    listed = [entry.strip() for entry in stack.split(",") if entry.strip()]
+    # A comma inside an entry's brackets separates its options.
+    listed = [e.strip() for e in re.split(r",(?![^\[]*\])", stack) if e.strip()]
     stack_list = listed or birth_extensions(_paths.builtin())
     contract = root / "workshop.toml"
     spelled = ", ".join(f'"{entry}"' for entry in stack_list)

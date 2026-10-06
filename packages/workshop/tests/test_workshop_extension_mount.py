@@ -243,6 +243,133 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     ]
 
 
+# The options an entry turns on: the refusals first, then what they register.
+
+_OPTIONED = """\
+from livery.workshop._checks import CheckRecord
+
+
+def _noop(ctx):
+    del ctx
+
+
+OPTIONS = {"deep": "judges deeper"}
+CHECKS = (
+    CheckRecord("acme", "lint", _noop),
+    CheckRecord("acme", "typecomplete", _noop, listed_with="deep"),
+)
+"""
+
+
+def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    for spelled in ("acme.tool>=1.0", "acme.tool?", "acme.tool[deep]@linux"):
+        _contract(tmp_path, f'["{spelled}"]')
+        assert _extensions.closure_problems(tmp_path) == [
+            f"[workspace] extensions lists {spelled!r}; an entry is a name with"
+            " the options it turns on, `name` or `name[option,option]`, and no"
+            " version or scope: the lock pins an extension's version from its"
+            " wheel"
+        ]
+    # A spelling the grammar does not read is named the same way, and
+    # read whole as a name no distribution declares.
+    _contract(tmp_path, '["acme.tool[deep"]')
+    problems = _extensions.closure_problems(tmp_path)
+    assert any(
+        problem.startswith("[workspace] extensions lists 'acme.tool[deep';")
+        for problem in problems
+    )
+    assert _extensions.extension_names(tmp_path) == ("acme.tool[deep",)
+
+
+def test_an_option_the_extension_does_not_declare_refuses_and_mounts_off(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restored_checks: None,
+) -> None:
+    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    _contract(tmp_path, '["acme.tool[deeper]"]')
+    why = (
+        "[workspace] extensions lists acme.tool with 'deeper', which it does not"
+        " declare; its options are deep"
+    )
+    assert _extensions.closure_problems(tmp_path) == [why]
+    from livery.footman import registry
+
+    with registry.capture():
+        assert _extensions.mount_extensions(tmp_path) == ("acme.tool",)
+    assert f"{why}; the mount leaves it off" in capsys.readouterr().err
+    names = _checks.checks_by_name()
+    assert "lint.acme" in names
+    assert "typecomplete.acme" not in names
+
+
+def test_a_record_for_an_option_its_extension_does_not_declare_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    import importlib
+
+    _fake_extensions(
+        tmp_path,
+        monkeypatch,
+        tool=_OPTIONED.replace('OPTIONS = {"deep": "judges deeper"}', "OPTIONS = {}"),
+        odd='OPTIONS = ("deep",)\n',
+    )
+    module = importlib.import_module("acme.tool")
+    with pytest.raises(RuntimeError, match="its options are none"):
+        _extensions.register_declared_checks("acme.tool", module, ("deep",))
+    with pytest.raises(RuntimeError, match=r"acme\.odd.*OPTIONS.*map"):
+        _extensions.declared_options("acme.odd")
+
+
+def test_an_option_registers_its_checks_and_fm_extensions_says_which_are_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    _contract(tmp_path, '["acme.tool"]')
+    assert _extensions.extension_options(tmp_path) == {"acme.tool": ()}
+    described = _extensions.describe_extensions(tmp_path)
+    assert "    option deep (off): judges deeper" in described
+    # The table form spells its name the same way.
+    _contract(tmp_path, '[{ name = "acme.tool[deep]" }]')
+    assert _extensions.extension_names(tmp_path) == ("acme.tool",)
+    assert _extensions.extension_options(tmp_path) == {"acme.tool": ("deep",)}
+    assert _extensions.closure_problems(tmp_path) == []
+    described = _extensions.describe_extensions(tmp_path)
+    assert "    option deep (on): judges deeper" in described
+    from livery.footman import registry
+
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    assert _checks.checks_by_name()["typecomplete.acme"].extension == "acme.tool"
+
+
+def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_extensions(
+        tmp_path, monkeypatch, tool=_OPTIONED + 'REQUIRES = ("acme.base",)\n', base=""
+    )
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = [\n    "acme.tool[deep]",\n]\n'
+    )
+    assert _extensions.write_extensions(tmp_path) == [
+        "  layering: [workspace] extensions gains acme.base before acme.tool,"
+        " which requires it"
+    ]
+    written = (tmp_path / "workshop.toml").read_text()
+    assert '    "acme.base",  # required by acme.tool\n    "acme.tool[deep]",\n' in (
+        written
+    )
+    _contract(tmp_path, '["acme.tool[deep]"]')
+    _extensions.write_extensions(tmp_path)
+    written = (tmp_path / "workshop.toml").read_text()
+    assert 'extensions = ["acme.base", "acme.tool[deep]"]' in written
+
+
 # The tool declaration and the contributions by target: refusals and
 # the unlisted arms first.
 

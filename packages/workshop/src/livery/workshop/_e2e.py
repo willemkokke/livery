@@ -143,7 +143,7 @@ def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[st
     Raises:
         Failed: when *root* has no workshop member to eat.
     """
-    from livery.workshop._extensions import SELF, distribution_of
+    from livery.workshop._extensions import SELF, distribution_of, listing
     from livery.workshop._new_project import birth_extensions
     from livery.workshop._packages import discover_packages
 
@@ -152,7 +152,7 @@ def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[st
     if workshop is None:
         fail(f"{root}: no {DEV_MEMBER} member; the loop eats the workshop's dev wheels")
     listed = birth_extensions([SELF]) if extensions is None else extensions
-    stock = {distribution_of(name) for name in listed}
+    stock = {distribution_of(listing(entry).name) for entry in listed}
     shipping = sorted(
         (p for p in by_path.values() if p.name in stock and p is not workshop),
         key=lambda package: package.path,
@@ -1622,15 +1622,21 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The stack a pass births to test extension *name*, and the member kinds it lands.
 
     The stack is what *name* requires, each before what needs it, then
-    *name* itself. The members are the loop's of the kinds *name*'s
-    checks declare, so each check has something of its own to judge.
+    *name* itself with every option it declares, so each of its checks
+    registers. The members are the loop's of the kinds *name*'s checks
+    declare, so each check has something of its own to judge.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
             the installed ones; when *name* registers no check; when its
             requirements form a cycle.
     """
-    from livery.workshop._extensions import declaration, installed_extensions
+    from livery.toolroom.store.api import Spec
+    from livery.workshop._extensions import (
+        declaration,
+        declared_options,
+        installed_extensions,
+    )
 
     module = declaration(name)
     if module is None:
@@ -1658,6 +1664,7 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         stack.append(extension)
 
     visit(name, ())
+    stack[-1] = str(Spec(name, tuple(declared_options(name))))
     declared_kinds = {kind for record in checks for kind in record.kinds}
     kinds = tuple(
         member_kind(seed)
@@ -2776,16 +2783,15 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
 
 
 def _listed_extensions(root: Path) -> tuple[str, ...]:
-    """The extensions *root*'s contract lists, in order; empty without a contract."""
-    import tomllib
+    """The entries *root*'s contract lists, options spelled; empty with no contract."""
+    from livery.toolroom.store.api import Spec
+    from livery.workshop._extensions import extension_names, extension_options
 
-    contract = root / "workshop.toml"
-    if not contract.is_file():
+    if not (root / "workshop.toml").is_file():
         return ()
-    workspace = tomllib.loads(contract.read_text("utf-8")).get("workspace") or {}
+    options = extension_options(root)
     return tuple(
-        str(entry.get("name", "")) if isinstance(entry, dict) else str(entry)
-        for entry in workspace.get("extensions") or []
+        str(Spec(name, options.get(name, ()))) for name in extension_names(root)
     )
 
 

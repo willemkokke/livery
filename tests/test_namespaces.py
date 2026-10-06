@@ -381,14 +381,18 @@ EXPORTS: dict[str, list[str]] = {
         "Edge",
         "Fragment",
         "GateContext",
+        "PACKAGES",
         "PATHS",
         "Package",
+        "WHOLE",
         "__version__",
         "discover_packages",
         "extension_names",
         "mount_extensions",
+        "public_modules",
         "rewrite_nav_block",
         "run_batched",
+        "scoped_packages",
         "scoped_paths",
         "verify_workspace",
         "workspace_root",
@@ -410,6 +414,9 @@ SOURCES = {
 #: __init__.py, reached through an entry point alone.
 BARE = {
     "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
+    "livery.extensions.basedpyright": (
+        "packages/extensions/basedpyright/src/livery/extensions/basedpyright"
+    ),
     "livery.extensions.ruff": "packages/extensions/ruff/src/livery/extensions/ruff",
 }
 
