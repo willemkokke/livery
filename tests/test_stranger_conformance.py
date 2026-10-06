@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from separate_workspace import environment
+
 ROOT = Path(__file__).resolve().parents[1]
 
 #: The base extension's own names: the livery spellings an instance
@@ -166,7 +168,7 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     # build from an earlier drive would resurface on every sync the
     # verbs run mid-test. Cold once per drive, correct throughout.
     env = {
-        **os.environ,
+        **environment(),
         "VIRTUAL_ENV": "",
         # Its own conan home: a sync registers a native member as an
         # editable, which in the machine's home would outlive the drive.
@@ -234,7 +236,7 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
     subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
 
     env = {
-        **os.environ,
+        **environment(),
         "VIRTUAL_ENV": "",
         "CONAN_HOME": str(tmp_path / "conan-home"),
     }

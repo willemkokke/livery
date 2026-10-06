@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from separate_workspace import environment
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE_ROOT = ROOT / "packages/workshop/src/livery/workshop/content/root"
 
@@ -251,15 +253,16 @@ def _publish(index: Path, wheels: list[Path]) -> None:
 def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     rig = _rig()
     _url, token = rig
-    base_env = {
-        **os.environ,
-        "FORGE_TOKEN": token,
-        "FORGE_ADMIN_TOKEN": token,
-        "VIRTUAL_ENV": "",
+    # The workspaces the chain builds run their own gates, unmetered by
+    # this suite's coverage.
+    base_env = environment(
+        FORGE_TOKEN=token,
+        FORGE_ADMIN_TOKEN=token,
+        VIRTUAL_ENV="",
         # Every workspace the chain builds registers its native members
         # as conan editables: in the chain's own home, never the machine's.
-        "CONAN_HOME": str(tmp_path / "conan-home"),
-    }
+        CONAN_HOME=str(tmp_path / "conan-home"),
+    )
     # The chain plays a person at a workstation. The suite's own rig
     # marks this session as a CI run, and a verb that behaves
     # differently there would be exercised in the wrong mode: the
@@ -267,13 +270,6 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     # here, where the update verb asks for exactly that.
     for marker in ("CI", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "GITEA_ACTIONS"):
         base_env.pop(marker, None)
-    # Nor does it inherit this suite's own instrumentation. The
-    # workspaces it builds run their own gates, and a child that
-    # starts coverage under the outer configuration writes rows for
-    # files that exist only in its temporary tree, which the outer
-    # report then cannot resolve.
-    for measured in [name for name in base_env if name.startswith("COVERAGE_")]:
-        base_env.pop(measured, None)
     # Nor the runner's loop belt. A global `fm` that handed this suite
     # to `uv run --project` set it, and a child `fm` that inherits it
     # skips its own handoff and runs this workspace's footman against
@@ -500,6 +496,8 @@ def _chain(
             f"--owner={OWNER}",
             f"--url={url}",
             "--namespace=kid",
+            # A second birth in the same folder is a resume.
+            *(["--resume"] if resumed else []),
         ],
         child_work,
         _hermetic(env, tool),

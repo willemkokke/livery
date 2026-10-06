@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from separate_workspace import environment
+
 ROOT = Path(__file__).resolve().parents[1]
 
 _END_TABLES = "# -- workshop: end tables --"
@@ -65,7 +67,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
         )
     from livery.workshop._e2e import checkout_index
 
-    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    env = {key: value for key, value in environment().items() if key != "VIRTUAL_ENV"}
     # Its own conan home: a sync registers the native member as an
     # editable, which in the machine's home would outlive this test.
     env["CONAN_HOME"] = str(tmp_path / "conan-home")
