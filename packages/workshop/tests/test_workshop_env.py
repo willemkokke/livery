@@ -721,7 +721,19 @@ def test_a_non_ascii_untracked_path_is_planned_and_removed(
     assert not (root / "café.txt").exists()
 
 
-_SHIM = Path(__file__).resolve().parents[3] / ".claude" / "hooks" / "fm-hook.sh"
+def _shipped_shim() -> Path:
+    """The hook shim as the workshop ships it, beside its hooks module.
+
+    The `.claude/hooks/` copy is what a sync delivers, so a checkout
+    that never synced, the release train's fresh clone among them, has
+    none; the shipped one is there wherever the workshop is installed.
+    """
+    from livery.workshop import _hooks
+
+    return Path(_hooks.__file__).parent / "content" / "hooks" / "fm-hook.sh"
+
+
+_SHIM = _shipped_shim()
 
 
 @pytest.mark.skipif(

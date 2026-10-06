@@ -1814,12 +1814,21 @@ def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) ->
     ]
 
 
-def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api() -> None:
+def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The order holds among the sections a checkout has.
 
     The tasks block is emitted by its generator, so a fresh checkout
     may not carry it yet.
     """
+    # The development section renders the verbs fragment through this
+    # repository's own fm, which syncs a checkout that never synced: a
+    # release leg's fresh clone, whose links would then point into the
+    # leg's scratch venv. The packages' sidebars are what this reads.
+    monkeypatch.setattr(
+        "livery.extensions.docs._site.development_nav_lines", lambda root: []
+    )
     root = Path(__file__).resolve().parents[3]
     config = zensical_config(root)
     for name in ("footman", "workshop", "forge"):
