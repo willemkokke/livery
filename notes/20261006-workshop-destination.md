@@ -167,7 +167,7 @@ clauses apply by what is registered, not by a declared sort.
 
 | Sort | Level | May register | Seams it uses | Examples |
 | --- | --- | --- | --- | --- |
-| check (tool) | workspace | checks, tool configuration fragments, editor contributions, tools, options | `CHECKS`, `FRAGMENTS`, `content/`, `TOOLS`, `OPTIONS` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy |
+| check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `CHECKS`, `GENERATORS`, `FRAGMENTS`, `content/`, `TOOLS`, `OPTIONS` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
 | language | package | a package's capabilities: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, checks of its own; contributions to the docs extension | `PHASES`, `QUERIES`, `CATEGORIES`, `seeds/`, `ROOT_FILES`, `TOOLS`, `CHECKS`, `FOR` | python, cpp, cmake, nanobind, unreal; later rust, go, java |
 | ecosystem | package | a `[publish]` artifact and its registry kind, a manifest's requirements, an installer's cache | the same seams as a language, through the `publish` and `requirements` phases and queries | conan; later crates, maven, npm |
 | workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that languages contribute to | `CHECKS`, `JOBS`, `SLOTS`, `GUIDANCE`, `RELEASE_NOTES`, `RULES`, `FRAGMENTS`, `contributions_for` | docs, changelog, claude, housekeeping |
@@ -215,7 +215,7 @@ every kind the check judges"). What changes:
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `Job.inputs`, the same `Inputs` record a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, contributed by a language's `FOR = {"docs": ...}` module and read by the docs extension through `contributions_for("docs")` |
+| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by the extension that owns its tool, naming the languages it extracts for, and read by the docs extension through `contributions_for("docs")` |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `Generator` of the same contribution |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
@@ -257,6 +257,7 @@ built from are in the next table.
 | `OPTIONS` | option name to what it turns on | every | basedpyright |
 | `CONTRACT_KEYS` | `Declared` records | every | docs |
 | `CHECKS` | `CheckRecord` tuple | every | the eight, docs |
+| `GENERATORS` | `Generator` tuple, each naming the languages it extracts for | check, language | python (phase 11), doxygen (phase 12) |
 | `FRAGMENTS` | dynamic `Fragment` records; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
 | `JOBS` | `JobContribution` tuple | workspace | docs (phase 10 moves it onto data) |
 | `SLOTS` | `Slot` records it declares; `CONTRIBUTIONS` fills others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
@@ -343,7 +344,7 @@ for languages contributing to it and for generators in any package:
 
 | Name | Purpose | Users |
 | --- | --- | --- |
-| `Generator` | a page generator: name, claims, tools, options, `run(package, out) -> pages`, the site plugin blocks it needs, inventories | python (phase 11), cpp (phase 12), the task reference and coverage pages |
+| `Generator` | a page generator: name, languages, claims, tools, options, `run(package, out) -> pages`, the site plugin blocks it needs, inventories | python (phase 11), doxygen (phase 12), the task reference and coverage pages |
 | `Page` | one generated page: path, title, nav position | the same |
 | `write_nav_block`, `nav_block_markers` | emit a nav block beside generated pages, and place it | toolroom-bench, the task reference |
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
@@ -369,18 +370,32 @@ The brief's first thought: expose API documentation extraction the way
 checks are exposed, each extractor naming what it operates on, and
 factor out what the two share. The answer, in `Generator`:
 
-- A generator is a record with `claims` (categories and suffixes, the
-  same `Claim` a check carries), `tools`, `options` and a `run`. The
+- A generator is a record with `languages` (the package-level
+  extensions it extracts for, the way a check names `kinds`), `claims`
+  (categories and suffixes, the same `Claim` a check carries), `tools`,
+  `options` and a `run`. The
   docs build hands it a package and the output directory under the
   package's generated tree, and it returns the pages it wrote. It may
   also carry the site plugin blocks it needs (python's mkdocstrings
   handler, options and inventories), which the build writes into
   `zensical.toml` once per generator name.
-- Matching is by the package's listed extensions and the claims: a
-  package composed of `python+nanobind+cmake` meets python's generator
-  over its `.py` sources and cpp's over its `.h` and `.cpp` sources,
-  each listed in its own section. That is the brief's "file type it
-  can operate on", through the claims model checks already use.
+- A generator lives with the extension that owns its tool, as a check
+  does: `lint.ruff` lives in ruff and names python, `build.configure`
+  lives in the cpp extension. Doxygen reads C, C++, Java and more, so
+  its generator is `livery-extensions-doxygen`, a workspace extension
+  requiring `docs`, declaring `languages=("cpp",)` today and `java`
+  when a java extension exists; python's mkdocstrings generator lives
+  in the python extension's docs contribution, since the handler is the
+  site's own and brings no tool. `contributions_for("docs")` returns
+  both kinds of module: one that requires `docs` and declares
+  `GENERATORS` on its own module, and a language's `FOR` module.
+- Matching is by `languages` against the package's listed extensions,
+  then by the claims within the package: `python+nanobind+cmake` meets
+  python's generator over its `.py` sources and doxygen's over its `.h`
+  and `.cpp` sources, each listed in its own section. That is the
+  brief's "file type it can operate on", through the claims model
+  checks already use. Two mounted generators naming one language refuse
+  at mount, naming both, unless the package's contract picks one.
 - What checks and generators share is already public: `Claim`, the
   scoping of files to a package, `Option`, the tools-in-use rule,
   `run_batched`. There is no shared base class: a check returns a
@@ -664,9 +679,9 @@ repository runs the rule and exits 0.
 
 **12c, the C++ reference.** The pending spike first: Doxygen XML to
 Markdown before the Zensical build, measured on a native member of this
-repository. Then cpp's docs contribution: a `Generator` claiming the
-native sources, `doxygen` its tool, pages under the package's generated
-tree. Acceptance: the spike's note quotes the pages rendered and the
+repository. Then `livery-extensions-doxygen`: a `Generator` with
+`languages=("cpp",)`, claiming the native sources, `doxygen` its tool,
+pages under the package's generated tree. Acceptance: the spike's note quotes the pages rendered and the
 build time; `fm docs.build` on this repository renders the cpp member's
 reference. If the spike finds no workable route, 12c becomes a
 follow-up issue and the plan's open item 11 records why.
@@ -737,6 +752,10 @@ the stack, which this design neither needs nor rules out).
   so the public names are pinned once, at their final path.
 - Willem, 2026-10-06: `api` is not forbidden as a module name; the
   housekeeping extension carries no rule against it.
+- Willem, 2026-10-06: a generator declares the languages it extracts
+  for. So `Generator` carries `languages`, `GENERATORS` joins the
+  declaration vocabulary, and the doxygen generator is an extension of
+  its own rather than the cpp extension's contribution.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
