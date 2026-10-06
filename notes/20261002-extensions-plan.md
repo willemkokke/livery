@@ -241,7 +241,10 @@ Measured or read on main at `cd8e18e4`, 2026-10-02.
     scope an environment marker. Mount code never branches on what is
     listed.
 16. **`fm check` parses each source once**, in the layering check's
-    one traversal; rules register into it.
+    one traversal; rules register into it. The base reads python with
+    `ast`; a language extension registers the reader for its own
+    suffixes, so a second language joins the traversal instead of
+    parsing its sources again.
 17. **Footman imports no workshop and reads no `workshop.toml`.** Its
     changes here are generic.
 18. **Re-running a release is its recovery, and a receipt is the tag
@@ -519,6 +522,22 @@ extension owns its families, their probes and their store records:
 This changes the toolchain plan's contract 10 and its table name:
 `[cpp.toolchain]` becomes `[toolchain.cpp]`, owned by the cpp
 extension.
+
+A language extension also owns its ecosystem's caches and switches
+off every installer its ecosystem brings, so the store stays the one
+installer and contract 2 holds. The conan cache (11b) is the first
+case. The Gradle wrapper and Gradle's own JDK provisioning, rustup's
+toolchain file and Go's `GOTOOLCHAIN` switching are the same case
+for later languages. A receipt renders into each consumer's own
+configuration (the conan profile, Gradle's JDK installation paths),
+and no consumer detects a second time.
+
+One family may play two parts. A JDK compiles a package and also runs
+a formatter: as a toolchain it resolves the three ways of contract
+23, and as the runtime of a verdict tool it is a locked store tool
+under contract 24, as node is for basedpyright. The two resolve
+separately; the store keeps versions side by side, so one install
+serves both when they agree.
 
 ### Lodges
 
@@ -1449,7 +1468,16 @@ the empty shell plan's phases 5 and 6: `stamp`, `build`, `prove`,
 several artifacts per package; ecosystems as registrations with their
 defaults; `livery.forge.RegistryKind` an open name; the forge's
 `package_admin`; `[release] publish` goes. Builds on the releases
-plan's phases 1 and 2.
+plan's phases 1 and 2. An ecosystem registers more than its defaults:
+how it spells a version (`spell`: pypi writes `1.2.0.dev3`, and Maven
+orders an unknown qualifier after the release, so `1.2.0-dev.3` sorts
+above `1.2.0` there), the keys of its registry table (a signing key's
+secret beside `token-env`), and the signatures its registry requires
+on upload (Maven Central refuses a file without a PGP `.asc`, which
+the releases plan's ssh and sigstore signatures do not replace). A
+floor proof is the extension's own definition and may be absent:
+Gradle resolves a conflict to the highest version and Maven to the
+nearest, and neither has uv's lowest-direct resolution.
 
 **11d, the vocabulary at zero.** Deliverables, carried from the empty
 shell plan's phase 9: every remaining reach-in leaves the base; the
@@ -1461,7 +1489,12 @@ every section included (runtime, build, test extras), so `[[depends]]`
 restates nothing a manifest already says; its `kind` key goes. The
 forge's `test` extra on footman and toolroom then becomes edges, and
 a change to either reruns the forge's tests, which the graph misses
-today. Acceptance: `test_a_test_extra_on_a_sibling_is_an_edge`, and
+today. A manifest that is code (`conanfile.py` today, a Gradle build
+script later) is read over the shape its seed writes, refusing any
+other shape and naming the line to add, as the conan backend's
+`declare_requirement` does; where only the tool can answer, the tool
+answers behind the affected engine's record, since each such read
+starts it. Acceptance: `test_a_test_extra_on_a_sibling_is_an_edge`, and
 `fm check` reruns the forge's suite after a change to footman.
 
 Acceptance, refusals first:
@@ -2080,6 +2113,29 @@ Acceptance:
   checks do, and so do the cpp kind's `build.configure`,
   `build.compile` and `test.ctest`. pytest's serial call puts `-n 0`
   after them, so they cannot spread a suite that is not worker-safe.
+- Willem, 2026-10-06: Java support is not planned, and nothing here
+  may rule it out. Read against this plan on 2026-10-05, the model
+  holds: `java` with `gradle` (or `maven`) composes as `cpp` with
+  `cmake` and `conan` does, and Java's checks, fragments, phases and
+  queries each have their place. What the phases ahead must keep open
+  is recorded where each will read it: contract 16 takes a language's
+  reader; "Toolchains" states the rule for an ecosystem's caches and
+  installers, and the family that is both a toolchain and a verdict
+  tool's runtime; 11c's ecosystems carry their spelling, registry keys
+  and signatures, and a floor proof may be absent; 11e reads a
+  manifest that is code; open item 11 holds the API reference. The
+  facts behind them, read on 2026-10-05: Temurin JDKs cover the six
+  hosts from 21.0.5, which added windows-arm. Gradle 9's daemon needs
+  JVM 17 or newer, and Gradle provisions JDKs itself (the foojay
+  resolver, and the daemon's JVM since 8.13) unless that is switched
+  off. google-java-format 1.37.0 ships native binaries for
+  darwin-arm64, linux-arm64, linux-x86-64 and windows-x86-64 only, so
+  the ruling of 2026-10-03 on one source per tool points to its jar on
+  a store JDK, which needs a `java` runtime and a `maven` source kind
+  in the store, both additive. Maven Central requires a sources jar
+  and a javadoc jar per jar, md5 and sha1 per file, a PGP signature
+  per file and the POM's name, description, url, license, developers
+  and scm, and never removes a published version.
 
 ## Open
 
@@ -2108,3 +2164,13 @@ Acceptance:
 10. **A CI leg proving macos-x64** on `macos-15-intel`, a supported
     host no run proves until then. Owner: Willem, before GitHub
     retires the image.
+11. **API references for languages mkdocstrings has no handler for.**
+    The extractor query answers with a mkdocstrings handler block, and
+    mkdocstrings has handlers for Python, C, Crystal, GitHub Actions,
+    MATLAB, TypeScript, VBA and shell, none for Java, rust or go.
+    Javadoc writes an `element-list`, not an `objects.inv`, so a
+    reference to a Java name resolves nothing. The choices are a
+    handler of our own, or a docs mode that places a language's own
+    reference pages in the site and links to them without
+    cross-references. The cpp kind has no extractor today either.
+    Owner: Willem.
