@@ -1313,10 +1313,9 @@ def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
         shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True, exist_ok=True)
     present = {package.member for package in discover_packages(root)}
-    for stale in base.iterdir():
-        if stale.name not in present:
-            shutil.rmtree(stale, ignore_errors=True)
-            (stamps / f"{stale.name}.digest").unlink(missing_ok=True)
+    for stale in _stale_mounts(base, present):
+        shutil.rmtree(base / stale, ignore_errors=True)
+        (stamps / f"{stale}.digest").unlink(missing_ok=True)
     mounted: list[str] = []
     for package in discover_packages(root):
         docs = package.directory / "docs"
@@ -1351,9 +1350,34 @@ def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
         )
         _merge_generated(docs / GENERATED_DIR, target, package.path)
         _strip_generated_links(target)
+        # A member in a group directory keeps its stamp in the group's.
+        stamp.parent.mkdir(parents=True, exist_ok=True)
         stamp.write_text(digest, encoding="utf-8")
         mounted.append(name)
     return mounted
+
+
+def _stale_mounts(base: Path, present: set[str]) -> list[str]:
+    """The mounts under *base* no present member owns, by their path under it.
+
+    A member is ``<name>`` or ``<group>/<name>``: a top-level directory
+    that is no member and no member's group is stale whole, and inside
+    a group each directory that is no member is stale on its own.
+    """
+    groups = {member.partition("/")[0] for member in present if "/" in member}
+    stale: list[str] = []
+    for entry in sorted(base.iterdir()):
+        if entry.name in present:
+            continue
+        if entry.name not in groups:
+            stale.append(entry.name)
+            continue
+        stale += [
+            f"{entry.name}/{child.name}"
+            for child in sorted(entry.iterdir())
+            if f"{entry.name}/{child.name}" not in present
+        ]
+    return stale
 
 
 def _refresh_coverage(docs: Path, target: Path) -> None:
