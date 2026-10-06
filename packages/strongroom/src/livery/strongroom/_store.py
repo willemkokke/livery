@@ -402,8 +402,9 @@ class Store:
             algorithm: a registry entry's name.
             namespaces: the caller's namespaces, each with its class.
             clock: the instant source for records.
-            lock_stale: seconds after which a lock whose holder cannot
-                be proven alive is broken.
+            lock_stale: seconds after which a lock is broken even when
+                its holder looks alive: the pid of a holder that died
+                can belong to another process by then.
             lock_timeout: seconds to wait for a live lock.
             sources: where to look for an object the store lacks, in
                 order. A folder source is checked now; an HTTP source
@@ -457,8 +458,9 @@ class Store:
             root: the store's directory.
             namespaces: the caller's namespaces, each with its class.
             clock: the instant source for records.
-            lock_stale: seconds after which a lock whose holder cannot
-                be proven alive is broken.
+            lock_stale: seconds after which a lock is broken even when
+                its holder looks alive: the pid of a holder that died
+                can belong to another process by then.
             lock_timeout: seconds to wait for a live lock.
             sources: where to look for an object the store lacks, in
                 order. A folder source is checked now; an HTTP source

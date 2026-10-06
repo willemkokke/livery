@@ -282,6 +282,8 @@ def usage_fragment(p: dict[str, Any]) -> str:
     if kind == "stdin":
         return ""  # a whole-document parameter has no token spelling
     if kind == "flag":
+        # The usage line shows the spelling that changes something: a flag
+        # on by default is only ever turned off there.
         name = f"no-{p['name']}" if p.get("default") is True else p["name"]
         return f"--{name}" if required else f"[--{name}]"
     if kind == "option":
@@ -298,7 +300,9 @@ def usage_fragment(p: dict[str, Any]) -> str:
 def param_label(p: dict[str, Any]) -> str:
     kind = p["kind"]
     if kind == "flag":
-        return f"--no-{p['name']}" if p.get("default") is True else f"--{p['name']}"
+        # The row names the flag by its own spelling, which the author's
+        # text describes; the mechanics say how to turn it the other way.
+        return f"--{p['name']}"
     if kind == "option":
         return f"--{p['name']}={value_hint(p)}"
     suffix = "..." if kind == "variadic" or p.get("multiple") else ""
@@ -341,12 +345,13 @@ def default_text(p: dict[str, Any]) -> str:
 def _mechanics(p: dict[str, Any]) -> str:
     bits: list[str] = []
     if p["kind"] == "flag":
-        # A flag defaulting true is only ever *turned off*, so the spelling
-        # that does something leads, and the inert one is the parenthetical.
+        # A flag on by default says so: its row's text describes it on,
+        # and --no-<name> is the spelling a reader types to change it.
         if p.get("default") is True:
-            bits.append(f"flag (--{p['name']} to enable)")
+            bits.append(f"flag, on by default (--no-{p['name']} to disable)")
         else:
             bits.append(f"flag (--no-{p['name']} to disable)")
+
     choices = p.get("choices")
     if choices:
         # A dynamic parameter's values are what its completer answered just
