@@ -142,6 +142,17 @@ def test_a_module_importing_the_runner_may_not_ask_the_terminal(
     )
     with pytest.raises(ValueError, match=r"attended\(\)"):
         verify_workspace(tmp_path)
+    # stderr and os.isatty ask the same terminal.
+    _module(
+        tmp_path,
+        "tool",
+        "verbs.py",
+        "import os\nimport sys\nimport livery.footman as footman\n\n"
+        "def go() -> bool:\n    return sys.stderr.isatty() or os.isatty(1)\n",
+    )
+    with pytest.raises(ValueError, match=r"attended\(\)") as caught:
+        verify_workspace(tmp_path)
+    assert "os.isatty()" in str(caught.value)
 
 
 def test_the_runner_and_plain_application_code_may_ask(tmp_path: Path) -> None:

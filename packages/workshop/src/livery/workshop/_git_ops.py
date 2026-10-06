@@ -192,11 +192,15 @@ class GitOps:
         self._run("fetch", "origin")
 
     def has_remote(self, name: str = "origin") -> bool:
-        """Whether this clone has a remote called *name*."""
+        """Whether this clone has a remote called *name*; any other failure raises."""
         result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "remote", "get-url", name
         )
-        return result.code == 0
+        if result.code in (0, 2):
+            return result.code == 0
+        raise GitError(
+            f"git remote get-url exited {result.code}:\n{result.stdout}{result.stderr}"
+        )
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         """Whether *ancestor* reaches *descendant* in this clone.
@@ -294,11 +298,15 @@ class GitOps:
         self._run("commit", "--amend", "--no-edit")
 
     def local_branch_exists(self, branch: str) -> bool:
-        """Whether *branch* exists locally."""
+        """Whether *branch* exists locally; any other failure raises."""
         result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
         )
-        return result.code == 0
+        if result.code in (0, 1):
+            return result.code == 0
+        raise GitError(
+            f"git rev-parse exited {result.code}:\n{result.stdout}{result.stderr}"
+        )
 
     def remote_head(self, branch: str) -> str:
         """``origin/<branch>``'s commit, or empty when it does not exist.

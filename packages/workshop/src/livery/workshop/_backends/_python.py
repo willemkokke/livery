@@ -2121,15 +2121,9 @@ def run_isolated_test(
 
 # --- the API reference ---------------------------------------------------------
 
-#: The inventories cross-ecosystem references resolve against.
-#: Pinned here so one workshop release moves every project; the
-#: footman and toolroom pins retire when those repositories migrate
-#: into the workspace.
-INVENTORIES = (
-    "https://docs.python.org/3/objects.inv",
-    "https://willemkokke.github.io/footman/objects.inv",
-    "https://willemkokke.github.io/toolroom/objects.inv",
-)
+#: The inventories cross-ecosystem references resolve against. Pinned
+#: here so one workshop release moves every project.
+INVENTORIES = ("https://docs.python.org/3/objects.inv",)
 
 
 def api_pages(package: Package) -> list[tuple[str, str]]:

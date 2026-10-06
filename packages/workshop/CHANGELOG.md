@@ -148,7 +148,7 @@
 - The job runner names the leg it pushes for by @willemkokke
 - The native kinds find conan where the leg puts it by @willemkokke
 - The ignore list follows where a profiled run writes by @willemkokke
-- The sweep takes only the traces it wrote, and keeps more of them by @willemkokke
+- The trace sweep takes every file in its directory, whichever writer made it, and keeps fifty instead of ten by @willemkokke
 - A check's prerequisites run through their tasks, once per gate by @willemkokke
 - The lock check compares entries without their graphs by @willemkokke
 - An allowance ahead of its requirement is kept and named by the lock, and the loop's pass series is declared with the others by @willemkokke

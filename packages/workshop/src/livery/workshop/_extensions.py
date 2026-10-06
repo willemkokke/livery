@@ -368,8 +368,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     builtin is skipped: claiming its tasks again puts the same task in
     one rung twice.
     """
-    # footman does not expose the brand's builtin set publicly yet;
-    # the private read retires when footman joins the workspace.
+    # footman does not expose the brand's builtin set publicly; this
+    # private read is one of the reaches issue #1204 closes with a seam.
     from livery.footman import _paths
     from livery.footman.api import plugin
 

@@ -808,7 +808,7 @@ def test_pre_bash_push_guard_blocks_conflicts_and_exempts(
 
     probes: list[str] = []
 
-    def _conflicts(_repo: object) -> bool:
+    def _conflicts(_repo: object, _ref: str = "HEAD") -> bool:
         probes.append("probed")
         return True
 

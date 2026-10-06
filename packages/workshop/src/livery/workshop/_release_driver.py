@@ -368,21 +368,33 @@ def _base_tree_verified(git: GitOps, base: str) -> bool:
     A gate that proved this exact tree green in full, on the pull
     request whose squash became the tip, lets the release start at
     once instead of waiting for the tip's own push run. Anything the
-    record cannot decide answers False and the wait proceeds.
+    record cannot decide says why, answers False, and the wait proceeds.
     """
     from livery.workshop import _verified
-    from livery.workshop._git_ops import GitError
 
     try:
         git.fetch()
         sha = git.remote_head(base)
         tree = _verified.tree_id(git, sha) if sha else ""
-    except (GitError, Exception):
+    except Exception as error:
+        print(
+            f"  {base}: its tip cannot be read for the verified record: {error};"
+            " waiting for the tip's own run"
+        )
         return False
     if not tree:
+        print(f"  {base}: no tree at origin's tip to verify; waiting for its run")
         return False
-    found, _why = _verified.record(git.root, tree)
-    if found is None or found.scope != _verified.FULL:
+    found, why = _verified.record(git.root, tree)
+    if found is None:
+        if why:
+            print(f"  {base}: tree {tree[:12]}: {why}; waiting for the tip's own run")
+        return False
+    if found.scope != _verified.FULL:
+        print(
+            f"  {base}: tree {tree[:12]} was proved at scope {found.scope}, not"
+            " full; waiting for the tip's own run"
+        )
         return False
     print(
         f"  {base} verified: tree {tree[:12]} proved green by run {found.run};"

@@ -56,7 +56,7 @@ owner = "willemkokke"
 # host `[workspace] hosts` supports, every host key while it is absent.
 index = "records"
 # The Windows ARM runner is one line in `[ci] runners`,
-# `runners = [..., "windows-11-arm"]`, then `fm template.apply`.
+# `runners = [..., "windows-11-arm"]`, then `fm sync`.
 # Measured against x64 on one commit: the type checkers finish in half
 # the time, the tests in the same, the archive restores slower, and the
 # job's wall time is longer, so the gate gains nothing from it; a nightly
