@@ -58,8 +58,8 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
     from livery.workshop._sync import require_mounted
 
     handed: list[str] = []
-    synced: list[tuple[str, ...]] = []
-    installs = {"declares": False}
+    ran: list[tuple[str, ...]] = []
+    declares = {"after": ""}
 
     def reexec(root: Path, cause: str) -> None:
         del root
@@ -67,10 +67,12 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
 
     def run_uv(*args: str, root: Path) -> None:
         del root
-        synced.append(args)
+        ran.append(args)
 
     def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
-        return names if installs["declares"] and synced else ()
+        # Declared once the named step ran: "sync", "pip", or never.
+        done = {args[0] for args in ran}
+        return names if declares["after"] in done else ()
 
     monkeypatch.setattr(_reconcile, "_reexec", reexec)
     monkeypatch.setattr("livery.workshop._uv.run_uv", run_uv)
@@ -78,29 +80,45 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
     monkeypatch.setattr(
         "livery.workshop._extensions.unmounted", lambda start: ("mypy",)
     )
-    # The refusals first. Listed, and no distribution declares it even
-    # after uv sync: refused before anything renders or locks.
-    with pytest.raises(Failed, match="no installed distribution declares mypy"):
-        require_mounted(tmp_path, ("--locked",))
-    assert synced == [("sync", "--locked")]
+    monkeypatch.setattr(
+        "livery.workshop._extensions.extension_entries",
+        lambda start: (("ruff", "livery-extensions-ruff"), ("mypy", "acme-mypy")),
+    )
+    # The refusals first. A --locked sync installs nothing outside the
+    # lock: refused before anything renders or locks.
+    with pytest.raises(Failed, match="installs nothing outside the lock"):
+        require_mounted(tmp_path, ("--locked",), install=False)
+    assert ran == [("sync", "--locked")]
     assert handed == []
-    # uv sync installs it, and the handoff that would mount it cannot
-    # start: refused all the same, since this process cannot mount it.
-    installs["declares"] = True
-    synced.clear()
+    # Installed, and still no distribution declares it.
+    ran.clear()
+    with pytest.raises(Failed, match="installing it found no distribution"):
+        require_mounted(tmp_path)
+    assert [args[:2] for args in ran] == [("sync",), ("pip", "install")]
+    assert ran[1][-1] == "acme-mypy"  # the listed one alone, by its distribution
+    # A newly listed extension: uv sync cannot install what the dev group
+    # does not name yet, so it is installed directly, and the handoff that
+    # would mount it cannot start: refused all the same.
+    ran.clear()
+    declares["after"] = "pip"
     with pytest.raises(Failed, match="mypy installed, and this process cannot mount"):
         require_mounted(tmp_path)
-    assert synced == [("sync",)]
     assert handed == [_reconcile.INSTALLED]
     assert (
         "extensions installed by this sync: mypy; the sync continues with them"
         " mounted" in capsys.readouterr().out
     )
+    # One the lock already names: uv sync installs it, and nothing more.
+    ran.clear()
+    declares["after"] = "sync"
+    with pytest.raises(Failed, match="cannot mount"):
+        require_mounted(tmp_path)
+    assert ran == [("sync",)]
     # Every listed extension mounted: nothing to do.
     monkeypatch.setattr("livery.workshop._extensions.unmounted", lambda start: ())
-    synced.clear()
+    ran.clear()
     require_mounted(tmp_path)
-    assert synced == []
+    assert ran == []
 
 
 def test_a_conflicted_rebase_parks_and_restores_the_branch(

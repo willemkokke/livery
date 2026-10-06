@@ -323,45 +323,67 @@ def continue_on_moved_code(
     return True
 
 
-def require_mounted(root: Path, flags: tuple[str, ...] = ()) -> None:
+def require_mounted(
+    root: Path, flags: tuple[str, ...] = (), *, install: bool = True
+) -> None:
     """Refuse to render or lock while an extension the workspace lists is unmounted.
 
     The extensions mount when the command starts. One the workspace
     lists and no installed distribution declared then (a commit the sync
-    moved onto lists it, or a member's new entry point) registered
-    nothing, and a render or a lock without it would remove its files
-    and its tools as withdrawn. When the environment holds it now, or
-    holds it once ``uv sync`` ran with *flags*, the sync hands itself to
-    a fresh process, which mounts it. One no distribution declares even
-    then refuses, naming it, before a file is touched, and so does a
-    handoff that cannot start.
+    moved onto lists it, or a person just listed it) registered nothing,
+    and a render or a lock without it would remove its files and its
+    tools as withdrawn. When the environment holds it now, or holds it
+    once ``uv sync`` ran with *flags*, the sync hands itself to a fresh
+    process, which mounts it. A newly listed extension's distribution
+    reaches the dev group only through the render, so ``uv sync`` cannot
+    install it: with *install*, it is installed into the environment
+    directly, and the fresh process's render writes its line and its
+    ``uv sync`` reconciles the environment with the lock. One no
+    distribution declares even then refuses, naming it, before a file is
+    touched, and so does a handoff that cannot start.
 
     Raises:
         Failed: when a listed extension cannot be mounted in this process.
     """
     from livery.workshop import _reconcile
-    from livery.workshop._extensions import declared_now, unmounted
+    from livery.workshop._extensions import (
+        declared_now,
+        extension_entries,
+        unmounted,
+    )
+    from livery.workshop._pythons import venv_python
     from livery.workshop._uv import run_uv
 
     missing = unmounted(root)
     if not missing:
         return
-    if declared_now(missing) != missing:
-        run_uv("sync", *flags, root=root)
     installed = declared_now(missing)
+    if installed != missing:
+        run_uv("sync", *flags, root=root)
+        installed = declared_now(missing)
+    absent = [name for name in missing if name not in installed]
+    if absent and install:
+        dists = [dist for name, dist in extension_entries(root) if name in absent]
+        python = str(venv_python(root / ".venv"))
+        run_uv("pip", "install", "--python", python, *dists, root=root)
+        installed = declared_now(missing)
+        absent = [name for name in missing if name not in installed]
     if installed:
         print(
             f"  extensions installed by this sync: {', '.join(installed)}; the sync"
             " continues with them mounted"
         )
         _reconcile._reexec(root, _reconcile.INSTALLED)  # pyright: ignore[reportPrivateUsage]
-    absent = [name for name in missing if name not in installed]
     if absent:
+        why = (
+            "and installing it found no distribution declaring it"
+            if install
+            else f"and a sync with {' '.join(flags)} installs nothing outside the lock"
+        )
         fail(
             f"no installed distribution declares {', '.join(absent)}, which"
-            " [workspace] extensions lists, and `uv sync` installed none: install"
-            " the distribution that ships each, or remove the entry. Nothing was"
-            " rendered or locked"
+            f" [workspace] extensions lists, {why}: install the distribution that"
+            " ships each, or remove the entry. Nothing was rendered or locked"
         )
     fail(
         f"{', '.join(installed)} installed, and this process cannot mount"
@@ -589,7 +611,11 @@ def sync(
     # Before anything renders or locks: a listed extension the mount
     # found missing would count as withdrawn, and its files and its
     # tools would go.
-    require_mounted(root, _uv_flags(frozen=frozen, locked=locked, offline=offline))
+    require_mounted(
+        root,
+        _uv_flags(frozen=frozen, locked=locked, offline=offline),
+        install=not local_only,
+    )
     # Before anything discovers packages: a removed package's leftover
     # directory refuses discovery until it goes.
     for line in sweep_residue(root):
