@@ -1557,6 +1557,7 @@ Acceptance:
 | `_e2e.py` in the base | the e2e plugin (phase 14) |
 | `_scale.py` in the base | the e2e plugin (phase 14) |
 | `livery-cbor` 0.0.0 on the index | nothing: kept as the name's claim |
+| `griffelib` a dependency of `livery-workshop` | a dependency of `livery-extensions-docs` (phase 10) |
 
 ## Decision record
 
@@ -2013,6 +2014,19 @@ Acceptance:
 - 2026-10-06, 9b4: a bare `mypy` checks linux and shares the check's
   linux cache (`cache_dir = .workshop/.cache/mypy/linux` in
   `mypy.ini`); the check's darwin and win32 runs name their own.
+- Willem, 2026-10-06: the workshop wheel declares `griffelib`, the
+  distribution that ships `griffe`, until the docs extension ships as a
+  wheel of its own (#1156). The docs extension's reference check
+  imports griffe, and the workshop's isolated release leg installs only
+  what the wheel declares; the floor is the lock's, so the
+  lowest-direct leg runs the version the gate runs.
+- Willem, 2026-10-06, 9b's pytest slice, option A: `test.pytest`,
+  `examples.pytest`, the pytest and coverage tables and pytest's lines
+  in the dev group move to `livery-extensions-pytest`. The workshop's
+  six pytest plugins (contexts, examples, isolation, points, speed,
+  console) and the python kind's test runner stay in the base until
+  phase 11b moves the python kind into an extension, the vocabulary
+  allowance naming them until then.
 
 ## Open
 
