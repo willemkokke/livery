@@ -1842,6 +1842,16 @@ Acceptance:
   The wiring after the birth is unchanged. Releasing to unblock the
   loop is not the fix: the permission to release intermediate
   versions was for this migration only.
+- Willem, 2026-10-06: the loop's split comes forward. After #1149,
+  `fm ci.e2e --extension=<name>` (the local loop plan's phase 3b,
+  carried in phase 14) is built first, on today's devenv, before the
+  rest of 9b: it births a project that lists the base and the
+  extension under test, with what that extension requires, from this
+  checkout's wheels, runs its checks on the runner and stops. Each
+  remaining tool extension is then proved in isolation in minutes, not
+  in a develop pass. The lodge (phase 13) replaces the environment
+  under it later. The reason this refactor began: testing an extension
+  in isolation on the local loop, quickly.
 - Willem, 2026-10-06: `fm new.project [folder]` births a project in
   an empty or new folder, the current one by default, named after the
   folder unless `--name` says otherwise; a folder that holds a project,

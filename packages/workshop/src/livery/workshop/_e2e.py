@@ -704,43 +704,58 @@ def _index_page(directory: Path, targets: list[str]) -> None:
     )
 
 
-def _dev_index(kind: str) -> str:
-    """Build this pass's dev wheels as a local index; its URL, empty when none changed.
+def checkout_index(root: Path, folder: Path) -> str:
+    """Build what a newborn installs from *root* as a local index at *folder*; its URL.
 
-    The birth locks the newborn before the pass publishes anything,
-    and every extension the birth lists is in that first lock,
-    released or not. So the dev act runs here first with no index to
-    publish to, which leaves each changed member's wheel in its
-    ``dist/``, and [livery.workshop._e2e.write_dev_index][] lays the
-    wheels out under the lane's home. The birth names the index in
-    ``UV_INDEX``: uv takes a package from the first index that has it
-    and admits a prerelease where that index holds nothing else, so
-    the newborn resolves the dev wheels, and every other package from
-    PyPI. A folder named in ``UV_FIND_LINKS`` would not do: it only
-    adds candidates, and a stable release on PyPI wins over a dev
-    wheel (measured).
+    The members are [livery.workshop._e2e.dev_members][]: the workshop,
+    what it depends on, and the extensions a birth lists. Each is built
+    with ``uv build`` at the version its manifest declares, and
+    [livery.workshop._e2e.write_dev_index][] lays the wheels out. Named
+    first in ``UV_INDEX``, the index serves every distribution it holds,
+    whatever its version, because uv takes a package from the first
+    index that has it; every other package comes from the next.
+    ``UV_FIND_LINKS`` would not do: a folder named there only adds
+    candidates, and a stable release on PyPI beats a dev wheel
+    (measured). This is how a workspace installs this checkout's code
+    before a release, never the dev act, which on a main-family branch
+    is the release train.
     """
-    from livery.footman.api import run
-    from livery.workshop._dev_release import INDEX_VAR
+    import tempfile
+
+    import livery.toolroom.tools.api as toolroom
+    from livery.workshop._packages import discover_packages
+
+    members = set(dev_members(root))
+    paths = [p.path for p in discover_packages(root) if p.member in members]
+    with tempfile.TemporaryDirectory() as scratch:
+        built = Path(scratch)
+        for path in paths:
+            toolroom.uv.opts(cwd=root, recorded=False)(
+                "build", "--wheel", "--out-dir", str(built), path
+            )
+        write_dev_index(folder, sorted(built.glob("*.whl")))
+    return folder.as_uri()
+
+
+def _dev_index(kind: str) -> str:
+    """This checkout's index under the lane's home, for the birth to read; its URL.
+
+    The birth locks the newborn before the pass publishes anything, and
+    every extension the birth lists is in that first lock, released or
+    not: [livery.workshop._e2e.checkout_index][] builds them.
+    """
     from livery.workshop._extensions import workspace_root
-    from livery.workshop._git_ops import GitOps
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    git = GitOps(root)
-    changed, _released = _dev_split(root, git)
-    if not changed:
-        return ""
-    # No index to publish to, so the act builds and stops there.
-    built = {key: value for key, value in os.environ.items() if key != INDEX_VAR}
-    run([footman.prog(), "--yes", "workflow.release", *changed], cwd=root, env=built)
-    wheels = _dev_wheels(root, git.head_sha(), tuple(changed))
-    folder = write_dev_index(
-        _loop_home(kind).parent / f"{kind}-dev-index", wheels.values()
+    folder = _loop_home(kind).parent / f"{kind}-dev-index"
+    url = checkout_index(root, folder)
+    held = sum(1 for entry in folder.iterdir() if entry.is_dir())
+    print(
+        f"  checkout index: {held} distributions at {folder}, read first by the birth"
     )
-    print(f"  dev wheels: {len(wheels)} built into {folder}, the index the birth reads")
-    return folder.as_uri()
+    return url
 
 
 def _publish_dev_wheels(kind: str) -> dict[str, str]:
@@ -2793,8 +2808,8 @@ if _WORKSHOP_TESTS.is_dir():
         ``release`` (develop and the release act), ``points`` (the
         nightly, the dispatched gate, the contributed point) and
         ``all``; a scenario's needs run first, once. ``birth`` builds
-        the workshop's dev wheels, and those of the extensions a birth
-        lists, into a local index, births or resumes the loop's
+        this checkout's workshop, its dependencies and the extensions a
+        birth lists into a local index, births or resumes the loop's
         workspace through ``fm new.project`` from that index (so an
         extension the birth lists needs no release), with its
         repository, protection and setup pull request, provisions the

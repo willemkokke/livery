@@ -22,19 +22,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The distributions the newborn takes from this checkout instead of
-#: the index, by their directory under `packages/`: the workshop,
-#: everything of ours it installs, and the extensions a birth lists.
-_LOCAL = {
-    "livery-workshop": "workshop",
-    "livery-footman": "footman",
-    "livery-toolroom": "toolroom",
-    "livery-toolroom-store": "toolroom-store",
-    "livery-strongroom": "strongroom",
-    "livery-forge": "forge",
-    "livery-extensions-ruff": "extensions/ruff",
-}
-
 _END_TABLES = "# -- workshop: end tables --"
 
 
@@ -48,36 +35,26 @@ def _run(cmd: list[str], cwd: Path, env: dict[str, str]) -> str:
 
 
 def _point_at_this_checkout(project: Path) -> None:
-    """Add path sources for our distributions to the newborn's own region."""
+    """Add path sources for our distributions to the newborn's own region.
+
+    The same members the checkout index builds
+    ([livery.workshop._e2e.dev_members][]), as editable paths.
+    """
+    from livery.workshop._e2e import dev_members
+    from livery.workshop._packages import discover_packages
+
+    ours = set(dev_members(ROOT))
     pyproject = project / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     assert _END_TABLES in text, "the composed project file carries no tables region"
     sources = "".join(
-        f"[tool.uv.sources.{dist}]\n"
-        f'path = "{(ROOT / "packages" / path).as_posix()}"\n'
+        f"[tool.uv.sources.{package.name}]\n"
+        f'path = "{package.directory.as_posix()}"\n'
         "editable = true\n"
-        for dist, path in _LOCAL.items()
+        for package in discover_packages(ROOT)
+        if package.member in ours
     )
     pyproject.write_text(text.replace(_END_TABLES, sources + _END_TABLES), "utf-8")
-
-
-def _this_checkout_index(tmp_path: Path, env: dict[str, str]) -> str:
-    """This checkout's distributions as a local index; its URL, for `UV_INDEX`.
-
-    Plain wheels at their manifest versions: listed first, the index
-    serves every distribution it holds, and the index's other packages
-    come from PyPI.
-    """
-    from livery.workshop._e2e import write_dev_index
-
-    built = tmp_path / "wheels"
-    for path in _LOCAL.values():
-        _run(
-            ["uv", "build", "--wheel", "--out-dir", str(built), f"packages/{path}"],
-            ROOT,
-            env,
-        )
-    return write_dev_index(tmp_path / "index", sorted(built.glob("*.whl"))).as_uri()
 
 
 def test_a_born_project_is_green(tmp_path: Path) -> None:
@@ -86,6 +63,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
             "set WORKSHOP_CONFORMANCE_DRIVE=1 to run the birth: it locks and"
             " syncs a scratch workspace over the network"
         )
+    from livery.workshop._e2e import checkout_index
+
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
     # Its own conan home: a sync registers the native member as an
     # editable, which in the machine's home would outlive this test.
@@ -102,7 +81,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     born = {
         **env,
         "FOOTMAN_CONFIG_DIR": str(bridge),
-        "UV_INDEX": _this_checkout_index(tmp_path, env),
+        "UV_INDEX": checkout_index(ROOT, tmp_path / "checkout-index"),
     }
     _run(
         [

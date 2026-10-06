@@ -658,19 +658,6 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     assert ("dev wheel(s) of the dirty tree dropped" in out) is not clean
 
 
-def test_no_dev_index_when_every_member_pins_its_release(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
-    )
-    monkeypatch.setattr(_e2e, "_dev_split", lambda root, git: ([], {"forge": "0.3.0"}))
-    ran: list[object] = []
-    monkeypatch.setattr("livery.footman.api.run", lambda *a, **k: ran.append(a))
-    assert _e2e._dev_index("gitea") == ""
-    assert ran == []
-
-
 def test_the_dev_index_lays_out_each_project_with_its_wheels(tmp_path: Path) -> None:
     built = tmp_path / "dist"
     built.mkdir()
@@ -719,41 +706,36 @@ def test_the_birth_reads_the_dev_index_before_any_other(
     assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
 
 
-def test_the_dev_index_is_built_without_publishing(
+def test_the_checkout_index_builds_what_a_newborn_installs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from types import SimpleNamespace
+    import livery.toolroom.tools.api as toolroom
 
-    monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
-    )
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps",
-        lambda root: SimpleNamespace(head_sha=lambda: HEAD),
-    )
-    monkeypatch.setattr(
-        _e2e, "_dev_split", lambda root, git: (["workshop", "extensions/ruff"], {})
-    )
-    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path / "home" / kind)
-    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "http://registry.example/pypi")
-    calls: list[tuple[list[str], dict[str, str]]] = []
+    _member(tmp_path, "workshop", "toolroom")
+    _member(tmp_path, "toolroom")
+    _member(tmp_path, "unlisted")
+    built: list[str] = []
 
-    def _run(argv: list[str], *, env: dict[str, str], **kwargs: object) -> None:
-        calls.append((argv, dict(env)))
+    class _Uv:
+        def opts(self, **_: object) -> _Uv:
+            return self
 
-    monkeypatch.setattr("livery.footman.api.run", _run)
-    wheel = tmp_path / "livery_workshop-0.6.0.dev1-py3-none-any.whl"
-    wheel.write_bytes(b"wheel")
-    monkeypatch.setattr(
-        _e2e, "_dev_wheels", lambda root, head, members: {"livery-workshop": wheel}
-    )
-    url = _e2e._dev_index("gitea")
-    ((argv, env),) = calls
-    assert argv[-3:] == ["workflow.release", "workshop", "extensions/ruff"]
-    assert "PYTHON_PUBLISH_INDEX" not in env
-    folder = tmp_path / "home" / "gitea-dev-index"
-    assert url == folder.as_uri()
-    assert (folder / "livery-workshop" / wheel.name).is_file()
+        def __call__(self, *args: str) -> None:
+            out, path = Path(args[3]), args[4]
+            built.append(path)
+            name = path.rsplit("/", 1)[-1].replace("-", "_")
+            (out / f"livery_{name}-0.1.0-py3-none-any.whl").write_bytes(b"wheel")
+
+    monkeypatch.setattr(toolroom, "uv", _Uv())
+    folder = tmp_path / "index"
+    assert _e2e.checkout_index(tmp_path, folder) == folder.as_uri()
+    # The workshop and its closure, not a member nothing installs.
+    assert built == ["packages/toolroom", "packages/workshop"]
+    assert sorted(entry.name for entry in folder.iterdir()) == [
+        "index.html",
+        "livery-toolroom",
+        "livery-workshop",
+    ]
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
