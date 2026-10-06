@@ -2,9 +2,10 @@
 
 ``typecheck.pyrefly`` checks what ``pyrefly.toml`` includes whatever a
 run reaches: a run costs seconds, and the file pins the platforms,
-every one at once. A body resolves its runner on this module when it
-runs, so a test that replaces `run_typecheck` here sees its replacement
-called.
+every one at once. The check hands pyrefly the words after ``--`` on
+its own verb (``fm typecheck.pyrefly -- --summarize-errors``). A body
+resolves its runner on this module when it runs, so a test that
+replaces `run_typecheck` here sees its replacement called.
 """
 
 from __future__ import annotations
@@ -19,14 +20,16 @@ KINDS = ("python",)
 SUFFIXES = (".py", ".pyi")
 
 
-def run_typecheck() -> None:
-    """Type-check the configured whole with pyrefly; its exit code is the verdict."""
-    tools.pyrefly("check")
+def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
+    """Type-check the configured whole with pyrefly; its exit code is the verdict.
+
+    *arguments* go to ``pyrefly check``.
+    """
+    tools.pyrefly("check", *arguments)
 
 
 def _typecheck_run(ctx: GateContext) -> None:
-    del ctx
-    run_typecheck()
+    run_typecheck(ctx.arguments)
 
 
 CHECKS = (
@@ -36,6 +39,7 @@ CHECKS = (
         _typecheck_run,
         kinds=KINDS,
         tools=("pyrefly",),
+        arguments=True,
         claims=tuple(
             Claim(category, suffixes=SUFFIXES)
             for category in ("source", "test", "test-support")

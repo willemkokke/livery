@@ -158,6 +158,16 @@ def test_a_finding_refuses_with_clang_tidy_s_own_words(
         _checks.run_lint(package, (source,), database)
     assert len(calls) == 1
     _checks.run_lint(package, (), database)
+    # The words after -- on the check's own verb go before the files.
+    with answers({("clang-tidy",): Result(0)}) as calls:
+        _checks.run_lint(package, (source,), database, ("--checks=-*,bugprone-*",))
+    assert list(calls[0].argv[1:]) == [
+        "-p",
+        str(database.parent),
+        "--extra",
+        "--checks=-*,bugprone-*",
+        str(source),
+    ]
 
 
 # The check: the package's files against the database its kind's build writes.
@@ -167,10 +177,17 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls: list[tuple[tuple[str, ...], Path]] = []
+    handed: list[tuple[str, ...]] = []
 
-    def watched(package: Package, files: tuple[Path, ...], database: Path) -> None:
+    def watched(
+        package: Package,
+        files: tuple[Path, ...],
+        database: Path,
+        arguments: tuple[str, ...],
+    ) -> None:
         names = tuple(p.relative_to(package.directory).as_posix() for p in files)
         calls.append((names, database))
+        handed.append(arguments)
 
     monkeypatch.setattr(_checks, "run_lint", watched)
     package = _native(tmp_path)
@@ -184,3 +201,11 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
     database.write_text("[]")
     record.run(ctx)
     assert calls == [(("src/native.cpp",), database)]
+    # The words after -- on the check's own verb reach the lint.
+    words = ("--checks=-*,bugprone-*",)
+    record.run(
+        GateContext(
+            root=tmp_path, packages=(package,), package=package, arguments=words
+        )
+    )
+    assert handed == [(), words]

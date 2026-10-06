@@ -60,11 +60,15 @@ def _flags(group: Group, key: str) -> set[str]:
 
     The annotations resolve in the verb's module the way footman reads
     them: a flag whose type does not resolve reaches the verb as text.
+    The paths carry their help text, which the verb's help prints.
     """
     task = group.tasks[key]
     parameters = inspect.signature(task).parameters.values()
     assert any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in parameters)
+    extras = typing.get_type_hints(inspect.unwrap(task), include_extras=True)
+    assert extras["paths"] == _checks._Paths  # pyright: ignore[reportPrivateUsage]
     hints = typing.get_type_hints(inspect.unwrap(task))
+
     flags = {p.name for p in parameters if p.kind is inspect.Parameter.KEYWORD_ONLY}
     for flag in flags:
         assert hints[flag] is (str if flag == "point" else bool), flag
@@ -148,11 +152,13 @@ def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
         _quality.run_checks(("layering.imports",), safe_fix=True)
 
 
-def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
+def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Checking nothing there would pass: a typo, or pytest's own
-    # arguments after --, which a verb receives as paths.
+    # Checking nothing there would pass: a typo, or a tool's words given
+    # as paths. The refusal says where those words go: after --, on a
+    # check's own verb.
+
     (tmp_path / "workshop.toml").write_text("")
     (tmp_path / "tasks.py").write_text("x = 1\n")
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
@@ -161,7 +167,7 @@ def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
     with pytest.raises(
         _FAILURES,
         match=r"not a file or directory in the workspace: -k, slow\. Name files or"
-        r" directories; the checks pass nothing through to a tool\.",
+        r" directories; a check's own verb hands its tool the words after --",
     ):
         _quality.run_checks(("test.ctest",), ("-k", "slow"))
     outside = str(tmp_path.parent)
@@ -171,6 +177,89 @@ def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
         _quality.check("tasks.py", "gone.py", outside)
     # The post-edit hook names files an edit may already have deleted.
     _quality.fix_files(("gone.py",))
+
+
+# The words after --: a check's own verb hands them to its tool; the
+# role's verb, a check that wraps no tool and the gate refuse them.
+
+
+def test_the_words_after_the_dashes_split_off_the_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # footman hands the variadic parameter the words after -- as well,
+    # last, and names them through passthrough().
+    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-k", "a.py"])
+    assert _checks.split_arguments(("a.py", "-k", "a.py")) == (
+        ("a.py",),
+        ("-k", "a.py"),
+    )
+    monkeypatch.setattr("livery.footman.api.passthrough", lambda: [])
+    assert _checks.split_arguments(("a.py",)) == (("a.py",), ())
+
+
+def test_only_a_checks_own_verb_hands_its_tool_the_words_after_the_dashes(
+    empty: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = []
+
+    def run_checks(
+        names: tuple[str, ...], paths: tuple[str, ...], **kwargs: object
+    ) -> None:
+        arguments = kwargs["arguments"]
+        assert isinstance(arguments, tuple)
+        calls.append((names, paths, arguments))  # pyright: ignore[reportUnknownArgumentType]
+
+    monkeypatch.setattr(_quality, "run_checks", run_checks)
+    register_check(CheckRecord("acme", "test", _idle, arguments=True))
+    register_check(CheckRecord("plain", "test", _idle))
+    root = Group("root")
+    generate_verbs(root)
+    test = root.groups["test"]
+    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-k", "slow"])
+    # The refusals first: the role's verb runs several checks, and a
+    # check that wraps no tool takes none; neither runs anything.
+    with pytest.raises(
+        _FAILURES,
+        match=r"test` runs several checks, and the words after -- are one"
+        r" tool's; give them to the check's own verb: .* test\.acme$",
+    ):
+        inspect.unwrap(test.tasks["default"])("-k", "slow")
+    with pytest.raises(
+        _FAILURES,
+        match=re.escape("test.plain wraps no tool, so it takes no arguments after --"),
+    ):
+        inspect.unwrap(test.tasks["plain"])("-k", "slow")
+    assert calls == []
+    # The check's own verb runs it over its paths, the words its tool's.
+    inspect.unwrap(test.tasks["acme"])("tasks.py", "-k", "slow")
+    assert calls == [(("test.acme",), ("tasks.py",), ("-k", "slow"))]
+    assert "the words after -- go to its tool" in (
+        inspect.unwrap(test.tasks["acme"]).__doc__ or ""
+    )
+
+
+def test_the_words_after_the_dashes_reach_the_checks_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[str, ...]] = []
+    monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(_quality, "_packages", lambda: ())
+    monkeypatch.setattr(
+        _quality, "walk", lambda ctx, **kwargs: seen.append(ctx.arguments)
+    )
+    monkeypatch.delenv("CI", raising=False)
+    _quality.run_checks(("test.acme",), arguments=("-k", "slow"))
+    assert seen == [("-k", "slow")]
+
+
+def test_the_gate_takes_no_words_after_the_dashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-x"])
+    with pytest.raises(
+        _FAILURES, match=r"check` runs several checks, and the words after --"
+    ):
+        _quality.check("-x")
 
 
 # A further role: the check answers under it, and leaves with it.
@@ -244,10 +333,15 @@ def test_a_verb_runs_its_checks_through_the_walk(
         (
             ("probe.alpha", "probe.beta"),
             ("a.py",),
-            {"fix": True, "safe_fix": False, "point": ""},
+            {"fix": True, "safe_fix": False, "point": "", "arguments": ()},
         ),
-        (("probe.beta",), (), {"fix": False, "safe_fix": False, "point": "nightly"}),
+        (
+            ("probe.beta",),
+            (),
+            {"fix": False, "safe_fix": False, "point": "nightly", "arguments": ()},
+        ),
     ]
+
     # The role's verb reads its checks when it runs, so a check
     # registered after the generation runs under it too.
     register_check(CheckRecord("delta", "probe", _idle))

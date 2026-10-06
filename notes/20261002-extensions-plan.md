@@ -2069,6 +2069,17 @@ Acceptance:
 - 2026-10-06, 9b9: the dev group asks for `pytest>=9.0`, the first
   pytest that reads `pytest.toml`, and for `coverage>=7.13` without
   the `toml` extra, since coverage reads `.coveragerc`.
+- Willem, 2026-10-06, the open item on verb arguments (the extensible
+  gate plan's open item 29), #1191: a check's own verb hands the tool
+  it wraps the words after `--` (`fm test.pytest packages/strongroom
+  -- -k slow`), and the words before `--` stay paths. A role verb and
+  `fm check` run several tools, so they refuse words after `--` and
+  name the checks' own verbs that take them; a check that wraps no
+  tool refuses them too. A check takes them by `CheckRecord.arguments`
+  and reads them from `GateContext.arguments`: every tool extension's
+  checks do, and so do the cpp kind's `build.configure`,
+  `build.compile` and `test.ctest`. pytest's serial call puts `-n 0`
+  after them, so they cannot spread a suite that is not worker-safe.
 
 ## Open
 
@@ -2086,17 +2097,14 @@ Acceptance:
    open items 22 and 23). Owner: Willem, with the playground's plan.
 6. **The conformance loop's runner** (#930, #931; the extensible gate
    plan's open item 25), now the lodge's. Owner: phase 13.
-7. **Verb arguments passed through to a tool**
-   (`fm test.pytest <paths> -- <arguments>`; the extensible gate
-   plan's open item 29). Owner: Willem.
-8. **The lodge's runner store**: the machine's own or its own
+7. **The lodge's runner store**: the machine's own or its own
    directory (the local loop plan's open item 3); and Gitea's version
    in host mode against docker mode (its open item 6). Owner:
    phase 13.
-9. **The CycloneDX rendering of the release rows** (the toolchain
+8. **The CycloneDX rendering of the release rows** (the toolchain
    plan's open item 5). Owner: Willem, after phase 12.
-10. **The pwsh spelling of the entry** (the extensible gate plan's
-    open item 5). Owner: Willem.
-11. **A CI leg proving macos-x64** on `macos-15-intel`, a supported
+9. **The pwsh spelling of the entry** (the extensible gate plan's
+   open item 5). Owner: Willem.
+10. **A CI leg proving macos-x64** on `macos-15-intel`, a supported
     host no run proves until then. Owner: Willem, before GitHub
     retires the image.

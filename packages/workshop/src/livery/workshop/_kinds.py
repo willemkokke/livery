@@ -189,12 +189,14 @@ class Backend(Protocol):
         root: Path,
         *,
         selection: tuple[str, ...] = (),
+        arguments: tuple[str, ...] = (),
     ) -> None:
         """Run the kind's tests of *package*; a refusal is the verdict.
 
         Every test, or with *selection* the tests of the named files
         alone, relative to the package. A selection the kind cannot
         map to a test is a refusal, never a silent empty run.
+        *arguments* go to the kind's test runner after its own.
         """
         ...
 
@@ -279,8 +281,9 @@ class KindRecord:
             says by name. A child kind takes the nearest ancestor's.
         examples: How the kind runs a package's documentation
             examples, the files under ``docs/examples/``, given the
-            package, the workspace root and the named example files,
-            empty for all of them; None for a kind that runs
+            package, the workspace root, the named example files (empty
+            for all of them) and the arguments for its tool; None for a
+            kind that runs
             none, which the examples check says by name. A child kind
             takes the nearest ancestor's.
         suites: How the kind runs the test suites of several packages
@@ -309,7 +312,9 @@ class KindRecord:
     wheel_identity: str = "pure"
     tests_need_build: bool = False
     extractor: Extractor | None = None
-    examples: Callable[[Package, Path, tuple[str, ...]], None] | None = None
+    examples: (
+        Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
+    ) = None
     suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
@@ -471,12 +476,12 @@ def kind_extractor(kind_name: str) -> Extractor | None:
 
 def kind_examples(
     kind_name: str,
-) -> Callable[[Package, Path, tuple[str, ...]], None] | None:
+) -> Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None:
     """The examples runner *kind_name* uses: its own, else its nearest ancestor's.
 
-    The runner takes the package, the workspace root and the example
-    files a run names, empty for all of them. None for a kind that
-    runs no examples.
+    The runner takes the package, the workspace root, the example
+    files a run names (empty for all of them) and the arguments for its
+    tool. None for a kind that runs no examples.
     """
     for record in reversed(kind_chain(kind_name)):
         if record.examples is not None:

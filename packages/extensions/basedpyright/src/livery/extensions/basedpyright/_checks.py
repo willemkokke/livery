@@ -9,12 +9,15 @@ reads ``.`` as every file under the root and ignores the configured
 ([livery.workshop.api.scoped_packages][]) and verifies the modules each
 one declares public ([livery.workshop.api.public_modules][]); it
 registers only when the workspace lists ``basedpyright[typecomplete]``.
-A body resolves its runner on this module when it runs, so a test that
-replaces `run_typecheck` or `run_typecomplete` here sees its
-replacement called.
+Each check hands basedpyright the words after ``--`` on its own verb
+(``fm typecheck.basedpyright -- --level error``). A body resolves its
+runner on this module when it runs, so a test that replaces
+`run_typecheck` or `run_typecomplete` here sees its replacement called.
 """
 
 from __future__ import annotations
+
+from functools import partial
 
 import livery.toolroom.tools.api as tools
 from livery.workshop.api import (
@@ -51,38 +54,40 @@ SETTINGS = """\
 """
 
 
-def run_typecheck(paths: tuple[str, ...] = ()) -> None:
+def run_typecheck(paths: tuple[str, ...] = (), arguments: tuple[str, ...] = ()) -> None:
     """Type-check *paths* with basedpyright, its warnings gating as errors.
 
     No path checks the configured whole: what ``pyrightconfig.json``
-    includes, less what it excludes.
+    includes, less what it excludes. *arguments* go to basedpyright
+    before the paths.
     """
-    tools.basedpyright(*paths, warnings=True)
+    tools.basedpyright(*arguments, *paths, warnings=True)
 
 
-def run_typecomplete(modules: tuple[str, ...]) -> None:
+def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) -> None:
     """Verify that each of *modules* is 100% type-complete.
 
     Every public symbol needs a fully known type; the exit code is the
     verdict. The verifier reads the ``py.typed`` at the distribution's
     root and follows what a module declares public, so a public package
     a namespace root's ``api`` declares is verified through it.
+    *arguments* go to basedpyright in each module's call.
     """
     for module in modules:
-        tools.basedpyright(verifytypes=module, ignoreexternal=True)
+        tools.basedpyright(*arguments, verifytypes=module, ignoreexternal=True)
 
 
 def _typecheck_run(ctx: GateContext) -> None:
     chosen = scoped_paths(ctx, "typecheck.basedpyright")
     if chosen == WHOLE:
-        run_typecheck()
+        run_typecheck(arguments=ctx.arguments)
         return
-    run_batched(chosen, run_typecheck)
+    run_batched(chosen, partial(run_typecheck, arguments=ctx.arguments))
 
 
 def _typecomplete_run(ctx: GateContext) -> None:
     for package in scoped_packages(ctx, "typecomplete.basedpyright"):
-        run_typecomplete(public_modules(package))
+        run_typecomplete(public_modules(package), ctx.arguments)
 
 
 CHECKS = (
@@ -93,6 +98,7 @@ CHECKS = (
         narrowing=PATHS,
         kinds=KINDS,
         tools=("basedpyright",),
+        arguments=True,
         fragments=(Fragment(".vscode/settings.json", SETTINGS),),
         editor_extension=EDITOR,
         claims=tuple(
@@ -107,6 +113,7 @@ CHECKS = (
         narrowing=PACKAGES,
         kinds=KINDS,
         tools=("basedpyright",),
+        arguments=True,
         claims=(Claim("source", suffixes=SUFFIXES),),
         listed_with=TYPECOMPLETE,
     ),

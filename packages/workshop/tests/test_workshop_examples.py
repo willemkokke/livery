@@ -157,6 +157,9 @@ def test_the_runner_says_so_without_examples_and_names_a_red_exit(
     assert fake.calls[-1][0] == (ok,)
     _python.run_examples(package, tmp_path, (ok, conftest))
     assert fake.calls[-1][0] == ("packages/x/docs/examples",)
+    # The words after -- on the check's own verb follow the targets.
+    _python.run_examples(package, tmp_path, (ok,), ("-x",))
+    assert fake.calls[-1] == ((ok, "-x"), {})
 
 
 def test_the_kind_names_its_runner_and_a_child_inherits_it() -> None:

@@ -18,6 +18,8 @@ gate. It reads the files its claims reach in the python packages: their
 sources, tests and test support. A run that reaches every package checks
 what the configuration includes, the root's `tasks.py` and tests among it;
 a run that reaches some checks their `src` and `tests` directories.
+`fm typecheck.basedpyright -- --level error` hands basedpyright the words
+after `--`.
 
 ## Type completeness
 

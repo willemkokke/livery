@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import inspect
 import weakref
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Iterable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -96,6 +96,9 @@ class GateContext:
             inputs judges ([livery.workshop._influence.select][]); None
             when the run knows nothing of it, and then each judges
             everything.
+        arguments: The words after ``--`` on a check's own verb, which
+            a check that takes them (``CheckRecord.arguments``) hands
+            its tool; empty in every other run.
     """
 
     root: Path
@@ -111,6 +114,7 @@ class GateContext:
     package: Package | None = None
     selection: tuple[str, ...] = ()
     changes: Changes | None = None
+    arguments: tuple[str, ...] = ()
 
     @property
     def scoped(self) -> bool:
@@ -259,6 +263,12 @@ class CheckRecord:
             ``basedpyright[typecomplete]``; empty for a check that
             registers whenever its extension is listed. The extension
             declares the option in its ``OPTIONS``.
+        arguments: Whether the check hands the tool it wraps the words
+            after ``--`` on its own verb (``fm test.pytest -- -k name``),
+            which it reads from [livery.workshop.api.GateContext][]'s
+            ``arguments``. A check that wraps no tool leaves it off, and
+            its verb refuses them.
+
     """
 
     tool: str
@@ -283,6 +293,7 @@ class CheckRecord:
     roles: tuple[str, ...] = ()
     flags: tuple[str, ...] = ()
     listed_with: str = ""
+    arguments: bool = False
 
     @property
     def name(self) -> str:
@@ -901,23 +912,46 @@ def verb_tree() -> dict[str, dict[str, CheckRecord]]:
 _MADE: weakref.WeakSet[Callable[..., None]] = weakref.WeakSet()
 
 
+def split_arguments(paths: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """A verb's positional words as its paths, then the words after ``--``.
+
+    footman hands a task's variadic parameter the words after ``--``
+    too, last, and names them through ``passthrough()``.
+    """
+    from livery.footman.api import passthrough
+
+    after = tuple(passthrough())
+    if after and paths[-len(after) :] == after:
+        return paths[: -len(after)], after
+    return paths, after
+
+
 def _run_named(
     names: tuple[str, ...],
-    paths: tuple[str, ...],
+    words: tuple[str, ...],
     *,
+    refusal: str,
     fix: bool = False,
     safe_fix: bool = False,
     point: str = "",
 ) -> None:
     from livery.workshop import _quality
 
-    _quality.run_checks(names, paths, fix=fix, safe_fix=safe_fix, point=point)
+    paths, arguments = split_arguments(words)
+    if arguments and refusal:
+        fail(refusal)
+    _quality.run_checks(
+        names, paths, fix=fix, safe_fix=safe_fix, point=point, arguments=arguments
+    )
 
 
-#: A generated verb's flags, each with its help text. They live at
+#: A generated verb's paths and flags, each with its help text. They live at
 #: module level because footman reads a task's annotations in its
 #: module's namespace: a name local to the function making the verb
 #: does not resolve there, and the flag's value would arrive as text.
+_Paths = Annotated[
+    str, doc("the files or directories to check; the workspace when none")
+]
 _Fix = Annotated[bool, doc("rewrite what the checks can, then judge the rest")]
 _SafeFix = Annotated[bool, doc("fix, removing no code: safe for an edit in flight")]
 _Point = Annotated[
@@ -926,27 +960,39 @@ _Point = Annotated[
 
 
 def _verb(
-    select: Callable[[], tuple[str, ...]], *, fixes: bool, reads_point: bool, what: str
+    select: Callable[[], tuple[str, ...]],
+    *,
+    fixes: bool,
+    reads_point: bool,
+    what: str,
+    refusal: str = "",
 ) -> Callable[..., None]:
     """A verb over the checks *select* names, offering exactly the flags they read.
 
     ``--fix`` and ``--safe-fix`` where a check can fix, ``--point``
     where one reads the point; the paths narrow the run to those files.
+    The words after ``--`` reach the check's tool, unless *refusal*
+    says why this verb takes none.
     """
 
     def with_fix_and_point(
-        *paths: str, fix: _Fix = False, safe_fix: _SafeFix = False, point: _Point = ""
+        *paths: _Paths,
+        fix: _Fix = False,
+        safe_fix: _SafeFix = False,
+        point: _Point = "",
     ) -> None:
-        _run_named(select(), paths, fix=fix, safe_fix=safe_fix, point=point)
+        _run_named(
+            select(), paths, refusal=refusal, fix=fix, safe_fix=safe_fix, point=point
+        )
 
-    def with_fix(*paths: str, fix: _Fix = False, safe_fix: _SafeFix = False) -> None:
-        _run_named(select(), paths, fix=fix, safe_fix=safe_fix)
+    def with_fix(*paths: _Paths, fix: _Fix = False, safe_fix: _SafeFix = False) -> None:
+        _run_named(select(), paths, refusal=refusal, fix=fix, safe_fix=safe_fix)
 
-    def with_point(*paths: str, point: _Point = "") -> None:
-        _run_named(select(), paths, point=point)
+    def with_point(*paths: _Paths, point: _Point = "") -> None:
+        _run_named(select(), paths, refusal=refusal, point=point)
 
-    def bare(*paths: str) -> None:
-        _run_named(select(), paths)
+    def bare(*paths: _Paths) -> None:
+        _run_named(select(), paths, refusal=refusal)
 
     chosen: Callable[..., None] = (
         with_fix_and_point
@@ -1068,6 +1114,7 @@ def generate_verbs(into: Group | None = None) -> None:
                     reads_point=any("point" in r.flags for r in tools.values()),
                     what=f"Run every {role} check, over the named paths or the"
                     " workspace.",
+                    refusal=arguments_refusal(f"{prog()} {role}", tools.values()),
                 ),
             )
         for tool, record in tools.items():
@@ -1081,9 +1128,32 @@ def generate_verbs(into: Group | None = None) -> None:
                     fixes=record.fix is not None,
                     reads_point="point" in record.flags,
                     what=f"Run the {record.name} check alone, over the named paths"
-                    " or the workspace.",
+                    " or the workspace"
+                    + (
+                        "; the words after -- go to its tool."
+                        if record.arguments
+                        else "."
+                    ),
+                    refusal=""
+                    if record.arguments
+                    else f"{record.name} wraps no tool, so it takes no arguments"
+                    " after --",
                 ),
             )
+
+
+def arguments_refusal(verb: str, records: Iterable[CheckRecord]) -> str:
+    """Why *verb*, which runs several checks, takes no arguments after ``--``.
+
+    The words after ``--`` are one tool's, so they go to a check's own
+    verb; the refusal names those of *records* that take them.
+    """
+    takers = [f"{prog()} {r.role}.{r.tool}" for r in records if r.arguments]
+    named = f": {', '.join(takers)}" if takers else ""
+    return (
+        f"`{verb}` runs several checks, and the words after -- are one tool's;"
+        f" give them to the check's own verb{named}"
+    )
 
 
 def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
@@ -1663,14 +1733,16 @@ def _register_builtin() -> None:
         return ctx.package
 
     def configure_run(ctx: GateContext) -> None:
-        _cpp_conan.configure(package_of(ctx))
+        _cpp_conan.configure(package_of(ctx), ctx.arguments)
 
     def build_run(ctx: GateContext) -> None:
-        _cpp_conan.compile(package_of(ctx))
+        _cpp_conan.compile(package_of(ctx), ctx.arguments)
 
     def ctest_run(ctx: GateContext) -> None:
         package = package_of(ctx)
-        _cpp_conan.test(package, ctx.root, selection=ctx.selection)
+        _cpp_conan.test(
+            package, ctx.root, selection=ctx.selection, arguments=ctx.arguments
+        )
 
     # The slots the extensions' records fill: the dev group's tool
     # lines, and the options of the test runner the python kind runs.
@@ -1719,6 +1791,7 @@ def _register_builtin() -> None:
             scope=PACKAGE,
             kinds=("cpp-conan",),
             tests_only=True,
+            arguments=True,
         ),
         CheckRecord(
             "compile",
@@ -1728,6 +1801,7 @@ def _register_builtin() -> None:
             kinds=("cpp-conan",),
             tests_only=True,
             after=("build.configure",),
+            arguments=True,
         ),
         CheckRecord(
             "ctest",
@@ -1738,6 +1812,7 @@ def _register_builtin() -> None:
             tests_only=True,
             after=("build.compile",),
             claims=(Claim("test", suffixes=cpp), Claim("source", suffixes=cpp)),
+            arguments=True,
         ),
     ):
         register_check(record)

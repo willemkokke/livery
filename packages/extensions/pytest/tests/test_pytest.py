@@ -225,6 +225,16 @@ def test_a_suite_that_is_not_worker_safe_runs_alone_under_one_worker(
         (("packages/one",), ()),
         (("packages/two",), ("-n", "0")),
     ]
+    # The words after -- on the check's own verb reach both calls, and
+    # the serial call's -n 0 comes after them, so they cannot undo it.
+    calls.clear()
+    words = ("-k", "name", "-n", "4")
+    ctx = GateContext(root=tmp_path, packages=(one, two), arguments=words)
+    registry.check_for("test.pytest").run(ctx)
+    assert [(_paths(call), call[0]) for call in calls] == [
+        (("packages/one",), words),
+        (("packages/two",), (*words, "-n", "0")),
+    ]
 
 
 def test_a_scoped_run_skips_a_suite_whose_examples_alone_changed(
@@ -276,10 +286,14 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     registered: None,
 ) -> None:
     ran: list[tuple[str, tuple[str, ...]]] = []
+    handed: list[tuple[str, ...]] = []
 
-    def runner(package: Package, root: Path, files: tuple[str, ...]) -> None:
+    def runner(
+        package: Package, root: Path, files: tuple[str, ...], arguments: tuple[str, ...]
+    ) -> None:
         assert root == tmp_path
         ran.append((package.path, files))
+        handed.append(arguments)
 
     monkeypatch.setattr(_checks, "kind_examples", lambda kind: runner)
     one = _member(tmp_path, "one")
@@ -311,7 +325,12 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     )
     record.run(ctx)
     assert ran == [("packages/one", (str(tmp_path / example),))]
+    # The words after -- on the check's own verb reach the runner.
+    assert set(handed) == {()}
+    record.run(GateContext(root=tmp_path, packages=(one,), arguments=("-x",)))
+    assert handed[-1] == ("-x",)
     monkeypatch.setattr(_checks, "kind_examples", lambda kind: None)
+
     record.run(GateContext(root=tmp_path, packages=(one,)))
     assert "examples: packages/one skips (python kind runs none)" in (
         capsys.readouterr().out

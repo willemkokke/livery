@@ -4,9 +4,10 @@
 claims reach in the package, or the files a run names
 ([livery.workshop.api.scoped_files][]). The style is the package's own
 ``.clang-format``, which the extension writes and a file deeper in the
-tree may extend. A body resolves its runner on this module when it
-runs, so a test that replaces `run_format` here sees its replacement
-called.
+tree may extend. The check hands clang-format the words after ``--``
+on its own verb (``fm format.clang-format -- --verbose``). A body
+resolves its runner on this module when it runs, so a test that
+replaces `run_format` here sees its replacement called.
 """
 
 from __future__ import annotations
@@ -62,11 +63,18 @@ def unformatted(output: str) -> list[str]:
     return sorted(found)
 
 
-def run_format(package: Package, files: tuple[Path, ...], *, fix: bool) -> None:
+def run_format(
+    package: Package,
+    files: tuple[Path, ...],
+    *,
+    fix: bool,
+    arguments: tuple[str, ...] = (),
+) -> None:
     """Refuse a file of *package* clang-format would rewrite; *fix* rewrites it.
 
     The refusal names each file, because a person fixes files, not a
-    diff.
+    diff. *arguments* go to clang-format after its mode and before the
+    files.
 
     Raises:
         Failed: when a file is not formatted, or clang-format exits
@@ -74,10 +82,10 @@ def run_format(package: Package, files: tuple[Path, ...], *, fix: bool) -> None:
     """
     if not files:
         return
-    arguments = ["-i"] if fix else ["--dry-run", "--Werror"]
+    mode = ["-i"] if fix else ["--dry-run", "--Werror"]
     result = tools.clang_format.opts(
         cwd=package.directory, nofail=True, recorded=False
-    )(*arguments, *(str(path) for path in files))
+    )(*mode, *arguments, *(str(path) for path in files))
     if result.code == 0:
         return
     named = ", ".join(unformatted(result.stderr + result.stdout)) or "no file named"
@@ -93,11 +101,13 @@ def _package(ctx: GateContext) -> Package:
 
 
 def _format_run(ctx: GateContext) -> None:
-    run_format(_package(ctx), scoped_files(ctx, "format.clang-format"), fix=False)
+    files = scoped_files(ctx, "format.clang-format")
+    run_format(_package(ctx), files, fix=False, arguments=ctx.arguments)
 
 
 def _format_fix(ctx: GateContext) -> None:
-    run_format(_package(ctx), scoped_files(ctx, "format.clang-format"), fix=True)
+    files = scoped_files(ctx, "format.clang-format")
+    run_format(_package(ctx), files, fix=True, arguments=ctx.arguments)
 
 
 CHECKS = (
@@ -109,6 +119,7 @@ CHECKS = (
         fix=_format_fix,
         kinds=KINDS,
         tools=("clang_format",),
+        arguments=True,
         fragments=tuple(Fragment(".clang-format", STYLE, kind=kind) for kind in KINDS),
         claims=tuple(
             Claim(category, suffixes=SUFFIXES)

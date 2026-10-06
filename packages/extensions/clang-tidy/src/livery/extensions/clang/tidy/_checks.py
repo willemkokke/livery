@@ -5,9 +5,11 @@ build is configured: the files its claims reach in the package, or the
 files a run names ([livery.workshop.api.scoped_files][]), against the
 compilation database the package's kind says its build writes
 ([livery.workshop.api.compile_commands][]). The checks are the
-package's own ``.clang-tidy``, which the extension writes. A body
-resolves its runner on this module when it runs, so a test that
-replaces `run_lint` here sees its replacement called.
+package's own ``.clang-tidy``, which the extension writes. The check
+hands clang-tidy the words after ``--`` on its own verb
+(``fm lint.clang-tidy -- --checks=-*,bugprone-*``). A body resolves its
+runner on this module when it runs, so a test that replaces `run_lint`
+here sees its replacement called.
 """
 
 from __future__ import annotations
@@ -94,24 +96,30 @@ def toolchain_arguments() -> tuple[list[str], str]:
     return arguments, ""
 
 
-def run_lint(package: Package, files: tuple[Path, ...], database: Path) -> None:
+def run_lint(
+    package: Package,
+    files: tuple[Path, ...],
+    database: Path,
+    arguments: tuple[str, ...] = (),
+) -> None:
     """Run clang-tidy over *files* of *package* against *database*; a finding refuses.
 
     A host that cannot give the standalone binary its headers skips,
-    saying why.
+    saying why. *arguments* go to clang-tidy before the files.
 
     Raises:
         Failed: when clang-tidy finds anything, with its own output.
     """
     if not files:
         return
-    arguments, reason = toolchain_arguments()
+    toolchain, reason = toolchain_arguments()
     if reason:
         print(f"  {package.name}: clang-tidy skips, {reason}")
         return
     result = tools.clang_tidy.opts(cwd=package.directory, nofail=True, recorded=False)(
         "-p",
         str(database.parent),
+        *toolchain,
         *arguments,
         *(str(path) for path in files),
     )
@@ -128,7 +136,7 @@ def _lint_run(ctx: GateContext) -> None:
     database = compile_commands(package)
     if database is None or not database.is_file():
         return
-    run_lint(package, scoped_files(ctx, "lint.clang-tidy"), database)
+    run_lint(package, scoped_files(ctx, "lint.clang-tidy"), database, ctx.arguments)
 
 
 CHECKS = (
@@ -140,6 +148,7 @@ CHECKS = (
         kinds=KINDS,
         after=("build.configure",),
         tools=("clang_tidy",),
+        arguments=True,
         fragments=tuple(
             Fragment(".clang-tidy", CHECKS_FILE, kind=kind) for kind in CARRIERS
         ),

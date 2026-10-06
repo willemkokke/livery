@@ -343,7 +343,43 @@ def test_the_native_checks_run_per_package_in_order(
     ]
 
 
+def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    handed: list[tuple[str, tuple[str, ...]]] = []
+
+    def configure(package: Package, arguments: tuple[str, ...]) -> None:
+        handed.append(("configure", arguments))
+
+    def compile_(package: Package, arguments: tuple[str, ...]) -> None:
+        handed.append(("compile", arguments))
+
+    def ctest(
+        package: Package,
+        root: Path,
+        *,
+        selection: tuple[str, ...],
+        arguments: tuple[str, ...],
+    ) -> None:
+        handed.append(("ctest", arguments))
+
+    monkeypatch.setattr(_cpp_conan, "configure", configure)
+    monkeypatch.setattr(_cpp_conan, "compile", compile_)
+    monkeypatch.setattr(_cpp_conan, "test", ctest)
+    native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    words = ("-j", "4")
+    ctx = GateContext(
+        root=tmp_path, packages=(native,), package=native, arguments=words
+    )
+    for name in ("build.configure", "build.compile", "test.ctest"):
+        record = check_for(name)
+        assert record.arguments
+        record.run(ctx)
+    assert handed == [("configure", words), ("compile", words), ("ctest", words)]
+
+
 def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
+
     from livery.workshop._env_tasks import missing_host_tools
 
     (tmp_path / "packages" / "member").mkdir(parents=True)
@@ -392,6 +428,7 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
             root: Path,
             *,
             selection: tuple[str, ...] = (),
+            arguments: tuple[str, ...] = (),
             pages: tuple[str, ...] = (),
         ) -> None:
             return None

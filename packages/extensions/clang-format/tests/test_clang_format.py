@@ -143,6 +143,23 @@ def test_a_source_out_of_style_is_named_and_the_fix_heals_it(tmp_path: Path) -> 
     _checks.run_format(package, (), fix=False)  # nothing to read: no call
 
 
+def test_the_words_after_the_dashes_reach_clang_format_after_its_mode(
+    tmp_path: Path,
+) -> None:
+    from livery.toolroom.tools.api import Result
+    from livery.toolroom.tools.testing import answers
+
+    package = _native(tmp_path)
+    source = package.directory / "src" / "native.cpp"
+    with answers({("clang-format",): Result(0)}) as calls:
+        _checks.run_format(package, (source,), fix=False, arguments=("--verbose",))
+        _checks.run_format(package, (source,), fix=True, arguments=("--verbose",))
+    assert [list(call.argv[1:]) for call in calls] == [
+        ["--dry-run", "--Werror", "--verbose", str(source)],
+        ["-i", "--verbose", str(source)],
+    ]
+
+
 # The check: the package's files its claims reach, or the files a run names.
 
 
@@ -150,11 +167,19 @@ def test_the_check_reads_the_package_s_sources_or_the_files_a_run_names(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls: list[tuple[tuple[str, ...], bool]] = []
+    handed: list[tuple[str, ...]] = []
 
-    def watched(package: Package, files: tuple[Path, ...], *, fix: bool) -> None:
+    def watched(
+        package: Package,
+        files: tuple[Path, ...],
+        *,
+        fix: bool,
+        arguments: tuple[str, ...],
+    ) -> None:
         calls.append(
             (tuple(p.relative_to(package.directory).as_posix() for p in files), fix)
         )
+        handed.append(arguments)
 
     monkeypatch.setattr(_checks, "run_format", watched)
     package = _native(tmp_path)
@@ -166,3 +191,11 @@ def test_the_check_reads_the_package_s_sources_or_the_files_a_run_names(
     record.fix(ctx)
     # The recipe is python's, never clang-format's.
     assert calls == [(("src/native.cpp",), False), (("src/native.cpp",), True)]
+    # The words after -- on the check's own verb reach both modes.
+    words = ("--verbose",)
+    ctx = GateContext(
+        root=tmp_path, packages=(package,), package=package, arguments=words
+    )
+    record.run(ctx)
+    record.fix(ctx)
+    assert handed == [(), (), words, words]
