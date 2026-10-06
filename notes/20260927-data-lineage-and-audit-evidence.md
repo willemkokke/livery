@@ -527,8 +527,13 @@ Three destinations, then: annotations in content, policy on the
 namespace, and a mutable index keyed by digest. Authorisation is an
 example of the second kind and not the first: it must be revocable, its
 principals are local to a deployment, and it is worthless unless
-something enforces it, so it lives beside the name where revocation is
-a compare-and-swap. Confidentiality in a content-addressed store comes
+something enforces it. What lives beside the name is the namespace's
+root of authority, who may mint grants for its subtree. Each use is
+authorised by the capability it carries, verified offline, and
+revocation is non-renewal, as articles 1 to 4 of the cryptography
+manifesto in `livery-planning` rule; a compare-and-swap revocation list
+fits only as an organisation's real-time add-on. Confidentiality in a
+content-addressed store comes
 from encryption, which the redesign already carries as ciphers with
 rotation at compaction.
 
@@ -778,6 +783,11 @@ worse.
   directly from Swift, and a linked runtime not ruled out. Models are
   members of the graph on every platform, so open question 3 is
   closed.
+- 2026-10-04, at Willem's request: the authorisation sentence under
+  "What belongs in an annotation" follows the cryptography manifesto's
+  capability model. Its earlier wording put authorisation beside the
+  name with revocation by compare-and-swap, which reads as access
+  lists and contradicts revocation by non-renewal.
 
 ## Open
 

@@ -491,6 +491,8 @@ Acceptance:
   gone. The 0.0.0 release on the index and its receipt tag
   `packages/cbor/v0.0.0` stay as the name's claim. Phase 1's
   deliverables below name the paths as they were built.
+- 2026-10-04, at Willem's request: the tier interface's missing grant
+  parameter is recorded as open item 4, against phase 3.
 
 ## Open
 
@@ -502,3 +504,15 @@ Acceptance:
 3. **Whether phase 10 splits**, the switch of three consumers in one
    change being the largest phase; split by consumer if it does not
    land in two days. Owner: the agent, at phase 10.
+4. **The grant parameter in the tier interface.** The store note in
+   `livery-planning` (`docs/20260828-content-addressed-store.md`,
+   section 10) and article 17 of the cryptography manifesto want every
+   transfer of bytes into or out of a tier to carry an opaque
+   capability, which the local backend ignores and a source verifies,
+   in the API's signature from the first version, because it is the
+   part that cannot be added later. Phase 3's interface lists `get`,
+   `get_range`, `get_ranges`, `head`, `list`, `put`, `delete` and
+   `path` with no such parameter, and today's `fetch` and `fill` take
+   none. It is no hashed format, so the freeze does not decide it;
+   phase 3 does, before the consumers move in phase 10. Owner: Willem,
+   at phase 3.
