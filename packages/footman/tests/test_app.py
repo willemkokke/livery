@@ -1020,14 +1020,19 @@ def test_help_leads_with_the_spelling_that_does_something(project, capsys):
     assert "default: false" not in out
 
 
-def test_help_leads_a_default_true_flag_with_its_negative(project, capsys):
-    # `--cache` defaults true, so typing it changes nothing and `--no-cache` is
-    # the only spelling that does. Leading with the inert one buried the useful
-    # one in a parenthetical.
+def test_help_names_a_default_true_flag_by_its_own_spelling_and_says_it_is_on(
+    project, capsys
+):
+    # The row's text is the parameter's own, which describes the flag turned
+    # on, so the row names `--cache` and says it is on by default and how to
+    # turn it off. The usage line shows `--no-cache`, the spelling that
+    # changes something.
     assert _app.run(["--help", "publish"]) == 0
     out = capsys.readouterr().out
-    assert "--no-cache" in out
-    assert "(--cache to enable)" in out
+    assert "[--no-cache]" in out
+    assert "  --cache " in out
+    assert "flag, on by default (--no-cache to disable)" in out
+    assert "--cache to enable" not in out
 
 
 def test_help_shows_positionals_and_types(project, capsys):
