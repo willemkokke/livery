@@ -554,6 +554,12 @@ def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
     )
     (home / "pyproject.toml").write_text('[project]\nname = "livery-extensions-ruff"\n')
     assert _e2e.dev_members(tmp_path) == ("workshop", "extensions/ruff", "toolroom")
+    # An entry that turns options on names its extension all the same.
+    assert _e2e.dev_members(tmp_path, ("ruff[deep]",)) == (
+        "workshop",
+        "extensions/ruff",
+        "toolroom",
+    )
 
 
 # The extension under test: the refusals first.
@@ -619,6 +625,34 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
     assert kinds == ("cpp-conan",)
 
 
+def test_the_extension_under_test_is_listed_with_every_option_it_declares(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    check = SimpleNamespace(kinds=("python",))
+    _fake_declarations(
+        monkeypatch,
+        {
+            "top": SimpleNamespace(
+                CHECKS=(check,),
+                REQUIRES=("base",),
+                OPTIONS={"deep": "judges deeper", "wide": "judges wider"},
+            ),
+            "base": SimpleNamespace(CHECKS=(check,), OPTIONS={"x": "an option"}),
+        },
+    )
+    # What it requires is listed plainly: its options are not under test.
+    stack, _kinds = _e2e.extension_under_test("top")
+    assert stack == ("base", "top[deep,wide]")
+
+
+def test_basedpyright_is_tested_with_type_completeness_on_the_python_member() -> None:
+    stack, kinds = _e2e.extension_under_test("basedpyright")
+    assert stack == ("basedpyright[typecomplete]",)
+    assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
+
+
 def test_ruff_is_tested_on_the_python_and_the_conan_member() -> None:
     stack, kinds = _e2e.extension_under_test("ruff")
     assert stack == ("ruff",)
@@ -681,13 +715,14 @@ def test_the_loop_s_own_fm_never_asks_a_signer(
     assert pairs["commit.gpgsign"] == "false"
 
 
-def test_a_contract_s_list_is_read_by_name(tmp_path: Path) -> None:
+def test_a_contract_s_list_is_read_as_each_entry_spells_it(tmp_path: Path) -> None:
     assert _e2e._listed_extensions(tmp_path) == ()  # pyright: ignore[reportPrivateUsage]
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["docs", { name = "acme.house", for = [] }]\n'
+        '[workspace]\nextensions = ["docs", { name = "acme.house", for = [] },'
+        ' "basedpyright[typecomplete]"]\n'
     )
     listed = _e2e._listed_extensions(tmp_path)  # pyright: ignore[reportPrivateUsage]
-    assert listed == ("docs", "acme.house")
+    assert listed == ("docs", "acme.house", "basedpyright[typecomplete]")
 
 
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:

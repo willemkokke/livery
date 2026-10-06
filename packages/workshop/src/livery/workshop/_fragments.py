@@ -147,33 +147,11 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 # The builtin fragments, moved from the base template verbatim: each
 # tool's table where the tool reads one file per project.
 
-BASEDPYRIGHT = r"""[tool.basedpyright]
-include = [{% if packages %}"packages", {% endif %}{% for path in root_tests %}"{{ path }}", {% endfor %}"tasks.py"]
-# A conan recipe is conan's input, read by conan's own interpreter
-# where the conan package lives; the workspace venv never has it, so
-# the checker that reads the whole tree skips the recipes. The cpp
-# members are skipped whole: their kind type-checks nothing. A
-# documentation example is judged for its names by lint and run by
-# the examples check; it is not typed code.
-exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/**/conanfile.py", "packages/**/docs/examples"]
-# The IDE and the CLI resolve the same environment: the workspace
-# members are editable installs in .venv, so basedpyright must look
-# there whatever interpreter the editor has selected.
-venvPath = "."
-venv = ".venv"
-# The tool stubs `{{ runner_prog }} tools.restub` writes; the default stub path,
-# named so the four checkers visibly read one directory.
-stubPath = "typings"
-pythonVersion = "{{ python_floor }}"
-typeCheckingMode = "standard"
-reportMissingModuleSource = false
-"""
-
 MYPY = r"""[tool.mypy]
-# Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
-# run the usage-checking half (check_untyped_defs, on via strict), so
-# every test body type-checks as consumer code without demanding
-# `-> None` on every def. Narrow suppressions live inline as
+# {{ namespace_package }}.* is fully strict; tests and tasks.py run the
+# usage-checking half (check_untyped_defs, on via strict), so every
+# test body type-checks as consumer code without demanding `-> None`
+# on every def. Narrow suppressions live inline as
 # `# type: ignore[code]` with a reason; pyright-only suppressions use
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
@@ -223,8 +201,8 @@ warn_unused_ignores = false
 """
 
 TY = r"""[tool.ty]
-# Third gate. Scope: the packages themselves; the consumer seam in
-# tests is already double-checked by basedpyright and mypy.
+# Scope: the packages themselves; the consumer seam in tests is the
+# path-narrowing type checkers' to read.
 [tool.ty.src]
 include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
 

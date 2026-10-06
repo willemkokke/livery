@@ -268,7 +268,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "git_cliff",
         "uv",
         "pytest",
-        "basedpyright",
         "mypy",
         "ty",
         "pyrefly",
@@ -279,8 +278,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
     assert {
         ("pytest", "check test.pytest"),
-        ("basedpyright", "check typecheck.basedpyright"),
-        ("basedpyright", "check typecomplete.basedpyright"),
         ("mypy", "check typecheck.mypy"),
         ("ty", "check typecheck.ty"),
         ("pyrefly", "check typecheck.pyrefly"),
@@ -336,12 +333,25 @@ def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) 
     assert _tools.tool_names(tmp_path) == (
         "git_cliff",  # the base kind's, first in the chain
         "uv",  # the python kind's own
-        "basedpyright",  # then the checks' tools, in their registration order
-        "mypy",
+        "mypy",  # then the checks' tools, in their registration order
         "ty",
         "pyrefly",
         "pytest",
     )
+
+
+def test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes(
+    tmp_path: Path,
+) -> None:
+    # The root's tasks.py and tests are python whatever the members are,
+    # and the python checks judge them, so their tools stay required
+    # beside a native member alone.
+    member = tmp_path / "packages" / "native"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    names = _tools.tool_names(tmp_path)
+    assert {"uv", "mypy", "ty", "pyrefly", "pytest"} <= set(names)
+    assert "conan" in names  # the native member's own kind still counts
 
 
 # --- the verbs -----------------------------------------------------------------------
@@ -371,8 +381,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    # Six of the python kind, the base kind's git_cliff, and this one.
-    assert "git-cliff 2.1.0" in out and "tools.lock: 8 tool(s)" in out
+    # Five of the python kind, the base kind's git_cliff, and this one.
+    assert "git-cliff 2.1.0" in out and "tools.lock: 7 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
@@ -527,12 +537,15 @@ def test_relock_writes_a_graph_again_though_its_version_stands(
         _node("24.0.0"),
     )
     calls: list[str] = []
+    resolved = [0]
 
     def resolve(root_: Path, name: str, package: str, version: str, **kwargs: object):
+        # Every resolve writes new bytes, the way a fresh answer does.
         calls.append(name)
+        resolved[0] += 1
         written = _tools.graphs_dir(root_) / f"{name}.json"
         written.parent.mkdir(parents=True, exist_ok=True)
-        written.write_text(f"{name} {len(calls)}\n", encoding="utf-8")
+        written.write_text(f"{name} {resolved[0]}\n", encoding="utf-8")
         return Graph(written.name, digest_of(written.read_bytes()), by="node 24"), ""
 
     monkeypatch.setattr(_tools, "resolve_graph", resolve)
@@ -589,8 +602,8 @@ def test_each_runtime_is_locked_once_for_the_tools_that_run_on_it(
         '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["eslint"]\n'
     )
     locked = _tools.write_lock(root).tools
-    # bun leaves with the tool it was locked for; node stays, since the
-    # python kind's basedpyright still runs on it.
+    # bun leaves with the tool it was locked for; node stays, since
+    # eslint still runs on it.
     assert "bun" not in locked and "cspell" not in locked and "node" in locked
 
 
@@ -924,7 +937,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told
-    for name in ("git_cliff", "basedpyright"):
+    for name in ("git_cliff", "mypy"):
         assert name in told
     # The declaration, then the two verbs, in the order a reader runs them.
     assert "[tools]" in told and "index =" in told

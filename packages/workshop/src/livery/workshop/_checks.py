@@ -254,6 +254,11 @@ class CheckRecord:
             ``point`` for a check that selects tests by CI point. A
             generated verb offers the flags its checks declare, and
             ``--fix`` with ``--safe-fix`` where a check has a fix mode.
+        listed_with: The option of its extension that registers the
+            check, which a workspace turns on in its list,
+            ``basedpyright[typecomplete]``; empty for a check that
+            registers whenever its extension is listed. The extension
+            declares the option in its ``OPTIONS``.
     """
 
     tool: str
@@ -277,6 +282,7 @@ class CheckRecord:
     claims: tuple[Claim, ...] = ()
     roles: tuple[str, ...] = ()
     flags: tuple[str, ...] = ()
+    listed_with: str = ""
 
     @property
     def name(self) -> str:
@@ -1419,6 +1425,9 @@ def judges(ctx: GateContext) -> tuple[str, ...]:
 
 
 #: The whole repository, as a check that walks it from the root reads it.
+#: [livery.workshop._checks.scoped_paths][] answers it when a check
+#: judges its configured whole; a tool that reads ``.`` as more than
+#: its configuration names takes no paths then.
 WHOLE = (".",)
 
 
@@ -1495,6 +1504,17 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     return package_paths(judged) + _claimed(name, present)
 
 
+def scoped_packages(ctx: GateContext, name: str) -> tuple[Package, ...]:
+    """The members the package-narrowing check *name* judges in this run.
+
+    The members of its kinds, in a scoped run those of the subset,
+    less each one that turned the check off in its contract. Each
+    skip is printed, so a narrowed gate names what it left out. The
+    workspace's own tests are not a member.
+    """
+    return enabled(name, judged_by(check_for(name), _members(ctx)))
+
+
 def _register_builtin() -> None:
     """Register the workshop's own checks, in the order the rewriters run.
 
@@ -1508,46 +1528,16 @@ def _register_builtin() -> None:
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._influence import Inputs
     from livery.workshop._invoke import run_batched
-    from livery.workshop._kinds import is_python_kind
-    from livery.workshop._packages import package_paths
 
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
 
-    def python_kinds(ctx: GateContext) -> tuple[Package, ...]:
-        return tuple(p for p in _members(ctx) if is_python_kind(p.kind))
-
-    def python_members(ctx: GateContext, name: str) -> tuple[Package, ...]:
-        """The python members the check *name* judges: by its kinds, then its option."""
-        judged = tuple(
-            p
-            for p in judged_by(check_for(name), _members(ctx))
-            if is_python_kind(p.kind)
-        )
-        return enabled(name, judged)
-
-    def typecheck_paths(ctx: GateContext, tool: str) -> tuple[str, ...]:
-        """The paths one type checker reads: the named files, the members', or all."""
-        name = f"typecheck.{tool}"
-        if ctx.files:
-            return claimed_files(check_for(name), ctx)
-        judged = python_members(ctx, name) + unit(ctx)
-        whole = len(judged) == len(python_kinds(ctx)) + len(unit(ctx))
-        if not ctx.scoped and whole:
-            return ()
-        if ctx.scoped and whole and whole_reached(ctx, name, len(judged)):
-            return ()
-        return package_paths(judged)
-
     def typecheck_batched(ctx: GateContext, tool: str) -> None:
-        chosen = typecheck_paths(ctx, tool)
-        if not chosen:  # the configured whole, in one call
+        chosen = scoped_paths(ctx, f"typecheck.{tool}")
+        if chosen == WHOLE:  # the configured whole, in one call
             _python.run_typecheck(only=tool)
             return
         run_batched(chosen, lambda batch: _python.run_typecheck(paths=batch, only=tool))
-
-    def basedpyright_run(ctx: GateContext) -> None:
-        typecheck_batched(ctx, "basedpyright")
 
     def mypy_run(ctx: GateContext) -> None:
         typecheck_batched(ctx, "mypy")
@@ -1561,9 +1551,6 @@ def _register_builtin() -> None:
         del ctx
         _python.run_typecheck(only="pyrefly")
 
-    def typecomplete_run(ctx: GateContext) -> None:
-        _python.run_typecomplete(python_members(ctx, "typecomplete.basedpyright"))
-
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
         if ctx.files:
@@ -1572,7 +1559,7 @@ def _register_builtin() -> None:
             record = check_for("test.pytest")
             named = tuple(
                 p
-                for p in (*python_members(ctx, "test.pytest"), *unit(ctx))
+                for p in (*scoped_packages(ctx, "test.pytest"), *unit(ctx))
                 if claimed_files(
                     record, ctx, ROOT_UNIT if p.path == WORKSPACE_TESTS else p.path
                 )
@@ -1581,7 +1568,7 @@ def _register_builtin() -> None:
             return
         # A package whose examples alone changed runs them, not its suite.
         judged = tuple(
-            p for p in python_members(ctx, "test.pytest") if p.path not in ctx.examples
+            p for p in scoped_packages(ctx, "test.pytest") if p.path not in ctx.examples
         )
         record = check_for("test.pytest")
         serial = tuple(p for p in judged if not option_value(record, p, "parallel"))
@@ -1608,7 +1595,7 @@ def _register_builtin() -> None:
     def examples_run(ctx: GateContext) -> None:
         from livery.workshop._kinds import kind_examples
 
-        for package in python_members(ctx, "examples.pytest"):
+        for package in scoped_packages(ctx, "examples.pytest"):
             if (
                 ctx.scoped
                 and package.path in ctx.tests
@@ -1767,17 +1754,6 @@ def _register_builtin() -> None:
             ),
         ),
         CheckRecord(
-            "basedpyright",
-            "typecheck",
-            basedpyright_run,
-            narrowing=PATHS,
-            kinds=python,
-            tools=("basedpyright",),
-            fragments=(Fragment("pyproject.toml", _fragments.BASEDPYRIGHT),),
-            editor_extension="detachedfork.basedpyright",
-            claims=typed_claims,
-        ),
-        CheckRecord(
             "mypy",
             "typecheck",
             mypy_run,
@@ -1807,15 +1783,6 @@ def _register_builtin() -> None:
             tools=("pyrefly",),
             fragments=(Fragment("pyproject.toml", _fragments.PYREFLY),),
             claims=typed_claims,
-        ),
-        CheckRecord(
-            "basedpyright",
-            "typecomplete",
-            typecomplete_run,
-            narrowing=PACKAGES,
-            kinds=python,
-            tools=("basedpyright",),
-            claims=(Claim("source", suffixes=py),),
         ),
         CheckRecord(
             "pytest",

@@ -78,6 +78,9 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     register_kind(
         KindRecord(name="bare", backend=python.backend, template=python.template)
     )
+    # The root's own files are of the bare kind too, so nothing beyond
+    # what the contract requires is a requirement.
+    monkeypatch.setattr("livery.workshop._tools.ROOT_KIND", "bare")
     payload = _zip({"tea": b"#!/bin/sh\necho tea\n", "docs/readme": b"r"})
     digest = digest_of(payload)
     Record(

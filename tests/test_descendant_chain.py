@@ -377,8 +377,8 @@ def _chain(
         assert "already scaffolded" in birth.stdout
         assert "seeds: already written" in birth.stdout
     contract = (home / "workshop.toml").read_text()
-    # Stock fm's births list the site's extension; the home adds itself.
-    assert 'extensions = ["docs", "dummy.brandx"]' in contract
+    # Stock fm's births list the stock extensions; the home adds itself.
+    assert 'extensions = ["docs", "ruff", "basedpyright", "dummy.brandx"]' in contract
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
     assert (home / "docs" / "index.md").is_file()
@@ -511,7 +511,10 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
-    assert 'extensions = ["docs", "dummy.brandx"]' in child_contract
+    assert (
+        'extensions = ["docs", "ruff", "basedpyright", "dummy.brandx"]'
+        in child_contract
+    )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's replacement reached the child's composed file.
@@ -659,7 +662,7 @@ def _chain(
             f"  {check}: packages/geometry runs (cpp-conan kind)" in child_gate.stdout
         )
     assert (
-        "typecomplete.basedpyright: packages/geometry skips (cpp-conan kind)"
+        "typecheck.basedpyright: packages/geometry skips (cpp-conan kind)"
         in child_gate.stdout
     )
     # One compiled module, both sides of the graph: the member's own

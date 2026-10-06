@@ -27,9 +27,10 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
+livery-extensions-basedpyright = { workspace = true }
 livery-extensions-ruff = { workspace = true }
 livery-footman = { workspace = true }
 livery-forge = { workspace = true }
@@ -53,6 +54,7 @@ dev = [
     # Typed tool handles tasks.py runs through.
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
+    "livery-extensions-basedpyright",
     "livery-extensions-ruff",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
@@ -125,42 +127,23 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
+pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
 addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
 
-[tool.basedpyright]
-include = ["packages", "tests", "tasks.py"]
-# A conan recipe is conan's input, read by conan's own interpreter
-# where the conan package lives; the workspace venv never has it, so
-# the checker that reads the whole tree skips the recipes. The cpp
-# members are skipped whole: their kind type-checks nothing. A
-# documentation example is judged for its names by lint and run by
-# the examples check; it is not typed code.
-exclude = ["packages/**/conanfile.py", "packages/**/docs/examples"]
-# The IDE and the CLI resolve the same environment: the workspace
-# members are editable installs in .venv, so basedpyright must look
-# there whatever interpreter the editor has selected.
-venvPath = "."
-venv = ".venv"
-# The tool stubs `fm tools.restub` writes; the default stub path,
-# named so the four checkers visibly read one directory.
-stubPath = "typings"
-pythonVersion = "3.11"
-typeCheckingMode = "standard"
-reportMissingModuleSource = false
-
 [tool.mypy]
-# Second gate of the four. livery.* is fully strict; tests and tasks.py
-# run the usage-checking half (check_untyped_defs, on via strict), so
-# every test body type-checks as consumer code without demanding
-# `-> None` on every def. Narrow suppressions live inline as
+# livery.* is fully strict; tests and tasks.py run the
+# usage-checking half (check_untyped_defs, on via strict), so every
+# test body type-checks as consumer code without demanding `-> None`
+# on every def. Narrow suppressions live inline as
 # `# type: ignore[code]` with a reason; pyright-only suppressions use
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
 files = [
+    "packages/extensions/basedpyright/src",
+    "packages/extensions/basedpyright/tests",
     "packages/extensions/ruff/src",
     "packages/extensions/ruff/tests",
     "packages/footman/src",
@@ -182,6 +165,8 @@ files = [
 ]
 mypy_path = [
     "typings",
+    "packages/extensions/basedpyright/src",
+    "packages/extensions/basedpyright/tests",
     "packages/extensions/ruff/src",
     "packages/extensions/ruff/tests",
     "packages/footman/src",
@@ -238,7 +223,7 @@ warn_unused_ignores = false
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -258,10 +243,10 @@ deprecated = "error"
 unnecessary-type-conversion = "error"
 
 [tool.ty]
-# Third gate. Scope: the packages themselves; the consumer seam in
-# tests is already double-checked by basedpyright and mypy.
+# Scope: the packages themselves; the consumer seam in tests is the
+# path-narrowing type checkers' to read.
 [tool.ty.src]
-include = ["packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+include = ["packages/extensions/basedpyright/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.
@@ -271,26 +256,7 @@ python-version = "3.11"
 extra-paths = ["typings"]
 
 # The repository's own tables: whole tables and array-of-table entries
-# (a `[[tool.basedpyright.executionEnvironments]]` for an imported
-# suite, a `[tool.x]` of your own), never a key inside a table the
-# render wrote; a tool with an `extend-` spelling takes that.
+# (a `[tool.x]` of your own), never a key inside a table the render
+# wrote; a tool with an `extend-` spelling takes that.
 # -- workshop: region tables, yours to edit; the render keeps it --
-# The imported toolroom tests monkeypatch module internals by
-# attribute, which basedpyright reads as private-import use; their
-# conformance rides the same tracked content pass as the docstrings.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/toolroom/tests"
-reportPrivateImportUsage = false
-
-# The bench's tests are toolroom's machinery tests, moved with it.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/toolroom-bench/tests"
-reportPrivateImportUsage = false
-
-# The imported footman tests drive internals (`_app`, `_paths`,
-# `_complete`) by design: the suite is the framework's own, and its
-# subjects are private modules. Same tracked pass as toolroom's.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/footman/tests"
-reportPrivateImportUsage = false
 # -- workshop: end tables --

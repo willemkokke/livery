@@ -54,6 +54,9 @@ class _FakeBackend:
     def module_roots(self, package: Package) -> tuple[str, ...]:
         return ()
 
+    def public_modules(self, package: Package) -> tuple[str, ...]:
+        return ()
+
     def referenced_siblings(
         self, package: Package, around: Neighbours
     ) -> dict[str, str]:
@@ -202,7 +205,6 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
     from livery.workshop._checks import tools_for_kind
 
     assert {tool for tool, _ in tools_for_kind("python")} == {
-        "basedpyright",
         "mypy",
         "ty",
         "pyrefly",

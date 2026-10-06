@@ -36,6 +36,7 @@ publish_artifact = _python.publish_artifact
 # native half references its conan dependency through the recipe,
 # which the conan kind answers for.
 module_roots = _python.module_roots
+public_modules = _python.public_modules
 referenced_siblings = _python.referenced_siblings
 
 

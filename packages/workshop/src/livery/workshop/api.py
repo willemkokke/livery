@@ -15,19 +15,27 @@ An extension in its own wheel declares its checks with
 [livery.workshop.api.CheckRecord][], its claims with
 [livery.workshop.api.Claim][] and the files it manages with
 [livery.workshop.api.Fragment][], in a ``CHECKS`` tuple of its declaring
-module. A check's body takes a [livery.workshop.api.GateContext][]; a
+module, and the options a workspace may list it with in an ``OPTIONS``
+map. A check's body takes a [livery.workshop.api.GateContext][]. A
 check that narrows by paths (``narrowing=PATHS``) reads them from
-[livery.workshop.api.scoped_paths][] and calls its tool through
-[livery.workshop.api.run_batched][].
+[livery.workshop.api.scoped_paths][], which answers
+[livery.workshop.api.WHOLE][] for the tool's configured whole, and
+calls its tool through [livery.workshop.api.run_batched][]; one that
+narrows by packages (``narrowing=PACKAGES``) reads them from
+[livery.workshop.api.scoped_packages][]. A package's public modules are
+its kind's answer, [livery.workshop.api.public_modules][].
 """
 
 from __future__ import annotations
 
 from livery.workshop._checks import (
+    PACKAGES,
     PATHS,
+    WHOLE,
     CheckRecord,
     Claim,
     GateContext,
+    scoped_packages,
     scoped_paths,
 )
 from livery.workshop._extensions import (
@@ -37,6 +45,7 @@ from livery.workshop._extensions import (
 )
 from livery.workshop._fragments import Fragment
 from livery.workshop._invoke import run_batched
+from livery.workshop._kinds import public_modules
 from livery.workshop._navblocks import rewrite_nav_block
 from livery.workshop._packages import (
     Edge,
@@ -48,7 +57,9 @@ from livery.workshop._packages import (
 __version__ = "0.5.0"
 
 __all__ = [
+    "PACKAGES",
     "PATHS",
+    "WHOLE",
     "CheckRecord",
     "Claim",
     "Edge",
@@ -59,8 +70,10 @@ __all__ = [
     "discover_packages",
     "extension_names",
     "mount_extensions",
+    "public_modules",
     "rewrite_nav_block",
     "run_batched",
+    "scoped_packages",
     "scoped_paths",
     "verify_workspace",
     "workspace_root",

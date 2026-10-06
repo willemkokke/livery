@@ -28,7 +28,6 @@ import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import fail
 from livery.toolroom.tools.api import (
-    basedpyright,
     mypy,
     pyrefly,
     pytest,
@@ -50,24 +49,21 @@ PY_SUFFIXES = (".py", ".pyi")
 
 
 def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
-    """Type-check with the four gating checkers in parallel, or with *only* one.
+    """Type-check with the three gating checkers in parallel, or with *only* one.
 
-    basedpyright runs with warnings gating as errors. mypy is strict
-    on livery.* and checks every test body as consumer code, once per
-    platform (linux from config, darwin and win32 by flag), since
-    mypy has no all-platforms mode. ty and pyrefly check every
-    platform at once at the scopes pyproject pins. All four gate: a
-    checker livery uses is a checker the tree is clean against.
+    mypy is strict on livery.* and checks every test body as consumer
+    code, once per platform (linux from config, darwin and win32 by
+    flag), since mypy has no all-platforms mode. ty and pyrefly check
+    every platform at once at the scopes pyproject pins. All three
+    gate: a checker livery uses is a checker the tree is clean
+    against.
 
-    *paths* narrows basedpyright and mypy to the affected subset; ty
-    and pyrefly keep their configured whole either way. *only* names
-    one checker, ``basedpyright``, ``mypy``, ``ty`` or ``pyrefly``,
-    the way each is a check of the typecheck role.
+    *paths* narrows mypy to the affected subset; ty and pyrefly keep
+    their configured whole either way. *only* names one checker,
+    ``mypy``, ``ty`` or ``pyrefly``, the way each is a check of the
+    typecheck role.
     """
     from livery.footman.api import parallel, step
-
-    def based() -> None:
-        basedpyright(*paths, warnings=True)
 
     # Each mypy run gets its own cache dir: the SQLite cache does not
     # tolerate three concurrent writers on one file.
@@ -87,7 +83,6 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
         pyrefly("check")
 
     steps = {
-        "basedpyright": (step(based, title="basedpyright"),),
         "mypy": (step(mypy_linux), step(mypy_darwin), step(mypy_win32)),
         "ty": (step(run_ty, title="ty"),),
         "pyrefly": (step(run_pyrefly, title="pyrefly"),),
@@ -96,19 +91,6 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
         s for name, group in steps.items() if not only or name == only for s in group
     ]
     parallel(*(made() for made in chosen))
-
-
-def run_typecomplete(packages: tuple[Package, ...]) -> None:
-    """Verify each package's public API is 100% type-complete.
-
-    Every module [livery.workshop._backends._python.public_modules][]
-    names is verified; a package with nothing public verifies nothing.
-    The exit code is the verdict, 0 only when every public symbol has a
-    fully known type.
-    """
-    for package in packages:
-        for module in public_modules(package):
-            basedpyright(verifytypes=module, ignoreexternal=True)
 
 
 def public_modules(package: Package) -> tuple[str, ...]:

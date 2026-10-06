@@ -93,6 +93,14 @@ VERDICT_ROLES = ("format", "lint", "typecheck", "typecomplete", "test")
 PINNED_TOOLS = ("uv", "git_cliff")
 """The tools no allowance reaches: the entry pins uv, the train reads git-cliff."""
 
+ROOT_KIND = "python"
+"""The kind of the workspace's own files, whatever its members are.
+
+`tasks.py` and the root's tests run on the base's runtime, and the
+checks of that kind judge them, so the tools those checks run are
+required with no member of the kind present.
+"""
+
 TYPINGS = "typings"
 """The directory under the root the stubs are written into, pyright's default."""
 
@@ -141,20 +149,22 @@ def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
 def requirements(root: Path) -> tuple[Requirement, ...]:
     """Every requirement the six sites declare, in site order.
 
-    A workspace with no package types requires what the python kind
-    does: its own `tasks.py` runs on python. A kind's checks bring the
-    tools they run, each requirement naming `check <name>` as its
-    site. An extension's site is `extension <name>`, read from its
-    declaration's `TOOLS`; an unlisted extension declares nothing here,
-    since listing is the only activation channel. A plugin the project
-    mounts through its direct dependencies is `plugin <name>`, read
-    from its entry module ([livery.workshop._tools.plugin_tools][]).
+    A workspace requires what `ROOT_KIND` does with or without a
+    member of it: its own `tasks.py` and tests run on it, and the
+    checks of that kind judge them. A kind's checks bring the tools
+    they run, each requirement naming `check <name>` as its site. An
+    extension's site is `extension <name>`, read from its
+    declaration's `TOOLS`; an unlisted extension declares nothing
+    here, since listing is the only activation channel. A plugin the
+    project mounts through its direct dependencies is `plugin <name>`,
+    read from its entry module
+    ([livery.workshop._tools.plugin_tools][]).
     """
     from livery.toolroom.store.api import LockError, Requirement
     from livery.workshop._extensions import extension_tools
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    kinds = {package.kind for package in packages} or {"python"}
+    kinds = {package.kind for package in packages} | {ROOT_KIND}
     found: list[Requirement] = []
     for kind_name in sorted(kinds):
         for record in kind_chain(kind_name):
@@ -238,10 +248,11 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     """The tools whose copy on the machine may serve: the contract's and the kinds'.
 
     The root contract's list and the present kinds' `host_allowed`
-    union, sorted. A name no site requires yet is kept and named by
-    the lock as an allowance ahead of its requirement: a workspace may
-    allow `cmake` before its first C++ package arrives, and the lock's
-    line is where a misspelling shows. A tool a check reads its verdict
+    union, `ROOT_KIND` always among them, sorted. A name no site
+    requires yet is kept and named by the lock as an allowance ahead
+    of its requirement: a workspace may allow `cmake` before its first
+    C++ package arrives, and the lock's line is where a misspelling
+    shows. A tool a check reads its verdict
     from refuses, naming the checks that read it: a linter that varies
     by machine makes the gate disagree with CI. `uv` and `git_cliff`
     refuse by name: the entry pins uv, and the release train reads
@@ -256,7 +267,7 @@ def host_allowed(root: Path) -> tuple[str, ...]:
         "list[str]", tools_table(root / "workshop.toml").get("host-allowed", [])
     )
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    kinds = {package.kind for package in packages} or {"python"}
+    kinds = {package.kind for package in packages} | {ROOT_KIND}
     names = tuple(sorted({*declared, *kind_host_allowed(kinds)}))
     if not names:
         return ()

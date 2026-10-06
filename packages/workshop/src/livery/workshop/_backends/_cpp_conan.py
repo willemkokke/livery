@@ -148,6 +148,12 @@ def module_roots(package: Package) -> tuple[str, ...]:
     return ()
 
 
+def public_modules(package: Package) -> tuple[str, ...]:
+    """Nothing: a conan package has no importable API to verify."""
+    del package
+    return ()
+
+
 def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
     """Nothing: reading a recipe's own sources for references is unwritten.
 

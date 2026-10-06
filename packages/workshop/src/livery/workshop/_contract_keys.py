@@ -377,13 +377,18 @@ def judge(
 
 
 def listed_extensions(root_data: dict[str, Any]) -> frozenset[str]:
-    """The extensions a root contract lists, by name, the base always among them."""
+    """The extensions a root contract lists, by name, the base always among them.
+
+    A name is read without the options its entry turns on.
+    """
     names = {BASE}
     workspace = root_data.get("workspace")
     extensions = workspace.get("extensions", []) if isinstance(workspace, dict) else []  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    from livery.workshop._extensions import listing
+
     for entry in extensions if isinstance(extensions, list) else []:  # pyright: ignore[reportUnknownVariableType]
         if isinstance(entry, str):
-            names.add(entry)
+            names.add(listing(entry).name)
         elif isinstance(entry, dict) and isinstance(entry.get("name"), str):  # pyright: ignore[reportUnknownMemberType]
-            names.add(entry["name"])  # pyright: ignore[reportUnknownArgumentType]
+            names.add(listing(entry["name"]).name)  # pyright: ignore[reportUnknownArgumentType]
     return frozenset(names)

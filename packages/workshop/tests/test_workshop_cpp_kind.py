@@ -275,7 +275,7 @@ def test_python_checks_skip_a_native_member_by_name(
 
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    for name in ("typecheck.basedpyright", "typecomplete.basedpyright", "test.pytest"):
+    for name in ("typecheck.mypy", "test.pytest"):
         assert judged_by(check_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
         assert f"{name}: packages/native skips (cpp-conan kind)" in out
@@ -375,6 +375,9 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
             return package.directory
 
         def module_roots(self, package: Package) -> tuple[str, ...]:
+            return ()
+
+        def public_modules(self, package: Package) -> tuple[str, ...]:
             return ()
 
         def referenced_siblings(
@@ -483,13 +486,6 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
     assert '"packages/alpha"' in pyproject
     assert 'members = ["packages/alpha"]' in pyproject
     assert "acme-native" not in pyproject
-    # The cpp member is skipped whole, and every member's conan
-    # recipe with it: the checker that reads the tree cannot resolve
-    # the conan import, which lives in conan's own interpreter.
-    assert (
-        'exclude = ["packages/native", "packages/**/conanfile.py",'
-        ' "packages/**/docs/examples"]'
-    ) in pyproject
     assert '"packages/native/src"' not in pyproject
 
 
