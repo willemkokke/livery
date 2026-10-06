@@ -135,7 +135,6 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
     assert claimants(native, "conanfile.py") == ("format.fake", "lint.fake")
     # The tests measure the source, so the test checks claim it too.
     assert claimants(native, "src/native.cpp") == (
-        "format.clang-format",
         "lint.clang-tidy",
         "test.ctest",
     )

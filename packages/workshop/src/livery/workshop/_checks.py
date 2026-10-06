@@ -1504,6 +1504,26 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     return package_paths(judged) + _claimed(name, present)
 
 
+def scoped_files(ctx: GateContext, name: str) -> tuple[Path, ...]:
+    """The files of the run's package the package check *name* judges, absolute.
+
+    The files the run names, when it names any; else every file the
+    check's claims reach in the package, an untracked new one among
+    them.
+
+    Raises:
+        Failed: when the run judges no package, since *name* is not a
+            package check.
+    """
+    record = check_for(name)
+    package = ctx.package
+    if package is None:
+        fail(f"{name} judges one package at a time, and this run names none")
+    if ctx.files:
+        return tuple(Path(path) for path in claimed_files(record, ctx, package.path))
+    return tuple(package.directory / path for path in judged_files(record, package))
+
+
 def scoped_packages(ctx: GateContext, name: str) -> tuple[Package, ...]:
     """The members the package-narrowing check *name* judges in this run.
 
@@ -1680,14 +1700,6 @@ def _register_builtin() -> None:
         package = package_of(ctx)
         return tuple(Path(p) for p in claimed_files(check_for(name), ctx, package.path))
 
-    def clang_format_run(ctx: GateContext) -> None:
-        files = named_sources(ctx, "format.clang-format")
-        _cpp_conan.format_check(package_of(ctx), fix=False, files=files)
-
-    def clang_format_fix(ctx: GateContext) -> None:
-        files = named_sources(ctx, "format.clang-format")
-        _cpp_conan.format_check(package_of(ctx), fix=True, files=files)
-
     def configure_run(ctx: GateContext) -> None:
         _cpp_conan.configure(package_of(ctx))
 
@@ -1713,23 +1725,6 @@ def _register_builtin() -> None:
     py = _python.PY_SUFFIXES
     cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
-        CheckRecord(
-            "clang-format",
-            "format",
-            clang_format_run,
-            scope=PACKAGE,
-            fix=clang_format_fix,
-            kinds=native,
-            tools=("clang_format",),
-            fragments=tuple(
-                Fragment(".clang-format", _fragments.CLANG_FORMAT, kind=kind)
-                for kind in native
-            ),
-            claims=tuple(
-                Claim(category, suffixes=cpp)
-                for category in ("source", "test", "test-support")
-            ),
-        ),
         CheckRecord(
             "pytest",
             "test",

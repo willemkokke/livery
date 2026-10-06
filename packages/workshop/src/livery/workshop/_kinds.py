@@ -250,9 +250,6 @@ class KindRecord:
         tests_need_build: Whether the kind's tests run on a build
             rather than on source, so a test step is preceded by the
             backend's ``gate_build``.
-        native_sources: Whether the kind's members carry C or C++ the
-            gate formats with clang-format, against the member's own
-            `.clang-format`.
         extractor: How the kind's API reference is extracted for the
             site; None for a kind with no reference, which the site
             says by name. A child kind takes the nearest ancestor's.
@@ -283,7 +280,6 @@ class KindRecord:
     artifact: str = "python"
     wheel_identity: str = "pure"
     tests_need_build: bool = False
-    native_sources: bool = False
     extractor: Extractor | None = None
     examples: Callable[[Package, Path, tuple[str, ...]], None] | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
@@ -555,7 +551,6 @@ def _register_builtin() -> None:
             # The build tools; the native format and lint tools ride
             # their check records.
             tools=("cmake", "ninja", "conan", "cmake_conan"),
-            native_sources=True,
             host_tools=("cc", "c++"),
             wheel_identity="platform",
         )
@@ -576,7 +571,6 @@ def _register_builtin() -> None:
             # MSVC, so it is required on the Windows hosts alone; the
             # .NET SDK it runs on rides as its runtime, there too.
             tools=("cmake", "conan", "ninja", "dotnet_coverage@windows"),
-            native_sources=True,
             host_tools=("cc", "c++"),
             artifact="conan",
             wheel_identity="",

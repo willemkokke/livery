@@ -279,9 +279,9 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
     real = _shipped_files.settle_package
 
     def written(directory: Path) -> list[Path]:
-        return [
-            p for p in directory.iterdir() if p.name in (".clang-tidy", ".clang-format")
-        ]
+        from livery.workshop._fragments import package_files
+
+        return [p for p in directory.iterdir() if p.name in package_files()]
 
     def never_again(directory: Path, kind: str) -> list[str]:
         if written(directory):
@@ -477,7 +477,7 @@ def test_the_builtin_kinds_and_checks_pass_every_clause() -> None:
         "cpp-conan",
     }
     assert {record.name for record in subject.checks} >= {
-        "format.clang-format",
+        "lint.clang-tidy",
         "test.pytest",
     }
     assert judge(subject) == []

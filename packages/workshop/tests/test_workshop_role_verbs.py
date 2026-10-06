@@ -141,10 +141,10 @@ def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with pytest.raises(_FAILURES, match="Pass one"):
-        _quality.run_checks(("format.clang-format",), fix=True, safe_fix=True)
+        _quality.run_checks(("layering.imports",), fix=True, safe_fix=True)
     monkeypatch.setenv("CI", "true")
     with pytest.raises(_FAILURES, match="a fix inside CI"):
-        _quality.run_checks(("format.clang-format",), safe_fix=True)
+        _quality.run_checks(("layering.imports",), safe_fix=True)
 
 
 def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
@@ -316,7 +316,6 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
     assert tree == {
         "build": {"compile", "configure"},
         "examples": {"pytest"},
-        "format": {"clang-format"},
         "layering": {"graph", "imports"},
         "lint": {"clang-tidy"},
         "provenance": {"check"},
@@ -330,7 +329,7 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
     assert _flags(test, "default") == {"point"}
     assert _flags(test, "pytest") == {"point"}
     assert _flags(test, "ctest") == set()
-    assert _flags(root.groups["format"], "clang-format") == {"fix", "safe_fix"}
+    assert _flags(root.groups["layering"], "imports") == {"fix", "safe_fix"}
     # The base checks no types: a listed extension does.
     assert "typecheck" not in root.groups
 

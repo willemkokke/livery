@@ -77,7 +77,9 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
                 fragments=(Fragment("pyproject.toml", "x", kind="python"),),
             )
         )
-    with pytest.raises(_FAILURES, match="rendered per package and names the kind"):
+    # A per-package file is one a fragment names a kind for; without
+    # one, the file is no project file the render writes.
+    with pytest.raises(_FAILURES, match="a fragment that names a kind is rendered"):
         register_check(
             CheckRecord(
                 "acme", "lint", _noop, fragments=(Fragment(".clang-tidy", "x"),)
@@ -135,24 +137,38 @@ def _restore_clang_tidy() -> CheckRecord:
 
 
 def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
-    tmp_path: Path,
+    tmp_path: Path, restored_checks: None
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import settle_package
 
+    # A package file is any file a registered check's kinded fragment
+    # names: the native linter's, and an extension's style beside it.
+    register_check(
+        CheckRecord(
+            "acme-style",
+            "format",
+            _noop,
+            scope="package",
+            kinds=("cpp-conan",),
+            fragments=(
+                Fragment(".acme-style", "style for {{ kind }}\n", kind="cpp-conan"),
+            ),
+        )
+    )
     data = {**_data(), "kind": "cpp-conan"}
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
-    rendered = compose_package("cpp-conan", ".clang-format", data)
-    assert rendered is not None
-    (member / ".clang-format").write_bytes(rendered.encode())
+    rendered = compose_package("cpp-conan", ".acme-style", data)
+    assert rendered == "style for cpp-conan\n"
+    (member / ".acme-style").write_bytes(rendered.encode())
     other = member / ".clang-tidy"
     other.write_text("Checks: mine\n")
     assert settle_package(member, "cpp-conan") == [
         "  kept .clang-tidy: edited here, so it is not rewritten; delete it to"
         " take the rendered file"
     ]
-    assert ".clang-format" in read_rendered(member)  # adopted
+    assert ".acme-style" in read_rendered(member)  # adopted
     assert other.read_text() == "Checks: mine\n"
 
 

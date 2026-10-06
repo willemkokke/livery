@@ -66,11 +66,6 @@ def _package(directory: Path, name: str) -> Package:
     )
 
 
-needs_clang_format = pytest.mark.skipif(
-    shutil.which("clang-format") is None, reason="clang-format is not on PATH"
-)
-
-
 def _render_named(tmp_path: Path, package_name: str) -> Path:
     """The nanobind seeds written for *package_name*, native configs composed."""
     answers = project_facts(ROOT)
@@ -100,17 +95,10 @@ def _render_named(tmp_path: Path, package_name: str) -> Path:
 
 
 @pytest.mark.parametrize("package_name", ["ci-e2e-loop-loop-native", "x-y"])
-def test_the_rendered_member_passes_its_own_format_checks_whatever_its_name(
+def test_no_rendered_python_line_is_over_the_column_limit_whatever_the_name(
     tmp_path: Path, package_name: str
 ) -> None:
-    """A long or short package name reshapes no line the gate's formatters judge.
-
-    The name lands in a literal on a line of its own, so clang-format
-    finds the source as it wants it, and no rendered python line
-    exceeds the column limit ruff enforces.
-    """
-    import subprocess
-
+    """A long or short package name lands in a literal on a line of its own."""
     rendered = _render_named(tmp_path, package_name)
     over = [
         (path.name, line)
@@ -119,18 +107,6 @@ def test_the_rendered_member_passes_its_own_format_checks_whatever_its_name(
         if len(line) > 88
     ]
     assert over == []
-    clang_format = shutil.which("clang-format")
-    if clang_format is None:
-        pytest.skip("clang-format is not on PATH")
-    for source in sorted(rendered.rglob("*.cpp")):
-        formatted = subprocess.run(
-            [clang_format, "--style=file", str(source)],
-            capture_output=True,
-            text=True,
-            cwd=rendered,
-            check=True,
-        ).stdout
-        assert formatted == source.read_text("utf-8"), source.name
 
 
 def _render_chain(tmp_path: Path) -> Package:
@@ -196,16 +172,14 @@ def test_the_kind_chains_from_python() -> None:
     from livery.workshop._checks import tools_for_kind
 
     # clang-tidy judges the cpp-conan kind alone, so its tool is not here.
-    assert {"clang_format", "pytest"} <= {
-        tool for tool, _ in tools_for_kind("python-nanobind")
-    }
+    assert {"pytest"} <= {tool for tool, _ in tools_for_kind("python-nanobind")}
     record = kind_for("python-nanobind")
     assert record.parent == "python"
     # Its roles are those of the checks whose kinds its chain meets.
     from livery.workshop._checks import checks_by_name, judges_kind
 
     roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
-    assert {"format", "lint", "test", "examples"} <= roles
+    assert {"lint", "test", "examples"} <= roles
     assert record.host_tools == ("cc", "c++")
 
 

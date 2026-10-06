@@ -3,9 +3,9 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff, basedpyright, mypy, ty and pyrefly
-slices built (issues #1149, #1159, #1164, #1168 and #1170), and phases
-10 to 15 are not started. It is the one plan from now until the end of
+9b is in progress, its ruff, basedpyright, mypy, ty, pyrefly and
+clang-format slices built (issues #1149, #1159, #1164, #1168, #1170 and
+#1175), and phases 10 to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1296,6 +1296,21 @@ the `typecheck` role, so the role and its verb exist where a listed
 extension brings one; the python backend's type-check runner is gone.
 The gate's tests use a fake type checker, `typecheck.fake`, beside the
 fake formatter and linter.
+
+**9b7 built (issue #1175): clang-format is its own extension.**
+`livery-extensions-clang-format`, in `packages/extensions/clang-format/`
+and listed as `clang-format`, declares `format.clang-format`: one
+native package at a time, the C and C++ files its claims reach there
+or the files a run names (`scoped_files`, beside `scoped_paths` and
+`scoped_packages` in `livery.workshop.api`), rewritten under `--fix`.
+Its import path is `livery.extensions.clang.format`, the import path
+following the distribution's name. It writes each native package's
+`.clang-format` as a kinded fragment: the files a package carries are
+the registered checks' kinded fragments, so the base names no native
+tool's file (`PACKAGE_FILES` went), and the kinds' unread
+`native_sources` flag went with it. That the native seeds are in the
+extension's style spans both and is a root test,
+`tests/test_native_style.py`.
 
 **9a, the engine and the options.** Deliverables:
 

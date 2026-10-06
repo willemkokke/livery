@@ -1383,54 +1383,6 @@ def sources(package: Package) -> list[Path]:
     return sorted(found)
 
 
-#: A clang-format violation line: the file, then its line and column,
-#: then the complaint. The path is read up to the line number rather
-#: than to the first colon, which on Windows is the drive letter.
-_VIOLATION = re.compile(
-    r"^(?P<path>.+?):\d+:\d+: (?:error|warning): code should be clang-formatted"
-)
-
-
-def unformatted(output: str) -> list[str]:
-    """The files clang-format would rewrite, named once each, sorted."""
-    found = {
-        match["path"]
-        for line in output.splitlines()
-        if (match := _VIOLATION.match(line))
-    }
-    return sorted(found)
-
-
-def format_check(
-    package: Package, *, fix: bool = False, files: tuple[Path, ...] | None = None
-) -> None:
-    """Refuse a source clang-format would rewrite; *fix* rewrites it.
-
-    The style is the package's own `.clang-format`, seeded at birth
-    and edited there. The refusal names each file, because a person
-    fixes files, not a diff.
-
-    Raises:
-        Failed: when a file is not formatted, or clang-format exits
-            non-zero for a reason of its own.
-    """
-    targets = sources(package) if files is None else list(files)
-    if not targets:
-        return
-    arguments = ["-i"] if fix else ["--dry-run", "--Werror"]
-    result = tools.clang_format.opts(
-        cwd=package.directory, nofail=True, recorded=False
-    )(*arguments, *(str(path) for path in targets))
-    if result.code == 0:
-        return
-    named = ", ".join(unformatted(result.stderr + result.stdout)) or "no file named"
-    fail(
-        f"{package.name}: clang-format would rewrite {named}."
-        f" Run `{footman.prog()} check --fix` to apply the package's own"
-        " .clang-format."
-    )
-
-
 def _asked(argv: list[str]) -> str:
     """The first line *argv* prints, or empty when it will not run."""
     try:

@@ -72,7 +72,9 @@ def test_a_package_check_naming_no_kind_refuses(restored_registries):
 
 
 def test_an_unknown_check_name_refuses_naming_the_registry(restored_registries):
-    with pytest.raises(_FAILURES, match="not a registered check; checks: format"):
+    with pytest.raises(
+        _FAILURES, match=r"not a registered check; checks: test\.pytest"
+    ):
         check_for("nothing")
     with pytest.raises(_FAILURES, match="not a registered check"):
         unregister_check("nothing")
