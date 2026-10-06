@@ -1253,7 +1253,8 @@ def teardown_branch(
         print(f"  deleted origin/{branch}")
     git_dir = git._run("rev-parse", "--git-dir").strip()
     common_dir = git._run("rev-parse", "--git-common-dir").strip()
-    if git.current_branch() == branch and git_dir != common_dir:
+    standing = git.current_branch() == branch
+    if standing and git_dir != common_dir:
         # A linked worktree cannot switch to *base*: the main
         # checkout holds it. The worktree itself is the leftover, so
         # it is removed from the main checkout, branch and all. The
@@ -1261,7 +1262,7 @@ def teardown_branch(
         # and is told where to go.
         import os
 
-        main_root = Path(common_dir).resolve().parent
+        main_root = git.main_checkout()
         os.chdir(main_root)
         main_git = GitOps(main_root)
         main_git._run("worktree", "remove", "--force", str(git.root))
@@ -1270,7 +1271,7 @@ def teardown_branch(
         print(f"  removed the worktree {git.root} and deleted {branch}")
         print(f"  this shell's directory is gone: cd {main_root}")
         return
-    if git.current_branch() == branch:
+    if standing:
         git.switch(base)
         git.integrate(base)
     else:
@@ -1280,7 +1281,8 @@ def teardown_branch(
             print(f"  removed the worktree {tree}")
     if git.local_branch_exists(branch):
         git.delete_local_branch(branch)
-        print(f"  deleted {branch}; back on {base}")
+        # Only a checkout that stood on the branch moved to the base.
+        print(f"  deleted {branch}" + (f"; back on {base}" if standing else ""))
 
 
 def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
