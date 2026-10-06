@@ -337,7 +337,8 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     contract = (root / "workshop.toml").read_text()
     # The base is never listed; the site's extension rides in its wheel.
     assert (
-        'extensions = ["docs", "ruff", "basedpyright", "acme_tools.brand"]' in contract
+        'extensions = ["docs", "ruff", "basedpyright", "pytest", "acme_tools.brand"]'
+        in contract
     )
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
@@ -445,19 +446,14 @@ def test_a_birth_lists_the_site_first_and_a_brand_after_it() -> None:
     from livery.workshop._new_project import birth_extensions
 
     # The fallback first: an App with no builtins of its own is stock,
-    # and lists the site's extension, the python formatter's and the
-    # type checker's.
-    assert birth_extensions(()) == ["docs", "ruff", "basedpyright"]
-    assert birth_extensions(("footman.profile", "livery.workshop")) == [
-        "docs",
-        "ruff",
-        "basedpyright",
-    ]
+    # and lists the site's extension, the python formatter's, the type
+    # checker's and the test runner's.
+    stock = ["docs", "ruff", "basedpyright", "pytest"]
+    assert birth_extensions(()) == stock
+    assert birth_extensions(("footman.profile", "livery.workshop")) == stock
     # A brand's extension follows the stock ones, so it wins.
     assert birth_extensions(("dummy.brandx", "livery.workshop")) == [
-        "docs",
-        "ruff",
-        "basedpyright",
+        *stock,
         "dummy.brandx",
     ]
     # An App that does not carry the base lists its own alone.

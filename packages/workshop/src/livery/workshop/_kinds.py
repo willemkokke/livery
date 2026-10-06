@@ -24,7 +24,7 @@ vocabulary a contract may use is the concrete kinds.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
@@ -70,6 +70,21 @@ class Stamper(Protocol):
 
     def homes(self) -> list[Path]:
         """Every file `stamp` may write, so a caller can snapshot and restore them."""
+        ...
+
+
+class SuiteRunner(Protocol):
+    """How a kind runs the test suites of several packages in one call."""
+
+    def __call__(
+        self,
+        *arguments: str,
+        packages: tuple[Package, ...],
+        root: Path,
+        selection: Mapping[str, tuple[str, ...]] | None = None,
+        point: str = "",
+    ) -> None:
+        """Run the suites of *packages*; a refusal is the verdict."""
         ...
 
 
@@ -268,6 +283,10 @@ class KindRecord:
             empty for all of them; None for a kind that runs
             none, which the examples check says by name. A child kind
             takes the nearest ancestor's.
+        suites: How the kind runs the test suites of several packages
+            in one call ([livery.workshop.api.run_suites][]); None for
+            a kind that runs none that way. A child kind takes the
+            nearest ancestor's.
         coverage_pages: How the kind renders the coverage report
             pages of its packages for the site, given the workspace
             root and the packages that declare one; returns the names
@@ -291,6 +310,7 @@ class KindRecord:
     tests_need_build: bool = False
     extractor: Extractor | None = None
     examples: Callable[[Package, Path, tuple[str, ...]], None] | None = None
+    suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
 
@@ -452,11 +472,49 @@ def kind_extractor(kind_name: str) -> Extractor | None:
 def kind_examples(
     kind_name: str,
 ) -> Callable[[Package, Path, tuple[str, ...]], None] | None:
-    """The examples runner *kind_name* uses: its own, else its nearest ancestor's."""
+    """The examples runner *kind_name* uses: its own, else its nearest ancestor's.
+
+    The runner takes the package, the workspace root and the example
+    files a run names, empty for all of them. None for a kind that
+    runs no examples.
+    """
     for record in reversed(kind_chain(kind_name)):
         if record.examples is not None:
             return record.examples
     return None
+
+
+def run_suites(
+    kind_name: str,
+    *arguments: str,
+    packages: tuple[Package, ...],
+    root: Path,
+    selection: Mapping[str, tuple[str, ...]] | None = None,
+    point: str = "",
+) -> None:
+    """Run the test suites of *packages* in one call of *kind_name*'s runner.
+
+    The kind's own runner, else its nearest ancestor's. *arguments* go
+    to the runner unchanged. The call collects each package's own
+    tests and nothing else, the workspace's own among them when
+    [livery.workshop.api.workspace_suite][] is in *packages*.
+    *selection* names, per package path, the test files that stand for
+    the package's suite, and *point* selects that CI point's tests.
+
+    Raises:
+        Failed: when the kind runs no suites, or when a suite fails.
+    """
+    for record in reversed(kind_chain(kind_name)):
+        if record.suites is not None:
+            record.suites(
+                *arguments,
+                packages=packages,
+                root=root,
+                selection=selection,
+                point=point,
+            )
+            return
+    fail(f"kind {kind_name!r} runs no test suites")
 
 
 def kind_coverage_pages(
@@ -535,22 +593,22 @@ def _register_builtin() -> None:
     # Two contract kinds exist today. The extension package template
     # (package-extension) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
-    # The python kind's tools: uv makes the venv the checkers run in,
-    # and the checkers, the formatter and the test runner are what the
-    # gate runs on every python package. Declared here as data, so a
-    # workspace's lock takes them from the kind like any other
-    # requirement and no branch in code knows the list.
+    # The python kind's one tool is uv, which makes the venv the checks
+    # run in. Declared here as data, so a workspace's lock takes it
+    # from the kind like any other requirement and no branch in code
+    # knows the list.
     register_kind(
         KindRecord(
             name="python",
             backend=_python,
             template="package-python",
             parent="base",
-            # uv operates the workspace; the checkers and the formatter
-            # ride their check records, and pytest the dev group's slot.
+            # uv operates the workspace; the checkers, the formatter and
+            # the test runner ride their check records.
             tools=("uv",),
             extractor=_python.EXTRACTOR,
             examples=_python.run_examples,
+            suites=_python.run_test,
             coverage_pages=_python.render_coverage_pages,
         )
     )

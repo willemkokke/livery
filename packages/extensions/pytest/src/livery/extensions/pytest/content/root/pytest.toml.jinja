@@ -1,0 +1,21 @@
+# Written by `{{ prog }} sync` from the pytest extension; the gate keeps it
+# matching. Edit inside the region at the end, which is the repository's
+# own; an edit anywhere else is drift.
+[pytest]
+testpaths = [{% if packages %}"packages"{% if root_tests %}, {% endif %}{% endif %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# Test modules are named by their path (`--import-mode=importlib`), so
+# two packages may both have a tests/test_lifecycle.py. That leaves the
+# tests directories off sys.path, so they go on pythonpath for the
+# helper modules, which carry their package's name and so never clash.
+pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endfor %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# `-n auto` fans the suite across cores; `worksteal` because durations
+# are uneven (footman measured it; the choice carries until we measure
+# here).
+addopts = [{% for word in slots['python.test.addopts'] | join(' ') | split %}"{{ word }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# The cache lives with the workshop's state, never in the root.
+cache_dir = ".workshop/.cache/pytest"
+
+# The repository's own settings: keys of the [pytest] table above that
+# the render does not write.
+# -- workshop: region settings, yours to edit; the render keeps it --
+# -- workshop: end settings --

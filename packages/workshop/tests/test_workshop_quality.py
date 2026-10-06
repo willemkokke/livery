@@ -20,7 +20,7 @@ from workshop_python_checks import python_checks_fixture  # noqa: F401
 # The python checks that judge and never rewrite, sorted, as the fakes
 # below record them: one type check per type checker.
 PYTHON_JUDGES = (
-    "test.pytest",
+    "test.fake",
     "typecheck.fake",
 )
 
@@ -68,7 +68,7 @@ def _record(
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(fake_checks, "run_typecheck", named("typecheck.fake"))
-    monkeypatch.setattr(_python, "run_test", named("test.pytest"))
+    monkeypatch.setattr(fake_checks, "run_test", named("test.fake"))
     return ran, calls
 
 
@@ -130,8 +130,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
     assert by_verb["typecheck.fake"]["paths"] == (".",)
-    assert by_verb["test.pytest"]["packages"] == (unit,)
-    assert by_verb["test.pytest"]["scoped"] is True
+    assert by_verb["test.fake"]["packages"] == (unit,)
+    assert by_verb["test.fake"]["scoped"] is True
     # Beside a package, the unit rides along and the package keeps its
     # own paths.
     ran.clear()
@@ -145,7 +145,7 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     _quality._scoped_check((package, unit))
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == ("packages/one/tests", "tests")
-    assert by_verb["test.pytest"]["packages"] == (package, unit)
+    assert by_verb["test.fake"]["packages"] == (package, unit)
 
 
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
@@ -440,7 +440,7 @@ def _whole_gate(
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(fake_checks, "run_typecheck", typecheck)
-    monkeypatch.setattr(_python, "run_test", named("test.pytest"))
+    monkeypatch.setattr(fake_checks, "run_test", named("test.fake"))
 
     def rewritten(root: object, run: object, tree: str) -> str:
         trees.append(tree)

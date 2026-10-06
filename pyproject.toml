@@ -27,7 +27,7 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
@@ -35,6 +35,7 @@ livery-extensions-clang-format = { workspace = true }
 livery-extensions-clang-tidy = { workspace = true }
 livery-extensions-mypy = { workspace = true }
 livery-extensions-pyrefly = { workspace = true }
+livery-extensions-pytest = { workspace = true }
 livery-extensions-ruff = { workspace = true }
 livery-extensions-ty = { workspace = true }
 livery-footman = { workspace = true }
@@ -64,6 +65,7 @@ dev = [
     "livery-extensions-clang-tidy",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
+    "livery-extensions-pytest",
     "livery-extensions-ruff",
     "livery-extensions-ty",
     "livery-footman[test]",
@@ -79,11 +81,11 @@ dev = [
     # check record's contribution to the `python.dev-group` slot, so a
     # check an extension withdraws takes its line with it, and the record
     # is where its floor and its reason live.
-    "pytest>=8.0",
-    "pytest-cov>=5",
-    "coverage[toml]>=7.13",
-    "pytest-xdist>=3.6",
     "mypy>=1.14",
+    "pytest>=9.0",
+    "pytest-cov>=5",
+    "coverage>=7.13",
+    "pytest-xdist>=3.6",
 ]
 
 [tool.footman]
@@ -102,46 +104,6 @@ docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 # an ambient write is fixed or deliberately classified, never
 # ambient. Loosen a single kind here with a reason, never the star.
 "*" = "error"
-
-[tool.coverage.run]
-# The tests measure, and every process they start, every
-# fm child a test spawns included: inside CI the test
-# runner arms COVERAGE_PROCESS_START in pytest's environment, the .pth
-# coverage installs starts the meter in every python under it, and the
-# patch cascades through the workers. The gate's own driver is never
-# metered, so a line counts only when a test reached it. Parallel
-# data files merge per leg, then across legs in the aggregating
-# gate job.
-patch = ["subprocess"]
-parallel = true
-relative_files = true
-# Branches as well as statements: a conditional's untaken arm is
-# uncovered, where line coverage shows the conditional as covered
-# once its line ran. The floors judge the combined figure.
-branch = true
-source = ["livery"]
-# The C tracer, not sys.monitoring: the sysmon core records a line
-# under the first context that reaches it and never again, and the
-# check legs split one run's data per suite by context, which needs
-# every context complete.
-core = "ctrace"
-
-[tool.coverage.paths]
-# One identity for a file whichever separator wrote it, so Windows
-# and POSIX legs combine as one file set.
-packages = ["packages/", "packages\\"]
-
-[tool.pytest.ini_options]
-testpaths = ["packages", "tests"]
-# Test modules are named by their path (`--import-mode=importlib`), so
-# two packages may both have a tests/test_lifecycle.py. That leaves the
-# tests directories off sys.path, so they go on pythonpath for the
-# helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/clang-format/tests", "packages/extensions/clang-tidy/tests", "packages/extensions/mypy/tests", "packages/extensions/pyrefly/tests", "packages/extensions/ruff/tests", "packages/extensions/ty/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
-# `-n auto` fans the suite across cores; `worksteal` because durations
-# are uneven (footman measured it; the choice carries until we measure
-# here).
-addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[tool.x]` of your own), never a key inside a table the render

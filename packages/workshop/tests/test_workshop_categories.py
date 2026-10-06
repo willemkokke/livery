@@ -197,7 +197,7 @@ def test_explain_prints_category_channel_supplier_and_claims(
     assert lines[0] == "  packages/x/docs/examples/first.py"
     assert lines[1] == "    category: example (livery.workshop)"
     assert lines[2] == "    channel: yours (livery.workshop)"
-    assert "    claimed by: examples.pytest, lint.fake, site" in lines
+    assert "    claimed by: lint.fake, site" in lines
     note = _provenance.describe(tmp_path, Path("notes/musings.md"))
     assert note[1] == "    category: notes (livery.workshop)"
     assert not any(line.startswith("    claimed by") for line in note)

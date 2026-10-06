@@ -167,8 +167,8 @@
       "hosts": {},
       "graph": {
         "file": "pytest.txt",
-        "digest": "sha256:95ac1f59e8c146f02f09eb2231280d11878366c7a216543a147c7fe3530892f0",
-        "by": "uv 0.11.26"
+        "digest": "sha256:435771e2e22d06134d4ad8d83f275daa4f116b738d36efe28ab2c93c9b19c46a",
+        "by": "uv 0.12.5"
       }
     },
     "ruff": {

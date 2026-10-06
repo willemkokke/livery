@@ -187,27 +187,30 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
 # Then what the records render.
 
 
-def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
+def test_this_workspace_composes_no_tool_table_from_the_base_s_records() -> None:
     from livery.workshop._identity import project_facts
     from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
     injected = render_injections(root, project_facts(root))
-    composed = injected["fragments"]["pyproject.toml"]
-    assert "[tool.pytest.ini_options]" in composed
-    assert "packages/workshop/tests" in composed  # the roster reaches the fragments
-    template = (
-        root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
-    ).read_text()
-    assert "[tool.pytest.ini_options]" not in template
-    # The base's own checks carry no editor extension: the listed
-    # extensions' do, and none is mounted here.
+    # Each tool's configuration is a file of its extension's own, and no
+    # extension is mounted here: the base's records add no table to the
+    # project file and recommend no editor extension.
+    assert injected["fragments"]["pyproject.toml"] == ""
     assert injected["extensions"] == []
 
 
 def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
     from livery.workshop._checks import editor_extensions, tools_for_kind
 
+    register_check(
+        CheckRecord(
+            "bystander",
+            "lint",
+            _noop,
+            fragments=(Fragment("pyproject.toml", "[tool.bystander]\nx = 1\n"),),
+        )
+    )
     for role in ("typecheck", "typecomplete"):
         register_check(
             CheckRecord(
@@ -231,7 +234,7 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
     assert "[tool.acme" not in composed["pyproject.toml"]
     assert "acme.checker" not in editor_extensions()
     assert "acme" not in {tool for tool, _ in tools_for_kind("python")}
-    assert "[tool.pytest.ini_options]" in composed["pyproject.toml"]
+    assert "[tool.bystander]" in composed["pyproject.toml"]
 
 
 def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None:

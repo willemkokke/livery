@@ -1,4 +1,4 @@
-"""Documentation examples as files: the collector, the runner, the check."""
+"""Documentation examples as files: the collector and the python kind's runner."""
 
 from __future__ import annotations
 
@@ -166,70 +166,3 @@ def test_the_kind_names_its_runner_and_a_child_inherits_it() -> None:
     assert kind_examples("python") is _python.run_examples
     assert kind_examples("python-nanobind") is _python.run_examples
     assert kind_examples("cpp-conan") is None
-
-
-def test_the_check_runs_the_kinds_runner_and_skips_a_tests_only_member(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from livery.workshop._backends import _python
-    from livery.workshop._checks import GateContext, check_for
-    from livery.workshop._packages import discover_packages
-
-    record = check_for("examples.pytest")
-    assert record.role == "examples" and record.kinds == ("python",)
-    assert [claim.category for claim in record.claims] == ["example"]
-    assert record.tools == ("pytest",)
-    package = _package(tmp_path)
-    ran: list[tuple[str, tuple[str, ...]]] = []
-    # The record holds the runner itself, so the lookup is the seam.
-    from livery.workshop import _kinds
-
-    monkeypatch.setattr(
-        _kinds,
-        "kind_examples",
-        lambda kind: lambda package, root, files=(): ran.append((package.path, files)),
-    )
-    del _python
-    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)
-    packages = discover_packages(tmp_path)
-    # A whole walk runs the package's directory, whatever its catalogue
-    # lists; a run over named files hands the runner the named examples.
-    listed = {"packages/x": (("docs/examples/ok.py", "example"),)}
-    record.run(GateContext(root=tmp_path, packages=packages, catalogue=listed))
-    assert ran == [("packages/x", ())]
-    ran.clear()
-    record.run(
-        GateContext(
-            root=tmp_path,
-            packages=packages,
-            subset=(package,),
-            files=("packages/x/docs/examples/ok.py",),
-            catalogue=listed,
-        )
-    )
-    example = str(tmp_path / "packages/x/docs/examples/ok.py")
-    assert ran == [("packages/x", (example,))]
-    ran.clear()
-    record.run(GateContext(root=tmp_path, packages=packages))
-    assert ran == [("packages/x", ())]
-    # Scoped, with its tests alone changed: the examples did not move.
-    record.run(
-        GateContext(
-            root=tmp_path,
-            packages=packages,
-            subset=(package,),
-            tests={"packages/x": ("packages/x/tests/test_a.py",)},
-        )
-    )
-    assert ran == [("packages/x", ())]
-    # Scoped, with its examples alone changed: they run.
-    record.run(
-        GateContext(
-            root=tmp_path,
-            packages=packages,
-            subset=(package,),
-            examples=("packages/x",),
-        )
-    )
-    assert ran == [("packages/x", ()), ("packages/x", ())]
-    del capsys

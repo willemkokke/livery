@@ -378,7 +378,10 @@ def _chain(
         assert "seeds: already written" in birth.stdout
     contract = (home / "workshop.toml").read_text()
     # Stock fm's births list the stock extensions; the home adds itself.
-    assert 'extensions = ["docs", "ruff", "basedpyright", "dummy.brandx"]' in contract
+    assert (
+        'extensions = ["docs", "ruff", "basedpyright", "pytest", "dummy.brandx"]'
+        in contract
+    )
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
     assert (home / "docs" / "index.md").is_file()
@@ -512,7 +515,7 @@ def _chain(
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
     assert (
-        'extensions = ["docs", "ruff", "basedpyright", "dummy.brandx"]'
+        'extensions = ["docs", "ruff", "basedpyright", "pytest", "dummy.brandx"]'
         in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()

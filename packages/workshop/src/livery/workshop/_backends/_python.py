@@ -1276,7 +1276,6 @@ def test(
     run_test(
         packages=(package,),
         root=root,
-        scoped=True,
         selection={package.path: files} if files else None,
     )
 
@@ -1335,46 +1334,54 @@ def runner_shaped(env: Mapping[str, str]) -> dict[str, str]:
     return {**env, **dict.fromkeys(RUNNER_VARIABLES, "true")}
 
 
+#: coverage.py's own configuration file, which the test check's
+#: extension writes at the root: the meter armed in every process the
+#: tests start reads it, and the coverage CLI finds it first.
+COVERAGE_CONFIG = ".coveragerc"
+
+
 def run_test(
     *pytest_args: str,
-    packages: tuple[Package, ...] = (),
-    root: Path | None = None,
-    scoped: bool = False,
+    packages: tuple[Package, ...],
+    root: Path,
     selection: Mapping[str, tuple[str, ...]] | None = None,
+    point: str = "",
 ) -> None:
-    """Run the test suite; *pytest_args* forwarded verbatim.
+    """Run the suites of *packages* in one pytest call, *pytest_args* unchanged.
 
-    With *packages* and *root*, the run measures coverage over
-    ``livery``: inside CI the tests run metered for the gate job's
-    union, and on a machine the run prints each package's number
-    beside its floor. *scoped* additionally narrows collection to
-    those packages' own test directories (the affected mode), and
-    *selection* names, per package path, the test files that stand
-    for the package's directory. A machine's run sets the runner's
-    variables (`RUNNER_VARIABLES`), so the suite is judged the way
-    the legs judge it. Without *packages* the arguments pass through
-    untouched.
+    The call collects each package's own test directory, the
+    workspace's own tests when their unit is among *packages*, and
+    nothing else, so a package a run leaves out is never collected;
+    *selection* names, per package path, the test files that stand for
+    the package's directory. *point* selects that CI point's tests,
+    through the workshop's points plugin. The run measures coverage
+    over the namespace the configuration names: inside CI the tests
+    run metered for the gate job's union, and on a machine the run
+    prints each package's number beside its floor. A machine's run
+    sets the runner's variables (`RUNNER_VARIABLES`), so the suite is
+    judged the way the legs judge it. With no test directory among
+    the packages no pytest starts, since one handed no path would
+    collect the whole configuration.
     """
-    if not packages or root is None:
-        pytest.opts(in_process=False)(*pytest_args)
-        return
-    dirs: tuple[str, ...] = ()
-    if scoped:
-        # The workspace's own tests ride every scoped run: they reach
-        # any package, so no narrowing excuses them, and the leg stores
-        # them as a unit keyed by the whole tree.
-        from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
 
-        chosen = selection or {}
-        picked: list[str] = []
-        for package in packages:
-            if package.path == WORKSPACE_TESTS:
-                continue
-            if (package.directory / "tests").is_dir():
-                picked.extend(chosen.get(package.path) or (f"{package.path}/tests",))
-        if (root / WORKSPACE_TESTS).is_dir():
-            picked.extend(chosen.get(WORKSPACE_TESTS) or (WORKSPACE_TESTS,))
-        dirs = tuple(picked)
+    if point:
+        pytest_args = (*pytest_args, f"--workshop-point={point}")
+    chosen = selection or {}
+    picked: list[str] = []
+    for package in packages:
+        # The workspace's own tests are a unit whose directory is its
+        # own: the leg stores them keyed by the whole tree.
+        unit = package.path == WORKSPACE_TESTS
+        tests = package.directory if unit else package.directory / "tests"
+        if tests.is_dir():
+            own = package.path if unit else f"{package.path}/tests"
+            picked.extend(chosen.get(package.path) or (own,))
+    dirs = tuple(picked)
+    if not dirs:
+        names = ", ".join(package.path for package in packages)
+        print(f"  tests: no test directory in {names}; nothing to collect")
+        return
     from livery.workshop._pytest_contexts import ARMED
     from livery.workshop._pytest_speed import FILE_VARIABLE
     from livery.workshop._state import run_context
@@ -1406,7 +1413,7 @@ def run_test(
                 # captured child gets its own hidden console on Windows,
                 # where a streamed one shares the runner's and a control
                 # event a worker raises would interrupt the runner too.
-                armed = {**env, ARMED: str(root / "pyproject.toml")}
+                armed = {**env, ARMED: str(root / COVERAGE_CONFIG)}
                 result = pytest.opts(in_process=False, env=armed, nofail=True)(
                     *dirs, *pytest_args
                 )
@@ -1415,9 +1422,9 @@ def run_test(
                     print(result.stderr, end="")
                     fail(f"pytest exited {result.code}")
             else:
-                # Bare --cov: the measured source is [tool.coverage.run]
-                # source, the namespace the render derived, never a
-                # spelled module. The runner's variables are set, so
+                # Bare --cov: the measured source is the configuration's
+                # `[run] source`, the namespace the render derived, never
+                # a spelled module. The runner's variables are set, so
                 # a test that reads them is judged here as on the leg.
                 pytest.opts(in_process=False, env=runner_shaped(env))(
                     *dirs, "--cov", "--cov-report=", *pytest_args
@@ -2083,9 +2090,9 @@ def run_isolated_test(
                     "-p",
                     "no:cacheprovider",
                     # pytest derives its rootdir from the test paths and
-                    # finds the workspace pyproject, whose addopts would
-                    # hand the leg xdist workers and coverage flags; the
-                    # leg is serial and unmetered by design.
+                    # finds the workspace's configuration, whose addopts
+                    # would hand the leg xdist workers and coverage flags;
+                    # the leg is serial and unmetered by design.
                     "-o",
                     "addopts=",
                 ],

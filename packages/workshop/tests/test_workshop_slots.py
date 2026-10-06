@@ -94,33 +94,53 @@ def test_a_list_slot_is_the_union_in_order_and_a_scalar_the_nearest(
     assert composed("acme.scalar") == "Lato"
 
 
+def _noop(ctx: object) -> None:
+    del ctx
+
+
 def test_the_records_fill_the_dev_group_and_addopts_and_a_withdrawn_check_leaves(
     scratch_slots,
 ) -> None:
-    from livery.workshop._checks import check_for, register_check, unregister_check
-
-    group = _list("python.dev-group")
-    assert "pytest>=8.0" in group and "pytest-xdist>=3.6" in group
-    assert _list("python.test.addopts") == [
-        "-q",
-        "-n auto",
-        "--dist=worksteal",
-        "--import-mode=importlib",
-    ]
-    # An extension's contribution lands beside the records', and leaves with it.
-    contribute(
-        "python.dev-group", "hypothesis>=6", extension="acme.brand", by="acme.brand"
+    from livery.workshop._checks import (
+        CheckRecord,
+        register_check,
+        restore,
+        snapshot,
+        unregister_check,
     )
-    assert "hypothesis>=6" in _list("python.dev-group")
-    withdraw("python.dev-group", by="acme.brand")
-    assert "hypothesis>=6" not in _list("python.dev-group")
-    # Unregistering the check that contributes withdraws its lines;
-    # registering it again restores them.
-    record = check_for("test.pytest")
-    unregister_check("test.pytest", by="acme.brand")
-    assert "pytest-xdist>=3.6" not in _list("python.dev-group")
-    register_check(record)
-    assert "pytest-xdist>=3.6" in _list("python.dev-group")
+
+    state = snapshot()
+    try:
+        record = CheckRecord(
+            "acme",
+            "test",
+            _noop,
+            extension="acme.runner",
+            contributions=(
+                ("python.dev-group", "acme-runner>=1"),
+                ("python.test.addopts", "--acme"),
+            ),
+        )
+        register_check(record)
+        assert "acme-runner>=1" in _list("python.dev-group")
+        assert "--acme" in _list("python.test.addopts")
+        # An extension's contribution lands beside the records', and
+        # leaves with it.
+        contribute(
+            "python.dev-group", "hypothesis>=6", extension="acme.brand", by="acme.brand"
+        )
+        assert "hypothesis>=6" in _list("python.dev-group")
+        withdraw("python.dev-group", by="acme.brand")
+        assert "hypothesis>=6" not in _list("python.dev-group")
+        # Unregistering the check that contributes withdraws its lines;
+        # registering it again restores them.
+        unregister_check("test.acme", by="acme.brand")
+        assert "acme-runner>=1" not in _list("python.dev-group")
+        assert "--acme" not in _list("python.test.addopts")
+        register_check(record)
+        assert "acme-runner>=1" in _list("python.dev-group")
+    finally:
+        restore(state)
 
 
 def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
@@ -130,16 +150,15 @@ def test_this_workspace_renders_its_dev_group_from_the_slot() -> None:
     root = Path(__file__).resolve().parents[3]
     injected = render_injections(root, project_facts(root))
     slots = injected["slots"]
-    assert "pytest-xdist>=3.6" in slots["python.dev-group"]
     text = (root / "pyproject.toml").read_text()
     for requirement in slots["python.dev-group"]:
         assert f'    "{requirement}",\n' in text
-    assert 'addopts = "-q -n auto --dist=worksteal --import-mode=importlib"' in text
+    # The template spells no tool's line: the records' contributions do.
     template = (
         root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
     assert '"pytest-xdist>=3.6",' not in template
-    assert 'addopts = "-q' not in template
+    assert "addopts" not in template
 
 
 def test_a_union_composes_the_same_whatever_order_its_checks_registered() -> None:
@@ -147,11 +166,21 @@ def test_a_union_composes_the_same_whatever_order_its_checks_registered() -> Non
     from livery.workshop import _checks
     from livery.workshop._slots import all_composed
 
-    before = all_composed()["python.dev-group"]
     state = _checks.snapshot()
     try:
-        record = _checks.checks_by_name()["test.pytest"]
-        _checks.unregister_check("test.pytest", by="a test")
+        for name in ("one", "two"):
+            _checks.register_check(
+                _checks.CheckRecord(
+                    name,
+                    "test",
+                    _noop,
+                    extension="acme.runner",
+                    contributions=(("python.dev-group", f"acme-{name}>=1"),),
+                )
+            )
+        before = all_composed()["python.dev-group"]
+        record = _checks.checks_by_name()["test.one"]
+        _checks.unregister_check("test.one", by="a test")
         _checks.register_check(record)
         assert all_composed()["python.dev-group"] == before
     finally:

@@ -24,10 +24,16 @@ calls its tool through [livery.workshop.api.run_batched][]; one that
 narrows by packages (``narrowing=PACKAGES``) reads them from
 [livery.workshop.api.scoped_packages][], and one that judges a package
 at a time (``scope=PACKAGE``) reads its files from
-[livery.workshop.api.scoped_files][]. A package's public modules are
-its kind's answer, [livery.workshop.api.public_modules][], and so is
-where its build writes a compilation database,
-[livery.workshop.api.compile_commands][].
+[livery.workshop.api.scoped_files][]. A check declares the options a
+package may set on it with [livery.workshop.api.Option][] and reads a
+package's value with [livery.workshop.api.check_option][]. A package's
+public modules are its kind's answer,
+[livery.workshop.api.public_modules][], and so is where its build
+writes a compilation database, [livery.workshop.api.compile_commands][].
+A kind also runs tests: the suites of several packages in one call,
+[livery.workshop.api.run_suites][], the workspace's own tests among
+them as [livery.workshop.api.workspace_suite][], and a package's
+documentation examples, [livery.workshop.api.kind_examples][].
 """
 
 from __future__ import annotations
@@ -40,10 +46,13 @@ from livery.workshop._checks import (
     CheckRecord,
     Claim,
     GateContext,
+    Option,
+    check_option,
     scoped_files,
     scoped_packages,
     scoped_paths,
 )
+from livery.workshop._coverage_store import workspace_suite
 from livery.workshop._extensions import (
     extension_names,
     mount_extensions,
@@ -51,7 +60,12 @@ from livery.workshop._extensions import (
 )
 from livery.workshop._fragments import Fragment
 from livery.workshop._invoke import run_batched
-from livery.workshop._kinds import compile_commands, public_modules
+from livery.workshop._kinds import (
+    compile_commands,
+    kind_examples,
+    public_modules,
+    run_suites,
+)
 from livery.workshop._navblocks import rewrite_nav_block
 from livery.workshop._packages import (
     Edge,
@@ -72,18 +86,23 @@ __all__ = [
     "Edge",
     "Fragment",
     "GateContext",
+    "Option",
     "Package",
     "__version__",
+    "check_option",
     "compile_commands",
     "discover_packages",
     "extension_names",
+    "kind_examples",
     "mount_extensions",
     "public_modules",
     "rewrite_nav_block",
     "run_batched",
+    "run_suites",
     "scoped_files",
     "scoped_packages",
     "scoped_paths",
     "verify_workspace",
     "workspace_root",
+    "workspace_suite",
 ]

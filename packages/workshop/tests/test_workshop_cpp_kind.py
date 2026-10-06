@@ -262,7 +262,7 @@ def test_python_checks_skip_a_native_member_by_name(
 
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    for name in ("typecheck.fake", "test.pytest"):
+    for name in ("typecheck.fake", "test.fake"):
         assert judged_by(check_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
         assert f"{name}: packages/native skips (cpp-conan kind)" in out
