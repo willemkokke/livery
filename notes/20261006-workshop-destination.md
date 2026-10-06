@@ -20,8 +20,8 @@ Willem, 2026-10-06, quoted by intent:
    a compelling case. Tests have one and may.
 4. Delivery stays incremental, gate-green and mergeable one phase at a
    time, against this destination.
-5. footman drops the `.api` experiment: a root's entry module is its
-   `__init__.py`; what need not load at runtime is imported under
+5. Every root in livery drops the `.api` experiment, footman included: a
+   root's entry module is its `__init__.py`; what need not load at runtime is imported under
    `TYPE_CHECKING`, so type checking, type completeness and the API
    reference still see it.
 6. Java is not planned and nothing may rule it out. Rust must be
@@ -92,7 +92,7 @@ on.
     Extension code calls no `register_*` function; the base exports
     none. A registry an extension owns (the docs extension's
     generators) is read the same way, through
-    `livery.workshop.api.contributions_for`.
+    `livery.workshop.contributions_for`.
 27. **A registry is written at mount and read at use.** No code reads a
     registry while the mount runs, so no extension's correctness
     depends on its position in the list beyond what `REQUIRES` and
@@ -215,9 +215,9 @@ every kind the check judges"). What changes:
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `Job.inputs`, the same `Inputs` record a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.api.Generator`, contributed by a language's `FOR = {"docs": ...}` module and read by the docs extension through `contributions_for("docs")` |
+| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, contributed by a language's `FOR = {"docs": ...}` module and read by the docs extension through `contributions_for("docs")` |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `Generator` of the same contribution |
-| the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.api.write_nav_block`, `nav_block_markers` |
+| the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the python extension's docs contribution (`[docs] api`), and the `module-roots` query |
@@ -233,11 +233,11 @@ public under the names in the next section.
 
 ## The public API, as a contract
 
-The brief asks where each name lives: `livery.workshop.api` or a public
-module the api declares. This note writes `livery.workshop.api`
-throughout. Open ruling 1 asks whether the workshop follows footman to
-`__init__.py`; if it does, every path below reads `livery.workshop`
-and nothing else changes.
+Ruling 5 puts every root's public names in its `__init__.py`. So a
+name below lives in `livery.workshop`, `livery.extensions.docs`,
+`livery.footman` or `livery.toolroom.tools`, or in a public module the
+entry module declares. `livery.workshop.api` is the path today; phase
+10a retires it.
 
 ### The declaration vocabulary
 
@@ -285,60 +285,60 @@ the phase that brings one.
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `__version__` | the workshop's version | tests | api |
-| `Declared` | one contract key: contract, path, types, values | docs (private today) | api |
-| `Fragment` | a dynamic fragment: owner, target, render | the eight (check fragments), claude (phase 10) | api |
-| `Package`, `Edge` | a discovered package and a graph edge | the eight, docs | api |
-| `discover_packages`, `verify_workspace`, `workspace_root` | the workspace and its graph | docs, tests | api |
-| `read_contract` | one contract's declared keys, judged | docs (`load_contract` today) | api |
-| `extension_names` | the listed extensions, in order | tests | api |
-| `contributions_for` | the contribution modules grafted for a target extension | docs (phase 11) | api |
-| `generated_header` | the provenance header for a file an extension writes outside the engine | docs (private today) | api |
-| `ci_run` | the CI run's context, or None at a desk | docs (`run_context` today) | api |
-| `RunContext` | its type | docs | api |
-| `Option`, `check_option` | an option a package may set, and its value | pytest | api |
-| `Slot`, `slot`, `NEAREST`, `UNION`, `MERGE` | a declared slot, its composed value, the composition rules | docs (`_slots` today), the base's `pyproject.toml` template | api |
-| `testing` | the conformance kit: `Subject`, `Clause`, `CLAUSES`, `Violation`, `judge`, `builtin_subject` | every extension's suite | `livery.workshop.testing`, declared in api |
+| `__version__` | the workshop's version | tests | `livery.workshop` |
+| `Declared` | one contract key: contract, path, types, values | docs (private today) | `livery.workshop` |
+| `Fragment` | a dynamic fragment: owner, target, render | the eight (check fragments), claude (phase 10) | `livery.workshop` |
+| `Package`, `Edge` | a discovered package and a graph edge | the eight, docs | `livery.workshop` |
+| `discover_packages`, `verify_workspace`, `workspace_root` | the workspace and its graph | docs, tests | `livery.workshop` |
+| `read_contract` | one contract's declared keys, judged | docs (`load_contract` today) | `livery.workshop` |
+| `extension_names` | the listed extensions, in order | tests | `livery.workshop` |
+| `contributions_for` | the contribution modules grafted for a target extension | docs (phase 11) | `livery.workshop` |
+| `generated_header` | the provenance header for a file an extension writes outside the engine | docs (private today) | `livery.workshop` |
+| `ci_run` | the CI run's context, or None at a desk | docs (`run_context` today) | `livery.workshop` |
+| `RunContext` | its type | docs | `livery.workshop` |
+| `Option`, `check_option` | an option a package may set, and its value | pytest | `livery.workshop` |
+| `Slot`, `slot`, `NEAREST`, `UNION`, `MERGE` | a declared slot, its composed value, the composition rules | docs (`_slots` today), the base's `pyproject.toml` template | `livery.workshop` |
+| `testing` | the conformance kit: `Subject`, `Clause`, `CLAUSES`, `Violation`, `judge`, `builtin_subject` | every extension's suite | `livery.workshop.testing`, declared in `livery.workshop` |
 
 **Check extensions** (the model that works; unchanged but for two
 names).
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `CheckRecord`, `Claim`, `GateContext` | a check, what it claims, what a run hands it | the eight | api |
-| `PACKAGE`, `PACKAGES`, `PATHS`, `WHOLE`, `NONE` | the scope and narrowing vocabulary | the eight; docs needs `NONE` | api |
-| `scoped_paths`, `scoped_files`, `scoped_packages` | what a run reaches | the eight | api |
-| `selected_files` | the changed files a workspace check with `inputs` judges this run | docs (`_checks.selected_files` today) | api |
-| `Inputs`, `Changes` | what a workspace check reads, and what changed | docs (`_influence` today) | api |
-| `run_batched` | the fewest tool calls under the command-line limit | ruff, the type checkers | api |
+| `CheckRecord`, `Claim`, `GateContext` | a check, what it claims, what a run hands it | the eight | `livery.workshop` |
+| `PACKAGE`, `PACKAGES`, `PATHS`, `WHOLE`, `NONE` | the scope and narrowing vocabulary | the eight; docs needs `NONE` | `livery.workshop` |
+| `scoped_paths`, `scoped_files`, `scoped_packages` | what a run reaches | the eight | `livery.workshop` |
+| `selected_files` | the changed files a workspace check with `inputs` judges this run | docs (`_checks.selected_files` today) | `livery.workshop` |
+| `Inputs`, `Changes` | what a workspace check reads, and what changed | docs (`_influence` today) | `livery.workshop` |
+| `run_batched` | the fewest tool calls under the command-line limit | ruff, the type checkers | `livery.workshop` |
 
 **Language and ecosystem extensions** (phase 11 brings every user).
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `Phase`, `PhaseContext` | a lifecycle phase and what its steps share | python, cpp, conan | api |
-| `Query`, `answer` | a typed question about a package, and its answer across the package's extensions | basedpyright (`public_modules`), clang-tidy (`compile_commands`), docs | api |
-| `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]` | the same | api |
-| `Category` | one row of a category table | python, cpp | api |
+| `Phase`, `PhaseContext` | a lifecycle phase and what its steps share | python, cpp, conan | `livery.workshop` |
+| `Query`, `answer` | a typed question about a package, and its answer across the package's extensions | basedpyright (`public_modules`), clang-tidy (`compile_commands`), docs | `livery.workshop` |
+| `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]` | the same | `livery.workshop` |
+| `Category` | one row of a category table | python, cpp | `livery.workshop` |
 | `Seed` | nothing: seeds are files under `seeds/` | | |
-| `Stamper` | what the `stamp` phase writes through | python, cpp, conan | api |
-| `AstRule`, `ParsedModule`, `RuleContext` | a rule over a language's reader | housekeeping | api |
-| `Toolchain` records | phase 14 names them | cpp | api, phase 14 |
+| `Stamper` | what the `stamp` phase writes through | python, cpp, conan | `livery.workshop` |
+| `AstRule`, `ParsedModule`, `RuleContext` | a rule over a language's reader | housekeeping | `livery.workshop` |
+| `Toolchain` records | phase 14 names them | cpp | `livery.workshop`, phase 14 |
 
 **Workspace extensions.**
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `Job`, `Entry`, `JobContribution` | a CI job, its entries, its contribution to a builtin point | docs | api |
-| `Section`, `Prose`, `AGENT`, `HUMAN`, `guidance` | the guidance sections, a fragment, the audiences, and the composed set for one audience | docs (human pages), claude (agent file) | api |
-| `ReleaseNotes`, `release_notes` | the provider protocol and the mounted provider | changelog, docs (the release view) | api |
-| `ci_changes` | the paths changed since the base a CI run measures from, as `Changes` | docs (the docs job's skip; `GitOps` and `ci_affected_base` today) | api |
-| `forge_repository` | this workspace's repository name on its forge | docs (publish by container or ssh) | api |
-| `registry` | the resolved registry target of a kind | docs (the container registry) | api |
-| `RegistryTarget` | its type | docs | api |
-| `Setup` | one repository configuration step | docs | api |
+| `Job`, `Entry`, `JobContribution` | a CI job, its entries, its contribution to a builtin point | docs | `livery.workshop` |
+| `Section`, `Prose`, `AGENT`, `HUMAN`, `guidance` | the guidance sections, a fragment, the audiences, and the composed set for one audience | docs (human pages), claude (agent file) | `livery.workshop` |
+| `ReleaseNotes`, `release_notes` | the provider protocol and the mounted provider | changelog, docs (the release view) | `livery.workshop` |
+| `ci_changes` | the paths changed since the base a CI run measures from, as `Changes` | docs (the docs job's skip; `GitOps` and `ci_affected_base` today) | `livery.workshop` |
+| `forge_repository` | this workspace's repository name on its forge | docs (publish by container or ssh) | `livery.workshop` |
+| `registry` | the resolved registry target of a kind | docs (the container registry) | `livery.workshop` |
+| `RegistryTarget` | its type | docs | `livery.workshop` |
+| `Setup` | one repository configuration step | docs | `livery.workshop` |
 
-**The docs extension's own public API**, `livery.extensions.docs.api`,
+**The docs extension's own public API**, `livery.extensions.docs`,
 for languages contributing to it and for generators in any package:
 
 | Name | Purpose | Users |
@@ -349,13 +349,13 @@ for languages contributing to it and for generators in any package:
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
 | `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | python's generator |
 
-### What leaves the api, and the break each causes
+### What leaves the public surface, and the break each causes
 
 | Name | Goes to | Who breaks | Phase |
 | --- | --- | --- | --- |
-| `rewrite_nav_block` | `livery.extensions.docs.api.write_nav_block` | toolroom-bench (ours); any third-party generator | 10 |
+| `rewrite_nav_block` | `livery.extensions.docs.write_nav_block` | toolroom-bench (ours); any third-party generator | 10 |
 | `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
-| `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python.api` | pytest (ours), which then requires `python` | 11 |
+| `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
 | `API_VERSION` 1 | 2 | every extension built against 1 refuses at mount with a sentence naming both versions | 10 |
 
@@ -423,14 +423,14 @@ reaching package; "exception" means an allowance entry with its reason.
 
 | Reach | Treatment | Name |
 | --- | --- | --- |
-| toolroom's hosted lane into footman's `_globals` and `_context`, and `run(_show=)` | public seam, one object: what the lane asks of its host | `livery.footman.api.host()`: `None` outside a run; else `active`, `real_cwd()`, `target_cwd(cwd, relative)`, `argv_override`, `invocation`, and `run`'s display switch as a keyword the api documents |
+| toolroom's hosted lane into footman's `_globals` and `_context`, and `run(_show=)` | public seam, one object: what the lane asks of its host | `livery.footman.host()`: `None` outside a run; else `active`, `real_cwd()`, `target_cwd(cwd, relative)`, `argv_override`, `invocation`, and `run`'s display switch as a keyword the api documents |
 | toolroom-bench into footman's `_describe` | public: `colored` exists; `bold` and `cyan` are styles of it | `colored(text, style=...)`; `wants_color()` public |
 | toolroom-bench into footman's `_globals.active` | the same `host()` seam | |
-| toolroom-bench into toolroom's `_colordata` | public read of the probed colour table | `livery.toolroom.tools.api.colour_controls()` |
-| toolroom-bench into toolroom-store's `_engine.download` | footman's public `fetch` does the job; the store's own download stays private | `livery.footman.api.fetch` |
-| toolroom-bench into workshop's `_navblocks` | the docs extension's public name | `livery.extensions.docs.api.write_nav_block` |
-| workshop into footman's `_paths` and `_config` | public, named for the question each asks | `livery.footman.api.builtins()` (the App's mounted builtin set), `project_builtins(root)`, `directory_variable("DATA_DIR")`, `tasks_file_name()` |
-| workshop's `_e2e` into forge's `_registry` | the forge's admin protocol, phase 15, makes deleting a published version public; `_e2e` leaves the base in the same phase | `livery.forge.api` admin protocol |
+| toolroom-bench into toolroom's `_colordata` | public read of the probed colour table | `livery.toolroom.tools.colour_controls()` |
+| toolroom-bench into toolroom-store's `_engine.download` | footman's public `fetch` does the job; the store's own download stays private | `livery.footman.fetch` |
+| toolroom-bench into workshop's `_navblocks` | the docs extension's public name | `livery.extensions.docs.write_nav_block` |
+| workshop into footman's `_paths` and `_config` | public, named for the question each asks | `livery.footman.builtins()` (the App's mounted builtin set), `project_builtins(root)`, `directory_variable("DATA_DIR")`, `tasks_file_name()` |
+| workshop's `_e2e` into forge's `_registry` | the forge's admin protocol, phase 15, makes deleting a published version public; `_e2e` leaves the base in the same phase | the admin protocol in `livery.forge` |
 
 No exception. The hosted lane, #1204's likeliest candidate, is one
 object with five members, cheaper than an allowance entry that every
@@ -523,7 +523,16 @@ here; the mapping is in the decision record.
 
 ### Phase 10: the API as a contract, and its first consumers
 
-**10a, the names.** Deliverables:
+**10a, the entry module.** Every root's `api.py` becomes `__init__.py`
+in one wave, footman included (ruling 5);
+what need not load is imported under `TYPE_CHECKING` and served by
+`__getattr__`; `tests/test_namespaces.py` pins the new shape;
+`typecomplete` verifies `__init__`; 10b's pins are written against the
+new path once. Acceptance: `fm check` exits 0;
+`fm workflow.release --local`; the startup measure
+(`fm commit --help`, 255 ms median today) does not rise.
+
+**10b, the names.** Deliverables:
 
 - Every name in "The names" above that needs no language extension:
   `Declared`, `NONE`, `selected_files`, `Inputs`, `Changes`,
@@ -539,8 +548,8 @@ here; the mapping is in the decision record.
 - `Job.installs`, `Job.deploy`, `Job.inputs`; `_ci_generate`,
   `_workflow_tasks` and `_provenance` stop reading the `[docs]` table;
   the `project.urls` slot.
-- `rewrite_nav_block` leaves the api for `livery.extensions.docs.api`;
-  `mount_extensions` leaves it; `API_VERSION = 2`; the eight tool
+- `rewrite_nav_block` leaves for `livery.extensions.docs`;
+  `mount_extensions` leaves the public surface; `API_VERSION = 2`; the eight tool
   extensions and this repository move; the wave releases them.
 - The pin tests first: `test_api_exports_what_the_package_exported`
   lists the new set; the reach scan as
@@ -555,22 +564,14 @@ Acceptance, refusals first:
 - `fm ci.e2e --extension=ruff --fresh` is green on the re-released
   wheels.
 
-**10b, footman's and toolroom's seams.** Deliverables: `host()`,
+**10c, footman's and toolroom's seams.** Deliverables: `host()`,
 `colored` styles, `wants_color`, `builtins`, `project_builtins`,
-`directory_variable`, `tasks_file_name` in footman's api;
+`directory_variable`, `tasks_file_name` in footman's entry module;
 `colour_controls` in toolroom's; the bench on footman's `fetch`; the
 workshop's seven modules on the new names. Acceptance: the reach test's
 allowance holds the forge row alone; `fm check` exits 0;
 `fm workflow.release --local` releases footman, toolroom and the
 workshop.
-
-**10c, the entry module.** If open ruling 1 is yes: every root's
-`api.py` becomes `__init__.py` in one wave, footman first (ruled);
-what need not load is imported under `TYPE_CHECKING` and served by
-`__getattr__`; `tests/test_namespaces.py` pins the new shape;
-`typecomplete` verifies `__init__`. Acceptance: `fm check` exits 0;
-`fm workflow.release --local`; the startup measure
-(`fm commit --help`, 255 ms median today) does not rise.
 
 **10d, changelog ships apart.** `livery-extensions-changelog`: the
 git-cliff provider as `RELEASE_NOTES`, `cliff.toml` its fragment for
@@ -601,7 +602,7 @@ after, by `git diff --exit-code` after `fm sync`.
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
 move; `KindRecord`, `register_kind` and the kind registry go;
 `CATEGORIES` and `ROOT_FILES` as data; `run_suites`, `kind_examples`
-and `workspace_suite` become `livery.extensions.python.api`, and the
+and `workspace_suite` become `livery.extensions.python`, and the
 pytest extension requires `python`; `public_modules` and
 `compile_commands` become queries. The change: the plan's sentence
 that the conan extension owns the conan cache is replaced. Since #1112
@@ -610,7 +611,7 @@ machine's package cache is shared; what 11b still owes is that a
 container build never reuses a binary built against the host's glibc.
 
 **11c, the docs contributions.** `Generator` and the members policy in
-`livery.extensions.docs.api` (the extension is still in the wheel);
+`livery.extensions.docs` (the extension is still in the wheel);
 `Extractor` and `KindRecord.coverage_pages` go; python's `FOR =
 {"docs": "livery.extensions.python._docs"}` declares its generator, its
 coverage pages, `lint.docrefs` and `lint.docstrings`, and the keys
@@ -651,9 +652,9 @@ clone after `fm sync`, `fm check` and `fm docs.build` has no
 `mypy`, `ty` and `pyrefly`; the voice and documentation prose as
 `GUIDANCE`; the reach rule as `RULES` for python with
 `[housekeeping] reaches` as its allowance (this repository's root test
-from 10a retires); the layout rules: a root `__init__.py` where the
-ruling says `__init__`, `api` twice, a distribution not named after its
-import path. Acceptance:
+from 10b retires); the layout rules: a namespace
+`__init__.py`, a root with public names and no `__init__.py`, a module
+named `api`, a distribution not named after its import path. Acceptance:
 `test_an_unused_allowance_entry_refuses_naming_it`,
 `test_a_new_private_reach_refuses_naming_the_file_and_line` in the
 extension's suite; a project born without `housekeeping` lists no
@@ -729,6 +730,10 @@ the stack, which this design neither needs nor rules out).
   becomes 14; its 13 and 14 become 15; its 15 becomes 16. Phases 10a
   to 10c, 11c, 12c and 12d are new.
 - Willem, 2026-10-06, the rulings this note satisfies, quoted above.
+- Willem, 2026-10-06, after the first draft: the `.api` drop is for
+  every package in livery, not footman alone. The draft's open ruling
+  on it is closed and phase 10's entry-module move is its first slice,
+  so the public names are pinned once, at their final path.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
@@ -737,8 +742,7 @@ the stack, which this design neither needs nor rules out).
 - 2026-10-06: the plan's phase 11b sentence on the conan cache is
   stale since #1112 (see 11b above). The plan's vocabulary line "a
   root's `__init__.py` content moves to the root's `api` module" and
-  its 2026-10-02 phase 3 decision are superseded by ruling 5 for
-  footman, and by open ruling 1 for the other roots.
+  its 2026-10-02 phase 3 decision are superseded by ruling 5.
 - 2026-10-06: the brief's "No language extension exists yet", "the
   docs extension imports 20 private workshop modules" and "the eight
   tool extensions use 20 names" all hold on `4f2a5e53`.
@@ -748,29 +752,20 @@ the stack, which this design neither needs nor rules out).
 Each with its options, what each option does not cover, and a
 recommendation. Owner: Willem, unless named.
 
-1. **The entry module of every root.** Ruling 5 moves footman to
-   `__init__.py`. (a) Every root follows in one wave (phase 10c): one
-   rule, one break, every import path shortens; it does not cover a
-   root another distribution installs into, which stays a namespace
-   with its public names in a module it declares. (b) footman alone
-   moves; the other roots keep `api`: no second break; it does not
-   cover "one way", since two spellings of the same rule stay.
-   Recommendation: (a), in phase 10 before the API is pinned, so the
-   break lands once.
-2. **Mount order.** (a) Contract 28: package-level extensions before
+1. **Mount order.** (a) Contract 28: package-level extensions before
    the workspace list; it does not cover a workspace extension that
    wants to precede a language in composition, which none does today.
    (b) Listed order only, as today, with every registry read at use:
    less rule; it does not cover a refusal at mount for a wrong
    capability name, which then surfaces at verb time.
    Recommendation: (a).
-3. **Who owns the generator registry.** (a) The docs extension, through
+2. **Who owns the generator registry.** (a) The docs extension, through
    `contributions_for`; it does not cover a second product that wants
    page generators (none is planned). (b) A generic "generators"
    registry in the base; it does not cover ruling 1, since "page",
    "handler" and "inventory" are documentation words. Recommendation:
    (a).
-4. **Where the reach check lives.** (a) The housekeeping extension's
+3. **Where the reach check lives.** (a) The housekeeping extension's
    python rule with `[housekeeping] reaches`; it does not cover a
    workspace that lists no housekeeping, which then has no reach
    check. (b) The base's `layering.imports`, as a layering rule
@@ -778,34 +773,34 @@ recommendation. Owner: Willem, unless named.
    cover ruling 1, since "underscore name" is Python. Recommendation:
    (a); the conformance kit's `public-surface` clause covers an
    extension's own suite either way.
-5. **The hosted lane.** (a) The `host()` seam in footman's api; it does
+4. **The hosted lane.** (a) The `host()` seam in footman's api; it does
    not cover a future footman that changes how a run is hosted, which
    then changes a public name. (b) A named exception in the allowance;
    it does not cover ruling 3's "conservative with exceptions", and
    every later reader re-justifies it. Recommendation: (a).
-6. **The API version policy before 1.0.** (a) One supported version,
+5. **The API version policy before 1.0.** (a) One supported version,
    bumped on any removal or rename, every extension of ours re-released
    in the wave; it does not cover a third-party extension between two
    workshop releases, which refuses with a sentence until it moves.
    (b) The base accepts a range; it does not cover contract 4's "no
    compatibility code". Recommendation: (a).
-7. **The C++ reference route.** (a) Doxygen XML to Markdown as cpp's
+6. **The C++ reference route.** (a) Doxygen XML to Markdown as cpp's
    generator (phase 12c, after the spike); it does not cover
    cross-references into C++ names from Python pages, which need an
    inventory the route does not produce. (b) A placed Doxygen HTML
    tree linked from the nav; it does not cover the site's theme or
    search. Recommendation: (a), the spike deciding; the `Generator`
    record carries both shapes.
-8. **footman's curated API page.** (a) Delete it; the generator renders
+7. **footman's curated API page.** (a) Delete it; the generator renders
    footman's reference (phase 12d); it does not cover the curated
    grouping, which becomes an authored page. (b) Keep both; it does not
    cover "one way". Recommendation: (a).
-9. **Docs ships apart after the language extensions** (phase 12a after
+8. **Docs ships apart after the language extensions** (phase 12a after
    11). (a) As written; it does not cover `griffelib` leaving the
    workshop wheel before phase 12. (b) Docs ships apart in phase 10
    with its python parts inside it, which move to python's contribution
    in 11c: two moves of the same code. Recommendation: (a).
-10. **Keys a contribution declares under its target's table.**
+9. **Keys a contribution declares under its target's table.**
     (a) Python's docs contribution declares `docs.api` and
     `docs.python-paths` under `[docs]`, live while both are listed; it
     does not cover a reader of `[docs]` that does not know which keys
@@ -813,15 +808,15 @@ recommendation. Owner: Willem, unless named.
     keeps its own table, `[python] docs-paths`; it does not cover the
     reader's expectation that documentation settings sit under `[docs]`.
     Recommendation: (a).
-11. **An ecosystem as a sort.** (a) No sort and no seam of its own, as
+10. **An ecosystem as a sort.** (a) No sort and no seam of its own, as
     written; it does not cover a reader who wants `fm extensions` to
     label one. (b) A `SORT` attribute for the listing; it does not cover
     contract 26's rule that the base reads only what it acts on.
     Recommendation: (a); the listing can say what an extension
     registers.
-12. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
+11. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
     bench's and the store's, outside this design. Owner: the issue.
-13. **#1200's foundation library**: whether the advisory lock, the pid
+12. **#1200's foundation library**: whether the advisory lock, the pid
     probe and the atomic write join one distribution below footman.
     This design adds no lock; phase 16's shared temp roots and two
     gates in one checkout are the cases it would serve. Owner: Willem,
