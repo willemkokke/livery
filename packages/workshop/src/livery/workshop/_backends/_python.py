@@ -66,6 +66,12 @@ def public_modules(package: Package) -> tuple[str, ...]:
     return tuple(modules)
 
 
+def compile_commands(package: Package) -> Path | None:
+    """None: a python package's build writes no compilation database."""
+    del package
+    return None
+
+
 def module_for(package: Package) -> str:
     """The package's importable module, read from its src tree.
 

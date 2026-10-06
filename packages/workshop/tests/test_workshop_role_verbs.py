@@ -317,7 +317,7 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
         "build": {"compile", "configure"},
         "examples": {"pytest"},
         "layering": {"graph", "imports"},
-        "lint": {"clang-tidy"},
+        "lint": set(),
         "provenance": {"check"},
         "drift": {"check"},
         "test": {"ctest", "pytest"},

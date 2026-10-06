@@ -179,7 +179,7 @@ def test_the_kind_chains_from_python() -> None:
     from livery.workshop._checks import checks_by_name, judges_kind
 
     roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
-    assert {"lint", "test", "examples"} <= roles
+    assert {"test", "examples"} <= roles
     assert record.host_tools == ("cc", "c++")
 
 

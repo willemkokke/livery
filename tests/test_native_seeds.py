@@ -1,20 +1,23 @@
-"""The native seeds are written in the style the clang-format extension renders.
+"""The native seeds pass the native extensions' checks from their first commit.
 
-The seeds are the workshop's and the style is the extension's, so the
-property spans both: a member born from the seeds passes its own
-format check from its first commit.
+The seeds are the workshop's, and the style and the lint checks are
+the extensions', so each property spans both.
 """
 
 from __future__ import annotations
 
+import shutil
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 import livery.extensions.clang.format._extension as declaration
+import livery.extensions.clang.tidy._extension as tidy_declaration
 import livery.toolroom.tools.api as tools
 from livery.extensions.clang.format import _checks as clang_format
+from livery.extensions.clang.tidy import _checks as clang_tidy
 from livery.workshop import _checks as registry
 from livery.workshop.api import Package
 
@@ -25,11 +28,12 @@ from workshop_composed import seed_into  # pyright: ignore[reportMissingImports]
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """The extension's check registered, as the mount registers it when listed."""
+    """The extensions' checks registered, as the mount registers them when listed."""
     from livery.workshop._extensions import register_declared_checks
 
     state = registry.snapshot()
     register_declared_checks("clang-format", declaration)
+    register_declared_checks("clang-tidy", tidy_declaration)
     try:
         yield
     finally:
@@ -87,3 +91,57 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     )
     assert sources  # the seeds carry C or C++ to judge
     clang_format.run_format(package, sources, fix=False)
+
+
+@pytest.mark.skipif(
+    any(shutil.which(tool) is None for tool in ("cmake", "ninja", "cc", "c++"))
+    or sys.platform == "win32",
+    reason="the build needs the host's C++ toolchain; Windows builds with MSVC",
+)
+def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
+    tmp_path: Path, registered: None
+) -> None:
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._shipped_files import settle_package
+    from livery.workshop.api import compile_commands
+
+    destination = tmp_path / "packages" / "native"
+    seed_into(
+        destination,
+        "package-cpp-conan",
+        {
+            "package_name": "acme-native",
+            "package_description": "A native member.",
+            "namespace_package": "acme",
+            "project_name": "acme",
+        },
+    )
+    settle_package(destination, "cpp-conan")
+    package = Package(
+        directory=destination,
+        path="packages/native",
+        name="acme-native",
+        kind="cpp-conan",
+        depends=(),
+    )
+    source = destination / "src" / "native.cpp"
+    source.write_text(
+        source.read_text().replace(
+            "} // namespace native",
+            "int branch(int a) {\n"
+            "    if (a > 0) {\n"
+            "        return 1;\n"
+            "    } else {\n"
+            "        return 1;\n"
+            "    }\n"
+            "}\n"
+            "\n"
+            "} // namespace native",
+        )
+    )
+    _cpp_conan.gate_build(package, tmp_path)
+    database = compile_commands(package)
+    assert database is not None and database.is_file()
+    with pytest.raises(BaseException, match="clang-tidy found something") as caught:
+        clang_tidy.run_lint(package, (source,), database)
+    assert "branch" in str(caught.value) or "bugprone" in str(caught.value)

@@ -279,7 +279,6 @@ NATIVE_CHECKS = (
     "build.configure",
     "build.compile",
     "test.ctest",
-    "lint.clang-tidy",
 )
 
 
@@ -366,6 +365,9 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
         def public_modules(self, package: Package) -> tuple[str, ...]:
             return ()
 
+        def compile_commands(self, package: Package) -> Path | None:
+            return None
+
         def referenced_siblings(
             self, package: Package, around: Neighbours
         ) -> dict[str, str]:
@@ -440,8 +442,8 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-extension") is None
-    # The build tools are the kind's; clang-tidy rides its check
-    # record, which is where the profile reads it.
+    # The build tools are the kind's; a native tool an extension brings
+    # rides its check record, which is where the profile reads it.
     assert kind_for("cpp-conan").tools == (
         "cmake",
         "conan",
@@ -450,7 +452,7 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     )
     from livery.workshop._checks import tools_for_kind
 
-    assert {tool for tool, _ in tools_for_kind("cpp-conan")} == {"clang_tidy"}
+    assert {tool for tool, _ in tools_for_kind("cpp-conan")} == set()
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
@@ -484,8 +486,9 @@ def test_the_rendered_package_builds_and_its_ctest_passes(tmp_path: Path) -> Non
     # The kind's records, in the order the gate runs them.
     _cpp_conan.gate_build(package, tmp_path)
     _cpp_conan.test(package, tmp_path)
-    _cpp_conan.lint(package, tmp_path)
     assert (package.directory / _cpp_conan.GATE_BUILD_DIR).is_dir()
+    database = _cpp_conan.compile_commands(package)
+    assert database is not None and database.is_file()
 
 
 @needs_toolchain
@@ -529,31 +532,6 @@ def test_the_rendered_package_configures_from_its_preset(tmp_path: Path) -> None
         check=False,
     )
     assert tested.returncode == 0, tested.stdout + tested.stderr
-
-
-@needs_toolchain
-def test_a_tidy_finding_turns_the_gate_red(tmp_path: Path) -> None:
-    """The lint check is the package's own .clang-tidy, over the gate build."""
-    package = _render_cpp(tmp_path)
-    source = package.directory / "src" / "native.cpp"
-    source.write_text(
-        source.read_text().replace(
-            "} // namespace native",
-            "int branch(int a) {\n"
-            "    if (a > 0) {\n"
-            "        return 1;\n"
-            "    } else {\n"
-            "        return 1;\n"
-            "    }\n"
-            "}\n"
-            "\n"
-            "} // namespace native",
-        )
-    )
-    _cpp_conan.gate_build(package, tmp_path)
-    with pytest.raises(_FAILURES, match="clang-tidy found something") as caught:
-        _cpp_conan.lint(package, tmp_path)
-    assert "branch" in str(caught.value) or "bugprone" in str(caught.value)
 
 
 @needs_toolchain

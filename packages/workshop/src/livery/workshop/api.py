@@ -25,7 +25,9 @@ narrows by packages (``narrowing=PACKAGES``) reads them from
 [livery.workshop.api.scoped_packages][], and one that judges a package
 at a time (``scope=PACKAGE``) reads its files from
 [livery.workshop.api.scoped_files][]. A package's public modules are
-its kind's answer, [livery.workshop.api.public_modules][].
+its kind's answer, [livery.workshop.api.public_modules][], and so is
+where its build writes a compilation database,
+[livery.workshop.api.compile_commands][].
 """
 
 from __future__ import annotations
@@ -49,7 +51,7 @@ from livery.workshop._extensions import (
 )
 from livery.workshop._fragments import Fragment
 from livery.workshop._invoke import run_batched
-from livery.workshop._kinds import public_modules
+from livery.workshop._kinds import compile_commands, public_modules
 from livery.workshop._navblocks import rewrite_nav_block
 from livery.workshop._packages import (
     Edge,
@@ -72,6 +74,7 @@ __all__ = [
     "GateContext",
     "Package",
     "__version__",
+    "compile_commands",
     "discover_packages",
     "extension_names",
     "mount_extensions",

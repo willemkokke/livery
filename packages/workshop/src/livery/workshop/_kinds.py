@@ -138,6 +138,15 @@ class Backend(Protocol):
         """
         ...
 
+    def compile_commands(self, package: Package) -> Path | None:
+        """Where the package's gate build writes its compilation database.
+
+        What a tool that reads one takes (clang-tidy's ``-p``); None for
+        a kind whose build writes none. The file exists once the build
+        is configured.
+        """
+        ...
+
     def referenced_siblings(
         self, package: Package, around: Neighbours
     ) -> dict[str, str]:
@@ -352,6 +361,15 @@ def public_modules(package: Package) -> tuple[str, ...]:
     with no importable API answers nothing.
     """
     return backend_for(package).public_modules(package)
+
+
+def compile_commands(package: Package) -> Path | None:
+    """Where *package*'s gate build writes its compilation database, as its kind says.
+
+    None for a kind whose build writes none. The file exists once the
+    build is configured.
+    """
+    return backend_for(package).compile_commands(package)
 
 
 def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:

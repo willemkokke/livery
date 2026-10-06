@@ -37,6 +37,7 @@ publish_artifact = _python.publish_artifact
 # which the conan kind answers for.
 module_roots = _python.module_roots
 public_modules = _python.public_modules
+compile_commands = _python.compile_commands
 referenced_siblings = _python.referenced_siblings
 
 

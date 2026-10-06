@@ -38,6 +38,7 @@ def test_the_surface_is_declared() -> None:
         "GateContext",
         "Package",
         "__version__",
+        "compile_commands",
         "discover_packages",
         "extension_names",
         "mount_extensions",
