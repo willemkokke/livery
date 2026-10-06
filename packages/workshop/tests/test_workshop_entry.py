@@ -342,7 +342,7 @@ def test_a_failed_sync_reports_and_never_breaks_the_command(
     assert not _reconcile.receipt_path(tmp_path).is_file()
     # apply() reports and returns; it never re-runs on a failure.
     ran: list[object] = []
-    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    monkeypatch.setattr(_reconcile, "_reexec", lambda root, cause: ran.append(root))
     _reconcile.apply(tmp_path)
     assert ran == []
 
@@ -441,10 +441,12 @@ def test_drift_syncs_records_and_names_the_changed_code(
     assert result.changed == ("something-1.0.0.dist-info", "something-2.0.0.dist-info")
     # apply() re-runs exactly when installed code changed.
     monkeypatch.setattr(_reconcile, "reconcile", lambda root: result)
-    ran: list[object] = []
-    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    ran: list[tuple[object, str]] = []
+    monkeypatch.setattr(
+        _reconcile, "_reexec", lambda root, cause: ran.append((root, cause))
+    )
     _reconcile.apply(tmp_path)
-    assert ran == [tmp_path]
+    assert ran == [(tmp_path, _reconcile.SYNCED)]
 
 
 def test_an_unchanged_sync_does_not_rerun(
@@ -455,20 +457,34 @@ def test_an_unchanged_sync_does_not_rerun(
     result = _reconcile.Reconciled(ran=True, drifted=True, synced=True, changed=())
     monkeypatch.setattr(_reconcile, "reconcile", lambda root: result)
     monkeypatch.setattr(
-        _reconcile, "_reexec", lambda root: pytest.fail("re-ran on unchanged code")
+        _reconcile,
+        "_reexec",
+        lambda root, cause: pytest.fail("re-ran on unchanged code"),
     )
     _reconcile.apply(tmp_path)
 
 
-def test_the_rerun_guard_refuses_a_second_lap(
+def test_the_rerun_guard_refuses_a_second_lap_for_one_cause(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import _reconcile
 
-    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "1")
+    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "moved,synced")
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("exec despite the guard"))
-    _reconcile._reexec(tmp_path)
-    assert "already re-ran once on updated code" in capsys.readouterr().err
+    _reconcile._reexec(tmp_path, _reconcile.SYNCED)
+    assert (
+        "already re-ran once because the environment synced" in capsys.readouterr().err
+    )
+    # Another cause re-runs once more: a sync that moved the checkout
+    # mounts the extensions it installed.
+    if sys.platform == "win32":
+        pytest.skip("posix exec shape; the windows arm waits and forwards")
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/uv")
+    seen: list[dict[str, str]] = []
+    monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.append(dict(env)))
+    _reconcile._reexec(tmp_path, _reconcile.INSTALLED)
+    (handed_on,) = seen
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "installed,moved,synced"
 
 
 def test_a_missing_uv_degrades_the_rerun_to_a_note(
@@ -481,7 +497,7 @@ def test_a_missing_uv_degrades_the_rerun_to_a_note(
     monkeypatch.setattr(
         os, "execve", lambda *a: pytest.fail("exec without a uv to run")
     )
-    _reconcile._reexec(tmp_path)
+    _reconcile._reexec(tmp_path, _reconcile.SYNCED)
     assert "continuing on the loaded code" in capsys.readouterr().err
 
 
@@ -508,12 +524,12 @@ def test_the_rerun_hands_the_guard_on_and_writes_none_of_it_here(
     )
     if sys.platform == "win32":
         pytest.skip("posix exec shape; the windows arm waits and forwards")
-    _reconcile._reexec(tmp_path)
+    _reconcile._reexec(tmp_path, _reconcile.SYNCED)
     ((path, argv, handed_on),) = seen
     assert path == "/stub/uv"
     assert argv[:5] == ["/stub/uv", "run", "--project", str(tmp_path), "--no-sync"]
     assert argv[-2:] == ["check", "--affected"]
-    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "synced"
     assert handed_on["PATH"] == os.environ["PATH"]  # extended, not replaced
     assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
 
@@ -546,10 +562,10 @@ def test_a_profiled_rerun_hands_its_trace_on_with_the_guard(
     monkeypatch.setattr(footman, "handing_off", _handing_off)
     seen: list[dict[str, str]] = []
     monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.append(dict(env)))
-    _reconcile._reexec(tmp_path)
+    _reconcile._reexec(tmp_path, _reconcile.MOVED)
     (handed_on,) = seen
     assert handed_on["FM_PROFILE_HANDOFF"] == str(tmp_path / "box")
-    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "moved"
     assert "FM_PROFILE_HANDOFF" not in os.environ
 
 
@@ -578,10 +594,10 @@ def test_the_windows_arm_hands_the_guard_on_and_forwards_the_code(
 
     monkeypatch.setattr(subprocess, "run", _waited)
     with pytest.raises(SystemExit) as exited:
-        _reconcile._reexec(tmp_path)
+        _reconcile._reexec(tmp_path, _reconcile.SYNCED)
     assert exited.value.code == 3
     (handed_on,) = seen
-    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "synced"
     assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
 
 

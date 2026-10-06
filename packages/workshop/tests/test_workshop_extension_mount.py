@@ -220,19 +220,28 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ()
     assert _extensions.UNDECLARED == ("acme.later",)
-    assert _extensions.installed_since_mount(tmp_path) == ()
-    # An install declares it: the next look finds it, while the
-    # contract still lists it.
-    _fake_extensions(tmp_path, monkeypatch, later="")
-    assert _extensions.installed_since_mount(tmp_path) == ("acme.later",)
+    assert _extensions.unmounted(tmp_path) == ("acme.later",)
+    assert _extensions.declared_now(("acme.later",)) == ()
+    # An install declares it: the next look finds it by its entry point,
+    # and imports nothing, since a distribution installed after the
+    # interpreter started may not be importable in it.
+    _fake_extensions(
+        tmp_path, monkeypatch, later="", unloadable="raise ImportError('later')"
+    )
+    assert _extensions.declared_now(("acme.later", "acme.unloadable")) == (
+        "acme.later",
+        "acme.unloadable",
+    )
+    assert _extensions.declared_now(()) == ()
+    # A contract that no longer lists it counts it no more.
     _contract(tmp_path, "[]")
-    assert _extensions.installed_since_mount(tmp_path) == ()
+    assert _extensions.unmounted(tmp_path) == ()
     # A mount that finds every listed extension remembers none.
     _contract(tmp_path, '["acme.later"]')
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
     assert list(_extensions.UNDECLARED) == []
-    assert _extensions.installed_since_mount(tmp_path) == ()
+    assert _extensions.unmounted(tmp_path) == ()
 
 
 def test_an_extension_listed_at_the_wrong_level_refuses(

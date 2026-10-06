@@ -170,7 +170,7 @@ def test_the_clean_heal_reships_and_lands(
         fake.settle(OWNER, NAME, sha)
         return real_follow(*args, **kwargs)
 
-    def cannot_start(root: Path) -> None:
+    def cannot_start(root: Path, cause: str) -> None:
         """The handoff to a fresh submit cannot start: the heal carries on here."""
 
     monkeypatch.setattr("livery.workshop._submit.follow", follow_behind_once)
