@@ -6,6 +6,7 @@ dist/
 __pycache__/
 .coverage
 .coverage.*
+.coverage-lines.*
 fm-profile*.json
 fm-gate.json
 .claude/worktrees/
