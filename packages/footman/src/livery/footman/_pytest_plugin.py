@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Generator, Iterator
     from pathlib import Path
 
     from livery.footman._context import Result
@@ -212,3 +212,32 @@ def _fresh_entry_point_scan() -> Iterator[None]:
     _entries.rescan_entry_points()
     yield
     _entries.rescan_entry_points()
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(
+    item: pytest.Item, nextitem: pytest.Item | None
+) -> Generator[None, object, object]:
+    """Unbind from the api every name a test bound on it, once the test ends.
+
+    `livery.footman.api` serves most of its names through the module's
+    `__getattr__`, reading the defining module on every access, so a
+    test that patches `livery.footman._context.run` is seen by every
+    reader of the api. A test that patches the api itself,
+    `monkeypatch.setattr(api, "run", fake)`, binds the name into the
+    api's own namespace, and the restore at its teardown binds the
+    original there for good. From then on the api answers that name
+    from its namespace, and a later patch of the defining module
+    reaches no reader of the api: the next test on the worker patches a
+    seam nobody reads, and its rig leaks into the shared directories.
+    This wrapper runs around the whole test, after its fixtures' own
+    restores, so a name bound during the test leaves the api with it.
+    """
+    import livery.footman.api as api
+
+    before = set(vars(api))
+    try:
+        return (yield)
+    finally:
+        for name in set(vars(api)) - before:
+            delattr(api, name)

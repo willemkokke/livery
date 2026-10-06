@@ -281,3 +281,30 @@ def test_a_test_never_inherits_the_drop_box_but_the_suite_still_reports(
         monkeypatch.undo()
     (fragment,) = list(box.glob("*.json"))
     assert fragment.name.startswith("pytest-")
+
+
+def test_a_name_a_test_binds_on_the_api_leaves_it_when_the_test_ends(
+    pytester: pytest.Pytester,
+):
+    # The api serves most names through its module __getattr__, so a patch of
+    # the defining module reaches every reader of the api. A test that patches
+    # the api itself binds the name into the api's namespace, and monkeypatch's
+    # restore then binds the original there for good: the next test's patch of
+    # the defining module would reach nobody. The plugin unbinds it.
+    pytester.makepyfile(
+        """
+        import livery.footman.api as api
+        import livery.footman._context as context
+
+        def test_one_patches_the_api(monkeypatch):
+            monkeypatch.setattr(api, "data_dir", lambda: "fake")
+            assert api.data_dir() == "fake"
+
+        def test_two_patches_the_defining_module(monkeypatch):
+            assert "data_dir" not in vars(api)
+            monkeypatch.setattr(context, "data_dir", lambda: "patched")
+            from livery.footman.api import data_dir
+            assert data_dir() == "patched"
+        """
+    )
+    pytester.runpytest_inprocess("-p", "no:cacheprovider").assert_outcomes(passed=2)
