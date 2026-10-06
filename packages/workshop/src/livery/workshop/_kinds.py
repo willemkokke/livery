@@ -299,6 +299,12 @@ class KindRecord:
             heads their chains with its tools and seed tree, builds
             nothing, and is never a package's ``kind``. A concrete
             kind needs a backend; an abstract one has none.
+        root_files: The files the kind writes at the workspace root
+            while a package of it exists, given those packages in path
+            order: a map from each file's path to its text. The sync
+            writes them, the drift check judges them, and each goes
+            with the last such package. None for a kind with no such
+            files. A child kind takes the nearest ancestor's.
     """
 
     name: str
@@ -318,6 +324,7 @@ class KindRecord:
     suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
+    root_files: Callable[[tuple[Package, ...]], dict[str, str]] | None = None
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -522,6 +529,16 @@ def run_suites(
     fail(f"kind {kind_name!r} runs no test suites")
 
 
+def kind_root_files(
+    kind_name: str,
+) -> Callable[[tuple[Package, ...]], dict[str, str]] | None:
+    """The root files writer of *kind_name*, else its nearest ancestor's."""
+    for record in reversed(kind_chain(kind_name)):
+        if record.root_files is not None:
+            return record.root_files
+    return None
+
+
 def kind_coverage_pages(
     kind_name: str,
 ) -> Callable[[Path, tuple[Package, ...]], list[str]] | None:
@@ -656,6 +673,7 @@ def _register_builtin() -> None:
             artifact="conan",
             wheel_identity="",
             tests_need_build=True,
+            root_files=_cpp_conan.root_files,
         )
     )
 

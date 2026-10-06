@@ -319,19 +319,22 @@ def test_the_wheel_is_platform_tagged_and_imports(
 ) -> None:
     """The extension links one third-party and one first-party symbol.
 
-    fmt comes from Conan Center; the library beside the extension is
-    registered editable and built from HEAD; the isolated leg calls both.
-    The conan home is the test's own, so the editable and the packages
-    it builds never reach the machine's cache.
+    fmt comes from Conan Center; the library beside the extension
+    resolves from its source at HEAD through the workspace's
+    conanws.yml; the isolated leg calls both. The conan home is the
+    test's own, so the packages it builds never reach the machine's
+    cache, and nothing is registered in it.
     """
-    from livery.workshop._sync import conan_editables
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import discover_packages
 
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
     _render_library(tmp_path)
     package = _render_chain(tmp_path)
     _consume_the_library(package)
-    registered = conan_editables(tmp_path)
-    assert registered == ["  conan editable: packages/geometry at HEAD"], registered
+    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
+    workspace = _cpp_conan.workspace_file(members)
+    (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(workspace)
     dist = _python_nanobind.build(package, tmp_path)
     wheels = sorted(dist.glob("*.whl"))
     assert wheels, "cibuildwheel produced no wheel"
@@ -341,27 +344,31 @@ def test_the_wheel_is_platform_tagged_and_imports(
     # the package's tests there; the test imports the compiled module.
     resolved = _python.run_isolated_test(package, tmp_path)
     assert "acme-ext" in resolved
+    # The workspace file alone resolved the library: the home holds no
+    # registration, asked from outside the workspace.
+    listed = _cpp_conan._conan(tmp_path.parent, "editable", "list")  # pyright: ignore[reportPrivateUsage]
+    assert "acme-geometry" not in listed.stdout + listed.stderr
 
 
-def test_the_editable_step_says_when_conan_is_missing_and_does_nothing_without_a_member(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
+    tmp_path: Path,
 ) -> None:
-    from livery.workshop._sync import conan_editables
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import discover_packages
 
-    # No cpp-conan member: nothing to register, nothing said.
+    # An extension packages with no conan: no member, so no file.
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
-    assert conan_editables(tmp_path) == []
-    # A member, and no conan deployed: the handle spawns by name, so
-    # an empty PATH raises out of the spawn. The step answers with a
-    # line rather than refusing, because the sync it names is how
-    # conan arrives.
+    assert _cpp_conan.workspace_members(discover_packages(tmp_path)) == ()
+    # The library beside it is a member. Its entry is its path: conan
+    # reads the reference from the recipe, so a release's version stamp
+    # never leaves the file behind.
     _render_library(tmp_path)
-    empty = tmp_path / "empty-path"
-    empty.mkdir()
-    monkeypatch.setenv("PATH", str(empty))
-    (line,) = conan_editables(tmp_path)
-    assert "conan is not on PATH" in line and "sync" in line
+    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
+    assert [member.path for member in members] == ["packages/geometry"]
+    text = _cpp_conan.workspace_file(members)
+    assert text.endswith("packages:\n  - path: packages/geometry\n")
+    assert "ref:" not in text
 
 
 def _receipt(root: Path, tool: str, version: str, **fields: object) -> Path:

@@ -40,8 +40,9 @@ wheel.packages = ["src/{{ namespace_package.split('.')[0] }}"]
 # its own for this.
 CMAKE_PROJECT_TOP_LEVEL_INCLUDES = { env = "CMAKE_CONAN_PROVIDER" }
 # What conan builds for the provider: a package the cache lacks, and a
-# workspace sibling registered editable, from its source at HEAD. A
-# release leg registers no editable, so there the second is a no-op.
+# workspace sibling, from its source at HEAD through the workspace's
+# conanws.yml. A release leg sets the workspace aside, so there the
+# second is a no-op.
 # Those builds use Ninja on every host, the store's generator, under
 # the compiler environment conan activates; a Visual Studio generator
 # would let MSBuild pick a platform apart from the compiler conan names.

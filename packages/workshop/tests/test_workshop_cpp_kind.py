@@ -378,6 +378,35 @@ def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
     assert handed == [("configure", words), ("compile", words), ("ctest", words)]
 
 
+def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_failure(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
+    aside = tmp_path / f"{_cpp_conan.WORKSPACE_FILE}.aside"
+    # No workspace file: the block runs and nothing moves.
+    with _cpp_conan.workspace_aside(tmp_path):
+        assert not workspace.exists()
+    assert not workspace.exists() and not aside.exists()
+    workspace.write_text("packages: []\n")
+    # A block that fails still puts the file back.
+
+    def failing_leg() -> None:
+        with _cpp_conan.workspace_aside(tmp_path):
+            assert not workspace.exists()
+            raise RuntimeError("leg failed")
+
+    with pytest.raises(RuntimeError, match="leg failed"):
+        failing_leg()
+    assert workspace.read_text() == "packages: []\n" and not aside.exists()
+    # A leg killed inside its block left the file aside, and a sync
+    # wrote it again: the stale copy gives way to the current one.
+    aside.write_text("stale\n")
+    with _cpp_conan.workspace_aside(tmp_path):
+        assert not workspace.exists()
+        assert aside.read_text() == "packages: []\n"
+    assert workspace.read_text() == "packages: []\n" and not aside.exists()
+
+
 def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
 
     from livery.workshop._env_tasks import missing_host_tools

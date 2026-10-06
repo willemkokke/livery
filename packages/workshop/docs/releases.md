@@ -135,6 +135,12 @@ digest the forge reports, and restores the cache into its conan
 home; a forge that reports no digest says so rather than passing
 silently.
 
+A release leg builds the packages the release ships, so it sets the
+workspace's `conanws.yml` aside while it builds: a member's
+`conan create` and an extension's wheel resolve a sibling to the
+package the leg created, never to its source tree. The file comes
+back when the builds end, a failure included.
+
 Every floor a member declares on a conan member is proved in the
 leg that builds it: the floor's cache is restored from its own
 release, one wheel is built for that machine with a conan profile

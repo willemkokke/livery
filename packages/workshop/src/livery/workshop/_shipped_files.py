@@ -291,13 +291,11 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         packages=packages,
         package_data=package_data,
     )
-    if lfs_enabled(root):
-        return planned, []
-
     kept: list[Output] = []
     notes: list[str] = []
+    lfs = lfs_enabled(root)
     for output in planned:
-        if PurePosixPath(output.path).name == ".gitattributes":
+        if not lfs and PurePosixPath(output.path).name == ".gitattributes":
             text, left = without_lfs(output.body.decode())
             if left:
                 notes.append(
@@ -307,7 +305,36 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
                 )
                 output = Output(output.path, text.encode(), output.owners)
         kept.append(output)
-    return (*kept, *_agent_outputs(root, order)), notes
+    # Every output beside the composed ones, whatever the LFS setting:
+    # an output the list leaves out is one the delivery withdraws.
+    return (*kept, *_agent_outputs(root, order), *_kind_root_outputs(root)), notes
+
+
+def _kind_root_outputs(root: Path) -> list[Output]:
+    """The files the present kinds write at the root, each while a package of it exists.
+
+    A kind names its files through its record
+    ([livery.workshop._kinds.kind_root_files][]), handed its packages in
+    path order; a file is the engine's like any composed one, written by
+    the sync, judged by the drift check, and withdrawn with the last
+    package that wanted it.
+    """
+    from collections.abc import Callable
+
+    from livery.workshop._kinds import kind_root_files
+    from livery.workshop._packages import Package, discover_packages
+
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    writers: dict[Callable[[tuple[Package, ...]], dict[str, str]], list[Package]] = {}
+    for package in sorted(packages, key=lambda p: p.path):
+        writer = kind_root_files(package.kind)
+        if writer is not None:
+            writers.setdefault(writer, []).append(package)
+    found: list[Output] = []
+    for writer, members in writers.items():
+        for path, text in sorted(writer(tuple(members)).items()):
+            found.append(Output(path, text.encode(), (f"{SELF}:{path}",)))
+    return found
 
 
 def deliver(root: Path, *, local_only: bool = False) -> list[str]:

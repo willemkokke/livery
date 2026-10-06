@@ -158,7 +158,6 @@ def test_a_locked_or_frozen_sync_moves_no_branch_and_writes_no_tracked_file(
     monkeypatch.setattr(_sync, "continue_on_moved_code", refused)
     monkeypatch.setattr(_sync, "fetch_store_lines", lambda at: [])
     monkeypatch.setattr(_sync, "sync_workspace", sync_workspace)
-    monkeypatch.setattr(_sync, "conan_editables", lambda at: [])
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", sync_tools)
     monkeypatch.setattr(_uv, "run_uv", run_uv)
     monkeypatch.setattr(_shipped_files, "deliver", deliver)

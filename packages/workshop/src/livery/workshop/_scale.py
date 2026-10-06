@@ -241,10 +241,8 @@ def edit_member(root: Path, name: str) -> Path:
 def _environment(root: Path) -> dict[str, str]:
     """The children's environment: this one, minus the venv it names.
 
-    The conan home is the fixture's own, beside the workspace: a sync
-    registers every native member as a conan editable, and in the
-    machine's home those would outlive the fixture and answer for any
-    later package of the same name.
+    The conan home is the fixture's own, beside the workspace, so the
+    packages its native members build never reach the machine's cache.
     """
     from livery.workshop._e2e import unsigned_environment
 

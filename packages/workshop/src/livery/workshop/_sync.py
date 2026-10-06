@@ -624,14 +624,13 @@ def sync(
     for line in sync_workspace(root, local_only=local_only):
         print(line)
     # The tools come before `uv sync`: a native member's build under uv
-    # runs cmake, conan and the provider the store supplies, and a
-    # sibling library is consumed at HEAD only once it is registered.
+    # runs cmake, conan and the provider the store supplies, and resolves
+    # a sibling library at HEAD through the conan workspace file the
+    # delivery above wrote.
     # The engine, not the `tools.sync` task: this task owns the console,
     # and a task called from inside it waits for the console to free,
     # which it never does while its caller runs.
     sync_tools(root, frozen=frozen, locked=locked, offline=offline)
-    for line in conan_editables(root):
-        print(line)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
     # The locks just moved, and composed and generated files read them
     # (the locked tools' fragment, the uv pin in setup.sh), so the sync
@@ -773,47 +772,6 @@ def fetch_store_lines(root: Path) -> list[str]:
             " snapshot stands"
         ]
     return [f"  store: {count} ref(s) of origin's state store fetched"]
-
-
-def conan_editables(root: Path) -> list[str]:
-    """Register every cpp-conan member of the workspace as a conan editable; the lines.
-
-    Conan's editable mode is its workspace source: a consumer's
-    `find_package` resolves the member's reference to the member's
-    source tree, built from HEAD, never to a package in the cache, the
-    same as uv's workspace sources for python members. The contract
-    floor stays the drift guard between the two. A workspace with no
-    such member does nothing; a machine without conan deployed says
-    so and registers nothing, since the store supplies conan when the
-    environment is entered. That case is a line, not a refusal: a
-    sync is how conan arrives, so failing on its absence would make
-    the fix unreachable.
-    """
-    import livery.toolroom.tools.api as tools
-    from livery.workshop._packages import discover_packages
-
-    members = [p for p in discover_packages(root) if p.kind == "cpp-conan"]
-    if not members:
-        return []
-    conan = tools.conan.opts(nofail=True, recorded=False)
-    lines: list[str] = []
-    for member in members:
-        try:
-            result = conan("editable", "add", str(member.directory))
-        except OSError:
-            # The handle spawns by name; an undeployed conan raises
-            # here rather than answering with a failing result.
-            return [
-                "  conan editables: conan is not on PATH, so none registered; enter"
-                f" the environment and re-run `{footman.prog()} sync`"
-            ]
-        if result.code == 0:
-            lines.append(f"  conan editable: {member.path} at HEAD")
-        else:
-            tail = (result.stdout + result.stderr).strip().splitlines()
-            why = tail[-1] if tail else f"exit {result.code}"
-            lines.append(f"  conan editable: {member.path} refused: {why}")
-    return lines
 
 
 def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
