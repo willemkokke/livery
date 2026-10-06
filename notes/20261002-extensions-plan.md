@@ -1456,11 +1456,13 @@ phase 12) under `livery.extensions`, each its own distribution; the
 backends move into them; kinds, `KindRecord` and the kind registry go;
 this repository's packages list their extensions.
 The `conan` extension owns the conan cache, and a workspace's builds
-never share the machine's: sibling packages resolve the same way in
-development and at release, with no editables left in the machine's
-conan home (#1112); a container build (the nanobind wheel's manylinux
-image) never reuses a binary built against the host's newer glibc,
-since conan's package ID does not see glibc.
+never share the machine's. Sibling packages already resolve through
+the workspace's `conanws.yml`, with nothing registered in a conan home
+(#1112): in development from their sources, and at release from the
+packages the leg created, with the file set aside. A container build
+(the nanobind wheel's manylinux image) never reuses a binary built
+against the host's newer glibc, since conan's package ID does not see
+glibc. Open item 12 holds the cache's scope.
 
 **11c, the release train through phases.** Deliverables, carried from
 the empty shell plan's phases 5 and 6: `stamp`, `build`, `prove`,
@@ -2153,6 +2155,33 @@ Acceptance:
   and a javadoc jar per jar, md5 and sha1 per file, a PGP signature
   per file and the POM's name, description, url, license, developers
   and scm, and never removes a published version.
+- Willem, 2026-10-06: the core is a composition engine and an
+  extension-point API, nothing more. It knows no single language,
+  ecosystem or product concern, documentation generation included:
+  each lives in an extension, behind a seam the core offers. The
+  public API extensions build on is the most important thing this
+  refactor establishes.
+- Willem, 2026-10-06: delivery stays incremental, gate-green and
+  mergeable one phase at a time, but against a designed destination.
+  A design note for the base's public extension API, written apart
+  from this plan, re-sequences phases 10 to 15 once Willem rules on
+  it.
+- Willem, 2026-10-06: the `api` convention goes, for every
+  distribution root. A root's `__init__.py` is its entry point again;
+  the public names it need not import at runtime are imported under
+  `TYPE_CHECKING`, for the checkers, type completeness and the docs,
+  and served on first use. The shared namespaces (`livery`,
+  `livery.toolroom`, `livery.extensions`) keep no `__init__.py`. This
+  replaces the ruling of 2026-10-05 that `api` stays: no distribution
+  installs into another's root. footman's console scripts move from
+  `livery.footman.api:main` to `livery.footman:main` by an ordered
+  transition, never a compatibility shim. The layout pins flip with
+  it (`test_every_distribution_root_is_a_namespace_with_one_api` and
+  `test_every_public_module_under_a_root_is_its_api_or_declared_there`),
+  and so does phase 10's housekeeping rule against a root
+  `__init__.py`.
+- Willem, 2026-10-06: Rust must be supported. Java stays possible, as
+  recorded above.
 
 ## Open
 
@@ -2190,4 +2219,15 @@ Acceptance:
     handler of our own, or a docs mode that places a language's own
     reference pages in the site and links to them without
     cross-references. The cpp kind has no extractor today either.
+    Read on 2026-10-06: Zensical runs only the plugins it implements
+    natively and ignores the configuration of any other, and its
+    mkdocstrings support names the Python handler alone, so a handler
+    of our own would not load. A third choice follows: Markdown
+    generated before the build from a language's own extractor, such
+    as Doxygen's XML for C and C++, with a spike pending on whether
+    Zensical's reference check resolves the generated headings.
     Owner: Willem.
+12. **The conan cache's scope under 11b**: one per checkout, or one
+    shared by a repository's checkouts, as #1112's workspace file
+    assumes when every worktree resolves its own sources over one
+    cache. Owner: Willem, with the destination design.
