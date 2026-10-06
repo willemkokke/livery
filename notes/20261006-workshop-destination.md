@@ -123,7 +123,8 @@ on.
 32. **The docs extension owns every word of documentation generation.**
     Pages, generators, handlers, inventories, nav blocks, the members
     policy, the site's config, the publish seam and the `[docs]` table.
-    A language contributes to it through `FOR`, never the other way.
+    Another extension contributes to it by requiring it or through
+    `FOR`, never the other way.
 
 ## The architecture
 
@@ -214,7 +215,7 @@ every kind the check judges"). What changes:
 
 | Knowledge in the core today | Where | Seam in the destination |
 | --- | --- | --- |
-| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `CONTRACT_KEYS`; a language's docs contribution declares the keys it reads under `[docs]` (`api`, `python-paths`) |
+| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `CONTRACT_KEYS`; the mkdocstrings extension declares the keys it reads under `[docs]` (`api`, `python-paths`) |
 | the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `Job.installs` (system packages the job installs before entering) and `Job.deploy` (the seam's value), set by the contributing extension on its `JOBS` entry |
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
@@ -268,7 +269,7 @@ built from are in the next table.
 | `SLOTS` | `Slot` records it declares; `CONTRIBUTIONS` fills others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
 | `GUIDANCE` | `Section` and rendered `Prose` records; files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
 | `RELEASE_NOTES` | a `ReleaseNotes` provider | workspace | changelog (phase 10) |
-| `RULES` | `AstRule` tuple, each naming the language whose reader it reads | workspace, language | housekeeping's reach rule (phase 12) |
+| `RULES` | `AstRule` tuple, each naming the language whose reader it reads | workspace, package | housekeeping's reach rule (phase 12) |
 | `SETUP` | repository configuration steps for `workflow.configure` | workspace | docs' pages hosting (phase 12) |
 | `CATEGORIES` | category tables | package | python, cpp (phase 11) |
 | `PHASES` | contributions to the lifecycle phases, `pre`, main, `post` | package | phase 11 |
@@ -622,7 +623,7 @@ and `_hooks` leave the base. Acceptance: a project born without
 repository's `.claude/` and `CLAUDE.md` are byte-identical before and
 after, by `git diff --exit-code` after `fm sync`.
 
-### Phase 11: package composition and the language extensions
+### Phase 11: package composition and the package extensions
 
 **11a, the model** (the plan's 11a, unchanged): `COMPATIBLE`,
 `BEFORE`, `AFTER`, the validity rule, the canonical set,
@@ -857,7 +858,7 @@ recommendation. Owner: Willem, unless named.
    footman's reference (phase 12d); it does not cover the curated
    grouping, which becomes an authored page. (b) Keep both; it does not
    cover "one way". Recommendation: (a).
-8. **Docs ships apart after the language extensions** (phase 12a after
+8. **Docs ships apart after the package extensions** (phase 12a after
    11). (a) As written; it does not cover a workspace wanting the docs
    extension as a wheel of its own before phase 12. (b) Docs ships
    apart in phase 10 with its python parts inside it, which move to
