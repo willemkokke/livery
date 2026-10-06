@@ -49,6 +49,7 @@ def test_sync_runs_where_git_has_no_history(
         raise AssertionError("nothing to bring current here")
 
     monkeypatch.setattr(_sync, "bring_current", _never)
+    monkeypatch.setattr(_sync, "require_mounted", _step("mounted"))
     monkeypatch.setattr(_sync, "sweep_residue", _step("sweep", []))
     monkeypatch.setattr(_sync, "fetch_store_lines", _step("store", []))
     monkeypatch.setattr(_sync, "sync_workspace", _step("content", []))
@@ -65,7 +66,9 @@ def test_sync_runs_where_git_has_no_history(
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     _sync.sync()
     assert "no git history here: nothing to bring current" in capsys.readouterr().out
+    # Every listed extension is mounted before anything renders or locks.
     assert steps == 2 * [
+        "mounted",
         "sweep",
         "store",
         "content",
@@ -89,23 +92,27 @@ def test_a_moved_checkout_hands_the_sync_to_a_fresh_process(
 
     # Nothing moved: no handoff, no note.
     real_reexec = _reconcile._reexec
-    ran: list[object] = []
-    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    ran: list[tuple[object, str]] = []
+
+    def handed(root: Path, cause: str) -> None:
+        ran.append((root, cause))
+
+    monkeypatch.setattr(_reconcile, "_reexec", handed)
     assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "a" * 40) is False
     assert ran == [] and capsys.readouterr().out == ""
     # A re-run that cannot start is the reconcile's own note, and the
     # sync carries on in this process.
-    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "1")
+    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", _reconcile.MOVED)
     monkeypatch.setattr(_reconcile, "_reexec", real_reexec)
     assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "b" * 40) is True
     captured = capsys.readouterr()
     assert "the checkout moved from aaaaaaaaaaaa to bbbbbbbbbbbb" in captured.out
-    assert "continuing on the loaded code" in captured.err
+    assert "re-ran once because the checkout moved" in captured.err
     # A move hands over exactly once, to the re-run on the new code.
     monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC")
-    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    monkeypatch.setattr(_reconcile, "_reexec", handed)
     assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "b" * 40) is True
-    assert ran == [tmp_path]
+    assert ran == [(tmp_path, _reconcile.MOVED)]
 
 
 def test_the_stub_imports_the_sections_in_order_then_the_instance(

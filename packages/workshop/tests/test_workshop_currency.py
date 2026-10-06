@@ -49,31 +49,58 @@ def _advance_main(tmp_path: Path, origin: Path, name: str = "upstream.txt") -> N
     _git(other, "push", "origin", "main")
 
 
-def test_a_sync_that_installed_a_listed_extension_continues_with_it_mounted(
+def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop import _reconcile
-    from livery.workshop._sync import continue_with_new_extensions
+    from livery.workshop._sync import require_mounted
 
-    handed: list[Path] = []
-    monkeypatch.setattr(_reconcile, "_reexec", handed.append)
-    # The refusal first: nothing new, so the sync goes on in this process.
+    handed: list[str] = []
+    synced: list[tuple[str, ...]] = []
+    installs = {"declares": False}
+
+    def reexec(root: Path, cause: str) -> None:
+        del root
+        handed.append(cause)  # a re-run that could not start returns
+
+    def run_uv(*args: str, root: Path) -> None:
+        del root
+        synced.append(args)
+
+    def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
+        return names if installs["declares"] and synced else ()
+
+    monkeypatch.setattr(_reconcile, "_reexec", reexec)
+    monkeypatch.setattr("livery.workshop._uv.run_uv", run_uv)
+    monkeypatch.setattr("livery.workshop._extensions.declared_now", declared_now)
     monkeypatch.setattr(
-        "livery.workshop._extensions.installed_since_mount", lambda start: ()
+        "livery.workshop._extensions.unmounted", lambda start: ("mypy",)
     )
-    assert not continue_with_new_extensions(tmp_path)
+    # The refusals first. Listed, and no distribution declares it even
+    # after uv sync: refused before anything renders or locks.
+    with pytest.raises(Failed, match="no installed distribution declares mypy"):
+        require_mounted(tmp_path, ("--locked",))
+    assert synced == [("sync", "--locked")]
     assert handed == []
-    monkeypatch.setattr(
-        "livery.workshop._extensions.installed_since_mount", lambda start: ("mypy",)
-    )
-    assert continue_with_new_extensions(tmp_path)
-    assert handed == [tmp_path]
+    # uv sync installs it, and the handoff that would mount it cannot
+    # start: refused all the same, since this process cannot mount it.
+    installs["declares"] = True
+    synced.clear()
+    with pytest.raises(Failed, match="mypy installed, and this process cannot mount"):
+        require_mounted(tmp_path)
+    assert synced == [("sync",)]
+    assert handed == [_reconcile.INSTALLED]
     assert (
         "extensions installed by this sync: mypy; the sync continues with them"
         " mounted" in capsys.readouterr().out
     )
+    # Every listed extension mounted: nothing to do.
+    monkeypatch.setattr("livery.workshop._extensions.unmounted", lambda start: ())
+    synced.clear()
+    require_mounted(tmp_path)
+    assert synced == []
 
 
 def test_a_conflicted_rebase_parks_and_restores_the_branch(

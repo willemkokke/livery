@@ -319,33 +319,54 @@ def continue_on_moved_code(
         f"  the checkout moved from {before[:12]} to {after[:12]}; the {verb}"
         " continues on that code"
     )
-    _reconcile._reexec(root)  # pyright: ignore[reportPrivateUsage]
+    _reconcile._reexec(root, _reconcile.MOVED)  # pyright: ignore[reportPrivateUsage]
     return True
 
 
-def continue_with_new_extensions(root: Path) -> bool:
-    """Hand the sync to a fresh process when it installed a listed extension.
+def require_mounted(root: Path, flags: tuple[str, ...] = ()) -> None:
+    """Refuse to render or lock while an extension the workspace lists is unmounted.
 
-    The extensions mounted when the command started, so one the
-    workspace lists and this sync installed (a member's new entry
-    point, say) registered nothing, and the render that follows would
-    leave its files out. The fresh process mounts it. Returns False
-    when the sync installed none; when the re-run cannot start it is
-    named and the sync continues without it, which returns True.
+    The extensions mount when the command starts. One the workspace
+    lists and no installed distribution declared then (a commit the sync
+    moved onto lists it, or a member's new entry point) registered
+    nothing, and a render or a lock without it would remove its files
+    and its tools as withdrawn. When the environment holds it now, or
+    holds it once ``uv sync`` ran with *flags*, the sync hands itself to
+    a fresh process, which mounts it. One no distribution declares even
+    then refuses, naming it, before a file is touched, and so does a
+    handoff that cannot start.
+
+    Raises:
+        Failed: when a listed extension cannot be mounted in this process.
     """
-    from livery.workshop._extensions import installed_since_mount
-
-    installed = installed_since_mount(root)
-    if not installed:
-        return False
     from livery.workshop import _reconcile
+    from livery.workshop._extensions import declared_now, unmounted
+    from livery.workshop._uv import run_uv
 
-    print(
-        f"  extensions installed by this sync: {', '.join(installed)}; the sync"
-        " continues with them mounted"
+    missing = unmounted(root)
+    if not missing:
+        return
+    if declared_now(missing) != missing:
+        run_uv("sync", *flags, root=root)
+    installed = declared_now(missing)
+    if installed:
+        print(
+            f"  extensions installed by this sync: {', '.join(installed)}; the sync"
+            " continues with them mounted"
+        )
+        _reconcile._reexec(root, _reconcile.INSTALLED)  # pyright: ignore[reportPrivateUsage]
+    absent = [name for name in missing if name not in installed]
+    if absent:
+        fail(
+            f"no installed distribution declares {', '.join(absent)}, which"
+            " [workspace] extensions lists, and `uv sync` installed none: install"
+            " the distribution that ships each, or remove the entry. Nothing was"
+            " rendered or locked"
+        )
+    fail(
+        f"{', '.join(installed)} installed, and this process cannot mount"
+        f" them: run `{footman.prog()} sync` again. Nothing was rendered or locked"
     )
-    _reconcile._reexec(root)  # pyright: ignore[reportPrivateUsage]
-    return True
 
 
 def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
@@ -533,7 +554,11 @@ def sync(
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
     that code; the handoff is named, and a process that cannot be
-    started continues on the loaded code and says so.
+    started continues on the loaded code and says so. An extension the
+    workspace lists that the command started without is mounted the
+    same way before anything renders or locks
+    ([livery.workshop._sync.require_mounted][]): a sync never renders
+    without one.
     """
     from livery.workshop._git_ops import GitOps
     from livery.workshop._tool_tasks import sync_tools
@@ -561,6 +586,10 @@ def sync(
         before = git.head_sha()
         bring_current(root, git, interactive=footman.attended())
         continue_on_moved_code(root, before, git.head_sha())
+    # Before anything renders or locks: a listed extension the mount
+    # found missing would count as withdrawn, and its files and its
+    # tools would go.
+    require_mounted(root, _uv_flags(frozen=frozen, locked=locked, offline=offline))
     # Before anything discovers packages: a removed package's leftover
     # directory refuses discovery until it goes.
     for line in sweep_residue(root):
@@ -579,7 +608,6 @@ def sync(
     for line in conan_editables(root):
         print(line)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
-    continue_with_new_extensions(root)
     # The locks just moved, and composed and generated files read them
     # (the locked tools' fragment, the uv pin in setup.sh), so the sync
     # ends by writing both again: the tree it leaves is settled.

@@ -104,7 +104,7 @@ def _seed(base: Path) -> None:
     _git(clone, "commit", "-m", "feat: the first change")
 
 
-def _stays(root: Path) -> None:
+def _stays(root: Path, cause: str) -> None:
     """The handoff to a fresh process, standing in: it cannot start here.
 
     A heal hands the submit to a fresh ``fm submit`` on the merged code;
@@ -1741,7 +1741,7 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
 
     handed: list[Path] = []
 
-    def _handed_on(root: Path) -> None:
+    def _handed_on(root: Path, cause: str) -> None:
         handed.append(root)
         raise SystemExit(0)
 

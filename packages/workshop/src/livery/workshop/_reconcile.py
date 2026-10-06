@@ -24,6 +24,20 @@ from pathlib import Path
 
 _GUARD = "WORKSHOP_RECONCILE_REEXEC"
 
+#: Why a command re-runs on the code on disk. The guard counts each
+#: cause once per command, so a sync that moves the checkout and then
+#: installs extensions re-runs twice, and none re-runs without end.
+MOVED = "moved"
+SYNCED = "synced"
+INSTALLED = "installed"
+
+#: Each cause as the guard's note names it.
+_REASONS = {
+    MOVED: "the checkout moved",
+    SYNCED: "the environment synced",
+    INSTALLED: "listed extensions were installed",
+}
+
 #: Set while a repair runs, so the processes it starts repair nothing. A
 #: delivery lists the workspace's tasks through the runner; that child
 #: would find the files still missing and deliver again, without end.
@@ -269,12 +283,12 @@ def apply(root: Path) -> bool:
     if result.synced:
         _say(f"{footman.prog()}: environment synced from uv.lock")
         if result.changed:
-            _reexec(root)
+            _reexec(root, SYNCED)
     return bool(repaired)
 
 
-def _reexec(root: Path) -> None:
-    """Re-run this command through uv on the code the sync installed.
+def _reexec(root: Path, cause: str) -> None:
+    """Re-run this command through uv on the code the sync installed, for *cause*.
 
     The sync replaced packages underneath a process already running
     them; modules imported before it are the old version, ones
@@ -282,11 +296,12 @@ def _reexec(root: Path) -> None:
     ways that look like nothing in particular. Re-running costs one
     process start on a path that only happens when the lock moved.
 
-    Guarded by an environment marker: a sync that never converges
-    degrades to a note, not a spin. Launch failures degrade the same
-    way; killing the command because the restart could not start
-    would turn a repair into an outage. Windows has no real exec, so
-    it waits and forwards the exit code.
+    Guarded by an environment marker naming the causes the command
+    already re-ran for: each cause re-runs it once, so a sync that never
+    converges degrades to a note, not a spin. Launch failures degrade
+    the same way; killing the command because the restart could not
+    start would turn a repair into an outage. Windows has no real exec,
+    so it waits and forwards the exit code.
 
     The guard is handed to the replacement, never written into this
     process. An ambient write is a footman note, and rightly: a task
@@ -299,10 +314,11 @@ def _reexec(root: Path) -> None:
     import livery.footman.api as footman
 
     prog = footman.prog()
-    if os.environ.get(_GUARD):
+    done = {part for part in os.environ.get(_GUARD, "").split(",") if part}
+    if cause in done:
         _say(
-            f"{prog}: this command already re-ran once on updated code;"
-            " continuing on the loaded code"
+            f"{prog}: this command already re-ran once because"
+            f" {_REASONS[cause]}; continuing on the loaded code"
         )
         return
     uv = shutil.which("uv")
@@ -315,7 +331,11 @@ def _reexec(root: Path) -> None:
         # environment beside the guard: a profiled run's trace, and
         # whatever else subscribes later. Nothing mounted hands nothing on.
         with footman.handing_off() as handed:
-            handed_on = {**os.environ, _GUARD: "1", **handed}
+            handed_on = {
+                **os.environ,
+                _GUARD: ",".join(sorted({*done, cause})),
+                **handed,
+            }
             if sys.platform == "win32":
                 completed = subprocess.run(cmd, check=False, env=handed_on)
                 # The successful handoff: SystemExit derives from

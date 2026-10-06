@@ -346,8 +346,8 @@ def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | 
 MOUNTED: bool = False
 
 #: The listed extensions the last mount found no installed distribution
-#: declaring. A sync that installs one reads them again
-#: ([livery.workshop._extensions.installed_since_mount][]).
+#: declaring. A sync reads them before it renders anything
+#: ([livery.workshop._extensions.unmounted][]).
 UNDECLARED: tuple[str, ...] = ()
 
 
@@ -442,23 +442,31 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     return tuple(mounted)
 
 
-def installed_since_mount(start: Path | None = None) -> tuple[str, ...]:
-    """The listed extensions the mount found undeclared that are declared now.
+def unmounted(start: Path | None = None) -> tuple[str, ...]:
+    """The listed extensions the mount found no installed distribution declaring.
 
-    Reads the installed entry points again, since the process scanned
-    them once at its start: a sync that just installed a member's
-    extension sees it here, and the mount that ran before it did not.
     An extension the contract no longer lists is not counted.
     """
-    if not UNDECLARED:
+    listed = extension_names(start)
+    return tuple(name for name in UNDECLARED if name in listed)
+
+
+def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
+    """Of *names*, the extensions an installed distribution declares now.
+
+    Reads the installed entry points again, since the process scanned
+    them once at its start, and imports nothing: a distribution
+    installed after the interpreter started may not be importable in
+    it, as an editable install's path joins `sys.path` only when a
+    process starts.
+    """
+    if not names:
         return ()
     from livery.footman.api import rescan_entry_points
 
     rescan_entry_points()
-    listed = extension_names(start)
-    return tuple(
-        name for name in UNDECLARED if name in listed and declaration(name) is not None
-    )
+    declared = _declared()
+    return tuple(name for name in names if name in declared)
 
 
 def _note(text: str) -> None:
