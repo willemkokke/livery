@@ -192,6 +192,33 @@ and a product that names a language's capability at mount gets a
 refusal naming the capability instead of an `AttributeError` at verb
 time.
 
+### Requiring and extending
+
+Two declarations say how an extension relates to another, and no
+third is needed:
+
+- `REQUIRES` says the extension cannot work without the target. It
+  declares its registrations on its own module, since a required
+  target is always present, and a listing without the target refuses
+  through the layering check and its fix, naming the entry and the
+  missing target. The mkdocstrings and doxygen extensions require
+  `docs`.
+- `FOR` says the extension adds to the target when the target is
+  there. The contribution module is imported only when both are
+  listed, so a workspace without the target is silent by construction.
+  A house extension with opinions on python and cpp is this case, and
+  so is pytest's coverage pages for docs.
+
+An extension whose every registration lives in `FOR` modules, listed
+in a workspace where no target is listed, is dormant. That is not
+refused: a listing kept until the first python package arrives is a
+statement of intent. It is visible: `fm extensions` and `fm doctor`
+print the entry as dormant with the targets that would wake it,
+derived from the declarations alone. "At least one of several
+targets" has no spelling and no known case; if one appears it is a
+`REQUIRES` entry spelled as alternatives, a grammar change to rule on
+then.
+
 ### Dependencies follow use
 
 The brief's third thought: mounting an extension must not install its
@@ -256,7 +283,7 @@ built from are in the next table.
 | `API_VERSION` | int | every | the eight tool extensions, docs |
 | `LEVELS` | `("workspace",)`, `("package",)` or both | every | the eight, docs |
 | `PLUGIN` | the footman plugin carrying the verbs | every | docs |
-| `REQUIRES` | extensions that must be listed before it | every | housekeeping (phase 12) |
+| `REQUIRES` | extensions it cannot work without, listed before it; it declares for them on its own module | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
 | `COMPATIBLE` | extensions it combines with, from either side | package | phase 11 |
 | `BEFORE`, `AFTER` | order within a phase against named extensions | package | phase 11 |
 | `TOOLS` | the tools its verbs need | every | forge's dev plugin (as a plugin) |
@@ -275,7 +302,7 @@ built from are in the next table.
 | `PHASES` | contributions to the lifecycle phases, `pre`, main, `post` | package | phase 11 |
 | `QUERIES` | `Query` to answering callable | package | phase 11 |
 | `ROOT_FILES` | the files written at the root while a package of it exists | package | cmake and conan (phase 11), from `KindRecord.root_files` |
-| `FOR` | target extension to contribution module | every | pytest for docs, the coverage pages (phase 11) |
+| `FOR` | target extension to contribution module, imported only while both are listed; dormant when no target is, and named so | every | pytest for docs, the coverage pages (phase 11) |
 | `REPLACES`, `DELETES` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
 
 A contribution module (the value of a `FOR` entry) carries the same
@@ -797,6 +824,10 @@ the stack, which this design neither needs nor rules out).
   wheels job leaves the base for nanobind; and the field that matches
   a record to a package is `extensions` on checks and generators
   alike, replacing `kinds` and the draft's `languages`.
+- 2026-10-06, on Willem's question whether an extension with `FOR` and
+  no listed target is silent or an error: `REQUIRES` is the error and
+  `FOR` the silence, with a dormant entry named by `fm extensions` and
+  `fm doctor`; no third declaration.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
