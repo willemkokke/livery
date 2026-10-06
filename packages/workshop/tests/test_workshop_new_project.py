@@ -197,6 +197,12 @@ def test_the_folder_names_the_project_unless_a_name_is_given(
     assert 'name = "odd-dir"' in (here / "workshop.toml").read_text()
 
 
+def test_a_birth_lists_the_stack_it_is_given(tmp_path: Path) -> None:
+    _birth(local=True, stack="ruff")
+    contract = (tmp_path / "acme-tools" / "workshop.toml").read_text()
+    assert 'extensions = ["ruff"]' in contract
+
+
 def test_birth_end_to_end_and_the_second_run_resumes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

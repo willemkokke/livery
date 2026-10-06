@@ -328,12 +328,14 @@ def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
     calls: list[str] = []
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-abc"))
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
-    monkeypatch.setattr(_e2e, "_dev_index", lambda kind: "")
+    monkeypatch.setattr(_e2e, "_dev_index", lambda kind, stack=(): "")
 
     def _authenticate(root: Path, token: str, kind: str = "gitea") -> None:
         calls.append("authenticate")
 
-    def _birth(kind: str, url: str, index: str = "") -> Path:
+    def _birth(
+        kind: str, url: str, index: str = "", stack: tuple[str, ...] = ()
+    ) -> Path:
         calls.append("birth")
         return root
 
@@ -552,6 +554,140 @@ def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
     )
     (home / "pyproject.toml").write_text('[project]\nname = "livery-extensions-ruff"\n')
     assert _e2e.dev_members(tmp_path) == ("workshop", "extensions/ruff", "toolroom")
+
+
+# The extension under test: the refusals first.
+
+
+def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
+    with pytest.raises(
+        _FAILURES, match="no installed distribution declares it"
+    ) as caught:
+        _e2e.extension_under_test("no-such-extension")
+    assert "ruff" in str(caught.value)
+
+
+def _fake_declarations(
+    monkeypatch: pytest.MonkeyPatch, modules: dict[str, object]
+) -> None:
+    monkeypatch.setattr(
+        "livery.workshop._extensions.declaration", lambda name: modules.get(name)
+    )
+
+
+def test_an_extension_with_no_check_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    _fake_declarations(monkeypatch, {"quiet": SimpleNamespace(CHECKS=())})
+    with pytest.raises(_FAILURES, match="registers no check"):
+        _e2e.extension_under_test("quiet")
+
+
+def test_extensions_that_require_each_other_refuse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    check = SimpleNamespace(kinds=("python",))
+    _fake_declarations(
+        monkeypatch,
+        {
+            "a": SimpleNamespace(CHECKS=(check,), REQUIRES=("b",)),
+            "b": SimpleNamespace(CHECKS=(check,), REQUIRES=("a",)),
+        },
+    )
+    with pytest.raises(_FAILURES, match="a -> b -> a"):
+        _e2e.extension_under_test("a")
+
+
+def test_the_stack_lists_what_an_extension_requires_before_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    check = SimpleNamespace(kinds=("cpp-conan",))
+    _fake_declarations(
+        monkeypatch,
+        {
+            "top": SimpleNamespace(CHECKS=(check,), REQUIRES=("mid", "base")),
+            "mid": SimpleNamespace(CHECKS=(check,), REQUIRES=("base",)),
+            "base": SimpleNamespace(CHECKS=(check,)),
+        },
+    )
+    stack, kinds = _e2e.extension_under_test("top")
+    assert stack == ("base", "mid", "top")
+    assert kinds == ("cpp-conan",)
+
+
+def test_ruff_is_tested_on_the_python_and_the_conan_member() -> None:
+    stack, kinds = _e2e.extension_under_test("ruff")
+    assert stack == ("ruff",)
+    assert kinds == ("python", "cpp-conan")
+    # A kind the checks declare, not every kind deriving from it.
+    assert [name for name, _seed in _e2e.members_for(kinds)] == [
+        "loop-echo",
+        "loop-cpp",
+    ]
+    assert _e2e.members_for(()) == _e2e.LOOP_MEMBERS
+
+
+def test_the_birth_lists_the_stack_of_the_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    seen: list[list[str]] = []
+
+    def _run(argv: list[str], **_: object) -> object:
+        seen.append(argv)
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    _e2e._birth("gitea", "http://localhost:1")
+    assert not any(arg.startswith("--stack") for arg in seen[-1])
+    _e2e._birth("gitea", "http://localhost:1", stack=("base", "top"))
+    assert "--stack=base,top" in seen[-1]
+
+
+def test_the_loop_s_own_fm_never_asks_a_signer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools.api as toolroom
+
+    # The pass's own write lands in the task's environment, so the
+    # process's carries no setting: the child must get it anyway.
+    for key in ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"):
+        monkeypatch.delenv(key, raising=False)
+    handed: list[dict[str, str]] = []
+
+    class _Uv:
+        def opts(self, *, env: dict[str, str], **_: object) -> _Uv:
+            handed.append(env)
+            return self
+
+        def __call__(self, *args: str) -> object:
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(toolroom, "uv", _Uv())
+    _e2e._loop_fm(tmp_path, "status")
+    (env,) = handed
+    count = int(env["GIT_CONFIG_COUNT"])
+    pairs = {
+        env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"] for i in range(count)
+    }
+    assert pairs["commit.gpgsign"] == "false"
+
+
+def test_a_contract_s_list_is_read_by_name(tmp_path: Path) -> None:
+    assert _e2e._listed_extensions(tmp_path) == ()  # pyright: ignore[reportPrivateUsage]
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["docs", { name = "acme.house", for = [] }]\n'
+    )
+    listed = _e2e._listed_extensions(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert listed == ("docs", "acme.house")
 
 
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:
