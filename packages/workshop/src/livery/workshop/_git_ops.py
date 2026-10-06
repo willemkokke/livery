@@ -51,6 +51,27 @@ class GitOps:
         common = self._run("rev-parse", "--path-format=absolute", "--git-common-dir")
         return Path(common.strip()).parent
 
+    def unmerged_paths(self) -> list[str]:
+        """The paths a stopped merge or rebase left conflicted, as git names them."""
+        out = self._run("diff", "--name-only", "--diff-filter=U")
+        return [line for line in out.splitlines() if line]
+
+    def staged_text(self, path: str, stage: int) -> str:
+        """*path*'s text at index *stage* of a conflict; empty when that side has none.
+
+        Stage 1 is the common ancestor, 2 the side being merged into
+        (the base, in a rebase), 3 the side merged in (the commit
+        replayed, in a rebase).
+        """
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "show", f":{stage}:{path}"
+        )
+        return result.stdout if result.code == 0 else ""
+
+    def add(self, path: str) -> None:
+        """Stage *path* as it stands in the working tree, a removal included."""
+        self._run("add", "--all", "--", path)
+
     def current_branch(self) -> str:
         """The checked-out branch name; empty when detached."""
         out = self._run("rev-parse", "--abbrev-ref", "HEAD").strip()
