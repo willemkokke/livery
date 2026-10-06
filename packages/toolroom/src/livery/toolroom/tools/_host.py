@@ -316,7 +316,7 @@ def note(text: str) -> None:
     demotions it describes are behaviour-preserving either way.
     """
     if hosted():
-        from livery.footman._context import current, real_stderr
+        from livery.footman.api import current, real_stderr
 
         if current().verbose:
             real_stderr().write(text)

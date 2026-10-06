@@ -280,9 +280,10 @@ opt-in plugins. This repo's tasks.py mounts its first-party
 plugin: `plugin("footman.docs")` is [your tasks,
 documented](taskdocs.md) (`fm docs.page` / `site`). A branded CLI writes
 `into="acme.tools"` instead, since branding is a one-line authoring choice,
-not framework machinery. A naming symmetry to
-know: the `footman.tasks` entry-point *group* is served by the
-`footman.tasks` *package*: different namespaces, one product.
+not framework machinery. The docs plugin is also the public module
+`livery.footman.docs`, whose `page`, `site` and `globals_` a tasks file
+can call directly; footman's other first-party plugins are entry points
+alone.
 
 ## Around and beyond: hooks
 

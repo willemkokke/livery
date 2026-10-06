@@ -14,7 +14,7 @@ docs = group("docs", help="Documentation")
 @docs.task(name="build")
 def docs_build(check: bool = False):
     "Build the docs site; regenerates the task reference first."
-    from livery.footman.tasks.docs import globals_, page, site
+    from livery.footman.docs import globals_, page, site
     from livery.toolroom.tools.api import zensical
 
     site(Path("docs/tasks"))

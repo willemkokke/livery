@@ -23,8 +23,11 @@ if TYPE_CHECKING:
     # Give type-checkers the real types for the lazily re-exported names below;
     # at runtime these are served by `__getattr__` without importing registry
     # on a bare `import footman` (the completion hot path).
+    from livery.footman import docs as docs
     from livery.footman import docstrings as docstrings
     from livery.footman import markdown as markdown
+    from livery.footman import profile as profile
+    from livery.footman import testing as testing
     from livery.footman._application import App as App
     from livery.footman._application import Brand as Brand
     from livery.footman._compose import include as include
@@ -47,6 +50,7 @@ if TYPE_CHECKING:
     from livery.footman._context import config_dir as config_dir
     from livery.footman._context import config_file as config_file
     from livery.footman._context import confirm as confirm
+    from livery.footman._context import current as current
     from livery.footman._context import cwd as cwd
     from livery.footman._context import data_dir as data_dir
     from livery.footman._context import dist as dist
@@ -60,6 +64,7 @@ if TYPE_CHECKING:
     from livery.footman._context import progress as progress
     from livery.footman._context import project_root as project_root
     from livery.footman._context import prompt as prompt
+    from livery.footman._context import real_stderr as real_stderr
     from livery.footman._context import run as run
     from livery.footman._context import section as section
     from livery.footman._context import select as select
@@ -124,6 +129,7 @@ if TYPE_CHECKING:
     from livery.footman._registry import requires_dep as requires_dep
     from livery.footman._registry import requires_env as requires_env
     from livery.footman._registry import requires_tool as requires_tool
+    from livery.footman._registry import root as root_group
     from livery.footman._registry import task as task
     from livery.footman._registry import wrap_bind as wrap_bind
     from livery.footman._registry import wrap_task as wrap_task
@@ -188,12 +194,14 @@ __all__ = [
     "config_section",
     "confirm",
     "console_lane",
+    "current",
     "cwd",
     "cwd_lane",
     "data_dir",
     "default",
     "dist",
     "doc",
+    "docs",
     "docstrings",
     "env",
     "exists",
@@ -226,16 +234,19 @@ __all__ = [
     "pre_reexec",
     "pre_task",
     "pre_tasks",
+    "profile",
     "prog",
     "progress",
     "project_root",
     "prompt",
+    "real_stderr",
     "recording",
     "requires",
     "requires_dep",
     "requires_env",
     "requires_tool",
     "rescan_entry_points",
+    "root_group",
     "run",
     "section",
     "select",
@@ -245,6 +256,7 @@ __all__ = [
     "stream",
     "suggest",
     "task",
+    "testing",
     "track",
     "tty",
     "use_context",
@@ -382,6 +394,14 @@ def __getattr__(name: str) -> object:
         from livery.footman import testing
 
         return getattr(testing, name)
+    if name in ("docs", "profile", "testing"):
+        import importlib
+
+        return importlib.import_module(f"livery.footman.{name}")
+    if name == "root_group":
+        from livery.footman import _registry as registry
+
+        return registry.root
     if name == "docstrings":
         import livery.footman.docstrings
 
@@ -462,6 +482,8 @@ def __getattr__(name: str) -> object:
         "RunFailed",
         "RunTimeout",
         "Failed",
+        "current",
+        "real_stderr",
         "TimedOut",
         "fail",
         "use_context",

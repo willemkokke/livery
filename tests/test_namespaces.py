@@ -11,6 +11,7 @@ names, an extension's, has no api either.
 
 from __future__ import annotations
 
+import ast
 import importlib
 from pathlib import Path
 
@@ -67,12 +68,14 @@ EXPORTS: dict[str, list[str]] = {
         "config_section",
         "confirm",
         "console_lane",
+        "current",
         "cwd",
         "cwd_lane",
         "data_dir",
         "default",
         "dist",
         "doc",
+        "docs",
         "docstrings",
         "env",
         "exists",
@@ -105,16 +108,19 @@ EXPORTS: dict[str, list[str]] = {
         "pre_reexec",
         "pre_task",
         "pre_tasks",
+        "profile",
         "prog",
         "progress",
         "project_root",
         "prompt",
+        "real_stderr",
         "recording",
         "requires",
         "requires_dep",
         "requires_env",
         "requires_tool",
         "rescan_entry_points",
+        "root_group",
         "run",
         "section",
         "select",
@@ -124,6 +130,7 @@ EXPORTS: dict[str, list[str]] = {
         "stream",
         "suggest",
         "task",
+        "testing",
         "track",
         "tty",
         "use_context",
@@ -186,6 +193,7 @@ EXPORTS: dict[str, list[str]] = {
         "gitlab_configured_host",
         "gitlab_is_configured_host",
         "merge_state",
+        "testing",
     ],
     "livery.strongroom": [
         "ALGORITHMS",
@@ -269,6 +277,7 @@ EXPORTS: dict[str, list[str]] = {
         "fetch_url",
         "now",
         "silent",
+        "testing",
     ],
     "livery.toolroom.bench": ["Refreshed", "__version__", "submit_refresh", "tasks"],
     "livery.toolroom.store": [
@@ -402,6 +411,7 @@ EXPORTS: dict[str, list[str]] = {
         "scoped_files",
         "scoped_packages",
         "scoped_paths",
+        "testing",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",
@@ -471,6 +481,51 @@ def test_every_distribution_root_is_a_namespace_with_one_api() -> None:
                 continue
             if path.parent not in roots:
                 problems.append(f"{path.relative_to(ROOT)}: {path.stem} is reserved")
+    assert problems == []
+
+
+def _declared(root: str) -> set[str]:
+    """The names a root's api declares: its `__all__`, else its stub's re-exports."""
+    api = importlib.import_module(f"{root}.api")
+    declared = getattr(api, "__all__", None)
+    if declared is not None:
+        return set(declared)
+    stub = ROOT / SOURCES[root] / "api.pyi"
+    return {
+        alias.name
+        for node in ast.walk(ast.parse(stub.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.asname == alias.name
+    }
+
+
+def test_every_public_module_under_a_root_is_its_api_or_declared_there() -> None:
+    # typecomplete verifies what a root's api declares and nothing else,
+    # so a module or package directly under a root without a leading
+    # underscore is the api, or the api declares it.
+    problems: list[str] = []
+    for root, path in SOURCES.items():
+        declared = _declared(root)
+        # A declaration the api cannot serve is a lie the checkers believe.
+        api = importlib.import_module(f"{root}.api")
+        for name in sorted(declared):
+            getattr(api, name)
+        for child in sorted((ROOT / path).iterdir()):
+            if child.name.startswith(("_", ".")):
+                continue
+            if child.is_dir():
+                if not any(child.glob("*.py")):
+                    continue  # data, never a module
+                name = child.name
+            elif child.suffix == ".py":
+                name = child.stem
+            else:
+                continue
+            if name != "api" and name not in declared:
+                problems.append(
+                    f"{root}.{name}: public, and {root}.api declares no {name}"
+                )
     assert problems == []
 
 

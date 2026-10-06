@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import livery.forge.api as forge_module
 import livery.workshop.api as workshop_module
 
@@ -52,7 +54,18 @@ def test_the_surface_is_declared() -> None:
         "scoped_files",
         "scoped_packages",
         "scoped_paths",
+        "testing",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",
     ]
+
+
+def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name() -> (
+    None
+):
+    import importlib
+
+    assert workshop_module.testing is importlib.import_module("livery.workshop.testing")
+    with pytest.raises(AttributeError, match="has no attribute 'nothing_here'"):
+        workshop_module.nothing_here  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]

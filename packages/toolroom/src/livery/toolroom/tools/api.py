@@ -1025,7 +1025,7 @@ class Tool:
         if wanted:
             from livery.footman import _globals as _pg
             from livery.footman._context import _target_cwd as _target_cwd_of
-            from livery.footman._context import current as _current
+            from livery.footman.api import current as _current
 
             target = _target_cwd_of(_current(), cwd_opt, rel_opt)
             if target is not None and target.resolve() != _Path(_pg.real_getcwd()):

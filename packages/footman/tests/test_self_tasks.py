@@ -9,7 +9,7 @@ import pytest
 
 from livery.footman import _config, _paths
 from livery.footman._context import Result
-from livery.footman.tasks import self_
+from livery.footman._tasks import self_
 
 RECEIPT = """\
 [tool]

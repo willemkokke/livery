@@ -41,8 +41,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
-from livery.footman import _context as context
-from livery.footman.api import Group, doc, fail, group, prog
+import livery.footman.api as footman
+from livery.footman.api import Group, doc, fail, group, prog, root_group
 from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
 
@@ -1089,9 +1089,7 @@ def generate_verbs(into: Group | None = None) -> None:
     it makes what is new, remakes a verb whose flags changed, and
     removes a verb whose check is gone.
     """
-    from livery.footman import _registry as registry
-
-    target = into if into is not None else registry.root
+    target = into if into is not None else root_group
     tree = verb_tree()
     _prune(target, tree)
     for role, tools in tree.items():
@@ -1174,7 +1172,7 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
     body = record.fix if fix else record.run
     if body is None:
         return
-    if not fix and context.current().in_task:
+    if not fix and footman.current().in_task:
         # Inside a run the scheduler dedups a task call, so the earlier
         # check runs once for the whole gate; outside one (a test
         # driving a check by hand) there is no run to dedup against,

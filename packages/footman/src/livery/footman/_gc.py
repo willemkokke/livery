@@ -186,7 +186,7 @@ def main() -> None:
     """Entry for the detached child: argv is (cache_dir, skip_stem).
 
     After its own collect the child runs every registered sweeper
-    (`livery.footman.tasks.janitor`), as silently as
+    (`livery.footman._tasks.janitor`), as silently as
     itself: a sweeper's failure is the sweeper's, never the child's.
     """
     if len(sys.argv) < 2:
@@ -194,6 +194,6 @@ def main() -> None:
     skip = sys.argv[2] if len(sys.argv) > 2 else ""
     collect(Path(sys.argv[1]), skip)
     with contextlib.suppress(Exception):
-        from livery.footman.tasks.janitor import run_sweepers
+        from livery.footman._tasks.janitor import run_sweepers
 
         run_sweepers(dry_run=False)
