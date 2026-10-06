@@ -41,6 +41,16 @@ class GitOps:
             )
         return result.stdout
 
+    def main_checkout(self) -> Path:
+        """The repository's main checkout, the same from any of its worktrees.
+
+        Every worktree shares the main checkout's ``.git`` directory,
+        which git reports as the common directory; its parent is the
+        main checkout.
+        """
+        common = self._run("rev-parse", "--path-format=absolute", "--git-common-dir")
+        return Path(common.strip()).parent
+
     def current_branch(self) -> str:
         """The checked-out branch name; empty when detached."""
         out = self._run("rev-parse", "--abbrev-ref", "HEAD").strip()

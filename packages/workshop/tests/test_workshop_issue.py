@@ -186,6 +186,25 @@ def test_the_worktree_lives_under_the_runners_home(
     assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
 
 
+def test_work_started_inside_a_worktree_lands_beside_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Stacked work starts from the parent's worktree, whose directory
+    # is named after its branch: the folder is the repository's.
+    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "runner")
+    main = tmp_path / "repo"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    _git(main, "config", "user.email", "t@livery.local")
+    _git(main, "config", "user.name", "T")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "root")
+    elsewhere = tmp_path / "runner" / "worktrees" / "repo" / "7-a-parent"
+    _git(main, "worktree", "add", "-q", "-b", "feat/7-a-parent", str(elsewhere))
+    home = tmp_path / "runner" / "worktrees" / "repo"
+    assert worktree_home(main) == home
+    assert worktree_home(elsewhere) == home
+
+
 def test_start_at_the_limit_warns_and_continues(
     rig: tuple[Path, FakeForge, GitOps],
     capsys: pytest.CaptureFixture[str],
