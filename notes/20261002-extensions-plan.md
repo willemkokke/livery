@@ -2,10 +2,11 @@
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
-#1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff, basedpyright, mypy, ty, pyrefly,
-clang-format and clang-tidy slices built (issues #1149, #1159, #1164,
-#1168, #1170, #1175 and #1176), and phases 10 to 15 are not started. It is the one plan from now until the end of
+#1036). Later phases mark each slice built in place, with its issue.
+Phase 9 is built: the eight tool extensions are distributions of
+their own and this repository lists them (issues #1149, #1159, #1164,
+#1168, #1170, #1175, #1176 and #1181). Phases 10 to 15 are not
+started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1344,6 +1345,12 @@ record entry (`KindRecord.suites`), reached through
 `workspace_suite`, `Option` and `check_option`. A run over named files
 keeps, in `scoped_packages`, the members holding a named file the
 check claims. A new project lists `pytest`; this repository does.
+
+**9b built.** This repository lists the eight beside `docs`
+(`workshop.toml`), and `fm new.project` lists `docs`, `ruff`,
+`basedpyright` and `pytest`. Each extension passed
+`fm ci.e2e --extension=<name> --fresh`: ruff after it merged, since
+the extension pass was built after it, and the seven others before.
 
 **9a, the engine and the options.** Deliverables:
 
