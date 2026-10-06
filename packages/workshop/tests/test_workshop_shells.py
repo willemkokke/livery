@@ -141,7 +141,9 @@ def test_check_affected_scopes_or_says_nothing(
         fake_checks, "run_format", lambda **kwargs: ran.append("format")
     )
     monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
-    monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
+    monkeypatch.setattr(
+        fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
+    )
     monkeypatch.setattr(
         _python,
         "run_test",
@@ -206,7 +208,9 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
         fake_checks, "run_format", lambda **kwargs: ran.append("format")
     )
     monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
-    monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
+    monkeypatch.setattr(
+        fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
+    )
     monkeypatch.setattr(_python, "run_test", lambda **kwargs: ran.append("test"))
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps
@@ -246,7 +250,7 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
         fake_checks, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
     )
     monkeypatch.setattr(
-        _python, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
+        fake_checks, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
     )
     monkeypatch.setattr(
         _python, "run_test", lambda **kwargs: calls.append(("test", kwargs))

@@ -111,7 +111,7 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
     )
     # A python tool's claim on the tests stops at the python files; the
     # test check's does not, since pytest reads the cassettes too.
-    for tool in ("pyrefly",):
+    for tool in ("fake",):
         assert judged_files(check_for(f"typecheck.{tool}"), python) == (
             "src/livery/py/mod.py",
             "tests/conftest.py",
@@ -145,7 +145,7 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
         "lint.acme-sources",
         "lint.fake",
         "test.pytest",
-        "typecheck.pyrefly",
+        "typecheck.fake",
     )
     assert claimants(python, "src/livery/py/py.typed") == ()
     assert claimants(python, "docs/index.md") == ()

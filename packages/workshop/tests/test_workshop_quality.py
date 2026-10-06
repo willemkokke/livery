@@ -21,7 +21,7 @@ from workshop_python_checks import python_checks_fixture  # noqa: F401
 # below record them: one type check per type checker.
 PYTHON_JUDGES = (
     "test.pytest",
-    "typecheck.pyrefly",
+    "typecheck.fake",
 )
 
 
@@ -54,9 +54,6 @@ def _record(
 
         return body
 
-    def typecheck(*args: object, **kwargs: object) -> None:
-        named("typecheck.pyrefly")(*args, **kwargs)
-
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr(
         "livery.workshop._packages.verify_graph", named("layering.graph")
@@ -70,7 +67,7 @@ def _record(
     )
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
-    monkeypatch.setattr(_python, "run_typecheck", typecheck)
+    monkeypatch.setattr(fake_checks, "run_typecheck", named("typecheck.fake"))
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
     return ran, calls
 
@@ -132,8 +129,7 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
-    # pyrefly reads its configured whole whatever the scope.
-    assert "paths" not in by_verb["typecheck.pyrefly"]
+    assert by_verb["typecheck.fake"]["paths"] == (".",)
     assert by_verb["test.pytest"]["packages"] == (unit,)
     assert by_verb["test.pytest"]["scoped"] is True
     # Beside a package, the unit rides along and the package keeps its
@@ -414,7 +410,7 @@ def _whole_gate(
 
     def typecheck(*args: object, **kwargs: object) -> None:
         del args, kwargs
-        ran.append("typecheck.pyrefly")
+        ran.append("typecheck.fake")
 
     @contextlib.contextmanager
     def watched():
@@ -443,7 +439,7 @@ def _whole_gate(
     )
     monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
     monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
-    monkeypatch.setattr(_python, "run_typecheck", typecheck)
+    monkeypatch.setattr(fake_checks, "run_typecheck", typecheck)
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
 
     def rewritten(root: object, run: object, tree: str) -> str:
@@ -568,6 +564,6 @@ def test_one_refusing_member_is_the_gate_s_verdict(
     def refuse(*args: object, **kwargs: object) -> None:
         raise RuntimeError("typecheck says no")
 
-    monkeypatch.setattr(_python, "run_typecheck", refuse)
+    monkeypatch.setattr(fake_checks, "run_typecheck", refuse)
     with pytest.raises(BaseException, match="typecheck says no"):
         _quality._run_check(full=True, fix=False, base="")

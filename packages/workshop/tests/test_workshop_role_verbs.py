@@ -322,18 +322,17 @@ def test_the_builtin_checks_generate_the_role_verbs() -> None:
         "provenance": {"check"},
         "drift": {"check"},
         "test": {"ctest", "pytest"},
-        "typecheck": {"pyrefly"},
     }
     root = Group("root")
     generate_verbs(root)
-    test, typecheck = root.groups["test"], root.groups["typecheck"]
+    test = root.groups["test"]
     # --point where pytest reads it, and nowhere else.
     assert _flags(test, "default") == {"point"}
     assert _flags(test, "pytest") == {"point"}
     assert _flags(test, "ctest") == set()
     assert _flags(root.groups["format"], "clang-format") == {"fix", "safe_fix"}
-    assert _flags(typecheck, "default") == set()
-    assert set(typecheck.tasks) == {"default", "pyrefly"}
+    # The base checks no types: a listed extension does.
+    assert "typecheck" not in root.groups
 
 
 def test_a_role_with_no_listed_check_has_no_verb(registry: None) -> None:

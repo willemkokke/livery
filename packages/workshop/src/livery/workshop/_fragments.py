@@ -147,31 +147,6 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 # The builtin fragments, moved from the base template verbatim: each
 # tool's table where the tool reads one file per project.
 
-PYREFLY = r"""[tool.pyrefly]
-# The packages themselves. Preset `default`, not `strict`:
-# strict demands @override, and `typing.override` is Python 3.12+; a
-# zero-dependency 3.11 library cannot spell it without a
-# typing_extensions runtime dep. Revisit when 3.11 support ends.
-preset = "default"
-project-includes = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
-# Both path heuristics off: a checkout under a dot-directory (a
-# `.claude/worktrees/` worktree) silently skips every include and the
-# gate fails on "no files matched". At the repo root neither setting
-# changes anything.
-use-ignore-files = false
-disable-project-excludes-heuristics = true
-# The tool stubs `{{ runner_prog }} tools.restub` writes.
-search-path = ["typings"]
-# Every platform at once, {{ python_floor }} floor.
-python-platform = "all"
-python-version = "{{ python_floor }}"
-
-[tool.pyrefly.errors]
-# Held at error so they cannot silently accumulate; both classes are
-# zero today.
-deprecated = "error"
-unnecessary-type-conversion = "error"
-"""
 
 TESTS = r"""[tool.coverage.run]
 # The tests measure, and every process they start, every

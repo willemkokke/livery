@@ -223,8 +223,8 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 
     for name in ("run_format", "run_lint"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    for name in ("run_typecheck", "run_test"):
-        monkeypatch.setattr(_python, name, spy(name))
+    monkeypatch.setattr(fake_checks, "run_typecheck", spy("run_typecheck"))
+    monkeypatch.setattr(_python, "run_test", spy("run_test"))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
     monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
     # A source file: the style and type checks take it, the import rules
@@ -278,8 +278,8 @@ def test_the_fixers_only_walk_judges_nothing(
 
     for name in ("run_format", "run_lint"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    for name in ("run_typecheck", "run_test"):
-        monkeypatch.setattr(_python, name, spy(name))
+    monkeypatch.setattr(fake_checks, "run_typecheck", spy("run_typecheck"))
+    monkeypatch.setattr(_python, "run_test", spy("run_test"))
 
     def fix(ctx: GateContext) -> None:
         assert ctx.safe and ctx.files == ("tasks.py",)
