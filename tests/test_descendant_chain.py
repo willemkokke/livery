@@ -220,8 +220,14 @@ def _build_wheels(source_root: Path, wheelhouse: Path, env: dict[str, str]) -> N
     current source made.
     """
     wheelhouse.mkdir(exist_ok=True)
+    # A member at either depth: packages/<name>/ or packages/<group>/<name>/.
+    packages = source_root / "packages"
     members = sorted(
-        path.parent for path in (source_root / "packages").glob("*/pyproject.toml")
+        path.parent
+        for path in [
+            *packages.glob("*/workshop.toml"),
+            *packages.glob("*/*/workshop.toml"),
+        ]
     )
     assert members, f"no members under {source_root}/packages"
     for member in members:
@@ -359,6 +365,8 @@ def _chain(
             f"--owner={OWNER}",
             f"--url={GITEA}",
             "--namespace=dummy",
+            # A second birth in the same folder is a resume.
+            *(["--resume"] if resumed else []),
         ],
         work,
         bridged,
@@ -367,7 +375,7 @@ def _chain(
     assert "done: merge the setup PR" in birth.stdout
     if resumed:
         assert "already scaffolded" in birth.stdout
-        assert "workshop.toml: already seeded" in birth.stdout
+        assert "seeds: already written" in birth.stdout
     contract = (home / "workshop.toml").read_text()
     # Stock fm's births list the site's extension; the home adds itself.
     assert 'extensions = ["docs", "dummy.brandx"]' in contract

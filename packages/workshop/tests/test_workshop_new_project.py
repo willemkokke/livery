@@ -124,6 +124,35 @@ def test_a_birth_test_that_reaches_the_network_refuses_naming_the_host() -> None
         pass
 
 
+def test_the_verb_is_offered_outside_a_project_and_inside_one(tmp_path: Path) -> None:
+    # Outside one it starts a birth, inside one it resumes: a task of a
+    # package is offered inside a project only unless it says otherwise.
+    import os
+    import subprocess
+    import sys
+
+    bridge = tmp_path / "bridge-config"
+    bridge.mkdir()
+    (bridge / "tasks.py").write_text(
+        'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    env = {**os.environ, "FOOTMAN_CONFIG_DIR": str(bridge)}
+    shown = subprocess.run(
+        [sys.executable, "-m", "livery.footman", "new.project", "--help"],
+        cwd=outside,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert shown.returncode == 0, shown.stdout + shown.stderr
+    # Hidden from the options: the refusal and the description teach it.
+    options = [line.strip() for line in shown.stdout.splitlines()]
+    assert not any(line.startswith("--resume") for line in options)
+
+
 # The refusals first: where no birth may start, nothing is written.
 
 

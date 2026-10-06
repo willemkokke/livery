@@ -207,7 +207,7 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     return stack
 
 
-@new_group.task(name="project", interactive=True)
+@new_group.task(name="project", expose="always", interactive=True)
 def new_project(
     folder: Annotated[
         Arg[str],
