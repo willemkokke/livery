@@ -1576,7 +1576,12 @@ def _register_builtin() -> None:
         # A package whose suite is not worker-safe runs in an invocation
         # of its own under -n 0; the rest share one run across cores,
         # which runs whatever the members are, since the workspace's
-        # own tests ride every run.
+        # own tests ride every run. With neither a python member nor
+        # tests of its own, the workspace has nothing to collect, and
+        # pytest refuses an empty collection.
+        if not judged and not (ctx.root / WORKSPACE_TESTS).is_dir():
+            print("  test.pytest: no python package and no workspace tests to run")
+            return
         for members, extra in ((parallel, ()), (serial, ("-n", "0"))):
             if extra and not members:
                 continue

@@ -279,6 +279,42 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
     assert enabled("examples.pytest", (package,)) == (package,)
 
 
+def test_a_workspace_with_nothing_to_collect_starts_no_pytest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A native member alone, and no tests of the workspace's own: pytest
+    # would collect nothing and refuse, so no run starts. With the
+    # workspace's tests, the shared run carries them.
+    from livery.workshop._backends import _python
+    from livery.workshop._checks import GateContext, check_for
+    from livery.workshop._packages import discover_packages
+
+    native = tmp_path / "packages" / "native"
+    native.mkdir(parents=True)
+    native.joinpath("workshop.toml").write_text(
+        'kind = "cpp-conan"\nname = "acme-native"\n'
+    )
+    runs: list[tuple[str, ...]] = []
+
+    def fake_run_test(
+        *args: str, packages: tuple[Package, ...], **kwargs: object
+    ) -> None:
+        del args, kwargs
+        runs.append(tuple(p.path for p in packages))
+
+    monkeypatch.setattr(_python, "run_test", fake_run_test)
+    ctx = GateContext(root=tmp_path, packages=discover_packages(tmp_path))
+    check_for("test.pytest").run(ctx)
+    assert runs == []
+    out = capsys.readouterr().out
+    assert "test.pytest: no python package and no workspace tests to run" in out
+    (tmp_path / "tests").mkdir()
+    check_for("test.pytest").run(ctx)
+    assert runs == [()]
+
+
 def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
