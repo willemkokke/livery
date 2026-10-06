@@ -1014,9 +1014,7 @@ def submit_default(
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
     base: Annotated[str, doc("target branch")] = "main",
     closes: Annotated[int, doc("issue to close on merge; 0 = from branch name")] = 0,
-    close: Annotated[
-        bool, doc("close the branch's issue on merge; --no-close leaves it open")
-    ] = True,
+    close: Annotated[bool, doc("close the branch's issue on merge")] = True,
     armed: Annotated[
         bool,
         footman.env("WORKSHOP_AUTOMERGE"),

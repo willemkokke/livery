@@ -347,9 +347,7 @@ def start(
     wip: Annotated[
         bool, doc("park the dirty tree as a commit and reuse this checkout")
     ] = False,
-    worktree: Annotated[
-        bool, doc("open the work in a linked worktree (the default)")
-    ] = True,
+    worktree: Annotated[bool, doc("open the work in a linked worktree")] = True,
     agent: Annotated[
         str, doc("hand the work to a coding agent (implies a worktree)")
     ] = "",
