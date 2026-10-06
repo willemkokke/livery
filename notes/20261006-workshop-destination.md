@@ -168,15 +168,19 @@ clauses apply by what is registered, not by a declared sort.
 | Sort | Level | May register | Seams it uses | Examples |
 | --- | --- | --- | --- | --- |
 | check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `CHECKS`, `GENERATORS`, `FRAGMENTS`, `content/`, `TOOLS`, `OPTIONS` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
-| language | package | a package's capabilities: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, checks of its own; contributions to the docs extension | `PHASES`, `QUERIES`, `CATEGORIES`, `seeds/`, `ROOT_FILES`, `TOOLS`, `CHECKS`, `FOR` | python, cpp, cmake, nanobind, unreal; later rust, go, java |
-| ecosystem | package | a `[publish]` artifact and its registry kind, a manifest's requirements, an installer's cache | the same seams as a language, through the `publish` and `requirements` phases and queries | conan; later crates, maven, npm |
-| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that languages contribute to | `CHECKS`, `JOBS`, `SLOTS`, `GUIDANCE`, `RELEASE_NOTES`, `RULES`, `FRAGMENTS`, `contributions_for` | docs, changelog, claude, housekeeping |
+| package | package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `PHASES`, `QUERIES`, `CATEGORIES`, `seeds/`, `ROOT_FILES`, `TOOLS`, `JOBS`, `CHECKS`, `FOR` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
+| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `CHECKS`, `JOBS`, `SLOTS`, `GUIDANCE`, `RELEASE_NOTES`, `RULES`, `FRAGMENTS`, `contributions_for` | docs, changelog, claude, housekeeping |
 
-An ecosystem is not a fourth level and gets no seam of its own: `conan`
-composes with `cpp` and `cmake` the way the plan already states, and
-`python` carries PyPI inside it because uv and `pyproject.toml` are the
-engine's runtime. A language and an ecosystem differ in which phases
-and queries they answer, nothing more.
+The package sort has four flavours and no sub-sort: a language, a
+build system, an ecosystem and a platform differ in which phases and
+queries they answer, nothing more. `conan` composes with `cpp` and
+`cmake` the way the plan already states, `nanobind` with `python` and
+`cmake`, and `python` carries PyPI inside it because uv and
+`pyproject.toml` are the engine's runtime. A package-level extension
+contributes CI jobs like a workspace one, and its job exists while a
+package lists it: the wheels job is nanobind's, with the runner labels
+its packages declare, and an engine build on its own runners is
+unreal's.
 
 No `SORT` attribute is declared. The brief's question, whether to
 define extension types with a load order between them, is answered by
@@ -215,10 +219,11 @@ every kind the check judges"). What changes:
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `Job.inputs`, the same `Inputs` record a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the languages it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
+| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `Generator` of the same contribution |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
+| the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` | nanobind's `JOBS` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the mkdocstrings extension's keys (`[docs] api`, `[docs] python-paths`), and the `MODULE_ROOTS` query |
 | the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `CHECKS` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
@@ -257,15 +262,15 @@ built from are in the next table.
 | `OPTIONS` | option name to what it turns on | every | basedpyright |
 | `CONTRACT_KEYS` | `Declared` records | every | docs |
 | `CHECKS` | `CheckRecord` tuple | every | the eight, docs |
-| `GENERATORS` | `Generator` tuple, each naming the languages it extracts for | check, language | mkdocstrings (phase 11), doxygen (phase 12) |
+| `GENERATORS` | `Generator` tuple, each naming the package-level extensions it extracts for | check | mkdocstrings (phase 11), doxygen (phase 12) |
 | `FRAGMENTS` | dynamic `Fragment` records; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
-| `JOBS` | `JobContribution` tuple | workspace | docs (phase 10 moves it onto data) |
+| `JOBS` | `JobContribution` tuple; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10 moves it onto data), nanobind's wheels job (phase 11) |
 | `SLOTS` | `Slot` records it declares; `CONTRIBUTIONS` fills others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
 | `GUIDANCE` | `Section` and rendered `Prose` records; files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
 | `RELEASE_NOTES` | a `ReleaseNotes` provider | workspace | changelog (phase 10) |
 | `RULES` | `AstRule` tuple, each naming the language whose reader it reads | workspace, language | housekeeping's reach rule (phase 12) |
 | `SETUP` | repository configuration steps for `workflow.configure` | workspace | docs' pages hosting (phase 12) |
-| `CATEGORIES` | category tables per language | language | python, cpp (phase 11) |
+| `CATEGORIES` | category tables | package | python, cpp (phase 11) |
 | `PHASES` | contributions to the lifecycle phases, `pre`, main, `post` | package | phase 11 |
 | `QUERIES` | `Query` to answering callable | package | phase 11 |
 | `ROOT_FILES` | the files written at the root while a package of it exists | package | cmake and conan (phase 11), from `KindRecord.root_files` |
@@ -340,11 +345,11 @@ names).
 | `Setup` | one repository configuration step | docs | `livery.workshop` |
 
 **The docs extension's own public API**, `livery.extensions.docs`,
-for languages contributing to it and for generators in any package:
+for generator extensions and for generators in any package:
 
 | Name | Purpose | Users |
 | --- | --- | --- |
-| `Generator` | a page generator: name, languages, claims, tools, options, `run(package, out) -> pages`; its site configuration is a `zensical.toml` fragment of its extension | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
+| `Generator` | a page generator: name, extensions, claims, tools, options, `run(package, out) -> pages`; its site configuration is a `zensical.toml` fragment of its extension | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
 | `Page` | one generated page: path, title, nav position | the same |
 | `write_nav_block`, `nav_block_markers` | emit a nav block beside generated pages, and place it | toolroom-bench, the task reference |
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
@@ -357,6 +362,7 @@ for languages contributing to it and for generators in any package:
 | `rewrite_nav_block` | `livery.extensions.docs.write_nav_block` | toolroom-bench (ours); any third-party generator | 10 |
 | `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
 | `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
+| `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
 | `API_VERSION` 1 | 2 | every extension built against 1 refuses at mount with a sentence naming both versions | 10 |
 
@@ -370,8 +376,9 @@ The brief's first thought: expose API documentation extraction the way
 checks are exposed, each extractor naming what it operates on, and
 factor out what the two share. The answer, in `Generator`:
 
-- A generator is a record with `languages` (the package-level
-  extensions it extracts for, the way a check names `kinds`), `claims`
+- A generator is a record with `extensions` (the package-level
+  extensions a package lists for the generator to apply; a check's
+  `kinds` becomes the same field in phase 11), `claims`
   (categories and suffixes, the same `Claim` a check carries), `tools`,
   `options` and a `run`. The
   docs build hands it a package and the output directory under the
@@ -385,10 +392,10 @@ factor out what the two share. The answer, in `Generator`:
   does: `lint.ruff` lives in ruff and names python, `build.configure`
   lives in the cpp extension. Doxygen reads C, C++, Java and more, so
   its generator is `livery-extensions-doxygen`, a workspace extension
-  requiring `docs`, declaring `languages=("cpp",)` today and `java`
+  requiring `docs`, declaring `extensions=("cpp",)` today and `java`
   when a java extension exists. The Python reference is
   `livery-extensions-mkdocstrings`, a workspace extension requiring
-  `docs`, declaring `languages=("python",)`, its generator writing the
+  `docs`, declaring `extensions=("python",)`, its generator writing the
   handler stubs, its fragment the handler tables of `zensical.toml`,
   its checks `lint.docrefs` and `lint.docstrings`, its dependency
   `griffelib`, its keys `[docs] api` and `[docs] python-paths`. A
@@ -398,12 +405,12 @@ factor out what the two share. The answer, in `Generator`:
   `contributions_for("docs")` returns every mounted module that
   declares for docs: the declaring module of an extension that requires
   `docs`, and a `FOR` module such as pytest's coverage pages.
-- Matching is by `languages` against the package's listed extensions,
+- Matching is by `extensions` against the package's listed extensions,
   then by the claims within the package: `python+nanobind+cmake` meets
   mkdocstrings' generator over its `.py` sources and doxygen's over its `.h`
   and `.cpp` sources, each listed in its own section. That is the
   brief's "file type it can operate on", through the claims model
-  checks already use. Two mounted generators naming one language refuse
+  checks already use. Two mounted generators naming one extension refuse
   at mount, naming both, unless the package's contract picks one.
 - What checks and generators share is already public: `Claim`, the
   scoping of files to a package, `Option`, the tools-in-use rule,
@@ -622,13 +629,17 @@ after, by `git diff --exit-code` after `fm sync`.
 `fm extensions --combinations`, `PHASES` with `pre` and reversed
 `post`, the declared context, `QUERIES` and `answer`, `fm run`.
 
-**11b, the language extensions** (the plan's 11b, with one change):
+**11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
-move; `KindRecord`, `register_kind` and the kind registry go;
+move; `KindRecord`, `register_kind` and the kind registry go; a check's
+`kinds` becomes `extensions`, the package-level extensions a package
+lists for the check to apply, and the eight tool extensions move with
+it; nanobind declares the wheels job in `JOBS` and `_ci_generate` stops
+reading the member roster;
 `CATEGORIES` and `ROOT_FILES` as data; `run_suites`, `kind_examples`
 and `workspace_suite` become `livery.extensions.python`, and the
 pytest extension requires `python`; `public_modules` and
-`compile_commands` become queries. The change: the plan's sentence
+`compile_commands` become queries. The second change: the plan's sentence
 that the conan extension owns the conan cache is replaced. Since #1112
 a rendered `conanws.yml` resolves siblings from their sources and the
 machine's package cache is shared; what 11b still owes is that a
@@ -695,7 +706,7 @@ repository runs the rule and exits 0.
 **12c, the C++ reference.** The pending spike first: Doxygen XML to
 Markdown before the Zensical build, measured on a native member of this
 repository. Then `livery-extensions-doxygen`: a `Generator` with
-`languages=("cpp",)`, claiming the native sources, `doxygen` its tool,
+`extensions=("cpp",)`, claiming the native sources, `doxygen` its tool,
 pages under the package's generated tree. Acceptance: the spike's note quotes the pages rendered and the
 build time; `fm docs.build` on this repository renders the cpp member's
 reference. If the spike finds no workable route, 12c becomes a
@@ -777,6 +788,14 @@ the stack, which this design neither needs nor rules out).
   contributes the handler tables to `zensical.toml`. So every generator
   is an extension of its own, `zensical.toml` is a composed file of the
   fragment engine, and no language extension contributes to docs.
+- Willem, 2026-10-06: a package-level extension may contribute CI
+  jobs; nanobind and unreal are not languages. So the sort is
+  `package`, with a language, a build system, an ecosystem and a
+  platform as its flavours; `JOBS` is read at both levels and a
+  package-level job exists while a package lists its extension; the
+  wheels job leaves the base for nanobind; and the field that matches
+  a record to a package is `extensions` on checks and generators
+  alike, replacing `kinds` and the draft's `languages`.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
@@ -852,12 +871,12 @@ recommendation. Owner: Willem, unless named.
     keeps its own table, `[python] docs-paths`; it does not cover the
     reader's expectation that documentation settings sit under `[docs]`.
     Recommendation: (a).
-10. **An ecosystem as a sort.** (a) No sort and no seam of its own, as
-    written; it does not cover a reader who wants `fm extensions` to
-    label one. (b) A `SORT` attribute for the listing; it does not cover
-    contract 26's rule that the base reads only what it acts on.
-    Recommendation: (a); the listing can say what an extension
-    registers.
+10. **A flavour as a sort.** (a) One package sort with four flavours
+    and no declaration, as written; it does not cover a reader who
+    wants `fm extensions` to label an ecosystem or a platform. (b) A
+    `SORT` attribute for the listing; it does not cover contract 26's
+    rule that the base reads only what it acts on. Recommendation: (a);
+    the listing can say what an extension registers.
 11. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
     bench's and the store's, outside this design. Owner: the issue.
 12. **#1200's foundation library**: whether the advisory lock, the pid
