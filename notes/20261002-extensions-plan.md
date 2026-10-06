@@ -1842,6 +1842,18 @@ Acceptance:
   The wiring after the birth is unchanged. Releasing to unblock the
   loop is not the fix: the permission to release intermediate
   versions was for this migration only.
+- Willem, 2026-10-06: one way to give a workspace this checkout's
+  code before a release: `checkout_index` in `livery.workshop._e2e`
+  builds the members a newborn installs (`dev_members`) from copies,
+  each copy's version stamped `+checkout.<digest of its files>` through
+  the kind's own stamper, and lays them out as a simple index read
+  first through `UV_INDEX`. The digest is measured necessity: uv
+  installs a cached wheel by its file name, and a rebuild at an
+  unchanged version installed the code from before a fix. The dev act
+  is not used for it: on a main-family branch it is the release train.
+  The loop's birth and the born-project test use it; the descendant
+  chain keeps its wheelhouse, which also carries the brand it builds,
+  until its next run on the forge rig.
 - Willem, 2026-10-06: the loop's split comes forward. After #1149,
   `fm ci.e2e --extension=<name>` (the local loop plan's phase 3b,
   carried in phase 14) is built first, on today's devenv, before the

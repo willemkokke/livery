@@ -17,7 +17,7 @@ import os
 import re
 import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,6 +31,7 @@ from livery.workshop._verdict import Transient
 if TYPE_CHECKING:
     from livery.forge.api import Forge, Job, Repository, Run
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._packages import Package
 
 #: The seeded organisation and the loop's one scratch repository.
 E2E_OWNER = "livery"
@@ -726,15 +727,54 @@ def checkout_index(root: Path, folder: Path) -> str:
     from livery.workshop._packages import discover_packages
 
     members = set(dev_members(root))
-    paths = [p.path for p in discover_packages(root) if p.member in members]
+    skipped = shutil.ignore_patterns(
+        ".venv", "dist", "build", "__pycache__", "_docs", "*.egg-info"
+    )
     with tempfile.TemporaryDirectory() as scratch:
-        built = Path(scratch)
-        for path in paths:
+        built = Path(scratch) / "wheels"
+        for package in discover_packages(root):
+            if package.member not in members:
+                continue
+            copy = Path(scratch) / "copies" / package.member
+            shutil.copytree(package.directory, copy, ignore=skipped)
+            _stamp_content(replace(package, directory=copy))
             toolroom.uv.opts(cwd=root, recorded=False)(
-                "build", "--wheel", "--out-dir", str(built), path
+                "build", "--wheel", "--out-dir", str(built), str(copy)
             )
         write_dev_index(folder, sorted(built.glob("*.whl")))
     return folder.as_uri()
+
+
+def _stamp_content(package: Package) -> None:
+    """Give *package*'s version a local segment naming its tree's content.
+
+    A rebuilt wheel at an unchanged version carries the last one's file
+    name, and uv installs a cached wheel by its name: a birth installed
+    the code from before a fix (measured). The segment is a digest of
+    the package's files, so a change gets a new name and an unchanged
+    tree the same one, and every floor the version met still holds, a
+    local version sorting with its public one. The kind's own stamper
+    writes it, where the kind keeps its version.
+
+    Raises:
+        Failed: when the kind's stamper finds no version to stamp.
+    """
+    import hashlib
+
+    from livery.workshop._backends import backend_for
+
+    backend = backend_for(package)
+    tree = package.directory
+    digest = hashlib.sha256()
+    for path in sorted(path for path in tree.rglob("*") if path.is_file()):
+        digest.update(path.relative_to(tree).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    version = backend.current_version(package)
+    backend.stamp_version(package).stamp(
+        f"{version}+checkout.{digest.hexdigest()[:12]}"
+    )
 
 
 def _dev_index(kind: str) -> str:

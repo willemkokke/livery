@@ -207,7 +207,7 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     return stack
 
 
-@new_group.task(name="project", expose="always", interactive=True)
+@new_group.task(name="project", expose="always", interactive=True, cwd="asinvoked")
 def new_project(
     folder: Annotated[
         Arg[str],
@@ -253,10 +253,11 @@ def new_project(
     never hang; a missing required answer is a refusal listing what to
     pass.
     """
-    # The process cwd on purpose, not the task context's directory:
-    # outside a project the context directory is wherever the tasks
-    # file lives, and the folder means where the caller stands.
-    root = (Path.cwd() / folder).resolve() if folder else Path.cwd()
+    # The task's directory is the launch directory (`asinvoked`), not
+    # the directory of whichever tasks file mounted the verb: the folder
+    # means where the caller stands.
+    here = footman.cwd()
+    root = (here / folder).resolve() if folder else here
     prog = footman.prog()
     held = (root / "workshop.toml").is_file()
     if resume:

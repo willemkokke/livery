@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from pathlib import Path
 
@@ -507,7 +508,9 @@ def _member(root: Path, name: str, *edges: str) -> None:
     (home / "workshop.toml").write_text(
         f'kind = "python"\nname = "livery-{name}"\n' + declared
     )
-    (home / "pyproject.toml").write_text(f'[project]\nname = "livery-{name}"\n')
+    (home / "pyproject.toml").write_text(
+        f'[project]\nname = "livery-{name}"\nversion = "0.1.0"\n'
+    )
 
 
 def test_dev_members_refuse_a_workspace_without_the_workshop(tmp_path: Path) -> None:
@@ -706,6 +709,23 @@ def test_the_birth_reads_the_dev_index_before_any_other(
     assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
 
 
+def test_the_checkout_index_refuses_a_member_without_a_version(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._packages import Package
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "livery-x"\n')
+    member = Package(
+        directory=tmp_path,
+        path="packages/x",
+        name="livery-x",
+        kind="python",
+        depends=(),
+    )
+    with pytest.raises(_FAILURES, match="no version line"):
+        _e2e._stamp_content(member)  # pyright: ignore[reportPrivateUsage]
+
+
 def test_the_checkout_index_builds_what_a_newborn_installs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -714,28 +734,44 @@ def test_the_checkout_index_builds_what_a_newborn_installs(
     _member(tmp_path, "workshop", "toolroom")
     _member(tmp_path, "toolroom")
     _member(tmp_path, "unlisted")
-    built: list[str] = []
+    built: list[tuple[str, str]] = []
 
     class _Uv:
         def opts(self, **_: object) -> _Uv:
             return self
 
         def __call__(self, *args: str) -> None:
-            out, path = Path(args[3]), args[4]
-            built.append(path)
-            name = path.rsplit("/", 1)[-1].replace("-", "_")
-            (out / f"livery_{name}-0.1.0-py3-none-any.whl").write_bytes(b"wheel")
+            out, copy = Path(args[3]), Path(args[4])
+            version = re.search(
+                r'version = "([^"]+)"', (copy / "pyproject.toml").read_text()
+            )
+            assert version is not None
+            built.append((copy.name, version.group(1)))
+            out.mkdir(parents=True, exist_ok=True)
+            dist = f"livery_{copy.name.replace('-', '_')}"
+            (out / f"{dist}-{version.group(1)}-py3-none-any.whl").write_bytes(b"wheel")
 
     monkeypatch.setattr(toolroom, "uv", _Uv())
     folder = tmp_path / "index"
     assert _e2e.checkout_index(tmp_path, folder) == folder.as_uri()
-    # The workshop and its closure, not a member nothing installs.
-    assert built == ["packages/toolroom", "packages/workshop"]
+    # The workshop and its closure, each a copy stamped with its content,
+    # and the checkout's own files untouched.
+    assert [name for name, _version in built] == ["toolroom", "workshop"]
+    assert all(re.fullmatch(r"0\.1\.0\+checkout\.[0-9a-f]{12}", v) for _n, v in built)
+    assert (
+        'version = "0.1.0"\n'
+        in (tmp_path / "packages/workshop/pyproject.toml").read_text()
+    )
     assert sorted(entry.name for entry in folder.iterdir()) == [
         "index.html",
         "livery-toolroom",
         "livery-workshop",
     ]
+    # An unchanged tree keeps its name: the same build, the same wheel.
+    first = dict(built)
+    built.clear()
+    _e2e.checkout_index(tmp_path, folder)
+    assert dict(built) == first
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
