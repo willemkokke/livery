@@ -206,7 +206,6 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop import _quality
-    from livery.workshop._backends import _python
 
     root = _repository(tmp_path)
     (root / "packages" / "one" / "tests").mkdir()
@@ -221,10 +220,8 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 
         return body
 
-    for name in ("run_format", "run_lint"):
+    for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    monkeypatch.setattr(fake_checks, "run_typecheck", spy("run_typecheck"))
-    monkeypatch.setattr(_python, "run_test", spy("run_test"))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
     monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
     # A source file: the style and type checks take it, the import rules
@@ -238,7 +235,6 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     assert dict(calls)["run_format"]["paths"] == (source,)
     suite = dict(calls)["run_test"]
     assert [p.path for p in suite["packages"]] == ["packages/one"]  # type: ignore[attr-defined]
-    assert "selection" not in suite or not suite["selection"]
     out = capsys.readouterr().out
     assert "layering.graph: no file it reads in the named files; not run" in out
     # A test file: its package's whole suite, at the point asked.
@@ -246,8 +242,7 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     _quality.check(str(test_file), point="nightly")
     test_call = dict(calls)["run_test"]
     assert [p.path for p in test_call["packages"]] == ["packages/one"]  # type: ignore[attr-defined]
-    assert "selection" not in test_call or not test_call["selection"]
-    assert test_call["args"] == ("--workshop-point=nightly",)
+    assert test_call["point"] == "nightly"
     # A path no claim reaches runs nothing.
     calls.clear()
     (root / "notes.md").write_text("# notes\n")
@@ -262,7 +257,6 @@ def test_the_fixers_only_walk_judges_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop import _quality
-    from livery.workshop._backends import _python
 
     root = _repository(tmp_path)
     monkeypatch.chdir(root)
@@ -276,10 +270,8 @@ def test_the_fixers_only_walk_judges_nothing(
 
         return body
 
-    for name in ("run_format", "run_lint"):
+    for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
         monkeypatch.setattr(fake_checks, name, spy(name))
-    monkeypatch.setattr(fake_checks, "run_typecheck", spy("run_typecheck"))
-    monkeypatch.setattr(_python, "run_test", spy("run_test"))
 
     def fix(ctx: GateContext) -> None:
         assert ctx.safe and ctx.files == ("tasks.py",)

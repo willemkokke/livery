@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import ClassVar
 
@@ -21,13 +22,43 @@ from livery.toolroom.store.api import (
     Requirement,
     Surface,
 )
-from livery.workshop import _tool_tasks, _tools
+from livery.workshop import _checks, _tool_tasks, _tools
 from workshop_hosts import (  # noqa: F401
     HERE,
     HOSTS,
     lock_for_this_host,
     no_graph_resolution,
 )
+
+
+def _idle(ctx: _checks.GateContext) -> None:
+    del ctx
+
+
+@pytest.fixture(autouse=True)
+def _a_test_check_requires_pytest() -> Iterator[None]:
+    """The python test check a listed pytest extension registers, as a stand-in.
+
+    The base registers no python check, and these tests lock a
+    workspace whose checks require a tool: pytest is the one they name,
+    at the site `check test.pytest`.
+    """
+    state = _checks.snapshot()
+    _checks.register_check(
+        _checks.CheckRecord(
+            "pytest",
+            "test",
+            _idle,
+            kinds=("python",),
+            tools=("pytest",),
+            extension="pytest",
+        )
+    )
+    try:
+        yield
+    finally:
+        _checks.restore(state)
+
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
 THREE = HOSTS

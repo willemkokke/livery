@@ -228,7 +228,7 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
 
     monkeypatch.setattr(_python, "enforce_coverage", refuse)
     _in_ci(monkeypatch, "check-a")
-    _python.run_test(packages=(thing, other), root=tmp_path, scoped=True)
+    _python.run_test(packages=(thing, other), root=tmp_path)
     # One process for every suite, under the leg's own prefix: the
     # plugin names each test's context, and the leg splits the data.
     # The meter is armed in pytest's environment alone, with the
@@ -238,14 +238,23 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     ]
     env = fake.calls[0][1]
     assert env is not None
-    assert env["COVERAGE_PROCESS_START"] == str(tmp_path / "pyproject.toml")
+    assert env["COVERAGE_PROCESS_START"] == str(tmp_path / ".coveragerc")
     assert env["WORKSHOP_LEG"] == "check-a"  # the rest of the environment rides
     assert "COVERAGE_PROCESS_START" not in os.environ
-    # The workspace's own tests ride every scoped run once they exist.
+    # The workspace's own tests run when their unit is among the
+    # packages, and only then.
+    from livery.workshop._coverage_store import workspace_suite
+
     (tmp_path / "tests").mkdir()
+    unit = workspace_suite(tmp_path)
+    assert unit is not None
     fake.calls.clear()
-    _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
-    assert [args for args, _env in fake.calls] == [("packages/thing/tests", "tests")]
+    _python.run_test(packages=(thing,), root=tmp_path)
+    _python.run_test(packages=(thing, unit), root=tmp_path, point="merge")
+    assert [args for args, _env in fake.calls] == [
+        ("packages/thing/tests",),
+        ("packages/thing/tests", "tests", "--workshop-point=merge"),
+    ]
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
@@ -297,22 +306,6 @@ def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
     assert list(tmp_path.glob(".coverage.*"))
 
 
-def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
-    from livery.workshop._checks import check_for
-
-    contributed = [
-        str(value)
-        for slot, value in check_for("test.pytest").contributions
-        if slot == "python.dev-group"
-    ]
-    # 7.13 is the first coverage that installs its own startup hook: an
-    # older one would leave every process the tests start unmetered.
-    assert "coverage[toml]>=7.13" in contributed
-    assert not any(
-        value.startswith("coverage-enable-subprocess") for value in contributed
-    )
-
-
 def test_the_preview_tolerates_a_run_that_measured_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -330,7 +323,7 @@ def test_the_preview_tolerates_a_run_that_measured_nothing(
 
 
 def test_without_a_parent_the_meter_and_the_preview_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
     seen: list[tuple[str, ...]] = []
@@ -351,18 +344,29 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     # so the test reads the same on a runner as on a desk.
     for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
         monkeypatch.delenv(name, raising=False)
-    _python.run_test(packages=(package,), root=tmp_path, scoped=True)
+    # The fallback first: a package with no tests directory gives pytest
+    # nothing to collect, and handed no path it would collect the whole
+    # configuration, so no pytest starts.
+    _python.run_test(packages=(package,), root=tmp_path)
+    assert seen == [] and enforced == []
+    assert "no test directory in packages/thing" in capsys.readouterr().out
+    (package.directory / "tests").mkdir()
+    _python.run_test(packages=(package,), root=tmp_path)
+    assert seen[0][0] == "packages/thing/tests"
     assert any(arg == "--cov" for arg in seen[0])
-    assert "packages/thing/tests" not in seen[0]  # no tests dir exists
     assert enforced == [tmp_path]
 
 
 def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._coverage_store import workspace_suite
+
     thing = _suite(tmp_path, "thing")
     other = _suite(tmp_path, "other")
     (tmp_path / "tests").mkdir()
+    unit = workspace_suite(tmp_path)
+    assert unit is not None
     fake = _FakePytest()
     monkeypatch.setattr(_python, "pytest", fake)
     monkeypatch.setattr(_python, "report_coverage", lambda root, packages: None)
@@ -372,9 +376,7 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
         "packages/thing": ("packages/thing/tests/test_a.py",),
         "tests": ("tests/test_all.py",),
     }
-    _python.run_test(
-        packages=(thing, other), root=tmp_path, scoped=True, selection=selection
-    )
+    _python.run_test(packages=(thing, other, unit), root=tmp_path, selection=selection)
     args, env = fake.calls[0]
     assert args[:3] == (
         "packages/thing/tests/test_a.py",
@@ -387,13 +389,14 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
     assert env is not None and env["CI"] == "true"
     assert env["GITHUB_ACTIONS"] == "true"
     assert "GITHUB_ACTIONS" not in os.environ
-    # The kind's own test call: the selection is the package's alone.
+    # The kind's own test call: the package's suite alone, or its
+    # selection.
     fake.calls.clear()
     _python.test(thing, tmp_path, selection=("tests/test_b.py",))
-    assert fake.calls[0][0][:2] == ("packages/thing/tests/test_b.py", "tests")
+    assert fake.calls[0][0][:2] == ("packages/thing/tests/test_b.py", "--cov")
     fake.calls.clear()
     _python.test(thing, tmp_path)
-    assert fake.calls[0][0][:2] == ("packages/thing/tests", "tests")
+    assert fake.calls[0][0][:2] == ("packages/thing/tests", "--cov")
 
 
 # --- the leg: its refusal, then what it stores --------------------------------

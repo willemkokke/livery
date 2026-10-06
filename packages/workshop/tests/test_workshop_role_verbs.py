@@ -31,6 +31,7 @@ from livery.workshop._checks import (
 )
 from livery.workshop._extensions import SELF
 from livery.workshop._packages import discover_packages
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -162,7 +163,7 @@ def test_a_path_that_names_nothing_refuses_the_passthrough_spelling_included(
         match=r"not a file or directory in the workspace: -k, slow\. Name files or"
         r" directories; the checks pass nothing through to a tool\.",
     ):
-        _quality.run_checks(("test.pytest",), ("-k", "slow"))
+        _quality.run_checks(("test.ctest",), ("-k", "slow"))
     outside = str(tmp_path.parent)
     with pytest.raises(
         _FAILURES, match=re.escape(f"in the workspace: gone.py, {outside}.")
@@ -306,32 +307,31 @@ def test_a_second_generation_follows_the_registry(empty: None) -> None:
     assert "probe" not in root.groups
 
 
-def test_the_builtin_checks_generate_the_role_verbs() -> None:
+def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> None:
     # The base's own: an extension mounted earlier in this process (the
-    # docs extension's lint checks) adds its checks beside them.
+    # docs extension's lint checks) and the fakes add theirs beside them.
     tree = {
         role: {tool for tool, record in tools.items() if record.extension == SELF}
         for role, tools in verb_tree().items()
     }
     assert tree == {
         "build": {"compile", "configure"},
-        "examples": {"pytest"},
+        "format": set(),
         "layering": {"graph", "imports"},
         "lint": set(),
         "provenance": {"check"},
         "drift": {"check"},
-        "test": {"ctest", "pytest"},
+        "test": {"ctest"},
+        "typecheck": set(),
     }
     root = Group("root")
     generate_verbs(root)
     test = root.groups["test"]
-    # --point where pytest reads it, and nowhere else.
+    # --point where a check reads it, and nowhere else.
     assert _flags(test, "default") == {"point"}
-    assert _flags(test, "pytest") == {"point"}
+    assert _flags(test, "fake") == {"point"}
     assert _flags(test, "ctest") == set()
     assert _flags(root.groups["layering"], "imports") == {"fix", "safe_fix"}
-    # The base checks no types: a listed extension does.
-    assert "typecheck" not in root.groups
 
 
 def test_a_role_with_no_listed_check_has_no_verb(registry: None) -> None:

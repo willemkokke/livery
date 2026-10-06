@@ -17,6 +17,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Neighbours, Package
 from livery.workshop._registries import RegistryTarget
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -170,6 +171,33 @@ def test_a_chain_cycle_refuses_naming_it(restored_registry) -> None:
 # The fake future kind registers and dispatches.
 
 
+def test_a_kind_without_a_suite_runner_refuses_and_a_child_takes_its_parents(
+    restored_registry, tmp_path: Path
+) -> None:
+    from livery.workshop._kinds import run_suites
+
+    # The fallback first: cpp-conan runs its tests through its build and
+    # ctest, so it has no runner for several packages' suites at once.
+    with pytest.raises(_FAILURES, match="kind 'cpp-conan' runs no test suites"):
+        run_suites("cpp-conan", packages=(), root=tmp_path)
+    seen: list[tuple[tuple[str, ...], dict[str, object]]] = []
+
+    def suites(*arguments: str, **options: object) -> None:
+        seen.append((arguments, options))
+
+    register_kind(KindRecord(name="acme-parent", abstract=True, suites=suites))
+    register_kind(
+        KindRecord(name="acme-child", backend=_FakeBackend(), parent="acme-parent")
+    )
+    run_suites("acme-child", "-x", packages=(), root=tmp_path, point="merge")
+    assert seen == [
+        (
+            ("-x",),
+            {"packages": (), "root": tmp_path, "selection": None, "point": "merge"},
+        )
+    ]
+
+
 def test_a_registered_kind_dispatches_and_chains(
     restored_registry, tmp_path: Path
 ) -> None:
@@ -191,7 +219,9 @@ def test_a_registered_kind_dispatches_and_chains(
     assert [record.name for record in chain] == ["base", "python", "python-fake"]
 
 
-def test_tools_union_along_the_chain_only_when_present(restored_registry) -> None:
+def test_tools_union_along_the_chain_only_when_present(
+    restored_registry, python_checks: object
+) -> None:
     fake = _FakeBackend()
     register_kind(KindRecord(name="cpp-fake", backend=fake, tools=("cmake", "ninja")))
     register_kind(
@@ -207,7 +237,7 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
     )
     from livery.workshop._checks import tools_for_kind
 
-    assert {tool for tool, _ in tools_for_kind("python")} == {"pytest"}
+    assert {tool for tool, _ in tools_for_kind("python")} == {"fake"}
     # A kind registered without the base as its parent gets none of it.
     assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
 

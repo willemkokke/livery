@@ -844,7 +844,10 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     from livery.workshop._backends._python import units_of
 
     packages = _packages()
-    units = _unrecorded(root, run, packages, units_of(root, packages), bases=bases)
+    # Only a suite a listed test check runs has a record to miss: a
+    # workspace that lists no python test check measures nothing here.
+    tested = _checks.tested(units_of(root, packages))
+    units = _unrecorded(root, run, packages, tested, bases=bases)
     if not units:
         _verified.write_marker(root, _verified.VERIFIED, leg=run.leg)
         return
@@ -853,7 +856,7 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     _verified.write_marker(
         root, _verified.MEASURED, tuple(unit.path for unit in units), leg=run.leg
     )
-    _python.run_test(packages=units, root=root, scoped=True)
+    _python.run_test(packages=units, root=root)
 
 
 def _scoped_check(
@@ -1074,12 +1077,13 @@ def caches_clear() -> None:
     """Remove build artifacts and checker caches.
 
     A tool that is a check of its own keeps its cache under
-    ``.workshop/.cache/<tool>/``, which goes whole; the rest are named.
+    ``.workshop/.cache/<tool>/``, which goes whole; the build
+    artifacts are named.
     """
     import shutil
 
     root = workspace_root()
     if root is None:
         return
-    for name in ("dist", ".pytest_cache", ".workshop/.cache"):
+    for name in ("dist", ".workshop/.cache"):
         shutil.rmtree(root / name, ignore_errors=True)

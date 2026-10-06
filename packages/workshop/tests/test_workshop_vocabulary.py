@@ -51,8 +51,7 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_checks", BACKEND_IMPORT): 1,
     ("_checks", "cpp-conan"): 3,
-    ("_checks", "pyproject.toml"): 2,
-    ("_checks", "python"): 1,
+    ("_checks", "pyproject.toml"): 1,
     ("_ci_generate", "conanfile.py"): 1,
     ("_devenv", "conan"): 2,
     ("_e2e", BACKEND_IMPORT): 1,
@@ -222,6 +221,17 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_new_project", "basedpyright"): (
         1,
         "fm new.project writes the stock list, as ruled",
+    ),
+    ("_new_project", "pytest"): (1, "fm new.project writes the stock list, as ruled"),
+    ("_backends._python", "pytest"): (
+        5,
+        "the python kind's test runner stays in the base until the python"
+        " kind is an extension of its own, as ruled",
+    ),
+    ("_replay", "pytest"): (
+        2,
+        "the release replay runs a member's suite as the python kind's test"
+        " runner does, and stays in the base with it, as ruled",
     ),
 }
 

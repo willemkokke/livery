@@ -1,14 +1,14 @@
-"""A python formatter, linter and type checker for the gate's tests.
+"""A python formatter, linter, type checker and test runner for the gate's tests.
 
-The base registers no python formatter, linter or type checker: listed
-extensions do (ruff and the type checkers, in this repository). The
-gate's tests need such checks to walk, scope, order and claim, so
-`python_checks` registers three with ruff's and mypy's shapes under the
-extension ``fake``, after the base's checks as a mount would, and puts
-the registry back after the test; a test module imports
-`python_checks_fixture` and names ``python_checks`` as a parameter. Each
-body calls this module's `run_format`, `run_lint` or `run_typecheck`,
-which a test replaces to watch them.
+The base registers no python formatter, linter, type checker or test
+runner: listed extensions do (ruff, the type checkers and pytest, in
+this repository). The gate's tests need such checks to walk, scope,
+order and claim, so `python_checks` registers four with ruff's, mypy's
+and pytest's shapes under the extension ``fake``, after the base's
+checks as a mount would, and puts the registry back after the test; a
+test module imports `python_checks_fixture` and names ``python_checks``
+as a parameter. Each body calls this module's `run_format`, `run_lint`,
+`run_typecheck` or `run_test`, which a test replaces to watch them.
 """
 
 from __future__ import annotations
@@ -18,16 +18,21 @@ from collections.abc import Iterator
 import pytest
 
 from livery.workshop._checks import (
+    PACKAGES,
     PATHS,
     CheckRecord,
     Claim,
     GateContext,
+    Option,
     register_check,
     restore,
+    scoped_packages,
     scoped_paths,
     snapshot,
 )
+from livery.workshop._coverage_store import workspace_suite
 from livery.workshop._invoke import run_batched
+from livery.workshop._packages import Package
 
 #: The suffixes the pair reads.
 SUFFIXES = (".py", ".pyi")
@@ -46,6 +51,11 @@ def run_lint(*, fix: bool, safe_fix: bool = False, paths: tuple[str, ...]) -> No
 def run_typecheck(*, paths: tuple[str, ...]) -> None:
     """The type checker's call; a test replaces it to watch the calls."""
     del paths
+
+
+def run_test(*, packages: tuple[Package, ...], scoped: bool, point: str) -> None:
+    """The test runner's call; a test replaces it to watch the calls."""
+    del packages, scoped, point
 
 
 def _format_run(ctx: GateContext) -> None:
@@ -83,8 +93,16 @@ def _typecheck_run(ctx: GateContext) -> None:
     )
 
 
+def _test_run(ctx: GateContext) -> None:
+    # The workspace's own tests ride every run, as pytest's do.
+    unit = workspace_suite(ctx.root)
+    suites = scoped_packages(ctx, "test.fake") + ((unit,) if unit else ())
+    if suites:
+        run_test(packages=suites, scoped=ctx.scoped, point=ctx.point)
+
+
 def records() -> tuple[CheckRecord, ...]:
-    """A formatter and a linter with ruff's claims and kinds, then a type checker."""
+    """A formatter and a linter with ruff's claims and kinds, a type checker, tests."""
     kinds = ("python", "cpp-conan")
     example = ("D", "E", "I", "UP", "B", "SIM", "C4", "RUF", "F401", "F811", "F841")
     return (
@@ -132,12 +150,28 @@ def records() -> tuple[CheckRecord, ...]:
                 for category in ("source", "test", "test-support")
             ),
         ),
+        CheckRecord(
+            "fake",
+            "test",
+            _test_run,
+            flags=("point",),
+            narrowing=PACKAGES,
+            kinds=("python",),
+            tools=("fake",),
+            extension="fake",
+            claims=(
+                Claim("test"),
+                Claim("test-support"),
+                Claim("source", suffixes=SUFFIXES),
+            ),
+            options=(Option("parallel", "bool", True, "run the suite across cores"),),
+        ),
     )
 
 
 @pytest.fixture(name="python_checks")
 def python_checks_fixture() -> Iterator[tuple[CheckRecord, ...]]:
-    """Register the three for the test; the registry is put back after it."""
+    """Register the four for the test; the registry is put back after it."""
     state = snapshot()
     pair = records()
     for record in pair:

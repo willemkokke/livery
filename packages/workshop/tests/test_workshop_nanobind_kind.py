@@ -21,6 +21,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Package
 from workshop_composed import IDENTITY, seed_into
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -146,7 +147,7 @@ def test_a_pure_wheel_from_the_native_kind_refuses(tmp_path: Path) -> None:
     _python_nanobind.assert_platform_tagged(package, dist)
 
 
-def test_the_kind_chains_from_python() -> None:
+def test_the_kind_chains_from_python(python_checks: object) -> None:
     assert template_chain("package-python-nanobind") == (
         "package-base",
         "package-python",
@@ -171,15 +172,16 @@ def test_the_kind_chains_from_python() -> None:
     )
     from livery.workshop._checks import tools_for_kind
 
-    # clang-tidy judges the cpp-conan kind alone, so its tool is not here.
-    assert {"pytest"} <= {tool for tool, _ in tools_for_kind("python-nanobind")}
+    # A check of the python kind reaches its child through the chain:
+    # its tool joins the child's profile.
+    assert {"fake"} <= {tool for tool, _ in tools_for_kind("python-nanobind")}
     record = kind_for("python-nanobind")
     assert record.parent == "python"
     # Its roles are those of the checks whose kinds its chain meets.
     from livery.workshop._checks import checks_by_name, judges_kind
 
     roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
-    assert {"test", "examples"} <= roles
+    assert {"test", "typecheck"} <= roles
     assert record.host_tools == ("cc", "c++")
 
 

@@ -4,8 +4,8 @@
 dist/
 .venv/
 __pycache__/
-.pytest_cache/
-.coverage*
+.coverage
+.coverage.*
 fm-profile*.json
 fm-gate.json
 .claude/worktrees/

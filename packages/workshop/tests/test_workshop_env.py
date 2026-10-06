@@ -316,9 +316,13 @@ def test_the_github_emission_persists_the_moved_temp(
     assert "TEMP:" in out and "the runner's working drive" in out
 
 
-def test_the_tool_profile_derives_from_package_types(tmp_path: Path) -> None:
-    profile = tool_profile(tmp_path)  # no packages: the python kind's tools
-    assert "uv" in profile and "pytest" in profile
+def test_the_tool_profile_derives_from_package_types(
+    tmp_path: Path, python_checks: object
+) -> None:
+    # No packages: the root's kind, python, with its own tool and the
+    # tools of the checks that judge it.
+    profile = tool_profile(tmp_path)
+    assert "uv" in profile and "fake" in profile
 
 
 # --- clean: the protections before the removals ---

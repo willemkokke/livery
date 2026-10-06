@@ -15,6 +15,7 @@ from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 
 def _root(tmp_path: Path, ci: str) -> Path:
@@ -606,10 +607,10 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
 # --- a proved tree measures what main's record cannot supply ------------------
 
 
-def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-
+def _proved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, list[tuple[str, ...]]]:
+    """A root whose tree a check leg proved, two members in it; the runs measured."""
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
     (root / "tests").mkdir()
@@ -631,9 +632,33 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
         packages = kw["packages"]
         assert isinstance(packages, tuple)
         ran.append(tuple(p.path for p in packages))
-        assert kw["scoped"] is True and kw["root"] == root
+        assert kw["root"] == root
 
     monkeypatch.setattr(_python, "run_test", _run_test)
+    return root, ran
+
+
+def test_a_proved_tree_with_no_test_check_listed_measures_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A suite no listed check runs has no record to miss.
+    root, ran = _proved(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        _coverage_store,
+        "recorded",
+        lambda root, *, leg, base="main": _coverage_store.Record({}),
+    )
+    _quality.check()
+    assert ran == [] and read_marker(root)["scope"] == "verified"
+
+
+def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_checks: object,
+) -> None:
+    root, ran = _proved(tmp_path, monkeypatch)
     # Every unit recorded at its closure: the leg runs nothing.
     every = {
         path: _coverage_store.Unit(path, "k" * 64, "5", "a" * 40, {})

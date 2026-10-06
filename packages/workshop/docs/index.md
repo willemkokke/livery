@@ -231,13 +231,13 @@ snippets extension: a fence whose one line is the snippet marker
 followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
-`examples.pytest` check runs each file as one test through the kind's
-runner, pytest for python, from the workspace root; a failure reports
-the example's own file and line. An example is never a test module:
-pytest's own collector leaves it alone, named or not, so a `test_*`
-function in it is code a reader sees and never a test the workspace
-runs. A run over named files runs the named examples; a whole walk
-runs the package's directory. A `conftest.py` beside the examples is
+pytest extension's `examples.pytest` check runs each file as one test
+through the kind's runner, pytest for python, from the workspace root;
+a failure reports the example's own file and line. An example is
+never a test module: pytest's own collector leaves it alone, named or
+not, so a `test_*` function in it is code a reader sees and never a
+test the workspace runs. A run over named files runs the named
+examples; a whole walk runs the package's directory. A `conftest.py` beside the examples is
 the package's setup around them, never an example: it reaches every
 example item through the `example` marker, as footman's does to run
 each inside a captured registry, and naming it runs every example.
@@ -247,14 +247,14 @@ build and no test, and an example file reaches the examples check and
 the site.
 
 A check record also owns its configuration. Its `fragments`, one per
-rendered file, are what the render writes for it: the typecheck and
-test records carry the `[tool.*]` tables of the root `pyproject.toml`,
-composed in check-name order where the base template leaves the
-`fragments` block, and a check an extension withdraws takes its
-tables with it. A tool that reads one file per project gets its
-section there, or a file of its own that its extension writes, as
-ruff's `ruff.toml`; a tool that searches upward from each file, clang-format
-and clang-tidy in a native package, gets a managed file where it looks,
+rendered file, are what the render writes for it: a `[tool.*]` table
+of the root `pyproject.toml`, composed in check-name order, which a
+check an extension withdraws takes with it. A tool that reads one
+file per project gets a file of its own instead, written by its
+extension under the name the tool looks for: ruff's `ruff.toml`,
+pytest's `pytest.toml` and coverage's `.coveragerc`. A tool that
+searches upward from each file, clang-format and clang-tidy in a
+native package, gets a managed file where it looks,
 rendered from the record's fragment for the package's kind and judged
 by the drift gate, with a `.workshop-rendered` receipt beside it so a
 withdrawn check's file goes only when nobody edited it and an edited
@@ -567,10 +567,10 @@ absence.
   afterwards; the cache is the speed extension and Conan Center the
   origin, so a miss costs time, never a red leg. The other lanes
   cache nothing until they have a cache action.
-  Tests are namespaced by their path (pytest's importlib mode, set by
-  the project template), so two packages may share a test file's
-  name; a helper module in a package's `tests/` carries the package's
-  name, and the session refuses to start otherwise.
+  Tests are namespaced by their path (pytest's importlib mode, set in
+  the pytest extension's `pytest.toml`), so two packages may share a
+  test file's name; a helper module in a package's `tests/` carries
+  the package's name, and the session refuses to start otherwise.
 - `fm start`: open the work. An issue number assigns and branches
   `<kind>/<number>-<slug>`, a quoted title files the issue first, and
   `<kind>/<slug>` starts a branch that belongs to no issue, whose

@@ -110,16 +110,14 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
         "src/livery/py/mod.py",
     )
     # A python tool's claim on the tests stops at the python files; the
-    # test check's does not, since pytest reads the cassettes too.
+    # test check's does not, since a test runner reads the cassettes too.
     for tool in ("fake",):
         assert judged_files(check_for(f"typecheck.{tool}"), python) == (
             "src/livery/py/mod.py",
             "tests/conftest.py",
             "tests/test_mod.py",
         )
-    assert "tests/cassettes/first.yaml" in judged_files(
-        check_for("test.pytest"), python
-    )
+    assert "tests/cassettes/first.yaml" in judged_files(check_for("test.fake"), python)
     # A check without claims judges nothing by this measure.
     assert judged_files(check_for("drift.check"), python) == ()
     # A category is a role, not a language: a python formatter claims
@@ -135,7 +133,7 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
         "format.fake",
         "lint.acme-sources",
         "lint.fake",
-        "test.pytest",
+        "test.fake",
         "typecheck.fake",
     )
     assert claimants(python, "src/livery/py/py.typed") == ()

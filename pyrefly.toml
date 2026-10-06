@@ -7,7 +7,7 @@
 # that supports 3.11 cannot spell it without the typing_extensions
 # backport as a runtime dependency.
 preset = "default"
-project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/clang-format/src", "packages/extensions/clang-tidy/src", "packages/extensions/mypy/src", "packages/extensions/pyrefly/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/clang-format/src", "packages/extensions/clang-tidy/src", "packages/extensions/mypy/src", "packages/extensions/pyrefly/src", "packages/extensions/pytest/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include, and the
 # check fails on "no files matched". At the root neither setting

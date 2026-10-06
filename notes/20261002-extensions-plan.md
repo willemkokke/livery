@@ -1326,6 +1326,25 @@ SDK, are the tool's and moved with it. It writes each native package's
 for a native package; `tests/test_native_seeds.py` holds the seeded
 member's tidy finding beside its style.
 
+**9b9 built (issue #1181): pytest is its own extension.**
+`livery-extensions-pytest`, in `packages/extensions/pytest/` and listed
+as `pytest`, declares `test.pytest` and `examples.pytest`. It writes
+the root `pytest.toml` (pytest 9's own file, its options a list of
+words) and `.coveragerc`, coverage's own file, which the test runner
+arms the meter with; `[tool.pytest.ini_options]` and
+`[tool.coverage.*]` left `pyproject.toml`, pytest's cache moved to
+`.workshop/.cache/pytest/`, and the `.pytest_cache/` line left the
+root `.gitignore`, whose coverage line now names the data files alone
+(`.coverage`, `.coverage.*`), so `.coveragerc` is tracked. pytest's
+lines in the dev group and its `addopts` are the extension's
+contributions. As ruled, the workshop's pytest plugins and the python
+kind's test runner stay in the base: the runner is the python kind's
+record entry (`KindRecord.suites`), reached through
+`livery.workshop.api.run_suites`, beside `kind_examples`,
+`workspace_suite`, `Option` and `check_option`. A run over named files
+keeps, in `scoped_packages`, the members holding a named file the
+check claims. A new project lists `pytest`; this repository does.
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1558,6 +1577,7 @@ Acceptance:
 | `_scale.py` in the base | the e2e plugin (phase 14) |
 | `livery-cbor` 0.0.0 on the index | nothing: kept as the name's claim |
 | `griffelib` a dependency of `livery-workshop` | a dependency of `livery-extensions-docs` (phase 10) |
+| `run_suites`, `kind_examples` and `workspace_suite` in `livery.workshop.api` | the python kind's extension's API (phase 11b) |
 
 ## Decision record
 
@@ -2027,6 +2047,21 @@ Acceptance:
   console) and the python kind's test runner stay in the base until
   phase 11b moves the python kind into an extension, the vocabulary
   allowance naming them until then.
+- 2026-10-06, 9b9: the test runner collects the test directories of
+  the packages it is handed and nothing else, the workspace's own
+  tests when their unit is among them, and with none it starts no
+  pytest; the test check hands it the workspace's unit in every run.
+  Before, a whole run collected pytest's `testpaths`, so a package
+  that turned the check off still ran and a suite that is not
+  worker-safe ran in both calls, and every scoped call collected the
+  workspace's tests.
+- 2026-10-06, 9b9: the CI leg that measures what the coverage record
+  cannot supply on a proved tree measures only the suites a listed
+  test check runs (`_checks.tested`), so a workspace that lists no
+  python test check starts no pytest there.
+- 2026-10-06, 9b9: the dev group asks for `pytest>=9.0`, the first
+  pytest that reads `pytest.toml`, and for `coverage>=7.13` without
+  the `toml` extra, since coverage reads `.coveragerc`.
 
 ## Open
 

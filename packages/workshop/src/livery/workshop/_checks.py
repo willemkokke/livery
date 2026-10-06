@@ -1504,19 +1504,22 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     return package_paths(judged) + _claimed(name, present)
 
 
-def scoped_files(ctx: GateContext, name: str) -> tuple[Path, ...]:
-    """The files of the run's package the package check *name* judges, absolute.
+def scoped_files(
+    ctx: GateContext, name: str, package: Package | None = None
+) -> tuple[Path, ...]:
+    """The files of *package* the check *name* judges in this run, absolute.
 
-    The files the run names, when it names any; else every file the
-    check's claims reach in the package, an untracked new one among
-    them.
+    *package* is the run's own package unless named: a package check
+    names none, and a check that narrows by packages names each one
+    [livery.workshop.api.scoped_packages][] answers. The files the run
+    names, when it names any; else every file the check's claims reach
+    in the package, an untracked new one among them.
 
     Raises:
-        Failed: when the run judges no package, since *name* is not a
-            package check.
+        Failed: when neither *package* nor the run names a package.
     """
     record = check_for(name)
-    package = ctx.package
+    package = package or ctx.package
     if package is None:
         fail(f"{name} judges one package at a time, and this run names none")
     if ctx.files:
@@ -1529,98 +1532,59 @@ def scoped_packages(ctx: GateContext, name: str) -> tuple[Package, ...]:
 
     The members of its kinds, in a scoped run those of the subset,
     less each one that turned the check off in its contract. Each
-    skip is printed, so a narrowed gate names what it left out. The
-    workspace's own tests are not a member.
+    skip is printed, so a narrowed gate names what it left out. A run
+    over named files keeps the members holding a named file the
+    check claims. The workspace's own tests are not a member.
     """
-    return enabled(name, judged_by(check_for(name), _members(ctx)))
+    record = check_for(name)
+    members = enabled(name, judged_by(record, _members(ctx)))
+    if not ctx.files:
+        return members
+    return tuple(p for p in members if claimed_files(record, ctx, p.path))
+
+
+def check_option(name: str, package: Package, option: str) -> object:
+    """What *package* sets for the check *name*'s *option*, or the option's default.
+
+    The deepest of the package's tables that sets it wins. Refuses an
+    option the check does not declare and a value of the wrong type,
+    naming the check's options.
+    """
+    return option_value(check_for(name), package, option)
+
+
+def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
+    """The *units* whose suites a registered check of the test role runs.
+
+    A package by its kind. The workspace's own tests carry no kind;
+    they are a python suite, run when a test check judges a python
+    kind.
+    """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._kinds import is_python_kind
+
+    tests = [record for record in _CHECKS.values() if record.role == "test"]
+    python = any(is_python_kind(kind) for record in tests for kind in record.kinds)
+
+    def runs(unit: Package) -> bool:
+        if unit.path == WORKSPACE_TESTS:
+            return python
+        return any(judges_kind(record, unit.kind) for record in tests)
+
+    return tuple(unit for unit in units if runs(unit))
 
 
 def _register_builtin() -> None:
     """Register the workshop's own checks, in the order the rewriters run.
 
-    The python checks judge the whole tree or the scoped subset's
-    directories and gate each package by its kind's roles; the native
-    checks judge one package at a time. A body resolves its backend
-    function on the module when it runs, never at registration, so a
-    test that patches ``_python.run_typecheck`` sees its fake run.
+    The workspace checks judge the whole tree; the native build and
+    test checks judge one package at a time. A body resolves its
+    backend function on the module when it runs, never at
+    registration, so a test that patches ``_cpp_conan.test`` sees its
+    fake run.
     """
-    from livery.workshop._backends import _cpp_conan, _python
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs
-
-    def unit(ctx: GateContext) -> tuple[Package, ...]:
-        return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
-
-    def test_run(ctx: GateContext) -> None:
-        point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
-        if ctx.files:
-            # A named test or source file runs its package's whole suite;
-            # the workspace's tests unit reads the root's own files.
-            record = check_for("test.pytest")
-            named = tuple(
-                p
-                for p in (*scoped_packages(ctx, "test.pytest"), *unit(ctx))
-                if claimed_files(
-                    record, ctx, ROOT_UNIT if p.path == WORKSPACE_TESTS else p.path
-                )
-            )
-            _python.run_test(*point, packages=named, root=ctx.root, scoped=True)
-            return
-        # A package whose examples alone changed runs them, not its suite.
-        judged = tuple(
-            p for p in scoped_packages(ctx, "test.pytest") if p.path not in ctx.examples
-        )
-        record = check_for("test.pytest")
-        serial = tuple(p for p in judged if not option_value(record, p, "parallel"))
-        parallel = tuple(p for p in judged if p not in serial) + unit(ctx)
-        # A package whose suite is not worker-safe runs in an invocation
-        # of its own under -n 0; the rest share one run across cores,
-        # which runs whatever the members are, since the workspace's
-        # own tests ride every run. With neither a python member nor
-        # tests of its own, the workspace has nothing to collect, and
-        # pytest refuses an empty collection.
-        if not judged and not (ctx.root / WORKSPACE_TESTS).is_dir():
-            print("  test.pytest: no python package and no workspace tests to run")
-            return
-        for members, extra in ((parallel, ()), (serial, ("-n", "0"))):
-            if extra and not members:
-                continue
-            if not ctx.scoped:
-                _python.run_test(*extra, *point, packages=members, root=ctx.root)
-                continue
-            _python.run_test(
-                *extra,
-                *point,
-                packages=members,
-                root=ctx.root,
-                scoped=True,
-                selection=ctx.tests,
-            )
-
-    def examples_run(ctx: GateContext) -> None:
-        from livery.workshop._kinds import kind_examples
-
-        for package in scoped_packages(ctx, "examples.pytest"):
-            if (
-                ctx.scoped
-                and package.path in ctx.tests
-                and package.path not in ctx.examples
-            ):
-                continue  # its tests alone changed: the examples did not move
-            runner = kind_examples(package.kind)
-            if runner is None:
-                print(
-                    f"  examples: {package.path} skips ({package.kind} kind runs none)"
-                )
-                continue
-            # Only a run over named files narrows the examples; a whole
-            # walk runs the package's directory.
-            named: tuple[str, ...] = ()
-            if ctx.files:
-                named = claimed_files(check_for("examples.pytest"), ctx, package.path)
-                if not named:
-                    continue
-            runner(package, ctx.root, named)
 
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
@@ -1708,68 +1672,14 @@ def _register_builtin() -> None:
         package = package_of(ctx)
         _cpp_conan.test(package, ctx.root, selection=ctx.selection)
 
-    # The slots the python records fill: the dev group's tool lines
-    # and pytest's options, lines the base template no longer writes
-    # by hand. The python extension declares both once it exists.
+    # The slots the extensions' records fill: the dev group's tool
+    # lines, and the options of the test runner the python kind runs.
+    # The python kind's extension declares both once it exists.
     _slots.register_slot("python.dev-group")
     _slots.register_slot("python.test.addopts")
 
-    python = ("python",)
-    py = _python.PY_SUFFIXES
     cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
-        CheckRecord(
-            "pytest",
-            "test",
-            test_run,
-            flags=("point",),
-            narrowing=PACKAGES,
-            kinds=python,
-            # pytest is the record's tool in the store, for the typed
-            # handle the runner calls, and its venv copy below is the
-            # one that imports the project's environment.
-            tools=("pytest",),
-            fragments=(Fragment("pyproject.toml", _fragments.TESTS),),
-            # A package's tests measure its source, so a source change
-            # is one the test check reads, and runs the suite for.
-            claims=(
-                Claim("test"),
-                Claim("test-support"),
-                Claim("source", suffixes=py),
-            ),
-            options=(
-                Option(
-                    "parallel",
-                    "bool",
-                    True,
-                    "run the package's suite across cores; false runs it under -n 0",
-                ),
-            ),
-            # pytest and coverage import the project's environment, so
-            # they live in the venv: coverage 7.13 for the .pth it
-            # installs, which starts the meter in every python the tests
-            # start once the runner arms it and imports nothing
-            # otherwise, and xdist for -n auto.
-            contributions=(
-                ("python.dev-group", "pytest>=8.0"),
-                ("python.dev-group", "pytest-cov>=5"),
-                ("python.dev-group", "coverage[toml]>=7.13"),
-                ("python.dev-group", "pytest-xdist>=3.6"),
-                ("python.test.addopts", "-q"),
-                ("python.test.addopts", "-n auto"),
-                ("python.test.addopts", "--dist=worksteal"),
-                ("python.test.addopts", "--import-mode=importlib"),
-            ),
-        ),
-        CheckRecord(
-            "pytest",
-            "examples",
-            examples_run,
-            narrowing=PACKAGES,
-            kinds=python,
-            tools=("pytest",),
-            claims=(Claim("example", suffixes=py),),
-        ),
         CheckRecord(
             "check",
             "drift",

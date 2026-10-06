@@ -1,0 +1,41 @@
+# Seeded from the package-python seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-pytest"
+version = "0.0.0"
+description = "pytest as a check of the livery workshop: each python package's suite and documentation examples, configured by the root pytest.toml and .coveragerc."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "livery-workshop>=0.5.0",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The name a workspace lists in [workspace] extensions, and the module
+# whose data the workshop mounts it from. Nothing else: the extension
+# adds no verb of its own, and nothing activates by being installed.
+[project.entry-points."workshop.extensions"]
+pytest = "livery.extensions.pytest._extension"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.extensions.pytest and
+# there is no livery/__init__.py anywhere in this repository.
+module-name = "livery.extensions.pytest"
+namespace = true

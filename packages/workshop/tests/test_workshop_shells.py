@@ -144,11 +144,7 @@ def test_check_affected_scopes_or_says_nothing(
     monkeypatch.setattr(
         fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
     )
-    monkeypatch.setattr(
-        _python,
-        "run_test",
-        lambda **kwargs: ran.append("test"),
-    )
+    monkeypatch.setattr(fake_checks, "run_test", lambda **kwargs: ran.append("test"))
     # The block contract runs unstubbed, deliberately: stubbing
     # parallel and step here once certified a gate whose steps were
     # built and never run (livery#291). Execution is the property.
@@ -211,7 +207,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     monkeypatch.setattr(
         fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
     )
-    monkeypatch.setattr(_python, "run_test", lambda **kwargs: ran.append("test"))
+    monkeypatch.setattr(fake_checks, "run_test", lambda **kwargs: ran.append("test"))
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps
     from livery.workshop._verified import tree_id
@@ -253,7 +249,7 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
         fake_checks, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
     )
     monkeypatch.setattr(
-        _python, "run_test", lambda **kwargs: calls.append(("test", kwargs))
+        fake_checks, "run_test", lambda **kwargs: calls.append(("test", kwargs))
     )
     monkeypatch.setattr(
         _quality, "drift_check", lambda files=None: calls.append(("render", None))
