@@ -570,7 +570,9 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
         _FAILURES, match="no installed distribution declares it"
     ) as caught:
         _e2e.extension_under_test("no-such-extension")
-    assert "ruff" in str(caught.value)
+    # The docs extension rides in the workshop's own wheel, so it is
+    # installed wherever the workshop is, its release leg included.
+    assert "docs" in str(caught.value)
 
 
 def _fake_declarations(
@@ -647,17 +649,26 @@ def test_the_extension_under_test_is_listed_with_every_option_it_declares(
     assert stack == ("base", "top[deep,wide]")
 
 
-def test_basedpyright_is_tested_with_type_completeness_on_the_python_member() -> None:
-    stack, kinds = _e2e.extension_under_test("basedpyright")
-    assert stack == ("basedpyright[typecomplete]",)
-    assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
+def test_the_members_are_the_loop_s_of_the_kinds_the_checks_declare(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
 
-
-def test_ruff_is_tested_on_the_python_and_the_conan_member() -> None:
-    stack, kinds = _e2e.extension_under_test("ruff")
-    assert stack == ("ruff",)
-    assert kinds == ("python", "cpp-conan")
+    _fake_declarations(
+        monkeypatch,
+        {
+            "typed": SimpleNamespace(CHECKS=(SimpleNamespace(kinds=("python",)),)),
+            "both": SimpleNamespace(
+                CHECKS=(SimpleNamespace(kinds=("python", "cpp-conan")),)
+            ),
+        },
+    )
+    stack, kinds = _e2e.extension_under_test("typed")
+    assert stack == ("typed",)
     # A kind the checks declare, not every kind deriving from it.
+    assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
+    _stack, kinds = _e2e.extension_under_test("both")
+    assert kinds == ("python", "cpp-conan")
     assert [name for name, _seed in _e2e.members_for(kinds)] == [
         "loop-echo",
         "loop-cpp",
