@@ -19,6 +19,7 @@ from livery.workshop._categories import (
     unregister_channels,
 )
 from livery.workshop._packages import Package, discover_packages
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 
 def _package(
@@ -184,7 +185,7 @@ def test_the_builtin_ladder_answers_as_before(tmp_path: Path) -> None:
 
 
 def test_explain_prints_category_channel_supplier_and_claims(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     from livery.workshop import _provenance
 
@@ -196,7 +197,7 @@ def test_explain_prints_category_channel_supplier_and_claims(
     assert lines[0] == "  packages/x/docs/examples/first.py"
     assert lines[1] == "    category: example (livery.workshop)"
     assert lines[2] == "    channel: yours (livery.workshop)"
-    assert "    claimed by: examples.pytest, lint.ruff, site" in lines
+    assert "    claimed by: examples.pytest, lint.fake, site" in lines
     note = _provenance.describe(tmp_path, Path("notes/musings.md"))
     assert note[1] == "    category: notes (livery.workshop)"
     assert not any(line.startswith("    claimed by") for line in note)

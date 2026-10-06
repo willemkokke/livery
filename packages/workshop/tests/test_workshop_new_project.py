@@ -12,10 +12,10 @@ from livery.forge.testing import FakeForge
 from livery.workshop import _new_project as _newborn_module
 from livery.workshop._new_project import new_project
 
-#: The birth's tool sync, bound at import, before the module's fixture
-#: stubs it for every birth below: the one test of the real function
-#: calls this.
-_REAL_SYNC_TOOLS = _newborn_module._sync_tools
+#: The hand-off to the newborn's own runner, bound at import, before the
+#: module's fixture stubs it for every birth below: the tests of the
+#: real function call this.
+_REAL_HAND_OFF = _newborn_module._hand_off
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -73,6 +73,13 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
 
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _locked)
 
+    # The finish runs with the runner the newborn's environment holds,
+    # which the suite never builds: here it runs in this process.
+    monkeypatch.setattr(
+        "livery.workshop._new_project._hand_off",
+        lambda root, **answers: birth._finish(root, **answers),
+    )
+
     # Nothing in a birth test reaches the network: a fetch that escapes
     # the fakes refuses here, naming its host, instead of reading the
     # live site, whose answers a deploy can change mid-run.
@@ -89,7 +96,7 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
 
 def _birth(**overrides: Any) -> None:
     arguments: dict[str, Any] = {
-        "name": "acme-tools",
+        "folder": "acme-tools",
         "forge": "gitea",
         "owner": "acme",
         "url": "https://forge.acme.example",
@@ -117,6 +124,79 @@ def test_a_birth_test_that_reaches_the_network_refuses_naming_the_host() -> None
         pass
 
 
+def test_the_verb_is_offered_outside_a_project_and_inside_one(tmp_path: Path) -> None:
+    # Outside one it starts a birth, inside one it resumes: a task of a
+    # package is offered inside a project only unless it says otherwise.
+    import os
+    import subprocess
+    import sys
+
+    bridge = tmp_path / "bridge-config"
+    bridge.mkdir()
+    (bridge / "tasks.py").write_text(
+        'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    env = {**os.environ, "FOOTMAN_CONFIG_DIR": str(bridge)}
+    shown = subprocess.run(
+        [sys.executable, "-m", "livery.footman", "new.project", "--help"],
+        cwd=outside,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert shown.returncode == 0, shown.stdout + shown.stderr
+    # Hidden from the options: the refusal and the description teach it.
+    options = [line.strip() for line in shown.stdout.splitlines()]
+    assert not any(line.startswith("--resume") for line in options)
+
+
+# The refusals first: where no birth may start, nothing is written.
+
+
+def test_a_folder_holding_a_project_refuses_and_names_resume(
+    tmp_path: Path,
+) -> None:
+    _birth(local=True)
+    with pytest.raises(_FAILURES) as caught:
+        _birth(local=True)
+    assert "new.project --resume" in str(caught.value)
+
+
+def test_a_folder_that_is_not_empty_refuses(tmp_path: Path) -> None:
+    folder = tmp_path / "acme-tools"
+    (folder / "packages").mkdir(parents=True)
+    (folder / "pyproject.toml").write_text("[project]\n")
+    with pytest.raises(_FAILURES) as caught:
+        _birth()
+    assert "is not empty" in str(caught.value)
+    assert not (folder / "workshop.toml").exists()
+
+
+def test_resume_without_a_project_refuses(tmp_path: Path) -> None:
+    with pytest.raises(_FAILURES) as caught:
+        _birth(resume=True)
+    assert "holds no project to resume" in str(caught.value)
+    assert not (tmp_path / "acme-tools").exists()
+
+
+def test_the_folder_names_the_project_unless_a_name_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A birth with no folder is born where the caller stands.
+    here = tmp_path / "Odd_Dir"
+    here.mkdir()
+    monkeypatch.chdir(here)
+    with pytest.raises(_FAILURES) as caught:
+        new_project(local=True)
+    assert "--name" in str(caught.value)
+    assert list(here.iterdir()) == []
+    new_project(name="odd-dir", local=True)
+    assert 'name = "odd-dir"' in (here / "workshop.toml").read_text()
+
+
 def test_birth_end_to_end_and_the_second_run_resumes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -130,10 +210,9 @@ def test_birth_end_to_end_and_the_second_run_resumes(
     assert (root / "CLAUDE.project.md").is_file()
     out = capsys.readouterr().out
     assert "setup PR: opened" in out
-    _birth()
+    _birth(resume=True)
     out = capsys.readouterr().out
     for line in (
-        "workshop.toml: already seeded",
         "seeds: already written",
         "git: already initialised",
         "setup PR: already open",
@@ -169,7 +248,7 @@ def test_a_kill_at_any_boundary_resumes_on_rerun(
         with pytest.raises((_Killed, *(_FAILURES if boundary else ()))):
             _birth()
     capsys.readouterr()
-    _birth()  # the rerun IS the recovery procedure
+    _birth(resume=True)  # the resume IS the recovery procedure
     out = capsys.readouterr().out
     assert "done: merge the setup PR" in out
 
@@ -251,7 +330,7 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
     # The base is never listed; the site's extension rides in its wheel.
-    assert 'extensions = ["docs", "acme_tools.brand"]' in contract
+    assert 'extensions = ["docs", "ruff", "acme_tools.brand"]' in contract
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
     assert '"acme_tools.brand" = "acme_tools.brand._tasks"' in pyproject
@@ -261,8 +340,8 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     assert '"acme_tools-brand' in (root / "pyproject.toml").read_text()
     out = capsys.readouterr().out
     assert "self-hosted, last in the stack" in out
-    # The second run walks past the scaffold.
-    _birth(local=True, owner="", extension="brand")
+    # The resume walks past the scaffold.
+    _birth(local=True, owner="", extension="brand", resume=True)
     out = capsys.readouterr().out
     assert "already scaffolded" in out
 
@@ -302,31 +381,72 @@ def test_a_newborn_names_the_index_and_holds_a_lock(
     assert (tmp_path / "acme-tools" / "tools.lock").is_file()
 
 
-def test_the_newborn_tool_sync_takes_the_root_and_changes_no_directory(
+def test_the_birth_finishes_with_the_runner_its_environment_holds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The birth runs inside a task, and a task may not change directory."""
-    from livery.workshop import _tool_tasks
+    import sys
 
-    seen: list[Path] = []
-    monkeypatch.setattr(
-        _tool_tasks, "sync_tools", lambda root, **kwargs: seen.append(root)
+    from livery.workshop._pythons import scripts_dir
+
+    # The refusal first: an environment with no runner of its own.
+    with pytest.raises(_FAILURES) as caught:
+        _REAL_HAND_OFF(tmp_path)
+    assert "environment has no fm to finish the birth with" in str(caught.value)
+    runner = scripts_dir(tmp_path / ".venv") / (
+        "fm.exe" if sys.platform == "win32" else "fm"
     )
+    runner.parent.mkdir(parents=True)
+    runner.write_text("")
+    seen: list[tuple[list[str], object, object]] = []
+
+    def _run(
+        argv: list[str], *, cwd: object = None, capture: object = True, **_: object
+    ) -> None:
+        seen.append((argv, cwd, capture))
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
     before = Path.cwd()
-    _REAL_SYNC_TOOLS(tmp_path)
-    assert seen == [tmp_path]
+    _REAL_HAND_OFF(tmp_path, owner="acme", local=True)
+    # Inside the project, sharing the console, passing what the
+    # contract does not hold.
+    argv = [str(runner), "new.project", "--resume", "--owner=acme", "--local"]
+    assert seen == [(argv, tmp_path, False)]
     assert Path.cwd() == before
+
+
+def test_a_resume_inside_the_project_finishes_it_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A local birth, then its forge half from inside the project: this
+    # process is the project's own runner, so nothing is handed off.
+    _birth(local=True)
+    root = tmp_path / "acme-tools"
+
+    def _never(root: Path, **answers: object) -> None:
+        raise AssertionError("a resume inside the project finishes in place")
+
+    monkeypatch.setattr("livery.workshop._new_project._hand_off", _never)
+    monkeypatch.chdir(root)
+    capsys.readouterr()
+    new_project(resume=True)
+    assert "setup PR: opened" in capsys.readouterr().out
 
 
 def test_a_birth_lists_the_site_first_and_a_brand_after_it() -> None:
     from livery.workshop._new_project import birth_extensions
 
-    # The fallback first: an App with no builtins of its own is stock.
-    assert birth_extensions(()) == ["docs"]
-    assert birth_extensions(("footman.profile", "livery.workshop")) == ["docs"]
-    # A brand's extension follows the site's, so it wins.
+    # The fallback first: an App with no builtins of its own is stock,
+    # and lists the site's extension and the python formatter's.
+    assert birth_extensions(()) == ["docs", "ruff"]
+    assert birth_extensions(("footman.profile", "livery.workshop")) == [
+        "docs",
+        "ruff",
+    ]
+    # A brand's extension follows the stock ones, so it wins.
     assert birth_extensions(("dummy.brandx", "livery.workshop")) == [
         "docs",
+        "ruff",
         "dummy.brandx",
     ]
     # An App that does not carry the base lists its own alone.

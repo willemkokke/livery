@@ -16,11 +16,13 @@ import pytest
 # The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
+import workshop_python_checks as fake_checks
 from livery.footman.api import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -130,12 +132,15 @@ def test_graph_affected_prints_the_reach(
 def test_check_affected_scopes_or_says_nothing(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
+    python_checks: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _, root = rig
     ran: list[str] = []
-    monkeypatch.setattr(_python, "run_format", lambda **kwargs: ran.append("format"))
-    monkeypatch.setattr(_python, "run_lint", lambda **kwargs: ran.append("lint"))
+    monkeypatch.setattr(
+        fake_checks, "run_format", lambda **kwargs: ran.append("format")
+    )
+    monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
     monkeypatch.setattr(
         _python, "run_typecomplete", lambda subset: ran.append("complete")
@@ -192,6 +197,7 @@ def test_check_affected_scopes_or_says_nothing(
 def test_a_dispatched_run_sets_the_verified_record_aside(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
+    python_checks: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # A person dispatched the gate for this tree: the run proves it
@@ -199,8 +205,10 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     # read and every verb runs.
     _, root = rig
     ran: list[str] = []
-    monkeypatch.setattr(_python, "run_format", lambda **kwargs: ran.append("format"))
-    monkeypatch.setattr(_python, "run_lint", lambda **kwargs: ran.append("lint"))
+    monkeypatch.setattr(
+        fake_checks, "run_format", lambda **kwargs: ran.append("format")
+    )
+    monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
     monkeypatch.setattr(
         _python, "run_typecomplete", lambda subset: ran.append("complete")
@@ -229,6 +237,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
 def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
+    python_checks: object,
 ) -> None:
     _, root = rig
     calls: list[tuple[str, object]] = []
@@ -238,9 +247,9 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
         module = root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py"
         module.write_text("x = 2\n")
 
-    monkeypatch.setattr(_python, "run_format", _format)
+    monkeypatch.setattr(fake_checks, "run_format", _format)
     monkeypatch.setattr(
-        _python, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
+        fake_checks, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
     )
     monkeypatch.setattr(
         _python, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
@@ -259,15 +268,17 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
     monkeypatch.delenv("CI", raising=False)  # the guard is its own test
     _quality.check(fix=True)
-    # format and lint rewrite the same files, so they run first and in
-    # order; the rest of the gate still judges after them. The exact
-    # kwargs beyond the mode flag are the verb's business (paths,
-    # safe_fix); the pin is the order and the rewrite mode.
-    name0, kw0 = calls[0]
-    name1, kw1 = calls[1]
+    # The rewriters run first, the base's (the render) and then a listed
+    # extension's in its order: format and lint rewrite the same files,
+    # so the formatter goes first. The rest of the gate judges after
+    # them. The exact kwargs beyond the mode flag are the verb's business
+    # (paths, safe_fix); the pin is the order and the rewrite mode.
+    assert calls[0][0] == "render"
+    name0, kw0 = calls[1]
+    name1, kw1 = calls[2]
     assert name0 == "format" and isinstance(kw0, dict) and kw0["check"] is False
     assert name1 == "lint" and isinstance(kw1, dict) and kw1["fix"] is True
-    assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
+    assert {name for name, _ in calls[3:]} == {"types", "complete", "test"}
     # The row names the tree the rewrite left, not the one the plan measured.
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps

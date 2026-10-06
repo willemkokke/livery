@@ -27,6 +27,57 @@ def test_sync_is_idempotent(tmp_path: Path) -> None:
     assert sync_workspace(root) == []  # the second has nothing
 
 
+def test_sync_runs_where_git_has_no_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # No repository, then a repository with nothing committed: nothing
+    # to bring current, and everything else as anywhere.
+    from livery.workshop import _sync
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    steps: list[str] = []
+
+    def _step(name: str, result: object = None) -> object:
+        def record(*args: object, **kwargs: object) -> object:
+            steps.append(name)
+            return result
+
+        return record
+
+    def _never(*args: object, **kwargs: object) -> None:
+        raise AssertionError("nothing to bring current here")
+
+    monkeypatch.setattr(_sync, "bring_current", _never)
+    monkeypatch.setattr(_sync, "sweep_residue", _step("sweep", []))
+    monkeypatch.setattr(_sync, "fetch_store_lines", _step("store", []))
+    monkeypatch.setattr(_sync, "sync_workspace", _step("content", []))
+    monkeypatch.setattr(_sync, "conan_editables", _step("conan", []))
+    monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _step("tools"))
+    monkeypatch.setattr("livery.workshop._uv.run_uv", _step("uv"))
+    monkeypatch.setattr("livery.workshop._shipped_files.deliver", _step("deliver", []))
+    monkeypatch.setattr(
+        "livery.workshop._templates.apply_generated", _step("generated", [])
+    )
+    monkeypatch.setattr("livery.workshop._reconcile.record_receipt", _step("receipt"))
+    _sync.sync()
+    assert "no git history here: nothing to bring current" in capsys.readouterr().out
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    _sync.sync()
+    assert "no git history here: nothing to bring current" in capsys.readouterr().out
+    assert steps == 2 * [
+        "sweep",
+        "store",
+        "content",
+        "tools",
+        "conan",
+        "uv",
+        "deliver",
+        "generated",
+        "receipt",
+    ]
+
+
 def test_a_moved_checkout_hands_the_sync_to_a_fresh_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -163,10 +214,28 @@ def test_the_monorepo_is_in_sync() -> None:
         # re-point the repository's real links at the scratch venv.
         # The dogfood check means the editable checkout syncing itself.
         pytest.skip("dogfood: only the editable checkout syncs itself")
-    before = _tracked_state()
-    first = sync_workspace(ROOT)
-    assert sync_workspace(ROOT) == []
-    after = _tracked_state()
+    from livery.workshop import _checks
+    from livery.workshop._extensions import (
+        declaration,
+        extension_names,
+        register_declared_checks,
+    )
+
+    # A sync runs after the mount, which registers the listed
+    # extensions' checks and with them what they deliver; the registry
+    # is put back after.
+    state = _checks.snapshot()
+    try:
+        for name in extension_names(ROOT):
+            module = declaration(name)
+            if module is not None:
+                register_declared_checks(name, module)
+        before = _tracked_state()
+        first = sync_workspace(ROOT)
+        assert sync_workspace(ROOT) == []
+        after = _tracked_state()
+    finally:
+        _checks.restore(state)
     # A failure names what moved, so a runner-only difference is readable
     # from the log alone.
     moved = subprocess.run(

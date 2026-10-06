@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from pathlib import Path
 
@@ -327,11 +328,12 @@ def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
     calls: list[str] = []
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-abc"))
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.setattr(_e2e, "_dev_index", lambda kind: "")
 
     def _authenticate(root: Path, token: str, kind: str = "gitea") -> None:
         calls.append("authenticate")
 
-    def _birth(kind: str, url: str) -> Path:
+    def _birth(kind: str, url: str, index: str = "") -> Path:
         calls.append("birth")
         return root
 
@@ -506,7 +508,9 @@ def _member(root: Path, name: str, *edges: str) -> None:
     (home / "workshop.toml").write_text(
         f'kind = "python"\nname = "livery-{name}"\n' + declared
     )
-    (home / "pyproject.toml").write_text(f'[project]\nname = "livery-{name}"\n')
+    (home / "pyproject.toml").write_text(
+        f'[project]\nname = "livery-{name}"\nversion = "0.1.0"\n'
+    )
 
 
 def test_dev_members_refuse_a_workspace_without_the_workshop(tmp_path: Path) -> None:
@@ -532,6 +536,22 @@ def test_dev_members_are_the_workshop_s_closure_once_each(tmp_path: Path) -> Non
         "toolroom-store",
         "strongroom",
     )
+
+
+def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
+    # An extension depends on the workshop, so the workshop's closure
+    # never reaches it, and a newborn listing it would install nothing.
+    _member(tmp_path, "workshop", "toolroom")
+    _member(tmp_path, "toolroom")
+    _member(tmp_path, "unlisted", "workshop")
+    home = tmp_path / "packages" / "extensions" / "ruff"
+    home.mkdir(parents=True)
+    (home / "workshop.toml").write_text(
+        'kind = "python"\nname = "livery-extensions-ruff"\n'
+        '\n[[depends]]\npath = "packages/workshop"\nkind = "runtime"\nfloor = "0"\n'
+    )
+    (home / "pyproject.toml").write_text('[project]\nname = "livery-extensions-ruff"\n')
+    assert _e2e.dev_members(tmp_path) == ("workshop", "extensions/ruff", "toolroom")
 
 
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:
@@ -639,6 +659,119 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     assert "forge: nothing unreleased since 0.3.0; the loop pins the release" in out
     assert "1 stale rehearsal release(s)" in out
     assert ("dev wheel(s) of the dirty tree dropped" in out) is not clean
+
+
+def test_the_dev_index_lays_out_each_project_with_its_wheels(tmp_path: Path) -> None:
+    built = tmp_path / "dist"
+    built.mkdir()
+    wheels = [
+        built / "livery_workshop-0.6.0.dev1+feat.x.gabc1234.20261005-py3-none-any.whl",
+        built
+        / "livery_extensions_ruff-0.1.0.dev1+feat.x.gabc1234.20261005-py3-none-any.whl",
+    ]
+    for wheel in wheels:
+        wheel.write_bytes(b"wheel")
+    folder = tmp_path / "index"
+    (folder / "stale").mkdir(parents=True)
+    assert _e2e.write_dev_index(folder, wheels) == folder
+    # An earlier pass's layout is gone, and each project is its
+    # normalised name with its wheel and a page linking it.
+    assert sorted(path.name for path in folder.iterdir()) == [
+        "index.html",
+        "livery-extensions-ruff",
+        "livery-workshop",
+    ]
+    page = (folder / "livery-workshop" / "index.html").read_text()
+    assert f'<a href="{wheels[0].name}">' in page
+    assert (folder / "livery-workshop" / wheels[0].name).read_bytes() == b"wheel"
+    root_page = (folder / "index.html").read_text()
+    assert '<a href="livery-extensions-ruff/">' in root_page
+    assert '<a href="livery-workshop/">' in root_page
+
+
+def test_the_birth_reads_the_dev_index_before_any_other(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    seen: list[dict[str, str]] = []
+
+    def _run(argv: list[str], *, env: dict[str, str], **kwargs: object) -> object:
+        seen.append(dict(env))
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.setenv("UV_INDEX", "https://mirror.example/simple")
+    _e2e._birth("gitea", "http://localhost:1")
+    assert seen[-1]["UV_INDEX"] == "https://mirror.example/simple"
+    _e2e._birth("gitea", "http://localhost:1", index="file:///dev-index")
+    assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
+
+
+def test_the_checkout_index_refuses_a_member_without_a_version(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._packages import Package
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "livery-x"\n')
+    member = Package(
+        directory=tmp_path,
+        path="packages/x",
+        name="livery-x",
+        kind="python",
+        depends=(),
+    )
+    with pytest.raises(_FAILURES, match="no version line"):
+        _e2e._stamp_content(member)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_the_checkout_index_builds_what_a_newborn_installs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import livery.toolroom.tools.api as toolroom
+
+    _member(tmp_path, "workshop", "toolroom")
+    _member(tmp_path, "toolroom")
+    _member(tmp_path, "unlisted")
+    built: list[tuple[str, str]] = []
+
+    class _Uv:
+        def opts(self, **_: object) -> _Uv:
+            return self
+
+        def __call__(self, *args: str) -> None:
+            out, copy = Path(args[3]), Path(args[4])
+            version = re.search(
+                r'version = "([^"]+)"', (copy / "pyproject.toml").read_text()
+            )
+            assert version is not None
+            built.append((copy.name, version.group(1)))
+            out.mkdir(parents=True, exist_ok=True)
+            dist = f"livery_{copy.name.replace('-', '_')}"
+            (out / f"{dist}-{version.group(1)}-py3-none-any.whl").write_bytes(b"wheel")
+
+    monkeypatch.setattr(toolroom, "uv", _Uv())
+    folder = tmp_path / "index"
+    assert _e2e.checkout_index(tmp_path, folder) == folder.as_uri()
+    # The workshop and its closure, each a copy stamped with its content,
+    # and the checkout's own files untouched.
+    assert [name for name, _version in built] == ["toolroom", "workshop"]
+    assert all(re.fullmatch(r"0\.1\.0\+checkout\.[0-9a-f]{12}", v) for _n, v in built)
+    assert (
+        'version = "0.1.0"\n'
+        in (tmp_path / "packages/workshop/pyproject.toml").read_text()
+    )
+    assert sorted(entry.name for entry in folder.iterdir()) == [
+        "index.html",
+        "livery-toolroom",
+        "livery-workshop",
+    ]
+    # An unchanged tree keeps its name: the same build, the same wheel.
+    first = dict(built)
+    built.clear()
+    _e2e.checkout_index(tmp_path, folder)
+    assert dict(built) == first
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:

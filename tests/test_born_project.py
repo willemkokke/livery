@@ -1,11 +1,14 @@
 """A project born by `fm new.project` passes its own gate, on this checkout's code.
 
-The birth runs here, from this checkout; the newborn's uv sources then
-point at this checkout's packages through the region of its project
-file, so its own verbs run the code under test rather than the
-published wheels. It locks over the network, which the merge path
-never waits on, so it arms with WORKSHOP_CONFORMANCE_DRIVE=1 like the
-stranger drive.
+The birth runs here, from this checkout, and finishes with the runner
+the newborn's environment holds, so the newborn's first lock reads this
+checkout's distributions from a local index of their wheels: the
+published ones are older, and an extension a birth lists may not be
+published at all. The newborn's uv sources then point at this
+checkout's packages through the region of its project file, so its own
+verbs run the code under test. It locks over the network, which the
+merge path never waits on, so it arms with WORKSHOP_CONFORMANCE_DRIVE=1
+like the stranger drive.
 """
 
 from __future__ import annotations
@@ -18,10 +21,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-
-#: The distributions the newborn takes from this checkout instead of
-#: the index: the workshop and everything of ours it installs.
-_LOCAL = ("workshop", "footman", "toolroom", "toolroom-store", "strongroom", "forge")
 
 _END_TABLES = "# -- workshop: end tables --"
 
@@ -36,15 +35,24 @@ def _run(cmd: list[str], cwd: Path, env: dict[str, str]) -> str:
 
 
 def _point_at_this_checkout(project: Path) -> None:
-    """Add path sources for our distributions to the newborn's own region."""
+    """Add path sources for our distributions to the newborn's own region.
+
+    The same members the checkout index builds
+    ([livery.workshop._e2e.dev_members][]), as editable paths.
+    """
+    from livery.workshop._e2e import dev_members
+    from livery.workshop._packages import discover_packages
+
+    ours = set(dev_members(ROOT))
     pyproject = project / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     assert _END_TABLES in text, "the composed project file carries no tables region"
     sources = "".join(
-        f"[tool.uv.sources.livery-{name}]\n"
-        f'path = "{(ROOT / "packages" / name).as_posix()}"\n'
+        f"[tool.uv.sources.{package.name}]\n"
+        f'path = "{package.directory.as_posix()}"\n'
         "editable = true\n"
-        for name in _LOCAL
+        for package in discover_packages(ROOT)
+        if package.member in ours
     )
     pyproject.write_text(text.replace(_END_TABLES, sources + _END_TABLES), "utf-8")
 
@@ -55,6 +63,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
             "set WORKSHOP_CONFORMANCE_DRIVE=1 to run the birth: it locks and"
             " syncs a scratch workspace over the network"
         )
+    from livery.workshop._e2e import checkout_index
+
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
     # Its own conan home: a sync registers the native member as an
     # editable, which in the machine's home would outlive this test.
@@ -68,7 +78,11 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     (bridge / "tasks.py").write_text(
         'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
     )
-    born = {**env, "FOOTMAN_CONFIG_DIR": str(bridge)}
+    born = {
+        **env,
+        "FOOTMAN_CONFIG_DIR": str(bridge),
+        "UV_INDEX": checkout_index(ROOT, tmp_path / "checkout-index"),
+    }
     _run(
         [
             sys.executable,

@@ -385,7 +385,7 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     if not re.fullmatch(r"([a-z][a-z0-9-]*/)?[a-z][a-z0-9-]*", name):
         fail(
             f"package name {name!r}: use lowercase letters, digits, hyphens,"
-            " and at most one group directory (extensions/ruff)"
+            " and at most one group directory (extensions/widgets)"
         )
     destination = root / "packages" / name
     if destination.exists():

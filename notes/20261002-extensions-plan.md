@@ -2,7 +2,9 @@
 
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
-#1036); the others not started. It is the one plan from now until the end of
+#1036). Later phases mark each slice built in place, with its issue;
+9b is in progress, its ruff slice built (issue #1149), and phases 10
+to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1207,6 +1209,32 @@ patterns), and a basedpyright or gitignore glob takes `**`.
 `fm new.package extensions/ruff` names the distribution
 `<namespace>-extensions-ruff`.
 
+**9b2 built (issue #1149): ruff is its own extension.**
+`livery-extensions-ruff`, in `packages/extensions/ruff/` and listed as
+`ruff`, declares `CHECKS`: the `format.ruff` and `lint.ruff` records,
+as data, which the mount registers under the listed name after the
+base's own checks. Installed and not listed, it registers nothing and
+writes nothing, which
+`test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file`
+pins. It writes the root `ruff.toml`: the claims' per-file ignores, the
+`src` roster, `cache-dir = ".workshop/.cache/ruff"`, and a `tables`
+region for the repository's own tables. `[tool.ruff]` left
+`pyproject.toml`; a package's own settings are its own `ruff.toml`,
+which extends the root one and adds its ignores under
+`[lint.extend-per-file-ignores]`. The base keeps no ruff: the bodies,
+the safe-fix rule and the tables moved, and what the bodies need
+from the base is generic (`scoped_paths`, `run_batched`,
+`CheckRecord`, `Claim`, `Fragment`, `GateContext`, `PATHS` in
+`livery.workshop.api`); `test_the_base_names_no_tool_an_extension_brings`
+pins it, with `fm new.project`'s stock list its one allowance. A
+birth lists `docs` and `ruff`, and this repository lists both. A run
+handed files names each one to ruff, which applies its excludes to a
+named file only under `--force-exclude`; both calls pass it. The
+extension has no public names, so it has neither `api.py` nor
+`__init__.py`: its build's `module-name` is its root, typecomplete
+finds nothing public in it, and its version lives in its manifest
+alone.
+
 **9a, the engine and the options.** Deliverables:
 
 - A check's invocation declarations (unit, narrowing, transport,
@@ -1765,6 +1793,97 @@ Acceptance:
   `.gitattributes`, and LFS is a workspace setting in `workshop.toml`;
   6b carries both. Nobody is forced onto LFS: with it off, an
   extension's LFS lines are left out and named, never refused.
+- 2026-10-05, 9b2: an extension's checks are data, `CHECKS` in its
+  declaring module, a tuple of check records. The mount registers each
+  under the name the workspace lists, after the level check, so the
+  name the gate prints is the listed one. Anything but a tuple of
+  records refuses at mount, naming the extension. Before, an
+  extension registered its checks from its plugin, at import.
+- 2026-10-05, 9b2: an extension that no installed distribution
+  declares is taken at the convention: a dotted name's distribution
+  is the name with hyphens for dots, a short name's is the base's
+  family, `livery-extensions-<name>`, never the index's package of
+  the bare name. A newborn lists `ruff` before its environment exists.
+- 2026-10-05, 9b2: a composed template that collects contributions
+  renders when nothing contributes, so `.vscode/settings.json` stays
+  a JSON object with no extension listed.
+- Willem, 2026-10-05: `api` holds what a root's `__init__.py` would
+  hold, never all public API: a public package under a root,
+  `livery.strongroom.cbor` or a `testing` kit, is reached by its own
+  path. `api` stays: a root that another distribution installs into
+  cannot have an `__init__.py`, and cbor was its own distribution
+  until 2026-10-01, so a root keeps the freedom to gain one without
+  moving its public names. A root with no public names, an
+  extension's, has no `api`.
+- Willem, 2026-10-05: typecomplete checks all public API, and a root's
+  public API is what its `api` declares. A public package beneath the
+  root keeps its own import path and is declared there too: imported
+  under `TYPE_CHECKING`, listed in `__all__`, served on first use. The
+  verifier follows the declaration into the package, so verifying the
+  `api` verifies it. `py.typed` sits at a distribution's root only. A
+  root with nothing public verifies nothing. `livery.strongroom.cbor`
+  is declared in `livery.strongroom.api`, which amends the 2026-09-30
+  line keeping the codec out of strongroom's root (and contract 3 of
+  the strongroom redesign plan): its path stays its own. Measured
+  before the ruling: an untyped function in the codec fails the
+  `api`'s verification once the codec is declared, and passes it while
+  undeclared.
+- Willem, 2026-10-05: an extension is tested end to end without a
+  release. The loop's birth locks the newborn before the pass
+  publishes anything, so `fm ci.e2e` first builds the dev wheels of
+  the workshop and of every extension a birth lists (the dev act with
+  no index to publish to) into a local simple index under the lane's
+  home, and runs the birth with that index first in `UV_INDEX`. uv
+  takes a package from the first index that has it and admits a
+  prerelease where that index holds nothing else, so the dev wheels
+  win and everything else comes from PyPI; `UV_FIND_LINKS` would not
+  do, since a folder named there only adds candidates and PyPI's
+  stable release beats a dev wheel (both measured with uv 0.12.7).
+  The wiring after the birth is unchanged. Releasing to unblock the
+  loop is not the fix: the permission to release intermediate
+  versions was for this migration only.
+- Willem, 2026-10-06: one way to give a workspace this checkout's
+  code before a release: `checkout_index` in `livery.workshop._e2e`
+  builds the members a newborn installs (`dev_members`) from copies,
+  each copy's version stamped `+checkout.<digest of its files>` through
+  the kind's own stamper, and lays them out as a simple index read
+  first through `UV_INDEX`. The digest is measured necessity: uv
+  installs a cached wheel by its file name, and a rebuild at an
+  unchanged version installed the code from before a fix. The dev act
+  is not used for it: on a main-family branch it is the release train.
+  The loop's birth and the born-project test use it; the descendant
+  chain keeps its wheelhouse, which also carries the brand it builds,
+  until its next run on the forge rig.
+- Willem, 2026-10-06: the loop's split comes forward. After #1149,
+  `fm ci.e2e --extension=<name>` (the local loop plan's phase 3b,
+  carried in phase 14) is built first, on today's devenv, before the
+  rest of 9b: it births a project that lists the base and the
+  extension under test, with what that extension requires, from this
+  checkout's wheels, runs its checks on the runner and stops. Each
+  remaining tool extension is then proved in isolation in minutes, not
+  in a develop pass. The lodge (phase 13) replaces the environment
+  under it later. The reason this refactor began: testing an extension
+  in isolation on the local loop, quickly.
+- Willem, 2026-10-06: `fm new.project [folder]` births a project in
+  an empty or new folder, the current one by default, named after the
+  folder unless `--name` says otherwise; a folder that holds a project,
+  or anything else, refuses. Adopting an existing tree is a feature of
+  its own (an existing `pyproject.toml`, a `packages/` of members that do
+  not comply). After it locks and syncs the newborn's environment, the
+  birth runs the newborn's own runner in its folder as `new.project
+  --resume` (hidden; the refusal names it), so the tools lock, the
+  files and the forge half come from the extensions the newborn lists,
+  mounted at the versions it locked. `--resume` is also the recovery
+  after a birth stopped part way, and finishes a `--local` birth's
+  forge half. `fm sync` runs where git has no history: nothing to
+  bring current, and the rest as anywhere.
+- 2026-10-05, 9b2: a package's roots are its build's `module-name`
+  where the manifest declares one, the modules its wheel ships, and
+  the `api.py` and `__init__.py` marks otherwise. The layering check's
+  owners follow, so `livery.extensions.docs` is the workshop's, and a
+  root with no marks takes its docs copy from the declared root.
+  `verify_release` asks for a `__version__` only where a root module
+  exists.
 
 ## Open
 

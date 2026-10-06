@@ -1,20 +1,21 @@
 """The check registry: what the quality gate runs, one record per check.
 
 A check is one tool's judgment over the workspace or over one
-package: ruff's format pass, the render drift comparison, ctest
+package: a formatter's pass, the render drift comparison, ctest
 over a native member. Each is a [livery.workshop._checks.CheckRecord][]
 registered through [livery.workshop._checks.register_check][], and
 the gate is the walk over the registry: every applicable check
 green, the exit code the verdict. The workshop registers the
 builtin records at import, in the order the gate runs its
-rewriters; an extension's plugin registers its own at mount, the way it
-registers a kind, and re-registering a name replaces the record.
+rewriters; a listed extension's records register at mount, after
+them and in list order, and re-registering a name replaces the
+record.
 
 A check names the kinds it judges, and a package of another kind
-skips it by name: a C++ member is formatted by ruff over its recipe
-and by clang-format over its sources because both checks name its
-kind. A role is the set of checks that implement it, so the roles that
-exist are what the listed extensions register.
+skips it by name: a C++ member is formatted over its recipe by a
+python formatter and over its sources by clang-format because both
+checks name its kind. A role is the set of checks that implement it,
+so the roles that exist are what the listed extensions register.
 
 A check is named by its role and its tool, ``test.pytest``. Every
 role is a verb and every check a sub-task of it, made by
@@ -158,7 +159,7 @@ class Claim:
     Attributes:
         category: The category, ``source``, ``test``, ``configuration``.
         ignore: Rule codes the check does not apply to that category;
-            a ruff-shaped tool renders them as its per-file ignores.
+            a tool with per-file ignores renders them as those.
         suffixes: The file suffixes the check reads in the category,
             ``(".py", ".pyi")`` for a python tool; empty reads every
             file. A category names a role, not a language: a native
@@ -227,7 +228,7 @@ class CheckRecord:
         extension: The extension that registered the check, named when a
             narrowing is printed.
         tools: The tools the check runs, as the tool profile names
-            them, ``("ruff",)``; each reaches the profile for every kind
+            them, ``("clang_format",)``; each reaches the profile for every kind
             the check judges, naming ``check <name>`` as its site, and
             leaves it when the check is unregistered.
         options: The options a package may set under
@@ -244,9 +245,8 @@ class CheckRecord:
             recommendations list names these and nothing else.
         claims: The categories the check judges, each with the rules
             it withholds there and the suffixes it reads; a check
-            judges every file its claims reach and no other, and the
-            render derives a ruff-shaped tool's per-file ignores from
-            them.
+            judges every file its claims reach and no other, and a
+            tool with per-file ignores renders its ignores from them.
         roles: Further roles the check implements; it answers to
             ``<role>.<tool>`` under each, and its options stay in its
             own table, ``[checks.<role>.<tool>]`` for ``role``.
@@ -683,15 +683,16 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
 
     For each present kind and the workspace's own unit, every claim
     that withholds rules on a category maps to that category's
-    patterns in the kind's table, a package's under ``packages/*/``
-    and the root's as they are; two checks claiming one category
-    under different rules land in one entry with both sets.
+    patterns in the kind's table, a package's under ``packages/**/``,
+    which reaches a member in a group directory too, and the root's as
+    they are; two checks claiming one category under different rules
+    land in one entry with both sets.
     """
     from livery.workshop._categories import WORKSPACE, category_rules
     from livery.workshop._kinds import kind_chain, kind_names
 
     table: dict[str, set[str]] = {}
-    units = [(kind, "packages/*/") for kind in kinds if kind in kind_names()]
+    units = [(kind, "packages/**/") for kind in kinds if kind in kind_names()]
     units.append((WORKSPACE, ""))
     for kind, prefix in units:
         chain = (
@@ -1216,12 +1217,14 @@ def _drift_widens(root: Path) -> tuple[str, ...]:
     A listed extension whose sources live in a member package composes
     from them, so a change under them may move any output.
     """
-    from livery.workshop._extensions import extension_names
+    from livery.workshop._extensions import extension_names, extension_package
     from livery.workshop._influence import provider_of
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root)
-    providers = {provider_of(name, packages) for name in extension_names(root)}
+    providers = {
+        provider_of(extension_package(name), packages) for name in extension_names(root)
+    }
     return (
         "workshop.toml",
         *package_files(root),
@@ -1415,6 +1418,83 @@ def judges(ctx: GateContext) -> tuple[str, ...]:
     return tuple(names)
 
 
+#: The whole repository, as a check that walks it from the root reads it.
+WHOLE = (".",)
+
+
+def _workspace_unit(ctx: GateContext) -> tuple[Package, ...]:
+    """The workspace's own tests, when this run judges them as a unit."""
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+
+    return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
+
+
+def _claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
+    """The files of the native members the check *name* claims, by path.
+
+    A native member's directories are not a python check's to walk, so
+    its files come by name: its ``conanfile.py``, say.
+    """
+    record = check_for(name)
+    return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
+
+
+def whole_reached(ctx: GateContext, name: str, chosen: int) -> bool:
+    """Whether the scoped check *name* over *chosen* units should run its whole.
+
+    At the check's threshold share of every unit it judges, provided
+    no member anywhere turned it off: the whole would reach that
+    member too.
+    """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._invoke import runs_whole
+
+    record = check_for(name)
+    everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
+    gated_all = judged_by(record, everyone, quiet=True)
+    # The workspace's tests unit rides in the scope, not always among
+    # the packages: counted once from either.
+    tests_unit = {
+        p.path for p in (*ctx.packages, *ctx.judged) if p.path == WORKSPACE_TESTS
+    }
+    units = len(gated_all) + len(tests_unit)
+    on = all(option_value(record, p, "enabled") for p in gated_all)
+    return on and runs_whole(chosen, units, record.threshold)
+
+
+def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
+    """The paths the path-narrowing check *name* judges in this run.
+
+    The files the run names, when it names any. Otherwise the whole
+    tree, ``.``, when the check reaches every member it judges or its
+    threshold says so; else the reached python members' ``src`` and
+    ``tests`` directories, the workspace's own tests when the run
+    judges them, and the files the check's claims give it in the
+    reached native members.
+    """
+    from livery.workshop._kinds import is_python_kind
+    from livery.workshop._packages import package_paths
+
+    record = check_for(name)
+    if ctx.files:
+        return claimed_files(record, ctx)
+    gated_members = judged_by(record, _members(ctx))
+    members = enabled(name, gated_members)
+    pythons = tuple(p for p in members if is_python_kind(p.kind))
+    natives = tuple(p for p in members if not is_python_kind(p.kind))
+    unit = _workspace_unit(ctx)
+    if ctx.subset is None:
+        if len(members) == len(gated_members):
+            return WHOLE
+        chosen = package_paths(pythons + unit) + _claimed(name, natives)
+        return chosen or WHOLE
+    judged = tuple(p for p in ctx.subset if p in pythons or p in unit)
+    present = tuple(p for p in natives if p in ctx.subset)
+    if whole_reached(ctx, name, len(judged) + len(present)):
+        return WHOLE
+    return package_paths(judged) + _claimed(name, present)
+
+
 def _register_builtin() -> None:
     """Register the workshop's own checks, in the order the rewriters run.
 
@@ -1422,13 +1502,14 @@ def _register_builtin() -> None:
     directories and gate each package by its kind's roles; the native
     checks judge one package at a time. A body resolves its backend
     function on the module when it runs, never at registration, so a
-    test that patches ``_python.run_format`` sees its fake run.
+    test that patches ``_python.run_typecheck`` sees its fake run.
     """
     from livery.workshop._backends import _cpp_conan, _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._influence import Inputs
     from livery.workshop._invoke import run_batched
     from livery.workshop._kinds import is_python_kind
+    from livery.workshop._packages import package_paths
 
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
@@ -1445,83 +1526,6 @@ def _register_builtin() -> None:
         )
         return enabled(name, judged)
 
-    def claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
-        """The files of the native members the check *name* claims, by path.
-
-        A native member's directories are C++ and not the check's to
-        walk, so its files come by name: its ``conanfile.py`` to ruff.
-        """
-        record = check_for(name)
-        return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
-
-    def whole_reached(ctx: GateContext, name: str, chosen: int) -> bool:
-        """Whether a scoped check over *chosen* units should run its whole.
-
-        At the check's threshold share of every unit it judges, provided
-        no member anywhere turned it off: the whole would reach that
-        member too.
-        """
-        from livery.workshop._invoke import runs_whole
-
-        record = check_for(name)
-        everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
-        gated_all = judged_by(record, everyone, quiet=True)
-        # The workspace's tests unit rides in the scope, not always among
-        # the packages: counted once from either.
-        tests_unit = {
-            p.path for p in (*ctx.packages, *ctx.judged) if p.path == WORKSPACE_TESTS
-        }
-        units = len(gated_all) + len(tests_unit)
-        on = all(option_value(record, p, "enabled") for p in gated_all)
-        return on and runs_whole(chosen, units, record.threshold)
-
-    def paths(ctx: GateContext, name: str) -> tuple[str, ...]:
-        """The paths a check judges: the named files, the tree, or the members'."""
-        if ctx.files:
-            return claimed_files(check_for(name), ctx)
-        gated_members = judged_by(check_for(name), _members(ctx))
-        members = enabled(name, gated_members)
-        pythons = tuple(p for p in members if is_python_kind(p.kind))
-        natives = tuple(p for p in members if not is_python_kind(p.kind))
-        if ctx.subset is None:
-            if len(members) == len(gated_members):
-                return _python.SRC
-            chosen = _python.package_paths(pythons + unit(ctx)) + claimed(name, natives)
-            return chosen or _python.SRC
-        judged = tuple(p for p in ctx.subset if p in pythons or p in unit(ctx))
-        present = tuple(p for p in natives if p in ctx.subset)
-        if whole_reached(ctx, name, len(judged) + len(present)):
-            return _python.SRC
-        return _python.package_paths(judged) + claimed(name, present)
-
-    def format_run(ctx: GateContext) -> None:
-        run_batched(
-            paths(ctx, "format.ruff"),
-            lambda batch: _python.run_format(check=True, paths=batch),
-        )
-
-    def format_fix(ctx: GateContext) -> None:
-        run_batched(
-            paths(ctx, "format.ruff"),
-            lambda batch: _python.run_format(
-                check=False, safe_fix=ctx.safe, paths=batch
-            ),
-        )
-
-    def lint_run(ctx: GateContext) -> None:
-        run_batched(
-            paths(ctx, "lint.ruff"),
-            lambda batch: _python.run_lint(fix=False, paths=batch),
-        )
-
-    def lint_fix(ctx: GateContext) -> None:
-        run_batched(
-            paths(ctx, "lint.ruff"),
-            lambda batch: _python.run_lint(
-                fix=not ctx.safe, safe_fix=ctx.safe, paths=batch
-            ),
-        )
-
     def typecheck_paths(ctx: GateContext, tool: str) -> tuple[str, ...]:
         """The paths one type checker reads: the named files, the members', or all."""
         name = f"typecheck.{tool}"
@@ -1533,7 +1537,7 @@ def _register_builtin() -> None:
             return ()
         if ctx.scoped and whole and whole_reached(ctx, name, len(judged)):
             return ()
-        return _python.package_paths(judged)
+        return package_paths(judged)
 
     def typecheck_batched(ctx: GateContext, tool: str) -> None:
         chosen = typecheck_paths(ctx, tool)
@@ -1739,38 +1743,12 @@ def _register_builtin() -> None:
 
     native = ("cpp-conan", "python-nanobind")
     python = ("python",)
-    # ruff judges a native package's conanfile.py beside clang-format on
-    # its sources, so its records apply to the native kind as well.
-    ruffed = ("python", "cpp-conan")
     py = _python.PY_SUFFIXES
     typed_claims = tuple(
         Claim(category, suffixes=py) for category in ("source", "test", "test-support")
     )
     cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
-        CheckRecord(
-            "ruff",
-            "format",
-            format_run,
-            narrowing=PATHS,
-            fix=format_fix,
-            kinds=ruffed,
-            tools=("ruff",),
-            fragments=(
-                Fragment("pyproject.toml", _fragments.RUFF_BASE),
-                Fragment(".vscode/settings.json", _fragments.RUFF_SETTINGS),
-            ),
-            editor_extension="charliermarsh.ruff",
-            claims=tuple(
-                Claim(category, suffixes=py)
-                for category in (
-                    "source",
-                    "test",
-                    "test-support",
-                    "configuration",
-                )
-            ),
-        ),
         CheckRecord(
             "clang-format",
             "format",
@@ -1786,44 +1764,6 @@ def _register_builtin() -> None:
             claims=tuple(
                 Claim(category, suffixes=cpp)
                 for category in ("source", "test", "test-support")
-            ),
-        ),
-        CheckRecord(
-            "ruff",
-            "lint",
-            lint_run,
-            narrowing=PATHS,
-            fix=lint_fix,
-            kinds=ruffed,
-            tools=("ruff",),
-            fragments=(Fragment("pyproject.toml", _fragments.RUFF_LINT),),
-            editor_extension="charliermarsh.ruff",
-            # Test bodies explain themselves by name and assertion, so
-            # the docstring rules stop at the tests.
-            claims=(
-                Claim("source", suffixes=py),
-                Claim("test", ignore=("D1",), suffixes=py),
-                # An example keeps the layout its page shows; ruff judges
-                # its names, as the page harness did, and nothing of style.
-                Claim(
-                    "example",
-                    ignore=(
-                        "D",
-                        "E",
-                        "I",
-                        "UP",
-                        "B",
-                        "SIM",
-                        "C4",
-                        "RUF",
-                        "F401",
-                        "F811",
-                        "F841",
-                    ),
-                    suffixes=py,
-                ),
-                Claim("test-support", ignore=("D1",), suffixes=py),
-                Claim("configuration", suffixes=py),
             ),
         ),
         CheckRecord(

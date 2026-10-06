@@ -8,8 +8,8 @@
   // The extensions the registered checks carry a marketplace id for,
   // and nothing else: a check without a verified id recommends none.
   "recommendations": [
-    "charliermarsh.ruff",
     "detachedfork.basedpyright",
+    "charliermarsh.ruff",
     // The repository's own recommendations, each line ending with a comma.
     // -- workshop: region recommendations, yours to edit; the render keeps it --
     // -- workshop: end recommendations --

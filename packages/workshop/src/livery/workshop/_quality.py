@@ -1071,11 +1071,15 @@ caches = group("caches", help="The workspace's derived caches")
 
 @caches.task(name="clear")
 def caches_clear() -> None:
-    """Remove build artifacts and checker caches."""
+    """Remove build artifacts and checker caches.
+
+    A tool that is a check of its own keeps its cache under
+    ``.workshop/.cache/<tool>/``, which goes whole; the rest are named.
+    """
     import shutil
 
     root = workspace_root()
     if root is None:
         return
-    for name in ("dist", ".pytest_cache", ".ruff_cache", ".mypy_cache"):
+    for name in ("dist", ".pytest_cache", ".mypy_cache", ".workshop/.cache"):
         shutil.rmtree(root / name, ignore_errors=True)

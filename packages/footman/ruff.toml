@@ -1,0 +1,19 @@
+# This package's own ruff settings, on top of the workspace's root
+# ruff.toml, which the ruff extension writes.
+extend = "../../ruff.toml"
+
+# Added to the workspace's claims, which the extended root renders;
+# a per-file-ignores table of our own would replace them.
+[lint.extend-per-file-ignores]
+# The imported sources predate the workspace's pydocstyle rule;
+# their docstring conformance is a tracked content pass, not a
+# cut-time rewrite. Retired by that pass.
+"src/**" = ["D102", "D103", "D105", "D107", "D205", "D209", "D301", "D402", "D403", "D415", "D417", "D418"]
+# The A/B/ARG carve-out is the origin's own standing ruling: tasks
+# fixtures deliberately shadow builtins (format, list) and take
+# unused params to exercise the signature grammar.
+"tests/**" = ["A", "B", "ARG", "D1", "D205", "D209", "D300", "D301", "D403", "D415", "E501"]
+# The process-globals router is one deliberate monkeypatch: setattr
+# IS the honest spelling there (a static assignment can't be blessed
+# by any checker on any platform), so B010's advice is excused.
+"src/livery/footman/_globals.py" = ["B010"]

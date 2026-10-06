@@ -35,7 +35,9 @@ and [livery.strongroom.api.Store.drop_view][]: the only route from a digest
 to a path, by the cheapest safe rung, under a doctrine about what may
 be removed. [livery.strongroom.testing][] runs the conformance
 scenarios under `spec/conformance` against any implementation of the
-same API; importing this package does not load it.
+same API; importing this package does not load it. The codec,
+[livery.strongroom.cbor][], is part of the public API, declared here and
+imported by its own path; importing this module does not load it either.
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from __future__ import annotations
 # that needs one name never pays for the modules it does not touch.
 TYPE_CHECKING = False
 if TYPE_CHECKING:
+    from livery.strongroom import cbor as cbor
     from livery.strongroom._canonical import FormatError as FormatError
     from livery.strongroom._canonical import Value as Value
     from livery.strongroom._canonical import canonical as canonical
@@ -199,6 +202,7 @@ __all__ = [
     "WriteOnceRefused",
     "__version__",
     "canonical",
+    "cbor",
     "check_name",
     "check_target",
     "check_timestamp",
@@ -296,14 +300,24 @@ _EXPORTS: dict[str, tuple[str, str]] = {
 }
 
 
+#: The public packages beneath the root: each keeps its own import path,
+#: and is declared here so the checkers verify it with this module.
+_PACKAGES = ("cbor",)
+
+
 def __getattr__(name: str) -> object:
     """Serve a public name from its module on first use, then keep it."""
-    found = _EXPORTS.get(name)
-    if found is None:
-        raise AttributeError(f"module 'livery.strongroom' has no attribute {name!r}")
     import importlib
 
-    module, attribute = found
-    value = getattr(importlib.import_module(module), attribute)
+    if name in _PACKAGES:
+        value: object = importlib.import_module(f"livery.strongroom.{name}")
+    else:
+        found = _EXPORTS.get(name)
+        if found is None:
+            raise AttributeError(
+                f"module 'livery.strongroom' has no attribute {name!r}"
+            )
+        module, attribute = found
+        value = getattr(importlib.import_module(module), attribute)
     globals()[name] = value
     return value

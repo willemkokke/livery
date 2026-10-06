@@ -1,0 +1,29 @@
+# Seeded from the package-python seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+kind = "python"
+name = "livery-extensions-ruff"
+description = "Ruff as a check of the livery workshop: the formatter and the linter, configured by the root ruff.toml."
+
+[[depends]]
+path = "packages/workshop"
+kind = "runtime"
+floor = "0.5.0"
+
+[[depends]]
+path = "packages/toolroom"
+kind = "runtime"
+floor = "0.9.0"
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage-floor = 100
+
+[[depends]]
+path = "packages/footman"
+kind = "test"
+floor = "0.56.0"

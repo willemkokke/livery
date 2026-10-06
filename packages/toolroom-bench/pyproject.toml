@@ -65,15 +65,3 @@ Repository = "https://github.com/willemkokke/livery"
 # PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
 module-name = "livery.toolroom.bench"
 namespace = true
-
-[tool.ruff]
-extend = "../../pyproject.toml"
-
-# Added to the workspace's claims, which the extended root renders;
-# a per-file-ignores table of our own would replace them.
-[tool.ruff.lint.extend-per-file-ignores]
-# The imported sources predate the workspace's pydocstyle rule;
-# their docstring conformance is a tracked content pass, not a
-# cut-time rewrite. Retired by that pass.
-"src/**" = ["D105", "D102", "D107", "D205", "D301", "D415"]
-"tests/**" = ["D1", "D205", "D301", "D415", "E501"]

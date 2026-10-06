@@ -167,8 +167,6 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
     injected = render_injections(root, project_facts(root))
     composed = injected["fragments"]["pyproject.toml"]
     for table in (
-        "[tool.ruff]",
-        "[tool.ruff.lint]",
         "[tool.basedpyright]",
         "[tool.mypy]",
         "[tool.pytest.ini_options]",
@@ -178,21 +176,21 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
     template = (
         root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
-    assert "[tool.ruff]" not in template and "[tool.pytest.ini_options]" not in template
-    assert injected["extensions"] == ["charliermarsh.ruff", "detachedfork.basedpyright"]
+    assert "[tool.basedpyright]" not in template
+    assert "[tool.pytest.ini_options]" not in template
+    assert injected["extensions"] == ["detachedfork.basedpyright"]
 
 
-def test_unregistering_the_ruff_checks_removes_every_trace(restored_checks) -> None:
+def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
     from livery.workshop._checks import editor_extensions, tools_for_kind
 
-    unregister_check("format.ruff", by="acme.brand")
-    unregister_check("lint.ruff", by="acme.brand")
+    unregister_check("typecheck.basedpyright", by="acme.brand")
+    unregister_check("typecomplete.basedpyright", by="acme.brand")
     composed = compose_project(_data())
-    assert "[tool.ruff" not in composed["pyproject.toml"]
-    assert "ruff" not in composed[".vscode/settings.json"]
-    assert "charliermarsh.ruff" not in editor_extensions()
-    assert "ruff" not in {tool for tool, _ in tools_for_kind("python")}
-    assert "[tool.basedpyright]" in composed["pyproject.toml"]
+    assert "[tool.basedpyright" not in composed["pyproject.toml"]
+    assert "detachedfork.basedpyright" not in editor_extensions()
+    assert "basedpyright" not in {tool for tool, _ in tools_for_kind("python")}
+    assert "[tool.mypy]" in composed["pyproject.toml"]
 
 
 def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None:

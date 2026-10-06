@@ -27,13 +27,20 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
 
 def test_the_surface_is_declared() -> None:
     assert workshop_module.__all__ == [
+        "PATHS",
+        "CheckRecord",
+        "Claim",
         "Edge",
+        "Fragment",
+        "GateContext",
         "Package",
         "__version__",
         "discover_packages",
         "extension_names",
         "mount_extensions",
         "rewrite_nav_block",
+        "run_batched",
+        "scoped_paths",
         "verify_workspace",
         "workspace_root",
     ]

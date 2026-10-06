@@ -110,12 +110,27 @@ def declines_api(package: Package) -> bool:
 
 
 def module_root(package: Package) -> Path | None:
-    """The importable module's root: the shallowest ``api.py`` or ``__init__.py``."""
+    """The importable module's root: the shallowest ``api.py`` or ``__init__.py``.
+
+    A root with neither, one with no public names, is the first module
+    the package's kind says it owns, the directory its wheel ships.
+    """
     src = package.directory / "src"
     if not src.is_dir():
         return None
     marks = root_marks(src)
-    return marks[0].parent if marks else None
+    if marks:
+        return marks[0].parent
+    from livery.workshop._kinds import kind_for, kind_names
+
+    if package.kind not in kind_names():
+        return None
+    owned = getattr(kind_for(package.kind).backend, "module_roots", None)
+    for module in owned(package) if owned is not None else ():
+        directory = src.joinpath(*module.split("."))
+        if directory.is_dir():
+            return directory
+    return None
 
 
 def module_docs_dir(package: Package) -> Path | None:

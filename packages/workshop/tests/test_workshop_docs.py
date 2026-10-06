@@ -90,6 +90,51 @@ def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
     assert not target.exists()
 
 
+def test_a_root_with_no_public_names_keeps_its_docs_where_the_wheel_ships(
+    tmp_path: Path,
+) -> None:
+    # Neither api.py nor __init__.py marks the root, so nothing is found
+    # until the build names the module it ships.
+    root = _workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    module = core.directory / "src" / "acme" / "core"
+    (module / "__init__.py").unlink()
+    (module / "_extension.py").write_text("API_VERSION = 1\n")
+    assert module_docs_dir(core) is None
+    (core.directory / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n\n'
+        '[tool.uv.build-backend]\nmodule-name = "acme.core"\n'
+    )
+    assert module_docs_dir(core) == module / "_docs"
+
+
+def test_a_member_in_a_group_directory_mounts_and_stays_mounted(tmp_path: Path) -> None:
+    import shutil
+
+    root = _workspace(tmp_path)
+    for name in ("demo", "kept"):
+        member = root / "packages" / "extensions" / name
+        (member / "src" / "acme" / "extensions" / name).mkdir(parents=True)
+        (member / "workshop.toml").write_text(
+            f'kind = "python"\nname = "acme-extensions-{name}"\n'
+        )
+        (member / "pyproject.toml").write_text(
+            f'[project]\nname = "acme-extensions-{name}"\n'
+        )
+        (member / "docs").mkdir()
+        (member / "docs" / "index.md").write_text(f"# {name}\n")
+    assert {"extensions/demo", "extensions/kept"} <= set(mount_package_docs(root))
+    assert (root / "docs/packages/extensions/demo/index.md").is_file()
+    # Unchanged, both stay as they are: their stamps sit in the group's
+    # folder, and the group's folder is no stale mount.
+    assert mount_package_docs(root) == []
+    # A group's member that left takes its mount with it; the other stays.
+    shutil.rmtree(root / "packages" / "extensions" / "demo")
+    mount_package_docs(root)
+    assert not (root / "docs/packages/extensions/demo").exists()
+    assert (root / "docs/packages/extensions/kept/index.md").is_file()
+
+
 def test_the_mount_rebuilds_whole_when_asked(tmp_path: Path) -> None:
     """An unchanged section keeps its mount; ``full`` rebuilds it whole."""
     root = _workspace(tmp_path)

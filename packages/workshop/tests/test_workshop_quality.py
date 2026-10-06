@@ -11,9 +11,11 @@ from pathlib import Path
 
 import pytest
 
+import workshop_python_checks as fake_checks
 from livery.workshop import _quality
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 # The python checks that judge and never rewrite, sorted, as the fakes
 # below record them: one type check per type checker.
@@ -70,8 +72,8 @@ def _record(
     monkeypatch.setattr(
         "livery.workshop._provenance.check_content", named("provenance.check")
     )
-    monkeypatch.setattr(_python, "run_format", named("format.ruff"))
-    monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
+    monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
+    monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(_python, "run_typecheck", typecheck)
     monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
@@ -89,7 +91,7 @@ def test_a_fixing_gate_refuses_inside_ci(
 
 
 def test_the_scoped_gate_runs_every_verb(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     from livery.workshop._influence import Changes
 
@@ -100,10 +102,10 @@ def test_the_scoped_gate_runs_every_verb(
     _quality._scoped_check((package,))
     assert sorted(ran) == sorted(
         (
-            "format.ruff",
+            "format.fake",
             "layering.graph",
             "layering.imports",
-            "lint.ruff",
+            "lint.fake",
             "drift.check",
             "provenance.check",
             *PYTHON_JUDGES,
@@ -115,12 +117,12 @@ def test_the_scoped_gate_runs_every_verb(
     source = "packages/one/src/one/a.py"
     _quality._scoped_check((package,), changes=Changes(tmp_path, (source,)))
     assert sorted(ran) == sorted(
-        ("format.ruff", "layering.imports", "lint.ruff", *PYTHON_JUDGES)
+        ("format.fake", "layering.imports", "lint.fake", *PYTHON_JUDGES)
     )
 
 
 def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     from livery.workshop._coverage_store import workspace_suite
 
@@ -133,8 +135,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     # over the configured whole; the tests run as the one suite, no
     # type-completeness, and no kind check for it.
     by_verb = {c["verb"]: c for c in calls}
-    assert by_verb["format.ruff"]["paths"] == (".",)
-    assert by_verb["lint.ruff"]["paths"] == (".",)
+    assert by_verb["format.fake"]["paths"] == (".",)
+    assert by_verb["lint.fake"]["paths"] == (".",)
     for tool in ("basedpyright", "mypy"):
         assert "paths" not in by_verb[f"typecheck.{tool}"]
     # ty and pyrefly read their configured whole whatever the scope.
@@ -155,12 +157,12 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     (other / "workshop.toml").write_text('kind = "python"\nname = "livery-two"\n')
     _quality._scoped_check((package, unit))
     by_verb = {c["verb"]: c for c in calls}
-    assert by_verb["format.ruff"]["paths"] == ("packages/one/tests", "tests")
+    assert by_verb["format.fake"]["paths"] == ("packages/one/tests", "tests")
     assert by_verb["test.pytest"]["packages"] == (package, unit)
 
 
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     # The serial rewrites were the silent half of the drift: built
     # outside the block, dropped without even a refusal.
@@ -170,13 +172,15 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     package = _package(tmp_path)
     source = Changes(tmp_path, ("packages/one/src/one/a.py",))
     _quality._scoped_check((package,), fix=True, changes=source)
-    assert ran[:2] == ["format.ruff", "lint.ruff"]
+    # The base's fixers first, then a listed extension's in its order:
+    # the formatter before the linter.
+    assert ran[:3] == ["layering.imports", "format.fake", "lint.fake"]
     assert sorted(ran) == sorted(
-        ("format.ruff", "layering.imports", "lint.ruff", *PYTHON_JUDGES)
+        ("format.fake", "layering.imports", "lint.fake", *PYTHON_JUDGES)
     )
-    rewrites = {c["verb"]: c for c in calls[:2]}
-    assert rewrites["format.ruff"]["check"] is False
-    assert rewrites["lint.ruff"]["fix"] is True
+    rewrites = {c["verb"]: c for c in calls[:3]}
+    assert rewrites["format.fake"]["check"] is False
+    assert rewrites["lint.fake"]["fix"] is True
     # Every fixer that applies rewrites before any judge, the layering
     # fix and an extension's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
@@ -210,7 +214,7 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     finally:
         _checks.restore(state)
     fixed = between[0]
-    assert fixed[:2] == ["format.ruff", "lint.ruff"]
+    assert fixed[:3] == ["layering.imports", "format.fake", "lint.fake"]
     assert "layering.imports" in fixed and "acme-fix" in fixed
     assert sorted(ran[len(fixed) :]) == list(PYTHON_JUDGES)
     assert "acme-judged" not in ran
@@ -253,31 +257,104 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
     assert module_for(package) == "livery.loop_echo"
 
 
-def test_safe_fix_keeps_imports_and_foreign_files_pass_through(
-    tmp_path: Path,
-) -> None:
-    # The edit-in-flight fix: the unused import survives, the sortable
-    # one still heals, and a non-python path named alongside is a
-    # no-op rather than an error.
-    victim = tmp_path / "wip.py"
-    victim.write_text("import sys\nimport os\n\nprint(sys.path)\n")
-    foreign = tmp_path / "notes.md"
-    foreign.write_text("#Heading\n")
-    # The file heals in place; lint still reports the withheld import
-    # by exiting non-zero (which the hook suppresses and a user
-    # reads). The pin is the healed bytes, not the exit.
-    import contextlib
+def _python_member(tmp_path: Path, name: str, manifest: str = "") -> Package:
+    member = tmp_path / "packages" / name
+    member.mkdir(parents=True)
+    (member / "pyproject.toml").write_text(
+        f'[project]\nname = "acme-{name}"\n{manifest}'
+    )
+    return Package(
+        directory=member,
+        path=f"packages/{name}",
+        name=f"acme-{name}",
+        kind="python",
+        depends=(),
+    )
 
-    with contextlib.suppress(Exception):
-        _python.run_lint(safe_fix=True, paths=(str(victim), str(foreign)))
-    healed = victim.read_text()
-    assert "import os" in healed  # F401 withheld
-    assert healed.index("import os") < healed.index("import sys")  # I001 healed
-    assert foreign.read_text() == "#Heading\n"  # foreign file untouched
-    # A plain fix removes the unused import; safe-fix is the weaker one.
-    with contextlib.suppress(Exception):
-        _python.run_lint(fix=True, paths=(str(victim),))
-    assert "import os" not in victim.read_text()
+
+def _namespace_root(member: Path, name: str) -> Path:
+    """A namespace root: an api, a public package it declares, a private module."""
+    root = member / "src" / "acme" / name
+    (root / "codec").mkdir(parents=True)
+    (root / "api.py").write_text('__version__ = "0.0.0"\n')
+    (root / "py.typed").write_text("")
+    (root / "codec" / "__init__.py").write_text("")
+    (root / "_private.py").write_text("")
+    (root / "content").mkdir()
+    (root / "content" / "seed.py").write_text("")
+    return root
+
+
+def test_typecomplete_verifies_what_each_root_declares(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verified: list[object] = []
+    monkeypatch.setattr(
+        _python, "basedpyright", lambda **kw: verified.append(kw["verifytypes"])
+    )
+    # A root with nothing public, an extension's, verifies nothing.
+    bare = _python_member(
+        tmp_path, "ext", '[tool.uv.build-backend]\nmodule-name = "acme.ext"\n'
+    )
+    (bare.directory / "src" / "acme" / "ext").mkdir(parents=True)
+    _python.run_typecomplete((bare,))
+    assert verified == []
+    # A namespace root's api declares its public packages too, so the
+    # verifier reaches them through it: one call.
+    package = _python_member(tmp_path, "one")
+    _namespace_root(package.directory, "one")
+    _python.run_typecomplete((bare, package))
+    assert verified == ["acme.one.api"]
+
+
+def test_a_root_with_nothing_public_verifies_nothing(tmp_path: Path) -> None:
+    # An extension: its build names the root, and nothing in it is public.
+    package = _python_member(
+        tmp_path,
+        "ext",
+        '[tool.uv.build-backend]\nmodule-name = "acme.extensions.ext"\n',
+    )
+    root = package.directory / "src" / "acme" / "extensions" / "ext"
+    (root / "content").mkdir(parents=True)
+    (root / "_checks.py").write_text("")
+    assert _python.module_roots(package) == ("acme.extensions.ext",)
+    assert _python.public_modules(package) == ()
+
+
+def test_the_public_modules_follow_the_layout(tmp_path: Path) -> None:
+    # A regular package is one module: the verifier walks the rest.
+    regular = _python_member(tmp_path, "two")
+    (regular.directory / "src" / "acme" / "two" / "sub").mkdir(parents=True)
+    (regular.directory / "src" / "acme" / "two" / "__init__.py").write_text("")
+    (regular.directory / "src" / "acme" / "two" / "sub" / "__init__.py").write_text("")
+    assert _python.public_modules(regular) == ("acme.two",)
+    # A namespace root declares its public API in its api.
+    spaced = _python_member(tmp_path, "three")
+    _namespace_root(spaced.directory, "three")
+    assert _python.public_modules(spaced) == ("acme.three.api",)
+    # No src tree: the distribution name's module.
+    srcless = _python_member(tmp_path, "four")
+    assert _python.public_modules(srcless) == ("acme.four",)
+
+
+def test_the_roots_are_what_the_build_ships(tmp_path: Path) -> None:
+    # Undeclared: read from the src tree's marks.
+    marked = _python_member(tmp_path, "five")
+    _namespace_root(marked.directory, "five")
+    assert _python.module_roots(marked) == ("acme.five",)
+    # Declared: the build's own list, a second root with no marks included.
+    declared = _python_member(
+        tmp_path,
+        "six",
+        '[tool.uv.build-backend]\nmodule-name = ["acme.six", "acme.extensions.six"]\n',
+    )
+    _namespace_root(declared.directory, "six")
+    assert _python.module_roots(declared) == ("acme.extensions.six", "acme.six")
+    single = _python_member(
+        tmp_path, "seven", '[tool.uv.build-backend]\nmodule-name = "acme.seven"\n'
+    )
+    (single.directory / "src").mkdir()
+    assert _python.module_roots(single) == ("acme.seven",)
 
 
 def test_check_refuses_both_fix_flags_and_no_role_verb_is_written_by_hand() -> None:
@@ -291,7 +368,7 @@ def test_check_refuses_both_fix_flags_and_no_role_verb_is_written_by_hand() -> N
 
 
 def test_the_python_test_entry_maps_a_selection_to_its_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     from livery.workshop._backends import _python
 
@@ -378,8 +455,8 @@ def _whole_gate(
     monkeypatch.setattr(
         "livery.workshop._provenance.check_content", named("provenance.check")
     )
-    monkeypatch.setattr(_python, "run_format", named("format.ruff"))
-    monkeypatch.setattr(_python, "run_lint", named("lint.ruff"))
+    monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
+    monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
     monkeypatch.setattr(_python, "run_typecheck", typecheck)
     monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete.basedpyright"))
     monkeypatch.setattr(_python, "run_test", named("test.pytest"))
@@ -420,7 +497,7 @@ def _whole_gate(
 
 
 def test_the_whole_gate_runs_every_member_in_one_parallel_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=False, base="")
@@ -430,10 +507,10 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
     # check finds no example to read.
     assert sorted(ran[1:-1]) == sorted(
         (
-            "format.ruff",
+            "format.fake",
             "layering.graph",
             "layering.imports",
-            "lint.ruff",
+            "lint.fake",
             "provenance.check",
             "drift.check",
             *PYTHON_JUDGES,
@@ -442,7 +519,10 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
 
 
 def test_a_workspace_without_python_starts_no_python_check(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_checks: object,
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path, python=False)
     _quality._run_check(full=True, fix=False, base="")
@@ -455,33 +535,34 @@ def test_a_workspace_without_python_starts_no_python_check(
         "provenance.check",
     ]
     out = capsys.readouterr().out
-    for name in ("format.ruff", "lint.ruff", *PYTHON_JUDGES):
+    for name in ("format.fake", "lint.fake", *PYTHON_JUDGES):
         assert f"  {name}: no file it reads in the workspace; not run" in out
 
 
 def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=True, base="")
     opened = ran.index("<parallel")
     # The rewriters, in order, before any block is opened: they write
     # the files the judges then read, and none of them is a judge under
-    # --fix.
+    # --fix. The base's run first, then a listed extension's in its
+    # list order, the formatter before the linter.
     assert ran[:opened] == [
-        "format.ruff",
-        "lint.ruff",
         "drift.check",
         "provenance.check",
         "layering.graph",
         "layering.imports",
+        "format.fake",
+        "lint.fake",
     ]
     assert sorted(ran[opened + 1 : -1]) == sorted(PYTHON_JUDGES)
     assert ran[-1] == ">parallel"
 
 
 def test_the_judges_read_the_tree_the_rewriters_left(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     """The tree is recomputed between the two, and only under --fix."""
     ran, trees = _whole_gate(monkeypatch, tmp_path)
@@ -494,7 +575,7 @@ def test_the_judges_read_the_tree_the_rewriters_left(
 
 
 def test_one_refusing_member_is_the_gate_s_verdict(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     """The gate is the conjunction: one member's refusal is the answer."""
     _whole_gate(monkeypatch, tmp_path)

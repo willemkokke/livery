@@ -10,6 +10,7 @@ from livery.footman.api import Failed, fail
 from livery.workshop._checks import CheckRecord, GateContext, register_check, run_check
 from livery.workshop._invoke import batches, run_batched, runs_whole
 from livery.workshop._packages import Package
+from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -96,27 +97,27 @@ def _members(root: Path, count: int) -> tuple[Package, ...]:
 
 
 def test_a_workspace_check_runs_once_for_two_hundred_packages(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
-    from livery.workshop._backends import _python
+    import workshop_python_checks as fake_checks
 
     monkeypatch.chdir(tmp_path)
     packages = _members(tmp_path, 200)
     calls: list[tuple[str, ...]] = []
     monkeypatch.setattr(
-        _python,
+        fake_checks,
         "run_lint",
         lambda fix=False, safe_fix=False, paths=(): calls.append(paths),
     )
     # A scoped gate over three quarters of the members: one call carries
     # every affected member's directories.
     subset = packages[:150]
-    run_check("lint.ruff", GateContext(root=tmp_path, packages=packages, subset=subset))
+    run_check("lint.fake", GateContext(root=tmp_path, packages=packages, subset=subset))
     assert len(calls) == 1
     assert len(calls[0]) == 300
     # Every member affected: the configured whole, still one call.
     calls.clear()
     run_check(
-        "lint.ruff", GateContext(root=tmp_path, packages=packages, subset=packages)
+        "lint.fake", GateContext(root=tmp_path, packages=packages, subset=packages)
     )
     assert calls == [(".",)]

@@ -992,7 +992,6 @@ def test_the_root_tests_directory_is_checked_only_while_it_exists(
     tool = project["tool"]
     assert "tests" not in tool["basedpyright"]["include"]
     assert "tests" not in tool["mypy"]["files"]
-    assert "tests" not in tool["ruff"]["src"]
     assert "tests" not in tool["pytest"]["ini_options"]["pythonpath"]
     (tmp_path / "with" / "tests").mkdir(parents=True)
     tested = compose_into(tmp_path / "with")

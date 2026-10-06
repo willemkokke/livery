@@ -29,7 +29,7 @@ def offenders(root: Path) -> list[tuple[Path, str]]:
     and the files every directory may hold are never offenders. The
     prefix is the package's path under ``packages/``, so a package in
     a group directory carries the group's name too
-    (``extensions_ruff_``).
+    (``extensions_widgets_``).
     """
     from livery.workshop._packages import package_directories
 

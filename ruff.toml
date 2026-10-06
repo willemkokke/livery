@@ -1,0 +1,46 @@
+# Written by `fm sync` from the ruff extension; the gate keeps
+# it matching. Edit inside the region below, which is the repository's
+# own; an edit anywhere else is drift.
+line-length = 88
+target-version = "py311"
+src = ["packages/extensions/ruff/src", "packages/extensions/ruff/tests", "packages/footman/src", "packages/footman/tests", "packages/forge/src", "packages/forge/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
+# The cache lives with the workshop's state, never in the root.
+cache-dir = ".workshop/.cache/ruff"
+
+[format]
+# A markdown page is prose: a python fence may hold a snippet directive
+# or code shown as it is, and a documentation example file keeps the
+# layout its page shows, so the formatter leaves both alone.
+exclude = ["*.md", "packages/**/docs/examples/**", "docs/examples/**"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+# The claims: each line is a category's patterns for a present kind,
+# with the rules a check withholds there.
+"packages/**/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "F841", "I", "RUF", "SIM", "UP"]
+"packages/**/tests/**" = ["D1"]
+"packages/**/tests/**/*_test.py" = ["D1"]
+"packages/**/tests/**/test_*.py" = ["D1"]
+"tests/**" = ["D1"]
+"tests/**/*_test.py" = ["D1"]
+"tests/**/test_*.py" = ["D1"]
+# The composed tasks.py opens with the header the fragment engine
+# writes, whose lines it does not wrap.
+"tasks.py" = ["E501"]
+
+# The repository's own tables: a whole table of its own, or a key the
+# render writes through its `extend-` spelling, as
+# `[lint.extend-per-file-ignores]`.
+# -- workshop: region tables, yours to edit; the render keeps it --
+[lint.extend-per-file-ignores]
+# The CI emitters carry workflow YAML as string content, and the
+# fragments module carries rendered files' tables; their lines are the
+# generated files' lines, not prose to wrap.
+"**/_ci_generate.py" = ["E501"]
+"**/_fragments.py" = ["E501"]
+# -- workshop: end tables --

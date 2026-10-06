@@ -3,7 +3,10 @@
 Our convention, not the workshop's: every distribution root is a PEP 420
 namespace with no __init__.py, its public names live in <root>.api,
 and api and testing are names no module takes anywhere but
-directly under a root.
+directly under a root. The api holds what an __init__.py would hold: a
+public package under a root keeps its own path, and the api declares it,
+imported for the checkers and listed in __all__. A root with no public
+names, an extension's, has no api either.
 """
 
 from __future__ import annotations
@@ -256,6 +259,7 @@ EXPORTS: dict[str, list[str]] = {
         "WriteOnceRefused",
         "__version__",
         "canonical",
+        "cbor",
         "check_name",
         "check_target",
         "check_timestamp",
@@ -372,13 +376,20 @@ EXPORTS: dict[str, list[str]] = {
         "version_tuple",
     ],
     "livery.workshop": [
+        "CheckRecord",
+        "Claim",
         "Edge",
+        "Fragment",
+        "GateContext",
+        "PATHS",
         "Package",
         "__version__",
         "discover_packages",
         "extension_names",
         "mount_extensions",
         "rewrite_nav_block",
+        "run_batched",
+        "scoped_paths",
         "verify_workspace",
         "workspace_root",
     ],
@@ -393,6 +404,13 @@ SOURCES = {
     "livery.toolroom.store": "packages/toolroom-store/src/livery/toolroom/store",
     "livery.toolroom.bench": "packages/toolroom-bench/src/livery/toolroom/bench",
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
+}
+
+#: The roots with no public names: a namespace with neither api.py nor
+#: __init__.py, reached through an entry point alone.
+BARE = {
+    "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
+    "livery.extensions.ruff": "packages/extensions/ruff/src/livery/extensions/ruff",
 }
 
 #: The names a module takes only directly under a root.
@@ -427,7 +445,8 @@ def test_every_distribution_root_is_a_namespace_with_one_api() -> None:
             problems.append(f"{directory}: a root carries no __init__.py")
         if not (directory / "api.py").is_file():
             problems.append(f"{directory}: a root holds its names in api.py")
-    for src in sorted(ROOT.glob("packages/*/src")):
+    # A member at either depth: packages/<name>/ or packages/<group>/<name>/.
+    for src in sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("packages/*/*/src")]):
         for namespace in (src / "livery", src / "livery" / "extensions"):
             if (namespace / "__init__.py").exists():
                 problems.append(f"{namespace}: a namespace carries no __init__.py")
@@ -437,3 +456,14 @@ def test_every_distribution_root_is_a_namespace_with_one_api() -> None:
             if path.parent not in roots:
                 problems.append(f"{path.relative_to(ROOT)}: {path.stem} is reserved")
     assert problems == []
+
+
+def test_a_root_with_no_public_names_has_neither_api_nor_init() -> None:
+    problems = [
+        f"{path}: {name} in a root with no public names"
+        for path in BARE.values()
+        for name in ("api.py", "__init__.py")
+        if (ROOT / path / name).exists()
+    ]
+    assert problems == []
+    assert all((ROOT / path).is_dir() for path in BARE.values())

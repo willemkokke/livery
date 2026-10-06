@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
-from livery.footman.api import doc, fail
+from livery.footman.api import Arg, doc, fail, hidden
 from livery.forge.api import Forge, ForgeError, Repository
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import new as new_group
@@ -56,6 +56,59 @@ def _sync_tools(root: Path) -> None:
     from livery.workshop._tool_tasks import sync_tools
 
     sync_tools(root)
+
+
+def _hand_off(
+    root: Path,
+    *,
+    forge: str = "",
+    owner: str = "",
+    url: str = "",
+    local: bool = False,
+    extension: str = "",
+) -> None:
+    """Finish the birth with the runner *root*'s environment holds, inside *root*.
+
+    Run as ``new.project --resume`` from the project's own directory,
+    where the project's extensions are mounted at the versions it
+    locked: its tools, its composed and generated files and its forge
+    half come from them, which a process started elsewhere cannot
+    promise. The answers ride in the contract; the flags pass what it
+    does not hold. The child shares the console and its failure is the
+    birth's.
+
+    Raises:
+        Failed: when the environment has no runner, naming it.
+    """
+    import sys
+
+    from livery.workshop._pythons import scripts_dir
+
+    prog = footman.prog()
+    runner = scripts_dir(root / ".venv") / (
+        f"{prog}.exe" if sys.platform == "win32" else prog
+    )
+    if not runner.is_file():
+        fail(
+            f"{runner} is missing: {root}'s environment has no {prog} to finish"
+            f" the birth with. `uv sync` in {root} installs it; then run"
+            f" `{prog} new.project --resume` there"
+        )
+    argv = [str(runner), "new.project", "--resume"]
+    argv += [
+        f"--{key}={value}"
+        for key, value in (
+            ("forge", forge),
+            ("owner", owner),
+            ("url", url),
+            ("extension", extension),
+        )
+        if value
+    ]
+    if local:
+        argv.append("--local")
+    print(f"  environment: the birth continues with {runner}")
+    footman.run(argv, cwd=root, capture=False)
 
 
 def _git(root: Path, *args: str) -> str:
@@ -142,22 +195,28 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     """The extensions a birth lists, from the running App's builtin providers.
 
     Footman's own providers and the base are never listed. A stock App
-    (the base among its builtins) lists the site's extension first; the
-    list is in precedence order, so a brand's own extensions follow it
-    and win.
+    (the base among its builtins) lists the site's extension and the
+    python formatter's first, as ruled; the list is in precedence
+    order, so a brand's own extensions follow them and win.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
     stack = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack.insert(0, "docs")
+        stack[:0] = ["docs", "ruff"]
     return stack
 
 
-@new_group.task(name="project", expose="global_only", interactive=True)
+@new_group.task(name="project", expose="always", interactive=True, cwd="asinvoked")
 def new_project(
-    name: Annotated[str, doc("the workspace's name (also the repository name)")],
-    forge: Annotated[str, doc("github, gitea, or gitlab")] = "github",
+    folder: Annotated[
+        Arg[str],
+        doc("where the project is born, an empty or new folder; this one by default"),
+    ] = "",
+    name: Annotated[
+        str, doc("the workspace's name, also the repository's; the folder's by default")
+    ] = "",
+    forge: Annotated[str, doc("github, gitea, or gitlab; github by default")] = "",
     owner: Annotated[
         str, doc("the owner or organisation the repository lives under")
     ] = "",
@@ -178,32 +237,55 @@ def new_project(
     local: Annotated[
         bool, doc("everything that stays on the machine, nothing that leaves it")
     ] = False,
+    resume: Annotated[bool, hidden] = False,
 ) -> None:
-    """Create a workspace from nothing: W1 as one idempotent verb.
+    """Create a workspace in an empty or new folder: W1 as one verb.
 
-    Renders into ``./<name>``. Re-running resumes: every step
-    detects done and walks past it. Headless runs never hang; a
-    missing required answer is a refusal listing what to pass.
+    The birth seeds the contract and the project's files, locks and
+    syncs its environment, then hands the rest to the runner that
+    environment holds, run as ``new.project --resume`` inside the
+    project. There the project's own extensions are mounted, so its
+    tools, its composed and generated files and its forge half come
+    from them at the versions it locked. A folder that holds a project
+    refuses, naming ``--resume``, which finishes that project's birth:
+    every step of it detects done and walks past it, so it is also
+    the recovery after a birth that stopped part way. Headless runs
+    never hang; a missing required answer is a refusal listing what to
+    pass.
     """
-    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
-        fail(f"project name {name!r}: use lowercase letters, digits, hyphens")
-    if forge not in ("github", "gitea", "gitlab"):
-        fail(f"unknown forge kind {forge!r}: use github, gitea, or gitlab")
-    if not local and not owner:
-        fail(
-            "answers missing for the forge half: pass --owner (and --url"
-            " for a self-hosted server), or --local for everything that"
-            " stays on the machine"
-        )
-    if forge == "gitea" and not local and not url:
-        fail("gitea has no public default server: pass --url")
+    # The task's directory is the launch directory (`asinvoked`), not
+    # the directory of whichever tasks file mounted the verb: the folder
+    # means where the caller stands.
+    here = footman.cwd()
+    root = (here / folder).resolve() if folder else here
+    prog = footman.prog()
+    held = (root / "workshop.toml").is_file()
+    if resume:
+        if not held:
+            fail(
+                f"{root} holds no project to resume: `{prog} new.project`"
+                " births one into an empty or new folder"
+            )
+        from livery.workshop._extensions import workspace_root
 
-    # The process cwd on purpose, not the task context's directory:
-    # a global verb runs above any project, its context directory is
-    # wherever its tasks file lives, and "./<name>" means where the
-    # caller stands.
-    root = Path.cwd() / name
-    root.mkdir(exist_ok=True)
+        # Inside the project this process is its own runner; elsewhere
+        # the project's runner finishes it.
+        finish = _finish if workspace_root() == root else _hand_off
+        finish(
+            root, forge=forge, owner=owner, url=url, local=local, extension=extension
+        )
+        return
+    if held:
+        fail(
+            f"{root} holds a project already; `{prog} new.project --resume`"
+            " finishes its birth"
+        )
+    if root.exists() and any(root.iterdir()):
+        fail(f"{root} is not empty: a project is born into an empty or new folder")
+    name = name or root.name
+    forge = forge or "github"
+    _check_answers(name, forge=forge, owner=owner, url=url, local=local)
+    root.mkdir(parents=True, exist_ok=True)
 
     # The contract: a birth-time seed the render never touches. The
     # list is the running App's own builtin providers, minus footman's
@@ -217,68 +299,116 @@ def new_project(
 
     stack = birth_extensions(_paths.builtin())
     contract = root / "workshop.toml"
-    if contract.is_file():
-        print("  workshop.toml: already seeded")
-    else:
-        spelled = ", ".join(f'"{entry}"' for entry in stack)
-        year = str(datetime.datetime.now(tz=datetime.UTC).year)
-        author_name = author or _git_config("user.name") or f"{name} authors"
-        author_email = email or _git_config("user.email")
-        person = f"{{ name = {toml_string(author_name)}"
-        if author_email:
-            person += f", email = {toml_string(author_email)}"
-        person += " }"
-        lines = [
-            "[workspace]",
-            f"name = {toml_string(name)}",
-            "description = "
-            + toml_string(description or f"The {name} monorepo (virtual root)."),
-            f"namespace = {toml_string(namespace or name.replace('-', '_'))}",
-            f"authors = [{person}]",
-            f'copyright-year = "{year}"',
-            f"extensions = [{spelled}]",
-        ]
-        lines += ["", "[forge]", f'kind = "{forge}"']
-        if owner:
-            lines.append(f'owner = "{owner}"')
-        if url:
-            lines.append(f'url = "{url}"')
-        lines += [
-            "",
-            "[tools]",
-            f'index = "{PUBLISHED_INDEX}"',
-            "",
-            "[ci]",
-            'runners = ["ubuntu-latest"]',
-            'required-context = "gate"',
-        ]
-        contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("  workshop.toml: seeded")
+    spelled = ", ".join(f'"{entry}"' for entry in stack)
+    year = str(datetime.datetime.now(tz=datetime.UTC).year)
+    author_name = author or _git_config("user.name") or f"{name} authors"
+    author_email = email or _git_config("user.email")
+    person = f"{{ name = {toml_string(author_name)}"
+    if author_email:
+        person += f", email = {toml_string(author_email)}"
+    person += " }"
+    lines = [
+        "[workspace]",
+        f"name = {toml_string(name)}",
+        "description = "
+        + toml_string(description or f"The {name} monorepo (virtual root)."),
+        f"namespace = {toml_string(namespace or name.replace('-', '_'))}",
+        f"authors = [{person}]",
+        f'copyright-year = "{year}"',
+        f"extensions = [{spelled}]",
+    ]
+    lines += ["", "[forge]", f'kind = "{forge}"']
+    if owner:
+        lines.append(f'owner = "{owner}"')
+    if url:
+        lines.append(f'url = "{url}"')
+    lines += [
+        "",
+        "[tools]",
+        f'index = "{PUBLISHED_INDEX}"',
+        "",
+        "[ci]",
+        'runners = ["ubuntu-latest"]',
+        'required-context = "gate"',
+    ]
+    contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("  workshop.toml: seeded")
 
-    # The seeds: the files a workspace starts with, which are its own
-    # from then on. One that exists is never touched, so a resumed
-    # birth writes only what a killed one did not.
+    _prepare(root)
+    _hand_off(root, local=local, extension=extension)
+
+
+def _check_answers(name: str, *, forge: str, owner: str, url: str, local: bool) -> None:
+    """Refuse answers no birth can use, listing what to pass."""
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+        fail(
+            f"project name {name!r}: use lowercase letters, digits, hyphens"
+            " (the folder's name, unless --name gives one)"
+        )
+    if forge not in ("github", "gitea", "gitlab"):
+        fail(f"unknown forge kind {forge!r}: use github, gitea, or gitlab")
+    if not local and not owner:
+        fail(
+            "answers missing for the forge half: pass --owner (and --url"
+            " for a self-hosted server), or --local for everything that"
+            " stays on the machine"
+        )
+    if forge == "gitea" and not local and not url:
+        fail("gitea has no public default server: pass --url")
+
+
+def _prepare(root: Path) -> None:
+    """Write what a newborn starts with, then lock and sync its environment.
+
+    The seeds are the files a workspace starts with, its own from then
+    on: one that exists is never touched, so a resumed birth writes
+    only what a stopped one did not. The project file is composed from
+    the answers and the lock reads it, so the composed files are
+    written before the first lock.
+    """
     from livery.workshop._identity import project_facts
     from livery.workshop._seeds import PROJECT, create
+    from livery.workshop._shipped_files import deliver
     from livery.workshop._templates import package_injections
+    from livery.workshop._uv import run_uv
 
     seeded = create(
         root, root, (PROJECT,), {**project_facts(root), **package_injections(root)}
     )
     print(f"  seeds: {len(seeded)} written" if seeded else "  seeds: already written")
-
-    # The project file is composed from the answers, and the lock below
-    # reads it, so the composed files are written before the first lock.
-    from livery.workshop._shipped_files import deliver
-
     for line in deliver(root):
         print(line)
-
-    from livery.workshop._uv import run_uv
-
     run_uv("lock", root=root)
     run_uv("sync", root=root)
     print("  environment: locked and synced")
+
+
+def _finish(
+    root: Path,
+    *,
+    forge: str = "",
+    owner: str = "",
+    url: str = "",
+    local: bool = False,
+    extension: str = "",
+) -> None:
+    """Finish *root*'s birth from inside it: everything after its environment.
+
+    The answers come from the contract the birth seeded; a flag passes
+    what it does not hold, the owner a local birth left out, say.
+    """
+    from livery.workshop._contract import load_contract
+
+    contract = load_contract(root / "workshop.toml")
+    workspace = contract.get("workspace") or {}
+    seeded = contract.get("forge") or {}
+    name = str(workspace.get("name", root.name))
+    description = str(workspace.get("description", ""))
+    forge = forge or str(seeded.get("kind", "github"))
+    owner = owner or str(seeded.get("owner", ""))
+    url = url or str(seeded.get("url", ""))
+    _check_answers(name, forge=forge, owner=owner, url=url, local=local)
+    _prepare(root)
 
     _sync_tools(root)
 
@@ -318,8 +448,8 @@ def new_project(
         print(
             "  --local: done. Skipped, because they leave the machine:"
             " repo.create, the repository configuration, the push, and"
-            f" the setup PR. Re-run `{footman.prog()} new.project {name}"
-            " --owner=...` without --local to finish the forge half."
+            f" the setup PR. `{footman.prog()} new.project --resume"
+            " --owner=...` here finishes the forge half."
         )
         return
 

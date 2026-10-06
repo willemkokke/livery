@@ -1,0 +1,34 @@
+# Written by `{{ prog }} sync` from the ruff extension; the gate keeps
+# it matching. Edit inside the region below, which is the repository's
+# own; an edit anywhere else is drift.
+line-length = 88
+target-version = "py{{ python_floor | replace('.', '') }}"
+src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}{% for path in root_tests %}"{{ path }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# The cache lives with the workshop's state, never in the root.
+cache-dir = ".workshop/.cache/ruff"
+
+[format]
+# A markdown page is prose: a python fence may hold a snippet directive
+# or code shown as it is, and a documentation example file keeps the
+# layout its page shows, so the formatter leaves both alone.
+exclude = ["*.md", "packages/**/docs/examples/**", "docs/examples/**"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+# The claims: each line is a category's patterns for a present kind,
+# with the rules a check withholds there.
+{% for pattern, codes in per_file_ignores %}"{{ pattern }}" = [{% for code in codes %}"{{ code }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+{% endfor %}# The composed tasks.py opens with the header the fragment engine
+# writes, whose lines it does not wrap.
+"tasks.py" = ["E501"]
+
+# The repository's own tables: a whole table of its own, or a key the
+# render writes through its `extend-` spelling, as
+# `[lint.extend-per-file-ignores]`.
+# -- workshop: region tables, yours to edit; the render keeps it --
+# -- workshop: end tables --

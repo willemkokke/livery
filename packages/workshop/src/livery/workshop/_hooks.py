@@ -174,9 +174,9 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     if not path or not Path(path).is_file():
         return
     # Through the gate's walk, never a tool: every fixer whose claims
-    # reach the file runs over it, ruff's for python, clang-format's
-    # for C++, an extension's for its own files; a file no claim reaches is
-    # the walk's no-op, not the hook's business.
+    # reach the file runs over it, a python formatter's for python,
+    # clang-format's for C++, an extension's for its own files; a file
+    # no claim reaches is the walk's no-op, not the hook's business.
     with (
         contextlib.suppress(Exception, SystemExit),
         contextlib.redirect_stdout(io.StringIO()),

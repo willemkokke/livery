@@ -545,9 +545,9 @@ def _register_builtin() -> None:
     )
     # The C/C++ library: cmake configures and builds, ctest is the
     # test check, conan packages the result. The python type checkers
-    # do not gate it (there is no dist to verify types on); ruff
-    # formats and lints its conanfile.py beside clang-format and
-    # clang-tidy over its sources, and its build and ctest records
+    # do not gate it (there is no dist to verify types on); a python
+    # formatter and linter judge its conanfile.py beside clang-format
+    # and clang-tidy over its sources, and its build and ctest records
     # carry the build and test roles.
     register_kind(
         KindRecord(

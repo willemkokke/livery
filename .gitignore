@@ -5,7 +5,6 @@ dist/
 .venv/
 __pycache__/
 .pytest_cache/
-.ruff_cache/
 .coverage*
 fm-profile*.json
 fm-gate.json

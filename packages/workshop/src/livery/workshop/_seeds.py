@@ -49,10 +49,10 @@ def derived(facts: Mapping[str, Any]) -> dict[str, str]:
     repository: each hyphen after the namespace's own prefix is one
     namespace level (`acme-tools-store` in `acme` imports as
     `acme.tools.store`). The directory decides nothing, so a package
-    in a group directory (`extensions/ruff`, named `acme-extensions-ruff`)
-    imports as `acme.extensions.ruff`. `project_slug` is the last
-    level, `source_path` the directory under `src/` and `tests/`, and
-    `import_path` the dotted import.
+    in a group directory (`extensions/widgets`, named
+    `acme-extensions-widgets`) imports as `acme.extensions.widgets`.
+    `project_slug` is the last level, `source_path` the directory
+    under `src/` and `tests/`, and `import_path` the dotted import.
     """
     namespace = str(facts.get("namespace_package", ""))
     name = str(facts.get("package_name", ""))

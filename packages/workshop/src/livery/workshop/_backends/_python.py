@@ -32,8 +32,6 @@ from livery.toolroom.tools.api import (
     mypy,
     pyrefly,
     pytest,
-    ruff,
-    ruff_format,
     ty,
 )
 from livery.workshop._contract import load_contract
@@ -46,88 +44,9 @@ if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
     from livery.workshop._registries import RegistryTarget
 
-#: The whole repo, as CI lints it.
-SRC = (".",)
-
-
-def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
-    """The src and tests directories the *packages* own, as they exist.
-
-    The workspace's own tests, a unit whose directory is the tests
-    themselves, contribute that directory.
-    """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
-
-    paths = []
-    for package in packages:
-        if package.path == WORKSPACE_TESTS:
-            if package.directory.is_dir():
-                paths.append(package.path)
-            continue
-        for name in ("src", "tests"):
-            directory = package.directory / name
-            if directory.is_dir():
-                paths.append(f"{package.path}/{name}")
-    return tuple(paths)
-
-
-#: The python suffixes ruff owns, what a python check's claims admit;
-#: a foreign file an explicit path names passes through untouched.
+#: The python suffixes a python check's claims admit; a foreign file
+#: an explicit path names passes through untouched.
 PY_SUFFIXES = (".py", ".pyi")
-
-#: What ``--safe-fix`` refuses to let ruff remove: rules that delete
-#: code an edit in flight has not finished writing. This is the one
-#: place the meaning of safe-fix lives for python.
-_SAFE_UNFIXABLE = "F401"
-
-
-def _python_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
-    """Keep the directories and python files; drop foreign files.
-
-    A directory is ruff's to walk; a named python file is its to
-    read; a named C++ or markdown file is not, so it passes through
-    as a no-op rather than an error.
-    """
-    kept: list[str] = []
-    for entry in paths:
-        path = Path(entry)
-        if not path.is_file() or path.suffix in PY_SUFFIXES:
-            kept.append(entry)
-    return tuple(kept)
-
-
-def run_format(
-    check: bool = False, safe_fix: bool = False, paths: tuple[str, ...] = SRC
-) -> None:
-    """Format with ruff; *check* reports instead of rewriting.
-
-    Formatting removes no code, so ``safe_fix`` rewrites exactly as
-    a plain fix does; the flag exists for symmetry with lint.
-    """
-    chosen = _python_paths(paths)
-    if not chosen:
-        return
-    ruff_format(*chosen, check=check and not safe_fix)
-
-
-def run_lint(
-    fix: bool = False, safe_fix: bool = False, paths: tuple[str, ...] = SRC
-) -> None:
-    """Lint with ruff; *fix* applies safe fixes, *safe_fix* fewer.
-
-    ``safe_fix`` applies fixes but never the code-removing rules
-    (unused imports): an edit in flight adds an import before the
-    code that uses it, and removing it between the two edits deletes
-    real work. What safe-fix withholds is _SAFE_UNFIXABLE, defined
-    here and nowhere above.
-    """
-    chosen = _python_paths(paths)
-    if not chosen:
-        return
-    if safe_fix:
-        ruff.check(*chosen, fix=True, unfixable=_SAFE_UNFIXABLE)
-        return
-    ruff.check(*chosen, fix=fix)
 
 
 def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
@@ -182,18 +101,41 @@ def run_typecheck(paths: tuple[str, ...] = (), only: str = "") -> None:
 def run_typecomplete(packages: tuple[Package, ...]) -> None:
     """Verify each package's public API is 100% type-complete.
 
-    Each of the package's roots ([livery.workshop._backends._python.module_roots][])
-    is verified, through its ``api`` module where the root is a
-    namespace; a package with no src tree is verified under the module
-    its distribution name spells. The exit code is the verdict, 0 only
-    when every public symbol has a fully known type.
+    Every module [livery.workshop._backends._python.public_modules][]
+    names is verified; a package with nothing public verifies nothing.
+    The exit code is the verdict, 0 only when every public symbol has a
+    fully known type.
     """
     for package in packages:
-        src = package.directory / "src"
-        for root in module_roots(package) or (module_for(package),):
-            api = src.joinpath(*root.split("."), "api.py")
-            target = f"{root}.api" if api.is_file() else root
-            basedpyright(verifytypes=target, ignoreexternal=True)
+        for module in public_modules(package):
+            basedpyright(verifytypes=module, ignoreexternal=True)
+
+
+def public_modules(package: Package) -> tuple[str, ...]:
+    """The modules that declare *package*'s public API.
+
+    A namespace root declares it in its ``api``; a root that is a
+    regular package, or a single module, is its own declaration. A
+    public package beneath a root keeps its own import path and is
+    declared in the root's ``api`` as well, imported for the checkers
+    alone and listed in ``__all__``: the verifier follows the
+    declaration into it, reading the ``py.typed`` at the
+    distribution's root. A root with neither declares nothing; a
+    package with no src tree is its distribution name's module.
+    """
+    src = package.directory / "src"
+    if not src.is_dir():
+        return (module_for(package),)
+    modules: list[str] = []
+    for root in module_roots(package) or (module_for(package),):
+        directory = src.joinpath(*root.split("."))
+        if (directory / "api.py").is_file():
+            modules.append(f"{root}.api")
+        elif (directory / "__init__.py").is_file() or directory.with_suffix(
+            ".py"
+        ).is_file():
+            modules.append(root)
+    return tuple(modules)
 
 
 def module_for(package: Package) -> str:
@@ -1601,12 +1543,14 @@ def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
 
 
 def module_roots(package: Package) -> tuple[str, ...]:
-    """The import prefixes *package* owns, read from its src tree.
+    """The import prefixes *package* owns.
 
-    A prefix is the topmost directory under ``src`` holding an
-    ``api.py`` (a namespace root) or an ``__init__.py`` (a regular
-    package) on its branch. Read from the tree rather than
-    derived from the distribution name: three distributions share the
+    The build backend's ``module-name`` where the manifest declares
+    one, since that is what the wheel ships. Otherwise each topmost
+    directory under ``src`` holding an ``api.py`` (a namespace root)
+    or an ``__init__.py`` (a regular package) on its branch, which
+    finds nothing under a root with no public names. Never derived
+    from the distribution name: three distributions share the
     ``livery.toolroom`` namespace, so a transformed name would
     attribute two of them to the third. A package with no python
     source owns nothing.
@@ -1614,6 +1558,9 @@ def module_roots(package: Package) -> tuple[str, ...]:
     src = package.directory / "src"
     if not src.is_dir():
         return ()
+    declared = _declared_modules(package)
+    if declared:
+        return declared
     roots: list[str] = []
     from livery.workshop._packages import root_marks
 
@@ -1625,6 +1572,21 @@ def module_roots(package: Package) -> tuple[str, ...]:
             continue
         roots.append(dotted)
     return tuple(sorted(roots))
+
+
+def _declared_modules(package: Package) -> tuple[str, ...]:
+    """The modules uv's build backend ships for *package*, sorted; empty if none."""
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    backend = data.get("tool", {}).get("uv", {}).get("build-backend", {})
+    declared = backend.get("module-name") if isinstance(backend, dict) else None
+    if isinstance(declared, str):
+        return (declared,)
+    if isinstance(declared, list):
+        return tuple(sorted(name for name in declared if isinstance(name, str)))
+    return ()
 
 
 def plugin_modules(package: Package) -> tuple[str, ...]:
