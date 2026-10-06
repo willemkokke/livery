@@ -10,11 +10,11 @@ from typing import Annotated, Literal
 import pytest
 
 from livery.footman import _manifest
+from livery.footman._context import Context
 from livery.footman._executor import run_chain
+from livery.footman._params import env
+from livery.footman._registry import Group
 from livery.footman._split import ChainError, split_chain
-from livery.footman.context import Context
-from livery.footman.params import env
-from livery.footman.registry import Group
 
 
 class Colour(enum.Enum):

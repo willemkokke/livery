@@ -635,7 +635,7 @@ def installed_entry_points() -> tuple[str, ...]:
     in.
     """
     from livery.footman import _entries
-    from livery.footman.compose import ENTRY_POINT_GROUP
+    from livery.footman._compose import ENTRY_POINT_GROUP
 
     return tuple(
         sorted({ep.name for ep in _entries.installed_entry_points(ENTRY_POINT_GROUP)})

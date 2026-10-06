@@ -81,7 +81,15 @@ def refresh_cwd(*where: str) -> None:
 def _rebuild() -> None:
     from pathlib import Path
 
-    from livery.footman import _config, _discover, _manifest, _paths, registry
+    from livery.footman import (
+        _config,
+        _discover,
+        _manifest,
+        _paths,
+    )
+    from livery.footman import (
+        _registry as registry,
+    )
 
     cwd = Path.cwd()
     # The walk's reach is the run's: the user-level `cascade` key (and its
@@ -161,7 +169,7 @@ def _rebuild() -> None:
     # runner does not serve.
     base = registry.Group("root")
     if builtin:
-        from livery.footman import compose
+        from livery.footman import _compose as compose
 
         with registry.capture() as base:
             for entry in builtin:
@@ -259,7 +267,15 @@ def refresh_source(tasks_file: str, *where: str) -> None:
 def _rebuild_source(tasks_file: str) -> None:
     from pathlib import Path
 
-    from livery.footman import _config, _discover, _manifest, _paths, registry
+    from livery.footman import (
+        _config,
+        _discover,
+        _manifest,
+        _paths,
+    )
+    from livery.footman import (
+        _registry as registry,
+    )
 
     one = Path(tasks_file).expanduser()
     if not one.is_file():

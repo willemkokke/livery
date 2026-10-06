@@ -119,7 +119,7 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
         "livery.footman._paths",
     }, sorted(loaded)
     forbidden = {
-        "livery.footman.registry",
+        "livery.footman._registry",
         "livery.footman._app",
         "livery.footman._split",
     }
@@ -137,7 +137,8 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
     """
     import os
 
-    from livery.footman import _manifest, _paths, registry
+    from livery.footman import _manifest, _paths
+    from livery.footman import _registry as registry
 
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
     proj = tmp_path / "proj"

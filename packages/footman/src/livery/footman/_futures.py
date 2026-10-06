@@ -39,7 +39,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from livery.footman import _coerce, registry
+from livery.footman import _coerce
+from livery.footman import _registry as registry
 from livery.footman._split import ChainError
 
 if TYPE_CHECKING:
@@ -250,7 +251,7 @@ def unshared(task: Any) -> bool:
     unshared request asks unshared for everything it needs), then shared. The
     scheduler resolves the same ladder for a node.
     """
-    from livery.footman import context
+    from livery.footman import _context as context
 
     own = registry.sharing(task)
     if own is not None:
@@ -357,7 +358,7 @@ def call(task: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
     is the once-cell: hit the memo, wait for the thread that is running it, or
     claim it and run it here.
     """
-    from livery.footman import context as _context
+    from livery.footman import _context as _context
 
     # The request takes its number now, in the caller's thread — for a
     # queued call this IS the written line; the thunk carries the number
@@ -378,7 +379,8 @@ def call(task: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
             return task._plain_call(args, kwargs)
         return registry.task_body(task)(*args, **kwargs)
     _refuse_unrunnable(task)
-    from livery.footman import _executor, _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _executor, _schedule
 
     label = _label(task)
     seg = _schedule._default_seg(task)
@@ -724,7 +726,7 @@ def _claim_unit(label: str) -> Any:
     Cleared on claim, so a second call in the same thunk — and everything
     the callee goes on to ask for — counts honestly.
     """
-    from livery.footman import context
+    from livery.footman import _context as context
 
     status = context.active_status()
     if status is None:
@@ -818,7 +820,8 @@ def _run_now(
     asked here, at the moment of execution (a request the run has already
     answered never re-asks).
     """
-    from livery.footman import _executor, _globals, _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _executor, _globals, _schedule
 
     parent = context.current()
     label = _label(task)

@@ -204,7 +204,7 @@ def test_a_tools_own_switches_come_from_its_record_and_reads_inherit_them(
             timed_out=False, stdout="gh version 2.88.0", stderr="", code=0
         )
 
-    monkeypatch.setattr("livery.footman.context.run", fake_run)
+    monkeypatch.setattr("livery.footman._context.run", fake_run)
     monkeypatch.setattr(_drivers, "_resolve", lambda name: "/bin/gh")
     monkeypatch.delenv("GH_NO_UPDATE_NOTIFIER", raising=False)
     assert _drivers._read_version("gh")[0] == "2.88.0"

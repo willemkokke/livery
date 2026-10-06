@@ -9,9 +9,9 @@ import pytest
 
 from livery.footman import _manifest
 from livery.footman._executor import run_chain
+from livery.footman._params import between, check, default, env, exists, isdir, isfile
+from livery.footman._registry import Group
 from livery.footman._split import ChainError, split_chain
-from livery.footman.params import between, check, default, env, exists, isdir, isfile
-from livery.footman.registry import Group
 
 # Module level, or `from __future__ import annotations` leaves the name
 # unresolvable when the spec is built.
@@ -189,7 +189,7 @@ def test_an_outer_marker_wins_over_the_element_marker():
 
 def test_a_completer_on_the_element_serves_the_collection():
     from livery.footman import _coerce
-    from livery.footman.params import suggest
+    from livery.footman._params import suggest
 
     peeled = _coerce.peel(list[Annotated[str, suggest(_next_tag)]])
     assert peeled.element is str

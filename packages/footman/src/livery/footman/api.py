@@ -25,6 +25,49 @@ if TYPE_CHECKING:
     # on a bare `import footman` (the completion hot path).
     from livery.footman import docstrings as docstrings
     from livery.footman import markdown as markdown
+    from livery.footman._application import App as App
+    from livery.footman._application import Brand as Brand
+    from livery.footman._compose import include as include
+    from livery.footman._compose import plugin as plugin
+    from livery.footman._context import Argv as Argv
+    from livery.footman._context import AuditEntry as AuditEntry
+    from livery.footman._context import Context as Context
+    from livery.footman._context import Failed as Failed
+    from livery.footman._context import Result as Result
+    from livery.footman._context import ResultView as ResultView
+    from livery.footman._context import RunFailed as RunFailed
+    from livery.footman._context import RunTimeout as RunTimeout
+    from livery.footman._context import Section as Section
+    from livery.footman._context import Stream as Stream
+    from livery.footman._context import TimedOut as TimedOut
+    from livery.footman._context import attended as attended
+    from livery.footman._context import cache_dir as cache_dir
+    from livery.footman._context import chdir as chdir
+    from livery.footman._context import colored as colored
+    from livery.footman._context import config_dir as config_dir
+    from livery.footman._context import config_file as config_file
+    from livery.footman._context import confirm as confirm
+    from livery.footman._context import cwd as cwd
+    from livery.footman._context import data_dir as data_dir
+    from livery.footman._context import dist as dist
+    from livery.footman._context import fail as fail
+    from livery.footman._context import given as given
+    from livery.footman._context import inherited as inherited
+    from livery.footman._context import mark as mark
+    from livery.footman._context import parallel as parallel
+    from livery.footman._context import passthrough as passthrough
+    from livery.footman._context import prog as prog
+    from livery.footman._context import progress as progress
+    from livery.footman._context import project_root as project_root
+    from livery.footman._context import prompt as prompt
+    from livery.footman._context import run as run
+    from livery.footman._context import section as section
+    from livery.footman._context import select as select
+    from livery.footman._context import stream as stream
+    from livery.footman._context import track as track
+    from livery.footman._context import tty as tty
+    from livery.footman._context import use_context as use_context
+    from livery.footman._context import user_tasks_file as user_tasks_file
     from livery.footman._entries import installed_entry_points as installed_entry_points
     from livery.footman._entries import rescan_entry_points as rescan_entry_points
     from livery.footman._executor import handing_off as handing_off
@@ -34,99 +77,57 @@ if TYPE_CHECKING:
     from livery.footman._globals import console_lane as console_lane
     from livery.footman._globals import cwd_lane as cwd_lane
     from livery.footman._globals import make_lane as lane
+    from livery.footman._invocation import Invocation as Invocation
+    from livery.footman._params import Arg as Arg
+    from livery.footman._params import Exists as Exists
+    from livery.footman._params import Forward as Forward
+    from livery.footman._params import Hidden as Hidden
+    from livery.footman._params import IsDir as IsDir
+    from livery.footman._params import IsFile as IsFile
+    from livery.footman._params import Many as Many
+    from livery.footman._params import NoSplit as NoSplit
+    from livery.footman._params import Secret as Secret
+    from livery.footman._params import Stdin as Stdin
+    from livery.footman._params import Stdout as Stdout
+    from livery.footman._params import ask as ask
+    from livery.footman._params import between as between
+    from livery.footman._params import check as check
+    from livery.footman._params import default as default
+    from livery.footman._params import doc as doc
+    from livery.footman._params import env as env
+    from livery.footman._params import exists as exists
+    from livery.footman._params import forward as forward
+    from livery.footman._params import hidden as hidden
+    from livery.footman._params import isdir as isdir
+    from livery.footman._params import isfile as isfile
+    from livery.footman._params import matching as matching
+    from livery.footman._params import nosplit as nosplit
+    from livery.footman._params import stdin as stdin
+    from livery.footman._params import stdout as stdout
+    from livery.footman._params import suggest as suggest
+    from livery.footman._registry import GlobalOption as GlobalOption
+    from livery.footman._registry import Group as Group
+    from livery.footman._registry import Tasks as Tasks
+    from livery.footman._registry import TaskView as TaskView
+    from livery.footman._registry import capture as capture
+    from livery.footman._registry import config_section as config_section
+    from livery.footman._registry import expose as expose
+    from livery.footman._registry import group as group
+    from livery.footman._registry import post_task as post_task
+    from livery.footman._registry import post_tasks as post_tasks
+    from livery.footman._registry import pre_bind as pre_bind
+    from livery.footman._registry import pre_record as pre_record
+    from livery.footman._registry import pre_reexec as pre_reexec
+    from livery.footman._registry import pre_task as pre_task
+    from livery.footman._registry import pre_tasks as pre_tasks
+    from livery.footman._registry import requires as requires
+    from livery.footman._registry import requires_dep as requires_dep
+    from livery.footman._registry import requires_env as requires_env
+    from livery.footman._registry import requires_tool as requires_tool
+    from livery.footman._registry import task as task
+    from livery.footman._registry import wrap_bind as wrap_bind
+    from livery.footman._registry import wrap_task as wrap_task
     from livery.footman._step import step as step
-    from livery.footman.app import App as App
-    from livery.footman.app import Brand as Brand
-    from livery.footman.compose import include as include
-    from livery.footman.compose import plugin as plugin
-    from livery.footman.context import Argv as Argv
-    from livery.footman.context import AuditEntry as AuditEntry
-    from livery.footman.context import Context as Context
-    from livery.footman.context import Failed as Failed
-    from livery.footman.context import Result as Result
-    from livery.footman.context import ResultView as ResultView
-    from livery.footman.context import RunFailed as RunFailed
-    from livery.footman.context import Section as Section
-    from livery.footman.context import Stream as Stream
-    from livery.footman.context import TimedOut as TimedOut
-    from livery.footman.context import attended as attended
-    from livery.footman.context import cache_dir as cache_dir
-    from livery.footman.context import chdir as chdir
-    from livery.footman.context import colored as colored
-    from livery.footman.context import config_dir as config_dir
-    from livery.footman.context import config_file as config_file
-    from livery.footman.context import confirm as confirm
-    from livery.footman.context import cwd as cwd
-    from livery.footman.context import data_dir as data_dir
-    from livery.footman.context import dist as dist
-    from livery.footman.context import fail as fail
-    from livery.footman.context import given as given
-    from livery.footman.context import inherited as inherited
-    from livery.footman.context import mark as mark
-    from livery.footman.context import parallel as parallel
-    from livery.footman.context import passthrough as passthrough
-    from livery.footman.context import prog as prog
-    from livery.footman.context import progress as progress
-    from livery.footman.context import project_root as project_root
-    from livery.footman.context import prompt as prompt
-    from livery.footman.context import run as run
-    from livery.footman.context import section as section
-    from livery.footman.context import select as select
-    from livery.footman.context import stream as stream
-    from livery.footman.context import track as track
-    from livery.footman.context import tty as tty
-    from livery.footman.context import use_context as use_context
-    from livery.footman.context import user_tasks_file as user_tasks_file
-    from livery.footman.invocation import Invocation as Invocation
-    from livery.footman.params import Arg as Arg
-    from livery.footman.params import Exists as Exists
-    from livery.footman.params import Forward as Forward
-    from livery.footman.params import Hidden as Hidden
-    from livery.footman.params import IsDir as IsDir
-    from livery.footman.params import IsFile as IsFile
-    from livery.footman.params import Many as Many
-    from livery.footman.params import NoSplit as NoSplit
-    from livery.footman.params import Secret as Secret
-    from livery.footman.params import Stdin as Stdin
-    from livery.footman.params import Stdout as Stdout
-    from livery.footman.params import ask as ask
-    from livery.footman.params import between as between
-    from livery.footman.params import check as check
-    from livery.footman.params import default as default
-    from livery.footman.params import doc as doc
-    from livery.footman.params import env as env
-    from livery.footman.params import exists as exists
-    from livery.footman.params import forward as forward
-    from livery.footman.params import hidden as hidden
-    from livery.footman.params import isdir as isdir
-    from livery.footman.params import isfile as isfile
-    from livery.footman.params import matching as matching
-    from livery.footman.params import nosplit as nosplit
-    from livery.footman.params import stdin as stdin
-    from livery.footman.params import stdout as stdout
-    from livery.footman.params import suggest as suggest
-    from livery.footman.registry import GlobalOption as GlobalOption
-    from livery.footman.registry import Group as Group
-    from livery.footman.registry import Tasks as Tasks
-    from livery.footman.registry import TaskView as TaskView
-    from livery.footman.registry import capture as capture
-    from livery.footman.registry import config_section as config_section
-    from livery.footman.registry import expose as expose
-    from livery.footman.registry import group as group
-    from livery.footman.registry import post_task as post_task
-    from livery.footman.registry import post_tasks as post_tasks
-    from livery.footman.registry import pre_bind as pre_bind
-    from livery.footman.registry import pre_record as pre_record
-    from livery.footman.registry import pre_reexec as pre_reexec
-    from livery.footman.registry import pre_task as pre_task
-    from livery.footman.registry import pre_tasks as pre_tasks
-    from livery.footman.registry import requires as requires
-    from livery.footman.registry import requires_dep as requires_dep
-    from livery.footman.registry import requires_env as requires_env
-    from livery.footman.registry import requires_tool as requires_tool
-    from livery.footman.registry import task as task
-    from livery.footman.registry import wrap_bind as wrap_bind
-    from livery.footman.registry import wrap_task as wrap_task
     from livery.footman.testing import Runner as Runner
     from livery.footman.testing import recording as recording
 
@@ -163,6 +164,7 @@ __all__ = [
     "Result",
     "ResultView",
     "RunFailed",
+    "RunTimeout",
     "Runner",
     "Secret",
     "Section",
@@ -314,7 +316,7 @@ def main(tasks_file: str | None = None) -> None:
     # made yet. `_globals` turns the collector back on — with everything
     # loaded by then frozen — at the last moment before task bodies run.
     from livery.footman import _globals
-    from livery.footman.app import App
+    from livery.footman._application import App
 
     _globals.defer_gc()
 
@@ -357,7 +359,7 @@ def __getattr__(name: str) -> object:
         "requires_env",
         "requires_tool",
     ):
-        from livery.footman import registry
+        from livery.footman import _registry as registry
 
         return getattr(registry, name)
     if name in ("installed_entry_points", "rescan_entry_points"):
@@ -393,7 +395,7 @@ def __getattr__(name: str) -> object:
 
         return getattr(_fetch, name)
     if name in ("include", "plugin"):
-        from livery.footman import compose
+        from livery.footman import _compose as compose
 
         return getattr(compose, name)
     if name in (
@@ -425,7 +427,7 @@ def __getattr__(name: str) -> object:
         "IsFile",
         "IsDir",
     ):
-        from livery.footman import params
+        from livery.footman import _params as params
 
         return getattr(params, name)
     if name in (
@@ -458,6 +460,7 @@ def __getattr__(name: str) -> object:
         "select",
         "track",
         "RunFailed",
+        "RunTimeout",
         "Failed",
         "TimedOut",
         "fail",
@@ -468,15 +471,15 @@ def __getattr__(name: str) -> object:
         "Section",
         "Stream",
     ):
-        from livery.footman import context
+        from livery.footman import _context as context
 
         return getattr(context, name)
     if name in ("App", "Brand"):
-        from livery.footman import app
+        from livery.footman import _application as app
 
         return getattr(app, name)
     if name == "Invocation":
-        from livery.footman import invocation
+        from livery.footman import _invocation as invocation
 
         return invocation.Invocation
     raise AttributeError(f"module 'livery.footman' has no attribute {name!r}")

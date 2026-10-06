@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from livery.workshop._verified import Verified
 
 import livery.footman.api as footman
-from livery.footman import context
+from livery.footman import _context as context
 from livery.footman.api import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends

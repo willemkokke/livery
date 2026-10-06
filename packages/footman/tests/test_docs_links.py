@@ -7,7 +7,7 @@ import json
 import pytest
 
 from livery.footman import _describe
-from livery.footman.registry import Group
+from livery.footman._registry import Group
 from livery.footman.testing import Runner
 
 OSC = "\033]8;;"

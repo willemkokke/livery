@@ -7,11 +7,12 @@ from typing import Annotated, Literal
 
 import pytest
 
-from livery.footman import _executor, registry
+from livery.footman import _executor
+from livery.footman import _registry as registry
+from livery.footman._params import ask, between, env, stdin
+from livery.footman._registry import Group, RegistrationError
 from livery.footman._split import ChainError
 from livery.footman._step import step
-from livery.footman.params import ask, between, env, stdin
-from livery.footman.registry import Group, RegistrationError
 from livery.footman.testing import Runner
 
 
@@ -1254,7 +1255,7 @@ def _with_status(reg: Group, line: str) -> _FakeStatus:
     """Drive *line* with a fake status installed; the scheduler builds no
     line of its own off a terminal, so the fake stays the run's status and
     collects exactly what the futures layer feeds it."""
-    from livery.footman import context
+    from livery.footman import _context as context
 
     status = _FakeStatus()
     context.set_status(status)

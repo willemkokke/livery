@@ -626,7 +626,7 @@ def test_speed_lines_on_a_machine_print_the_sums_and_read_no_mark(
 
 def test_the_judge_is_a_ci_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     """Footman lists it unavailable outside CI, and a direct call refuses too."""
-    from livery.footman.registry import availability
+    from livery.footman._registry import availability
     from livery.workshop import _speed_tasks
 
     monkeypatch.setattr(_speed_tasks, "run_context", lambda: None)

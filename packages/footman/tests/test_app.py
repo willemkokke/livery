@@ -307,7 +307,7 @@ def test_a_raising_strict_completer_is_a_taught_cli_refusal(tmp_path):
             from typing import Annotated
 
             from livery.footman.api import task
-            from livery.footman.params import suggest
+            from livery.footman._params import suggest
 
             def boom():
                 raise RuntimeError("registry down")
@@ -693,7 +693,7 @@ def test_binding_refusals_exit_usage_end_to_end(tmp_path, monkeypatch):
         "import uuid\n"
         "from typing import Annotated\n"
         "from livery.footman.api import task\n"
-        "from livery.footman.params import between, env\n"
+        "from livery.footman._params import between, env\n"
         "@task\n"
         "def ident(id: uuid.UUID): ...\n"
         "@task\n"
@@ -1460,7 +1460,7 @@ def test_json_step_rows_redact_a_secret_argument(tmp_path):
 
     (tmp_path / "tasks.py").write_text(
         "from livery.footman.api import run, task\n"
-        "from livery.footman.params import Secret\n"
+        "from livery.footman._params import Secret\n"
         "\n"
         "@task\n"
         "def login():\n"
@@ -2002,7 +2002,7 @@ def test_a_failed_plugin_import_retries_too(stale_project, monkeypatch):
     # The #530 shape: the tasks file imports fine, a mounted module doesn't.
     (stale_project / "helper.py").write_text("import missing_module_xyz\n")
     (stale_project / "tasks.py").write_text(
-        "from livery.footman.compose import include\ninclude('helper')\n"
+        "from livery.footman._compose import include\ninclude('helper')\n"
     )
     calls = _capture_exec(monkeypatch)
     with pytest.raises(SystemExit):
@@ -2131,7 +2131,7 @@ def test_script_handoff_reenters_the_brand_not_stock_footman(
     # count — and died on the mismatch refusal, because the script declares
     # the brand's dist and not 'footman'. The brand re-enters through its
     # own console script's entry point instead.
-    from livery.footman.app import App
+    from livery.footman._application import App
 
     (script_project / "tasks.py").write_text(
         _SCRIPT_BLOCK.replace('"livery-footman"', '"acme-cli"'), encoding="utf-8"
@@ -2330,7 +2330,7 @@ def test_an_ordinary_import_failure_gains_no_script_hint(project, capsys):
 def test_a_branded_cli_without_a_dist_stays_out_of_it(script_project, monkeypatch):
     # footman cannot know which distribution ships someone else's runner,
     # so it never guesses one into an environment.
-    from livery.footman.app import App
+    from livery.footman._application import App
 
     calls = _capture_exec(monkeypatch)
     ran = _fake_uv(monkeypatch)

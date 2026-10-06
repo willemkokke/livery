@@ -43,6 +43,7 @@ EXPORTS: dict[str, list[str]] = {
         "Result",
         "ResultView",
         "RunFailed",
+        "RunTimeout",
         "Runner",
         "Secret",
         "Section",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.context import Failed
+from livery.footman.api import Failed
 from livery.workshop import _fragment_engine as engine
 from livery.workshop._fragment_engine import Fragment
 from livery.workshop._shipped_files import deliver, shipped_drift

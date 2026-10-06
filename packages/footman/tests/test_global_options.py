@@ -9,10 +9,11 @@ from typing import Annotated
 
 import pytest
 
-from livery.footman import _manifest, registry
+from livery.footman import _manifest
+from livery.footman import _registry as registry
 from livery.footman._complete import _DYNAMIC, _FILES, complete
-from livery.footman.params import env, nosplit, suggest
-from livery.footman.registry import GlobalOption, Group, RegistrationError
+from livery.footman._params import env, nosplit, suggest
+from livery.footman._registry import GlobalOption, Group, RegistrationError
 from livery.footman.testing import Runner
 
 # Module level: `from __future__ import annotations` makes an annotation a
@@ -170,7 +171,7 @@ def test_the_manifest_bakes_globals_and_uses(tmp_path):
         Path,
         help="load this .env file",
     )
-    opt.owner = "livery.footman.env_files"
+    opt.owner = "livery.footman._env_files"
 
     @reg.task(uses=[opt])
     def build(): ...
@@ -182,7 +183,7 @@ def test_the_manifest_bakes_globals_and_uses(tmp_path):
     assert entry["kind"] == "option"
     assert "path" in entry["types"]  # typed: completion hands off to files
     assert entry["help"] == "load this .env file"
-    assert entry["owner"] == "livery.footman.env_files"
+    assert entry["owner"] == "livery.footman._env_files"
     assert data["tree"]["tasks"]["build"]["uses"] == ["env-file"]
 
 
@@ -275,7 +276,7 @@ def test_suggest_answers_a_global_by_name(tmp_path, monkeypatch):
             from typing import Annotated
 
             from livery.footman.api import GlobalOption, task
-            from livery.footman.params import env, suggest
+            from livery.footman._params import env, suggest
 
             def _targets():
                 return Path("targets.txt").read_text().split()
@@ -605,7 +606,7 @@ def test_env_outranks_config_for_a_global(tmp_path, monkeypatch):
             import livery.footman.api as footman
             from typing import Annotated
             from livery.footman.api import GlobalOption, task
-            from livery.footman.params import env
+            from livery.footman._params import env
 
             footman.config_section("devkit")
             REGION = GlobalOption(
@@ -724,7 +725,7 @@ def test_global_help_lists_plugin_globals_with_provenance():
     # own heading, with where each came from.
     reg = Group("root")
     opt = _adopt(reg, "env-file", Path, help="load this .env file")
-    opt.owner = "livery.footman.env_files"
+    opt.owner = "livery.footman._env_files"
 
     @reg.task(uses=[opt])
     def build(): ...
@@ -734,7 +735,7 @@ def test_global_help_lists_plugin_globals_with_provenance():
     assert "plugin globals (before the first task):" in result.stdout
     assert "--env-file" in result.stdout
     assert "load this .env file" in result.stdout
-    assert "from livery.footman.env_files" in result.stdout
+    assert "from livery.footman._env_files" in result.stdout
 
 
 def test_global_help_without_plugin_globals_has_no_plugin_heading():

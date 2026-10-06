@@ -177,7 +177,7 @@ def hosted() -> bool:
     # the old `footman` shim name has no host to route through.
     if "livery.footman" not in sys.modules:
         return False
-    from livery.footman.context import _current
+    from livery.footman._context import _current
 
     return _current.get() is not None
 
@@ -316,7 +316,7 @@ def note(text: str) -> None:
     demotions it describes are behaviour-preserving either way.
     """
     if hosted():
-        from livery.footman.context import current, real_stderr
+        from livery.footman._context import current, real_stderr
 
         if current().verbose:
             real_stderr().write(text)
@@ -383,8 +383,8 @@ def run(
     in-process lane too.
     """
     if hosted():
-        from livery.footman.context import Invocation
-        from livery.footman.context import run as fm_run
+        from livery.footman._context import Invocation
+        from livery.footman.api import run as fm_run
 
         painted: dict[str, Any] = {}
         if _run_takes_colour(fm_run):

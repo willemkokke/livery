@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from livery.footman.context import Failed
+from livery.footman.api import Failed
 from livery.strongroom.api import digest_of
 from livery.toolroom.bench import (
     _artifacts,

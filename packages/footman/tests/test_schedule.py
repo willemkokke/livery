@@ -9,10 +9,10 @@ import threading
 import pytest
 
 from livery.footman import _manifest, _schedule
+from livery.footman._registry import Group
 from livery.footman._split import ChainError, Segment, split_chain
 from livery.footman._step import step
 from livery.footman.api import parallel, run
-from livery.footman.registry import Group
 
 
 def drive(build, line, **kw):
@@ -328,7 +328,7 @@ def test_single_node_runs_live(capsys):
     def tasks(reg):
         @reg.task
         def solo():
-            from livery.footman import context
+            from livery.footman import _context as context
 
             seen["sink"] = context.current().sink
 
@@ -344,13 +344,13 @@ def test_multi_node_still_buffers(capsys):
     def tasks(reg):
         @reg.task
         def a():
-            from livery.footman import context
+            from livery.footman import _context as context
 
             seen["a"] = context.current().sink
 
         @reg.task
         def b():
-            from livery.footman import context
+            from livery.footman import _context as context
 
             seen["b"] = context.current().sink
 
@@ -382,7 +382,7 @@ def test_both_engines_feed_the_same_status_line(monkeypatch):
     def fanout(reg):
         @reg.task
         def combo():
-            from livery.footman.context import parallel
+            from livery.footman._context import parallel
 
             def alpha(): ...
 
@@ -399,7 +399,7 @@ def test_both_engines_feed_the_same_status_line(monkeypatch):
 def test_parallel_without_a_run_is_a_noop(capsys):
     # Plain calls and recording() have no status line to feed — parallel()
     # must not care.
-    from livery.footman.context import parallel
+    from livery.footman._context import parallel
 
     def a(): ...
 

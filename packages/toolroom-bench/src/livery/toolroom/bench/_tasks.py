@@ -48,11 +48,9 @@ if TYPE_CHECKING:
     from livery.toolroom.store.api import Ensured, Record, Store, ToolSpec
 
 import livery.toolroom.tools.api as _tools
+from livery.footman._context import current, data_dir, project_root
 from livery.footman._describe import bold, cyan, wants_color
-from livery.footman.api import fail
-from livery.footman.context import current, data_dir, project_root
-from livery.footman.params import doc
-from livery.footman.registry import Group
+from livery.footman.api import Group, doc, fail
 from livery.toolroom.tools.api import version_tuple as _version_tuple
 
 tasks: Group = Group("tools", help="Keep the tool records honest")
@@ -2480,8 +2478,8 @@ def _gather(
     reports, which reads as a hole exactly like a release that would not
     install, with the traceback in the wave's output.
     """
+    from livery.footman._context import current
     from livery.footman.api import parallel, step
-    from livery.footman.context import current
 
     surfaces: dict[str, dict[str, dict[str, Any] | None]] = {}
     lock = threading.Lock()

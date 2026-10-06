@@ -21,10 +21,18 @@ from dataclasses import dataclass, field
 from itertools import count
 from typing import Any, TextIO
 
-from livery.footman import _describe, _executor, _futures, _globals, _progress, context
+from livery.footman import (
+    _context as context,
+)
+from livery.footman import (
+    _describe,
+    _executor,
+    _futures,
+    _globals,
+    _progress,
+)
 from livery.footman._manifest import resolved_signature
-from livery.footman._split import ChainError, Segment
-from livery.footman.registry import (
+from livery.footman._registry import (
     Group,
     Task,
     _Opted,
@@ -43,6 +51,7 @@ from livery.footman.registry import (
     wants_progress,
     work_key,
 )
+from livery.footman._split import ChainError, Segment
 
 
 @dataclass

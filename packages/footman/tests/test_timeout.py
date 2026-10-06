@@ -22,11 +22,11 @@ import time
 import pytest
 
 from livery.footman import _manifest, _schedule
+from livery.footman._context import RunTimeout, TimedOut
+from livery.footman._registry import Group
 from livery.footman._split import split_chain
 from livery.footman._step import step
 from livery.footman.api import parallel, run
-from livery.footman.context import RunTimeout, TimedOut
-from livery.footman.registry import Group
 
 
 def drive(build, line, **kw):
@@ -55,7 +55,7 @@ def _sleep(seconds: float) -> str:
 
 
 def test_timeout_is_declarable_and_readable():
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     reg = Group("root")
 
@@ -85,7 +85,7 @@ def test_timeout_rides_opts_for_a_single_use():
     @reg.task
     def build(): ...
 
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     once = build.opts(timeout=2)
     assert registry.task_timeout(once) == 2.0
@@ -238,7 +238,7 @@ def test_timed_out_task_answers_124():
 def test_timed_out_is_catchable_as_failed():
     """`TimedOut` is a `Failed`, so `except footman.Failed:` keeps working
     and a caller can still tell a deadline from any other deliberate stop."""
-    from livery.footman.context import Failed
+    from livery.footman._context import Failed
 
     assert issubclass(TimedOut, Failed)
     err = TimedOut("deploy", 5.0)
@@ -361,7 +361,7 @@ def test_time_left_counts_down():
 def test_time_left_clamps_at_zero_rather_than_going_negative():
     """Callers hand it to `communicate(timeout=…)`, where a negative bound
     reads as "no bound" — the opposite of what an expired deadline means."""
-    from livery.footman.context import Context
+    from livery.footman._context import Context
 
     ctx = Context()
     ctx.deadline = time.perf_counter() - 5

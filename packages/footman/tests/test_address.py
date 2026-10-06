@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import textwrap
 
+from livery.footman._params import Secret
 from livery.footman.api import Context, parallel, run, step, use_context
-from livery.footman.params import Secret
 from livery.footman.testing import Runner
 
 
@@ -97,7 +97,7 @@ def test_parallel_children_branch_the_parents_path():
     seen: dict[str, str] = {}
 
     def probe():
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         seen[current().task] = current().address
 
@@ -123,7 +123,7 @@ def test_command_leaves_carry_the_verb_and_never_the_flags():
 
 
 def test_leaves_are_parse_safe():
-    from livery.footman.context import _leaf
+    from livery.footman._context import _leaf
 
     assert _leaf("./ship") == "ship"  # the separator cannot fake a level
     assert _leaf("prepared 3 fixtures") == "prepared-3-fixtures"

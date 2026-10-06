@@ -31,7 +31,7 @@ def dev(monkeypatch: pytest.MonkeyPatch) -> Iterator[ModuleType]:
     the module put back. The setup's monkeypatched delete restores
     whatever ``sys.modules`` held before.
     """
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     monkeypatch.delitem(sys.modules, "livery.forge._dev", raising=False)
     with registry.capture():

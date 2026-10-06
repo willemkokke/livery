@@ -41,7 +41,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
-from livery.footman import context
+from livery.footman import _context as context
 from livery.footman.api import Group, doc, fail, group, prog
 from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
@@ -1089,7 +1089,7 @@ def generate_verbs(into: Group | None = None) -> None:
     it makes what is new, remakes a verb whose flags changed, and
     removes a verb whose check is gone.
     """
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     target = into if into is not None else registry.root
     tree = verb_tree()

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from livery.footman.app import App
+from livery.footman._application import App
 from livery.footman.testing import Runner
 
 # Two installed providers: `acme-direct`, which the project names, and
@@ -56,7 +56,8 @@ def providers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in ("acme_direct", "acme_deep"):
         monkeypatch.delitem(sys.modules, name, raising=False)
 
-    from livery.footman import _entries, compose
+    from livery.footman import _compose as compose
+    from livery.footman import _entries
 
     class FakeEP:
         def __init__(self, name: str, dist: str, group: str) -> None:

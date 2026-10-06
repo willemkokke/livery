@@ -12,10 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman import _paths, registry
+from livery.footman import _paths
+from livery.footman import _registry as registry
+from livery.footman._application import DEFAULT_BRAND
 from livery.footman._executor import EX_USAGE
 from livery.footman.api import App, Brand, __version__
-from livery.footman.app import DEFAULT_BRAND
 from livery.footman.testing import Runner
 
 

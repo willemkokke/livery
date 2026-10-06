@@ -25,12 +25,16 @@ from livery.footman import (
     _manifest,
     _paths,
     _shellcomp,
-    context,
     markdown,
-    registry,
 )
-from livery.footman.params import between, default, doc
-from livery.footman.registry import Group, requires, requires_dep
+from livery.footman import (
+    _context as context,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._params import between, default, doc
+from livery.footman._registry import Group, requires, requires_dep
 
 
 def invoking_prog() -> str:

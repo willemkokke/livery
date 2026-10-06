@@ -27,8 +27,8 @@ from livery.footman._describe import (
 )
 from livery.footman._executor import EX_USAGE
 from livery.footman._manifest import returned_spec
-from livery.footman.params import Stdout, suggest
-from livery.footman.registry import Group
+from livery.footman._params import Stdout, suggest
+from livery.footman._registry import Group
 from livery.footman.testing import Runner
 
 

@@ -9,9 +9,20 @@ from typing import Any
 
 import pytest
 
-from livery.footman import _app, _discover, _executor, _paths, context, registry
+from livery.footman import (
+    _app,
+    _discover,
+    _executor,
+    _paths,
+)
+from livery.footman import (
+    _context as context,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._context import Context, current, use_context
 from livery.footman._executor import EX_USAGE
-from livery.footman.context import Context, current, use_context
 
 # --- helpers -----------------------------------------------------------------
 
@@ -326,7 +337,7 @@ def test_config_cwd_root_threads_to_the_task(tmp_path, monkeypatch, capsys):
     pkg.mkdir()
     (pkg / "tasks.py").write_text(
         "from livery.footman.api import task\n"
-        "from livery.footman.context import current\n"
+        "from livery.footman._context import current\n"
         "@task\n"
         "def where():\n"
         "    print(current().cwd)\n",

@@ -68,7 +68,7 @@ provider. Footman's own `footman.docs`,
 An installed plugin is inert metadata until a tasks file says otherwise:
 
 ```python
-from livery.footman.compose import plugin
+from livery.footman.api import plugin
 
 plugin("acme.devkit", into="acme")  # fm acme.deploy
 ```

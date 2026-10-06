@@ -548,7 +548,7 @@ def test_release_refuses_bad_versions(fm_project):
     fm = fm_project("""
         from typing import Annotated
         from livery.footman.api import task
-        from livery.footman.params import check
+        from livery.footman.api import check
 
         def semver(v):
             import re

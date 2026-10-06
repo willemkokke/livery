@@ -8,9 +8,9 @@ import pytest
 
 from livery.footman import _manifest
 from livery.footman._executor import EX_USAGE
+from livery.footman._registry import Group
 from livery.footman._schedule import dag_wants_progress, resolve_keep_going
 from livery.footman._split import _parse_globals, split_chain
-from livery.footman.registry import Group
 
 
 def _tree(build):
@@ -179,8 +179,8 @@ def test_mixed_chain_gate_surfaces_siblings_while_fail_fast_task_bails():
 def test_fail_fast_reaps_only_the_fail_fast_in_flight_tree_in_a_mixed_run(tmp_path):
     import time
 
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     kept = tmp_path / "kept"
     killed = tmp_path / "killed"
@@ -219,8 +219,8 @@ def test_fail_fast_kills_an_in_flight_sibling_subprocess(tmp_path):
     import sys
     import time
 
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     marker = tmp_path / "finished"
     sleep = [sys.executable, "-c", "import time; time.sleep(30)"]  # portable, killable
@@ -246,8 +246,8 @@ def test_fail_fast_kills_an_in_flight_sibling_subprocess(tmp_path):
 def test_keep_going_lets_an_in_flight_sibling_finish(tmp_path):
     import sys
 
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     marker = tmp_path / "finished"
     sleep = [sys.executable, "-c", "import time; time.sleep(0.4)"]
@@ -271,8 +271,8 @@ def test_keep_going_lets_an_in_flight_sibling_finish(tmp_path):
 def test_atomic_task_is_not_killed_by_fail_fast(tmp_path):
     import sys
 
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     marker = tmp_path / "finished"
     sleep = [sys.executable, "-c", "import time; time.sleep(0.4)"]
@@ -294,8 +294,8 @@ def test_atomic_task_is_not_killed_by_fail_fast(tmp_path):
 
 
 def test_a_killed_task_reports_cancelled_not_failed():
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     def tasks(reg):
         @reg.task
@@ -321,7 +321,7 @@ def test_keep_going_reports_a_later_failure_as_its_own_not_cancelled():
     # that conclusion a cancellation — so `--keep-going`, whose whole job is
     # to collect every failure, reported the first and hid the rest: the
     # "cancelled" line *replaces* the error rather than joining it.
-    from livery.footman import context
+    from livery.footman import _context as context
     from livery.footman._schedule import run_plan
 
     def tasks(reg):
@@ -359,8 +359,8 @@ def test_fail_fast_kills_grandchildren_not_just_the_direct_child(tmp_path):
     import signal
     import time
 
+    from livery.footman._context import run
     from livery.footman._schedule import run_plan
-    from livery.footman.context import run
 
     pidfile = tmp_path / "grandchild.pid"
     grandchild = tmp_path / "grandchild.py"
@@ -441,7 +441,7 @@ def test_kill_signals_a_shared_group_child_alone_never_the_group():
     import signal
     import subprocess
 
-    from livery.footman import context as ctx
+    from livery.footman import _context as ctx
 
     proc = subprocess.Popen(  # no start_new_session → shares pytest's group
         [sys.executable, "-c", "import time; time.sleep(30)"], text=True
@@ -465,7 +465,7 @@ def test_fail_fast_escalates_to_sigkill_when_sigterm_is_ignored(tmp_path):
     import subprocess
     import time
 
-    from livery.footman import context as ctx
+    from livery.footman import _context as ctx
 
     ready = tmp_path / "ready"
     src = (

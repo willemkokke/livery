@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from livery.footman.context import Context
+    from livery.footman._context import Context
 
 LEVELS = ("trace", "info", "warning", "error")
 
@@ -254,7 +254,7 @@ def emit(kind: str, text: str, ctx: Context | None = None) -> None:
     passed explicitly where the caller holds a context that may not be
     current (the executor's hook machinery).
     """
-    from livery.footman.context import current, real_stderr
+    from livery.footman._context import current, real_stderr
 
     if ctx is None:
         ctx = current()

@@ -18,12 +18,13 @@ from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 
 import pytest
 
-from livery.footman import _manifest, context
+from livery.footman import _context as context
+from livery.footman import _manifest
 from livery.footman._describe import param_detail, usage_fragment
 from livery.footman._executor import EX_USAGE, run_chain
+from livery.footman._params import stdin
+from livery.footman._registry import Group
 from livery.footman._split import ChainError, split_chain
-from livery.footman.params import stdin
-from livery.footman.registry import Group
 from livery.footman.testing import Runner
 
 

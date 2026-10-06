@@ -69,8 +69,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
-from livery.footman.api import fail, prog
-from livery.footman.context import Failed, run
+from livery.footman.api import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared, Type
 from livery.workshop._kinds import kind_chain
@@ -534,7 +533,7 @@ def _home() -> Home:
 
 def store_home() -> Home:
     """The store's home on this machine: `toolroom` in the runner's data directory."""
-    from livery.footman.context import data_dir
+    from livery.footman.api import data_dir
     from livery.toolroom.store.api import Home
 
     return Home(data_dir() / "toolroom")

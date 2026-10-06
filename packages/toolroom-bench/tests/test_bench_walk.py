@@ -1085,7 +1085,7 @@ def test_a_bare_call_is_refused_with_directions(tmp_path, monkeypatch):
     does not exist, so the walk refuses and says how to run it instead of
     degrading into the exact race it was built to remove.
     """
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
     from livery.toolroom.bench import _tasks as tools
 
     isolate(tools, monkeypatch, tmp_path)
@@ -1157,7 +1157,7 @@ def test_a_run_whose_holes_outnumber_its_readings_fails(capsys):
     records a platform where the tools do not exist. Holes in the majority
     mean the machine, not the tools.
     """
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
     from livery.toolroom.bench import _tasks as tools
 
     with pytest.raises(Failed) as failed:
@@ -1202,7 +1202,7 @@ def test_a_disk_with_no_room_stops_the_walk_instead_of_recording_holes(
     """
     import shutil
 
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
     from livery.toolroom.bench import _tasks as tools
 
     Usage = collections.namedtuple("Usage", "total used free")

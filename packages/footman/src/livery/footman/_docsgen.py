@@ -23,8 +23,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from livery.footman.context import fail, run
-from livery.footman.registry import group
+from livery.footman._context import fail, run
+from livery.footman._registry import group
 
 # packages/footman, wherever the checkout lives: the generator runs at
 # the workspace root, but anchoring on this file keeps it honest.
@@ -180,6 +180,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
             "AuditEntry",
             "Argv",
             "RunFailed",
+            "RunTimeout",
             "parallel",
             "step",
             "pre_record",

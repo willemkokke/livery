@@ -9,9 +9,19 @@ from typing import Annotated, Any
 
 import pytest
 
-from livery.footman import _discover, _executor, _manifest, compose, registry
-from livery.footman.params import between, check, env
-from livery.footman.registry import Group, RegistrationError
+from livery.footman import (
+    _compose as compose,
+)
+from livery.footman import (
+    _discover,
+    _executor,
+    _manifest,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._params import between, check, env
+from livery.footman._registry import Group, RegistrationError
 from livery.footman.testing import Runner
 
 
@@ -632,7 +642,7 @@ def test_finalize_is_gone():
 
 
 def test_the_invocation_refuses_writes_once_frozen():
-    from livery.footman.invocation import Frozen, Invocation
+    from livery.footman._invocation import Frozen, Invocation
 
     inv = Invocation(cwd="/tmp")
     inv.root = "/tmp"  # editable at pre_tasks
@@ -1634,7 +1644,7 @@ def test_a_raising_post_tasks_fails_a_green_invocation():
 
 
 def test_a_skipped_row_never_headlines_the_exit_code():
-    from livery.footman import context as fm_context
+    from livery.footman import _context as fm_context
 
     reg = Group("root")
 

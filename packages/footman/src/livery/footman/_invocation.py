@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from livery.footman.registry import Tasks
+    from livery.footman._registry import Tasks
 
 
 class Frozen(RuntimeError):

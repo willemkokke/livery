@@ -121,9 +121,9 @@ def test_importing_footman_stays_lazy_under_the_plugin():
     import sys
 
     probe = (
-        "import livery.footman.pytest_plugin, sys; "
+        "import livery.footman._pytest_plugin, sys; "
         "print('livery.footman.testing' in sys.modules"
-        " or 'livery.footman.context' in sys.modules)"
+        " or 'livery.footman._context' in sys.modules)"
     )
     out = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
@@ -154,7 +154,7 @@ def _report(
 def test_recorder_records_phases_and_writes_a_fragment(tmp_path, monkeypatch):
     import json
 
-    from livery.footman.pytest_plugin import _TraceRecorder
+    from livery.footman._pytest_plugin import _TraceRecorder
 
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     rec = _TraceRecorder(str(tmp_path))
@@ -179,7 +179,7 @@ def test_an_xdist_worker_is_never_armed(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from typing import cast
 
-    from livery.footman import pytest_plugin
+    from livery.footman import _pytest_plugin as pytest_plugin
 
     registered: list[str] = []
     monkeypatch.setenv("FM_PROFILE_DIR", str(tmp_path))
@@ -211,7 +211,7 @@ def test_recorder_skips_reports_without_timing_and_writes_nothing_empty(tmp_path
     from types import SimpleNamespace
     from typing import cast
 
-    from livery.footman.pytest_plugin import _TraceRecorder
+    from livery.footman._pytest_plugin import _TraceRecorder
 
     rec = _TraceRecorder(str(tmp_path))
     bare = cast(pytest.TestReport, SimpleNamespace(when="call", nodeid="x"))
@@ -221,7 +221,7 @@ def test_recorder_skips_reports_without_timing_and_writes_nothing_empty(tmp_path
 
 
 def test_a_broken_sink_is_a_note_never_a_failure(tmp_path, capsys, monkeypatch):
-    from livery.footman.pytest_plugin import _TraceRecorder
+    from livery.footman._pytest_plugin import _TraceRecorder
 
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     rec = _TraceRecorder(str(tmp_path / "never-made"))
@@ -234,7 +234,7 @@ def test_configure_arms_only_under_a_profiled_run(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from typing import cast
 
-    from livery.footman import pytest_plugin
+    from livery.footman import _pytest_plugin as pytest_plugin
 
     registered: list[str] = []
     config = cast(

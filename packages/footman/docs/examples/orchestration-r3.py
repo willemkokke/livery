@@ -18,7 +18,7 @@ def test(): ...
 # --8<-- [start:part-1]
 from typing import Annotated
 from livery.footman.api import task
-from livery.footman.params import forward
+from livery.footman._params import forward
 
 
 @task(pre=[fmt, lint, test])

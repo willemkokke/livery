@@ -38,13 +38,14 @@ from livery.footman import (
     _globals,
     _notes,
     _signals,
-    context,
-    registry,
 )
-from livery.footman._discover import defining_dir
-from livery.footman._manifest import resolved_signature
-from livery.footman._split import ChainError, Segment
-from livery.footman.context import (
+from livery.footman import (
+    _context as context,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._context import (
     Context,
     Failed,
     Result,
@@ -54,8 +55,11 @@ from livery.footman.context import (
     coroutine_refusal,
     generator_refusal,
 )
-from livery.footman.params import Secret
-from livery.footman.registry import Group, Task
+from livery.footman._discover import defining_dir
+from livery.footman._manifest import resolved_signature
+from livery.footman._params import Secret
+from livery.footman._registry import Group, Task
+from livery.footman._split import ChainError, Segment
 
 EX_USAGE = 64
 """The refusal exit code — footman did not understand the command line.

@@ -10,8 +10,8 @@ and BOTH checkers turn the line red — mypy through `warn_unused_ignores`,
 basedpyright through the line-1 pragma. The ignore is the assertion.
 """
 
+from livery.footman._registry import requires_tool
 from livery.footman.api import Runner, parallel, run, select, task, track
-from livery.footman.registry import requires_tool
 
 
 def _policy_options_are_a_closed_typed_set() -> None:

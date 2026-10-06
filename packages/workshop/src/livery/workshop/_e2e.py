@@ -600,7 +600,7 @@ def _loop_home(kind: str) -> Path:
     different registries and different histories, and one pass must
     never adopt the other lane's checkout.
     """
-    from livery.footman.context import data_dir
+    from livery.footman.api import data_dir
 
     home = data_dir() / "workshop-e2e"
     if CURRENT.name:

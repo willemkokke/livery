@@ -16,8 +16,7 @@ from livery.footman._coerce import peel
 from livery.footman._complete import complete
 from livery.footman._describe import example_parts, listed_params, usage_parts
 from livery.footman._executor import EX_USAGE, run_chain
-from livery.footman._split import ChainError, split_chain
-from livery.footman.params import (
+from livery.footman._params import (
     Arg,
     Exists,
     Forward,
@@ -30,7 +29,8 @@ from livery.footman.params import (
     nosplit,
     suggest,
 )
-from livery.footman.registry import Group
+from livery.footman._registry import Group
+from livery.footman._split import ChainError, split_chain
 
 
 class _StandInMarker:
@@ -516,7 +516,7 @@ def test_a_completer_runs_only_where_its_values_are_wanted(tmp_path, monkeypatch
         "from typing import Annotated\n"
         "from pathlib import Path\n"
         "from livery.footman.api import task\n"
-        "from livery.footman.params import suggest\n\n"
+        "from livery.footman._params import suggest\n\n"
         f"LOG = Path({str(calls)!r})\n\n\n"
         "def branches() -> list[str]:\n"
         "    LOG.write_text(LOG.read_text() + 'x')\n"
@@ -555,7 +555,7 @@ def test_help_shows_dynamic_values_and_says_they_are_dynamic(tmp_path, monkeypat
         "from __future__ import annotations\n"
         "from typing import Annotated\n"
         "from livery.footman.api import task\n"
-        "from livery.footman.params import suggest\n\n\n"
+        "from livery.footman._params import suggest\n\n\n"
         "def branches() -> list[str]:\n"
         "    return ['main', 'dev']\n\n\n"
         "@task\n"

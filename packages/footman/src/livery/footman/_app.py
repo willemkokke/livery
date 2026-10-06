@@ -32,12 +32,18 @@ from livery.footman import (
     _script,
     _signals,
     _split,
-    context,
-    invocation,
-    registry,
 )
+from livery.footman import (
+    _context as context,
+)
+from livery.footman import (
+    _invocation as invocation,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._application import DEFAULT_BRAND, Brand
 from livery.footman._executor import EX_USAGE
-from livery.footman.app import DEFAULT_BRAND, Brand
 
 # The brand (names + version) in effect for the current invocation. Set at the
 # top of `run()`; a CLI is one invocation per process, so a module global is
@@ -333,7 +339,7 @@ def _base_tree(
     installs them; a discovered built-in is a record footman can rebuild.
     The one refusal left is the user's config naming a plugin that does
     not mount, since that is their spelling or install to fix."""
-    from livery.footman import compose
+    from livery.footman import _compose as compose
 
     declared_by_user = set(_config.user_builtin())
     with registry.capture() as base:
@@ -1033,7 +1039,8 @@ def _plugins_report(reg: registry.Group) -> int:
     code could crash a listing, and a repeated package summary taught
     nothing.
     """
-    from livery.footman import _entries, compose
+    from livery.footman import _compose as compose
+    from livery.footman import _entries
 
     eps = sorted(
         _entries.installed_entry_points(compose.ENTRY_POINT_GROUP), key=lambda e: e.name

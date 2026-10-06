@@ -12,8 +12,8 @@ import pytest
 
 from livery.footman import _manifest, _notes
 from livery.footman._executor import run_chain
+from livery.footman._registry import Group
 from livery.footman._split import split_chain
-from livery.footman.registry import Group
 from livery.footman.testing import Runner
 
 

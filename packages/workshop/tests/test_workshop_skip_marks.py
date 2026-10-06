@@ -11,7 +11,7 @@ TASKS = textwrap.dedent(
     """
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
 
     plugin("footman.profile")
 

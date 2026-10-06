@@ -120,7 +120,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
     return root
 
 

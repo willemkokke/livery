@@ -280,7 +280,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
     import livery.footman.api as footman
-    import livery.footman.context
+    import livery.footman._context
 
     footman.parallel  # resolve the lazy re-export before overriding it
 
@@ -294,7 +294,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
         if failure is not None:
             raise failure
 
-    livery.footman.context.parallel = _inline_parallel
+    livery.footman._context.parallel = _inline_parallel
     footman.__dict__["parallel"] = _inline_parallel
 
 def _fm_sandbox_line(line):
@@ -342,7 +342,7 @@ def _fm_complete(code, line):
     # manifest tree once per source text, then every Tab is a pure walk —
     # the same complete() a shell hook consults.
     import types
-    from livery.footman import _manifest as manifest, registry
+    from livery.footman import _manifest as manifest, _registry as registry
     from livery.footman._complete import complete
     if _fm_manifest["code"] != code:
         module = types.ModuleType("tasks")

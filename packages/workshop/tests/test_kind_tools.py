@@ -10,7 +10,7 @@ from typing import ClassVar
 
 import pytest
 
-from livery.footman.context import Failed
+from livery.footman.api import Failed
 from livery.toolroom.store.api import (
     Artifact,
     Deployment,
@@ -399,7 +399,7 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
         return 0
 
     monkeypatch.setattr(_engine, "run_installer", installing)
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
@@ -962,7 +962,7 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
         pointer[record.name] = {"tree": str(store.put(data)), "record": "x"}
     (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": pointer}))
     (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "index"\n')
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
     assert _tools.write_lock(root) == _tools.write_lock(root)
     assert _tools.write_lock(root).tools["pytest"].version == "1.1.0"
 

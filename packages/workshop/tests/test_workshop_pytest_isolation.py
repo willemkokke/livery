@@ -76,7 +76,7 @@ def test_a_test_that_leaks_into_the_global_registry_fails_by_name(
 ) -> None:
     pytester.makepyfile(
         """
-        from livery.footman import registry
+        from livery.footman import _registry as registry
 
         def test_leaks():
             registry.root.tasks["leaked"] = object()

@@ -22,7 +22,7 @@ TASKS = textwrap.dedent(
 
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
 
     plugin("footman.profile")
 
@@ -138,8 +138,8 @@ SECRET_TASKS = textwrap.dedent(
     """
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
-    from livery.footman.params import Secret
+    from livery.footman._compose import plugin
+    from livery.footman._params import Secret
 
     plugin("footman.profile")
 
@@ -196,7 +196,7 @@ FRAGMENT_TASKS = textwrap.dedent(
 
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
 
     plugin("footman.profile")
 
@@ -282,7 +282,7 @@ CHILD_TASKS = textwrap.dedent(
 
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
 
     plugin("footman.profile")
 
@@ -310,7 +310,7 @@ HANDOFF_TASKS = textwrap.dedent(
 
     import livery.footman.api as footman
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
     from livery.footman import profile
 
     plugin("footman.profile")
@@ -580,7 +580,7 @@ def test_the_successor_adopts_the_box_it_was_handed(tmp_path, monkeypatch):
 
 
 def test_an_inherited_anchor_is_taken_only_from_the_same_run_clock(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     own = (1000.0, 50.0)
     # A garbled entry, and a pairing from another clock domain, are refused.

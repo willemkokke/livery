@@ -531,7 +531,9 @@ def test_task_decorator_protocol_matches_group_task():
     # overload to `Group.task`'s keyword surface, or the two drift silently.
     import ast as ast_
 
-    source = (Path(footman.__file__).parent / "registry.py").read_text(encoding="utf-8")
+    source = (Path(footman.__file__).parent / "_registry.py").read_text(
+        encoding="utf-8"
+    )
     tree = ast_.parse(source)
 
     def kwonly(fn: ast_.FunctionDef) -> dict[str, tuple[str, str]]:

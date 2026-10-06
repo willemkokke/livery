@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from livery.footman import _describe, _manifest, registry
+from livery.footman import _describe, _manifest
+from livery.footman import _registry as registry
 from livery.footman._complete import complete
 from livery.footman._executor import run_chain
-from livery.footman._split import ChainError, split_chain
-from livery.footman.params import Forward
-from livery.footman.registry import (
+from livery.footman._params import Forward
+from livery.footman._registry import (
     Group,
     RegistrationError,
     is_atomic,
@@ -20,6 +20,7 @@ from livery.footman.registry import (
     pre_deps,
     task_confirm,
 )
+from livery.footman._split import ChainError, split_chain
 
 
 def drive(build, line):

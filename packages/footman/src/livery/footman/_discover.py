@@ -18,9 +18,9 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from livery.footman import registry
-from livery.footman.invocation import Invocation
-from livery.footman.registry import Group, Task
+from livery.footman import _registry as registry
+from livery.footman._invocation import Invocation
+from livery.footman._registry import Group, Task
 
 # Attribute stamped on every task fn: the directory of the file that defined
 # it. The scheduler uses it as the task's working directory.
@@ -56,7 +56,7 @@ class HookError(Exception):
         self.kind = kind
         self.name = name
         self.original = original
-        from livery.footman import context
+        from livery.footman import _context as context
 
         if context._is_deliberate_stop(original):
             # A hook that *chose* to stop is talking to the user, and its

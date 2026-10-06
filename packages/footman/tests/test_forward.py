@@ -6,9 +6,9 @@ from typing import Annotated
 
 from livery.footman import _manifest
 from livery.footman._executor import forward_map, run_chain
+from livery.footman._params import Forward, forward
+from livery.footman._registry import Group
 from livery.footman._split import Segment, split_chain
-from livery.footman.params import Forward, forward
-from livery.footman.registry import Group
 
 
 def drive(build, line):

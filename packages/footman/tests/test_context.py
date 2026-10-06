@@ -13,10 +13,7 @@ import pytest
 
 import livery.toolroom.tools.api as tools
 from livery.footman import _manifest
-from livery.footman._executor import run_chain
-from livery.footman._split import split_chain
-from livery.footman._step import step
-from livery.footman.context import (
+from livery.footman._context import (
     Context,
     Invocation,
     RunFailed,
@@ -25,8 +22,11 @@ from livery.footman.context import (
     run,
     use_context,
 )
-from livery.footman.params import Many, Secret, ask, between, suggest
-from livery.footman.registry import Group
+from livery.footman._executor import run_chain
+from livery.footman._params import Many, Secret, ask, between, suggest
+from livery.footman._registry import Group
+from livery.footman._split import split_chain
+from livery.footman._step import step
 
 
 def drive(build, line, **cfg):
@@ -58,7 +58,7 @@ def _exit(code: int) -> str:
 
 
 def test_colored_predicate(monkeypatch):
-    from livery.footman.context import _colored
+    from livery.footman._context import _colored
 
     monkeypatch.delenv("NO_COLOR", raising=False)
     # never wins over everything; always forces on even off a terminal;
@@ -77,8 +77,8 @@ def test_colored_predicate(monkeypatch):
 
 
 def test_attended_reader(monkeypatch):
-    from livery.footman import context
-    from livery.footman.context import attended
+    from livery.footman import _context as context
+    from livery.footman._context import attended
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     with use_context(Context()):
@@ -97,7 +97,7 @@ def test_attended_reader(monkeypatch):
 
 
 def test_tty_reader_ignores_colour_policy():
-    from livery.footman.context import tty
+    from livery.footman._context import tty
 
     assert tty() is False  # outside a run, nothing is stamped
     # NO_COLOR undresses the output; the person is still watching.
@@ -109,7 +109,7 @@ def test_tty_reader_ignores_colour_policy():
 
 
 def test_colored_reader(monkeypatch):
-    from livery.footman.context import colored
+    from livery.footman._context import colored
 
     monkeypatch.delenv("NO_COLOR", raising=False)
     with use_context(Context(tty=True)):
@@ -121,7 +121,7 @@ def test_colored_reader(monkeypatch):
 
 
 def test_color_env_helper():
-    from livery.footman.context import color_env
+    from livery.footman._context import color_env
 
     assert color_env(True) == {
         "FORCE_COLOR": "1",
@@ -135,7 +135,7 @@ def test_color_env_helper():
 
 
 def test_run_colour_on_decision(monkeypatch):
-    from livery.footman.context import run_colour_on
+    from livery.footman._context import run_colour_on
 
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("TERM", "xterm")
@@ -150,7 +150,7 @@ def test_run_colour_on_decision(monkeypatch):
 
 
 def test_color_environment_sets_once_and_restores(monkeypatch):
-    from livery.footman.context import color_environment
+    from livery.footman._context import color_environment
 
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.delenv("FORCE_COLOR", raising=False)
@@ -540,7 +540,7 @@ def test_routing_line_buffers_the_real_streams_and_survives_one_that_will_not(
     """
     import io
 
-    from livery.footman import context as ctxmod
+    from livery.footman import _context as ctxmod
 
     class _Stubborn(io.StringIO):
         def reconfigure(self, **kwargs: object) -> None:
@@ -641,7 +641,7 @@ def test_run_callable_foreign_cwd_is_a_taught_error(tmp_path):
 
     # run(callable) retired; the guard lives on under the tools bridge's
     # in-process lane, so it is pinned at the machinery it protects.
-    from livery.footman.context import _run_callable
+    from livery.footman._context import _run_callable
 
     def tasks(reg):
         @reg.task
@@ -670,7 +670,7 @@ def test_run_callable_matching_cwd_runs(tmp_path):
                 seen["cwd"] = os.getcwd()
                 return 0
 
-            from livery.footman.context import _run_callable
+            from livery.footman._context import _run_callable
 
             _run_callable(tool, (), cwd=Path.cwd())
 
@@ -752,7 +752,7 @@ def test_in_process_stderr_is_captured():
 
 
 def test_routing_is_reentrant():
-    import livery.footman.context as ctxmod
+    import livery.footman._context as ctxmod
 
     with ctxmod.routing():
         outer = ctxmod._router
@@ -941,7 +941,7 @@ def test_run_string_with_shell_operator_is_taught():
 
 
 def test_shell_operator_detection_is_precise():
-    from livery.footman.context import _shell_operator
+    from livery.footman._context import _shell_operator
 
     assert _shell_operator("tar cf - . | ssh host") == "|"
     assert _shell_operator("build && test") == "&&"
@@ -1023,10 +1023,10 @@ def test_non_utf8_subprocess_output_does_not_crash():
 
 
 def test_resolve_shell_kinds_and_strategies(monkeypatch):
-    from livery.footman.context import _resolve_shell
+    from livery.footman._context import _resolve_shell
 
     # no hints
-    monkeypatch.setattr("livery.footman.context.os.path.isfile", lambda p: False)
+    monkeypatch.setattr("livery.footman._context.os.path.isfile", lambda p: False)
     monkeypatch.setattr("shutil.which", lambda n: f"/usr/bin/{n}")
     monkeypatch.setattr(sys, "platform", "linux")
     assert _resolve_shell(True) == ["/usr/bin/bash", "-c"]  # posix policy → bash
@@ -1041,9 +1041,9 @@ def test_resolve_shell_kinds_and_strategies(monkeypatch):
 
 
 def test_resolve_shell_posix_falls_back_to_sh_then_teaches(monkeypatch):
-    from livery.footman.context import _resolve_shell
+    from livery.footman._context import _resolve_shell
 
-    monkeypatch.setattr("livery.footman.context.os.path.isfile", lambda p: False)
+    monkeypatch.setattr("livery.footman._context.os.path.isfile", lambda p: False)
     # No bash, but sh exists → sh.
     monkeypatch.setattr("shutil.which", lambda n: "/bin/sh" if n == "sh" else None)
     assert _resolve_shell(True) == ["/bin/sh", "-c"]
@@ -1057,7 +1057,7 @@ def test_resolve_shell_windows_cmd_and_native_use_comspec(monkeypatch):
     """The cmd/native-on-Windows branch, platform-independent by design —
     a POSIX runner would otherwise leave it dark everywhere but Windows,
     and the merged coverage would carry a permanently missing line."""
-    from livery.footman.context import _resolve_shell
+    from livery.footman._context import _resolve_shell
 
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setenv("COMSPEC", r"C:\WINDOWS\system32\cmd.exe")
@@ -1066,10 +1066,10 @@ def test_resolve_shell_windows_cmd_and_native_use_comspec(monkeypatch):
 
 
 def test_resolve_shell_named_shell_missing_is_taught(monkeypatch):
-    from livery.footman.context import _resolve_shell
+    from livery.footman._context import _resolve_shell
 
     # no hints
-    monkeypatch.setattr("livery.footman.context.os.path.isfile", lambda p: False)
+    monkeypatch.setattr("livery.footman._context.os.path.isfile", lambda p: False)
     monkeypatch.setattr("shutil.which", lambda n: None)
     with pytest.raises(ValueError, match="'zsh' was not found on PATH"):
         _resolve_shell("zsh")
@@ -1090,7 +1090,7 @@ def test_run_shell_true_actually_pipes():
 
 def test_run_shell_true_reads_the_configured_policy(monkeypatch):
     # `[shell] default` flows into ctx.shell_default; run(shell=True) resolves it.
-    monkeypatch.setattr("livery.footman.context.os.path.isfile", lambda p: False)
+    monkeypatch.setattr("livery.footman._context.os.path.isfile", lambda p: False)
     monkeypatch.setattr("shutil.which", lambda n: f"/bin/{n}")
     captured = {}
 
@@ -1098,14 +1098,14 @@ def test_run_shell_true_reads_the_configured_policy(monkeypatch):
         captured["argv"] = argv
         return 0, "", "", False
 
-    monkeypatch.setattr("livery.footman.context._run_subprocess", fake)
+    monkeypatch.setattr("livery.footman._context._run_subprocess", fake)
     with use_context(Context(shell_default="pwsh")):
         run("echo hi", shell=True)
     assert captured["argv"][:2] == ["/bin/pwsh", "-Command"]  # policy honoured
 
 
 def test_shell_strict_and_clean_prep_per_interpreter():
-    from livery.footman.context import _shell_prep
+    from livery.footman._context import _shell_prep
 
     # strict: bash/zsh get pipefail; sh degrades to errexit-only.
     assert _shell_prep("bash", "x", strict=True, clean=False) == (
@@ -1166,7 +1166,7 @@ def test_run_list_with_shell_is_a_taught_error():
 
 
 def test_shown_line_quotes_the_windows_way(monkeypatch):
-    from livery.footman.context import _shell_quote
+    from livery.footman._context import _shell_quote
 
     # POSIX quoting (pin the platform — this runs on Windows CI too).
     monkeypatch.setattr(sys, "platform", "linux")
@@ -1181,7 +1181,7 @@ def test_shown_line_quotes_the_windows_way(monkeypatch):
 
 
 def test_windows_string_commands_are_not_shlex_split(monkeypatch):
-    from livery.footman import context as context_mod
+    from livery.footman import _context as context_mod
 
     calls = {}
 
@@ -1502,8 +1502,8 @@ def test_step_lines_carry_an_aligned_name_column(capsys):
 
 
 def test_progress_and_track_report_to_the_status_line():
+    from livery.footman._context import Context, set_status, use_context
     from livery.footman.api import progress, track
-    from livery.footman.context import Context, set_status, use_context
 
     class FakeStatus:
         def __init__(self):
@@ -1564,7 +1564,7 @@ def test_progress_outside_a_run_is_a_noop():
 
 
 def test_prompt_off_a_terminal_uses_default_then_raises(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: False)
     # A default makes an unattended run deterministic instead of hung.
@@ -1575,7 +1575,7 @@ def test_prompt_off_a_terminal_uses_default_then_raises(monkeypatch):
 
 
 def test_prompt_reads_stdin_and_writes_the_prompt_to_stderr(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("Ada\n"))
@@ -1593,7 +1593,7 @@ def test_prompt_reads_stdin_and_writes_the_prompt_to_stderr(monkeypatch):
 def test_prompt_bypasses_the_capture_sink(monkeypatch):
     # Even when a task's stdout is captured (parallel/JSON), the prompt goes
     # to the real terminal, not into the buffer.
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("blue\n"))
@@ -1609,7 +1609,7 @@ def test_prompt_bypasses_the_capture_sink(monkeypatch):
 
 
 def test_prompt_empty_line_falls_back_to_default(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))  # just Enter
@@ -1618,7 +1618,7 @@ def test_prompt_empty_line_falls_back_to_default(monkeypatch):
 
 
 def test_confirm_yes_no_and_default(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(context, "real_stderr", io.StringIO)
@@ -1637,7 +1637,7 @@ def test_confirm_yes_no_and_default(monkeypatch):
 
 
 def test_interactive_primitives_are_guarded_in_a_plain_task():
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # Inside a non-interactive task body the prompt would be swallowed by the
     # capture buffer — so it is a loud, taught error naming both fixes. (No
@@ -1652,7 +1652,7 @@ def test_interactive_primitives_are_guarded_in_a_plain_task():
 
 
 def test_interactive_primitives_allowed_in_an_interactive_task(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("Ada\n"))
@@ -1663,7 +1663,7 @@ def test_interactive_primitives_allowed_in_an_interactive_task(monkeypatch):
 
 
 def test_no_input_refuses_to_prompt(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)  # even on a tty
     with use_context(Context(no_input=True)):
@@ -1674,7 +1674,7 @@ def test_no_input_refuses_to_prompt(monkeypatch):
 
 
 def test_prompt_typed_coerces_and_re_asks(monkeypatch, capfd):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("abc\n7\n"))
@@ -1684,7 +1684,7 @@ def test_prompt_typed_coerces_and_re_asks(monkeypatch, capfd):
 
 
 def test_prompt_typed_runs_the_marker_checks(monkeypatch, capfd):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("9\n3\n"))
@@ -1695,7 +1695,7 @@ def test_prompt_typed_runs_the_marker_checks(monkeypatch, capfd):
 
 
 def test_prompt_typed_literal_is_a_choice(monkeypatch, capfd):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("dev\nprod\n"))
@@ -1706,7 +1706,7 @@ def test_prompt_typed_literal_is_a_choice(monkeypatch, capfd):
 
 
 def test_prompt_typed_empty_and_unattended_take_the_default(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
@@ -1718,7 +1718,7 @@ def test_prompt_typed_empty_and_unattended_take_the_default(monkeypatch):
 
 
 def test_prompt_typed_refusals_are_loud_even_unattended():
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # Programming errors refuse by name regardless of attendance — a default
     # must not paper over a wrong type= in CI.
@@ -1732,7 +1732,7 @@ def test_prompt_typed_refusals_are_loud_even_unattended():
 
 
 def test_assume_yes_auto_confirms():
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # --yes answers every confirm without reading stdin (none is provided).
     with use_context(Context(assume_yes=True)):
@@ -1740,7 +1740,7 @@ def test_assume_yes_auto_confirms():
 
 
 def test_select_single_multiple_and_pairs(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(context, "real_stderr", io.StringIO)
@@ -1759,7 +1759,7 @@ def test_select_single_multiple_and_pairs(monkeypatch):
 
 
 def test_select_rejects_bad_input_and_degrades(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "real_stderr", io.StringIO)
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
@@ -1779,7 +1779,7 @@ def test_select_rejects_bad_input_and_degrades(monkeypatch):
 
 
 def test_prompt_guard_fires_in_a_real_run():
-    from livery.footman import context
+    from livery.footman import _context as context
 
     def build(reg):
         @reg.task
@@ -1792,7 +1792,7 @@ def test_prompt_guard_fires_in_a_real_run():
 
 
 def test_interactive_task_may_prompt(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("Ada\n"))
@@ -1814,7 +1814,7 @@ def test_interactive_task_may_prompt(monkeypatch):
 
 
 def test_ask_prompts_a_required_param(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("1.2.3\n"))
@@ -1833,7 +1833,7 @@ def test_ask_prompts_a_required_param(monkeypatch):
 
 
 def test_ask_cli_value_wins_over_the_prompt(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # A value on the line means no prompt — the (wrong) stdin is never read.
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
@@ -1853,7 +1853,7 @@ def test_ask_cli_value_wins_over_the_prompt(monkeypatch):
 
 
 def test_ask_offers_the_default_and_enter_accepts_it(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # A default no longer silences the question — it becomes the offer, so
     # `ask()` is usable on any parameter rather than defaultless ones only.
@@ -1874,7 +1874,7 @@ def test_ask_offers_the_default_and_enter_accepts_it(monkeypatch):
 
 
 def test_ask_takes_the_answer_over_the_default(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("minor\n"))
@@ -1893,7 +1893,7 @@ def test_ask_takes_the_answer_over_the_default(monkeypatch):
 
 
 def test_ask_with_a_default_falls_back_where_nobody_can_be_asked(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # No terminal, but there *is* another answer, so this is not a refusal:
     # a person gets asked, an unattended run gets the default.
@@ -1912,7 +1912,7 @@ def test_ask_with_a_default_falls_back_where_nobody_can_be_asked(monkeypatch):
 
 
 def test_ask_re_asks_on_a_bad_value(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # A typed param re-asks until the answer coerces — "abc" then "5".
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
@@ -1932,7 +1932,7 @@ def test_ask_re_asks_on_a_bad_value(monkeypatch):
 
 
 def test_ask_validates_a_literal_choice(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # A Literal is a typed choice: "dev" is rejected, "prod" accepted.
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
@@ -1952,7 +1952,7 @@ def test_ask_validates_a_literal_choice(monkeypatch):
 
 
 def test_ask_off_a_terminal_fails_loudly(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
     from livery.footman._split import ChainError
 
     # No tty, no default: the required value can't be prompted. Since asks
@@ -1972,7 +1972,7 @@ def test_ask_off_a_terminal_fails_loudly(monkeypatch):
 
 
 def test_confirm_gate_runs_when_confirmed(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))
@@ -1991,7 +1991,7 @@ def test_confirm_gate_runs_when_confirmed(monkeypatch):
 
 
 def test_confirm_gate_denied_skips_the_task(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("n\n"))
@@ -2026,7 +2026,7 @@ def test_confirm_gate_yes_bypasses():
 def test_confirm_gate_under_dry_run_assumes_yes(monkeypatch, capsys):
     # A rehearsal answers every gate yes — a gate answered no would hide
     # the very work the rehearsal exists to show — and notes it did.
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: False)
 
@@ -2048,10 +2048,10 @@ def test_prompt_layer_is_unattended_under_dry_run():
     # with no default fails loudly instead of hanging on input.
     import pytest as _pytest
 
+    from livery.footman._context import Context, use_context
     from livery.footman.api import confirm as fm_confirm
     from livery.footman.api import prompt as fm_prompt
     from livery.footman.api import select as fm_select
-    from livery.footman.context import Context, use_context
 
     ctx = Context(dry_run=True, interactive=True, in_task=True)
     with use_context(ctx):
@@ -2063,7 +2063,7 @@ def test_prompt_layer_is_unattended_under_dry_run():
 
 
 def test_confirm_gate_off_a_terminal_denies(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: False)
 
@@ -2080,7 +2080,7 @@ def test_confirm_gate_off_a_terminal_denies(monkeypatch):
 
 
 def test_select_scrubs_control_characters_in_labels(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("1\n"))
@@ -2106,7 +2106,8 @@ def _live_options():  # module-level: `from __future__ import annotations` makes
 
 
 def test_ask_front_loads_before_any_body_runs(monkeypatch):
-    from livery.footman import _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _schedule
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     order = []
@@ -2135,7 +2136,8 @@ def test_ask_front_loads_before_any_body_runs(monkeypatch):
 
 
 def test_ask_with_live_suggest_resolves_after_its_prereqs(monkeypatch):
-    from livery.footman import _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _schedule
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("1\n"))  # pick from the menu
@@ -2161,7 +2163,8 @@ def test_ask_with_live_suggest_resolves_after_its_prereqs(monkeypatch):
 
 
 def test_ask_refuses_up_front_without_a_terminal(monkeypatch):
-    from livery.footman import _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _schedule
     from livery.footman._split import ChainError
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: False)
@@ -2188,7 +2191,8 @@ def test_ask_with_live_suggest_under_no_input_fails_that_task_loudly(monkeypatch
     # menu may need a dep's output), so --no-input can't refuse it up front —
     # the task fails loudly at launch instead, and can never hang. A sibling
     # is untouched.
-    from livery.footman import _schedule, context
+    from livery.footman import _context as context
+    from livery.footman import _schedule
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     ran = []
@@ -2218,7 +2222,7 @@ def _menu_opts():
 
 
 def test_ask_with_strict_suggest_is_a_menu(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("2\n"))
@@ -2236,7 +2240,7 @@ def test_ask_with_strict_suggest_is_a_menu(monkeypatch):
 
 
 def test_ask_with_strict_suggest_multi_select(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("1,3\n"))
@@ -2254,7 +2258,7 @@ def test_ask_with_strict_suggest_multi_select(monkeypatch):
 
 
 def test_ask_menu_re_asks_on_a_bad_number(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("9\n1\n"))
@@ -2272,7 +2276,7 @@ def test_ask_menu_re_asks_on_a_bad_number(monkeypatch):
 
 
 def test_ask_with_best_effort_suggest_stays_free_text(monkeypatch, capfd):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("custom\n"))
@@ -2292,7 +2296,8 @@ def test_ask_with_best_effort_suggest_stays_free_text(monkeypatch, capfd):
 
 
 def test_secret_answers_arrive_redacting(monkeypatch):
-    from livery.footman import _executor, context
+    from livery.footman import _context as context
+    from livery.footman import _executor
     from livery.footman._coerce import peel
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
@@ -2324,7 +2329,7 @@ def test_secret_params_publish_no_values():
 
 
 def test_prompt_eof_is_a_taught_error_not_a_spin(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))  # closed pipe
@@ -2334,7 +2339,7 @@ def test_prompt_eof_is_a_taught_error_not_a_spin(monkeypatch):
 
 
 def test_prompt_echo_scrubs_reflected_input(monkeypatch, capfd):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(sys, "stdin", io.StringIO("\x1b[31mbad\n5\n"))
@@ -2355,7 +2360,7 @@ def test_prompt_secret_answers_redact_like_ask_does(monkeypatch):
     """Hiding a value while it is typed and then printing it in the first
     traceback would be a strange kind of secret — the mid-task question and
     the declared parameter answer the same way."""
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: True)
     monkeypatch.setattr(context, "_prompt_core", lambda *a, **k: "hunter2")
@@ -2371,7 +2376,7 @@ def test_prompt_secret_answers_redact_like_ask_does(monkeypatch):
 
 def test_prompt_secret_wraps_an_unattended_default(monkeypatch):
     # Where the value came from doesn't change what it is.
-    from livery.footman import context
+    from livery.footman import _context as context
 
     monkeypatch.setattr(context, "_stdin_is_tty", lambda: False)
     answer = context.prompt("token? ", default="fallback", secret=True)
@@ -2482,7 +2487,7 @@ def test_a_secret_argument_is_out_of_the_failure_message(capsys):
 
 
 def test_a_timed_out_secret_command_redacts_too():
-    from livery.footman.context import RunTimeout
+    from livery.footman._context import RunTimeout
 
     token = Secret("hunter2")
 
@@ -2637,7 +2642,7 @@ def _sleeper(seconds: float) -> list[str]:
 
 
 def test_a_timeout_kills_the_call_and_raises_runtimeout():
-    from livery.footman.context import Context, RunFailed, RunTimeout, use_context
+    from livery.footman._context import Context, RunFailed, RunTimeout, use_context
 
     with use_context(Context()), pytest.raises(RunTimeout) as caught:
         run(_sleeper(30), timeout=0.5)
@@ -2651,7 +2656,7 @@ def test_a_timeout_kills_the_call_and_raises_runtimeout():
 
 
 def test_a_timeout_under_nofail_returns_the_result():
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     with use_context(Context()):
         result = run(_sleeper(30), timeout=0.5, nofail=True)
@@ -2663,7 +2668,7 @@ def test_a_timeout_under_nofail_returns_the_result():
 
 
 def test_a_missing_executable_raises_a_taught_command_not_found():
-    from livery.footman.context import CommandNotFound, Context, use_context
+    from livery.footman._context import CommandNotFound, Context, use_context
 
     with use_context(Context()), pytest.raises(CommandNotFound) as caught:
         run(["definitely-not-installed-anywhere", "--version"])
@@ -2681,7 +2686,7 @@ def test_a_bare_name_spawns_by_the_path_a_shell_would_find_on_windows(
     """Windows starts a process by an exact file, so a `.cmd` launcher on
     PATH is only found the way a shell finds it, through PATHEXT.
     """
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # Nothing resolves: the name stays bare, so the missing-tool error names it.
     monkeypatch.setattr(context.shutil, "which", lambda name: None)
@@ -2709,7 +2714,7 @@ def test_a_bare_name_spawns_by_the_path_a_shell_would_find_on_windows(
 
 
 def test_a_missing_executable_is_not_silenced_by_nofail():
-    from livery.footman.context import CommandNotFound, Context, use_context
+    from livery.footman._context import CommandNotFound, Context, use_context
 
     # No command ran, so there is no exit code for nofail to accept — the
     # environment defect raises either way.
@@ -2718,7 +2723,7 @@ def test_a_missing_executable_is_not_silenced_by_nofail():
 
 
 def test_a_missing_cwd_keeps_the_honest_os_error(tmp_path):
-    from livery.footman.context import CommandNotFound, Context, use_context
+    from livery.footman._context import CommandNotFound, Context, use_context
 
     # POSIX spells it FileNotFoundError, Windows NotADirectoryError
     # ([WinError 267]) — either way the interpreter exists and the
@@ -2733,7 +2738,7 @@ def test_a_missing_cwd_keeps_the_honest_os_error(tmp_path):
 
 
 def test_a_call_inside_its_timeout_is_untouched():
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     with use_context(Context()):
         result = run(_sleeper(0), timeout=30)
@@ -2745,7 +2750,7 @@ def test_a_call_inside_its_timeout_is_untouched():
 def test_run_refuses_a_bare_callable_and_teaches_the_lift():
     # run() runs commands; in-process work is a step. (A step's own
     # timeout= is honoured at checkpoints — test_step pins it.)
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     with use_context(Context()), pytest.raises(TypeError, match=r"work is a step"):
         run(lambda: 0, timeout=5)
@@ -2756,7 +2761,7 @@ def test_run_refuses_trailing_arguments_it_would_have_dropped():
     # ever reached the label, so `run("echo", "hi")` passed green having
     # printed nothing, and `run("sh", "-c", …)` ran a bare shell on the
     # caller's terminal. Refused now, naming the spelling that works.
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     with use_context(Context()):
         with pytest.raises(TypeError, match=r"run\(\['echo', 'hi'\]\)"):
@@ -2771,7 +2776,7 @@ def test_run_refuses_trailing_arguments_it_would_have_dropped():
 def test_run_input_feeds_the_childs_stdin():
     # The write side of the process boundary: the payload arrives whole and
     # the pipe closes, so a child reading to EOF finishes rather than hangs.
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     reader = "import sys; print(sys.stdin.read().upper(), end='')"
     with use_context(Context()):
@@ -2783,7 +2788,7 @@ def test_run_without_input_leaves_stdin_alone():
     # No payload, no pipe: the child sees whatever stdin the process had —
     # here not-a-terminal, and crucially not an instantly-EOF pipe footman
     # opened on its behalf.
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     probe = "import sys; print(sys.stdin is not None)"
     with use_context(Context()):
@@ -2794,7 +2799,7 @@ def test_run_without_input_leaves_stdin_alone():
 def test_run_input_on_an_in_process_tool_is_a_taught_error():
     # Reached only through the tools bridge's in-process lane: a subprocess
     # has a stdin to feed, a Python call does not.
-    from livery.footman.context import Context, Invocation, use_context
+    from livery.footman._context import Context, Invocation, use_context
 
     show = Invocation(parts=(("prog", "demo"),), exact=("demo",))
     with (
@@ -2805,7 +2810,7 @@ def test_run_input_on_an_in_process_tool_is_a_taught_error():
 
 
 def test_a_timed_out_call_is_still_a_step_unless_it_says_otherwise():
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     ctx = Context()
     with use_context(ctx):
@@ -2826,7 +2831,7 @@ def test_a_captured_windows_child_gets_no_console_window(monkeypatch):
     git-bash with no console at all."""
     import subprocess as sp
 
-    from livery.footman import context as context_mod
+    from livery.footman import _context as context_mod
 
     seen: dict[str, object] = {}
 
@@ -3353,7 +3358,7 @@ def test_the_clock_anchor_skips_a_preempted_reading(monkeypatch):
     one lost none. The anchor pairs the wall clock with the narrow
     bracket's midpoint, so the 50 ms never enters the mapping.
     """
-    from livery.footman import context
+    from livery.footman import _context as context
 
     perf = iter([10.0, 10.05, 20.0, 20.000002, 30.0, 30.00001])
     wall = iter([1000.0, 2000.0, 3000.0])

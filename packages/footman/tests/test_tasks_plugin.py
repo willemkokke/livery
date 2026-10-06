@@ -180,7 +180,7 @@ def test_no_docs_parameter_says_only_its_own_type():
 def test_shots_lists_unavailable_without_rich(plugin_project, capsys, monkeypatch):
     # The @requires_dep("rich") gate, dogfooded: with rich unimportable the task
     # lists with the taught reason and refuses to run — no ImportError ever.
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     real = registry._importable
     monkeypatch.setattr(
@@ -271,7 +271,7 @@ def test_compose_animation_windows_and_shell():
 
 
 def test_cast_lists_unavailable_without_pyte(plugin_project, capsys, monkeypatch):
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     real = registry._importable
     monkeypatch.setattr(

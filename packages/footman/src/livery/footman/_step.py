@@ -25,9 +25,9 @@ from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from typing import Any, Generic, Literal, ParamSpec, TypeVar, cast, overload
 
+from livery.footman import _context as _context
 from livery.footman import _describe, _signals
-from livery.footman import context as _context
-from livery.footman.context import (
+from livery.footman._context import (
     AuditEntry,
     Failed,
     Result,
@@ -152,7 +152,7 @@ class StepFn(Generic[P, R_co]):
                 f"— auto follows the run's own decision"
             )
         if overrides.get("lanes") is not None:
-            from livery.footman.registry import validate_lanes
+            from livery.footman._registry import validate_lanes
 
             overrides["lanes"] = validate_lanes(overrides["lanes"])
         return StepFn(

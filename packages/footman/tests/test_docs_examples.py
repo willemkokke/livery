@@ -168,7 +168,7 @@ def test_playground_path_requirements_pass(tmp_path: Path):
 from pathlib import Path
 from typing import Annotated
 from livery.footman.api import task
-from livery.footman.params import check, isfile
+from livery.footman._params import check, isfile
 
 def semver(value: str) -> None:
     import re

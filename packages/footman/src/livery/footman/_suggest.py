@@ -64,7 +64,15 @@ def _values(param: str, path: list[str], g: dict[str, object]) -> list[str]:
     completer. Any miss — no tasks file, a renamed task, a plain parameter —
     is an empty list, never an error.
     """
-    from livery.footman import _app, _coerce, _discover, _manifest, registry
+    from livery.footman import (
+        _app,
+        _coerce,
+        _discover,
+        _manifest,
+    )
+    from livery.footman import (
+        _registry as registry,
+    )
 
     found = _app.resolve_task_files(g, on_warning=lambda *a: None, on_note=None)
     files = found.files
@@ -102,7 +110,8 @@ def _global_values(name: str, g: dict[str, object]) -> list[str]:
     finds a task's completer finds an option's: rediscover, match the cli
     name, peel the annotation, run what it carries. Any miss — no tasks
     file, an unmounted owner, a plain option — is an empty list."""
-    from livery.footman import _app, _coerce, _discover, registry
+    from livery.footman import _app, _coerce, _discover
+    from livery.footman import _registry as registry
 
     found = _app.resolve_task_files(g, on_warning=lambda *a: None, on_note=None)
     files = found.files

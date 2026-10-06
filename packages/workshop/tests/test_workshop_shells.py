@@ -303,7 +303,7 @@ def test_coverage_enforce_reads_the_workspace(
 def test_the_extensions_task_prints_the_walk(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.footman import registry
+    from livery.footman import _registry as registry
     from livery.workshop._tasks import extensions
 
     _, _root = rig

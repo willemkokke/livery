@@ -13,10 +13,10 @@ import pytest
 
 from footman_workers import read_force_color as _mp_read_force_color
 from livery.footman import _globals, _manifest
+from livery.footman._context import chdir, run
 from livery.footman._executor import run_chain
+from livery.footman._registry import Group
 from livery.footman._split import split_chain
-from livery.footman.context import chdir, run
-from livery.footman.registry import Group
 
 
 def drive(build, line, **cfg):
@@ -872,7 +872,7 @@ def test_abort_latch_clears_after_a_failed_run():
     # A run that ends in a failed task latches fail-fast; the latch must die
     # with the run — a *later* bare run() (no scheduler, so no start-of-run
     # reset) must not have its freshly registered child reaped at birth.
-    from livery.footman.context import Context, use_context
+    from livery.footman._context import Context, use_context
 
     def tasks(reg):
         @reg.task
@@ -891,7 +891,7 @@ def test_abort_latch_clears_after_a_failed_run():
 
 
 def test_console_lane_suspends_the_status_line():
-    from livery.footman import context
+    from livery.footman import _context as context
 
     calls = []
 
@@ -1210,7 +1210,7 @@ def test_a_deliberate_setting_still_reaches_the_child(monkeypatch):
     own report: a real interpreter handed a bogus PYTHONHOME dies during
     startup, which would test CPython rather than footman.
     """
-    from livery.footman import context as context_mod
+    from livery.footman import _context as context_mod
 
     monkeypatch.delenv("PYTHONHOME", raising=False)
     hand_over: dict[str, dict[str, str]] = {}

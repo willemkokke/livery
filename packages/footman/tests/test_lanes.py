@@ -162,7 +162,7 @@ def test_a_string_in_lanes_is_taught_at_the_declaration():
     # Under capture(), so the test neither depends on the global registry
     # being clean of the name `migrate` nor leaves it behind for a later
     # test — it used to pass only by registration-order luck.
-    from livery.footman import registry
+    from livery.footman import _registry as registry
     from livery.footman.api import task
 
     with registry.capture(), pytest.raises(TypeError, match="Lane handles, not str"):
@@ -172,7 +172,7 @@ def test_a_string_in_lanes_is_taught_at_the_declaration():
 
 
 def test_a_string_in_opts_lanes_is_taught():
-    from livery.footman import registry
+    from livery.footman import _registry as registry
     from livery.footman.api import task
 
     with registry.capture():
@@ -236,7 +236,7 @@ def test_lane_waits_land_in_the_json_report():
     # claim granted on arrival carries nothing.
     import json as json_mod
 
-    from livery.footman.registry import Group
+    from livery.footman._registry import Group
     from livery.footman.testing import Runner
 
     contended = lane("test-report-contended")

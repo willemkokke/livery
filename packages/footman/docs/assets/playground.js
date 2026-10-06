@@ -426,7 +426,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
     import livery.footman.api as footman
-    import livery.footman.context
+    import livery.footman._context
 
     footman.parallel  # resolve the lazy re-export before overriding it
 
@@ -440,7 +440,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
         if failure is not None:
             raise failure
 
-    livery.footman.context.parallel = _inline_parallel
+    livery.footman._context.parallel = _inline_parallel
     footman.__dict__["parallel"] = _inline_parallel
 
     # The browser has no shells to find, and the simulated child never
@@ -450,7 +450,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
     def _fm_resolve_shell(kind, policy="posix"):
         return ["/bin/sh", "-c"]
 
-    livery.footman.context._resolve_shell = _fm_resolve_shell
+    livery.footman._context._resolve_shell = _fm_resolve_shell
 
     # include("module") in an example imports a sibling editor tab; make
     # the working directory importable the way a terminal's usually is.
@@ -505,9 +505,9 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     _fm_terminal_out = _FMTerminalOut()
     _fm_terminal_in = _FMStdin()
-    livery.footman.context._stdin_is_tty = lambda: True
-    livery.footman.context.real_stdin = lambda: _fm_terminal_in
-    livery.footman.context.real_stderr = lambda: _fm_terminal_out
+    livery.footman._context._stdin_is_tty = lambda: True
+    livery.footman._context.real_stdin = lambda: _fm_terminal_in
+    livery.footman._context.real_stderr = lambda: _fm_terminal_out
 
     def _fm_getpass(prompt="", stream=None):
         # A secret prompt: the browser dialog cannot mask typing, so the
@@ -1253,7 +1253,7 @@ def _fm_dynamic(root, partial, prefix, param, seg_path):
     # miss answers nothing, never an error. "Fresh" is simply a call
     # here, because the interpreter holding the user's code is this one.
     import contextlib, inspect, io
-    from livery.footman import _coerce, _manifest as manifest, registry
+    from livery.footman import _coerce, _manifest as manifest, _registry as registry
     completer = None
     if seg_path:
         node = root
@@ -1290,7 +1290,7 @@ def _fm_complete(files_json, line):
     # written first, so a dynamic completer that reads a file sees what
     # the editor says now, not what the last Run left behind.
     import types
-    from livery.footman import _manifest as manifest, registry
+    from livery.footman import _manifest as manifest, _registry as registry
     from livery.footman._complete import _DYNAMIC, complete
     files = json.loads(files_json)
     files.pop("stdin", None)  # the pipe, not a file
