@@ -96,8 +96,17 @@ def branch_name(kind: str, number: int, title: str) -> str:
 
 
 def worktree_home(root: Path) -> Path:
-    """Where this repository's issue worktrees live under the runner's home."""
-    return footman.data_dir() / "worktrees" / root.name
+    """Where this repository's issue worktrees live under the runner's home.
+
+    The folder is named after the repository's main checkout, which git
+    reports from any of its worktrees, so work started inside a
+    worktree lands beside the rest. A directory that is no checkout is
+    named by itself.
+    """
+    name = root.name
+    if (root / ".git").exists():
+        name = GitOps(root).main_checkout().name
+    return footman.data_dir() / "worktrees" / name
 
 
 def worktree_path(root: Path, number: int, title: str) -> Path:

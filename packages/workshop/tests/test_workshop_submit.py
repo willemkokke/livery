@@ -2073,8 +2073,9 @@ def test_abandon_of_a_named_branch_refuses_a_dirty_worktree_then_removes_it(
     assert _git(git.root, "branch", "--list", "feat/9-linked").strip() == ""
     closed = repo.pr.find_by_head("feat/9-linked", state="all")
     assert closed is not None and closed.state == "closed" and not closed.merged
-    # This checkout never moved.
+    # This checkout never moved, and the output does not say it did.
     assert git.current_branch() == "feat/1-first"
+    assert "back on" not in out
 
 
 def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
