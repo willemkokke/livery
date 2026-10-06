@@ -110,7 +110,10 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         written = _settings((root / "pyrightconfig.json").read_text())
         assert written["typeCheckingMode"] == "standard"
         recommended = (root / ".vscode" / "extensions.json").read_text()
-        assert "detachedfork.basedpyright" in recommended
+        assert '"detachhead.basedpyright"' in recommended
+        # The editor answers with the checker this file configures alone.
+        settings = (root / ".vscode" / "settings.json").read_text()
+        assert '"python.languageServer": "None"' in settings
         # Listed with it, the type-completeness check joins, under the
         # listed name.
         (root / "workshop.toml").write_text(

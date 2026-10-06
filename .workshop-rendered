@@ -1,8 +1,8 @@
 {
   ".gitattributes": "777778cbdb9c481540de884a4820c5dbe8ff65dad89d3b07385d1eeb702e0f4d",
   ".gitignore": "1e3235cb75600c788cf2f620ecd5a1cecf126a68de9301217c384cfb23f0908d",
-  ".vscode/extensions.json": "5b04e90a98874f34dd8b37fc0b98856e43b972542e45a4680481ff3656143c9a",
-  ".vscode/settings.json": "e9a6fb24b6bc28a8bc47eb4b47ef5953d10efc05cfde061a746359d0d9079111",
+  ".vscode/extensions.json": "aa7852033e7f0a257514c1681c4b5ebcb4a80825e3ff98ba6ee60ec9df1d080c",
+  ".vscode/settings.json": "3e4d1d4f4979a2a8bde9213a78edd3e8d48d97400c9ece194358f65cce83525e",
   "CLAUDE.md": "cc6ccfb7b6c3b25a9b1674aedb29724686142d1075d161247893f21e75926c00",
   "pyproject.toml": "c889b303c94bb6abf9c9247e37b9e2298b484ae6f092d7e5e56f59d3fc7ca54c",
   "pyrightconfig.json": "53fb025064a13f65594c742929f6ebc3a8f1482a299fff445302d454ebc89b22",

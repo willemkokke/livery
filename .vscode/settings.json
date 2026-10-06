@@ -16,6 +16,7 @@
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
+  "python.languageServer": "None",
   "terminal.integrated.profiles.osx": {
     "livery": {
       "path": "zsh",

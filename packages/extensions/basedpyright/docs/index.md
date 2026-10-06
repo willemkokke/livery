@@ -65,4 +65,8 @@ over the same key above it, since basedpyright reads the last one:
 ```
 
 A workspace that lists the extension recommends basedpyright's editor
-extension, `detachedfork.basedpyright`, in `.vscode/extensions.json`.
+extension, `detachhead.basedpyright`, in `.vscode/extensions.json`, and
+turns the editor's default python language server off in
+`.vscode/settings.json` (`"python.languageServer": "None"`): the type
+checker that answers in the editor is the one this file configures, and
+no second one answers with settings of its own.

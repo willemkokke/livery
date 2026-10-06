@@ -23,6 +23,7 @@ from livery.workshop.api import (
     WHOLE,
     CheckRecord,
     Claim,
+    Fragment,
     GateContext,
     public_modules,
     run_batched,
@@ -40,7 +41,14 @@ SUFFIXES = (".py", ".pyi")
 TYPECOMPLETE = "typecomplete"
 
 #: The editor's language server: basedpyright's own, reading the same file.
-EDITOR = "detachedfork.basedpyright"
+EDITOR = "detachhead.basedpyright"
+
+#: The type checker that answers in the editor is the one this
+#: workspace configures: the editor's default python language server
+#: is off, so it adds no second verdict with settings of its own.
+SETTINGS = """\
+{"python.languageServer": "None"}
+"""
 
 
 def run_typecheck(paths: tuple[str, ...] = ()) -> None:
@@ -85,6 +93,7 @@ CHECKS = (
         narrowing=PATHS,
         kinds=KINDS,
         tools=("basedpyright",),
+        fragments=(Fragment(".vscode/settings.json", SETTINGS),),
         editor_extension=EDITOR,
         claims=tuple(
             Claim(category, suffixes=SUFFIXES)
