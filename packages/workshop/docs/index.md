@@ -47,8 +47,19 @@ module declares:
 - `CONTRACT_KEYS`, the contract keys it reads;
 - `CHECKS`, the check records it adds to the gate, a tuple the mount
   registers under the listed name, which the gate prints beside each;
+- `OPTIONS`, a map from each option a workspace may turn on to what it
+  turns on, `{"typecomplete": "verifies ..."}`; a check record that
+  names an option in `listed_with` registers only when the entry turns
+  it on;
 - `FOR`, a map from a target extension to the module carrying the
   registrations for that target, `{"python": "acme.house.python"}`.
+
+An entry names its extension, and the options it turns on in brackets:
+`"basedpyright[typecomplete]"`, either as the string or as a table
+entry's `name`. An entry takes no version, `?` or scope: an
+extension's version comes from its wheel, and the lock pins it. An
+option the extension does not declare refuses in the layering check,
+naming the ones it declares; the mount names it and leaves it off.
 
 A footman plugin that declares no extension is never offered as one.
 The mount imports a contribution module once both its owner and its
@@ -61,7 +72,7 @@ opt-out from that target's opinions, and a name the list does not
 carry refuses. A name the extension declares no contribution for
 mounts nothing, and the layering check names the entry.
 `fm extensions` prints the base, then each extension, who requires
-it, its tools and its targets.
+it, its tools, its targets, and each option with whether it is on.
 
 The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its
@@ -197,7 +208,16 @@ which a bare `ruff` reads too. A package's own settings go in its own
 its per-file ignores go under `[lint.extend-per-file-ignores]`, because
 a `per-file-ignores` table of its own replaces the workspace's.
 Unlisted, the extension registers nothing and writes nothing.
-`fm new.project` lists `docs` and `ruff`.
+
+The type checker basedpyright is an extension of its own too,
+`livery-extensions-basedpyright`, listed as `basedpyright`. Listed, it
+registers `typecheck.basedpyright`, and `fm sync` writes the root
+`pyrightconfig.json`, which the editor and a bare `basedpyright` read;
+the repository's own settings go in its region at the end. Listed as
+`basedpyright[typecomplete]`, it also registers
+`typecomplete.basedpyright`, which verifies that each package's public
+API is type-complete. `fm new.project` lists `docs`, `ruff` and
+`basedpyright`.
 
 A package's documentation examples are files under `docs/examples/`,
 python files a page shows whole or by named section through the
