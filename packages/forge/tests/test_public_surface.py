@@ -71,6 +71,7 @@ def test_the_testing_surface_is_declared() -> None:
     assert livery.forge.testing.__all__ == [
         "FORMAT",
         "REDACTED",
+        "RIG_RECORD",
         "SCENARIOS",
         "VOLATILE",
         "Cassette",
@@ -85,6 +86,7 @@ def test_the_testing_surface_is_declared() -> None:
         "ReplayOpener",
         "Scenario",
         "UrlOpener",
+        "rig_record_path",
         "shared_env_path",
     ]
 

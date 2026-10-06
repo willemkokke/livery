@@ -16,11 +16,14 @@ files =
 {% endfor %}{% for path in root_tests %}    {{ path }},
 {% endfor %}    tasks.py
 # A PEP 420 namespace in a src layout: mypy derives a module's name
-# from these bases, since no __init__.py trail leads to its root.
+# from these bases, since no __init__.py trail leads to its root. The
+# tests directories are bases too, as they are on pytest's pythonpath,
+# so a test's helper module resolves for mypy as it does for pytest.
 mypy_path =
     typings{% for package in py %},
     packages/{{ package.dir }}/src,
-    packages/{{ package.dir }}/tests{% endfor %}
+    packages/{{ package.dir }}/tests{% endfor %}{% for path in root_tests %},
+    {{ path }}{% endfor %}
 namespace_packages = True
 explicit_package_bases = True
 # A deterministic world, whatever host runs the check: a bare run

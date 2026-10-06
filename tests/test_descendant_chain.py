@@ -12,8 +12,10 @@ resumes quietly.
 Heavyweight and network-bound, so it arms with
 WORKSHOP_CONFORMANCE_DRIVE=1: the merge path waits on nothing
 outside the repository, and the committed unit suites are the fast
-subset. Local wheels stand in for the index, the conformance
-drive's own stand-in.
+subset. This checkout's code comes from a local index built from it,
+the one the local loop and the born-project test read; the brand's
+own wheels come from a folder beside it. The chain drives the dev
+containers, with the URL and token their seed recorded.
 """
 
 from __future__ import annotations
@@ -28,29 +30,47 @@ from pathlib import Path
 
 import pytest
 
+from separate_workspace import environment
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE_ROOT = ROOT / "packages/workshop/src/livery/workshop/content/root"
 
-GITEA = "http://localhost:3000"
 OWNER = "livery-admin"
 BRAND = "brandx"
+#: The extensions a project lists for its native members' format and
+#: lint checks, which the child adds once it has native members.
+NATIVE = ("clang-format", "clang-tidy")
 
 
-def _token() -> str:
-    shared = Path.home() / ".config" / "footman" / ".repo.shared.env"
-    if not shared.is_file():
-        pytest.skip("no rig credentials: run `fm forge.dev.up` first")
-    for line in shared.read_text().splitlines():
-        if line.startswith("GITEA_TOKEN="):
-            return line.partition("=")[2]
-    pytest.skip("no GITEA_TOKEN in the shared env: run `fm forge.dev.up`")
+def _rig() -> tuple[str, str]:
+    """The dev containers' Gitea URL and token, as their seed recorded them.
+
+    Never the shared env file's: it names whichever forge is current,
+    and a local loop environment rewrites its keys with its own Gitea's.
+    """
+    from livery.forge.testing import rig_record_path
+
+    record = rig_record_path()
+    if not record.is_file():
+        pytest.skip("no record of the dev containers: run `fm forge.dev.up`")
+    values = dict(
+        line.split("=", 1) for line in record.read_text().splitlines() if "=" in line
+    )
+    url, token = values.get("GITEA_URL", ""), values.get("GITEA_TOKEN", "")
+    if not (url and token):
+        pytest.skip("the containers' record names no Gitea: run `fm forge.dev.seed`")
+    return url, token
 
 
 def _api(
-    token: str, method: str, path: str, body: dict[str, object] | None = None
+    rig: tuple[str, str],
+    method: str,
+    path: str,
+    body: dict[str, object] | None = None,
 ) -> object:
+    url, token = rig
     request = urllib.request.Request(
-        f"{GITEA}/api/v1{path}",
+        f"{url}/api/v1{path}",
         method=method,
         headers={
             "Authorization": f"token {token}",
@@ -143,9 +163,9 @@ def _conan_name(library: Path) -> str:
     return match.group(1)
 
 
-def _destroy(token: str, name: str) -> None:
+def _destroy(rig: tuple[str, str], name: str) -> None:
     with contextlib.suppress(OSError):
-        _api(token, "DELETE", f"/repos/{OWNER}/{name}")
+        _api(rig, "DELETE", f"/repos/{OWNER}/{name}")
 
 
 def _run(
@@ -210,57 +230,19 @@ def _entered(fm: Path, workspace: Path, env: dict[str, str]) -> dict[str, str]:
     return applied
 
 
-def _build_wheels(source_root: Path, wheelhouse: Path, env: dict[str, str]) -> None:
-    """Build every member of this workspace into *wheelhouse*.
+def _publish(index: Path, wheels: list[Path]) -> None:
+    """Add *wheels* to the checkout *index*, beside what it serves already.
 
-    The whole stack, discovered rather than listed: the home resolves
-    the workshop's dependency graph from these wheels, and one member
-    missing from the set sends the resolution to the index for an
-    older release that still fits, which then fails on an import the
-    current source made.
+    The index serves every version it holds, so a member rebuilt at a
+    bumped version is what an upgrade of it takes.
     """
-    wheelhouse.mkdir(exist_ok=True)
-    # A member at either depth: packages/<name>/ or packages/<group>/<name>/.
-    packages = source_root / "packages"
-    members = sorted(
-        path.parent
-        for path in [
-            *packages.glob("*/workshop.toml"),
-            *packages.glob("*/*/workshop.toml"),
-        ]
-    )
-    assert members, f"no members under {source_root}/packages"
-    for member in members:
-        _run(
-            ["uv", "build", "--wheel", "-o", str(wheelhouse), str(member)],
-            source_root,
-            env,
-        )
+    from livery.workshop._e2e import write_dev_index
 
-
-def _pin_the_wheelhouse(wheelhouse: Path) -> Path:
-    """Pin every built member to its own build; the override file.
-
-    A member's declared floor may name a version the release train
-    has not published yet, which a member still at its newborn
-    version cannot satisfy. The resolution would then reach past the
-    wheelhouse for an older release that fits, and the chain would
-    test that release instead of this source. Every wheel built here
-    wins outright.
-    """
-    newest: dict[str, tuple[tuple[int, ...], str]] = {}
-    for wheel in sorted(wheelhouse.glob("*.whl")):
-        dist, version = wheel.name.split("-")[:2]
-        name = dist.replace("_", "-")
-        key = tuple(int(part) for part in version.split(".") if part.isdigit())
-        if name not in newest or key > newest[name][0]:
-            newest[name] = (key, version)
-    path = wheelhouse / "overrides.txt"
-    path.write_text(
-        "\n".join(f"{name}=={version}" for name, (_key, version) in newest.items())
-        + "\n"
-    )
-    return path
+    staged = index.parent / f"{index.name}-wheels"
+    staged.mkdir(exist_ok=True)
+    for wheel in [*index.glob("*/*.whl"), *wheels]:
+        shutil.copy2(wheel, staged / wheel.name)
+    write_dev_index(index, sorted(staged.glob("*.whl")))
 
 
 @pytest.mark.skipif(
@@ -269,16 +251,18 @@ def _pin_the_wheelhouse(wheelhouse: Path) -> Path:
     " builds venvs and drives the local Gitea",
 )
 def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
-    token = _token()
-    base_env = {
-        **os.environ,
-        "FORGE_TOKEN": token,
-        "FORGE_ADMIN_TOKEN": token,
-        "VIRTUAL_ENV": "",
+    rig = _rig()
+    _url, token = rig
+    # The workspaces the chain builds run their own gates, unmetered by
+    # this suite's coverage.
+    base_env = environment(
+        FORGE_TOKEN=token,
+        FORGE_ADMIN_TOKEN=token,
+        VIRTUAL_ENV="",
         # Every workspace the chain builds registers its native members
         # as conan editables: in the chain's own home, never the machine's.
-        "CONAN_HOME": str(tmp_path / "conan-home"),
-    }
+        CONAN_HOME=str(tmp_path / "conan-home"),
+    )
     # The chain plays a person at a workstation. The suite's own rig
     # marks this session as a CI run, and a verb that behaves
     # differently there would be exercised in the wrong mode: the
@@ -286,13 +270,6 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     # here, where the update verb asks for exactly that.
     for marker in ("CI", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "GITEA_ACTIONS"):
         base_env.pop(marker, None)
-    # Nor does it inherit this suite's own instrumentation. The
-    # workspaces it builds run their own gates, and a child that
-    # starts coverage under the outer configuration writes rows for
-    # files that exist only in its temporary tree, which the outer
-    # report then cannot resolve.
-    for measured in [name for name in base_env if name.startswith("COVERAGE_")]:
-        base_env.pop(measured, None)
     # Nor the runner's loop belt. A global `fm` that handed this suite
     # to `uv run --project` set it, and a child `fm` that inherits it
     # skips its own handoff and runs this workspace's footman against
@@ -302,23 +279,38 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
         base_env.pop(belt, None)
     fm = str(ROOT / ".venv" / "bin" / "fm")
     for name in ("dummy", "child"):
-        _destroy(token, name)
+        _destroy(rig, name)
     try:
-        _chain(tmp_path, token, fm, base_env, resumed=False)
+        _chain(tmp_path, rig, fm, base_env, resumed=False)
         # The chain re-run: the second pass resumes and no-ops.
-        _chain(tmp_path, token, fm, base_env, resumed=True)
+        _chain(tmp_path, rig, fm, base_env, resumed=True)
     finally:
         if not os.environ.get("WORKSHOP_CHAIN_KEEP"):
             for name in ("dummy", "child"):
-                _destroy(token, name)
+                _destroy(rig, name)
 
 
 def _chain(
-    tmp_path: Path, token: str, fm: str, base_env: dict[str, str], *, resumed: bool
+    tmp_path: Path,
+    rig: tuple[str, str],
+    fm: str,
+    base_env: dict[str, str],
+    *,
+    resumed: bool,
 ) -> None:
-    wheelhouse = tmp_path / "wheelhouse"
+    url, token = rig
+    # This checkout's code, from the one checkout index: named first, it
+    # serves every distribution it holds, whatever its version. The
+    # brand's own wheels, which no index serves, sit in a folder of
+    # their own.
+    index = tmp_path / "checkout-index"
     if not resumed:
-        _build_wheels(ROOT, wheelhouse, base_env)
+        from livery.workshop._e2e import checkout_index
+        from livery.workshop._new_project import birth_extensions
+
+        checkout_index(ROOT, index, [*birth_extensions(()), *NATIVE])
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir(exist_ok=True)
     # The tool store is a content-addressed cache every checkout on
     # this machine shares, and the workspaces the chain builds reach
     # for the pinned checkers like any other. The suite's isolation
@@ -329,8 +321,8 @@ def _chain(
 
     env = {
         **base_env,
+        "UV_INDEX": index.as_uri(),
         "UV_FIND_LINKS": str(wheelhouse),
-        "UV_OVERRIDE": str(_pin_the_wheelhouse(wheelhouse)),
         "FOOTMAN_DATA_DIR": str(_paths.data_home() / "footman"),
     }
 
@@ -363,7 +355,7 @@ def _chain(
             f"--extension={BRAND}",
             "--forge=gitea",
             f"--owner={OWNER}",
-            f"--url={GITEA}",
+            f"--url={url}",
             "--namespace=dummy",
             # A second birth in the same folder is a resume.
             *(["--resume"] if resumed else []),
@@ -471,7 +463,6 @@ def _chain(
         home,
         env,
     )
-    _pin_the_wheelhouse(wheelhouse)
 
     # -- 4. the branded App begets the child --------------------------
     tool = tmp_path / "brand-tool"
@@ -503,8 +494,10 @@ def _chain(
             "child",
             "--forge=gitea",
             f"--owner={OWNER}",
-            f"--url={GITEA}",
+            f"--url={url}",
             "--namespace=kid",
+            # A second birth in the same folder is a resume.
+            *(["--resume"] if resumed else []),
         ],
         child_work,
         _hermetic(env, tool),
@@ -514,9 +507,11 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
+    # The resumed pass finds the native extensions the first one listed.
+    natives = "".join(f'"{name}", ' for name in NATIVE) if resumed else ""
     assert (
-        'extensions = ["docs", "ruff", "basedpyright", "pytest", "dummy.brandx"]'
-        in child_contract
+        f'extensions = ["docs", "ruff", "basedpyright", "pytest", {natives}'
+        '"dummy.brandx"]' in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
@@ -613,6 +608,16 @@ def _chain(
                 'floor = "0.0.0"\n'
             )
         _link_the_library(child / "packages" / "ext", child / "packages" / "geometry")
+        # The native members' format and lint checks are extensions the
+        # child lists, as a person adding native packages would, ahead
+        # of the brand's own.
+        contract_file = child / "workshop.toml"
+        listed = "".join(f'"{name}", ' for name in NATIVE)
+        contract_file.write_text(
+            contract_file.read_text().replace(
+                '"dummy.brandx"]', f'{listed}"dummy.brandx"]', 1
+            )
+        )
         _run(["git", "add", "-A"], child, env)
         _run(
             ["git", "commit", "-qm", "feat: the native library and the extension"],
@@ -728,8 +733,11 @@ def _chain(
     pyproject.write_text(
         text.replace(found.group(0), f'version = "{major}.{minor}.{patch + 1}"', 1)
     )
-    _run(["uv", "build", "--wheel", "-o", str(wheelhouse)], improved, env)
-    _pin_the_wheelhouse(wheelhouse)
+    # The bumped base joins the checkout index, which serves both
+    # versions; the upgrades below take the newer.
+    improved_wheels = tmp_path / "base-improved-wheels"
+    _run(["uv", "build", "--wheel", "-o", str(improved_wheels)], improved, env)
+    _publish(index, sorted(improved_wheels.glob("*.whl")))
 
     # The home takes the base bump the real way: the lock moves to the
     # new wheel, sync refreshes the environment (the bumped member's
@@ -751,7 +759,6 @@ def _chain(
         home,
         env,
     )
-    _pin_the_wheelhouse(wheelhouse)
 
     # The child updates: new brand and base wheels arrive, then the
     # composed files move to what they ship.

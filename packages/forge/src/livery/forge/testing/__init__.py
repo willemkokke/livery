@@ -41,6 +41,7 @@ from livery.forge.testing._fake import FakeDriver, FakeForge, Faults
 __all__ = [
     "FORMAT",
     "REDACTED",
+    "RIG_RECORD",
     "SCENARIOS",
     "VOLATILE",
     "Cassette",
@@ -55,8 +56,13 @@ __all__ = [
     "ReplayOpener",
     "Scenario",
     "UrlOpener",
+    "rig_record_path",
     "shared_env_path",
 ]
+
+#: The dev containers' own record of their credentials, beside the
+#: shared env file: their seed writes it, and nothing else does.
+RIG_RECORD = ".forge-dev.env"
 
 
 def shared_env_path() -> Path:
@@ -72,3 +78,15 @@ def shared_env_path() -> Path:
 
     home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(home) / "footman" / ".repo.shared.env"
+
+
+def rig_record_path() -> Path:
+    """The dev containers' own record of their URLs and tokens.
+
+    Their seed writes it, and nothing else does. The shared env file
+    beside it names the cascade's current forge, which a local loop
+    environment rewrites with its own Gitea's keys, so a test that
+    drives the containers reads their credentials here, and skips
+    without it.
+    """
+    return shared_env_path().parent / RIG_RECORD

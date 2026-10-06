@@ -52,9 +52,14 @@ cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
 ## Local development
 
 `fm forge.dev.up` starts and seeds the compose container (a 1.28
-nightly with an act_runner beside it) and writes the credentials to
-the shared env file in footman's config directory
-(`.repo.shared.env`), which the env cascade reads. The conformance suite runs three ways:
+nightly with an act_runner beside it). The seed writes the credentials
+to the containers' own record (`.forge-dev.env`) and to the shared env
+file (`.repo.shared.env`), both in footman's config directory. The
+shared file is what the env cascade reads, and it names whichever forge
+is current: a local loop environment writes its own Gitea's keys
+there. A test that drives the containers reads them from the record
+(`livery.forge.testing.rig_record_path`). The conformance suite runs
+three ways:
 
 - default: replays the committed cassettes, no container, no network.
 - `FORGE_LIVE=1`: live against the container.
