@@ -188,6 +188,19 @@ def _dev_env_path() -> Path:
     return footman.config_dir() / ".repo.shared.env"
 
 
+def _rig_record_path() -> Path:
+    """The containers' own record of their credentials, beside the shared env file.
+
+    The shared env file names the cascade's current forge, and a local
+    loop environment writes its own Gitea's keys there. Only the seed
+    writes this record, so what drives the containers reads their URLs
+    and tokens here ([livery.forge.testing.rig_record_path][]).
+    """
+    from livery.forge.testing import RIG_RECORD
+
+    return footman.config_dir() / RIG_RECORD
+
+
 def _gitlab_image() -> str:
     """The GitLab CE image for this machine's architecture.
 
@@ -282,9 +295,8 @@ def _gitea_api(
         return 0
 
 
-def _read_dev_env() -> dict[str, str]:
-    """The minted credentials, empty when nothing is seeded yet."""
-    path = _dev_env_path()
+def _read_env(path: Path) -> dict[str, str]:
+    """The keys of the env file at *path*, empty when it is absent."""
     if not path.is_file():
         return {}
     pairs = {}
@@ -295,14 +307,13 @@ def _read_dev_env() -> dict[str, str]:
     return pairs
 
 
-def _update_dev_env(updates: dict[str, str]) -> None:
-    """Set *updates* in the shared env file, key by key.
+def _update_env(path: Path, updates: dict[str, str]) -> None:
+    """Set *updates* in the env file at *path*, key by key.
 
-    The file is the person's own cross-repo config, so nothing here
-    may rewrite it wholesale: each key replaces its own line or
-    appends, and every other line stays exactly as written.
+    The shared env file is the person's own cross-repo config, so
+    nothing here may rewrite it wholesale: each key replaces its own
+    line or appends, and every other line stays exactly as written.
     """
-    path = _dev_env_path()
     lines = path.read_text().splitlines() if path.is_file() else []
     for key, value in sorted(updates.items()):
         entry = f"{key}={value}"
@@ -314,6 +325,24 @@ def _update_dev_env(updates: dict[str, str]) -> None:
             lines.append(entry)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
+    # Tokens: readable by their owner alone, as a new file would not be.
+    path.chmod(0o600)
+
+
+def _record(updates: dict[str, str]) -> None:
+    """Write the containers' credentials to their own record and the shared env file.
+
+    The shared env file makes them the cascade's current forge, which a
+    loop environment may rewrite later; the record keeps them for
+    whatever drives the containers.
+    """
+    _update_env(_rig_record_path(), updates)
+    _update_env(_dev_env_path(), updates)
+
+
+def _credentials() -> str:
+    """Where the seed wrote the containers' credentials, for the up's last line."""
+    return f"{_rig_record_path().name} (shared in {_dev_env_path().name})"
 
 
 def _wait_for_gitea() -> None:
@@ -352,7 +381,7 @@ def dev_up(
     if profile in ("gitea", "all"):
         _compose("--profile", "gitea", "up", "-d", "--wait", "gitea")
         _seed_gitea()
-        token = _read_dev_env().get("GITEA_RUNNER_TOKEN", "")
+        token = _read_env(_rig_record_path()).get("GITEA_RUNNER_TOKEN", "")
         # --build: the runner image is built from runner.Dockerfile, so
         # a changed toolchain line rebuilds it here instead of running
         # on the stale image under the pinned tag.
@@ -368,7 +397,7 @@ def dev_up(
             env={"GITEA_RUNNER_TOKEN": token},
             with_docker=with_docker,
         )
-        print(f"  gitea: {_GITEA_URL}  credentials: {_dev_env_path().name}")
+        print(f"  gitea: {_GITEA_URL}  credentials: {_credentials()}")
     if profile in ("gitlab", "all"):
         _compose("--profile", "gitlab", "up", "-d", "--wait", "gitlab")
         _seed_gitlab()
@@ -385,7 +414,7 @@ def dev_up(
             with_docker=with_docker,
         )
         _register_gitlab_runner()
-        print(f"  gitlab: {_GITLAB_URL}  credentials: {_dev_env_path().name}")
+        print(f"  gitlab: {_GITLAB_URL}  credentials: {_credentials()}")
     if with_docker:
         print("  runners: the host's docker socket is mounted")
 
@@ -404,11 +433,11 @@ def dev_seed(
 def _seed_gitea() -> None:
     """Seed the running Gitea: admin user, API token, org, runner token.
 
-    Probes before every act. A working token in the shared env file
-    is kept; a missing or dead one is re-minted.
+    Probes before every act. A working token in the containers' own
+    record is kept; a missing or dead one is re-minted.
     """
     _wait_for_gitea()
-    existing = _read_dev_env().get("GITEA_TOKEN", "")
+    existing = _read_env(_rig_record_path()).get("GITEA_TOKEN", "")
     if existing and _gitea_api("/user", existing) == 200:
         token = existing
         print("  seed: existing token still works, keeping it")
@@ -451,14 +480,14 @@ def _seed_gitea() -> None:
     runner = _gitea_cli("actions", "generate-runner-token")
     if runner.code != 0:
         fail(f"runner token mint failed:\n{runner.stdout}{runner.stderr}")
-    _update_dev_env(
+    _record(
         {
             "GITEA_URL": _GITEA_URL,
             "GITEA_TOKEN": token,
             "GITEA_RUNNER_TOKEN": runner.stdout.strip(),
         }
     )
-    print(f"  seed: gitea credentials written to {_dev_env_path().name}")
+    print(f"  seed: gitea credentials written to {_credentials()}")
 
 
 def _gitlab_api(
@@ -503,11 +532,11 @@ def _docker_exec(service: str, *args: str) -> tools.Result:
 def _seed_gitlab() -> None:
     """Seed the running GitLab: a root PAT and the livery group.
 
-    Probes before every act. A working token in the shared env file
-    is kept; a missing or dead one is minted through `gitlab-rails
-    runner`, which takes about a minute per invocation.
+    Probes before every act. A working token in the containers' own
+    record is kept; a missing or dead one is minted through
+    `gitlab-rails runner`, which takes about a minute per invocation.
     """
-    env = _read_dev_env()
+    env = _read_env(_rig_record_path())
     token = env.get("GITLAB_TOKEN", "")
     if token and _gitlab_api("/user", token)[0] == 200:
         print("  seed: existing gitlab token still works, keeping it")
@@ -543,8 +572,8 @@ def _seed_gitlab() -> None:
         )
         if status != 200:
             fail(f"gitlab group visibility answered HTTP {status}: {body}")
-    _update_dev_env({"GITLAB_URL": _GITLAB_URL, "GITLAB_TOKEN": token})
-    print(f"  seed: gitlab credentials written to {_dev_env_path().name}")
+    _record({"GITLAB_URL": _GITLAB_URL, "GITLAB_TOKEN": token})
+    print(f"  seed: gitlab credentials written to {_credentials()}")
 
 
 def _register_gitlab_runner() -> None:
@@ -562,7 +591,7 @@ def _register_gitlab_runner() -> None:
     if '"http://gitlab:8929/"' in existing.stdout or "url = " in existing.stdout:
         print("  seed: gitlab runner already registered, keeping it")
         return
-    token = _read_dev_env().get("GITLAB_TOKEN", "")
+    token = _read_env(_rig_record_path()).get("GITLAB_TOKEN", "")
     status, body = _gitlab_api(
         "/user/runners",
         token,
@@ -635,12 +664,14 @@ def dev_down(
 
     ``--profile`` stops one forge and its runner and leaves the other
     up, matching ``up``. A wipe of one forge deletes its volumes
-    alone; the shared env file goes only when every forge is wiped,
-    since it carries the other forge's credentials too.
+    alone; the shared env file and the containers' own record go only
+    when every forge is wiped, since each carries the other forge's
+    credentials too.
     """
     forges = _forges(profile)
     if wipe and profile == "all":
         _dev_env_path().unlink(missing_ok=True)
+        _rig_record_path().unlink(missing_ok=True)
     if profile == "all":
         args = []
         for names, _runner in _FORGE_PROFILES.values():

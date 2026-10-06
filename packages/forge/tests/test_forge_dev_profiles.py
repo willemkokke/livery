@@ -69,14 +69,17 @@ def test_down_stops_one_forge_alone_and_wipes_only_its_volumes(
     calls = _compose_recorder(monkeypatch, dev)
     env = tmp_path / ".repo.shared.env"
     env.write_text("GITEA_TOKEN=x\n")
+    record = tmp_path / ".forge-dev.env"
+    record.write_text("GITEA_TOKEN=x\n")
     monkeypatch.setattr(dev, "_dev_env_path", lambda: env)
+    monkeypatch.setattr(dev, "_rig_record_path", lambda: record)
     dev.dev_down(profile="gitlab", wipe=True)
     profiles = ("--profile", "gitlab", "--profile", "gitlab-runner")
     assert calls == [
         (*profiles, "stop", "gitlab", "gitlab-runner"),
         (*profiles, "rm", "-f", "-v", "gitlab", "gitlab-runner"),
     ]
-    assert env.exists()
+    assert env.exists() and record.exists()
     assert "gitlab: stopped, volumes deleted" in capsys.readouterr().out
     calls.clear()
     dev.dev_down(profile="gitea")
@@ -98,7 +101,10 @@ def test_down_of_every_forge_is_one_compose_down_and_a_wipe_drops_the_env(
     calls = _compose_recorder(monkeypatch, dev)
     env = tmp_path / ".repo.shared.env"
     env.write_text("GITEA_TOKEN=x\n")
+    record = tmp_path / ".forge-dev.env"
+    record.write_text("GITEA_TOKEN=x\n")
     monkeypatch.setattr(dev, "_dev_env_path", lambda: env)
+    monkeypatch.setattr(dev, "_rig_record_path", lambda: record)
     dev.dev_down()
     every = (
         "--profile",
@@ -111,11 +117,59 @@ def test_down_of_every_forge_is_one_compose_down_and_a_wipe_drops_the_env(
         "gitlab-runner",
     )
     assert calls == [(*every, "down")]
-    assert env.exists()
+    assert env.exists() and record.exists()
     calls.clear()
     dev.dev_down(wipe=True)
     assert calls == [(*every, "down", "--volumes")]
-    assert not env.exists()
+    assert not env.exists() and not record.exists()
+
+
+def test_the_seed_keeps_the_containers_token_from_their_own_record(
+    dev: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    # The shared env file names whichever forge is current: a loop
+    # environment wrote its own Gitea's keys there. The seed reads the
+    # containers' token from their own record, keeps it while it
+    # works, and writes it to both files, every other line kept.
+    shared = tmp_path / ".repo.shared.env"
+    shared.write_text(
+        "GITEA_URL=http://localhost:50433\nGITEA_TOKEN=loop\nOTHER=kept\n"
+    )
+    record = tmp_path / ".forge-dev.env"
+    record.write_text("GITEA_URL=http://localhost:3000\nGITEA_TOKEN=rig\n")
+    monkeypatch.setattr(dev, "_dev_env_path", lambda: shared)
+    monkeypatch.setattr(dev, "_rig_record_path", lambda: record)
+    monkeypatch.setattr(dev, "_wait_for_gitea", lambda: None)
+    probed: list[tuple[str, str]] = []
+
+    def api(path: str, token: str, **kwargs: object) -> int:
+        del kwargs
+        probed.append((path, token))
+        return 200
+
+    monkeypatch.setattr(dev, "_gitea_api", api)
+    monkeypatch.setattr(
+        dev,
+        "_gitea_cli",
+        lambda *args: SimpleNamespace(code=0, stdout="runner\n", stderr=""),
+    )
+    dev._seed_gitea()
+    assert probed[0] == ("/user", "rig")
+    assert "existing token still works" in capsys.readouterr().out
+    for path in (record, shared):
+        values = dict(line.split("=", 1) for line in path.read_text().splitlines())
+        assert values["GITEA_URL"] == "http://localhost:3000"
+        assert values["GITEA_TOKEN"] == "rig"
+        assert values["GITEA_RUNNER_TOKEN"] == "runner"
+    assert "OTHER=kept" in shared.read_text()
+    if sys.platform != "win32":
+        # Tokens: the record is its owner's alone, as the shared file is.
+        assert record.stat().st_mode & 0o777 == 0o600
 
 
 def test_restart_restarts_each_forges_runner_and_names_it(
