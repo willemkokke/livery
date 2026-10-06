@@ -1527,20 +1527,9 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan, _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._influence import Inputs
-    from livery.workshop._invoke import run_batched
 
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
-
-    def typecheck_batched(ctx: GateContext, tool: str) -> None:
-        chosen = scoped_paths(ctx, f"typecheck.{tool}")
-        if chosen == WHOLE:  # the configured whole, in one call
-            _python.run_typecheck(only=tool)
-            return
-        run_batched(chosen, lambda batch: _python.run_typecheck(paths=batch, only=tool))
-
-    def mypy_run(ctx: GateContext) -> None:
-        typecheck_batched(ctx, "mypy")
 
     # ty and pyrefly check their configured whole whatever the scope.
     def ty_run(ctx: GateContext) -> None:
@@ -1752,19 +1741,6 @@ def _register_builtin() -> None:
                 Claim(category, suffixes=cpp)
                 for category in ("source", "test", "test-support")
             ),
-        ),
-        CheckRecord(
-            "mypy",
-            "typecheck",
-            mypy_run,
-            narrowing=PATHS,
-            kinds=python,
-            tools=("mypy",),
-            fragments=(Fragment("pyproject.toml", _fragments.MYPY),),
-            claims=typed_claims,
-            # mypy reads the members' own stubs from the venv, so it
-            # rides the dev group beside the store's copy.
-            contributions=(("python.dev-group", "mypy>=1.14"),),
         ),
         CheckRecord(
             "ty",

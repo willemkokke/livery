@@ -1,0 +1,58 @@
+# Written by `{{ prog }} sync` from the mypy extension; the gate keeps it
+# matching. Edit inside the region at the end, which is the repository's
+# own; an edit anywhere else is drift.
+#
+# {{ namespace_package }}.* is fully strict; tests and tasks.py run the
+# usage-checking half (check_untyped_defs, on through strict), so every
+# test body type-checks as consumer code without demanding `-> None`
+# on every def. Narrow suppressions live inline as
+# `# type: ignore[code]` with a reason; pyright-only suppressions use
+# `# pyright: ignore` so warn_unused_ignores keeps this checker's set
+# honest.
+[mypy]
+files =
+{% for package in py %}    packages/{{ package.dir }}/src,
+    packages/{{ package.dir }}/tests,
+{% endfor %}{% for path in root_tests %}    {{ path }},
+{% endfor %}    tasks.py
+# A PEP 420 namespace in a src layout: mypy derives a module's name
+# from these bases, since no __init__.py trail leads to its root.
+mypy_path =
+    typings{% for package in py %},
+    packages/{{ package.dir }}/src,
+    packages/{{ package.dir }}/tests{% endfor %}
+namespace_packages = True
+explicit_package_bases = True
+# A deterministic world, whatever host runs the check: a bare run
+# checks linux, and the check adds darwin and win32, since mypy has no
+# all-platforms mode.
+platform = linux
+python_version = {{ python_floor }}
+# The cache lives with the workshop's state, never in the root; a bare
+# run shares the check's linux one.
+cache_dir = .workshop/.cache/mypy/linux
+strict = True
+disallow_untyped_defs = False
+disallow_incomplete_defs = False
+disallow_untyped_calls = False
+disallow_untyped_decorators = False
+# The public names' re-exports are the type-completeness check's and
+# the public-surface test's to police.
+implicit_reexport = True
+
+[mypy-{{ namespace_package }}.*]
+disallow_untyped_defs = True
+disallow_incomplete_defs = True
+disallow_untyped_calls = True
+disallow_untyped_decorators = True
+
+# The generated tool stubs carry the suppressions their generator
+# placed for its own reading of each tool; which of them fire varies
+# with flags this file does not share, and an unused one there is the
+# generator's business, not drift.
+[mypy-*.toolroom.stubs.*]
+warn_unused_ignores = False
+
+# The repository's own sections, a `[mypy-<module>]` each.
+# -- workshop: region sections, yours to edit; the render keeps it --
+# -- workshop: end sections --

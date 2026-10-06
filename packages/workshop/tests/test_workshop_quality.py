@@ -21,7 +21,6 @@ from workshop_python_checks import python_checks_fixture  # noqa: F401
 # below record them: one type check per type checker.
 PYTHON_JUDGES = (
     "test.pytest",
-    "typecheck.mypy",
     "typecheck.pyrefly",
     "typecheck.ty",
 )
@@ -134,9 +133,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
-    # Every type checker reads its configured whole: mypy because the
-    # unit is every unit, ty and pyrefly whatever the scope.
-    for tool in ("mypy", "ty", "pyrefly"):
+    # ty and pyrefly read their configured whole whatever the scope.
+    for tool in ("ty", "pyrefly"):
         assert "paths" not in by_verb[f"typecheck.{tool}"]
     assert by_verb["test.pytest"]["packages"] == (unit,)
     assert by_verb["test.pytest"]["scoped"] is True

@@ -1081,5 +1081,5 @@ def caches_clear() -> None:
     root = workspace_root()
     if root is None:
         return
-    for name in ("dist", ".pytest_cache", ".mypy_cache", ".workshop/.cache"):
+    for name in ("dist", ".pytest_cache", ".workshop/.cache"):
         shutil.rmtree(root / name, ignore_errors=True)

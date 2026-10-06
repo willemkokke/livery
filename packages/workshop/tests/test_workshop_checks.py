@@ -147,9 +147,9 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     )
     # A check whose kinds the native member's chain does not meet skips
     # it by name, as the gate prints it.
-    assert judged_by(check_for("typecheck.mypy"), (py, native)) == (py,)
+    assert judged_by(check_for("typecheck.pyrefly"), (py, native)) == (py,)
     assert (
-        "typecheck.mypy: packages/native skips (cpp-conan kind)"
+        "typecheck.pyrefly: packages/native skips (cpp-conan kind)"
         in capsys.readouterr().out
     )
 
@@ -267,13 +267,13 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
 ) -> None:
     from livery.workshop._checks import check_for, enabled, option_value
 
-    package = _member_with(tmp_path, "[checks.mypy.typecheck]\nenabled = false\n")
-    record = check_for("typecheck.mypy")
+    package = _member_with(tmp_path, "[checks.pyrefly.typecheck]\nenabled = false\n")
+    record = check_for("typecheck.pyrefly")
     assert option_value(record, package, "enabled") is False
     assert option_value(check_for("test.pytest"), package, "enabled") is True
-    assert enabled("typecheck.mypy", (package,)) == ()
+    assert enabled("typecheck.pyrefly", (package,)) == ()
     assert (
-        "typecheck.mypy: packages/x skips (turned off in"
+        "typecheck.pyrefly: packages/x skips (turned off in"
         " packages/x/workshop.toml)" in (capsys.readouterr().out)
     )
     assert enabled("test.pytest", (package,)) == (package,)
