@@ -20,6 +20,8 @@ what the configuration names in `files`, the root's `tasks.py` and tests
 among them; a run that reaches some checks their `src` and `tests`
 directories. Each platform's run has a cache of its own under
 `.workshop/.cache/mypy/`, and each one's verdict gates.
+`fm typecheck.mypy -- --strict` hands mypy the words after `--`, in each
+platform's call.
 
 The workspace's namespace is fully strict. The tests and `tasks.py` are
 checked as consumer code, so every test body type-checks without a

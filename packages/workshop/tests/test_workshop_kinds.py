@@ -91,6 +91,7 @@ class _FakeBackend:
         root: Path,
         *,
         selection: tuple[str, ...] = (),
+        arguments: tuple[str, ...] = (),
         pages: tuple[str, ...] = (),
     ) -> None:
         return None

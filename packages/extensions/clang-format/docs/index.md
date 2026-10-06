@@ -18,6 +18,8 @@ It reads the C and C++ files its claims reach in the package: its sources,
 its tests and their support, a new file not yet added to git among them; a
 run over named files reads the ones it names. A file out of style refuses,
 naming each file, and `fm check --fix` rewrites them.
+`fm format.clang-format -- --verbose` hands clang-format the words after
+`--`, in each package's call.
 
 ## The style
 

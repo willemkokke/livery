@@ -2,9 +2,10 @@
 
 ``typecheck.ty`` checks what ``ty.toml`` includes whatever a run
 reaches: a run costs seconds, and the file pins the platforms, every
-one at once. A body resolves its runner on this module when it runs,
-so a test that replaces `run_typecheck` here sees its replacement
-called.
+one at once. The check hands ty the words after ``--`` on its own
+verb (``fm typecheck.ty -- --output-format concise``). A body resolves
+its runner on this module when it runs, so a test that replaces
+`run_typecheck` here sees its replacement called.
 """
 
 from __future__ import annotations
@@ -22,14 +23,16 @@ SUFFIXES = (".py", ".pyi")
 EDITOR = "astral-sh.ty"
 
 
-def run_typecheck() -> None:
-    """Type-check the configured whole with ty; its exit code is the verdict."""
-    tools.ty.check()
+def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
+    """Type-check the configured whole with ty; its exit code is the verdict.
+
+    *arguments* go to ``ty check``.
+    """
+    tools.ty.check(*arguments)
 
 
 def _typecheck_run(ctx: GateContext) -> None:
-    del ctx
-    run_typecheck()
+    run_typecheck(ctx.arguments)
 
 
 CHECKS = (
@@ -39,6 +42,7 @@ CHECKS = (
         _typecheck_run,
         kinds=KINDS,
         tools=("ty",),
+        arguments=True,
         editor_extension=EDITOR,
         claims=tuple(
             Claim(category, suffixes=SUFFIXES)

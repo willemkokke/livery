@@ -19,6 +19,8 @@ rewriters and before every judge. Each reads the python files its claims
 reach: a python package's sources, tests and test support, its
 configuration, and a native package's `conanfile.py`. An example file is
 judged for its names alone, and a test needs no docstrings.
+`fm lint.ruff -- --statistics` hands `ruff check` the words after `--`, and
+`fm format.ruff -- --diff` hands them to `ruff format`.
 
 ## The configuration
 

@@ -364,6 +364,9 @@ def test_the_python_test_entry_maps_a_selection_to_its_files(
     assert kwargs["selection"] == {package.path: (f"{package.path}/tests/test_a.py",)}
     _python.test(package, tmp_path)
     assert calls[1][1]["selection"] is None
+    # The words for the kind's test runner reach pytest unchanged.
+    _python.test(package, tmp_path, arguments=("-k", "name"))
+    assert calls[2][0] == ("-k", "name")
 
 
 # --- what the gate is, pinned before the check registry replaces it -----------

@@ -16,6 +16,8 @@ extensions = ["ty"]
 `fm typecheck` then runs it, and `fm check` runs it with the rest of the
 gate. A run checks what the configuration includes whatever the run
 reaches: a run costs seconds, and the configuration pins the platforms.
+`fm typecheck.ty -- --output-format concise` hands `ty check` the words
+after `--`.
 
 ## The configuration
 

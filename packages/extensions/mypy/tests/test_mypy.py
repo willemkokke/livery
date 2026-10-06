@@ -144,22 +144,44 @@ def test_every_call_checks_each_platform_with_a_cache_of_its_own(
         (("packages/one/src",), {"platform": p, "cache_dir": f"{_checks.CACHE}/{p}"})
         for p in ("darwin", "linux", "win32")
     ]
+    # The words after -- on the check's own verb reach every platform's call.
+    calls.clear()
+    _checks.run_typecheck(("packages/one/src",), ("--strict",))
+    assert sorted(calls, key=lambda call: call[1]["platform"]) == [
+        (
+            ("--strict", "packages/one/src"),
+            {"platform": p, "cache_dir": f"{_checks.CACHE}/{p}"},
+        )
+        for p in ("darwin", "linux", "win32")
+    ]
 
 
 def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(_checks, "run_typecheck", lambda paths=(): calls.append(paths))
+    calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    monkeypatch.setattr(
+        _checks,
+        "run_typecheck",
+        lambda paths=(), arguments=(): calls.append((paths, arguments)),
+    )
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.mypy")
     # Every member reached: mypy reads the files mypy.ini names.
     record.run(GateContext(root=tmp_path, packages=(one, two)))
-    assert calls == [()]
+    assert calls == [((), ())]
     calls.clear()
     record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
-    assert calls == [("packages/one/src", "packages/one/tests")]
+    assert calls == [(("packages/one/src", "packages/one/tests"), ())]
+    # The words after -- on the check's own verb reach both calls.
+    calls.clear()
+    words = ("--strict",)
+    record.run(GateContext(root=tmp_path, packages=(one, two), arguments=words))
+    record.run(
+        GateContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
+    )
+    assert calls == [((), words), (("packages/one/src", "packages/one/tests"), words)]
 
 
 # The file: the workshop writes it, and a bare mypy reads what the gate reads.

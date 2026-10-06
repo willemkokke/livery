@@ -1270,10 +1270,15 @@ def test(
     root: Path,
     *,
     selection: tuple[str, ...] = (),
+    arguments: tuple[str, ...] = (),
 ) -> None:
-    """Run *package*'s tests: its suite, or the files in *selection* alone."""
+    """Run *package*'s tests: its suite, or the files in *selection* alone.
+
+    *arguments* go to pytest after the workshop's own.
+    """
     files = tuple(f"{package.path}/{path}" for path in selection)
     run_test(
+        *arguments,
         packages=(package,),
         root=root,
         selection={package.path: files} if files else None,
@@ -1292,8 +1297,13 @@ def examples_of(package: Package) -> list[Path]:
     return sorted(path for path in base.rglob("*.py") if path.name != "conftest.py")
 
 
-def run_examples(package: Package, root: Path, files: tuple[str, ...] = ()) -> None:
-    """Run *package*'s documentation examples, one test per file.
+def run_examples(
+    package: Package,
+    root: Path,
+    files: tuple[str, ...] = (),
+    arguments: tuple[str, ...] = (),
+) -> None:
+    """Run *package*'s documentation examples, one test per file; *arguments* to pytest.
 
     Pytest over the package's ``docs/examples/`` directory, or over
     *files* alone when every one of them is an example, whose files
@@ -1316,7 +1326,7 @@ def run_examples(package: Package, root: Path, files: tuple[str, ...] = ()) -> N
         if files and len(named) == len(files)
         else (f"{package.path}/docs/examples",)
     )
-    result = pytest.opts(in_process=False, cwd=root, nofail=True)(*targets)
+    result = pytest.opts(in_process=False, cwd=root, nofail=True)(*targets, *arguments)
     if result.code != 0:
         print(result.stdout, end="")
         print(result.stderr, end="")

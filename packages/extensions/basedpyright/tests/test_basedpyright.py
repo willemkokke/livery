@@ -132,19 +132,31 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
 def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(_checks, "run_typecheck", lambda paths=(): calls.append(paths))
+    calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    monkeypatch.setattr(
+        _checks,
+        "run_typecheck",
+        lambda paths=(), arguments=(): calls.append((paths, arguments)),
+    )
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.basedpyright")
     # Every member reached: basedpyright reads its configured include,
     # which a `.` would replace with every file under the root.
     record.run(GateContext(root=tmp_path, packages=(one, two)))
-    assert calls == [()]
+    assert calls == [((), ())]
     # One member of two: its own directories, in one call.
     calls.clear()
     record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
-    assert calls == [("packages/one/src", "packages/one/tests")]
+    assert calls == [(("packages/one/src", "packages/one/tests"), ())]
+    # The words after -- on the check's own verb reach both calls.
+    calls.clear()
+    words = ("--level", "error")
+    record.run(GateContext(root=tmp_path, packages=(one, two), arguments=words))
+    record.run(
+        GateContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
+    )
+    assert calls == [((), words), (("packages/one/src", "packages/one/tests"), words)]
 
 
 def test_type_completeness_verifies_each_judged_member_s_public_modules(
@@ -155,8 +167,12 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
 ) -> None:
     from livery.workshop._coverage_store import workspace_suite
 
-    verified: list[tuple[str, ...]] = []
-    monkeypatch.setattr(_checks, "run_typecomplete", verified.append)
+    verified: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    monkeypatch.setattr(
+        _checks,
+        "run_typecomplete",
+        lambda modules, arguments: verified.append((modules, arguments)),
+    )
     # A member that turned the check off is skipped by name, and the
     # workspace's own tests are no member: neither is verified.
     off = _member(tmp_path, "off", checks="checks.basedpyright.typecomplete")
@@ -166,24 +182,35 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     assert unit is not None
     record = registry.check_for("typecomplete.basedpyright")
     record.run(GateContext(root=tmp_path, packages=(off, one, unit)))
-    assert verified == [("acme.one.api",)]
+    assert verified == [(("acme.one.api",), ())]
     assert (
         "typecomplete.basedpyright: packages/off skips (turned off in"
         " packages/off/workshop.toml)" in capsys.readouterr().out
     )
+    # The words after -- on the check's own verb reach each verification.
+    verified.clear()
+    record.run(GateContext(root=tmp_path, packages=(one,), arguments=("--outputjson",)))
+    assert verified == [(("acme.one.api",), ("--outputjson",))]
 
 
 def test_each_public_module_is_verified_with_its_dependencies_external(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[dict[str, object]] = []
-    monkeypatch.setattr(tools, "basedpyright", lambda **kw: calls.append(kw))
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        tools, "basedpyright", lambda *words, **kw: calls.append((words, kw))
+    )
     _checks.run_typecomplete(())
     assert calls == []
     _checks.run_typecomplete(("acme.one.api", "acme.two"))
     assert calls == [
-        {"verifytypes": "acme.one.api", "ignoreexternal": True},
-        {"verifytypes": "acme.two", "ignoreexternal": True},
+        ((), {"verifytypes": "acme.one.api", "ignoreexternal": True}),
+        ((), {"verifytypes": "acme.two", "ignoreexternal": True}),
+    ]
+    calls.clear()
+    _checks.run_typecomplete(("acme.one.api",), ("--outputjson",))
+    assert calls == [
+        (("--outputjson",), {"verifytypes": "acme.one.api", "ignoreexternal": True})
     ]
 
 
@@ -194,9 +221,11 @@ def test_warnings_gate_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     _checks.run_typecheck()
     _checks.run_typecheck(("packages/one/src",))
+    _checks.run_typecheck(("packages/one/src",), ("--level", "error"))
     assert calls == [
         ((), {"warnings": True}),
         (("packages/one/src",), {"warnings": True}),
+        (("--level", "error", "packages/one/src"), {"warnings": True}),
     ]
 
 

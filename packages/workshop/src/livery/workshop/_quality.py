@@ -53,6 +53,7 @@ def _context(
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
     changes: Changes | None = None,
+    arguments: tuple[str, ...] = (),
 ) -> GateContext:
     """This workspace's gate context: the root, every package, and the run's scope."""
     root = workspace_root()
@@ -69,6 +70,7 @@ def _context(
         safe=safe,
         point=point,
         changes=changes,
+        arguments=arguments,
     )
 
 
@@ -287,9 +289,14 @@ def check(
     """
     from contextlib import nullcontext
 
+    from livery.workshop._checks import arguments_refusal, split_arguments
     from livery.workshop._state import fetched_snapshot, run_context
 
     _refuse_both(fix, safe_fix)
+    paths, arguments = split_arguments(paths)
+    if arguments:
+        verb = f"{footman.prog()} check"
+        fail(arguments_refusal(verb, _checks.checks_by_name().values()))
     if paths:
         _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point)
         return
@@ -358,6 +365,7 @@ def _check_files(
     point: str,
     judge: bool = True,
     only: frozenset[str] | None = None,
+    arguments: tuple[str, ...] = (),
 ) -> None:
     """The gate over the named files: the walk narrowed to them, nothing recorded.
 
@@ -381,8 +389,9 @@ def _check_files(
         if unknown:
             fail(
                 "not a file or directory in the workspace:"
-                f" {', '.join(unknown)}. Name files or directories; the checks"
-                " pass nothing through to a tool."
+                f" {', '.join(unknown)}. Name files or directories; a check's"
+                " own verb hands its tool the words after --:"
+                f" `{footman.prog()} <role>.<tool> <paths> -- <words>`."
             )
     files = named_files(root, paths)
     if not files:
@@ -405,6 +414,7 @@ def _check_files(
         files=files,
         safe=safe,
         point=point,
+        arguments=arguments,
     )
     walk(ctx, judge=judge, only=only)
 
@@ -416,11 +426,13 @@ def run_checks(
     fix: bool = False,
     safe_fix: bool = False,
     point: str = "",
+    arguments: tuple[str, ...] = (),
 ) -> None:
     """Run the checks *names* through the walk: a generated verb's body.
 
     Over the named paths, or the whole workspace; nothing is recorded
-    as proved, since a part of the gate ran.
+    as proved, since a part of the gate ran. *arguments*, the words
+    after ``--`` on a check's own verb, reach that check's tool.
     """
     import os
 
@@ -432,9 +444,19 @@ def run_checks(
         )
     only = frozenset(names)
     if paths:
-        _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point, only=only)
+        _check_files(
+            paths,
+            fix=fix or safe_fix,
+            safe=safe_fix,
+            point=point,
+            only=only,
+            arguments=arguments,
+        )
         return
-    walk(_context(fix=fix or safe_fix, safe=safe_fix, point=point), only=only)
+    context = _context(
+        fix=fix or safe_fix, safe=safe_fix, point=point, arguments=arguments
+    )
+    walk(context, only=only)
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:

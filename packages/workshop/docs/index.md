@@ -134,6 +134,16 @@ nightly's tests and `fm test.ctest` offers no point at all. A role
 whose verb already exists is served by it: the provenance check is
 `fm provenance`.
 
+A check's own verb hands the tool it wraps the words after `--`:
+`fm test.pytest packages/strongroom -- -k slow` runs that package's
+suite with pytest's `-k slow`, and `fm lint.ruff -- --statistics` gives
+ruff its flag. The words before `--` stay paths. A role verb runs
+several tools, so it refuses words after `--` and names the checks'
+own verbs that take them; `fm check` refuses them the same way. A
+check that wraps no tool, such as `fm drift.check`, refuses them too.
+A check says it takes them with `arguments=True` on its record, and
+its body reads them from the context's `arguments`.
+
 A check's `options` are what a package may set in its own contract,
 each with a type and a default; every check carries `enabled`, and
 pytest's test check carries `parallel`. Three tables reach them:
@@ -523,7 +533,9 @@ absence.
   paths or the workspace the way `fm check <paths>` runs them, with
   nothing recorded as proved; each offers exactly the flags its
   checks read. `fm test.pytest packages/strongroom` runs one package's
-  suite.
+  suite, and `fm test.pytest packages/strongroom -- -k slow` hands
+  pytest the words after `--`.
+
 - The check legs run on every runner the contract names, with the
   newest Python of a derived matrix; the nightly point runs the whole
   matrix, floor included, so the floor's legs cost runner minutes at

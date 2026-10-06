@@ -8,7 +8,8 @@ kind's runner runs their suites in one call
 suite is not worker-safe sets the check's ``parallel`` option to false
 and runs in a call of its own, under ``-n 0``. ``examples.pytest`` runs
 each member's documentation examples with its kind's examples runner
-([livery.workshop.api.kind_examples][]).
+([livery.workshop.api.kind_examples][]). Each check hands pytest the
+words after ``--`` on its own verb (``fm test.pytest -- -k name``).
 """
 
 from __future__ import annotations
@@ -52,13 +53,15 @@ def _test_run(ctx: GateContext) -> None:
         print(f"  {TEST}: no python package and no workspace tests to run")
         return
     # A suite that is not worker-safe runs in a call of its own under
-    # -n 0. Each call collects the packages it is handed and no other.
+    # -n 0, after the words from the verb, so they cannot undo it. Each
+    # call collects the packages it is handed and no other.
     serial = tuple(p for p in members if not check_option(TEST, p, "parallel"))
     parallel = tuple(p for p in suites if p not in serial)
     for group, extra in ((parallel, ()), (serial, ("-n", "0"))):
         if group:
             run_suites(
                 KIND,
+                *ctx.arguments,
                 *extra,
                 packages=group,
                 root=ctx.root,
@@ -86,7 +89,7 @@ def _examples_run(ctx: GateContext) -> None:
             if ctx.files
             else ()
         )
-        runner(package, ctx.root, named)
+        runner(package, ctx.root, named, ctx.arguments)
 
 
 CHECKS = (
@@ -97,6 +100,7 @@ CHECKS = (
         flags=("point",),
         narrowing=PACKAGES,
         kinds=(KIND,),
+        arguments=True,
         # pytest is the record's tool in the store, for the typed handle
         # the runner calls, and its venv copy below is the one that
         # imports the project's environment.
@@ -139,6 +143,7 @@ CHECKS = (
         narrowing=PACKAGES,
         kinds=(KIND,),
         tools=("pytest",),
+        arguments=True,
         claims=(Claim("example", suffixes=SUFFIXES),),
     ),
 )

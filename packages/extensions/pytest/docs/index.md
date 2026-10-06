@@ -23,6 +23,9 @@ and `fm check` runs both with the rest of the gate:
 - `examples.pytest` runs each python package's documentation examples, the
   files under `docs/examples/`, one test per file.
 
+`fm test.pytest -- -k name` hands pytest the words after `--`, and
+`fm examples.pytest` takes them the same way.
+
 A package whose suite is not safe to run across cores turns that off in its
 own `workshop.toml`, and its suite then runs in a pytest call of its own
 under one worker:
@@ -31,6 +34,10 @@ under one worker:
 [checks.pytest]
 parallel = false
 ```
+
+That call puts `-n 0` after the words from the verb, so
+`fm test.pytest -- -n 4` cannot spread that suite across cores.
+
 
 ## The configuration
 

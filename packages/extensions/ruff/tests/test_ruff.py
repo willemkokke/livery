@@ -112,14 +112,48 @@ def test_each_check_hands_ruff_the_paths_of_the_run_in_its_mode(
         record.fix(ctx)
         record.fix(GateContext(root=tmp_path, packages=(member,), safe=True))
     # Every member reached: the whole tree, in one call each.
+    whole = {"paths": (".",), "arguments": ()}
     assert calls == [
-        ("format", {"check": True, "paths": (".",)}),
-        ("format", {"check": False, "safe_fix": False, "paths": (".",)}),
-        ("format", {"check": False, "safe_fix": True, "paths": (".",)}),
-        ("lint", {"fix": False, "paths": (".",)}),
-        ("lint", {"fix": True, "safe_fix": False, "paths": (".",)}),
-        ("lint", {"fix": False, "safe_fix": True, "paths": (".",)}),
+        ("format", {"check": True, **whole}),
+        ("format", {"check": False, "safe_fix": False, **whole}),
+        ("format", {"check": False, "safe_fix": True, **whole}),
+        ("lint", {"fix": False, **whole}),
+        ("lint", {"fix": True, "safe_fix": False, **whole}),
+        ("lint", {"fix": False, "safe_fix": True, **whole}),
     ]
+    # The words after -- on a check's own verb reach its call, in each mode.
+    calls.clear()
+    words = ("--statistics",)
+    ctx = GateContext(root=tmp_path, packages=(member,), arguments=words)
+    for name in ("format.ruff", "lint.ruff"):
+        record = registry.check_for(name)
+        record.run(ctx)
+        assert record.fix is not None
+        record.fix(ctx)
+    assert [kw["arguments"] for _, kw in calls] == [words] * 4
+
+
+def test_the_words_after_the_dashes_reach_ruff_before_the_paths(
+    tmp_path: Path,
+) -> None:
+    # The file selects F alone, so the long line passes until the words
+    # select E501 too; the formatter wraps the list only at the narrower
+    # line length the words give it.
+    (tmp_path / "ruff.toml").write_text('[lint]\nselect = ["F"]\n')
+    wide = tmp_path / "wide.py"
+    wide.write_text(f"value = {'x' * 100!r}\n")
+    _checks.run_lint(fix=False, paths=(str(wide),))
+    with pytest.raises(Exception, match="exited"):
+        _checks.run_lint(
+            fix=False, paths=(str(wide),), arguments=("--extend-select", "E501")
+        )
+    listed = tmp_path / "listed.py"
+    listed.write_text("x = [1, 2, 3, 4, 5, 6]\n")
+    _checks.run_format(check=True, paths=(str(listed),))
+    with pytest.raises(Exception, match="exited"):
+        _checks.run_format(
+            check=True, paths=(str(listed),), arguments=("--line-length", "10")
+        )
 
 
 def test_a_foreign_file_a_run_names_passes_through_untouched(tmp_path: Path) -> None:

@@ -19,6 +19,8 @@ reads the C and C++ sources and tests its claims reach in the package, or
 the files a run names, against the compilation database the package's kind
 says its build writes. A package not configured yet has no database, and
 nothing is linted until it has.
+`fm lint.clang-tidy -- --checks=-*,bugprone-*` hands clang-tidy the words
+after `--`, in each package's call.
 
 The store's clang-tidy is one static binary with no headers of its own: it
 takes the host compiler's builtin headers, and the SDK on macOS. A host

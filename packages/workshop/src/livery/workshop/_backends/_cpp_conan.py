@@ -820,8 +820,8 @@ def _from_set_output(text: str) -> dict[str, str]:
     return parsed
 
 
-def configure(package: Package) -> None:
-    """Configure *package* into the gate's build directory.
+def configure(package: Package, arguments: tuple[str, ...] = ()) -> None:
+    """Configure *package* into the gate's build directory; *arguments* go to cmake.
 
     The dependency-free library needs no conan at gate time: cmake
     configures against the host toolchain with the Ninja generator
@@ -842,14 +842,15 @@ def configure(package: Package) -> None:
         "Ninja",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         f"-DCMAKE_PROJECT_INCLUDE={COVERAGE_CMAKE}",
+        *arguments,
     )
 
 
-def compile(package: Package) -> None:
-    """Build the configured *package*; incremental, so one edit costs that edit."""
+def compile(package: Package, arguments: tuple[str, ...] = ()) -> None:
+    """Build the configured *package*, *arguments* to cmake's build; incremental."""
     build_dir = package.directory / GATE_BUILD_DIR
     tools.cmake.opts(cwd=package.directory, env=toolchain_env())(
-        "--build", str(build_dir)
+        "--build", str(build_dir), *arguments
     )
 
 
@@ -870,8 +871,11 @@ def test(
     root: Path,
     *,
     selection: tuple[str, ...] = (),
+    arguments: tuple[str, ...] = (),
 ) -> None:
     """Run ctest over the gate build, measured: every test, or *selection*'s alone.
+
+    *arguments* go to ctest after the workshop's own.
 
     A selected test file maps to the ctest named after its stem
     (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
@@ -893,16 +897,17 @@ def test(
         **_fresh_profiles(package),
     }
     names = [Path(path).stem for path in selection]
-    arguments = ["--test-dir", str(build_dir), "--output-on-failure"]
+    argv = ["--test-dir", str(build_dir), "--output-on-failure"]
     if names:
         pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
-        arguments += ["-R", pattern]
+        argv += ["-R", pattern]
+    argv += arguments
     compiler_id, compiler = compiler_of(package)
     family = lines_.measurer_for(compiler_id)
     if family == "msvc":
-        measured = _measure_msvc(package, arguments, env, names)
+        measured = _measure_msvc(package, argv, env, names)
     else:
-        _run_ctest(package, arguments, env, names)
+        _run_ctest(package, argv, env, names)
         if not family:
             fail(
                 f"{package.name}: the gate build's compiler"
