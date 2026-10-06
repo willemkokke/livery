@@ -1674,9 +1674,12 @@ def _publish_ssh(root: Path) -> None:
     # The one spawn here that stays shell: the site rides a pipe into
     # the far side's tar, and a handle builds one command line, not a
     # pipeline. Streaming the archive instead would need bytes on
-    # stdin, where a handle's `input` is text.
+    # stdin, where a handle's `input` is text. bash runs the pipeline
+    # with pipefail, so a local tar failure is the exit code as well;
+    # the deploy runner's /bin/sh has no pipefail.
     shipped = footman.run(
-        f'tar -cf - -C site . | ssh {destination} "tar -xf - -C {target}"',
+        "bash -o pipefail -c "
+        f"'tar -cf - -C site . | ssh {destination} \"tar -xf - -C {target}\"'",
         shell=True,
         cwd=root,
         nofail=True,

@@ -60,12 +60,28 @@ def _runs_runner() -> re.Pattern[str]:
 # `|&` is bash's pipe-with-stderr; it hides the exit code exactly
 # like a bare pipe, so both forms count.
 _TRUNCATES = re.compile(r"\|&?\s*(?:tail|head)\b")
-_PUSHES = re.compile(r"^\s*git\s+(?:-C\s+(\S+)\s+)?push\b")
-_PUSH_EXEMPT = re.compile(r"\s(?:--delete|-d|--tags)\b|\bpush\s+(?:\S+\s+)?main\b")
+_PUSHES = re.compile(r"^\s*git\s+(?:-C\s+(\S+)\s+)?push\b(.*)$")
+_PUSH_EXEMPT = re.compile(
+    r"\s(?:--delete|-d|--tags)\b|\bpush\s+(?:\S+\s+)?main(?=\s|$)"
+)
 
 
-def _push_conflicts(repo: str | None) -> bool:
-    """Whether HEAD conflicts with origin/main.
+def _pushed_refs(rest: str) -> list[str]:
+    """The local refs a push sends: each refspec's source, or HEAD.
+
+    *rest* is the command after ``push``. Options are skipped, the
+    first word is the remote, and every word after it is a refspec
+    whose source the guard tests. A deletion, an empty source, sends
+    nothing and is left out; a push naming no refspec sends HEAD.
+    """
+    words = [word for word in rest.split() if not word.startswith("-")]
+    sources = [word.split(":", 1)[0].lstrip("+") for word in words[1:]]
+    refs = [source for source in sources if source]
+    return refs if words[1:] else ["HEAD"]
+
+
+def _push_conflicts(repo: str | None, ref: str = "HEAD") -> bool:
+    """Whether *ref*, the branch the push sends, conflicts with origin/main.
 
     GitHub's test-merge, run locally in milliseconds, before the push
     can create the silent state.
@@ -83,10 +99,13 @@ def _push_conflicts(repo: str | None) -> bool:
         run([*git, "fetch", "--quiet", "origin", "main"], capture=True)
     try:
         run([*git, "rev-parse", "--verify", "-q", "origin/main^{commit}"], capture=True)
+        run([*git, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], capture=True)
     except RunFailed:
-        return False  # no origin/main at all: not this guard's business
+        # No origin/main at all, or a ref git cannot see: git refuses
+        # the push itself, and neither is this guard's business.
+        return False
     try:
-        run([*git, "merge-tree", "--write-tree", "origin/main", "HEAD"], capture=True)
+        run([*git, "merge-tree", "--write-tree", "origin/main", ref], capture=True)
     except RunFailed as exc:
         # With the ref verified, exit 1 is merge-tree's one honest meaning:
         # "merged, with conflicts". (Unverified, 1 also means "no such ref".)
@@ -140,13 +159,14 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
         if push is None or _PUSH_EXEMPT.search(segment):
             continue
         repo = push.group(1)  # a quoted -C path was blinded; probe the cwd then
-        if _push_conflicts(None if repo in (None, '""') else repo):
+        where = None if repo in (None, '""') else repo
+        if any(_push_conflicts(where, ref) for ref in _pushed_refs(push.group(2))):
             fail(
                 "git push refused: this branch conflicts with origin/main. A "
                 "conflicting PR spawns no CI at all - GitHub cannot build its "
                 "test-merge, so there is no red X, no checks, just silence. "
-                "Rebase (git fetch origin && git rebase origin/main), re-run "
-                "the gate, then push.",
+                f"Align the branch with `{footman.prog()} sync`, re-run the gate,"
+                " then push.",
                 code=2,
             )
 

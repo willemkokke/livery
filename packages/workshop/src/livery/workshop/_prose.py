@@ -529,7 +529,8 @@ def render_verbs(root: Path, audience: str | None) -> str:
     else:
         lines.append(
             f"Every job goes through `{prog}`; these are its verbs, by the extension"
-            " that provides them:"
+            f" that provides them. Verbs hidden from `--help`, which CI and other"
+            f" verbs call, are not listed; `{prog} --all --help` shows them:"
         )
     lines.append("")
     for extension in ordered:

@@ -323,8 +323,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     only what a removed package left behind is named as such, with
     the ``fm sync`` that removes it. An unknown kind
     passes discovery so the backend refusal can name the vocabulary.
-    A contract still naming the package kind under ``type`` refuses
-    with the one-line migration.
     """
     from livery.workshop._kinds import requires_pyproject
 
@@ -794,7 +792,12 @@ _RUNNER_DIST = "livery-footman"
 
 #: What a module that imports the runner must never call: a terminal
 #: says nothing about ``--no-input`` or ``--dry-run``.
-_TERMINAL_CALLS = ("sys.stdin.isatty", "sys.stdout.isatty")
+_TERMINAL_CALLS = (
+    "sys.stdin.isatty",
+    "sys.stdout.isatty",
+    "sys.stderr.isatty",
+    "os.isatty",
+)
 
 
 def _imports_the_runner(tree: ast.Module) -> bool:
@@ -826,7 +829,7 @@ def _terminal_calls(tree: ast.Module) -> list[str]:
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.module == "sys"
         for alias in node.names
-        if alias.name in ("stdin", "stdout")
+        if alias.name in ("stdin", "stdout", "stderr")
     }
     found: list[str] = []
     for node in ast.walk(tree):

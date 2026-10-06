@@ -48,10 +48,12 @@ def test_an_ordinary_pipe_passes() -> None:
     assert _guard("git log --oneline | head -3").returncode == 0
 
 
-def test_a_conflicting_push_is_refused(tmp_path: Path) -> None:
-    def git(*args: str, cwd: Path) -> None:
-        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+def git(*args: str, cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
+
+def _conflicting_clone(tmp_path: Path) -> Path:
+    """A clone checked out on main, whose `feature` branch conflicts with it."""
     origin = tmp_path / "origin"
     origin.mkdir()
     git("init", "--bare", "-b", "main", cwd=origin)
@@ -72,6 +74,11 @@ def test_a_conflicting_push_is_refused(tmp_path: Path) -> None:
     (clone / "f.txt").write_text("main moved\n")
     git("commit", "-am", "moved", cwd=clone)
     git("push", "origin", "main", cwd=clone)
+    return clone
+
+
+def test_a_conflicting_push_is_refused(tmp_path: Path) -> None:
+    clone = _conflicting_clone(tmp_path)
     git("switch", "feature", cwd=clone)
 
     refused = _guard(f"git -C {clone} push origin feature")
@@ -79,3 +86,20 @@ def test_a_conflicting_push_is_refused(tmp_path: Path) -> None:
     assert "conflicts with origin/main" in refused.stdout + refused.stderr
     # ...while the exempt shapes pass untouched.
     assert _guard(f"git -C {clone} push --tags").returncode == 0
+
+
+def test_the_branch_a_push_names_is_tested_rather_than_head(tmp_path: Path) -> None:
+    # The checkout stays on main, which is current; the push names feature.
+    clone = _conflicting_clone(tmp_path)
+    refused = _guard(f"git -C {clone} push origin feature")
+    assert refused.returncode == 2
+    assert "conflicts with origin/main" in refused.stdout + refused.stderr
+    assert _guard(f"git -C {clone} push origin main").returncode == 0
+
+
+def test_a_branch_named_like_main_is_not_exempt() -> None:
+    from livery.workshop._hooks import _PUSH_EXEMPT
+
+    assert _PUSH_EXEMPT.search("git push origin main") is not None
+    assert _PUSH_EXEMPT.search("git -C /w push origin main") is not None
+    assert _PUSH_EXEMPT.search("git push origin main-fix") is None

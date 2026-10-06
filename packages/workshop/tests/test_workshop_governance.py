@@ -793,3 +793,26 @@ def test_a_disarmed_behind_pr_teaches_integrate(
     assert verdict.state == "disarmed"
     assert "behind" in verdict.detail
     assert "integrate" in verdict.detail
+
+
+def test_the_reconcile_spawns_the_runner_by_a_module_that_resolves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib.util
+    from types import SimpleNamespace
+
+    import livery.footman.api as footman
+    from livery.workshop import _workflow_tasks
+
+    spawned: list[list[str]] = []
+
+    def _run(argv: list[str], **_: object) -> SimpleNamespace:
+        spawned.append(list(argv))
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(footman, "run", _run)
+    _workflow_tasks._spawn_configure()
+    (argv,) = spawned
+    assert argv[1:2] == ["-m"]
+    assert importlib.util.find_spec(argv[2]) is not None, argv
+    assert argv[3:] == ["workflow.configure"]

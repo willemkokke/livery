@@ -419,7 +419,7 @@ def _spawn_configure() -> footman.Result:
     import sys
 
     return footman.run(
-        [sys.executable, "-m", "footman", "workflow.configure"],
+        [sys.executable, "-m", "livery.footman", "workflow.configure"],
         nofail=True,
         recorded=False,
         cwd=_root(),

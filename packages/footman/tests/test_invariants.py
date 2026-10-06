@@ -17,7 +17,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "footman"
+SRC = Path(__file__).resolve().parent.parent / "src" / "livery" / "footman"
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 # The lazily-imported optional friends a module may reach for *inside* a
@@ -45,16 +45,17 @@ def test_zero_runtime_dependencies_is_declared_and_true():
     meta = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     assert meta["project"]["dependencies"] == []
     # The practice: every module-level import in the shipped package is the
-    # standard library or footman itself. A lazy optional import inside a
+    # standard library or footman itself, under its ``livery`` namespace. A
+    # lazy optional import inside a
     # @requires_dep-gated body is legal (the blessed exception); this walk
     # reads module scope only, so such an import failing HERE means someone
     # hoisted it to the top of the file.
-    allowed = set(sys.stdlib_module_names) | {"footman"}
+    allowed = set(sys.stdlib_module_names) | {"livery"}
     # One module is imported BY its dependency, never the other way round:
     # the pytest plugin loads through the `pytest11` entry point, so pytest
     # is present by construction whenever this file executes. Nothing else
-    # gets the pass — and nothing under footman/ may import pytest_plugin.
-    per_file = {"pytest_plugin.py": {"pytest"}}
+    # gets the pass, and nothing under footman may import _pytest_plugin.
+    per_file = {"_pytest_plugin.py": {"pytest"}}
     offenders: list[str] = []
     for path in sorted(SRC.rglob("*.py")):
         extra = per_file.get(str(path.relative_to(SRC)), set())
@@ -65,7 +66,7 @@ def test_zero_runtime_dependencies_is_declared_and_true():
     importers = [
         str(path.relative_to(SRC))
         for path in sorted(SRC.rglob("*.py"))
-        if path.name != "pytest_plugin.py"
+        if path.name != "_pytest_plugin.py"
         and any(
             "pytest_plugin" in ln
             for ln in path.read_text(encoding="utf-8").splitlines()
@@ -91,7 +92,7 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
         "    pass\n"
         "loaded = sorted(\n"
         "    n for n in sys.modules\n"
-        "    if n == 'footman' or n.startswith('footman.')\n"
+        "    if n == 'livery.footman' or n.startswith('livery.footman.')\n"
         ")\n"
         "print('LOADED ' + json.dumps(loaded))\n"
     )
@@ -113,8 +114,10 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     loaded = set(json.loads(line[len("LOADED ") :]))
     # The hot path's whole allowance. Growing this set is a decision about
     # the ~30 ms budget, not a test to appease — that is why it is exact.
+    # The namespace and api are the entry: api took over from __init__.
     assert loaded <= {
-        "footman",
+        "livery.footman",
+        "livery.footman.api",
         "livery.footman._complete",
         "livery.footman._paths",
     }, sorted(loaded)
