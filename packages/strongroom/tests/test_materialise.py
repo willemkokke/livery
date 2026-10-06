@@ -407,7 +407,27 @@ def test_a_live_view_roots_its_tree_and_a_gone_one_is_retired_by_the_sweep(
     assert store.view_record(record.id) is None
 
 
+def test_a_record_retired_while_the_views_are_read_is_left_out(
+    store: Store, sample: Digest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kept = store.view(sample, tmp_path / "kept")
+    gone = store.view(sample, tmp_path / "gone")
+    retired = store.root / "index" / "views" / f"{gone.id}.json"
+    read_bytes = Path.read_bytes
+
+    def read_after_the_retire(path: Path) -> bytes:
+        # Another process retires the record after the listing named it.
+        if path == retired:
+            retired.unlink(missing_ok=True)
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_after_the_retire)
+    assert store.views() == [kept]
+    assert store.view_record(gone.id) is None
+
+
 def test_a_malformed_view_record_is_an_integrity_error(store: Store) -> None:
+
     (store.root / "index" / "views").mkdir(parents=True)
     (store.root / "index" / "views" / "bad.json").write_bytes(b"{")
     with pytest.raises(IntegrityError, match=r"view record bad\.json"):

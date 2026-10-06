@@ -28,6 +28,7 @@ import sys
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import partial
 from io import BytesIO
 from pathlib import Path
 
@@ -42,6 +43,7 @@ from livery.strongroom.api import (
     ViewRecord,
 )
 from livery.strongroom.api import Store as ObjectStore
+from livery.toolroom.store._exclusive import exclusive
 from livery.toolroom.store._fetch import UnpackError, fetch_bytes, unpack
 from livery.toolroom.store._home import TOOLS, Home
 from livery.toolroom.store._record import (
@@ -90,7 +92,8 @@ class Event:
     Attributes:
         name: The tool.
         version: The version.
-        action: A short verb: `probe`, `fetch`, `install`, `link`.
+        action: A short verb: `probe`, `wait`, `fetch`, `install`, `link`.
+
         detail: Free text a renderer may show: a URL, a path, a reason.
     """
 
@@ -504,6 +507,11 @@ class Store:
         is not supplied through the store yet and refuses naming the
         kind.
 
+        One process at a time supplies a version: the supply holds the
+        version's lock in the home while it works, and a second supply
+        waits for it, saying so through the progress, then finds the
+        version present.
+
         Raises:
             StoreError: for a kind the store cannot supply, a downloaded
                 kind with no deployment, an `npm` tool with no runtime
@@ -514,6 +522,35 @@ class Store:
                 missing or below its floor, or a ref already naming
                 another tree.
         """
+        waiting = partial(
+            self._progress, Event(name, version, "wait", "another process supplies it")
+        )
+        with exclusive(self.home.lock(name, version), waiting=waiting):
+            return self._supply(
+                name,
+                kind,
+                version,
+                deployment,
+                package=package,
+                min_version=min_version,
+                runtime=runtime,
+                runtime_exe=runtime_exe,
+                graph=graph,
+            )
+
+    def _supply(
+        self,
+        name: str,
+        kind: str,
+        version: str,
+        deployment: Deployment | None,
+        *,
+        package: str,
+        min_version: str,
+        runtime: str,
+        runtime_exe: Path | None,
+        graph: Path | None,
+    ) -> Ensured:
         if kind in DOWNLOAD_KINDS:
             if deployment is None:
                 raise StoreError(

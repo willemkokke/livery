@@ -7,9 +7,13 @@ import json
 import os
 import stat
 import sys
+import threading
+import time
 import zipfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -344,6 +348,46 @@ def test_a_launcher_stands_in_where_a_link_is_refused(
         assert not made.is_symlink()
         assert made.read_text().startswith("#!/bin/sh\nexec ")
         assert made.stat().st_mode & stat.S_IXUSR
+
+
+def test_a_second_supply_of_a_version_waits_for_the_first_and_finds_it_present(
+    home: Home, origin: dict[str, bytes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two supplies of one version at once would each drop and remake
+    # the other's view. The second waits on the version's lock, saying
+    # so, then probes and finds the view the first made whole.
+    artifacts, _data = _tool()
+    spec = _record("tool", artifacts)
+    _serve(origin, spec, artifacts)
+    staging = threading.Event()
+    staged = threading.Event()
+    stage = Store.stage
+
+    def held_stage(self: Store, *args: Any, **kwargs: Any) -> tuple[str, ...]:
+        staging.set()
+        assert staged.wait(10)
+        return stage(self, *args, **kwargs)
+
+    monkeypatch.setattr(Store, "stage", held_stage)
+    first_events: list[Event] = []
+    second_events: list[Event] = []
+    first = Store(home, host=HOST, progress=first_events.append)
+    second = Store(home, host=HOST, progress=second_events.append)
+    with ThreadPoolExecutor(2) as pool:
+        made = pool.submit(first.ensure, spec, "1.0.0")
+        assert staging.wait(10)
+        found = pool.submit(second.ensure, spec, "1.0.0")
+        deadline = time.monotonic() + 10
+        while not second_events and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert [e.action for e in second_events] == ["wait"]
+        staged.set()
+        first_made, second_found = made.result(10), found.result(10)
+    assert first_made.installed and not second_found.installed
+    assert second_found.tree == first_made.tree
+    assert [e.action for e in first_events] == ["probe", "fetch", "install"]
+    assert [e.action for e in second_events] == ["wait", "probe"]
+    assert home.lock("tool", "1.0.0").exists()
 
 
 # --- the shapes -----------------------------------------------------------------
