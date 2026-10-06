@@ -219,6 +219,25 @@ targets" has no spelling and no known case; if one appears it is a
 `REQUIRES` entry spelled as alternatives, a grammar change to rule on
 then.
 
+`COMPATIBLE` is a third declaration on another axis: composition, not
+contribution. It says two package-level extensions may sit on one
+package, and the validity rule reads it: a package's list is valid when
+every pair is connected through `REQUIRES` or compatibility, else the
+package refuses naming the pair. For a package-level pair, a `REQUIRES`
+or `FOR` target counts as compatible: contributing to an extension
+means knowing it, so `FOR = {"python": ...}` without `COMPATIBLE =
+("python",)` would be a contradiction to refuse, and deriving it removes
+the case. `COMPATIBLE` is needed only where neither side requires or
+contributes to the other, `conan` beside `nanobind` for one. The
+wheel's side is one rule as well: a compatibility claim is an extra
+(contract 15), and a `FOR` module that imports its target's public
+names is the same extra, `livery-extensions-nanobind[python]`. So three
+outcomes, each at its own place: a missing `REQUIRES` target refuses at
+the listing; an absent `FOR` target is silence, the entry dormant and
+named; an unconnected pair refuses at the package, naming both.
+`BEFORE` and `AFTER` are declared against required or compatible
+extensions, which the derived compatibility covers.
+
 ### Dependencies follow use
 
 The brief's third thought: mounting an extension must not install its
@@ -284,7 +303,7 @@ built from are in the next table.
 | `LEVELS` | `("workspace",)`, `("package",)` or both | every | the eight, docs |
 | `PLUGIN` | the footman plugin carrying the verbs | every | docs |
 | `REQUIRES` | extensions it cannot work without, listed before it; it declares for them on its own module | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
-| `COMPATIBLE` | extensions it combines with, from either side | package | phase 11 |
+| `COMPATIBLE` | extensions it combines with, from either side; a `REQUIRES` or `FOR` target counts as one | package | phase 11 |
 | `BEFORE`, `AFTER` | order within a phase against named extensions | package | phase 11 |
 | `TOOLS` | the tools its verbs need | every | forge's dev plugin (as a plugin) |
 | `OPTIONS` | option name to what it turns on | every | basedpyright |
@@ -828,6 +847,10 @@ the stack, which this design neither needs nor rules out).
   no listed target is silent or an error: `REQUIRES` is the error and
   `FOR` the silence, with a dormant entry named by `fm extensions` and
   `fm doctor`; no third declaration.
+- 2026-10-06, on how that meets `COMPATIBLE`: composition is its own
+  axis, and a `REQUIRES` or `FOR` target counts as compatible for a
+  package-level pair, so `COMPATIBLE` is declared only where neither
+  side requires or contributes to the other.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
