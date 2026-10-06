@@ -1,12 +1,13 @@
 {
   ".gitattributes": "777778cbdb9c481540de884a4820c5dbe8ff65dad89d3b07385d1eeb702e0f4d",
   ".gitignore": "1825a8e7c889038fd26becef962ecbc65b58d057f01435629bed41422f525d03",
-  ".vscode/extensions.json": "aa7852033e7f0a257514c1681c4b5ebcb4a80825e3ff98ba6ee60ec9df1d080c",
+  ".vscode/extensions.json": "7d7ebb7334688388efa14b465884bf0435cec0acca52bd90aabf6e315ff7df64",
   ".vscode/settings.json": "3e4d1d4f4979a2a8bde9213a78edd3e8d48d97400c9ece194358f65cce83525e",
   "CLAUDE.md": "cc6ccfb7b6c3b25a9b1674aedb29724686142d1075d161247893f21e75926c00",
-  "mypy.ini": "6075782cd7f7e99e3b2f14ee5199baf3565a1d9edd68c6451f1a52d880db1b6e",
-  "pyproject.toml": "65cf802bf8e67a92c66c4702296aa62134e1923b777276350e2fc6ded2705896",
+  "mypy.ini": "3c58f0d6d087ce3584067cd942292a49f0c4b0834abeb25fb1778deef1f5c597",
+  "pyproject.toml": "1e002ee50314291fba0dcb665b371bdf791eb622f50bcdb2fed49f60fd3c7c9f",
   "pyrightconfig.json": "53fb025064a13f65594c742929f6ebc3a8f1482a299fff445302d454ebc89b22",
-  "ruff.toml": "9e81e19f1015874a7655d8b0d58efb102449fbde10c04eafc5566180f36ea7f0",
-  "tasks.py": "7e8d6b67ae153fbb7f4cd6d10f3a8dc41fd50573fcd9e7a64ee3cf6d8129df1d"
+  "ruff.toml": "19a59157397ee320f073cffde42af0d5ee10d64b4708400af44f46a9677e74d1",
+  "tasks.py": "7e8d6b67ae153fbb7f4cd6d10f3a8dc41fd50573fcd9e7a64ee3cf6d8129df1d",
+  "ty.toml": "74fda73cf0f61e18fcdf032f492a033d525faf1128b9322bc6791f096dba6100"
 }

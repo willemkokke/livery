@@ -268,7 +268,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "git_cliff",
         "uv",
         "pytest",
-        "ty",
         "pyrefly",
     }
     # The base kind heads the chain: its tool is declared first, by it;
@@ -277,7 +276,6 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
     assert {
         ("pytest", "check test.pytest"),
-        ("ty", "check typecheck.ty"),
         ("pyrefly", "check typecheck.pyrefly"),
     } <= sites
     assert {r.name for r in declared if r.site == "kind python"} == {"uv"}
@@ -331,8 +329,7 @@ def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) 
     assert _tools.tool_names(tmp_path) == (
         "git_cliff",  # the base kind's, first in the chain
         "uv",  # the python kind's own
-        "ty",  # then the checks' tools, in their registration order
-        "pyrefly",
+        "pyrefly",  # then the checks' tools, in their registration order
         "pytest",
     )
 
@@ -347,7 +344,7 @@ def test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes(
     member.mkdir(parents=True)
     (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
     names = _tools.tool_names(tmp_path)
-    assert {"uv", "ty", "pyrefly", "pytest"} <= set(names)
+    assert {"uv", "pyrefly", "pytest"} <= set(names)
     assert "conan" in names  # the native member's own kind still counts
 
 
@@ -378,8 +375,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    # Four of the python kind, the base kind's git_cliff, and this one.
-    assert "git-cliff 2.1.0" in out and "tools.lock: 6 tool(s)" in out
+    # Three of the python kind, the base kind's git_cliff, and this one.
+    assert "git-cliff 2.1.0" in out and "tools.lock: 5 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")

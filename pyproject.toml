@@ -27,12 +27,13 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/mypy", "packages/extensions/ruff", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/mypy", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
 livery-extensions-mypy = { workspace = true }
 livery-extensions-ruff = { workspace = true }
+livery-extensions-ty = { workspace = true }
 livery-footman = { workspace = true }
 livery-forge = { workspace = true }
 livery-strongroom = { workspace = true }
@@ -58,6 +59,7 @@ dev = [
     "livery-extensions-basedpyright",
     "livery-extensions-mypy",
     "livery-extensions-ruff",
+    "livery-extensions-ty",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
     "livery-strongroom",
@@ -129,19 +131,19 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/mypy/tests", "packages/extensions/ruff/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
+pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/mypy/tests", "packages/extensions/ruff/tests", "packages/extensions/ty/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
 addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
 
 [tool.pyrefly]
-# Fourth gate, same scope as ty. Preset `default`, not `strict`:
+# The packages themselves. Preset `default`, not `strict`:
 # strict demands @override, and `typing.override` is Python 3.12+; a
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -159,19 +161,6 @@ python-version = "3.11"
 # zero today.
 deprecated = "error"
 unnecessary-type-conversion = "error"
-
-[tool.ty]
-# Scope: the packages themselves; the consumer seam in tests is the
-# path-narrowing type checkers' to read.
-[tool.ty.src]
-include = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/ruff/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
-
-[tool.ty.environment]
-# Every platform at once (ty checks the union), 3.11 floor.
-python-platform = "all"
-python-version = "3.11"
-# The tool stubs `fm tools.restub` writes.
-extra-paths = ["typings"]
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[tool.x]` of your own), never a key inside a table the render

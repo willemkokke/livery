@@ -3,7 +3,7 @@
 # own; an edit anywhere else is drift.
 line-length = 88
 target-version = "py311"
-src = ["packages/extensions/basedpyright/src", "packages/extensions/basedpyright/tests", "packages/extensions/mypy/src", "packages/extensions/mypy/tests", "packages/extensions/ruff/src", "packages/extensions/ruff/tests", "packages/footman/src", "packages/footman/tests", "packages/forge/src", "packages/forge/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
+src = ["packages/extensions/basedpyright/src", "packages/extensions/basedpyright/tests", "packages/extensions/mypy/src", "packages/extensions/mypy/tests", "packages/extensions/ruff/src", "packages/extensions/ruff/tests", "packages/extensions/ty/src", "packages/extensions/ty/tests", "packages/footman/src", "packages/footman/tests", "packages/forge/src", "packages/forge/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
 # The cache lives with the workshop's state, never in the root.
 cache-dir = ".workshop/.cache/ruff"
 

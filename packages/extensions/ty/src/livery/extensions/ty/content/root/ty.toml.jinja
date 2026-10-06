@@ -1,0 +1,19 @@
+# Written by `{{ prog }} sync` from the ty extension; the gate keeps it
+# matching. Edit inside the region at the end, which is the repository's
+# own; an edit anywhere else is drift.
+#
+# The scope is the packages themselves; the tests are read as consumer
+# code by the type checkers that narrow by paths.
+[src]
+include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
+
+[environment]
+# Every platform at once (ty checks the union), {{ python_floor }} floor.
+python-platform = "all"
+python-version = "{{ python_floor }}"
+# The tool stubs `{{ runner_prog }} tools.restub` writes.
+extra-paths = ["typings"]
+
+# The repository's own tables.
+# -- workshop: region tables, yours to edit; the render keeps it --
+# -- workshop: end tables --

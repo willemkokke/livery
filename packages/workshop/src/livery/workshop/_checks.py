@@ -1531,14 +1531,10 @@ def _register_builtin() -> None:
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
 
-    # ty and pyrefly check their configured whole whatever the scope.
-    def ty_run(ctx: GateContext) -> None:
-        del ctx
-        _python.run_typecheck(only="ty")
-
+    # pyrefly checks its configured whole whatever the scope.
     def pyrefly_run(ctx: GateContext) -> None:
         del ctx
-        _python.run_typecheck(only="pyrefly")
+        _python.run_typecheck()
 
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
@@ -1741,15 +1737,6 @@ def _register_builtin() -> None:
                 Claim(category, suffixes=cpp)
                 for category in ("source", "test", "test-support")
             ),
-        ),
-        CheckRecord(
-            "ty",
-            "typecheck",
-            ty_run,
-            kinds=python,
-            tools=("ty",),
-            fragments=(Fragment("pyproject.toml", _fragments.TY),),
-            claims=typed_claims,
         ),
         CheckRecord(
             "pyrefly",
