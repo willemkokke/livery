@@ -49,6 +49,33 @@ def _advance_main(tmp_path: Path, origin: Path, name: str = "upstream.txt") -> N
     _git(other, "push", "origin", "main")
 
 
+def test_a_sync_that_installed_a_listed_extension_continues_with_it_mounted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop import _reconcile
+    from livery.workshop._sync import continue_with_new_extensions
+
+    handed: list[Path] = []
+    monkeypatch.setattr(_reconcile, "_reexec", handed.append)
+    # The refusal first: nothing new, so the sync goes on in this process.
+    monkeypatch.setattr(
+        "livery.workshop._extensions.installed_since_mount", lambda start: ()
+    )
+    assert not continue_with_new_extensions(tmp_path)
+    assert handed == []
+    monkeypatch.setattr(
+        "livery.workshop._extensions.installed_since_mount", lambda start: ("mypy",)
+    )
+    assert continue_with_new_extensions(tmp_path)
+    assert handed == [tmp_path]
+    assert (
+        "extensions installed by this sync: mypy; the sync continues with them"
+        " mounted" in capsys.readouterr().out
+    )
+
+
 def test_a_conflicted_rebase_parks_and_restores_the_branch(
     seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

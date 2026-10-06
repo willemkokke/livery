@@ -323,6 +323,31 @@ def continue_on_moved_code(
     return True
 
 
+def continue_with_new_extensions(root: Path) -> bool:
+    """Hand the sync to a fresh process when it installed a listed extension.
+
+    The extensions mounted when the command started, so one the
+    workspace lists and this sync installed (a member's new entry
+    point, say) registered nothing, and the render that follows would
+    leave its files out. The fresh process mounts it. Returns False
+    when the sync installed none; when the re-run cannot start it is
+    named and the sync continues without it, which returns True.
+    """
+    from livery.workshop._extensions import installed_since_mount
+
+    installed = installed_since_mount(root)
+    if not installed:
+        return False
+    from livery.workshop import _reconcile
+
+    print(
+        f"  extensions installed by this sync: {', '.join(installed)}; the sync"
+        " continues with them mounted"
+    )
+    _reconcile._reexec(root)  # pyright: ignore[reportPrivateUsage]
+    return True
+
+
 def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     """Bring the current checkout up to date; the one-stop's first act.
 
@@ -554,6 +579,7 @@ def sync(
     for line in conan_editables(root):
         print(line)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
+    continue_with_new_extensions(root)
     # The locks just moved, and composed and generated files read them
     # (the locked tools' fragment, the uv pin in setup.sh), so the sync
     # ends by writing both again: the tree it leaves is settled.
