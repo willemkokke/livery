@@ -147,22 +147,8 @@ def compose_package(kind_name: str, file: str, data: dict[str, Any]) -> str | No
 # The builtin fragments, moved from the base template verbatim: each
 # tool's table where the tool reads one file per project.
 
-TY = r"""[tool.ty]
-# Scope: the packages themselves; the consumer seam in tests is the
-# path-narrowing type checkers' to read.
-[tool.ty.src]
-include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
-
-[tool.ty.environment]
-# Every platform at once (ty checks the union), {{ python_floor }} floor.
-python-platform = "all"
-python-version = "{{ python_floor }}"
-# The tool stubs `{{ runner_prog }} tools.restub` writes.
-extra-paths = ["typings"]
-"""
-
 PYREFLY = r"""[tool.pyrefly]
-# Fourth gate, same scope as ty. Preset `default`, not `strict`:
+# The packages themselves. Preset `default`, not `strict`:
 # strict demands @override, and `typing.override` is Python 3.12+; a
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.

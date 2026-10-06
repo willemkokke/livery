@@ -4,8 +4,8 @@ One invocation covers every Python package at once: the checkers read
 their scopes from the workspace's own configuration, so the whole
 repository is linted exactly as CI lints it, and a tracked file
 outside any package still cannot pass the gate and fail the build.
-ty and pyrefly always check their configured whole, because their
-runs cost seconds and their configs pin the platform matrix.
+pyrefly always checks its configured whole, because its runs cost
+seconds and its configuration pins the platforms.
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from livery.footman.api import fail
 from livery.toolroom.tools.api import (
     pyrefly,
     pytest,
-    ty,
 )
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import Extractor
@@ -45,31 +44,14 @@ if TYPE_CHECKING:
 PY_SUFFIXES = (".py", ".pyi")
 
 
-def run_typecheck(only: str = "") -> None:
-    """Type-check with the two gating checkers in parallel, or with *only* one.
+def run_typecheck() -> None:
+    """Type-check with pyrefly, every platform at once; its exit code is the verdict.
 
-    ty and pyrefly check every platform at once at the scopes their
-    configuration pins, the configured whole whatever a run reaches.
-    Both gate: a checker the workspace uses is a checker the tree is
-    clean against. *only* names one checker, ``ty`` or ``pyrefly``,
-    the way each is a check of the typecheck role.
+    pyrefly checks the scope its configuration pins whatever a run
+    reaches: a run costs seconds, and the configuration pins the
+    platforms.
     """
-    from livery.footman.api import parallel, step
-
-    def run_ty() -> None:
-        ty.check()
-
-    def run_pyrefly() -> None:
-        pyrefly("check")
-
-    steps = {
-        "ty": (step(run_ty, title="ty"),),
-        "pyrefly": (step(run_pyrefly, title="pyrefly"),),
-    }
-    chosen = [
-        s for name, group in steps.items() if not only or name == only for s in group
-    ]
-    parallel(*(made() for made in chosen))
+    pyrefly("check")
 
 
 def public_modules(package: Package) -> tuple[str, ...]:

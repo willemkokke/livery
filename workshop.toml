@@ -25,6 +25,9 @@ extensions = [
     "basedpyright[typecomplete]",
     # The type checker on every platform, configured by the root mypy.ini.
     "mypy",
+    # The type checker over every platform at once, configured by the
+    # root ty.toml.
+    "ty",
 ]
 
 [docs]

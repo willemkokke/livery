@@ -3,8 +3,9 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff, basedpyright and mypy slices built
-(issues #1149, #1159 and #1164), and phases 10 to 15 are not started. It is the one plan from now until the end of
+9b is in progress, its ruff, basedpyright, mypy and ty slices built
+(issues #1149, #1159, #1164 and #1168), and phases 10 to 15 are not
+started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1275,6 +1276,15 @@ and mypy's line in the dev group is the extension's contribution. A
 new project does not list it; this repository does. The base's tests
 that needed a type checker as an example name pyrefly, the last of the
 three to leave.
+
+**9b5 built (issue #1168): ty is its own extension.**
+`livery-extensions-ty`, in `packages/extensions/ty/` and listed as
+`ty`, declares `typecheck.ty`, which checks its configured whole,
+every platform at once, whatever a run reaches. It writes the root
+`ty.toml`, which a bare `ty` reads first, with the python members'
+`src` directories listed, and recommends `astral-sh.ty`, an id the
+ruling in #779 names. `[tool.ty]` left `pyproject.toml`. A new project
+does not list it; this repository does.
 
 **9a, the engine and the options.** Deliverables:
 

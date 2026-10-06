@@ -166,13 +166,13 @@ def test_this_workspace_composes_its_tool_tables_from_the_records() -> None:
     root = Path(__file__).resolve().parents[3]
     injected = render_injections(root, project_facts(root))
     composed = injected["fragments"]["pyproject.toml"]
-    for table in ("[tool.ty]", "[tool.pytest.ini_options]"):
+    for table in ("[tool.pyrefly]", "[tool.pytest.ini_options]"):
         assert table in composed
     assert "packages/workshop/src" in composed  # the roster reaches the fragments
     template = (
         root / "packages/workshop/src/livery/workshop/content/root/pyproject.toml.jinja"
     ).read_text()
-    assert "[tool.ty]" not in template
+    assert "[tool.pyrefly]" not in template
     assert "[tool.pytest.ini_options]" not in template
     # The base's own checks carry no editor extension: the listed
     # extensions' do, and none is mounted here.
@@ -205,7 +205,7 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
     assert "[tool.acme" not in composed["pyproject.toml"]
     assert "acme.checker" not in editor_extensions()
     assert "acme" not in {tool for tool, _ in tools_for_kind("python")}
-    assert "[tool.ty]" in composed["pyproject.toml"]
+    assert "[tool.pyrefly]" in composed["pyproject.toml"]
 
 
 def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None:

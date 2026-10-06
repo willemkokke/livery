@@ -22,7 +22,6 @@ from workshop_python_checks import python_checks_fixture  # noqa: F401
 PYTHON_JUDGES = (
     "test.pytest",
     "typecheck.pyrefly",
-    "typecheck.ty",
 )
 
 
@@ -56,7 +55,7 @@ def _record(
         return body
 
     def typecheck(*args: object, **kwargs: object) -> None:
-        named(f"typecheck.{kwargs['only']}")(*args, **kwargs)
+        named("typecheck.pyrefly")(*args, **kwargs)
 
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr(
@@ -133,9 +132,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
-    # ty and pyrefly read their configured whole whatever the scope.
-    for tool in ("ty", "pyrefly"):
-        assert "paths" not in by_verb[f"typecheck.{tool}"]
+    # pyrefly reads its configured whole whatever the scope.
+    assert "paths" not in by_verb["typecheck.pyrefly"]
     assert by_verb["test.pytest"]["packages"] == (unit,)
     assert by_verb["test.pytest"]["scoped"] is True
     # Beside a package, the unit rides along and the package keeps its
@@ -415,7 +413,8 @@ def _whole_gate(
         return body
 
     def typecheck(*args: object, **kwargs: object) -> None:
-        ran.append(f"typecheck.{kwargs['only']}")
+        del args, kwargs
+        ran.append("typecheck.pyrefly")
 
     @contextlib.contextmanager
     def watched():

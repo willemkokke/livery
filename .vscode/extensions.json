@@ -10,6 +10,7 @@
   "recommendations": [
     "charliermarsh.ruff",
     "detachhead.basedpyright",
+    "astral-sh.ty",
     // The repository's own recommendations, each line ending with a comma.
     // -- workshop: region recommendations, yours to edit; the render keeps it --
     // -- workshop: end recommendations --

@@ -12,6 +12,7 @@ members = [
     "livery-extensions-basedpyright",
     "livery-extensions-mypy",
     "livery-extensions-ruff",
+    "livery-extensions-ty",
     "livery-footman",
     "livery-forge",
     "livery-strongroom",
@@ -734,6 +735,7 @@ dev = [
     { name = "livery-extensions-basedpyright" },
     { name = "livery-extensions-mypy" },
     { name = "livery-extensions-ruff" },
+    { name = "livery-extensions-ty" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
     { name = "livery-strongroom" },
@@ -760,6 +762,7 @@ dev = [
     { name = "livery-extensions-basedpyright", editable = "packages/extensions/basedpyright" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
     { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
+    { name = "livery-extensions-ty", editable = "packages/extensions/ty" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
@@ -814,6 +817,21 @@ requires-dist = [
 name = "livery-extensions-ruff"
 version = "0.0.0"
 source = { editable = "packages/extensions/ruff" }
+dependencies = [
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+
+[[package]]
+name = "livery-extensions-ty"
+version = "0.0.0"
+source = { editable = "packages/extensions/ty" }
 dependencies = [
     { name = "livery-toolroom" },
     { name = "livery-workshop" },
