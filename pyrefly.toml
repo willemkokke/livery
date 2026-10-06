@@ -1,0 +1,30 @@
+# Written by `fm sync` from the pyrefly extension; the gate keeps
+# it matching. Edit inside the region at the end, which is the
+# repository's own; an edit anywhere else is drift.
+#
+# The packages themselves. Preset `default`, not `strict`: strict
+# demands @override, and `typing.override` is Python 3.12+; a library
+# that supports 3.11 cannot spell it without the typing_extensions
+# backport as a runtime dependency.
+preset = "default"
+project-includes = ["packages/extensions/basedpyright/src", "packages/extensions/mypy/src", "packages/extensions/pyrefly/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+# Both path heuristics off: a checkout under a dot-directory (a
+# `.claude/worktrees/` worktree) silently skips every include, and the
+# check fails on "no files matched". At the root neither setting
+# changes anything.
+use-ignore-files = false
+disable-project-excludes-heuristics = true
+# The tool stubs `fm tools.restub` writes.
+search-path = ["typings"]
+# Every platform at once, 3.11 floor.
+python-platform = "all"
+python-version = "3.11"
+
+[errors]
+# Held at error so they cannot accumulate unnoticed.
+deprecated = "error"
+unnecessary-type-conversion = "error"
+
+# The repository's own tables.
+# -- workshop: region tables, yours to edit; the render keeps it --
+# -- workshop: end tables --

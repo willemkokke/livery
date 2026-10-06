@@ -28,6 +28,9 @@ extensions = [
     # The type checker over every platform at once, configured by the
     # root ty.toml.
     "ty",
+    # The type checker over every platform at once, configured by the
+    # root pyrefly.toml.
+    "pyrefly",
 ]
 
 [docs]

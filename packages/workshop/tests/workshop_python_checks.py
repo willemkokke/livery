@@ -1,13 +1,14 @@
-"""A python formatter and linter for the gate's tests, as an extension registers one.
+"""A python formatter, linter and type checker for the gate's tests.
 
-The base registers no python formatter or linter: a listed extension does
-(ruff, in this repository). The gate's tests need such a pair to walk,
-scope, order and claim, so `python_checks` registers two with ruff's shape
-under the extension ``fake``, after the base's checks as a mount would, and
-puts the registry back after the test; a test module imports
+The base registers no python formatter, linter or type checker: listed
+extensions do (ruff and the type checkers, in this repository). The
+gate's tests need such checks to walk, scope, order and claim, so
+`python_checks` registers three with ruff's and mypy's shapes under the
+extension ``fake``, after the base's checks as a mount would, and puts
+the registry back after the test; a test module imports
 `python_checks_fixture` and names ``python_checks`` as a parameter. Each
-body calls this module's `run_format` or `run_lint`, which a test
-replaces to watch them.
+body calls this module's `run_format`, `run_lint` or `run_typecheck`,
+which a test replaces to watch them.
 """
 
 from __future__ import annotations
@@ -42,6 +43,11 @@ def run_lint(*, fix: bool, safe_fix: bool = False, paths: tuple[str, ...]) -> No
     del fix, safe_fix, paths
 
 
+def run_typecheck(*, paths: tuple[str, ...]) -> None:
+    """The type checker's call; a test replaces it to watch the calls."""
+    del paths
+
+
 def _format_run(ctx: GateContext) -> None:
     run_batched(
         scoped_paths(ctx, "format.fake"),
@@ -70,8 +76,15 @@ def _lint_fix(ctx: GateContext) -> None:
     )
 
 
-def records() -> tuple[CheckRecord, CheckRecord]:
-    """The pair: a formatter, then a linter, with ruff's claims and kinds."""
+def _typecheck_run(ctx: GateContext) -> None:
+    run_batched(
+        scoped_paths(ctx, "typecheck.fake"),
+        lambda batch: run_typecheck(paths=batch),
+    )
+
+
+def records() -> tuple[CheckRecord, ...]:
+    """A formatter and a linter with ruff's claims and kinds, then a type checker."""
     kinds = ("python", "cpp-conan")
     example = ("D", "E", "I", "UP", "B", "SIM", "C4", "RUF", "F401", "F811", "F841")
     return (
@@ -106,12 +119,25 @@ def records() -> tuple[CheckRecord, CheckRecord]:
                 Claim("configuration", suffixes=SUFFIXES),
             ),
         ),
+        CheckRecord(
+            "fake",
+            "typecheck",
+            _typecheck_run,
+            narrowing=PATHS,
+            kinds=("python",),
+            tools=("fake",),
+            extension="fake",
+            claims=tuple(
+                Claim(category, suffixes=SUFFIXES)
+                for category in ("source", "test", "test-support")
+            ),
+        ),
     )
 
 
 @pytest.fixture(name="python_checks")
-def python_checks_fixture() -> Iterator[tuple[CheckRecord, CheckRecord]]:
-    """Register the pair for the test; the registry is put back after it."""
+def python_checks_fixture() -> Iterator[tuple[CheckRecord, ...]]:
+    """Register the three for the test; the registry is put back after it."""
     state = snapshot()
     pair = records()
     for record in pair:

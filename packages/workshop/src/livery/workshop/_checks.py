@@ -1531,11 +1531,6 @@ def _register_builtin() -> None:
     def unit(ctx: GateContext) -> tuple[Package, ...]:
         return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
 
-    # pyrefly checks its configured whole whatever the scope.
-    def pyrefly_run(ctx: GateContext) -> None:
-        del ctx
-        _python.run_typecheck()
-
     def test_run(ctx: GateContext) -> None:
         point = (f"--workshop-point={ctx.point}",) if ctx.point else ()
         if ctx.files:
@@ -1716,9 +1711,6 @@ def _register_builtin() -> None:
     native = ("cpp-conan", "python-nanobind")
     python = ("python",)
     py = _python.PY_SUFFIXES
-    typed_claims = tuple(
-        Claim(category, suffixes=py) for category in ("source", "test", "test-support")
-    )
     cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
         CheckRecord(
@@ -1737,15 +1729,6 @@ def _register_builtin() -> None:
                 Claim(category, suffixes=cpp)
                 for category in ("source", "test", "test-support")
             ),
-        ),
-        CheckRecord(
-            "pyrefly",
-            "typecheck",
-            pyrefly_run,
-            kinds=python,
-            tools=("pyrefly",),
-            fragments=(Fragment("pyproject.toml", _fragments.PYREFLY),),
-            claims=typed_claims,
         ),
         CheckRecord(
             "pytest",

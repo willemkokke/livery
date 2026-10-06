@@ -4,8 +4,6 @@ One invocation covers every Python package at once: the checkers read
 their scopes from the workspace's own configuration, so the whole
 repository is linted exactly as CI lints it, and a tracked file
 outside any package still cannot pass the gate and fail the build.
-pyrefly always checks its configured whole, because its runs cost
-seconds and its configuration pins the platforms.
 """
 
 from __future__ import annotations
@@ -25,10 +23,7 @@ from typing import TYPE_CHECKING, Any
 import livery.footman.api as footman
 import livery.toolroom.tools.api as tools
 from livery.footman.api import fail
-from livery.toolroom.tools.api import (
-    pyrefly,
-    pytest,
-)
+from livery.toolroom.tools.api import pytest
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import Extractor
 from livery.workshop._packages import Neighbours, Package
@@ -42,16 +37,6 @@ if TYPE_CHECKING:
 #: The python suffixes a python check's claims admit; a foreign file
 #: an explicit path names passes through untouched.
 PY_SUFFIXES = (".py", ".pyi")
-
-
-def run_typecheck() -> None:
-    """Type-check with pyrefly, every platform at once; its exit code is the verdict.
-
-    pyrefly checks the scope its configuration pins whatever a run
-    reaches: a run costs seconds, and the configuration pins the
-    platforms.
-    """
-    pyrefly("check")
 
 
 def public_modules(package: Package) -> tuple[str, ...]:

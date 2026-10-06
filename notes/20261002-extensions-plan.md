@@ -3,9 +3,9 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff, basedpyright, mypy and ty slices built
-(issues #1149, #1159, #1164 and #1168), and phases 10 to 15 are not
-started. It is the one plan from now until the end of
+9b is in progress, its ruff, basedpyright, mypy, ty and pyrefly
+slices built (issues #1149, #1159, #1164, #1168 and #1170), and phases
+10 to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1285,6 +1285,17 @@ every platform at once, whatever a run reaches. It writes the root
 `src` directories listed, and recommends `astral-sh.ty`, an id the
 ruling in #779 names. `[tool.ty]` left `pyproject.toml`. A new project
 does not list it; this repository does.
+
+**9b6 built (issue #1170): pyrefly is its own extension, and the base
+checks no types.** `livery-extensions-pyrefly`, in
+`packages/extensions/pyrefly/` and listed as `pyrefly`, declares
+`typecheck.pyrefly`, which checks its configured whole, every platform
+at once, whatever a run reaches, and writes the root `pyrefly.toml`.
+`[tool.pyrefly]` left `pyproject.toml`. The base registers no check of
+the `typecheck` role, so the role and its verb exist where a listed
+extension brings one; the python backend's type-check runner is gone.
+The gate's tests use a fake type checker, `typecheck.fake`, beside the
+fake formatter and linter.
 
 **9a, the engine and the options.** Deliverables:
 

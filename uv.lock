@@ -11,6 +11,7 @@ members = [
     "livery",
     "livery-extensions-basedpyright",
     "livery-extensions-mypy",
+    "livery-extensions-pyrefly",
     "livery-extensions-ruff",
     "livery-extensions-ty",
     "livery-footman",
@@ -734,6 +735,7 @@ dev = [
     { name = "coverage", extra = ["toml"] },
     { name = "livery-extensions-basedpyright" },
     { name = "livery-extensions-mypy" },
+    { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-ruff" },
     { name = "livery-extensions-ty" },
     { name = "livery-footman", extra = ["test"] },
@@ -761,6 +763,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.13" },
     { name = "livery-extensions-basedpyright", editable = "packages/extensions/basedpyright" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
+    { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
     { name = "livery-extensions-ty", editable = "packages/extensions/ty" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
@@ -809,6 +812,21 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+
+[[package]]
+name = "livery-extensions-pyrefly"
+version = "0.0.0"
+source = { editable = "packages/extensions/pyrefly" }
+dependencies = [
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
