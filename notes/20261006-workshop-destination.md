@@ -215,13 +215,13 @@ every kind the check judges"). What changes:
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `Job.inputs`, the same `Inputs` record a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by the extension that owns its tool, naming the languages it extracts for, and read by the docs extension through `contributions_for("docs")` |
+| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the languages it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `Generator` of the same contribution |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
-| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the python extension's docs contribution (`[docs] api`), and the `module-roots` query |
-| the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `CHECKS` on the python extension's docs contribution module: they exist while both are listed |
+| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the mkdocstrings extension's keys (`[docs] api`, `[docs] python-paths`), and the `MODULE_ROOTS` query |
+| the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `CHECKS` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `RELEASE_NOTES` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
 | the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
@@ -257,7 +257,7 @@ built from are in the next table.
 | `OPTIONS` | option name to what it turns on | every | basedpyright |
 | `CONTRACT_KEYS` | `Declared` records | every | docs |
 | `CHECKS` | `CheckRecord` tuple | every | the eight, docs |
-| `GENERATORS` | `Generator` tuple, each naming the languages it extracts for | check, language | python (phase 11), doxygen (phase 12) |
+| `GENERATORS` | `Generator` tuple, each naming the languages it extracts for | check, language | mkdocstrings (phase 11), doxygen (phase 12) |
 | `FRAGMENTS` | dynamic `Fragment` records; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
 | `JOBS` | `JobContribution` tuple | workspace | docs (phase 10 moves it onto data) |
 | `SLOTS` | `Slot` records it declares; `CONTRIBUTIONS` fills others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
@@ -269,7 +269,7 @@ built from are in the next table.
 | `PHASES` | contributions to the lifecycle phases, `pre`, main, `post` | package | phase 11 |
 | `QUERIES` | `Query` to answering callable | package | phase 11 |
 | `ROOT_FILES` | the files written at the root while a package of it exists | package | cmake and conan (phase 11), from `KindRecord.root_files` |
-| `FOR` | target extension to contribution module | every | python for docs (phase 11) |
+| `FOR` | target extension to contribution module | every | pytest for docs, the coverage pages (phase 11) |
 | `REPLACES`, `DELETES` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
 
 A contribution module (the value of a `FOR` entry) carries the same
@@ -344,11 +344,11 @@ for languages contributing to it and for generators in any package:
 
 | Name | Purpose | Users |
 | --- | --- | --- |
-| `Generator` | a page generator: name, languages, claims, tools, options, `run(package, out) -> pages`, the site plugin blocks it needs, inventories | python (phase 11), doxygen (phase 12), the task reference and coverage pages |
+| `Generator` | a page generator: name, languages, claims, tools, options, `run(package, out) -> pages`; its site configuration is a `zensical.toml` fragment of its extension | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
 | `Page` | one generated page: path, title, nav position | the same |
 | `write_nav_block`, `nav_block_markers` | emit a nav block beside generated pages, and place it | toolroom-bench, the task reference |
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
-| `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | python's generator |
+| `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | mkdocstrings |
 
 ### What leaves the public surface, and the break each causes
 
@@ -375,23 +375,32 @@ factor out what the two share. The answer, in `Generator`:
   (categories and suffixes, the same `Claim` a check carries), `tools`,
   `options` and a `run`. The
   docs build hands it a package and the output directory under the
-  package's generated tree, and it returns the pages it wrote. It may
-  also carry the site plugin blocks it needs (python's mkdocstrings
-  handler, options and inventories), which the build writes into
-  `zensical.toml` once per generator name.
+  package's generated tree, and it returns the pages it wrote. The
+  site's configuration is the fragment engine's: `zensical.toml` is a
+  composed file the docs extension owns, rendered by a dynamic fragment
+  of its own, and a generator's extension contributes its tables (the
+  mkdocstrings handler block, its options and inventories) as a TOML
+  fragment in extension order. No record field carries configuration.
 - A generator lives with the extension that owns its tool, as a check
   does: `lint.ruff` lives in ruff and names python, `build.configure`
   lives in the cpp extension. Doxygen reads C, C++, Java and more, so
   its generator is `livery-extensions-doxygen`, a workspace extension
   requiring `docs`, declaring `languages=("cpp",)` today and `java`
-  when a java extension exists; python's mkdocstrings generator lives
-  in the python extension's docs contribution, since the handler is the
-  site's own and brings no tool. `contributions_for("docs")` returns
-  both kinds of module: one that requires `docs` and declares
-  `GENERATORS` on its own module, and a language's `FOR` module.
+  when a java extension exists. The Python reference is
+  `livery-extensions-mkdocstrings`, a workspace extension requiring
+  `docs`, declaring `languages=("python",)`, its generator writing the
+  handler stubs, its fragment the handler tables of `zensical.toml`,
+  its checks `lint.docrefs` and `lint.docstrings`, its dependency
+  `griffelib`, its keys `[docs] api` and `[docs] python-paths`. A
+  workspace that lists `docs` without it renders a site with no API
+  reference and no handler block. Every generator is an extension of
+  its own, and no language extension contributes to docs.
+  `contributions_for("docs")` returns every mounted module that
+  declares for docs: the declaring module of an extension that requires
+  `docs`, and a `FOR` module such as pytest's coverage pages.
 - Matching is by `languages` against the package's listed extensions,
   then by the claims within the package: `python+nanobind+cmake` meets
-  python's generator over its `.py` sources and doxygen's over its `.h`
+  mkdocstrings' generator over its `.py` sources and doxygen's over its `.h`
   and `.cpp` sources, each listed in its own section. That is the
   brief's "file type it can operate on", through the claims model
   checks already use. Two mounted generators naming one language refuse
@@ -407,8 +416,8 @@ factor out what the two share. The answer, in `Generator`:
   the verb; the task reference is the docs extension's own generator
   over every package that advertises `footman.tasks`.
 - Zensical runs only its native plugins, and its mkdocstrings support
-  covers the Python handler alone. So python's generator is the one
-  that writes handler stubs; every other language's writes Markdown
+  covers the Python handler alone. So mkdocstrings' generator is the
+  one that writes handler stubs; every other writes Markdown
   (Doxygen XML turned into pages for C++, `rustdoc` JSON or a Markdown
   renderer for Rust, `gomarkdoc` for Go) or places a rendered tree and
   links it without cross-references (Javadoc, whose `element-list` is
@@ -422,7 +431,7 @@ The brief's fourth thought. What exists twice today:
 | Job | footman | workshop docs extension | Destination |
 | --- | --- | --- | --- |
 | a task tree as pages | `livery.footman.markdown.render_site`, public; `fm docs site` renders the invoking project's tree | `_taskref` renders one provider in isolation by spawning `fm --tasks-file=<probe> --json --list`, then `render_site` | one renderer: `livery.footman.docs.site` takes `provider=` and renders that plugin in isolation in-process; the task reference generator calls it and assembles the nav. A change to footman, allowed by the brief |
-| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the python generator writes one page per module through mkdocstrings | the curated page, `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and `api = false` go; footman's reference is the generator's like every package's; the curated grouping becomes an authored page linking into it |
+| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curated page, `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and `api = false` go; footman's reference is the generator's like every package's; the curated grouping becomes an authored page linking into it |
 | errors-and-notes page, the config, notes and globals tables, the example render, the latest-release admonition | `fm footman.pages` | | stays footman's generator verb, declared as today; a `Generator` whose `run` calls it |
 
 Two mechanisms for the API reference are the one real duplication;
@@ -625,15 +634,20 @@ a rendered `conanws.yml` resolves siblings from their sources and the
 machine's package cache is shared; what 11b still owes is that a
 container build never reuses a binary built against the host's glibc.
 
-**11c, the docs contributions.** `Generator` and the members policy in
+**11c, the generators.** `Generator` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
-`Extractor` and `KindRecord.coverage_pages` go; python's `FOR =
-{"docs": "livery.extensions.python._docs"}` declares its generator, its
-coverage pages, `lint.docrefs` and `lint.docstrings`, and the keys
-`[docs] api` and `[docs] python-paths`; the docs extension reads them
-through `contributions_for("docs")` and names no language. The
+`zensical.toml` becomes a composed file of the fragment engine, the
+docs extension's dynamic fragment with contributed tables; `Extractor`
+and `KindRecord.coverage_pages` go. `livery-extensions-mkdocstrings`,
+its own distribution requiring `docs`: the python generator, the
+handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
+`griffelib`, the keys `[docs] api` and `[docs] python-paths`; the
+workshop wheel drops `griffelib`. pytest's `FOR = {"docs": ...}`
+module declares the coverage pages generator. The docs extension reads
+both through `contributions_for("docs")` and names no language. The
 `REFERENCES` query replaces the base's python parse in the layering
-check, python's extension answering it.
+check, python's extension answering it. This repository and
+`fm new.project`'s stock list add `mkdocstrings` after `docs`.
 
 Acceptance, refusals first:
 
@@ -641,7 +655,8 @@ Acceptance, refusals first:
   `test_two_providers_of_one_key_refuse`,
   `test_a_post_runs_after_a_failed_main_and_sees_the_failure`,
   `test_two_extensions_naming_one_executable_refuse`;
-- `test_a_generator_for_an_unlisted_extension_is_never_asked`;
+- `test_a_generator_for_an_unlisted_extension_is_never_asked`,
+  `test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_block`;
 - `fm run` of a C++ application rebuilds only what changed (a counting
   seam);
 - `fm docs.build` renders the same site before and after 11c: the two
@@ -652,7 +667,7 @@ Acceptance, refusals first:
 ### Phase 12: docs and housekeeping ship apart
 
 **12a, docs.** `livery-extensions-docs`: everything under
-`livery.extensions.docs` leaves the workshop wheel with `griffelib`;
+`livery.extensions.docs` leaves the workshop wheel;
 the override template becomes a whole-file fragment and `_site_files`
 goes; the docs build's state and zensical's cache move under
 `.workshop/.cache/docs/` and `.workshop/.cache/zensical/` (#1187's
@@ -689,7 +704,7 @@ follow-up issue and the plan's open item 11 records why.
 **12d, footman's docs onto one mechanism.** `livery.footman.docs.site`
 takes `provider=`; the task reference generator calls it; footman's
 curated API page and `[docs] api = false` go, its reference rendered by
-python's generator; the rest of `fm footman.pages` stays a declared
+the mkdocstrings extension's generator; the rest of `fm footman.pages` stays a declared
 generator. Acceptance: `fm docs.build` renders footman's reference
 with every exported name present (`test_the_reference_lists_every_export`);
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
@@ -732,7 +747,8 @@ the stack, which this design neither needs nor rules out).
 | `_site_files` | a whole-file fragment (phase 12a) |
 | `tests/test_private_reaches.py` at this repository's root | the housekeeping extension's rule and `[housekeeping] reaches` (phase 12b) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
-| `fm footman.pages`' curated API page | python's generator (phase 12d) |
+| `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
+| the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
 
@@ -756,6 +772,11 @@ the stack, which this design neither needs nor rules out).
   for. So `Generator` carries `languages`, `GENERATORS` joins the
   declaration vocabulary, and the doxygen generator is an extension of
   its own rather than the cpp extension's contribution.
+- Willem, 2026-10-06: the mkdocstrings configuration is an extension
+  of its own, so a workspace can have no API reference at all; it
+  contributes the handler tables to `zensical.toml`. So every generator
+  is an extension of its own, `zensical.toml` is a composed file of the
+  fragment engine, and no language extension contributes to docs.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
@@ -818,12 +839,13 @@ recommendation. Owner: Willem, unless named.
    grouping, which becomes an authored page. (b) Keep both; it does not
    cover "one way". Recommendation: (a).
 8. **Docs ships apart after the language extensions** (phase 12a after
-   11). (a) As written; it does not cover `griffelib` leaving the
-   workshop wheel before phase 12. (b) Docs ships apart in phase 10
-   with its python parts inside it, which move to python's contribution
-   in 11c: two moves of the same code. Recommendation: (a).
+   11). (a) As written; it does not cover a workspace wanting the docs
+   extension as a wheel of its own before phase 12. (b) Docs ships
+   apart in phase 10 with its python parts inside it, which move to
+   the mkdocstrings extension in 11c: two moves of the same code.
+   Recommendation: (a).
 9. **Keys a contribution declares under its target's table.**
-    (a) Python's docs contribution declares `docs.api` and
+    (a) The mkdocstrings extension declares `docs.api` and
     `docs.python-paths` under `[docs]`, live while both are listed; it
     does not cover a reader of `[docs]` that does not know which keys
     are a language's, which `fm explain` must say. (b) Each language
