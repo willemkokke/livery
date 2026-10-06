@@ -511,6 +511,29 @@ def test_a_graph_is_written_once_and_kept_until_its_version_moves(
     assert not (_tools.graphs_dir(root) / "cspell.json").exists()
 
 
+def test_a_pypi_graph_names_no_path_of_the_run_that_wrote_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bytes are the resolution's alone, so an unchanged version re-locks to them.
+
+    The header would name the output path, and each annotation the
+    input file in its fresh temporary directory.
+    """
+    from livery.toolroom.tools.api import Result
+    from livery.toolroom.tools.testing import answers
+
+    root = _workspace(tmp_path, monkeypatch)
+    target = tmp_path / "pytest.txt"
+    with answers({("uv",): Result(0)}) as calls:
+        by, why = _tools._pypi_graph(  # pyright: ignore[reportPrivateUsage]
+            root, "pytest", "9.1.1", target, runtime="python"
+        )
+    assert why == "" and by.startswith("uv")
+    argv = list(calls[0].argv)
+    assert argv[1:3] == ["pip", "compile"]
+    assert "--no-header" in argv and "--no-annotate" in argv
+
+
 def test_relock_writes_a_graph_again_though_its_version_stands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

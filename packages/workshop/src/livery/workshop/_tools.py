@@ -733,9 +733,12 @@ def _pypi_graph(
             "--universal",
             "--quiet",
             # The header names the command that wrote it, the output
-            # path included, so two machines resolving one version
-            # would write different bytes and the lock would churn.
+            # path included, and each annotation names the input file,
+            # whose directory is new on every run: either would make two
+            # resolutions of one version differ in bytes, and the lock
+            # would churn.
             "--no-header",
+            "--no-annotate",
             f"--python-version={python_floor(root)}",
             f"--output-file={target}",
             str(wanted),
