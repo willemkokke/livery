@@ -172,6 +172,15 @@ annotation decides the executable bit, not the modes the extractor
 happened to produce. A second `ensure` is a probe that answers
 offline. A directory the store did not make is never removed.
 
+One process at a time supplies a version. The supply holds the
+version's lock, `locks/<name>@<version>.lock` under the home, from its
+probe to its view. A second process that asks for the same version
+waits, says so through the progress (`wait`), and then finds the
+version present. The operating system holds the lock for the open file
+and lets go when the holder ends, so a holder that died leaves nothing
+to clear and a waiter has no timeout.
+
+
 `link` fills a bin directory with one link per declared entry point,
 a launcher where the platform refuses a link, and removes only links
 it made; `delta` is the one PATH prepend

@@ -412,24 +412,33 @@ def _write_record(store: Store, record: ViewRecord) -> None:
 
 
 def views(store: Store) -> list[ViewRecord]:
-    """Every recorded view, by id."""
+    """Every recorded view, by id.
+
+    A record another process retires between the listing and the read
+    is left out: that view is forgotten already.
+    """
     found: list[ViewRecord] = []
     for path in sorted(_records_dir(store).glob("*.json")):
-        found.append(_decode_record(path))
+        record = _read_record(path)
+        if record is not None:
+            found.append(record)
     return found
 
 
 def view_record(store: Store, view_id: str) -> ViewRecord | None:
     """The record of *view_id*, or None."""
-    path = _records_dir(store) / f"{view_id}.json"
-    if not path.exists():
-        return None
-    return _decode_record(path)
+    return _read_record(_records_dir(store) / f"{view_id}.json")
 
 
-def _decode_record(path: Path) -> ViewRecord:
+def _read_record(path: Path) -> ViewRecord | None:
+    # One read, no check before it: a record can be retired between a
+    # check and a read, and absent at the read is absent.
     try:
-        return ViewRecord.decode(path.read_bytes())
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    try:
+        return ViewRecord.decode(data)
     except FormatError as error:
         raise IntegrityError(f"view record {path.name}: {error}") from None
 

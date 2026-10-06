@@ -3,8 +3,10 @@
 Under the home: `store/`, the strongroom store with the `tools` and
 `urls` namespaces; `tools/<name>@<version>/`, the views of the tools'
 trees a shell runs from; `uv/` and `npm/`, the delegated kinds'
-directories. Nothing here reads an environment variable: the caller
-passes the home, toolroom's machinery its data directory, hse its own.
+directories; `locks/`, one file per tool version, which a supply holds
+so that one process at a time supplies that version. Nothing here
+reads an environment variable: the caller passes the home, toolroom's
+machinery its data directory, hse its own.
 
 Reach for [livery.toolroom.store.api.Home][] and its `open_store`.
 """
@@ -74,6 +76,15 @@ class Home:
     def tool_dir(self, name: str, version: str) -> Path:
         """The view of *name* at *version*."""
         return self.tools / f"{name}@{version}"
+
+    @property
+    def locks(self) -> Path:
+        """The supply locks, one file per `<name>@<version>.lock`."""
+        return self.root / "locks"
+
+    def lock(self, name: str, version: str) -> Path:
+        """The file a supply of *name* at *version* holds while it works."""
+        return self.locks / f"{name}@{version}.lock"
 
     def open_store(
         self, *, sources: Iterable[Source] = (), offline: bool = False
