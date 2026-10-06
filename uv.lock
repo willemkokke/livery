@@ -1029,6 +1029,7 @@ name = "livery-workshop"
 version = "0.5.0"
 source = { editable = "packages/workshop" }
 dependencies = [
+    { name = "griffelib" },
     { name = "livery-footman" },
     { name = "livery-forge" },
     { name = "livery-strongroom" },
@@ -1045,6 +1046,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "griffelib", specifier = ">=2.2.0" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-strongroom", editable = "packages/strongroom" },

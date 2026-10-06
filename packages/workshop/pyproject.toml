@@ -41,6 +41,12 @@ dependencies = [
     # The fragment engine's renderer: one compiled template per
     # fragment content, over the subset the engine declares.
     "minijinja>=2.24",
+    # The docs extension rides in this wheel, and its reference check
+    # imports griffe, which griffelib ships. The floor is the lock's,
+    # so the release's lowest-direct leg runs the version the gate
+    # runs. The dependency belongs to the docs extension, and moves
+    # with it when it ships as a wheel of its own.
+    "griffelib>=2.2.0",
 ]
 
 [project.optional-dependencies]
