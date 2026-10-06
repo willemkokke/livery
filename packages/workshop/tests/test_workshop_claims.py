@@ -124,20 +124,12 @@ def test_a_check_judges_the_files_its_claims_reach_and_no_other(
     assert judged_files(check_for("drift.check"), python) == ()
     # A category is a role, not a language: a python formatter claims
     # the native package's configuration and reaches its conanfile.py
-    # alone, while its C++ sources are the clang checks' and
-    # CMakeLists.txt is nobody's.
+    # alone, while CMakeLists.txt is nobody's.
     assert judged_files(check_for("lint.fake"), native) == ("conanfile.py",)
     assert judged_files(check_for("format.fake"), native) == ("conanfile.py",)
-    assert judged_files(check_for("lint.clang-tidy"), native) == (
-        "src/native.cpp",
-        "tests/test_native.cpp",
-    )
     assert claimants(native, "conanfile.py") == ("format.fake", "lint.fake")
-    # The tests measure the source, so the test checks claim it too.
-    assert claimants(native, "src/native.cpp") == (
-        "lint.clang-tidy",
-        "test.ctest",
-    )
+    # The tests measure the source, so the test check claims it too.
+    assert claimants(native, "src/native.cpp") == ("test.ctest",)
     assert claimants(native, "CMakeLists.txt") == ()
     assert claimants(python, "src/livery/py/mod.py") == (
         "format.fake",

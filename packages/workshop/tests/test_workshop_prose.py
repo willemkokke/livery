@@ -459,7 +459,7 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     agent = render_kinds(root, AGENT)
     assert (
         "- cpp-conan (packages/cpp): derives from nothing;"
-        " gate roles build, lint, test" in agent
+        " gate roles build, test" in agent
     )
     assert "- python-nanobind (packages/nb): derives from python; gate roles" in agent
     assert "| python-nanobind | python | packages/nb |" in render_kinds(root, HUMAN)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _checks, _fragments
+from livery.workshop import _checks
 from livery.workshop._checks import (
     CheckRecord,
     GateContext,
@@ -87,12 +87,30 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
         )
 
 
+def _native_style() -> CheckRecord:
+    """A base check carrying a per-package file for both native kinds."""
+    record = CheckRecord(
+        "native-style",
+        "lint",
+        _noop,
+        scope="package",
+        kinds=("cpp-conan",),
+        fragments=tuple(
+            Fragment(".native-style", "# for the {{ kind }} kind\n", kind=kind)
+            for kind in ("cpp-conan", "python-nanobind")
+        ),
+    )
+    register_check(record)
+    return record
+
+
 def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     tmp_path: Path, restored_checks, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import deliver, shipped_drift
 
+    record = _native_style()
     root = tmp_path / "ws"
     member = root / "packages" / "native"
     member.mkdir(parents=True)
@@ -102,38 +120,31 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     # The engine writes the file and its receipt in the package.
-    assert "  wrote packages/native/.clang-tidy" in deliver(root)
-    assert ".clang-tidy" in read_rendered(member)
-    assert "cpp-conan" in (member / ".clang-tidy").read_text()
+    assert "  wrote packages/native/.native-style" in deliver(root)
+    assert ".native-style" in read_rendered(member)
+    assert "cpp-conan" in (member / ".native-style").read_text()
     assert deliver(root) == []
     # The check withdrawn: the edited arm first, kept and named.
-    unregister_check("lint.clang-tidy", by="acme.brand")
-    (member / ".clang-tidy").write_text("Checks: mine\n")
+    unregister_check("lint.native-style", by="acme.brand")
+    (member / ".native-style").write_text("mine\n")
     # The gate's prose follows the withdrawn check too; the package's
     # lines are the ones under test.
     assert [line for line in deliver(root) if "packages/" in line] == [
-        "  kept packages/native/.clang-tidy: no listed extension renders it, and"
-        " it was edited here, so it stays as the repository's own"
+        "  kept packages/native/.native-style: no listed extension renders it,"
+        " and it was edited here, so it stays as the repository's own"
     ]
-    assert (member / ".clang-tidy").is_file()
-    assert ".clang-tidy" not in read_rendered(member)
+    assert (member / ".native-style").is_file()
+    assert ".native-style" not in read_rendered(member)
     # The unedited arm: removed by the next delivery, and no drift after.
-    (member / ".clang-tidy").unlink()
-    register_check(_checks._CHECKS.get("lint.clang-tidy") or _restore_clang_tidy())
+    (member / ".native-style").unlink()
+    register_check(record)
     deliver(root)
-    unregister_check("lint.clang-tidy", by="acme.brand")
+    unregister_check("lint.native-style", by="acme.brand")
     assert [line for line in deliver(root) if "packages/" in line] == [
-        "  removed packages/native/.clang-tidy: no listed extension renders it"
+        "  removed packages/native/.native-style: no listed extension renders it"
     ]
-    assert not (member / ".clang-tidy").is_file()
+    assert not (member / ".native-style").is_file()
     assert shipped_drift(root) == []
-
-
-def _restore_clang_tidy() -> CheckRecord:
-    from livery.workshop._checks import _register_builtin
-
-    _register_builtin()
-    return _checks._CHECKS["lint.clang-tidy"]
 
 
 def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
@@ -143,7 +154,8 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
     from livery.workshop._shipped_files import settle_package
 
     # A package file is any file a registered check's kinded fragment
-    # names: the native linter's, and an extension's style beside it.
+    # names: a native check's, and an extension's style beside it.
+    _native_style()
     register_check(
         CheckRecord(
             "acme-style",
@@ -162,14 +174,14 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
     rendered = compose_package("cpp-conan", ".acme-style", data)
     assert rendered == "style for cpp-conan\n"
     (member / ".acme-style").write_bytes(rendered.encode())
-    other = member / ".clang-tidy"
-    other.write_text("Checks: mine\n")
+    other = member / ".native-style"
+    other.write_text("mine\n")
     assert settle_package(member, "cpp-conan") == [
-        "  kept .clang-tidy: edited here, so it is not rewritten; delete it to"
+        "  kept .native-style: edited here, so it is not rewritten; delete it to"
         " take the rendered file"
     ]
     assert ".acme-style" in read_rendered(member)  # adopted
-    assert other.read_text() == "Checks: mine\n"
+    assert other.read_text() == "mine\n"
 
 
 # Then what the records render.
@@ -223,14 +235,15 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
 
 
 def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None:
+    record = _native_style()
     data = _data()
-    cpp = compose_package("cpp-conan", ".clang-tidy", {**data, "kind": "cpp-conan"})
+    cpp = compose_package("cpp-conan", ".native-style", {**data, "kind": "cpp-conan"})
     nano = compose_package(
-        "python-nanobind", ".clang-tidy", {**data, "kind": "python-nanobind"}
+        "python-nanobind", ".native-style", {**data, "kind": "python-nanobind"}
     )
-    assert cpp is not None and nano is not None
-    assert "for the cpp-conan kind" in cpp and "for the python-nanobind kind" in nano
-    assert package_fragment("python", ".clang-tidy") is None
+    assert cpp == "# for the cpp-conan kind\n"
+    assert nano == "# for the python-nanobind kind\n"
+    assert package_fragment("python", ".native-style") is None
     # An extension's fragment for one kind differs from the other kind's.
     register_check(
         CheckRecord(
@@ -241,15 +254,15 @@ def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None
             kinds=("python-nanobind",),
             extension="acme.brand",
             fragments=(
-                Fragment(".clang-tidy", "Checks: acme-*\n", kind="python-nanobind"),
+                Fragment(".native-style", "Checks: acme-*\n", kind="python-nanobind"),
             ),
         )
     )
-    found = package_fragment("python-nanobind", ".clang-tidy")
+    found = package_fragment("python-nanobind", ".native-style")
     assert found is not None and found[1] == "lint.acme-tidy"
-    assert package_fragment("cpp-conan", ".clang-tidy") == (
-        _fragments.CLANG_TIDY,
-        "lint.clang-tidy",
+    assert package_fragment("cpp-conan", ".native-style") == (
+        record.fragments[0].text,
+        "lint.native-style",
     )
 
 

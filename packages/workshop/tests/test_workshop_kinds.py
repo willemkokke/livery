@@ -57,6 +57,9 @@ class _FakeBackend:
     def public_modules(self, package: Package) -> tuple[str, ...]:
         return ()
 
+    def compile_commands(self, package: Package) -> Path | None:
+        return None
+
     def referenced_siblings(
         self, package: Package, around: Neighbours
     ) -> dict[str, str]:

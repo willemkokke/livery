@@ -387,6 +387,7 @@ EXPORTS: dict[str, list[str]] = {
         "Package",
         "WHOLE",
         "__version__",
+        "compile_commands",
         "discover_packages",
         "extension_names",
         "mount_extensions",

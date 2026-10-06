@@ -3,9 +3,9 @@
 Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 2026-10-02. Phases 1 to 4 built (issues #1025, #1028, #1032, #1034,
 #1036). Later phases mark each slice built in place, with its issue;
-9b is in progress, its ruff, basedpyright, mypy, ty, pyrefly and
-clang-format slices built (issues #1149, #1159, #1164, #1168, #1170 and
-#1175), and phases 10 to 15 are not started. It is the one plan from now until the end of
+9b is in progress, its ruff, basedpyright, mypy, ty, pyrefly,
+clang-format and clang-tidy slices built (issues #1149, #1159, #1164,
+#1168, #1170, #1175 and #1176), and phases 10 to 15 are not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -1309,8 +1309,22 @@ following the distribution's name. It writes each native package's
 the registered checks' kinded fragments, so the base names no native
 tool's file (`PACKAGE_FILES` went), and the kinds' unread
 `native_sources` flag went with it. That the native seeds are in the
-extension's style spans both and is a root test,
-`tests/test_native_style.py`.
+extension's style spans both and is a root test, now
+`tests/test_native_seeds.py`.
+
+**9b8 built (issue #1176): clang-tidy is its own extension.**
+`livery-extensions-clang-tidy`, in `packages/extensions/clang-tidy/`,
+listed as `clang-tidy` and imported as `livery.extensions.clang.tidy`,
+declares `lint.clang-tidy`: one `cpp-conan` package at a time, after
+`build.configure`, against the compilation database the package's
+kind says its build writes, a kind query
+(`livery.workshop.api.compile_commands`, `Backend.compile_commands`;
+a python kind's build writes none). The arguments the store's static
+clang-tidy needs, the host compiler's resource directory and the macOS
+SDK, are the tool's and moved with it. It writes each native package's
+`.clang-tidy`. The base registers no check of the format or lint roles
+for a native package; `tests/test_native_seeds.py` holds the seeded
+member's tidy finding beside its style.
 
 **9a, the engine and the options.** Deliverables:
 

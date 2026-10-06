@@ -1693,13 +1693,6 @@ def _register_builtin() -> None:
         assert ctx.package is not None
         return ctx.package
 
-    def named_sources(ctx: GateContext, name: str) -> tuple[Path, ...] | None:
-        """The named files a package check takes, or None for the package's own set."""
-        if not ctx.files:
-            return None
-        package = package_of(ctx)
-        return tuple(Path(p) for p in claimed_files(check_for(name), ctx, package.path))
-
     def configure_run(ctx: GateContext) -> None:
         _cpp_conan.configure(package_of(ctx))
 
@@ -1710,17 +1703,12 @@ def _register_builtin() -> None:
         package = package_of(ctx)
         _cpp_conan.test(package, ctx.root, selection=ctx.selection)
 
-    def clang_tidy_run(ctx: GateContext) -> None:
-        files = named_sources(ctx, "lint.clang-tidy")
-        _cpp_conan.lint(package_of(ctx), ctx.root, files=files)
-
     # The slots the python records fill: the dev group's tool lines
     # and pytest's options, lines the base template no longer writes
     # by hand. The python extension declares both once it exists.
     _slots.register_slot("python.dev-group")
     _slots.register_slot("python.test.addopts")
 
-    native = ("cpp-conan", "python-nanobind")
     python = ("python",)
     py = _python.PY_SUFFIXES
     cpp = _cpp_conan.SOURCE_SUFFIXES
@@ -1835,20 +1823,6 @@ def _register_builtin() -> None:
             tests_only=True,
             after=("build.compile",),
             claims=(Claim("test", suffixes=cpp), Claim("source", suffixes=cpp)),
-        ),
-        CheckRecord(
-            "clang-tidy",
-            "lint",
-            clang_tidy_run,
-            scope=PACKAGE,
-            kinds=("cpp-conan",),
-            after=("build.configure",),
-            tools=("clang_tidy",),
-            fragments=tuple(
-                Fragment(".clang-tidy", _fragments.CLANG_TIDY, kind=kind)
-                for kind in native
-            ),
-            claims=(Claim("source", suffixes=cpp), Claim("test", suffixes=cpp)),
         ),
     ):
         register_check(record)

@@ -201,27 +201,3 @@ pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endf
 # here).
 addopts = "{{ slots['python.test.addopts'] | join(' ') }}"
 """
-
-#: The native tools search upward from each file for their own
-#: configuration, so a package of a native kind carries this file,
-#: rendered from the record and judged by the drift gate; a package's
-#: own additions ride the tool's inheritance, a deeper file with
-#: ``InheritParentConfig``.
-CLANG_TIDY = """\
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A `.clang-tidy` deeper in the tree with
-# `InheritParentConfig: true` carries this package's own lines.
-#
-# The families a gate can hold green from the first commit: the bug
-# and portability checks, and the performance ones. readability-* is
-# left out on purpose, since its opinions collide with the formatter's
-# and with each other. A finding is an error, so the gate's verdict
-# stays its exit code.
-Checks: >
-  bugprone-*,
-  performance-*,
-  portability-*,
-  -bugprone-easily-swappable-parameters
-WarningsAsErrors: "*"
-HeaderFilterRegex: "^$"
-"""

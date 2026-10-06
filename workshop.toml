@@ -32,6 +32,8 @@ extensions = [
     # root pyrefly.toml.
     "pyrefly",    # The C and C++ formatter, in each native package's .clang-format.
     "clang-format",
+    # The C and C++ linter, in each native package's .clang-tidy.
+    "clang-tidy",
 ]
 
 [docs]

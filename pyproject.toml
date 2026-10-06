@@ -27,11 +27,12 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/clang-format", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
 livery-extensions-clang-format = { workspace = true }
+livery-extensions-clang-tidy = { workspace = true }
 livery-extensions-mypy = { workspace = true }
 livery-extensions-pyrefly = { workspace = true }
 livery-extensions-ruff = { workspace = true }
@@ -60,6 +61,7 @@ dev = [
     # carry extras the dev loop needs.
     "livery-extensions-basedpyright",
     "livery-extensions-clang-format",
+    "livery-extensions-clang-tidy",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-ruff",
@@ -135,7 +137,7 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/clang-format/tests", "packages/extensions/mypy/tests", "packages/extensions/pyrefly/tests", "packages/extensions/ruff/tests", "packages/extensions/ty/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
+pythonpath = ["packages/extensions/basedpyright/tests", "packages/extensions/clang-format/tests", "packages/extensions/clang-tidy/tests", "packages/extensions/mypy/tests", "packages/extensions/pyrefly/tests", "packages/extensions/ruff/tests", "packages/extensions/ty/tests", "packages/footman/tests", "packages/forge/tests", "packages/strongroom/tests", "packages/toolroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/workshop/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).

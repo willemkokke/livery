@@ -1363,26 +1363,6 @@ def _test_objects(package: Package) -> list[str]:
     return objects
 
 
-#: Where a package keeps the sources the two clang tools read.
-SOURCE_DIRS = ("src", "include", "tests")
-
-
-def sources(package: Package) -> list[Path]:
-    """Every C and C++ file the package owns, sorted.
-
-    The two clang tools read the same set: what the package wrote,
-    never what a build wrote under `build/`.
-    """
-    found: list[Path] = []
-    for name in SOURCE_DIRS:
-        directory = package.directory / name
-        if not directory.is_dir():
-            continue
-        for suffix in SOURCE_SUFFIXES:
-            found.extend(directory.rglob(f"*{suffix}"))
-    return sorted(found)
-
-
 def _asked(argv: list[str]) -> str:
     """The first line *argv* prints, or empty when it will not run."""
     try:
@@ -1393,60 +1373,9 @@ def _asked(argv: list[str]) -> str:
     return lines[0] if answer.code == 0 and lines else ""
 
 
-def _toolchain_arguments() -> tuple[list[str], str]:
-    """What the standalone clang-tidy needs, and why it cannot run.
-
-    The static build is one binary. It carries no resource directory
-    of its own, so the compiler's builtin headers (`stddef.h` and its
-    kin) come from the host's compiler, and on macOS the standard
-    library comes from the SDK xcrun names. Returns the arguments and
-    an empty reason, or no arguments and the reason the lint cannot
-    run, which the caller prints as a skip.
-    """
-    resources = _asked(["clang", "-print-resource-dir"]) or _asked(
-        ["cc", "-print-file-name=include"]
-    )
-    if not resources:
-        return [], "no compiler here answers where its builtin headers are"
-    arguments = [f"--extra-arg=-resource-dir={resources.removesuffix('/include')}"]
-    if sys.platform == "darwin":
-        sdk = _asked(["xcrun", "--show-sdk-path"])
-        if not sdk:
-            return [], "xcrun names no SDK, where this platform keeps its headers"
-        arguments.append(f"--extra-arg=-isysroot{sdk}")
-    return arguments, ""
-
-
-def lint(package: Package, root: Path, files: tuple[Path, ...] | None = None) -> None:
-    """Run clang-tidy over the package's sources; a finding is a refusal.
-
-    The checks are the package's own `.clang-tidy`. clang-tidy reads
-    the compilation database the gate build exports, so the build
-    runs first and a package that has not configured is configured
-    here.
-
-    Raises:
-        Failed: when clang-tidy finds anything, with its own output.
-    """
-    targets = sources(package) if files is None else list(files)
-    database = package.directory / GATE_BUILD_DIR / "compile_commands.json"
-    if not targets or not database.is_file():
-        return
-    arguments, reason = _toolchain_arguments()
-    if reason:
-        print(f"  {package.name}: clang-tidy skips, {reason}")
-        return
-    result = tools.clang_tidy.opts(cwd=package.directory, nofail=True, recorded=False)(
-        "-p",
-        GATE_BUILD_DIR,
-        *arguments,
-        *(str(path) for path in targets),
-    )
-    if result.code != 0:
-        fail(
-            f"{package.name}: clang-tidy found something:\n"
-            f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
-        )
+def compile_commands(package: Package) -> Path | None:
+    """Where the package's gate build writes its compilation database."""
+    return package.directory / GATE_BUILD_DIR / "compile_commands.json"
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
