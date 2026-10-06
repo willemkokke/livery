@@ -209,6 +209,32 @@ def test_a_footman_plugin_is_not_offered_as_an_extension() -> None:
     assert "docs" in offered
 
 
+def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    # Listed and installed by nothing: the mount names it, skips it, and
+    # remembers it; nothing is declared since, so nothing is new.
+    _contract(tmp_path, '["acme.later"]')
+    from livery.footman import registry
+
+    with registry.capture():
+        assert _extensions.mount_extensions(tmp_path) == ()
+    assert _extensions.UNDECLARED == ("acme.later",)
+    assert _extensions.installed_since_mount(tmp_path) == ()
+    # An install declares it: the next look finds it, while the
+    # contract still lists it.
+    _fake_extensions(tmp_path, monkeypatch, later="")
+    assert _extensions.installed_since_mount(tmp_path) == ("acme.later",)
+    _contract(tmp_path, "[]")
+    assert _extensions.installed_since_mount(tmp_path) == ()
+    # A mount that finds every listed extension remembers none.
+    _contract(tmp_path, '["acme.later"]')
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    assert list(_extensions.UNDECLARED) == []
+    assert _extensions.installed_since_mount(tmp_path) == ()
+
+
 def test_an_extension_listed_at_the_wrong_level_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

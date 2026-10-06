@@ -345,6 +345,11 @@ def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | 
 #: must teach rather than silently narrow the tree.
 MOUNTED: bool = False
 
+#: The listed extensions the last mount found no installed distribution
+#: declaring. A sync that installs one reads them again
+#: ([livery.workshop._extensions.installed_since_mount][]).
+UNDECLARED: tuple[str, ...] = ()
+
 
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount every listed extension's plugin, in order; the names mounted.
@@ -368,8 +373,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     from livery.footman import _paths
     from livery.footman.api import plugin
 
-    global MOUNTED
+    global MOUNTED, UNDECLARED
     MOUNTED = True
+    undeclared: list[str] = []
     root = workspace_root(start)
     if root is not None and (why := missing_list(root)):
         _note(why)
@@ -391,6 +397,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             continue
         module = declaration(extension)
         if module is None:
+            undeclared.append(extension)
             _note(
                 f"extension {extension!r} is listed in [workspace] extensions, and no"
                 f" installed distribution declares it in {GROUP}; install the"
@@ -431,7 +438,27 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     from livery.workshop._checks import generate_verbs
 
     generate_verbs()
+    UNDECLARED = tuple(undeclared)
     return tuple(mounted)
+
+
+def installed_since_mount(start: Path | None = None) -> tuple[str, ...]:
+    """The listed extensions the mount found undeclared that are declared now.
+
+    Reads the installed entry points again, since the process scanned
+    them once at its start: a sync that just installed a member's
+    extension sees it here, and the mount that ran before it did not.
+    An extension the contract no longer lists is not counted.
+    """
+    if not UNDECLARED:
+        return ()
+    from livery.footman.api import rescan_entry_points
+
+    rescan_entry_points()
+    listed = extension_names(start)
+    return tuple(
+        name for name in UNDECLARED if name in listed and declaration(name) is not None
+    )
 
 
 def _note(text: str) -> None:
