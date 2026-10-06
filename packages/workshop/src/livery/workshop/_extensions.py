@@ -85,6 +85,11 @@ def _declared() -> dict[str, EntryPoint]:
     return {entry.name: entry for entry in installed_entry_points(GROUP)}
 
 
+def installed_extensions() -> tuple[str, ...]:
+    """The names installed distributions declare extensions under, sorted."""
+    return tuple(sorted(_declared()))
+
+
 def declaration(extension: str) -> ModuleType | None:
     """The data module *extension* declares itself with; None when none is installed.
 

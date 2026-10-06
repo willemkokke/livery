@@ -19,7 +19,7 @@ import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import livery.footman.api as footman
 from livery.footman.api import fail
@@ -30,6 +30,7 @@ from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge.api import Forge, Job, Repository, Run
+    from livery.workshop._checks import CheckRecord
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
@@ -126,7 +127,7 @@ def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
     }
 
 
-def dev_members(root: Path) -> tuple[str, ...]:
+def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[str, ...]:
     """The members whose dev wheels the loop eats: the workshop and what a birth lists.
 
     Directory names, the workshop first, then each member that ships
@@ -136,7 +137,8 @@ def dev_members(root: Path) -> tuple[str, ...]:
     registry, and a member the closure does not reach publishes
     nothing there. An extension depends on the workshop, never the
     other way round, so the workshop's closure alone leaves the
-    newborn's listed extensions nothing to install.
+    newborn's listed extensions nothing to install. *extensions* is
+    the stack a birth lists, the stock list when None.
 
     Raises:
         Failed: when *root* has no workshop member to eat.
@@ -149,7 +151,8 @@ def dev_members(root: Path) -> tuple[str, ...]:
     workshop = by_path.get(DEV_MEMBER)
     if workshop is None:
         fail(f"{root}: no {DEV_MEMBER} member; the loop eats the workshop's dev wheels")
-    stock = {distribution_of(name) for name in birth_extensions([SELF])}
+    listed = birth_extensions([SELF]) if extensions is None else extensions
+    stock = {distribution_of(name) for name in listed}
     shipping = sorted(
         (p for p in by_path.values() if p.name in stock and p is not workshop),
         key=lambda package: package.path,
@@ -511,7 +514,7 @@ LOOP_MEMBER_DIST = "ci-e2e-loop-loop-echo"
 #: join the union, the release leg creates it into conan's cache, and
 #: the wave publishes it through the forge's conan registry.
 LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
-    ("loop-echo", ""),
+    ("loop-echo", "package-python"),
     ("loop-native", "package-python-nanobind"),
     ("loop-cpp", "package-cpp-conan"),
 )
@@ -649,7 +652,9 @@ def _dev_wheels(root: Path, head: str, members: tuple[str, ...]) -> dict[str, Pa
     return found
 
 
-def _dev_split(root: Path, git: GitOps) -> tuple[list[str], dict[str, str]]:
+def _dev_split(
+    root: Path, git: GitOps, stack: Sequence[str] = ()
+) -> tuple[list[str], dict[str, str]]:
     """The dev members this pass builds, and the release each other one pins, by member.
 
     A member nothing unreleased touches cannot be built as a dev
@@ -664,7 +669,7 @@ def _dev_split(root: Path, git: GitOps) -> tuple[list[str], dict[str, str]]:
     packages = {package.member: package for package in discover_packages(root)}
     changed: list[str] = []
     released: dict[str, str] = {}
-    for member in dev_members(root):
+    for member in dev_members(root, tuple(stack) or None):
         version = unchanged_since_release(root, git, packages[member])
         if version:
             released[member] = version
@@ -705,7 +710,9 @@ def _index_page(directory: Path, targets: list[str]) -> None:
     )
 
 
-def checkout_index(root: Path, folder: Path) -> str:
+def checkout_index(
+    root: Path, folder: Path, extensions: Sequence[str] | None = None
+) -> str:
     """Build what a newborn installs from *root* as a local index at *folder*; its URL.
 
     The members are [livery.workshop._e2e.dev_members][]: the workshop,
@@ -719,14 +726,15 @@ def checkout_index(root: Path, folder: Path) -> str:
     candidates, and a stable release on PyPI beats a dev wheel
     (measured). This is how a workspace installs this checkout's code
     before a release, never the dev act, which on a main-family branch
-    is the release train.
+    is the release train. *extensions* is the stack the birth lists,
+    the stock list when None.
     """
     import tempfile
 
     import livery.toolroom.tools.api as toolroom
     from livery.workshop._packages import discover_packages
 
-    members = set(dev_members(root))
+    members = set(dev_members(root, extensions))
     skipped = shutil.ignore_patterns(
         ".venv", "dist", "build", "__pycache__", "_docs", "*.egg-info"
     )
@@ -777,7 +785,7 @@ def _stamp_content(package: Package) -> None:
     )
 
 
-def _dev_index(kind: str) -> str:
+def _dev_index(kind: str, stack: Sequence[str] = ()) -> str:
     """This checkout's index under the lane's home, for the birth to read; its URL.
 
     The birth locks the newborn before the pass publishes anything, and
@@ -790,7 +798,7 @@ def _dev_index(kind: str) -> str:
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     folder = _loop_home(kind).parent / f"{kind}-dev-index"
-    url = checkout_index(root, folder)
+    url = checkout_index(root, folder, tuple(stack) or None)
     held = sum(1 for entry in folder.iterdir() if entry.is_dir())
     print(
         f"  checkout index: {held} distributions at {folder}, read first by the birth"
@@ -798,7 +806,7 @@ def _dev_index(kind: str) -> str:
     return url
 
 
-def _publish_dev_wheels(kind: str) -> dict[str, str]:
+def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
     """Publish the workspace's dev wheels to the loop's registry; the pins.
 
     The loop installs the workshop being edited, so every pass
@@ -822,7 +830,7 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     _, token = _dev_forge(kind)
     git = GitOps(root)
     packages = {package.member: package for package in discover_packages(root)}
-    changed, pinned = _dev_split(root, git)
+    changed, pinned = _dev_split(root, git, stack)
     released = {packages[member].name: version for member, version in pinned.items()}
     for member, version in pinned.items():
         print(
@@ -976,7 +984,7 @@ def _unpushed_commits(root: Path) -> list[str]:
     return [line for line in listed.stdout.splitlines() if line.strip()]
 
 
-def _birth(kind: str, url: str, index: str = "") -> Path:
+def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: seeds, git, repository,
@@ -987,7 +995,8 @@ def _birth(kind: str, url: str, index: str = "") -> Path:
     reach the birth's git. A workspace already there is resumed, so
     this is the recovery procedure too. *index*, when given, is
     searched before any other index the environment names
-    ([livery.workshop._e2e._dev_index][]).
+    ([livery.workshop._e2e._dev_index][]); *stack*, when given, is the
+    extensions the workspace lists instead of the stock list.
     """
     import sys
 
@@ -1011,6 +1020,7 @@ def _birth(kind: str, url: str, index: str = "") -> Path:
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
             "--description=The workshop's local CI loop. Scratch; recreated freely.",
+            *([f"--stack={','.join(stack)}"] if stack else []),
             *resume,
         ],
         cwd=home,
@@ -1140,7 +1150,7 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
             1,
         )
     contract_text = re.sub(r'prerelease = "[^"]*"\n', "", contract_text)
-    if "[docs]" not in contract_text:
+    if "[docs]" not in contract_text and "docs" in _listed_extensions(root):
         # The loop builds the site for real and publishes nowhere:
         # the runner container has no docker, and the release act
         # needs main green (an undeclared seam defaults to the forge
@@ -1566,6 +1576,11 @@ def _loop_fm(
     # The caller's VIRTUAL_ENV points at the worktree; the loop's uv
     # must resolve the loop's own venv, so the variable stays behind.
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    # Named here, not only in the pass's environment: a write to
+    # os.environ inside a task is the task's, and the environment this
+    # child gets is built from the process's, so the loop's own fm
+    # (whose submit can amend a commit) would ask a developer's signer.
+    env.update(unsigned_environment(env))
     # No --no-sync: the wiring moves the lock onto each pass's fresh
     # dev wheels, and a frozen venv would keep running yesterday's
     # workshop under today's lock (measured: a fixed bug stayed red
@@ -1589,8 +1604,71 @@ def _loop_fm(
     return 0
 
 
-def _ensure_members(root: Path) -> None:
-    """Give the loop its members, each landed through its own gate.
+def member_kind(seed: str) -> str:
+    """The package kind a loop member's seed renders: its name past ``package-``."""
+    return seed.removeprefix("package-")
+
+
+def members_for(kinds: Sequence[str] = ()) -> tuple[tuple[str, str], ...]:
+    """The loop's members of *kinds*, as ``(name, seed)``; every member when empty."""
+    return tuple(
+        (name, seed)
+        for name, seed in LOOP_MEMBERS
+        if not kinds or member_kind(seed) in kinds
+    )
+
+
+def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The stack a pass births to test extension *name*, and the member kinds it lands.
+
+    The stack is what *name* requires, each before what needs it, then
+    *name* itself. The members are the loop's of the kinds *name*'s
+    checks declare, so each check has something of its own to judge.
+
+    Raises:
+        Failed: when no installed distribution declares *name*, naming
+            the installed ones; when *name* registers no check; when its
+            requirements form a cycle.
+    """
+    from livery.workshop._extensions import declaration, installed_extensions
+
+    module = declaration(name)
+    if module is None:
+        installed = ", ".join(installed_extensions()) or "none"
+        fail(
+            f"extension {name!r}: no installed distribution declares it;"
+            f" the installed ones are {installed}"
+        )
+    checks = cast("tuple[CheckRecord, ...]", tuple(getattr(module, "CHECKS", ())))
+    if not checks:
+        fail(
+            f"extension {name!r} registers no check: a pass would have"
+            " nothing of its own to run"
+        )
+    stack: list[str] = []
+
+    def visit(extension: str, path: tuple[str, ...]) -> None:
+        if extension in stack:
+            return
+        if extension in path:
+            fail(f"extensions require each other: {' -> '.join((*path, extension))}")
+        declared = declaration(extension)
+        for needed in getattr(declared, "REQUIRES", ()) if declared else ():
+            visit(str(needed), (*path, extension))
+        stack.append(extension)
+
+    visit(name, ())
+    declared_kinds = {kind for record in checks for kind in record.kinds}
+    kinds = tuple(
+        member_kind(seed)
+        for _member, seed in LOOP_MEMBERS
+        if member_kind(seed) in declared_kinds
+    )
+    return tuple(stack), kinds
+
+
+def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
+    """Give the loop its members of *kinds*, all when empty, each landed by its gate.
 
     ``new.package`` renders and wires a member, a `[release] baseline`
     seeds the first release's number, the nanobind member's contract
@@ -1607,22 +1685,22 @@ def _ensure_members(root: Path) -> None:
     # tree would skip straight to the release act with nothing
     # merged. The alignment makes the glob read main's truth.
     _align_main(root)
-    for name, kind in LOOP_MEMBERS:
+    for name, kind in members_for(kinds):
         if (root / "packages" / name / "workshop.toml").is_file():
             print(f"  member {name}: already landed")
             continue
         git = GitOps(root)
         _fresh_branch(root, f"feat/{name}")
-        _loop_fm(root, "new.package", name, *([f"--kind={kind}"] if kind else []))
+        _loop_fm(root, "new.package", name, f"--kind={kind}")
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
-        if kind:
-            # The seed names the hosted runners; the loop's fleet is its
-            # one linux container, and the leg must be schedulable.
-            body = body.replace(
-                'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
-                f'wheel-platforms = ["{CURRENT.label}"]',
-            )
+        # A native seed names the hosted runners as its wheel platforms;
+        # the loop's fleet is its one runner, and the leg must be
+        # schedulable. Another seed names none, and nothing changes.
+        body = body.replace(
+            'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
+            f'wheel-platforms = ["{CURRENT.label}"]',
+        )
         if "[release]" not in body:
             body = (
                 body.rstrip("\n")
@@ -2580,6 +2658,9 @@ class Pass:
         fresh: Whether the pass starts over from nothing.
         root: The loop's workspace once ``birth`` has run; None before.
         timings: One entry per scenario run, in order.
+        extension: The extension under test; empty for a plain pass.
+        stack: The extensions the birth lists; empty for the stock list.
+        kinds: The member kinds the members scenario lands; empty for all.
     """
 
     forge: str
@@ -2587,6 +2668,9 @@ class Pass:
     fresh: bool = False
     root: Path | None = None
     timings: list[Timing] = field(default_factory=list)
+    extension: str = ""
+    stack: tuple[str, ...] = ()
+    kinds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2637,7 +2721,12 @@ def _born(pass_: Pass) -> None:
     forge = pass_.forge
     lane, lane_token = _dev_forge(forge)
     root = _loop_home(forge) / E2E_REPO
-    if pass_.fresh and CURRENT.mode != "host":
+    if _listed_extensions(root) not in ((), _stack_of(pass_)):
+        # A workspace born for another stack is not this pass's: an
+        # extension pass and a plain one take turns in one environment.
+        for line in start_over(lane, lane_token, root, url=pass_.url, kind=forge):
+            print(line)
+    elif pass_.fresh and CURRENT.mode != "host":
         # A fresh host-mode pass took a new environment: its forge
         # holds nothing yet. The docker rig is long-lived, so its
         # repository, releases and workspace go here.
@@ -2656,13 +2745,18 @@ def _born(pass_: Pass) -> None:
         # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
-    root = _birth(forge, pass_.url, index=_dev_index(forge))
+    root = _birth(
+        forge,
+        pass_.url,
+        index=_dev_index(forge, pass_.stack),
+        stack=pass_.stack,
+    )
     _authenticate_remote(root, lane_token, forge)
     provision(forge)
     # After the project exists: GitLab's registry belongs to the
     # project, and a fresh start's delete is asynchronous, so a
     # publish before the birth lands in the project being deleted.
-    pins = _publish_dev_wheels(forge)
+    pins = _publish_dev_wheels(forge, pass_.stack)
     sha = _eat_dev_wheels(root, pins, forge)
     print(f"  watching {sha[:12]} on the runner")
     from livery.workshop._new_project import _SETUP_BRANCH
@@ -2671,6 +2765,28 @@ def _born(pass_: Pass) -> None:
     print("  green: the loop's gate ran on the real runner")
     _merge_setup(forge, sha)
     pass_.root = root
+
+
+def _stack_of(pass_: Pass) -> tuple[str, ...]:
+    """The extensions *pass_*'s birth lists: its own stack, else the stock list."""
+    from livery.workshop._extensions import SELF
+    from livery.workshop._new_project import birth_extensions
+
+    return pass_.stack or tuple(birth_extensions([SELF]))
+
+
+def _listed_extensions(root: Path) -> tuple[str, ...]:
+    """The extensions *root*'s contract lists, in order; empty without a contract."""
+    import tomllib
+
+    contract = root / "workshop.toml"
+    if not contract.is_file():
+        return ()
+    workspace = tomllib.loads(contract.read_text("utf-8")).get("workspace") or {}
+    return tuple(
+        str(entry.get("name", "")) if isinstance(entry, dict) else str(entry)
+        for entry in workspace.get("extensions") or []
+    )
 
 
 def _at(pass_: Pass) -> Path:
@@ -2687,7 +2803,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "verified-skip", ("birth",), lambda p: _prove_verified_skip(_at(p), p.forge)
     ),
-    Scenario("members", ("birth",), lambda p: _ensure_members(_at(p))),
+    Scenario("members", ("birth",), lambda p: _ensure_members(_at(p), p.kinds)),
     Scenario("ratchet", ("members",), lambda p: _prepare_ratchet(_at(p), p.forge)),
     Scenario("scoped-leg", ("ratchet",), lambda p: _prove_scoped_leg(_at(p), p.forge)),
     Scenario("prose-leg", ("members",), lambda p: _prove_prose_leg(_at(p), p.forge)),
@@ -2713,6 +2829,7 @@ SETS: dict[str, tuple[str, ...]] = {
     "develop": ("birth", "verified-skip", "members", "scoped-leg"),
     "release": ("birth", "verified-skip", "members", "scoped-leg", "release"),
     "points": ("nightly", "dispatched-gate", "contributed-point"),
+    "extension": ("birth", "members"),
     "all": tuple(scenario.name for scenario in SCENARIOS),
 }
 
@@ -2802,9 +2919,10 @@ def record_pass(root: Path, pass_: Pass, asked: str) -> str:
     from datetime import UTC, datetime
 
     when = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    row = {
+    row: dict[str, object] = {
         "forge": pass_.forge,
         "asked": asked,
+        **({"extension": pass_.extension} if pass_.extension else {}),
         "scenarios": [
             {
                 "name": timing.name,
@@ -2830,9 +2948,10 @@ if _WORKSHOP_TESTS.is_dir():
     def e2e(
         forge: str = "gitea",
         fresh: bool = False,
-        scenario: str = "develop",
+        scenario: str = "",
         env: str = "e2e",
         purge_cache: bool = False,
+        extension: str = "",
     ) -> None:
         """Exercise the CI and release story on a local environment, by scenario.
 
@@ -2844,10 +2963,14 @@ if _WORKSHOP_TESTS.is_dir():
         environment ``dev`` is the compose rig, addressed as before.
         ``--scenario`` names what the pass proves: scenario names, set
         names, or both, comma-separated. The sets are ``develop``
-        (birth, the verified skip, the members, the scoped leg),
-        ``release`` (develop and the release act), ``points`` (the
-        nightly, the dispatched gate, the contributed point) and
-        ``all``; a scenario's needs run first, once. ``birth`` builds
+        (birth, the verified skip, the members, the scoped leg), the
+        default, ``release`` (develop and the release act), ``points``
+        (the nightly, the dispatched gate, the contributed point),
+        ``extension`` (birth and the members) and ``all``; a scenario's
+        needs run first, once. ``--extension`` tests one extension in
+        isolation, ``extension`` the default set: the birth lists that
+        extension and what it requires instead of the stock list, and
+        the members are those of the kinds its checks declare. ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a
         birth lists into a local index, births or resumes the loop's
         workspace through ``fm new.project`` from that index (so an
@@ -2869,7 +2992,9 @@ if _WORKSHOP_TESTS.is_dir():
         from livery.workshop import _devenv
         from livery.workshop._extensions import workspace_root
 
-        chosen = scenarios_for(scenario)
+        asked = scenario or ("extension" if extension else "develop")
+        chosen = scenarios_for(asked)
+        stack, kinds = extension_under_test(extension) if extension else ((), ())
         if forge != "gitea":
             fail(f"--env addresses a Gitea environment; --forge={forge} has none yet")
         if purge_cache:
@@ -2893,7 +3018,12 @@ if _WORKSHOP_TESTS.is_dir():
         if daemon_needed(chosen):
             _require_runner_docker(forge)
         pass_ = Pass(
-            forge, CURRENT.url or os.environ.get(_lane(forge).url_var, ""), fresh
+            forge,
+            CURRENT.url or os.environ.get(_lane(forge).url_var, ""),
+            fresh,
+            extension=extension,
+            stack=stack,
+            kinds=kinds,
         )
         RUNS.count = 0
         try:
@@ -2904,6 +3034,6 @@ if _WORKSHOP_TESTS.is_dir():
                 print(line)
             driver = workspace_root()
             if driver is not None:
-                print(record_pass(driver, pass_, scenario))
+                print(record_pass(driver, pass_, asked))
         names = ", ".join(item.name for item in chosen)
         print(f"  the loop proved {names}")

@@ -1854,6 +1854,19 @@ Acceptance:
   The loop's birth and the born-project test use it; the descendant
   chain keeps its wheelhouse, which also carries the brand it builds,
   until its next run on the forge rig.
+- 2026-10-06, the loop's defaults for an extension pass (the agent's
+  to set, recorded here): `fm ci.e2e --extension=<name>` runs the
+  `extension` set, the birth and the members. The birth lists the
+  extension and what it requires (`fm new.project --stack`), no stock
+  list and no site; the members are the loop's of the kinds the
+  extension's checks declare, not every kind deriving from one (ruff:
+  `loop-echo` and `loop-cpp`). A workspace born for another stack is
+  started over, so plain and extension passes take turns in one
+  environment. First measure, `--extension=ruff --fresh`: 7 min 35 s
+  in all, the birth 161 s and the members 291 s, against about 22 min
+  for a develop pass. The loop's own fm gets the unsigned setting
+  explicitly (#1154): the pass's write to `os.environ` is the task's,
+  and the environment its child got was built from the process's.
 - Willem, 2026-10-06: the loop's split comes forward. After #1149,
   `fm ci.e2e --extension=<name>` (the local loop plan's phase 3b,
   carried in phase 14) is built first, on today's devenv, before the

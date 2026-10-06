@@ -237,6 +237,13 @@ def new_project(
     local: Annotated[
         bool, doc("everything that stays on the machine, nothing that leaves it")
     ] = False,
+    stack: Annotated[
+        str,
+        doc(
+            "the extensions the workspace lists, comma-separated in precedence"
+            " order; the stock list by default"
+        ),
+    ] = "",
     resume: Annotated[bool, hidden] = False,
 ) -> None:
     """Create a workspace in an empty or new folder: W1 as one verb.
@@ -297,9 +304,10 @@ def new_project(
     # runtime accessor is footman#536's family).
     from livery.footman import _paths
 
-    stack = birth_extensions(_paths.builtin())
+    listed = [entry.strip() for entry in stack.split(",") if entry.strip()]
+    stack_list = listed or birth_extensions(_paths.builtin())
     contract = root / "workshop.toml"
-    spelled = ", ".join(f'"{entry}"' for entry in stack)
+    spelled = ", ".join(f'"{entry}"' for entry in stack_list)
     year = str(datetime.datetime.now(tz=datetime.UTC).year)
     author_name = author or _git_config("user.name") or f"{name} authors"
     author_email = email or _git_config("user.email")
