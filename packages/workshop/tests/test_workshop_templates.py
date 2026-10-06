@@ -565,6 +565,32 @@ def test_every_rendered_project_mounts_the_profiler(tmp_path: Path) -> None:
     assert f"{root}/" in ignored.splitlines()
 
 
+def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
+    tmp_path: Path,
+) -> None:
+    # A gate writes the data at the root, and a file it leaves untracked
+    # makes the tree dirty, which a workflow verb refuses; coverage's own
+    # configuration, `.coveragerc`, is a tracked file beside them.
+    import subprocess
+
+    from livery.workshop._coverage_lines import PART_PREFIX
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
+    data = (".coverage", ".coverage.host.1.2", f"{PART_PREFIX}packages-geometry.json")
+    for name in (*data, ".coveragerc"):
+        (repo / name).write_text("x\n")
+
+    def ignored(name: str) -> bool:
+        done = subprocess.run(["git", "check-ignore", "-q", name], cwd=repo)
+        return done.returncode == 0
+
+    assert [name for name in data if not ignored(name)] == []
+    assert not ignored(".coveragerc")
+
+
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
     # Every change appends to a plan note's decision record, so two
     # changes in flight collide at the same tail; the rendered
