@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 import livery.footman.api as footman
-from livery.footman import context
+from livery.footman import _context as context
 from livery.footman.testing import Runner
 
 TASKS = textwrap.dedent(

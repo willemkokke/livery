@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from livery.footman import registry as _registry
+from livery.footman import _registry as _registry
 
 # capture(): a bare import registers the generator group in the
 # process-global registry, and a later mount_layers() in the same
@@ -66,7 +66,7 @@ def test_the_api_page_refuses_an_undocumented_export(monkeypatch):
     # section, and the refusal names it.
     import pytest
 
-    from livery.footman.context import Failed
+    from livery.footman._context import Failed
 
     monkeypatch.setattr(_docsgen, "_API_SECTIONS", [("Everything", "", ["task"])])
     monkeypatch.setattr(_docsgen, "_API_EXTRA", {})
@@ -79,7 +79,7 @@ def test_the_example_render_failure_names_the_child(tmp_path, monkeypatch):
     # refusal must carry its output rather than a bare exit code.
     import pytest
 
-    from livery.footman.context import Failed
+    from livery.footman._context import Failed
 
     class _Done(int):
         stdout = "child out"

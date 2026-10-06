@@ -79,7 +79,7 @@ TASKKILL = "taskkill"
 
 def rig_dir() -> Path:
     """The rig's own directory under the runner's data directory."""
-    from livery.footman.context import data_dir
+    from livery.footman.api import data_dir
 
     return data_dir() / "forge-dev"
 
@@ -664,7 +664,7 @@ def _start_runner(
 
 def _share(values: dict[str, str]) -> None:
     """Make *values* the cascade's current forge: the shared env file, key by key."""
-    from livery.footman.context import config_dir
+    from livery.footman.api import config_dir
 
     path = config_dir() / ".repo.shared.env"
     lines = path.read_text("utf-8").splitlines() if path.is_file() else []
@@ -771,7 +771,7 @@ def remove(env: Environment) -> list[str]:
 
 def _forget(url: str) -> None:
     """Drop the cascade's forge keys when they name *url*, a forge that is gone."""
-    from livery.footman.context import config_dir
+    from livery.footman.api import config_dir
 
     path = config_dir() / ".repo.shared.env"
     if not path.is_file():

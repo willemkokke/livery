@@ -57,10 +57,11 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman.api as footman
-from livery.footman import _schedule, context
+from livery.footman import _context as context
+from livery.footman import _schedule
 from livery.footman._executor import reported_state
-from livery.footman.params import matching
-from livery.footman.registry import GlobalOption
+from livery.footman._params import matching
+from livery.footman._registry import GlobalOption
 
 PROFILE = GlobalOption(
     "profile",

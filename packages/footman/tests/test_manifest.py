@@ -9,8 +9,10 @@ from typing import Annotated, Literal, Optional
 
 import pytest
 
-from livery.footman import _manifest, _paths, compose, registry
-from livery.footman.params import doc
+from livery.footman import _compose as compose
+from livery.footman import _manifest, _paths
+from livery.footman import _registry as registry
+from livery.footman._params import doc
 
 
 def specs(fn):
@@ -63,7 +65,7 @@ def test_doc_marker_lands_in_spec():
 
 def node(fn):
     """Build one task's manifest node the way the real tree does."""
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture() as root:
         registry.task(fn)
@@ -501,7 +503,7 @@ def test_sync_bakes_the_cwd_and_upgrades_manifests_without_it(
 
 
 def test_infinite_task_carries_the_note_key():
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture() as root:
 
@@ -519,7 +521,7 @@ def test_infinite_task_carries_the_note_key():
 
 
 def test_confirm_and_interactive_carry_note_keys():
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture() as root:
 
@@ -539,7 +541,7 @@ def test_confirm_and_interactive_carry_note_keys():
 
 
 def test_serial_and_exclusive_carry_the_lane_key():
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture() as root:
 

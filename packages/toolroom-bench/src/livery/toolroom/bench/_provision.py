@@ -855,7 +855,7 @@ def _fm_run(*args: Any, **kwargs: Any) -> Any:
     """`context.run`, imported at call time — provisioning is reachable from
     the stub generator, which has no interest in the run machinery.
     """
-    from livery.footman.context import run
+    from livery.footman.api import run
 
     return run(*args, **kwargs)
 

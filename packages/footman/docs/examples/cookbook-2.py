@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Annotated
 from livery.footman.api import task, run
-from livery.footman.params import between, check, env, isfile
+from livery.footman._params import between, check, env, isfile
 
 
 def semver(value: str) -> None:
@@ -26,7 +26,7 @@ def deploy(
 # --8<-- [start:part-2]
 from typing import Annotated
 from livery.footman.api import task
-from livery.footman.params import check
+from livery.footman._params import check
 
 
 def current_version(name: str) -> str: ...  # your lookup (pyproject, git…)
@@ -48,7 +48,7 @@ def release(name: str, version: Annotated[str, check(newer_than_current)]):
 # --8<-- [start:part-3]
 from typing import Annotated
 from livery.footman.api import task, run
-from livery.footman.params import suggest
+from livery.footman._params import suggest
 from livery.toolroom.tools.api import docker
 
 

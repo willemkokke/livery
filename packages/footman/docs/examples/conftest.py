@@ -1,7 +1,7 @@
 """The setup around footman's examples: a captured registry and a recording run.
 
 Every example defines tasks as a tasks file would, so it runs inside a
-fresh [livery.footman.registry.capture][], and a top-level run or tool
+fresh [livery.footman.api.capture][], and a top-level run or tool
 call records instead of executing, under [livery.footman.api.recording][].
 """
 
@@ -11,7 +11,7 @@ from collections.abc import Generator
 
 import pytest
 
-from livery.footman import registry
+from livery.footman import _registry as registry
 from livery.footman.api import recording
 
 

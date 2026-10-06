@@ -11,7 +11,7 @@ from typing import ClassVar
 import pytest
 
 from livery.footman import _fetch, _paths
-from livery.footman.context import Context, use_context
+from livery.footman._context import Context, use_context
 
 # Big enough to cross `_fetch.CHUNK` and Python's own write buffer: a body
 # that fits in one buffered write is atomic by luck, and the whole point of

@@ -109,7 +109,7 @@ def _merged() -> dict[str, str]:
     elsewhere. A task now owns its environment outright, so there is one value
     and nothing to reconcile — which is what makes deletion ordinary.
     """
-    from livery.footman.context import current
+    from livery.footman._context import current
 
     env = current().env
     if os.name == "nt":
@@ -128,7 +128,7 @@ def _note(kind: str, text: str) -> None:
 
 
 def _in_task() -> bool:
-    from livery.footman.context import current
+    from livery.footman._context import current
 
     return current().in_task
 
@@ -161,7 +161,7 @@ def _install_environ() -> None:
     def _virtual(self: Any) -> bool:
         if self is not os.environ or not _installs:
             return False
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         # A serial/exclusive task owns the real globals: pass through.
         return not current().serial_active
@@ -176,7 +176,7 @@ def _install_environ() -> None:
             return orig_set(self, key, value)
         if not isinstance(key, str) or not isinstance(value, str):
             raise TypeError("str expected for environment keys and values")
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         ctx = current()
         ctx.env[key] = value
@@ -193,7 +193,7 @@ def _install_environ() -> None:
     def __delitem__(self: Any, key: str) -> None:
         if not _virtual(self) or not _in_task():
             return orig_del(self, key)
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         # Ordinary, because a task owns its environment outright: the key goes
         # from this task's copy and from every child it spawns after, while a
@@ -274,7 +274,7 @@ def _managed_task() -> tuple[Any, bool]:
     Work footman does on the body's behalf (`internal()`) is never guarded
     either: it has already worked out whatever a guard would fill in, and a
     note about it would name a line the author never wrote."""
-    from livery.footman.context import current
+    from livery.footman._context import current
 
     ctx = current()
     guarded = (
@@ -774,7 +774,7 @@ class _GuardedStdin:
         self._real = real
 
     def _guard(self) -> None:
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         ctx = current()
         if _installs and ctx.in_task and not ctx.interactive and not ctx.serial_active:
@@ -923,7 +923,7 @@ def named_lanes(lanes: tuple[Lane, ...], name: str = "") -> Any:
         # already total — it conflicts with every named lane — so a step
         # inside it needs no further grant, and asking for one deadlocks the
         # run deterministically.
-        from livery.footman.context import current
+        from livery.footman._context import current
 
         mine = bool(getattr(current(), "serial_active", False))
         with _arb_cv:
@@ -1104,7 +1104,7 @@ def lane(
 def _suspend_status(on: bool) -> None:
     """Pause/resume the live status line around console ownership — its
     repaints and a wizard's prompt would fight for the one terminal."""
-    from livery.footman.context import active_status
+    from livery.footman._context import active_status
 
     status = active_status()
     if status is None:

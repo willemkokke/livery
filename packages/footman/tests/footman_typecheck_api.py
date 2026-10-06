@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Annotated, assert_type
 
 import livery.footman.api as footman
+from livery.footman._registry import TaskFn, Tasks, TaskView
 from livery.footman.api import (
     App,
     Arg,
@@ -57,7 +58,6 @@ from livery.footman.api import (
     task,
     track,
 )
-from livery.footman.registry import TaskFn, Tasks, TaskView
 from livery.footman.testing import InvokeResult, Runner, TaskResult, recording
 
 

@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from livery.footman.context import Result
+    from livery.footman.api import Result
     from livery.toolroom.store.api import Option, ToolSpec, Verb
 
 
@@ -54,7 +54,7 @@ def _run(*args: Any, **kwargs: Any) -> Result:
     bridge, which reaches here — and this module is also imported by the
     stub generator, which has no interest in the run machinery.
     """
-    from livery.footman.context import run
+    from livery.footman.api import run
 
     return run(*args, **kwargs)
 

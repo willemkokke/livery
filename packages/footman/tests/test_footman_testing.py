@@ -12,11 +12,11 @@ from typing import Literal
 
 import pytest
 
+from livery.footman._application import App
+from livery.footman._context import current
 from livery.footman._executor import EX_USAGE
+from livery.footman._registry import Group
 from livery.footman.api import Context, run, use_context
-from livery.footman.app import App
-from livery.footman.context import current
-from livery.footman.registry import Group
 from livery.footman.testing import Result, Runner, recording
 
 
@@ -61,7 +61,7 @@ def test_answers_accept_tuple_keys_and_collapse_whitespace():
 def test_a_non_zero_answer_takes_the_real_failing_lane():
     """Raised as RunFailed unless nofail — the error path under test really
     runs, with footman's own Result carrying the scripted verdict."""
-    from livery.footman.context import RunFailed
+    from livery.footman._context import RunFailed
 
     with recording(answers={"uv build": Result(1, stderr="boom")}) as steps:
         with pytest.raises(RunFailed) as failed:
@@ -97,7 +97,7 @@ def test_a_sequence_answers_in_order_then_refuses_by_name():
 
 
 def test_a_sequence_may_mix_answer_kinds():
-    from livery.footman.context import RunFailed
+    from livery.footman._context import RunFailed
 
     with recording(answers={"git push": [1, "ok\n"]}):
         with pytest.raises(RunFailed):
@@ -140,7 +140,7 @@ def test_a_live_record_keeps_no_env():
 def test_a_reviewer_sees_a_scripted_answer():
     """An adjudicator is tested *against* scripted exits: pre_record runs on
     the scripted draft, may amend the verdict, and the audit says so."""
-    from livery.footman.context import RunFailed
+    from livery.footman._context import RunFailed
 
     def adjudicate(view):
         if "changes required" in view.stdout:
@@ -225,7 +225,7 @@ def test_runner_invoke_answers_script_the_whole_invocation():
 
 
 def test_runner_invoke_without_answers_keeps_the_process_clean():
-    from livery.footman import context as _context
+    from livery.footman import _context as _context
 
     assert _context._injected_answers is None
     Runner().invoke("greet", tasks=_demo_group(), answers={"x": 0})
@@ -252,7 +252,7 @@ def test_recording_holds_the_secret_the_display_hides(capsys):
     """`recording()` is a record, not a display: a test asserting on what a
     task builds must see the value it built with. The `$` rehearsal line
     above it is a display, and shows `***`."""
-    from livery.footman.params import Secret
+    from livery.footman._params import Secret
 
     with recording(quiet=False) as steps:
         run(["git", "push", Secret("hunter2")])

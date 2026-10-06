@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from livery.workshop._verified import Verified
 
 import livery.footman.api as footman
-from livery.footman import context
 from livery.footman.api import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends
@@ -730,7 +729,7 @@ def say_skipped(text: str) -> None:
     plain call outside a run prints and nothing more.
     """
     print(f"  {text}")
-    if context.current().in_task:
+    if footman.current().in_task:
         footman.mark(f"skipped: {text}")
 
 

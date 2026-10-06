@@ -2113,6 +2113,23 @@ Acceptance:
   checks do, and so do the cpp kind's `build.configure`,
   `build.compile` and `test.ctest`. pytest's serial call puts `-n 0`
   after them, so they cannot spread a suite that is not worker-safe.
+- Willem, 2026-10-06: no package's source reaches into another
+  package's privates unless there is a compelling case. Tests have
+  one, and may. Every public name another package needs is in its
+  root's api or a public module the api declares.
+- Willem, 2026-10-06, #1152: footman's modules `app`, `compose`,
+  `context`, `env_files`, `invocation`, `params`, `registry`,
+  `pytest_plugin` and the `tasks` package are private (`app` becomes
+  `_application`, since `_app` exists). `profile` and the docs plugin
+  stay public modules, declared in the api, because other code calls
+  them: workshop reads profile traces, and a tasks file calls
+  `livery.footman.docs`. The api gains what other packages' sources
+  used from the renamed modules: `current`, `real_stderr`,
+  `RunTimeout` and `root_group`. Each root's `testing` kit is declared
+  in its api, and a test pins that every public module under a root is
+  its api or declared there. Removing `.api` from footman stays under
+  consideration; with every outside import going through the api, it
+  becomes one move.
 - Willem, 2026-10-06: Java support is not planned, and nothing here
   may rule it out. Read against this plan on 2026-10-05, the model
   holds: `java` with `gradle` (or `maven`) composes as `cpp` with

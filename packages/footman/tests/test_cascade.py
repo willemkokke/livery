@@ -16,10 +16,12 @@ from livery.footman import (
     _executor,
     _paths,
     _refresh,
-    registry,
 )
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._context import Context
 from livery.footman._split import Segment
-from livery.footman.context import Context
 
 # --- path primitives ---------------------------------------------------------
 
@@ -399,7 +401,7 @@ def test_cascade_tags_defining_dir(tmp_path):
     assert _discover.defining_dir(merged.tasks["b"]) == str(tmp_path / "svc")
 
 
-SHARED = "from livery.footman import context\nfrom livery.footman.api import task\n@task\ndef where():\n    pass\n"
+SHARED = "from livery.footman import _context as context\nfrom livery.footman.api import task\n@task\ndef where():\n    pass\n"
 
 
 def test_one_task_at_two_addresses_with_two_folders_is_refused(tmp_path):
@@ -481,7 +483,7 @@ def test_a_second_load_may_restamp_the_same_function(tmp_path):
 
 
 def test_load_tree_leaves_no_global_state(tmp_path):
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     root = _write(
         tmp_path / "tasks.py",

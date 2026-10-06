@@ -10,16 +10,16 @@ import pytest
 
 from livery.footman import _manifest
 from livery.footman._executor import run_chain
-from livery.footman._schedule import resolve_keep_going, run_plan
-from livery.footman._split import split_chain
-from livery.footman.params import Forward
-from livery.footman.registry import (
+from livery.footman._params import Forward
+from livery.footman._registry import (
     Group,
     is_atomic,
     is_interactive,
     keeps_going,
     wants_progress,
 )
+from livery.footman._schedule import resolve_keep_going, run_plan
+from livery.footman._split import split_chain
 
 
 def _tree(build):
@@ -104,7 +104,7 @@ def test_task_opts_matches_opts_attrs():
     # TaskOpts (the typed .opts()/set_opts surface) and _OPTS_ATTRS (the
     # runtime validator) are the same closed set, or completion and the
     # taught error drift apart.
-    from livery.footman.registry import _OPTS_ATTRS, TaskOpts
+    from livery.footman._registry import _OPTS_ATTRS, TaskOpts
 
     declared = set(TaskOpts.__optional_keys__) | set(TaskOpts.__required_keys__)
     assert declared == set(_OPTS_ATTRS)
@@ -140,7 +140,7 @@ def test_opts_keep_going_on_a_prerequisite_reaches_run_wide_resolution():
 
 
 def test_opts_atomic_on_a_prerequisite_survives_fail_fast(tmp_path):
-    from livery.footman.context import run
+    from livery.footman._context import run
 
     marker = tmp_path / "finished"
     sleep = [sys.executable, "-c", "import time; time.sleep(0.4)"]

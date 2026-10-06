@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def test_a_contract_without_extensions_refuses_printing_the_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.footman import registry
+    from livery.footman import _registry as registry
     from livery.workshop._extensions import closure_problems
 
     (tmp_path / "workshop.toml").write_text('[workspace]\n\n[forge]\nkind = "github"\n')
@@ -36,7 +36,7 @@ def test_a_contract_without_extensions_refuses_printing_the_line(
 def test_an_uninstalled_extension_is_named_and_skipped(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.footman import registry
+    from livery.footman import _registry as registry
     from livery.workshop._extensions import closure_problems
 
     (tmp_path / "workshop.toml").write_text(
@@ -100,7 +100,7 @@ def test_outside_a_workspace_there_are_no_extensions(tmp_path: Path) -> None:
 
 
 def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> None:
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     # A scratch contract naming the extension the workshop's own wheel
     # ships, so the suite needs nothing beyond the package's own

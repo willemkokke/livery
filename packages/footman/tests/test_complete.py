@@ -11,10 +11,11 @@ from unittest import mock
 
 import pytest
 
-from livery.footman import _complete, _manifest, _paths, registry
+from livery.footman import _complete, _manifest, _paths
+from livery.footman import _registry as registry
 from livery.footman._complete import _tasks_file_from, complete, complete_cli
+from livery.footman._params import Many, doc, matching, nosplit, suggest
 from livery.footman.api import task
-from livery.footman.params import Many, doc, matching, nosplit, suggest
 
 
 @pytest.fixture(autouse=True)
@@ -1035,7 +1036,7 @@ def _dynamic_project(tmp_path):
         "from pathlib import Path\n"
         "from typing import Annotated\n"
         "from livery.footman.api import task\n"
-        "from livery.footman.params import suggest\n\n"
+        "from livery.footman._params import suggest\n\n"
         "def _targets():\n"
         "    return Path('targets.txt').read_text().split()\n\n"
         "@task\n"
@@ -1862,7 +1863,7 @@ def test_prog_is_substituted_before_it_reaches_a_shell():
 def test_a_plugin_global_offers_the_help_it_declared():
     """The manifest has carried this text all along — `_global_spec` writes
     `spec["help"]` — and the emitter dropped it on the floor."""
-    from livery.footman import compose
+    from livery.footman import _compose as compose
 
     reg = registry.Group("root")
     with registry.capture() as captured:

@@ -1001,7 +1001,7 @@ def _diagnose_zsh_cast() -> str:
     the ground truth (hook registered? resolver answering? PATH sane?)."""
     import tempfile
 
-    from livery.footman.tasks.docs import (
+    from livery.footman.docs import (
         _boot_shell,
         _pty_session,
         _screens,
@@ -1322,7 +1322,7 @@ def _frames_text(chunks, width: int, height: int) -> list[str]:
     """Every rendered frame as plain text, so a transient state (the comma
     before zsh's auto-remove takes it back off) can be asserted alongside
     the final line."""
-    from livery.footman.tasks.docs import _screens
+    from livery.footman.docs import _screens
 
     frames = _screens(chunks, width=width, height=height)
     return [
@@ -1346,7 +1346,7 @@ def test_zsh_inserts_an_auto_removable_comma(home, fm_csv_project_dir):
     the comma as a suffix, and typing a space takes it back off."""
     import tempfile
 
-    from livery.footman.tasks.docs import _boot_shell, _pty_session, keystrokes
+    from livery.footman.docs import _boot_shell, _pty_session, keystrokes
 
     with tempfile.TemporaryDirectory() as scratch:
         argv, env = _boot_shell("zsh", "fm", Path(scratch))
@@ -1374,7 +1374,7 @@ def test_bash_glues_the_cursor_on_a_continuable_value(home, fm_csv_project_dir):
     the next keystroke lands right after the accepted element."""
     import tempfile
 
-    from livery.footman.tasks.docs import _boot_shell, _pty_session, keystrokes
+    from livery.footman.docs import _boot_shell, _pty_session, keystrokes
 
     if (bash := _bash_exe()) is None:
         pytest.skip("bash is not installed")

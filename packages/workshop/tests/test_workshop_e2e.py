@@ -1183,7 +1183,7 @@ def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
 
 
 def test_an_unknown_scenario_refuses_naming_the_sets_and_the_scenarios() -> None:
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
 
     with pytest.raises(
         Failed, match=r"'nonesuch' is not a scenario or a set; the sets are develop"
@@ -1221,7 +1221,7 @@ def test_a_choice_resolves_its_needs_once_in_the_registry_s_order() -> None:
 
 
 def test_a_scenario_is_timed_with_its_runs_and_a_failure_is_marked() -> None:
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
 
     pass_ = _e2e.Pass("gitea", "http://gitea:3000")
 
@@ -1288,7 +1288,7 @@ def host_environment(monkeypatch: pytest.MonkeyPatch) -> _e2e.Current:
 def test_a_host_environment_is_the_lane_s_alias_the_forge_and_the_workspace_s_home(
     host_environment: _e2e.Current, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path)
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path)
     lane = _e2e._lane("gitea")  # pyright: ignore[reportPrivateUsage]
     assert lane.alias == "http://localhost:43210"
     home = _e2e._loop_home("gitea")  # pyright: ignore[reportPrivateUsage]

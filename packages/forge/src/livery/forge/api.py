@@ -21,6 +21,7 @@ from __future__ import annotations
 # three backends it does not touch.
 TYPE_CHECKING = False
 if TYPE_CHECKING:
+    from livery.forge import testing as testing
     from livery.forge._errors import ForgeError as ForgeError
     from livery.forge._errors import RateLimited as RateLimited
     from livery.forge._errors import Unsupported as Unsupported
@@ -142,6 +143,7 @@ __all__ = [
     "gitlab_configured_host",
     "gitlab_is_configured_host",
     "merge_state",
+    "testing",
 ]
 
 # The module each lazily served name lives in.
@@ -202,13 +204,20 @@ _EXPORTS: dict[str, str] = {
 }
 
 
+#: The public packages beneath the root, served whole on first use.
+_PACKAGES = ("testing",)
+
+
 def __getattr__(name: str) -> object:
     """Serve a public name from its module on first use, then keep it."""
-    module = _EXPORTS.get(name)
-    if module is None:
-        raise AttributeError(f"module 'livery.forge' has no attribute {name!r}")
     import importlib
 
-    value = getattr(importlib.import_module(module), name)
+    if name in _PACKAGES:
+        value: object = importlib.import_module(f"livery.forge.{name}")
+    else:
+        module = _EXPORTS.get(name)
+        if module is None:
+            raise AttributeError(f"module 'livery.forge' has no attribute {name!r}")
+        value = getattr(importlib.import_module(module), name)
     globals()[name] = value
     return value

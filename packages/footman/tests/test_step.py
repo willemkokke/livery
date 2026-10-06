@@ -7,8 +7,8 @@ from asyncio import CancelledError  # a BaseException, unlike futures' namesake
 
 import pytest
 
+from livery.footman._context import Failed, RunTimeout
 from livery.footman.api import Context, fail, parallel, step, use_context
-from livery.footman.context import Failed, RunTimeout
 
 
 def test_calling_a_step_maker_builds_and_runs_nothing():
@@ -187,7 +187,7 @@ def test_a_secret_title_is_shown_redacted_and_recorded_whole():
     """A title stands where a command line would, so it answers to the same
     rule: the receipt, the address and the audit read `***`, the record
     keeps what the author passed."""
-    from livery.footman.params import Secret
+    from livery.footman._params import Secret
 
     ctx = Context()
     ctx.address = "release"
@@ -207,7 +207,7 @@ def test_an_amended_record_keeps_the_shown_line():
     """An observer's veto replaces the committed record, and a copy that
     dropped the shown line would put the secret back on every surface that
     reads the amended one."""
-    from livery.footman.params import Secret
+    from livery.footman._params import Secret
 
     lifted = step(sorted, title=Secret("sort hunter2"))
 

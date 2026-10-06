@@ -9,7 +9,7 @@ import textwrap
 import pytest
 
 from livery.footman import _config, _paths
-from livery.footman.app import App
+from livery.footman._application import App
 from livery.footman.testing import Runner
 
 # A distribution that ships a `footman.tasks` entry point, installed into the
@@ -58,7 +58,8 @@ def provider(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(pkg))
     monkeypatch.delitem(sys.modules, "acme_tasks", raising=False)
 
-    from livery.footman import _entries, compose
+    from livery.footman import _compose as compose
+    from livery.footman import _entries
 
     class FakeEP:
         name = "acme_tasks"

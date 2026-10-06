@@ -72,7 +72,7 @@ fm = "livery.footman.api:main"
 # Auto-loaded pytest fixtures (fm, fm_project, fm_record) for testing tasks.
 # Zero runtime cost: only pytest itself ever imports the module.
 [project.entry-points.pytest11]
-footman = "livery.footman.pytest_plugin"
+footman = "livery.footman._pytest_plugin"
 
 # footman's own first-party tasks, advertised the way any plugin is: an
 # entry point is the console-script of task trees, a stable public identity
@@ -82,11 +82,11 @@ footman = "livery.footman.pytest_plugin"
 # targets live under the livery namespace. Metadata only: a family
 # imports when pulled, never on a bare `import livery.footman`.
 [project.entry-points."footman.tasks"]
-"footman.docs" = "livery.footman.tasks.docs:tasks"
+"footman.docs" = "livery.footman.docs:tasks"
 "livery.footman" = "livery.footman._docsgen"
-"footman.env_files" = "livery.footman.env_files"
-"footman.self" = "livery.footman.tasks.self_:tasks"
-"footman.janitor" = "livery.footman.tasks.janitor:tasks"
+"footman.env_files" = "livery.footman._env_files"
+"footman.self" = "livery.footman._tasks.self_:tasks"
+"footman.janitor" = "livery.footman._tasks.janitor:tasks"
 "footman.profile" = "livery.footman.profile"
 
 # Mounted in every project that depends on footman directly: any run,

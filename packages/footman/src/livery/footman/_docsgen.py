@@ -23,8 +23,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from livery.footman.context import fail, run
-from livery.footman.registry import group
+from livery.footman._context import fail, run
+from livery.footman._registry import group
 
 # packages/footman, wherever the checkout lives: the generator runs at
 # the workspace root, but anchoring on this file keeps it honest.
@@ -41,10 +41,10 @@ def docs_pages() -> None:
     and ``_generated`` (snippet sources the pages include). Idempotent:
     the same source rewrites the same bytes.
     """
-    from livery.footman.tasks.docs import config as taskdocs_config
-    from livery.footman.tasks.docs import errors as taskdocs_errors
-    from livery.footman.tasks.docs import globals_ as taskdocs_globals
-    from livery.footman.tasks.docs import notes as taskdocs_notes
+    from livery.footman.docs import config as taskdocs_config
+    from livery.footman.docs import errors as taskdocs_errors
+    from livery.footman.docs import globals_ as taskdocs_globals
+    from livery.footman.docs import notes as taskdocs_notes
 
     site_home = _PACKAGE / "docs" / "_generated"
     snippet_home = _PACKAGE / "_generated"
@@ -162,7 +162,7 @@ straight from the `livery.footman` package
 # under `livery.footman.`; its first component must be a root export, or
 # the whole entry sits in _API_EXTRA with a reason.
 _API_SECTIONS: list[tuple[str, str, list[str]]] = [
-    ("Defining tasks", "", ["task", "group", "Group", "expose"]),
+    ("Defining tasks", "", ["task", "group", "Group", "expose", "root_group"]),
     (
         "Availability gates",
         "Stack these above `@task` to list a task as unavailable (with a "
@@ -180,6 +180,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
             "AuditEntry",
             "Argv",
             "RunFailed",
+            "RunTimeout",
             "parallel",
             "step",
             "pre_record",
@@ -204,7 +205,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "stdin binds to typed parameters, and a `Stdout[T]` return owns "
         "stdout. The full contract lives on [Pipelines](../pipelines.md) and "
         "[JSON output](../json.md).",
-        ["Stdin", "stdin", "Stdout", "stdout"],
+        ["Stdin", "stdin", "Stdout", "stdout", "real_stderr"],
     ),
     (
         "The working directory & lanes",
@@ -249,7 +250,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "`given()` answers whether the caller supplied a parameter or footman "
         "filled it in — the difference between asking for the default and "
         "having no opinion, which the value alone cannot tell you.",
-        ["Context", "given", "use_context"],
+        ["Context", "current", "given", "use_context"],
     ),
     ("Composing tasks", "", ["include", "plugin", "capture"]),
     (
@@ -325,6 +326,29 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "Pure functions over manifest tree nodes — see "
         "[Your tasks, documented](../taskdocs.md) for the task-level surface.",
         ["markdown.render_page", "markdown.render_site"],
+    ),
+    (
+        "The docs plugin",
+        'What `plugin("footman.docs")` mounts, as functions a tasks file '
+        "calls to write its task reference — see "
+        "[Your tasks, documented](../taskdocs.md).",
+        ["docs.page", "docs.site", "docs.globals_"],
+    ),
+    (
+        "Trace fragments",
+        "A profiled run exports `FM_PROFILE_DIR`; any process drops "
+        "Chrome-trace fragments there, and the run sweeps them onto its "
+        "timeline. These are the protocol's two ends, for a process that "
+        "writes fragments or a tool that reads a run's trace.",
+        [
+            "profile.DROP",
+            "profile.box",
+            "profile.keeping",
+            "profile.dropped",
+            "profile.swept",
+            "profile.as_trace",
+            "profile.laid_on",
+        ],
     ),
     ("Testing", "", ["Runner", "testing.InvokeResult", "recording"]),
 ]

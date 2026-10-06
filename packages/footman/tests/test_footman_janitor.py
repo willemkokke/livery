@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from livery.footman import _gc
-from livery.footman.tasks import janitor
+from livery.footman._tasks import janitor
 
 
 def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(

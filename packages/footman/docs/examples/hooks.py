@@ -55,7 +55,7 @@ AUDIT = GlobalOption("audit", help="report, change nothing")  # bool → a flag
 # --8<-- [end:part-4]
 
 # --8<-- [start:part-5]
-from livery.footman.compose import plugin
+from livery.footman._compose import plugin
 
 plugin("footman.env_files")
 # --8<-- [end:part-5]

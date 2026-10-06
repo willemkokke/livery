@@ -135,7 +135,7 @@ def deploy(
 # --8<-- [start:part-14]
 from typing import Annotated
 from livery.footman.api import task
-from livery.footman.params import hidden
+from livery.footman._params import hidden
 
 
 @task

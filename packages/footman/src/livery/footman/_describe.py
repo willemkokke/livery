@@ -989,7 +989,7 @@ def redact(value: Any) -> Any:
     reaches the `default` hook, so this pre-walk is the only reliable
     interception. Records are walked on the way out, never on the way in:
     what `recording()` and a dependent read is the value that was passed."""
-    from livery.footman.params import Secret
+    from livery.footman._params import Secret
 
     if isinstance(value, Secret):
         return "***"

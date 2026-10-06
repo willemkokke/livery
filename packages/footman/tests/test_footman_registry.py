@@ -6,10 +6,10 @@ import types
 
 import pytest
 
-from livery.footman import registry
+from livery.footman import _registry as registry
+from livery.footman._params import Forward
+from livery.footman._registry import Group, RegistrationError
 from livery.footman.api import Context
-from livery.footman.params import Forward
-from livery.footman.registry import Group, RegistrationError
 
 
 def test_sample_fixture_stays_out_of_the_global_registry(root):
@@ -79,7 +79,7 @@ def test_collision_is_a_registration_error():
 
 
 def test_infinite_implies_no_progress():
-    from livery.footman.registry import Group, is_infinite, wants_progress
+    from livery.footman._registry import Group, is_infinite, wants_progress
 
     g = Group("root")
 
@@ -98,7 +98,7 @@ def test_infinite_implies_no_progress():
 
 
 def test_confirm_and_interactive_stamp_and_read():
-    from livery.footman.registry import (
+    from livery.footman._registry import (
         Group,
         is_interactive,
         task_confirm,

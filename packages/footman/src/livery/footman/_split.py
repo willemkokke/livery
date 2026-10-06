@@ -33,9 +33,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from livery.footman import _coerce, registry
-from livery.footman.params import between as _between
-from livery.footman.params import default as _computed
+from livery.footman import _coerce
+from livery.footman import _registry as registry
+from livery.footman._params import between as _between
+from livery.footman._params import default as _computed
 
 
 def _close1(a: str, b: str) -> bool:
@@ -531,7 +532,7 @@ def _vouched_distributions() -> set[str]:
     importing, on a typo, code the project deliberately did not mount.
     """
     from livery.footman import _app
-    from livery.footman.app import DEFAULT_BRAND
+    from livery.footman._application import DEFAULT_BRAND
 
     # "livery-footman" is the distribution that ships the framework's own
     # plugins, whatever name a project pins on (the stock CLI pins the
@@ -572,7 +573,8 @@ def _own_plugin_flags() -> dict[str, str]:
         return cached
     found: dict[str, str] = {}
     try:
-        from livery.footman import _entries, compose
+        from livery.footman import _compose as compose
+        from livery.footman import _entries
 
         vouched = _vouched_distributions()
         for ep in _entries.installed_entry_points(compose.ENTRY_POINT_GROUP):

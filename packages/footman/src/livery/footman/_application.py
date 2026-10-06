@@ -7,7 +7,7 @@ project's names and version, and every message the user sees — errors,
 
 ```python
 # acme/cli.py
-from livery.footman.app import App
+from livery.footman._application import App
 
 app = App(name="Acme", prog="acme", version="1.4.0")
 

@@ -19,8 +19,8 @@ import pytest
 from livery.footman import _app, _manifest
 from livery.footman._coerce import emission_mode, emitted
 from livery.footman._executor import EX_USAGE
-from livery.footman.params import Secret, Stdout, stdin, stdout
-from livery.footman.registry import Group
+from livery.footman._params import Secret, Stdout, stdin, stdout
+from livery.footman._registry import Group
 from livery.footman.testing import Runner
 
 

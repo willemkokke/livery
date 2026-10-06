@@ -41,8 +41,13 @@ def plugin_project(tmp_path, monkeypatch):
 
 
 def test_bare_import_never_loads_first_party_tasks():
-    # Hot-path guard: `import footman` must not import the plugin package.
-    probe = "import livery.footman, sys; print('livery.footman.tasks' in sys.modules)"
+    # Hot-path guard: importing the api must not import a plugin family,
+    # though the api declares the docs family.
+    probe = (
+        "import livery.footman.api, sys;"
+        " print(any(m in sys.modules for m in"
+        " ('livery.footman._tasks', 'livery.footman.docs')))"
+    )
     out = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     )
@@ -155,7 +160,7 @@ def test_no_docs_parameter_says_only_its_own_type():
     Every parameter this plugin ships has to say more than its type."""
     from livery.footman import _manifest
     from livery.footman._describe import TYPE_WORD, listed_params, param_detail
-    from livery.footman.tasks.docs import tasks
+    from livery.footman.docs import tasks
 
     words = set(TYPE_WORD.values())
     bare: list[str] = []
@@ -180,7 +185,7 @@ def test_no_docs_parameter_says_only_its_own_type():
 def test_shots_lists_unavailable_without_rich(plugin_project, capsys, monkeypatch):
     # The @requires_dep("rich") gate, dogfooded: with rich unimportable the task
     # lists with the taught reason and refuses to run — no ImportError ever.
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     real = registry._importable
     monkeypatch.setattr(
@@ -202,7 +207,7 @@ def test_cell_style_translates_pytes_bright_colours():
     foreground, and fish's grey autosuggestion read as characters typed
     into the prompt. (`f77` on a Linux runner, where the Fortran `f77`
     command exists for fish to suggest.)"""
-    from livery.footman.tasks.docs import _cell_style
+    from livery.footman.docs import _cell_style
 
     class Cell:
         bold = italics = underscore = reverse = False
@@ -219,7 +224,7 @@ def test_cell_style_translates_pytes_bright_colours():
 
 
 def test_reduce_frames_keeps_only_the_final_repaint():
-    from livery.footman.tasks.docs import reduce_frames
+    from livery.footman.docs import reduce_frames
 
     raw = (
         "→ lint    ruff check\r\x1b[Kok   lint    ruff check  (0.1s)\r\n"
@@ -232,7 +237,7 @@ def test_reduce_frames_keeps_only_the_final_repaint():
 
 
 def test_keystrokes_compiles_text_and_tokens():
-    from livery.footman.tasks.docs import _SETTLE, keystrokes
+    from livery.footman.docs import _SETTLE, keystrokes
 
     sends = keystrokes(("hi", "<TAB>", "<WAIT:500>", "<SETTLE>", "<ENTER>"))
     assert [s.data for s in sends] == [b"h", b"i", b"\t", b"", b"", b"\r"]
@@ -247,7 +252,7 @@ def test_keystrokes_compiles_text_and_tokens():
 
 
 def test_compose_animation_windows_and_shell():
-    from livery.footman.tasks.docs import compose_animation
+    from livery.footman.docs import compose_animation
 
     svgs = ['<svg width="9">A</svg>', '<svg width="9">B</svg>']
     out = compose_animation(svgs, [0.0, 1.0], hold=1.0)
@@ -271,7 +276,7 @@ def test_compose_animation_windows_and_shell():
 
 
 def test_cast_lists_unavailable_without_pyte(plugin_project, capsys, monkeypatch):
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     real = registry._importable
     monkeypatch.setattr(
@@ -305,7 +310,7 @@ def test_shots_renders_a_real_svg(plugin_project, capsys):
 
 
 def test_errors_page_extracts_the_taught_errors(tmp_path):
-    from livery.footman.tasks.docs import errors
+    from livery.footman.docs import errors
 
     out = tmp_path / "errors.md"
     errors(out=out)

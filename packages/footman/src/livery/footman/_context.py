@@ -55,8 +55,8 @@ from typing import (
 from livery.footman import _globals
 
 if TYPE_CHECKING:
+    from livery.footman import _registry as _registry_t
     from livery.footman import _step
-    from livery.footman import registry as _registry_t
 
 
 class AuditEntry(NamedTuple):
@@ -848,7 +848,7 @@ clock every record in this module keeps: a retroactive
 live, and one process's timeline lands beside another's. Module-level on
 purpose: `perf_counter` reads one clock for the whole machine, so one
 anchor serves every run in the process, and a profiled child takes its
-parent's ([livery.footman.context.ANCHOR_ENV][])."""
+parent's ([livery.footman._context.ANCHOR_ENV][])."""
 
 
 @dataclass(frozen=True)
@@ -1442,7 +1442,7 @@ def inherited() -> Callable[..., Any]:
         # Point the context at the task being called, so an `inherited()`
         # inside *it* walks one level further up instead of resolving to
         # itself — a three-deep cascade would otherwise recurse forever.
-        from livery.footman import registry
+        from livery.footman import _registry as registry
 
         ctx = current()
         saved = ctx.fn
@@ -2190,7 +2190,7 @@ def prompt(
     with a non-`str` `type=` is refused — `ask(secret=True)` on a typed
     parameter is that spelling.
     """
-    from livery.footman.params import Secret
+    from livery.footman._params import Secret
 
     if secret and type is not str:
         raise ValueError(
@@ -4174,7 +4174,7 @@ def _queue_call(
     if queue is None:
         return None
     queue.append((task, args, kwargs, seq))
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     return Pending(registry.cli_name(getattr(task, "__name__", "task")))
 
@@ -4233,7 +4233,7 @@ def parallel(
         # codes — so `parallel(*items)` over an empty sequence is unchanged.
         return Fanout(keep_going=keep_going)
 
-    from livery.footman import registry as _registry
+    from livery.footman import _registry as _registry
 
     accepted: list[Callable[[], Any]] = []
     for c in calls:

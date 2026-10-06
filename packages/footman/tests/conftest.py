@@ -10,7 +10,9 @@ from typing import Any
 
 import pytest
 
-from livery.footman import _manifest, context, registry
+from livery.footman import _context as context
+from livery.footman import _manifest
+from livery.footman import _registry as registry
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_tasks.py"
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
@@ -74,7 +76,7 @@ def _no_cache_override(monkeypatch, tmp_path_factory):
         "FOOTMAN_CONFIG_DIR",
         str(tmp_path_factory.getbasetemp() / "no-global-config-dir"),
     )
-    from livery.footman import context
+    from livery.footman import _context as context
 
     context.seed_cmd_width(0)
 
@@ -133,7 +135,7 @@ def _root_restored():
     plugin fails a test that leaves tasks behind, so the leftovers
     are handed back here, before that guard looks.
     """
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     tasks, groups = dict(registry.root.tasks), dict(registry.root.groups)
     yield

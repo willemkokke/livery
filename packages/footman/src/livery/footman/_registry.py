@@ -3,7 +3,7 @@
 Users build their command tree in a tasks file (`tasks.py` by default):
 
 ```python
-from livery.footman.registry import task, group
+from livery.footman._registry import task, group
 
 @task
 def lint(fix: bool = False):
@@ -47,8 +47,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from livery.footman._context import ResultView
     from livery.footman._globals import Lane
-    from livery.footman.context import ResultView
 
 Task = Callable[..., Any]
 Hook = Callable[..., object]
@@ -242,7 +242,7 @@ class GlobalOption:
         # Read-marking for the notes lane: an in-task read is attributed to
         # the task; a task that never declared `uses=` gets a taught note
         # (once), because help and provenance can only describe what is said.
-        from livery.footman import context
+        from livery.footman import _context as context
 
         ctx = context._current.get()
         if ctx is None or not ctx.in_task or ctx.fn is None:
@@ -870,7 +870,7 @@ class _Opted:
             # process chdir. The other options are scheduler-read and inert
             # on a plain call. Lazy import: executor imports registry.
             from livery.footman import _executor
-            from livery.footman.context import current
+            from livery.footman._context import current
 
             ctx = current()
             saved, saved_unmanaged = ctx.cwd, ctx.cwd_unmanaged

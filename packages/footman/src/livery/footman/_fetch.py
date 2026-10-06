@@ -54,7 +54,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from livery.footman import _paths, context
+from livery.footman import _context as context
+from livery.footman import _paths
 
 BACKENDS = ("urllib", "curl", "httpx", "requests", "auto")
 _AUTO_ORDER = ("httpx", "requests", "urllib", "curl")

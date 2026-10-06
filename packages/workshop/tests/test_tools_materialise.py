@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.context import Failed
+from livery.footman.api import Failed
 from livery.strongroom.api import Store as ObjectStore
 from livery.strongroom.api import digest_of
 from livery.toolroom.store import _engine
@@ -108,7 +108,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
 
     def installing(argv: list[str], env: dict[str, str]) -> int:
         bin_dir = Path(env["UV_TOOL_BIN_DIR"])

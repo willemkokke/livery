@@ -26,8 +26,8 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from livery.footman import _entries, _gc, _paths
-from livery.footman.params import doc
-from livery.footman.registry import Group, group
+from livery.footman._params import doc
+from livery.footman._registry import Group, group
 
 tasks: Group = group("janitor", help="Sweep the runner's directories")
 

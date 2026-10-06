@@ -36,10 +36,19 @@ import uuid
 from pathlib import Path, PurePath
 from typing import Any
 
-from livery.footman import _binder, _coerce, _describe, _discover, _paths, registry
-from livery.footman.context import context_param_name
-from livery.footman.params import suggest
-from livery.footman.registry import Group
+from livery.footman import (
+    _binder,
+    _coerce,
+    _describe,
+    _discover,
+    _paths,
+)
+from livery.footman import (
+    _registry as registry,
+)
+from livery.footman._context import context_param_name
+from livery.footman._params import suggest
+from livery.footman._registry import Group
 
 SCHEMA_VERSION = 11
 

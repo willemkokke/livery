@@ -89,7 +89,7 @@ def _paths(call: Call) -> tuple[str, ...]:
 def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.footman import registry as footman_registry
+    from livery.footman import _registry as footman_registry
     from livery.workshop._checks import checks_by_name, tools_for_kind
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
@@ -140,7 +140,7 @@ def test_the_root_tests_directory_is_configured_only_while_it_exists(
 ) -> None:
     # A newborn has no root tests/: naming it would fail every pytest
     # run. The fallback first.
-    from livery.footman import registry as footman_registry
+    from livery.footman import _registry as footman_registry
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
 

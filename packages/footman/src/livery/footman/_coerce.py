@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Annotated, Any, TypedDict
 
-from livery.footman.params import (
+from livery.footman._params import (
     PathRequirement,
     StdoutMarker,
     ask,
@@ -34,14 +34,14 @@ from livery.footman.params import (
     matching,
     suggest,
 )
-from livery.footman.params import _arg as _ARG
-from livery.footman.params import ask as _ask_marker
-from livery.footman.params import default as _default_marker
-from livery.footman.params import forward as _FORWARD
-from livery.footman.params import hidden as _HIDDEN
-from livery.footman.params import nosplit as _NOSPLIT
-from livery.footman.params import stdin as _stdin_marker
-from livery.footman.params import stdout as _STDOUT
+from livery.footman._params import _arg as _ARG
+from livery.footman._params import ask as _ask_marker
+from livery.footman._params import default as _default_marker
+from livery.footman._params import forward as _FORWARD
+from livery.footman._params import hidden as _HIDDEN
+from livery.footman._params import nosplit as _NOSPLIT
+from livery.footman._params import stdin as _stdin_marker
+from livery.footman._params import stdout as _STDOUT
 
 _TAG_ORDER = {"bool": 0, "int": 1, "float": 2, "path": 3, "str": 4}
 

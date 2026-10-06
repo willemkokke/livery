@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
-    from livery.footman.context import Result
+    from livery.footman._context import Result
     from livery.footman.testing import Runner
 
 __all__ = ["fm", "fm_project", "fm_record"]
@@ -46,8 +46,8 @@ def fm_project(
     ```python
     def test_release(fm_project):
         fm = fm_project('''
-            from livery.footman.registry import task
-            from livery.footman.context import run
+            from livery.footman._registry import task
+            from livery.footman._context import run
 
             @task
             def release(version: str):

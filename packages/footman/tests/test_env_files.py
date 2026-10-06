@@ -12,7 +12,7 @@ TASKS = textwrap.dedent(
     """
     import os
     from livery.footman.api import task
-    from livery.footman.compose import plugin
+    from livery.footman._compose import plugin
 
     plugin("footman.env_files")
 

@@ -43,6 +43,7 @@ from livery.toolroom.handles import *  # noqa: F403
 from typing_extensions import TypeVar
 
 from livery.toolroom.tools import _host as _host
+from livery.toolroom.tools import testing as testing
 
 # The pre_record callback parameter: hosted, it receives footman's
 # ResultView; the stub says Any so type-checking toolroom never requires

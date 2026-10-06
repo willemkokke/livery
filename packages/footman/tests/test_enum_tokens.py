@@ -18,7 +18,7 @@ from livery.footman import _coerce, _manifest
 from livery.footman._describe import redact, returns_json_schema
 from livery.footman._futures import _freeze
 from livery.footman._manifest import returned_spec
-from livery.footman.registry import Group
+from livery.footman._registry import Group
 
 
 class Level(enum.Enum):

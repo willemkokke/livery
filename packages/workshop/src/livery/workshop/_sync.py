@@ -30,8 +30,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import livery.footman.api as footman
-from livery.footman.api import doc, fail, task
-from livery.footman.params import Forward
+from livery.footman.api import Forward, doc, fail, task
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps

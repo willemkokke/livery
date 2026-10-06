@@ -74,6 +74,10 @@ from livery.workshop._packages import (
     verify_workspace,
 )
 
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from livery.workshop import testing as testing
+
 __version__ = "0.5.0"
 
 __all__ = [
@@ -102,7 +106,17 @@ __all__ = [
     "scoped_files",
     "scoped_packages",
     "scoped_paths",
+    "testing",
     "verify_workspace",
     "workspace_root",
     "workspace_suite",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Serve the testing kit, a public package beneath the root, on first use."""
+    if name == "testing":
+        import importlib
+
+        return importlib.import_module("livery.workshop.testing")
+    raise AttributeError(f"module 'livery.workshop.api' has no attribute {name!r}")

@@ -64,6 +64,7 @@ def test_the_surface_is_declared() -> None:
         "gitlab_configured_host",
         "gitlab_is_configured_host",
         "merge_state",
+        "testing",
     ]
 
 

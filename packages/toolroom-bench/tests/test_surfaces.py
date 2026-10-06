@@ -1088,7 +1088,7 @@ def test_the_same_release_is_observed_once_per_run(tmp_path, monkeypatch):
     request for the same (tool, version) joins the first execution and is
     reported as a shared row, not re-installed.
     """
-    from livery.footman.registry import Group
+    from livery.footman.api import Group
     from livery.footman.testing import Runner
     from livery.toolroom.bench import _drivers, _toolfetch
     from livery.toolroom.bench import _tasks as tools

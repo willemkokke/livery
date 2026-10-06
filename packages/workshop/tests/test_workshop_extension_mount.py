@@ -78,7 +78,7 @@ def test_an_incompatible_api_version_refuses_naming_both(
         _extensions.check_api_version("acme.old", acme.old)
     # Mount refuses it before anything registers.
     _contract(tmp_path, '["acme.old"]')
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture(), pytest.raises(RuntimeError, match="API version 99"):
         _extensions.mount_extensions(tmp_path)
@@ -215,7 +215,7 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     # Listed and installed by nothing: the mount names it, skips it, and
     # remembers it; nothing is declared since, so nothing is new.
     _contract(tmp_path, '["acme.later"]')
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ()
@@ -256,7 +256,7 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     # A package-level extension in the workspace list: the gate refuses,
     # the mount names it and skips it.
     _contract(tmp_path, '["acme.native"]')
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ()
@@ -332,7 +332,7 @@ def test_an_option_the_extension_does_not_declare_refuses_and_mounts_off(
         " declare; its options are deep"
     )
     assert _extensions.closure_problems(tmp_path) == [why]
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ("acme.tool",)
@@ -375,7 +375,7 @@ def test_an_option_registers_its_checks_and_fm_extensions_says_which_are_on(
     assert _extensions.closure_problems(tmp_path) == []
     described = _extensions.describe_extensions(tmp_path)
     assert "    option deep (on): judges deeper" in described
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
@@ -416,7 +416,7 @@ def test_a_extension_declaring_tools_off_the_shape_refuses_naming_it(
     _contract(tmp_path, '["acme.odd"]')
     with pytest.raises(RuntimeError, match=r"acme\.odd.*TOOLS"):
         _extensions.extension_tools(tmp_path)
-    from livery.footman.context import Failed
+    from livery.footman.api import Failed
     from livery.workshop._tools import requirements
 
     with pytest.raises(Failed, match=r"acme\.odd"):
@@ -461,7 +461,7 @@ def _house(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _mount(root: Path) -> None:
-    from livery.footman import registry
+    from livery.footman import _registry as registry
 
     with registry.capture():
         _extensions.mount_extensions(root)

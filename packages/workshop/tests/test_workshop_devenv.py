@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.context import Failed
+from livery.footman.api import Failed
 from livery.workshop import _devenv
 
 
@@ -17,8 +17,8 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     config = tmp_path / "config"
     data.mkdir()
     config.mkdir()
-    monkeypatch.setattr("livery.footman.context.data_dir", lambda: data)
-    monkeypatch.setattr("livery.footman.context.config_dir", lambda: config)
+    monkeypatch.setattr("livery.footman._context.data_dir", lambda: data)
+    monkeypatch.setattr("livery.footman._context.config_dir", lambda: config)
     return data / "forge-dev"
 
 
@@ -156,7 +156,7 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
     # The caches every environment shares exist, beside the environments.
     assert (rig / "cache" / "footman").is_dir() and (rig / "cache" / "uv").is_dir()
     # The cascade's current forge is this environment.
-    from livery.footman.context import config_dir
+    from livery.footman.api import config_dir
 
     shared = (config_dir() / ".repo.shared.env").read_text()
     assert "GITEA_URL=http://localhost:43210" in shared
@@ -175,7 +175,7 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
 def test_down_stops_the_processes_and_rm_removes_the_directory_and_the_cascade_keys(
     rig: Path, machine: _Machine, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.footman.context import config_dir
+    from livery.footman.api import config_dir
 
     _devenv.devenv_up("dev")
     _devenv.devenv_down("dev")

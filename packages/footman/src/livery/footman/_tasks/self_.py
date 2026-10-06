@@ -28,10 +28,11 @@ import tomllib
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from livery.footman import _config, _paths, context
-from livery.footman.context import fail, run
-from livery.footman.params import doc, suggest
-from livery.footman.registry import Group, group
+from livery.footman import _config, _paths
+from livery.footman import _context as context
+from livery.footman._context import fail, run
+from livery.footman._params import doc, suggest
+from livery.footman._registry import Group, group
 
 tasks: Group = group("self", help="Manage this runner's own installation")
 

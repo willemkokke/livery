@@ -49,6 +49,7 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.strongroom import cbor as cbor
+    from livery.strongroom import testing as testing
     from livery.strongroom._canonical import FormatError as FormatError
     from livery.strongroom._canonical import Value as Value
     from livery.strongroom._canonical import canonical as canonical
@@ -211,6 +212,7 @@ __all__ = [
     "fetch_url",
     "now",
     "silent",
+    "testing",
 ]
 
 __version__ = "0.3.0"
@@ -302,7 +304,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
 
 #: The public packages beneath the root: each keeps its own import path,
 #: and is declared here so the checkers verify it with this module.
-_PACKAGES = ("cbor",)
+_PACKAGES = ("cbor", "testing")
 
 
 def __getattr__(name: str) -> object:

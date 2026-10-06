@@ -8,9 +8,11 @@ import textwrap
 
 import pytest
 
-from livery.footman import _manifest, compose, registry
+from livery.footman import _compose as compose
+from livery.footman import _manifest
+from livery.footman import _registry as registry
 from livery.footman._executor import EX_USAGE
-from livery.footman.registry import (
+from livery.footman._registry import (
     Group,
     RegistrationError,
     requires,
@@ -933,7 +935,7 @@ def test_plugin_explicit_group_module_is_adopted(tmp_path, monkeypatch):
         monkeypatch,
         "explicit_plugin",
         """
-        from livery.footman.registry import Group
+        from livery.footman._registry import Group
 
         tasks = Group("explicit", "Explicit provider")
 
@@ -1044,7 +1046,7 @@ def test_include_of_a_module_with_two_groups_teaches(tmp_path, monkeypatch):
     # Group(...) constructs without registering; group(...) would register
     # and the module would no longer be "no tasks at all".
     (tmp_path / "two_groups.py").write_text(
-        "from livery.footman.registry import Group\n\na = Group('a')\nb = Group('b')\n"
+        "from livery.footman._registry import Group\n\na = Group('a')\nb = Group('b')\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, "two_groups", raising=False)
@@ -1463,7 +1465,7 @@ def test_adopted_default_fans_out_the_group_it_landed_in(tmp_path, monkeypatch):
         "default_kit",
         """
         from livery.footman.api import group
-        from livery.footman.params import Forward
+        from livery.footman._params import Forward
 
         linters = group("linters")
 
@@ -1505,7 +1507,7 @@ def test_default_survives_only_if_the_default_survives(tmp_path, monkeypatch):
         "runnable_kit",
         """
         from livery.footman.api import group
-        from livery.footman.params import Forward
+        from livery.footman._params import Forward
 
         lint = group("lint", help="Lint things")
 

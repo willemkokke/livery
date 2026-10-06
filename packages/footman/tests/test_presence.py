@@ -10,10 +10,10 @@ import pytest
 
 from livery.footman import _manifest
 from livery.footman._executor import run_chain
+from livery.footman._params import ask, env, forward
+from livery.footman._registry import Group
 from livery.footman._split import split_chain
 from livery.footman.api import given
-from livery.footman.params import ask, env, forward
-from livery.footman.registry import Group
 
 # Module-level, because `from __future__ import annotations` turns every
 # annotation into a string resolved against module globals — a name local to a
@@ -209,7 +209,7 @@ def test_forwarding_satisfies_a_defaultless_parameter():
 
 
 def test_a_bare_mention_skips_the_question(monkeypatch):
-    from livery.footman import context
+    from livery.footman import _context as context
 
     # Naming the option *is* an answer: asking again would be footman not
     # listening. stdin would supply "typed" if a prompt ever fired.

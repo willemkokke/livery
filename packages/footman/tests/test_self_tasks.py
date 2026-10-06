@@ -8,8 +8,8 @@ import sys
 import pytest
 
 from livery.footman import _config, _paths
-from livery.footman.context import Result
-from livery.footman.tasks import self_
+from livery.footman._context import Result
+from livery.footman._tasks import self_
 
 RECEIPT = """\
 [tool]
@@ -123,7 +123,7 @@ def test_remove_drops_only_what_was_named(tool_env, spawned):
 
 
 def test_remove_refuses_a_package_that_was_never_added(tool_env, spawned):
-    from livery.footman.context import Failed
+    from livery.footman._context import Failed
 
     with pytest.raises(Failed, match="was not added"):
         self_.remove("never-installed")
@@ -131,7 +131,7 @@ def test_remove_refuses_a_package_that_was_never_added(tool_env, spawned):
 
 
 def test_add_and_remove_want_a_name(tool_env, spawned):
-    from livery.footman.context import Failed
+    from livery.footman._context import Failed
 
     with pytest.raises(Failed, match="at least one"):
         self_.add()
@@ -277,7 +277,7 @@ def test_the_group_answers_inside_a_project(tmp_path, monkeypatch):
     # The whole reason built-ins joined the cascade: a self-management
     # command that vanished inside a checkout would be useless exactly
     # where you reach for it.
-    from livery.footman.app import App
+    from livery.footman._application import App
     from livery.footman.testing import Runner
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
@@ -293,7 +293,7 @@ def test_the_group_answers_inside_a_project(tmp_path, monkeypatch):
 
 
 def test_path_reports_through_json(tmp_path, monkeypatch):
-    from livery.footman.app import App
+    from livery.footman._application import App
     from livery.footman.testing import Runner
 
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
