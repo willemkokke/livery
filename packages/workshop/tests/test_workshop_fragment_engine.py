@@ -294,3 +294,28 @@ def test_the_committed_regions_are_written_back_in_place(tmp_path: Path) -> None
     assert engine.drift(tmp_path, (again,)) == [
         "  pyproject.toml: differs from what livery.workshop:p render"
     ]
+
+
+# --- receipts that two sides changed ---------------------------------------------
+
+
+def test_receipts_merge_key_by_key_and_a_file_both_changed_reads_as_it_stands(
+    tmp_path: Path,
+) -> None:
+    base = {"a.toml": "a0", "b.toml": "b0", "c.toml": "c0", "gone.toml": "g0"}
+    ours = {"a.toml": "a1", "b.toml": "b1", "c.toml": "c0", "new.toml": "n1"}
+    theirs = {"a.toml": "a0", "b.toml": "b2", "c.toml": "c2", "gone.toml": "g0"}
+    # b.toml changed on both sides: its receipt is the digest of the file
+    # the merge left, regions left out, so the next render rewrites it.
+    (tmp_path / "b.toml").write_text("merged\n")
+    merged = engine.merge_receipts(base, ours, theirs, beside=tmp_path)
+    assert merged == {
+        "a.toml": "a1",  # ours alone changed it
+        "b.toml": engine.receipt_of(tmp_path / "b.toml"),
+        "c.toml": "c2",  # theirs alone changed it
+        "new.toml": "n1",  # ours alone added it
+    }  # gone.toml: ours removed it, theirs left it alone
+    # A file both changed that the merge left absent takes its receipt with it.
+    (tmp_path / "b.toml").unlink()
+    assert "b.toml" not in engine.merge_receipts(base, ours, theirs, beside=tmp_path)
+    assert engine.receipt_of(tmp_path / "b.toml") is None

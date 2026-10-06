@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -66,6 +67,84 @@ def test_a_conflicted_rebase_parks_and_restores_the_branch(
     # The attempt was aborted: the branch is exactly as it was.
     assert _git(clone, "rev-parse", "HEAD").strip() == before
     assert "rebase" not in _git(clone, "status")
+
+
+def _receipts(path: Path, **digests: str) -> None:
+    """A receipt file, as the render writes one: sorted, one receipt a line."""
+    path.write_text(json.dumps(dict(sorted(digests.items())), indent=2) + "\n")
+
+
+def _receipt_sides(
+    clone: Path, origin: Path, tmp_path: Path, *, beyond: bool
+) -> tuple[Path, str]:
+    """A branch and main that each change a receipt on adjacent lines.
+
+    With *beyond*, both sides change another file too. Returns the
+    clone, on its branch, and its head before any rebase.
+    """
+    other = _other(tmp_path, origin, email="ci@livery.local")
+    _receipts(other / ".workshop-rendered", **{"a.toml": "a0", "b.toml": "b0"})
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "chore: receipts")
+    _git(other, "push", "origin", "main")
+    _git(clone, "pull", "-q", "--ff-only", "origin", "main")
+    _git(clone, "checkout", "-b", "feat/1-work")
+    _receipts(clone / ".workshop-rendered", **{"a.toml": "a0", "b.toml": "b1"})
+    if beyond:
+        (clone / "seed.txt").write_text("mine\n")
+    _git(clone, "commit", "-am", "feat: my side")
+    _receipts(other / ".workshop-rendered", **{"a.toml": "a2", "b.toml": "b0"})
+    if beyond:
+        (other / "seed.txt").write_text("theirs\n")
+    _git(other, "commit", "-am", "feat: their side")
+    _git(other, "push", "origin", "main")
+    return clone, _git(clone, "rev-parse", "HEAD").strip()
+
+
+def test_a_rebase_that_conflicts_beyond_the_receipts_is_left_as_it_was(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, before = _receipt_sides(*_rig(seeds), tmp_path, beyond=True)
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert "the rebase has conflicts" in out and "receipts merged" not in out
+    assert _git(clone, "rev-parse", "HEAD").strip() == before
+    assert "rebase" not in _git(clone, "status")
+
+
+def test_a_rebase_whose_only_conflict_is_the_receipts_merges_them_and_goes_on(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, _before = _receipt_sides(*_rig(seeds), tmp_path, beyond=False)
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert ".workshop-rendered: the two sides' receipts merged" in out
+    assert "rebased feat/1-work onto origin/main" in out
+    # Each side's change to its own receipt survives, on top of main.
+    merged = json.loads((clone / ".workshop-rendered").read_text())
+    assert merged == {"a.toml": "a2", "b.toml": "b1"}
+    main = _git(clone, "rev-parse", "origin/main").strip()
+    assert _git(clone, "rev-parse", "HEAD~1").strip() == main
+    assert _git(clone, "status", "--porcelain") == ""
+
+
+def test_integrate_merges_a_receipt_conflict_and_commits_the_merge(
+    seeds: Seeds,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clone, _before = _receipt_sides(*_rig(seeds), tmp_path, beyond=False)
+    monkeypatch.setattr(
+        "livery.workshop._sync.workspace_root", lambda start=None: clone
+    )
+    monkeypatch.chdir(clone)
+    integrate()
+    out = capsys.readouterr().out
+    assert "merged origin/main into feat/1-work" in out
+    merged = json.loads((clone / ".workshop-rendered").read_text())
+    assert merged == {"a.toml": "a2", "b.toml": "b1"}
+    assert _git(clone, "status", "--porcelain") == ""
 
 
 def test_a_rebase_a_refused_signature_stopped_prints_gits_words_not_conflicts(

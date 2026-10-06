@@ -78,27 +78,72 @@ def _rebase_args(onto: str, upstream: str) -> tuple[str, ...]:
     return ("--onto", onto, upstream) if upstream else (onto,)
 
 
+def resolve_receipts(git: GitOps) -> bool:
+    """Resolve a stopped merge or rebase whose every conflict is a render receipt.
+
+    Returns whether it did. Each conflicted receipt file is merged key
+    by key ([livery.workshop._fragment_engine.merge_receipts][]), with
+    the files beside it as the conflict left them, and staged. A
+    conflict in any other file leaves everything as it is, for the
+    caller's own path.
+    """
+    from pathlib import PurePosixPath
+
+    from livery.workshop._fragment_engine import (
+        RENDERED_MANIFEST,
+        merge_receipts,
+        receipts_from,
+        write_rendered,
+    )
+
+    unmerged = git.unmerged_paths()
+    if not unmerged or any(
+        PurePosixPath(path).name != RENDERED_MANIFEST for path in unmerged
+    ):
+        return False
+    for path in unmerged:
+        directory = (git.root / path).parent
+        merged = merge_receipts(
+            *(receipts_from(git.staged_text(path, stage)) for stage in (1, 2, 3)),
+            beside=directory,
+        )
+        write_rendered(directory, merged)
+        git.add(path)
+        print(f"  {path}: the two sides' receipts merged, file by file")
+    return True
+
+
 def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> tuple[str, str]:
     """Attempt a rebase onto *onto*; how it ended and, when it failed, git's words.
 
     The outcome is ``clean``, ``conflict`` or ``failed``.
 
-    With *upstream*, only the commits after it move. An attempt that
-    stops is aborted, so the branch is exactly as it was: the caller
-    decides whether a person resolves it. It stopped on a conflict when
-    paths are left unmerged. Anything else that stops it, a commit the
-    signer refused or a hook, is ``failed`` with git's own words: each
-    needs another next act, and only git's words say which.
+    With *upstream*, only the commits after it move. A stop whose
+    conflicts are all render receipts resolves them and goes on
+    ([livery.workshop._sync.resolve_receipts][]). Any other stop is
+    aborted, so the branch is exactly as it was: the caller decides
+    whether a person resolves it. It stopped on a conflict when paths
+    are left unmerged. Anything else that stops it, a commit the signer
+    refused or a hook, is ``failed`` with git's own words: each needs
+    another next act, and only git's words say which.
     """
     from livery.workshop._git_ops import GitError
 
     try:
         git._run("rebase", *_rebase_args(onto, upstream))
+        return "clean", ""
     except GitError as error:
-        unmerged = git._run("diff", "--name-only", "--diff-filter=U").strip()
-        git._run("rebase", "--abort")
-        return ("conflict", "") if unmerged else ("failed", str(error))
-    return "clean", ""
+        stopped = error
+    while resolve_receipts(git):
+        try:
+            git._run("-c", "core.editor=true", "rebase", "--continue")
+        except GitError as error:
+            stopped = error
+            continue
+        return "clean", ""
+    unmerged = git.unmerged_paths()
+    git._run("rebase", "--abort")
+    return ("conflict", "") if unmerged else ("failed", str(stopped))
 
 
 def _rebase_step(
@@ -729,8 +774,9 @@ def integrate() -> None:
 
     The shared-branch spelling: a merge never rewrites, so every
     other copy of the branch stays valid, and the squash erases the
-    merge commit at landing. A conflict stops with git's own words;
-    resolve, commit, and re-run.
+    merge commit at landing. A conflict in the render's receipts alone
+    is merged key by key and committed; any other conflict stops with
+    git's own words: resolve, commit, and re-run.
     """
     from livery.workshop._git_ops import GitError, GitOps
 
@@ -753,11 +799,13 @@ def integrate() -> None:
     try:
         git.integrate("main")
     except GitError as error:
-        fail(
-            f"the merge stopped on conflicts:\n{error}\n  Resolve them,"
-            " `git commit`, and the branch is current; re-running any verb"
-            " is the recovery."
-        )
+        if not resolve_receipts(git):
+            fail(
+                f"the merge stopped on conflicts:\n{error}\n  Resolve them,"
+                " `git commit`, and the branch is current; re-running any verb"
+                " is the recovery."
+            )
+        git._run("-c", "core.editor=true", "commit", "--no-edit")
     if git.head_sha() == before:
         print("  already current with origin/main")
         return

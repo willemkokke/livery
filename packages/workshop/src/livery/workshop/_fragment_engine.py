@@ -534,15 +534,54 @@ def _committed(path: Path) -> bytes:
 def read_rendered(directory: Path) -> dict[str, str]:
     """The receipts in *directory*, name to digest; empty without any."""
     path = directory / RENDERED_MANIFEST
-    if not path.is_file():
-        return {}
+    return receipts_from(path.read_text("utf-8")) if path.is_file() else {}
+
+
+def receipts_from(text: str) -> dict[str, str]:
+    """The receipts *text* spells, name to digest; empty for anything else."""
     try:
-        loaded = json.loads(path.read_text("utf-8"))
+        loaded = json.loads(text)
     except ValueError:
         return {}
     if not isinstance(loaded, dict):
         return {}
     return {str(k): str(v) for k, v in cast("dict[object, object]", loaded).items()}
+
+
+def receipt_of(path: Path) -> str | None:
+    """The receipt *path* earns as it stands, its regions left out; None if absent."""
+    return _owned(_committed(path)) if path.is_file() else None
+
+
+def merge_receipts(
+    base: Mapping[str, str],
+    ours: Mapping[str, str],
+    theirs: Mapping[str, str],
+    *,
+    beside: Path,
+) -> dict[str, str]:
+    """Two sides' receipts merged key by key, over the *base* they share.
+
+    A receipt one side changed takes that side's digest, a removal
+    included, and one both changed alike takes it too. One both
+    changed differently takes the digest of its file as the merge left
+    it in *beside*, the directory the receipts describe, and goes when
+    the file did: a digest that does not match its file reads as the
+    repository's edit, and the next render would keep that file instead
+    of rewriting it.
+    """
+    merged: dict[str, str] = {}
+    for name in sorted({*base, *ours, *theirs}):
+        was, mine, yours = base.get(name), ours.get(name), theirs.get(name)
+        if mine == yours or yours == was:
+            chosen = mine
+        elif mine == was:
+            chosen = yours
+        else:
+            chosen = receipt_of(beside / name)
+        if chosen is not None:
+            merged[name] = chosen
+    return merged
 
 
 def write_rendered(directory: Path, receipts: Mapping[str, str]) -> None:
