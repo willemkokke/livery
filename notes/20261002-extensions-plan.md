@@ -1842,6 +1842,19 @@ Acceptance:
   The wiring after the birth is unchanged. Releasing to unblock the
   loop is not the fix: the permission to release intermediate
   versions was for this migration only.
+- Willem, 2026-10-06: `fm new.project [folder]` births a project in
+  an empty or new folder, the current one by default, named after the
+  folder unless `--name` says otherwise; a folder that holds a project,
+  or anything else, refuses. Adopting an existing tree is a feature of
+  its own (an existing `pyproject.toml`, a `packages/` of members that do
+  not comply). After it locks and syncs the newborn's environment, the
+  birth runs the newborn's own runner in its folder as `new.project
+  --resume` (hidden; the refusal names it), so the tools lock, the
+  files and the forge half come from the extensions the newborn lists,
+  mounted at the versions it locked. `--resume` is also the recovery
+  after a birth stopped part way, and finishes a `--local` birth's
+  forge half. `fm sync` runs where git has no history: nothing to
+  bring current, and the rest as anywhere.
 - 2026-10-05, 9b2: a package's roots are its build's `module-name`
   where the manifest declares one, the modules its wheel ships, and
   the `api.py` and `__init__.py` marks otherwise. The layering check's

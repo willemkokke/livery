@@ -929,9 +929,10 @@ def _birth(kind: str, url: str, index: str = "") -> Path:
     pass, this interpreter's own footman with the pass's environment:
     a task run in-process starts from the run's pinned environment,
     and the pass's own settings, its unsigned commits, would never
-    reach the birth's git. Re-running resumes, so this is the recovery
-    procedure too. *index*, when given, is searched before any other
-    index the environment names ([livery.workshop._e2e._dev_index][]).
+    reach the birth's git. A workspace already there is resumed, so
+    this is the recovery procedure too. *index*, when given, is
+    searched before any other index the environment names
+    ([livery.workshop._e2e._dev_index][]).
     """
     import sys
 
@@ -940,6 +941,9 @@ def _birth(kind: str, url: str, index: str = "") -> Path:
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
+    # A workspace already there is a birth to resume: the verb refuses
+    # to start a second one in its folder.
+    resume = ["--resume"] if (home / E2E_REPO / "workshop.toml").is_file() else []
     result = footman.run(
         [
             sys.executable,
@@ -952,6 +956,7 @@ def _birth(kind: str, url: str, index: str = "") -> Path:
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
             "--description=The workshop's local CI loop. Scratch; recreated freely.",
+            *resume,
         ],
         cwd=home,
         env=env,
