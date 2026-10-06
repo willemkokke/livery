@@ -653,8 +653,9 @@ clone after `fm sync`, `fm check` and `fm docs.build` has no
 `GUIDANCE`; the reach rule as `RULES` for python with
 `[housekeeping] reaches` as its allowance (this repository's root test
 from 10b retires); the layout rules: a namespace
-`__init__.py`, a root with public names and no `__init__.py`, a module
-named `api`, a distribution not named after its import path. Acceptance:
+`__init__.py`, a root with public names and no `__init__.py`, a
+distribution not named after its import path. `api` stays an ordinary
+module name. Acceptance:
 `test_an_unused_allowance_entry_refuses_naming_it`,
 `test_a_new_private_reach_refuses_naming_the_file_and_line` in the
 extension's suite; a project born without `housekeeping` lists no
@@ -734,6 +735,8 @@ the stack, which this design neither needs nor rules out).
   every package in livery, not footman alone. The draft's open ruling
   on it is closed and phase 10's entry-module move is its first slice,
   so the public names are pinned once, at their final path.
+- Willem, 2026-10-06: `api` is not forbidden as a module name; the
+  housekeeping extension carries no rule against it.
 - Willem, 2026-10-06, the brief's thoughts, taken as rulings where
   they state one: less code, simpler code, one way, one concern per
   module rank the options; an extension's dependencies follow its use,
