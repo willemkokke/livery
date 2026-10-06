@@ -327,8 +327,8 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
     for name in ("GITEA_TOKEN", "FORGE_TOKEN", "FORGE_TOKEN__GITEA_COM"):
         monkeypatch.delenv(name, raising=False)
     # The run leaves through the tool's handle; the seam answers for it.
-    with answers({("git-cliff",): "## [Unreleased]\n"}) as calls:
-        _cliff.unreleased_entry(root, package)
+    with answers({("git-cliff",): "## [1.0.0]\n"}) as calls:
+        _cliff.unreleased_entry(root, package, "1.0.0")
     assert "--offline" in calls[0].argv
     out = capsys.readouterr().out
     assert "without its authors" in out and "FORGE_TOKEN" in out
@@ -336,26 +336,82 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
     # one mapping site hands FORGE_TOKEN to git-cliff under the name
     # its own contract reads.
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
-    with answers({("git-cliff",): "## [Unreleased]\n"}) as calls:
-        _cliff.unreleased_entry(root, package)
+    with answers({("git-cliff",): "## [1.0.0]\n"}) as calls:
+        _cliff.unreleased_entry(root, package, "1.0.0")
     assert "--offline" not in calls[0].argv
     assert (calls[0].env or {}).get("GITEA_TOKEN") == "a-token"
+
+
+def test_a_dev_build_s_excerpt_asks_the_forge_for_no_author(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Nobody credits a dev build's authors, and the lookup pages through
+    # every pull request the forge holds, once per package: the excerpt
+    # goes offline with the credential in reach, and says nothing of it.
+    from livery.toolroom.tools.testing import answers
+    from livery.workshop import _cliff
+
+    root, package = _cliff_workspace(tmp_path, "gitea")
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
+    monkeypatch.setenv("FORGE_TOKEN", "a-token")
+    with answers({("git-cliff",): "## [Unreleased]\n"}) as calls:
+        _cliff.unreleased_entry(root, package)
+    assert "--offline" in calls[0].argv
+    assert "GITEA_TOKEN" not in (calls[0].env or {})
+    assert "without its authors" not in capsys.readouterr().out
+
+
+def _lookup_answers(monkeypatch: pytest.MonkeyPatch, refusal: Exception | None) -> None:
+    """The forge lane's one read, answered with *refusal* or nothing."""
+    from types import SimpleNamespace
+
+    def get(number: int) -> None:
+        del number
+        if refusal is not None:
+            raise refusal
+
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository",
+        lambda root: SimpleNamespace(pr=SimpleNamespace(get=get)),
+    )
 
 
 def test_a_refused_author_lookup_says_what_to_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import time
+
+    from livery.forge.api import ForgeError, RateLimited
     from livery.toolroom.tools.api import Result
     from livery.toolroom.tools.testing import answers
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "gitea")
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
-    refused = Result(101, stderr="Could not get gitea metadata: Status(404)")
+    refused = Result(101, stderr="Could not get gitea metadata: Status(403)")
+    # A spent API budget first: the forge answers it as it answers a
+    # refused token, and the next act is to wait, which the read names.
+    renews = time.time() + 600
+    _lookup_answers(monkeypatch, RateLimited("budget spent", reset_at=renews))
     with answers({("git-cliff",): refused}), pytest.raises(_FAILURES) as caught:
-        _cliff.unreleased_entry(root, package)
-    message = str(caught.value)
-    assert "FORGE_TOKEN" in message and "api_url" in message
+        _cliff.unreleased_entry(root, package, "1.0.0")
+    when = time.strftime("%H:%M", time.localtime(renews))
+    assert f"the forge's API budget is spent: it renews at {when}" in str(caught.value)
+    assert "api_url" not in str(caught.value)
+    # A budget the forge does not time still says what to do.
+    _lookup_answers(monkeypatch, RateLimited("budget spent", reset_at=None))
+    with answers({("git-cliff",): refused}), pytest.raises(_FAILURES) as caught:
+        _cliff.unreleased_entry(root, package, "1.0.0")
+    assert "it renews within the hour" in str(caught.value)
+    # The forge refuses the read too, or answers it: the token or the url.
+    for refusal in (ForgeError("refused"), None):
+        _lookup_answers(monkeypatch, refusal)
+        with answers({("git-cliff",): refused}), pytest.raises(_FAILURES) as caught:
+            _cliff.unreleased_entry(root, package, "1.0.0")
+        message = str(caught.value)
+        assert "FORGE_TOKEN" in message and "api_url" in message
 
 
 def test_a_missing_git_cliff_names_the_dependency(

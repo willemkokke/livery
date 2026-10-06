@@ -111,21 +111,25 @@ def config_path(package: Package) -> Path:
     return path
 
 
-def _run(root: Path, package: Package, *args: str) -> str:
+def _run(root: Path, package: Package, *args: str, offline: bool = False) -> str:
     """Run git-cliff for *package* under *root*; stdout, or fail.
 
-    Runs offline when no credential is in reach, which is what a
-    private repository without its token looks like: git-cliff would
-    otherwise stop on the forge's refusal, and an entry without its
-    authors beats no entry at all. The failure is git-cliff's own
-    words. The run goes through the tool's handle, so it carries a
-    receipt like every other tool the lock supplies. A missing binary
-    is named as the dependency it is, because the message a bare
-    ``FileNotFoundError`` carries says nothing a reader can act on.
+    Runs offline when *offline* asks it to, and when no credential is
+    in reach, which is what a private repository without its token
+    looks like: git-cliff would otherwise stop on the forge's refusal,
+    and an entry without its authors beats no entry at all. The failure
+    is git-cliff's own words, and a refused author lookup says why the
+    forge refused it. The run goes through the tool's handle, so it
+    carries a receipt like every other tool the lock supplies. A
+    missing binary is named as the dependency it is, because the
+    message a bare ``FileNotFoundError`` carries says nothing a reader
+    can act on.
     """
     command = ["--config", str(config_path(package)), *args]
-    variable, token = _credential(root)
-    if not token:
+    variable, token = ("", "") if offline else _credential(root)
+    if offline:
+        command.append("--offline")
+    elif not token:
         print("  writing the entry without its authors: set FORGE_TOKEN to credit them")
         command.append("--offline")
     child_env = {**os.environ}
@@ -143,29 +147,58 @@ def _run(root: Path, package: Package, *args: str) -> str:
     if result.code != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"
         if "metadata" in detail:
-            # The forge refused the lookup the credit needs: the token
-            # cannot read this repository, or the contract's forge url
-            # is not the server git-cliff reached.
-            detail += (
-                "\n  the forge refused the author lookup: check FORGE_TOKEN"
-                f" can read this repository, and that {CONFIG_NAME}'s api_url"
-                " names the server root (with /api/v4 on GitLab)"
-            )
+            detail += _refused_lookup(root)
         fail(f"git-cliff exited {result.code}:\n{detail}")
     return result.stdout
+
+
+def _refused_lookup(root: Path) -> str:
+    """Why the forge refused the author lookup the credit needs, as the next act.
+
+    The forge answers a spent API budget with the same status as a
+    refused token, so one read through the forge lane tells them apart:
+    a spent budget names when it renews. Otherwise the token cannot
+    read this repository, or the contract's forge url is not the server
+    git-cliff reached.
+    """
+    import time
+
+    from livery.forge.api import ForgeError, RateLimited
+    from livery.workshop._forge_lane import this_repository
+
+    try:
+        this_repository(root).pr.get(1)
+    except RateLimited as spent:
+        renews = (
+            f"it renews at {time.strftime('%H:%M', time.localtime(spent.reset_at))}"
+            if spent.reset_at is not None
+            else "it renews within the hour"
+        )
+        return f"\n  the forge's API budget is spent: {renews}; run this again then"
+    except ForgeError:
+        pass
+    return (
+        "\n  the forge refused the author lookup: check FORGE_TOKEN"
+        f" can read this repository, and that {CONFIG_NAME}'s api_url"
+        " names the server root (with /api/v4 on GitLab)"
+    )
 
 
 def unreleased_entry(root: Path, package: Package, version: str = "") -> str:
     """The changelog entry for what is unreleased in *package*.
 
-    With *version*, the entry is headed by it and dated today; without
-    one it is headed ``## [Unreleased]``, which is what a dev build's
-    excerpt wants. Empty when no commit touches the package.
+    With *version*, the entry is headed by it and dated today, and
+    credits its authors where a credential is in reach. Without one it
+    is headed ``## [Unreleased]``, which is what a dev build's excerpt
+    wants, and credits no one: nobody credits a dev build's authors,
+    and the lookup pages through every pull request the forge holds,
+    once per package, against the forge's API budget. Empty when no
+    commit touches the package.
     """
     args = ["--unreleased", "--strip", "all"]
     if version:
         args += ["--tag", f"packages/{package.member}/v{version}"]
-    return _run(root, package, *args).strip()
+    return _run(root, package, *args, offline=not version).strip()
 
 
 class CliffChangelog:
