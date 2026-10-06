@@ -341,6 +341,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "timeline. These are the protocol's two ends, for a process that "
         "writes fragments or a tool that reads a run's trace.",
         [
+            "profile.DROP",
             "profile.box",
             "profile.keeping",
             "profile.dropped",
