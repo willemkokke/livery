@@ -115,10 +115,13 @@ on.
     judged by the conformance kit.** A package's source never imports
     another distribution's underscore module or name, except through
     the allowance the reach check reads, each entry with its reason.
-31. **One `api-version` at a time, no compatibility code.** A record
-    grows additively within a version. A removal or a rename bumps the
-    version and the workshop's minor; the mount turns a mismatch into a
-    sentence naming both versions.
+31. **One `api-version` at a time, no compatibility code.** The
+    number is 1 and stays 1 until the workshop keeps backwards
+    compatibility. Until then every API change lands with every
+    extension of ours in one wave, this repository being the only user,
+    and no migration is written. The mount turns a mismatch into a
+    sentence naming both versions, which is what a wheel from another
+    era meets.
 32. **One schema per contract, shipped as data.** The base declares
     the schema of `extension.toml` and of its own tables; an extension
     declares the keys it owns in `[contract.<contract>.<table>]`; `fm sync`
@@ -344,7 +347,7 @@ a schema fragment with the shape of the file it describes.
 | `[slots.<name>]`, `[contributions]` | a slot it declares (`compose`, `default`, `values`), and the values it puts into others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
 | `[guidance.<section>]` | a section (`after`), or `[guidance.<section>.<topic>]` a rendered fragment (`render`); files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
 | `release-notes` | a reference to the provider | workspace | changelog (phase 10) |
-| `[rules.<name>]` | an AST rule: `language`, `judge`, `fix` | workspace, package | housekeeping's reach rule (phase 12) |
+| `[rules.<name>]` | an AST rule: `language`, `judge`, `fix` | workspace, package | python's reach rule (phase 11) |
 | `[setup.<name>]` | a repository configuration step for `workflow.configure` | workspace | docs' pages hosting (phase 12) |
 | `[categories]` | a category to its patterns, `source = ["src/**"]`, the shape a package's `[categories]` has | package | python, cpp (phase 11) |
 | `[phases.<phase>]` | `pre`, `main`, `post` references; `provides` and `reads` context keys | package | phase 11 |
@@ -552,7 +555,7 @@ for generator extensions and for generators in any package:
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
 | `CheckRecord`, `Claim`, `Fragment`, `Option` as constructed records | `[checks.<tool>.<role>]`, `claims`, `[fragments."<target>"]` and `options` tables in `extension.toml` | the eight (ours) | 10 |
-| `api-version` 1 on a module | `api-version = 2` in `extension.toml` | every extension built against 1 refuses at mount with a sentence naming both versions | 10 |
+| `API_VERSION = 1` on a module | `api-version = 1` in `extension.toml`; the number does not move | nothing: every extension of ours lands in the wave | 10 |
 
 Each is a break before 1.0: a minor bump of the workshop, every
 extension of ours re-released in the same wave (the ruling of
@@ -725,17 +728,21 @@ gate. An extension that reaches a private name the wheel does not ship
 fails there.
 
 **Where #1204's check runs, and the ratchet.** The reach check is a
-`[rules.<name>]` entry of the housekeeping extension for python, read by `layering.imports` over python's `REFERENCES` reader
-in the one parse (contract 16). It judges every package's sources, never
-its tests, per changed file and whole when the graph changed, and
-refuses each reach by file and line. Its allowance is a contract key
-the housekeeping extension declares, `[housekeeping] reaches`, a list of
-`{ from, into, name, reason }` tables: facts of the workspace in the
-contract, the rule in code. The ratchet: the check also refuses an
-allowance entry that no source uses, so the list can only shrink, the
-way the vocabulary allowance does. Until phase 12 lands the extension,
-this repository carries the same scan as a root test over the allowance
-written as data in the test, seeded from the table above in phase 10.
+`[rules.<name>]` entry of the python extension, on by default wherever
+python is listed (Willem, 2026-10-07: a generally useful check that
+comes with python support), read by `layering.imports` over python's
+`REFERENCES` reader in the one parse (contract 16). It judges every
+package's sources, never its tests, per changed file and whole when the
+graph changed, and refuses each reach by file and line; a package turns
+it off through the check's options like any other. Its allowance is a
+contract key the python extension declares at the root,
+`[python] private-reaches`, a list of `{ from, into, name, reason }`
+tables: facts of the workspace in the contract, the rule in code. The
+ratchet: the check also refuses an allowance entry that no source uses,
+so the list can only shrink, the way the vocabulary allowance does.
+Until phase 11 lands the extension, this repository carries the same
+scan as a root test over the allowance written as data in the test,
+seeded from the table above in phase 10.
 
 ## Phases
 
@@ -780,7 +787,7 @@ new path once. Acceptance: `fm check` exits 0;
   `_workflow_tasks` and `_provenance` stop reading the `[docs]` table;
   the `project.urls` slot.
 - `rewrite_nav_block` leaves for `livery.extensions.docs`;
-  `mount_extensions` leaves the public surface; `api-version = 2`; the
+  `mount_extensions` leaves the public surface; `api-version` stays 1; the
   eight tool extensions and this repository move; the wave releases
   them.
 - The pin tests first: `test_api_exports_what_the_package_exported`
@@ -794,7 +801,7 @@ Acceptance, refusals first:
   `test_a_reference_with_the_wrong_signature_fails_typecheck` (a
   generated module with a wrong assignment, judged by
   `fm typecheck`),
-  `test_an_extension_declared_for_api_version_1_refuses_naming_both`,
+  `test_an_extension_declared_for_another_api_version_refuses_naming_both`,
   `test_a_declaration_that_registers_at_import_fails_the_kit`,
   `test_a_new_private_reach_refuses_naming_the_file_and_line`.
 - `fm check` exits 0; `fm sync` writes the three schema files and the
@@ -884,6 +891,12 @@ that the conan extension owns the conan cache is replaced. Since #1112
 a rendered `conanws.yml` resolves siblings from their sources and the
 machine's package cache is shared; what 11b still owes is that a
 container build never reuses a binary built against the host's glibc.
+The python extension carries the reach rule as a `[rules.<name>]`
+entry, on by default, with `[python] private-reaches` as its allowance;
+this repository's root test from 10b retires, and
+`test_an_unused_allowance_entry_refuses_naming_it` and
+`test_a_new_private_reach_refuses_naming_the_file_and_line` move into
+the extension's suite.
 
 **11c, the generators.** `[generators.<name>]` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
@@ -931,14 +944,11 @@ clone after `fm sync`, `fm check` and `fm docs.build` has no
 
 **12b, housekeeping.** `livery-extensions-housekeeping`: requires
 `mypy`, `ty` and `pyrefly`; the voice and documentation prose as
-`[guidance.<section>]`; the reach rule as a `[rules.<name>]` entry for python with
-`[housekeeping] reaches` as its allowance (this repository's root test
-from 10b retires); the layout rules: a namespace
+`[guidance.<section>]`; the layout rules: a namespace
 `__init__.py`, a root with public names and no `__init__.py`, a
 distribution not named after its import path. `api` stays an ordinary
 module name. Acceptance:
-`test_an_unused_allowance_entry_refuses_naming_it`,
-`test_a_new_private_reach_refuses_naming_the_file_and_line` in the
+`test_a_root_without_its_entry_module_refuses_naming_it` in the
 extension's suite; a project born without `housekeeping` lists no
 mypy, ty or pyrefly, in the conformance kit; `fm check` on this
 repository runs the rule and exits 0.
@@ -998,7 +1008,7 @@ the stack, which this design neither needs nor rules out).
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor`, `coverage_pages`, `[docs] generators` as three mechanisms | `Generator` (phase 11c) |
 | `_site_files` | a whole-file fragment (phase 12a) |
-| `tests/test_private_reaches.py` at this repository's root | the housekeeping extension's rule and `[housekeeping] reaches` (phase 12b) |
+| `tests/test_private_reaches.py` at this repository's root | the python extension's rule and `[python] private-reaches` (phase 11b) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
@@ -1073,6 +1083,21 @@ the stack, which this design neither needs nor rules out).
   named after its owner and a standalone toolroom can share it; every
   `fm tools.*` verb is toolroom's, so the lock and the verbs rename
   with it: `toolroom.lock`, `fm toolroom.*`. Phase 10g.
+- Willem, 2026-10-07, on the open items: the docs extension owns the
+  generator registry; one package sort with four flavours and no key;
+  package-level extensions mount first, then the workspace list
+  (contract 28 stands); the hosted lane is a `host()` seam in footman;
+  Doxygen XML to Markdown is the C++ route; docs ships apart after the
+  package extensions. All closed as recommended.
+- Willem, 2026-10-07: the reach check is a generally useful check that
+  comes with python support and defaults to on. So it is the python
+  extension's rule, on wherever python is listed, with
+  `[python] private-reaches` as its allowance (phase 11b), and the
+  housekeeping extension keeps the layout rules alone.
+- Willem, 2026-10-07: every API change lands together and
+  `api-version` stays 1 until the workshop keeps backwards
+  compatibility; livery is the only repository that uses it, so no
+  migration is written. Contract 31 restated.
 - 2026-10-06, on how that meets `COMPATIBLE`: composition is its own
   axis, and a `REQUIRES` or `FOR` target counts as compatible for a
   package-level pair, so `COMPATIBLE` is declared only where neither
@@ -1095,73 +1120,70 @@ the stack, which this design neither needs nor rules out).
 Each with its options, what each option does not cover, and a
 recommendation. Owner: Willem, unless named.
 
-1. **Mount order.** (a) Contract 28: package-level extensions before
-   the workspace list; it does not cover a workspace extension that
-   wants to precede a language in composition, which none does today.
-   (b) Listed order only, as today, with every registry read at use:
-   less rule; it does not cover a refusal at mount for a wrong
-   capability name, which then surfaces at verb time.
-   Recommendation: (a).
-2. **Who owns the generator registry.** (a) The docs extension, through
-   `contributions_for`; it does not cover a second product that wants
-   page generators (none is planned). (b) A generic "generators"
-   registry in the base; it does not cover ruling 1, since "page",
-   "handler" and "inventory" are documentation words. Recommendation:
-   (a).
-3. **Where the reach check lives.** (a) The housekeeping extension's
-   python rule with `[housekeeping] reaches`; it does not cover a
-   workspace that lists no housekeeping, which then has no reach
-   check. (b) The base's `layering.imports`, as a layering rule
-   ("dependencies point downward, through public names"); it does not
-   cover ruling 1, since "underscore name" is Python. Recommendation:
-   (a); the conformance kit's `public-surface` clause covers an
-   extension's own suite either way.
-4. **The hosted lane.** (a) The `host()` seam in footman's api; it does
-   not cover a future footman that changes how a run is hosted, which
-   then changes a public name. (b) A named exception in the allowance;
-   it does not cover ruling 3's "conservative with exceptions", and
-   every later reader re-justifies it. Recommendation: (a).
-5. **The API version policy before 1.0.** (a) One supported version,
-   bumped on any removal or rename, every extension of ours re-released
-   in the wave; it does not cover a third-party extension between two
-   workshop releases, which refuses with a sentence until it moves.
-   (b) The base accepts a range; it does not cover contract 4's "no
-   compatibility code". Recommendation: (a).
-6. **The C++ reference route.** (a) Doxygen XML to Markdown as cpp's
-   generator (phase 12c, after the spike); it does not cover
-   cross-references into C++ names from Python pages, which need an
-   inventory the route does not produce. (b) A placed Doxygen HTML
-   tree linked from the nav; it does not cover the site's theme or
-   search. Recommendation: (a), the spike deciding; the `Generator`
-   record carries both shapes.
-7. **footman's curated API page.** (a) Delete it; the generator renders
-   footman's reference (phase 12d); it does not cover the curated
-   grouping, which becomes an authored page. (b) Keep both; it does not
-   cover "one way". Recommendation: (a).
-8. **Docs ships apart after the package extensions** (phase 12a after
-   11). (a) As written; it does not cover a workspace wanting the docs
-   extension as a wheel of its own before phase 12. (b) Docs ships
-   apart in phase 10 with its python parts inside it, which move to
-   the mkdocstrings extension in 11c: two moves of the same code.
-   Recommendation: (a).
-9. **Keys a contribution declares under its target's table.**
-    (a) The mkdocstrings extension declares `docs.api` and
-    `docs.python-paths` under `[docs]`, live while both are listed; it
-    does not cover a reader of `[docs]` that does not know which keys
-    are a language's, which `fm explain` must say. (b) Each language
-    keeps its own table, `[python] docs-paths`; it does not cover the
-    reader's expectation that documentation settings sit under `[docs]`.
-    Recommendation: (a).
-10. **A flavour as a sort.** (a) One package sort with four flavours
-    and no declaration, as written; it does not cover a reader who
-    wants `fm extensions` to label an ecosystem or a platform. (b) A
-    `SORT` attribute for the listing; it does not cover contract 26's
-    rule that the base reads only what it acts on. Recommendation: (a);
-    the listing can say what an extension registers.
-11. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
-    bench's and the store's, outside this design. Owner: the issue.
-12. **#1200's foundation library**: whether the advisory lock, the pid
-    probe and the atomic write join one distribution below footman.
-    This design adds no lock; phase 16's shared temp roots and two
-    gates in one checkout are the cases it would serve. Owner: Willem,
-    after the review.
+1. **Where a generator's own settings live in a package's contract.**
+   Today `[docs] api = false` declines a package's reference and
+   `[docs] python-paths` adds search paths for the python handler; both
+   are read by the python backend and declared by the base. Three
+   options:
+   (a) The mkdocstrings extension declares both under `[docs]`, live
+   while both extensions are listed. It keeps every documentation
+   setting in one table, which is where a reader looks. It does not
+   cover ownership: the table's owner does not know all its keys, so
+   the refusal for `[docs] python-paths` in a workspace without
+   mkdocstrings names the key as unknown and `fm explain` has to say
+   which extension would declare it.
+   (b) Each generator keeps its own table, `[mkdocstrings] paths`. One
+   table, one owner, and the refusal names the extension. It does not
+   cover the reader's expectation that documentation settings sit
+   under `[docs]`, and it spreads them over `[docs]`, `[mkdocstrings]`
+   and `[doxygen]`.
+   (c) Split by meaning, on the pattern checks already use. "No
+   reference for this package" is the docs extension's own concept
+   whatever the generator, so `[docs] api = false` stays docs' key. A
+   generator's own settings are its options, declared on the generator
+   as a check declares `options`, and set in a package's contract at
+   the generator's address, `[generators.mkdocstrings] paths = [...]`,
+   as a check's are set at `[checks.ruff.format]`. One owner per table,
+   one place for documentation-wide settings, and no new mechanism:
+   the "keys under another's table" rule is not needed.
+   Recommendation: (c).
+2. **footman's curated API page.** `fm footman.pages` writes
+   `docs/_generated/api.md` from `_API_SECTIONS`, a table of sections
+   with a sentence of prose each and the exported names in a chosen
+   order; each name renders as a mkdocstrings directive, `::: 
+   livery.footman.run`, and `_api_markdown` validates the table
+   against `__all__`: an export in no section fails, a stale entry
+   fails. footman's contract sets `[docs] api = false` so the
+   per-module reference is not built for it. Three options:
+   (a) Delete the curation; the mkdocstrings generator renders
+   footman's reference per module like every package's. Less code
+   (the table, the validation and the page writer go) and one
+   mechanism. It does not cover the curated order and the section
+   prose, which the per-module page cannot give: footman's entry
+   module has about ninety names, and a reader gets them in source
+   order under one heading.
+   (b) Keep both: the curated page and the per-module reference. It
+   does not cover "one way", documents the surface twice, and keeps
+   footman-specific generator code.
+   (c) Keep the curation as authored pages and make the validation
+   generic. A package that curates writes its reference pages by hand
+   with mkdocstrings directives, in the order and with the prose it
+   wants, which is what the generated page already is; the
+   mkdocstrings extension offers a `curated` option on its generator
+   that, when set, writes no per-module pages and instead checks that
+   every export of the package appears in a directive on some authored
+   page and that no directive names a name that is gone. footman's
+   table and page writer go; its curation survives as `docs/api/*.md`
+   it owns. It does not cover a package that wants both a curated
+   overview and the per-module pages, which stays two pages of the
+   same surface.
+   Recommendation: (c). The value in footman's page is the order and
+   the prose, not the generator; the validation is worth keeping and
+   is generic once it is an option of the mkdocstrings generator.
+3. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
+   bench's and the store's, outside this design. Owner: the issue.
+4. **#1200's foundation library**: whether the advisory lock, the pid
+   probe and the atomic write join one distribution below footman.
+   This design adds no lock; phase 16's shared temp roots and two
+   gates in one checkout are the cases it would serve. Owner: Willem,
+   after the review.
