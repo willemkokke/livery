@@ -1312,6 +1312,13 @@ the stack, which this design neither needs nor rules out).
   module per extension waits for the public names, whose role types it
   imports; the ci jobs' entries read against the plugin's tasks by AST
   are the next part.
+- 2026-10-07, the verification (#1268), second part: the kit's
+  `entries-name-defined-tasks` clause holds every task a CI job's
+  entries name to the tasks the extension's sources define, read by
+  AST: module-level `group(...)` assignments, nested and imported
+  groups, and `@<group>.task` decorators named as footman names them.
+  It runs in the kit, not at mount: reading the docs extension's
+  sources takes about 17 ms, which every command would pay.
 
 ## Open
 

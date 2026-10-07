@@ -628,6 +628,97 @@ def _defined(body: list[ast.stmt]) -> set[str]:
     return names
 
 
+def defined_tasks(directory: Path) -> frozenset[str]:
+    """The tasks the modules under *directory* define, ``<group>.<task>``, read by AST.
+
+    A module-level ``<name> = group("<group>")`` defines a group, and
+    ``<name> = <parent>.group("<sub>")`` one beneath another. A function
+    decorated ``@<name>.task`` defines a task in that group, named by the
+    decorator's ``name=`` or else as footman names it: the function's
+    name, a trailing underscore dropped, underscores as dashes. A group
+    another module defines is followed through ``from ... import``.
+    Nothing is imported.
+    """
+    package = ".".join(directory.parts[-1:])
+    modules: dict[str, ast.Module] = {}
+    for path in sorted(directory.rglob("*.py")):
+        relative = path.relative_to(directory).with_suffix("")
+        dotted = ".".join(part for part in relative.parts if part != "__init__")
+        modules[dotted] = ast.parse(path.read_text("utf-8"), filename=str(path))
+    groups: dict[tuple[str, str], str] = {}
+    for _round in range(2):
+        for dotted, tree in modules.items():
+            for node in tree.body:
+                found = _group_assigned(node, dotted, groups)
+                if found is not None:
+                    groups[(dotted, found[0])] = found[1]
+    for dotted, tree in modules.items():
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                source = node.module.rpartition(f"{package}.")[2]
+                for alias in node.names:
+                    group = groups.get((source, alias.name))
+                    if group is not None:
+                        groups.setdefault((dotted, alias.asname or alias.name), group)
+    tasks: set[str] = set()
+    for dotted, tree in modules.items():
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                call = decorator if isinstance(decorator, ast.Call) else None
+                target = call.func if call is not None else decorator
+                if not (
+                    isinstance(target, ast.Attribute)
+                    and target.attr == "task"
+                    and isinstance(target.value, ast.Name)
+                ):
+                    continue
+                group = groups.get((dotted, target.value.id))
+                if group is None:
+                    continue
+                named = next(
+                    (
+                        keyword.value.value
+                        for keyword in (call.keywords if call is not None else ())
+                        if keyword.arg == "name"
+                        and isinstance(keyword.value, ast.Constant)
+                        and isinstance(keyword.value.value, str)
+                    ),
+                    node.name.rstrip("_").replace("_", "-"),
+                )
+                tasks.add(f"{group}.{named}")
+    return frozenset(tasks)
+
+
+def _group_assigned(
+    node: ast.stmt, module: str, groups: dict[tuple[str, str], str]
+) -> tuple[str, str] | None:
+    """The variable and the group *node* assigns: ``group("x")``, ``<g>.group("y")``."""
+    if not (
+        isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Call)
+        and node.value.args
+        and isinstance(node.value.args[0], ast.Constant)
+        and isinstance(node.value.args[0].value, str)
+    ):
+        return None
+    name = node.value.args[0].value
+    func = node.value.func
+    if isinstance(func, ast.Name) and func.id == "group":
+        return node.targets[0].id, name
+    if (
+        isinstance(func, ast.Attribute)
+        and func.attr == "group"
+        and isinstance(func.value, ast.Name)
+        and (module, func.value.id) in groups
+    ):
+        return node.targets[0].id, f"{groups[(module, func.value.id)]}.{name}"
+    return None
+
+
 def contract_keys(package: str) -> tuple[Declared, ...]:
     """The contract keys the declaration beside *package* owns; empty without one.
 

@@ -428,3 +428,40 @@ def test_declared_jobs_join_their_points_under_the_listed_name(package: Path) ->
         )
     finally:
         withdraw_job("gate", "prose")
+
+
+def test_the_tasks_an_extension_defines_are_read_from_its_sources(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._declaration import defined_tasks
+
+    package = tmp_path / "acme_tasks"
+    package.mkdir()
+    (package / "_verbs.py").write_text(
+        "from livery.footman import group\n\n"
+        'acme = group("acme", help="the acme verbs")\n'
+        'deep = acme.group("deep")\n\n\n'
+        '@acme.task(name="build")\n'
+        "def acme_build() -> None: ...\n\n\n"
+        "@acme.task\n"
+        "def publish_site_() -> None: ...\n\n\n"
+        "@deep.task\n"
+        "def dig() -> None: ...\n\n\n"
+        "def helper() -> None: ...\n"
+    )
+    (package / "_more.py").write_text(
+        "from acme_tasks._verbs import acme\n\n\n@acme.task\ndef serve() -> None: ...\n"
+    )
+    # A match object's group is no footman group.
+    (package / "_unrelated.py").write_text(
+        "import re\n\n"
+        'found = re.match("x", "x")\n'
+        'first = found.group(0) if found else ""\n'
+    )
+    assert defined_tasks(package) == {
+        "acme.build",
+        "acme.publish-site",
+        "acme.deep.dig",
+        "acme.serve",
+    }
+    assert defined_tasks(tmp_path / "acme_tasks" / "_none_here") == frozenset()

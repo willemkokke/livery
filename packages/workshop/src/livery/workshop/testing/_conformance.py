@@ -100,6 +100,7 @@ CATEGORY_TABLE = "category-table"
 CHECK_ORDER = "check-order"
 DECLARATION_VALIDATES = "declaration-validates"
 REFERENCES_REGISTER_NOTHING = "references-register-nothing"
+ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -522,6 +523,50 @@ def _references_register_nothing(subject: Subject) -> list[Violation]:
     return violations
 
 
+def _entries_name_defined_tasks(subject: Subject) -> list[Violation]:
+    import difflib
+
+    from livery.workshop._contract_keys import shown
+    from livery.workshop._declaration import (
+        DeclarationError,
+        declaration_file,
+        defined_tasks,
+        read,
+    )
+
+    path = declaration_file(subject.extension)
+    if path is None:
+        return []
+    try:
+        declared = read(subject.extension, subject.extension)
+    except DeclarationError:
+        return []  # declaration-validates names the file
+    if declared is None:
+        return []
+    tables: list[tuple[tuple[str, ...], Additions]] = [((), declared.additions)]
+    tables += [(("for", target), table) for target, table in declared.targets.items()]
+    jobs = [(prefix, item) for prefix, additions in tables for item in additions.jobs]
+    if not jobs:
+        return []
+    defined = sorted(defined_tasks(path.parent))
+    violations: list[Violation] = []
+    for prefix, item in jobs:
+        where = shown((*prefix, "ci", "jobs", item.point, item.job.name, "entries"))
+        for entry in item.entries:
+            if entry.task in defined:
+                continue
+            if not defined:
+                reason = f"names {entry.task}, and the extension defines no task"
+            else:
+                near = difflib.get_close_matches(entry.task, defined, n=1)
+                hint = f"; did you mean {near[0]!r}?" if near else ""
+                reason = (
+                    f"names {entry.task}, which the extension does not define{hint}"
+                )
+            violations.append(Violation(ENTRIES_NAME_DEFINED_TASKS, where, reason))
+    return violations
+
+
 # An extension's configuration files, through the workshop's own render.
 
 
@@ -909,6 +954,12 @@ CLAUSES: tuple[Clause, ...] = (
         " the declaration says what the extension adds, and the mount"
         " registers it.",
         _references_register_nothing,
+    ),
+    Clause(
+        ENTRIES_NAME_DEFINED_TASKS,
+        "Every task a CI job's entries name is one the extension defines, read"
+        " from its sources: a group and a task decorated in it.",
+        _entries_name_defined_tasks,
     ),
     Clause(
         FRAGMENT_DRIFT,
