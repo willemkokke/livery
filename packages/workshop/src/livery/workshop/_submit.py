@@ -556,6 +556,20 @@ def _merge_title(repo: Repository, plan: Plan) -> str:
     return (pr.title.strip() if pr else "") or plan.title
 
 
+#: The words git uses when origin holds commits a pushed branch does not.
+_BEHIND = ("non-fast-forward", "fetch first", "stale info")
+
+
+def _behind_origin(refusal: str) -> bool:
+    """Whether git refused a push because origin holds commits it lacks.
+
+    A push the forge rejected for its own reasons (``(Internal Server
+    Error)``, a rule) also says "rejected", and reading it as this
+    would name the wrong cause and the wrong advice.
+    """
+    return any(words in refusal for words in _BEHIND)
+
+
 def _push(
     git: GitOps, branch: str, *, force: bool, repo: Repository | None = None
 ) -> None:
@@ -584,8 +598,14 @@ def _push(
         try:
             git.push(branch)
         except GitError as error:
-            if "non-fast-forward" not in str(error) and "rejected" not in str(error):
-                raise
+            if not _behind_origin(str(error)):
+                # The forge refused or failed the push for a reason of
+                # its own (a server error, a rule): its words, verbatim.
+                fail(
+                    f"the push of {branch} failed: {error}\n  run"
+                    f" `{footman.prog()} submit` again once the forge"
+                    " answers; nothing was pushed"
+                )
             fail(
                 f"the push of {branch} was rejected: origin holds commits"
                 " this branch does not. Add the fix as a new commit (the"
