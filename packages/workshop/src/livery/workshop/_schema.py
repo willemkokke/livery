@@ -161,10 +161,10 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
     extension's file: composing it reads no other owner's declarations,
     which a mount would otherwise read for every installed extension.
     """
-    from livery.workshop._contract_keys import BASE, EXTENSION, declarations
+    from livery.workshop._contract_keys import BASE, declarations, extension_keys
 
     if contract == "extension":
-        keys = [(declared, "") for declared in EXTENSION]
+        keys = [(declared, "") for declared in extension_keys()]
     else:
         keys = [
             (
@@ -198,9 +198,9 @@ def composed(contract: ContractKind, listed: frozenset[str] | None) -> dict[str,
     never the files, so a file written before an extension was
     installed or listed cannot misjudge a key until the next sync.
     """
-    from livery.workshop._contract_keys import EXTENSION, declarations
+    from livery.workshop._contract_keys import declarations, extension_keys
 
-    known: object = EXTENSION if contract == "extension" else declarations()
+    known: object = extension_keys() if contract == "extension" else declarations()
     held = _COMPOSED.get((contract, listed))
     if held is None or held[0] is not known:
         held = (known, compose(contract, listed))

@@ -1,0 +1,633 @@
+# The base's contract keys: every key of workshop.toml the base reads, at
+# the root and in a package's contract, and every key of extension.toml.
+# An extension declares the keys it owns the same way, in the [contract]
+# tables of its own extension.toml; the composed JSON Schema under
+# .workshop/schema/ holds them all, and the contract judge reads it.
+#
+# A key is a table with its types, and its values and doc where it has
+# them. "*" is a key the author names, "name[]" a list's entries. A key
+# named types, values or doc is a table like any other key; a list or a
+# string under those names is the key's own declaration.
+#
+# [for.<target>] in an extension.toml takes the checks, ci and
+# contributions keys of its top level again: the composer repeats them
+# under for.*, so they are written once, below.
+
+# workshop.toml at a workspace's root.
+
+[contract.root.ci]
+types = ["table"]
+
+[contract.root.ci.affected-legs]
+types = ["bool"]
+
+[contract.root.ci.automerge]
+types = ["bool"]
+
+[contract.root.ci.profile]
+types = ["bool"]
+
+[contract.root.ci.profile-into]
+types = ["str"]
+
+[contract.root.ci.profile-keep]
+types = ["int"]
+
+[contract.root.ci.profile-window]
+types = ["int"]
+
+[contract.root.ci.python-versions]
+types = ["strs"]
+
+[contract.root.ci.required-context]
+types = ["str"]
+
+[contract.root.ci.runners]
+types = ["strs"]
+
+# A scheduled entry; `every` takes the cadences
+# livery.workshop._points.CADENCES names, which a test holds equal.
+[contract.root.ci.schedule]
+types = ["list"]
+
+[contract.root.ci."schedule[]"]
+types = ["table"]
+
+[contract.root.ci."schedule[]".args]
+types = ["strs"]
+
+[contract.root.ci."schedule[]".every]
+types = ["str"]
+values = ["1w", "2w"]
+
+[contract.root.ci."schedule[]".job]
+types = ["str"]
+
+[contract.root.ci."schedule[]".point]
+types = ["str"]
+
+[contract.root.ci."schedule[]".task]
+types = ["str"]
+
+[contract.root.ci.speed-marks]
+types = ["bool"]
+
+[contract.root.ci.windows-temp]
+types = ["str"]
+values = ["runner", "system"]
+
+[contract.root.docs]
+types = ["table"]
+
+[contract.root.docs.site-url]
+types = ["str"]
+
+[contract.root.forge]
+types = ["table"]
+
+[contract.root.forge.kind]
+types = ["str"]
+values = ["github", "gitea", "gitlab"]
+
+[contract.root.forge.owner]
+types = ["str"]
+
+[contract.root.forge.url]
+types = ["str"]
+
+[contract.root.issues]
+types = ["table"]
+
+[contract.root.issues.assignees]
+types = ["int"]
+
+[contract.root.owners]
+types = ["table"]
+
+[contract.root.owners.approvals]
+types = ["int"]
+
+[contract.root.owners.teams]
+types = ["strs"]
+
+[contract.root.owners.users]
+types = ["strs"]
+
+# The package registries: an address per kind, or a table naming the
+# read and publish addresses; an index with an ecosystem default may
+# also name its prerelease policy. The kinds are the env cascade's, in
+# livery.workshop._registries, and a test holds them equal.
+[contract.root.registries]
+types = ["table"]
+
+[contract.root.registries.conan]
+types = ["str", "table"]
+
+[contract.root.registries.conan.publish]
+types = ["str"]
+
+[contract.root.registries.conan.url]
+types = ["str"]
+
+[contract.root.registries.container]
+types = ["str", "table"]
+
+[contract.root.registries.container.publish]
+types = ["str"]
+
+[contract.root.registries.container.url]
+types = ["str"]
+
+[contract.root.registries.python]
+types = ["str", "table"]
+
+[contract.root.registries.python.prerelease]
+types = ["str"]
+
+[contract.root.registries.python.publish]
+types = ["str"]
+
+[contract.root.registries.python.url]
+types = ["str"]
+
+[contract.root.release]
+types = ["table"]
+
+[contract.root.release.prove-floors]
+types = ["bool"]
+
+# The tools the workspace pins. The modes are toolroom's
+# (livery.toolroom.store.MODES), which a test holds equal.
+[contract.root.tools]
+types = ["table"]
+
+[contract.root.tools.host-allowed]
+types = ["strs"]
+
+[contract.root.tools.index]
+types = ["str"]
+
+[contract.root.tools.modes]
+types = ["table"]
+
+[contract.root.tools.modes."*"]
+types = ["str"]
+values = ["link", "path", "none"]
+
+[contract.root.tools.requires]
+types = ["strs"]
+
+[contract.root.tools.sources]
+types = ["strs"]
+
+[contract.root.workspace]
+types = ["table"]
+
+[contract.root.workspace.authors]
+types = ["list"]
+
+[contract.root.workspace."authors[]"]
+types = ["table"]
+
+[contract.root.workspace."authors[]".email]
+types = ["str"]
+
+[contract.root.workspace."authors[]".name]
+types = ["str"]
+
+[contract.root.workspace.copyright-year]
+types = ["str"]
+
+[contract.root.workspace.description]
+types = ["str"]
+
+[contract.root.workspace.extensions]
+types = ["list"]
+
+[contract.root.workspace."extensions[]"]
+types = ["str", "table"]
+
+[contract.root.workspace."extensions[]".for]
+types = ["strs"]
+
+[contract.root.workspace."extensions[]".name]
+types = ["str"]
+
+[contract.root.workspace.hosts]
+types = ["strs"]
+
+[contract.root.workspace.lfs]
+types = ["bool"]
+
+[contract.root.workspace.name]
+types = ["str"]
+
+[contract.root.workspace.namespace]
+types = ["str"]
+
+# workshop.toml in a package's directory.
+
+[contract.package.categories]
+types = ["table"]
+
+[contract.package.categories."*"]
+types = ["strs"]
+
+[contract.package.checks]
+types = ["table"]
+
+[contract.package.checks."*"]
+types = ["table"]
+
+[contract.package.checks."*"."*"]
+types = ["any"]
+
+[contract.package.checks."*"."*"."*"]
+types = ["any"]
+
+[contract.package.ci]
+types = ["table"]
+
+# A point a package contributes. It declares no grant, secret or
+# environment: a scheduled workflow with one on a public repository is
+# a foothold, so such a key is unknown and refuses, and a grant stays
+# the root contract's decision.
+[contract.package.ci.point]
+types = ["list"]
+
+[contract.package.ci."point[]"]
+types = ["table"]
+
+[contract.package.ci."point[]".args]
+types = ["strs"]
+
+[contract.package.ci."point[]".every]
+types = ["str"]
+values = ["1w", "2w"]
+
+[contract.package.ci."point[]".name]
+types = ["str"]
+
+[contract.package.ci."point[]".pythons]
+types = ["strs"]
+
+[contract.package.ci."point[]".runners]
+types = ["strs"]
+
+[contract.package.ci."point[]".task]
+types = ["str"]
+
+[contract.package.ci.wheel-platforms]
+types = ["strs"]
+
+[contract.package.depends]
+types = ["list"]
+
+[contract.package."depends[]"]
+types = ["table"]
+
+[contract.package."depends[]".floor]
+types = ["str"]
+
+[contract.package."depends[]".kind]
+types = ["str"]
+values = ["build", "runtime", "test", "tool"]
+
+[contract.package."depends[]".path]
+types = ["str"]
+
+[contract.package.description]
+types = ["str"]
+
+[contract.package.dev-extras]
+types = ["strs"]
+
+[contract.package.docs]
+types = ["table"]
+
+[contract.package.docs.api]
+types = ["bool"]
+
+[contract.package.docs.python-paths]
+types = ["strs"]
+
+[contract.package.extensions]
+types = ["strs"]
+
+[contract.package.kind]
+types = ["str"]
+
+[contract.package.name]
+types = ["str"]
+
+[contract.package.owners]
+types = ["table"]
+
+[contract.package.owners.approvals]
+types = ["int"]
+
+[contract.package.owners.teams]
+types = ["strs"]
+
+[contract.package.owners.users]
+types = ["strs"]
+
+[contract.package.qa]
+types = ["table"]
+
+[contract.package.qa.coverage-epsilon]
+types = ["number"]
+
+[contract.package.qa.coverage-floor]
+types = ["number", "str"]
+
+[contract.package.release]
+types = ["table"]
+
+[contract.package.release.baseline]
+types = ["str"]
+
+[contract.package.release.prove-floors]
+types = ["bool"]
+
+[contract.package.release.publish]
+types = ["bool"]
+
+[contract.package.roles]
+types = ["table"]
+
+[contract.package.roles."*"]
+types = ["table"]
+
+[contract.package.roles."*"."*"]
+types = ["any"]
+
+[contract.package.template]
+types = ["str"]
+
+[contract.package.tools]
+types = ["table"]
+
+[contract.package.tools.requires]
+types = ["strs"]
+
+# extension.toml beside an extension's package.
+
+[contract.extension.checks]
+types = ["table"]
+
+[contract.extension.checks."*"]
+types = ["table"]
+
+[contract.extension.checks."*"."*"]
+types = ["table"]
+
+[contract.extension.checks."*"."*".after]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".arguments]
+types = ["bool"]
+
+[contract.extension.checks."*"."*".claims]
+types = ["list"]
+
+[contract.extension.checks."*"."*"."claims[]"]
+types = ["table"]
+
+[contract.extension.checks."*"."*"."claims[]".category]
+types = ["str"]
+
+[contract.extension.checks."*"."*"."claims[]".ignore]
+types = ["strs"]
+
+[contract.extension.checks."*"."*"."claims[]".suffixes]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".editor-extension]
+types = ["str"]
+
+[contract.extension.checks."*"."*".fix]
+types = ["str"]
+
+[contract.extension.checks."*"."*".flags]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".fragments]
+types = ["table"]
+
+[contract.extension.checks."*"."*".fragments."*"]
+types = ["str", "table"]
+
+[contract.extension.checks."*"."*".fragments."*".kinds]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".fragments."*".text]
+types = ["str"]
+
+[contract.extension.checks."*"."*".inputs]
+types = ["table"]
+
+[contract.extension.checks."*"."*".inputs.ignores]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".inputs.on-removal]
+types = ["bool"]
+
+[contract.extension.checks."*"."*".inputs.per-file]
+types = ["bool"]
+
+[contract.extension.checks."*"."*".inputs.reads]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".inputs.widen]
+types = ["str"]
+
+[contract.extension.checks."*"."*".inputs.widens]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".kinds]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".listed-with]
+types = ["str"]
+
+[contract.extension.checks."*"."*".narrowing]
+types = ["str"]
+values = ["paths", "packages", "none"]
+
+[contract.extension.checks."*"."*".options]
+types = ["table"]
+
+[contract.extension.checks."*"."*".options."*"]
+types = ["table"]
+
+[contract.extension.checks."*"."*".options."*".default]
+types = ["any"]
+
+[contract.extension.checks."*"."*".options."*".doc]
+types = ["str"]
+
+[contract.extension.checks."*"."*".options."*".type]
+types = ["str"]
+values = ["bool", "str", "int"]
+
+[contract.extension.checks."*"."*".roles]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".run]
+types = ["str"]
+
+[contract.extension.checks."*"."*".scope]
+types = ["str"]
+values = ["workspace", "package"]
+
+[contract.extension.checks."*"."*".tests-only]
+types = ["bool"]
+
+[contract.extension.checks."*"."*".threshold]
+types = ["number"]
+
+[contract.extension.checks."*"."*".tools]
+types = ["strs"]
+
+[contract.extension.checks."*"."*".transport]
+types = ["str"]
+values = ["argv", "file", "config"]
+
+[contract.extension.ci]
+types = ["table"]
+
+[contract.extension.ci.jobs]
+types = ["table"]
+
+[contract.extension.ci.jobs."*"]
+types = ["table"]
+
+[contract.extension.ci.jobs."*"."*"]
+types = ["table"]
+
+[contract.extension.ci.jobs."*"."*".deploy]
+types = ["str"]
+
+[contract.extension.ci.jobs."*"."*".entries]
+types = ["strs"]
+
+[contract.extension.ci.jobs."*"."*".fetch]
+types = ["str"]
+values = ["full", "tags", "2"]
+
+[contract.extension.ci.jobs."*"."*".gates]
+types = ["bool"]
+
+[contract.extension.ci.jobs."*"."*".inputs]
+types = ["table"]
+
+[contract.extension.ci.jobs."*"."*".inputs.ignores]
+types = ["strs"]
+
+[contract.extension.ci.jobs."*"."*".inputs.on-removal]
+types = ["bool"]
+
+[contract.extension.ci.jobs."*"."*".inputs.per-file]
+types = ["bool"]
+
+[contract.extension.ci.jobs."*"."*".inputs.reads]
+types = ["strs"]
+
+[contract.extension.ci.jobs."*"."*".inputs.widen]
+types = ["str"]
+
+[contract.extension.ci.jobs."*"."*".inputs.widens]
+types = ["strs"]
+
+[contract.extension.ci.jobs."*"."*".installs]
+types = ["str"]
+
+[contract.extension.ci.jobs."*"."*".needs]
+types = ["strs"]
+
+[contract.extension.ci.jobs."*"."*".note]
+types = ["str"]
+
+[contract.extension.ci.jobs."*"."*".token]
+types = ["str"]
+values = ["job"]
+
+[contract.extension.contract]
+types = ["table"]
+
+[contract.extension.contract."*"]
+types = ["table"]
+
+[contract.extension.contract."*"."*"]
+types = ["any"]
+
+[contract.extension.contributions]
+types = ["table"]
+
+[contract.extension.contributions."*"]
+types = ["strs"]
+
+[contract.extension.deletes]
+types = ["table"]
+
+[contract.extension.deletes."*"]
+types = ["str"]
+
+[contract.extension.extension]
+types = ["table"]
+
+[contract.extension.extension.api-version]
+types = ["int"]
+
+[contract.extension.extension.levels]
+types = ["list"]
+
+[contract.extension.extension."levels[]"]
+types = ["str"]
+values = ["workspace", "package"]
+
+[contract.extension.extension.plugin]
+types = ["str"]
+
+[contract.extension.extension.requires]
+types = ["strs"]
+
+[contract.extension.for]
+types = ["table"]
+
+[contract.extension.for."*"]
+types = ["table"]
+
+[contract.extension.options]
+types = ["table"]
+
+[contract.extension.options."*"]
+types = ["str"]
+
+[contract.extension.replaces]
+types = ["table"]
+
+[contract.extension.replaces."*"]
+types = ["str"]
+
+[contract.extension.slots]
+types = ["table"]
+
+[contract.extension.slots."*"]
+types = ["table"]
+
+[contract.extension.slots."*".compose]
+types = ["str"]
+
+[contract.extension.slots."*".default]
+types = ["any"]
+
+[contract.extension.slots."*".values]
+types = ["list"]
+
+[contract.extension.toolroom]
+types = ["table"]
+
+[contract.extension.toolroom.requires]
+types = ["strs"]

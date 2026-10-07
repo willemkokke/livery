@@ -46,7 +46,6 @@ from typing import TYPE_CHECKING
 import livery.footman as footman
 from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
-from livery.workshop._contract_keys import Declared
 from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
 if TYPE_CHECKING:
@@ -1115,33 +1114,6 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
     Entry("release", "publish", "workflow.release.publish", ("--ref={ref}",)),
 )
-
-
-def contract_keys() -> tuple[Declared, ...]:
-    """The ``[[ci.schedule]]`` and ``[[ci.point]]`` keys a contract may hold.
-
-    A contributed point declares no grant, secret or environment: a
-    scheduled workflow with one on a public repository is a foothold,
-    so the key is unknown and refuses, and that stays a root decision.
-    """
-    cadences = tuple(CADENCES)
-    return (
-        Declared("root", "ci.schedule", ("list",)),
-        Declared("root", "ci.schedule[]", ("table",)),
-        Declared("root", "ci.schedule[].point", ("str",)),
-        Declared("root", "ci.schedule[].task", ("str",)),
-        Declared("root", "ci.schedule[].job", ("str",)),
-        Declared("root", "ci.schedule[].args", ("strs",)),
-        Declared("root", "ci.schedule[].every", ("str",), cadences),
-        Declared("package", "ci.point", ("list",)),
-        Declared("package", "ci.point[]", ("table",)),
-        Declared("package", "ci.point[].name", ("str",)),
-        Declared("package", "ci.point[].task", ("str",)),
-        Declared("package", "ci.point[].args", ("strs",)),
-        Declared("package", "ci.point[].every", ("str",), cadences),
-        Declared("package", "ci.point[].runners", ("strs",)),
-        Declared("package", "ci.point[].pythons", ("strs",)),
-    )
 
 
 def declared(root: Path) -> tuple[Entry, ...]:

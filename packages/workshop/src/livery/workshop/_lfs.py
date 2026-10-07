@@ -17,16 +17,12 @@ from pathlib import Path
 from typing import cast
 
 from livery.workshop._contract import load_contract
-from livery.workshop._contract_keys import Declared
 
 KEY = "lfs"
 """The `[workspace]` key that turns LFS on."""
 
 TOOL = "git_lfs"
 """The tool LFS needs, required while it is on."""
-
-DECLARED: tuple[Declared, ...] = (Declared("root", f"workspace.{KEY}", ("bool",)),)
-"""The contract key this module reads."""
 
 
 def lfs_enabled(root: Path) -> bool:

@@ -20,22 +20,6 @@ from pathlib import Path
 from typing import Any, cast
 
 from livery.workshop._contract import load_contract
-from livery.workshop._contract_keys import Declared
-
-DECLARED: tuple[Declared, ...] = (
-    Declared("root", "workspace.name", ("str",)),
-    Declared("root", "workspace.description", ("str",)),
-    Declared("root", "workspace.namespace", ("str",)),
-    Declared("root", "workspace.authors", ("list",)),
-    Declared("root", "workspace.authors[]", ("table",)),
-    Declared("root", "workspace.authors[].name", ("str",)),
-    Declared("root", "workspace.authors[].email", ("str",)),
-    Declared("root", "workspace.copyright-year", ("str",)),
-    Declared("package", "description", ("str",)),
-    Declared("package", "dev-extras", ("strs",)),
-    Declared("package", "template", ("str",)),
-)
-"""The contract keys this module reads."""
 
 
 def _workspace(root: Path) -> dict[str, Any]:

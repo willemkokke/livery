@@ -71,7 +71,6 @@ from typing import Any, cast
 
 from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
-from livery.workshop._contract_keys import Declared, Type
 from livery.workshop._kinds import kind_chain
 from livery.workshop._packages import discover_packages
 
@@ -105,27 +104,6 @@ TYPINGS = "typings"
 
 TYPINGS_PACKAGE = ("livery", "toolroom")
 """The namespace package the stubs and handles live under, beside the tools package."""
-
-
-def declared_keys() -> tuple[Declared, ...]:
-    """The ``[tools]`` keys a contract may hold, the modes taken from the store."""
-    from livery.toolroom.store import MODES
-
-    def root(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
-        return Declared("root", path, types, values)
-
-    return (
-        root("tools", "table"),
-        root("tools.requires", "strs"),
-        root("tools.host-allowed", "strs"),
-        root("workspace.hosts", "strs"),
-        root("tools.index", "str"),
-        root("tools.modes", "table"),
-        root("tools.modes.*", "str", values=tuple(MODES)),
-        root("tools.sources", "strs"),
-        Declared("package", "tools", ("table",)),
-        Declared("package", "tools.requires", ("strs",)),
-    )
 
 
 def tools_table(path: Path) -> dict[str, object]:

@@ -644,20 +644,30 @@ def contract_keys(package: str) -> tuple[Declared, ...]:
     return contract_keys_of(_parsed(path, path.read_text("utf-8")), path)
 
 
-def contract_keys_of(data: dict[str, Any], path: Path) -> tuple[Declared, ...]:
-    """The contract keys *data*'s ``[contract]`` tables declare, judged."""
+def contract_keys_of(
+    data: dict[str, Any], path: Path, *, contracts: tuple[str, ...] = CONTRACTS
+) -> tuple[Declared, ...]:
+    """The contract keys *data*'s ``[contract]`` tables declare, judged.
+
+    *contracts* are the contracts the file may declare keys in: a
+    workspace's for an extension; the base's own file declares the keys
+    of ``extension.toml`` as well.
+    """
     found: list[Declared] = []
     for contract, table in data.get("contract", {}).items():
-        if contract not in CONTRACTS:
+        if contract not in contracts:
             raise DeclarationError(
                 f"{path}: [contract.{contract}] names no contract; an extension"
-                f" declares keys in {', '.join(CONTRACTS)}"
+                f" declares keys in {', '.join(contracts)}"
             )
         found += _keys(cast("ContractKind", contract), table, (), path)
     return tuple(found)
 
 
-#: The keys a contract key's own declaration holds.
+#: The keys a contract key's own declaration holds. Under one of these
+#: names a table is a key of its own, declared beneath: a slot's
+#: ``values`` is a key of ``extension.toml``, and its declaration is a
+#: table.
 _OWN = ("types", "values", "doc")
 
 
@@ -668,8 +678,9 @@ def _keys(
 
     where = f"[contract.{contract}{''.join('.' + part for part in parts)}]"
     found: list[Declared] = []
-    if any(key in table for key in _OWN):
-        types = table.get("types")
+    own = {key for key in _OWN if key in table and not isinstance(table[key], dict)}
+    if own:
+        types = table.get("types") if "types" in own else None
         if not (
             isinstance(types, list)
             and types
@@ -679,8 +690,8 @@ def _keys(
                 f"{path}: {where} types is {types!r}; it lists one or more of"
                 f" {', '.join(TYPES)}"
             )
-        values = table.get("values", [])
-        doc = table.get("doc", "")
+        values = table.get("values", []) if "values" in own else []
+        doc = table.get("doc", "") if "doc" in own else ""
         if not isinstance(values, list) or not isinstance(doc, str):
             raise DeclarationError(
                 f"{path}: {where}: values is a list of strings, doc a string"
@@ -698,7 +709,7 @@ def _keys(
             )
         )
     for key, value in table.items():
-        if key in _OWN:
+        if key in own:
             continue
         if not isinstance(value, dict) or "." in key:
             raise DeclarationError(

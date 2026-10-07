@@ -11,9 +11,9 @@ import pytest
 
 from livery.workshop._contract_keys import (
     BASE,
-    EXTENSION,
     ContractKind,
     declarations,
+    extension_keys,
 )
 from livery.workshop._schema import (
     DIRECTORY,
@@ -90,7 +90,7 @@ def test_a_list_of_strings_is_refused_whole_and_a_lists_entries_one_by_one() -> 
 
 def _keys(contract: ContractKind) -> list[tuple[str, tuple[str, ...]]]:
     if contract == "extension":
-        return [(item.path, tuple(item.types)) for item in EXTENSION]
+        return [(item.path, tuple(item.types)) for item in extension_keys()]
     return [
         (path, tuple(owned.declared.types))
         for (kind, path), owned in declarations().items()
