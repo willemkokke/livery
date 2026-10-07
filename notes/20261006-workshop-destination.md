@@ -730,7 +730,7 @@ fails there.
 
 **Where #1204's check runs, and the ratchet.** The reach check is a
 `[rules.<name>]` entry of the python extension, on by default wherever
-python is listed (open item 1 holds the reasoning), read by
+python is listed (Willem's ruling of 2026-10-07), read by
 `layering.imports` over python's `REFERENCES` reader in the one parse
 (contract 16). It judges every package's sources, never its tests, per
 changed file and whole when the graph changed, and refuses each reach
@@ -1106,6 +1106,9 @@ the stack, which this design neither needs nor rules out).
   `layering.imports` to turn off, `[python] private-reaches` as its
   allowance (phase 11b); the housekeeping extension keeps the layout
   rules alone.
+- Willem, 2026-10-07: the reach check lives in the python package
+  extension, with an option to turn it off. Ruled as recommended;
+  open item closed.
 - Willem, 2026-10-07: a generator's own settings split by meaning,
   option (c): `[docs] api` stays the docs extension's key, and a
   generator's settings are its options set at `[generators.<name>]`,
@@ -1137,23 +1140,7 @@ the stack, which this design neither needs nor rules out).
 Each with its options, what each option does not cover, and a
 recommendation. Owner: Willem, unless named.
 
-1. **The reach check: python's and on by default, or housekeeping's.**
-   (a) The python extension's rule, on wherever python is listed, with
-   a `private-reaches` option on `layering.imports` to turn it off and
-   `[python] private-reaches` as the allowance. The unit it protects,
-   a distribution's underscore modules and names, is Python
-   packaging's own convention, not a house opinion; every workspace
-   with two distributions benefits and one with one pays nothing. It
-   does not cover a workspace that shares privates across its own
-   distributions on purpose, which turns the option off. basedpyright's
-   `reportPrivateUsage` overlaps on names and differs on modules (its
-   unit is the module), so the rule is not redundant and a workspace
-   without basedpyright still has it.
-   (b) The housekeeping extension's rule, beside the layout rules. It
-   does not cover a workspace that lists no housekeeping, which then
-   has no reach check, and it files a packaging convention under house
-   style. The agent's opinion, asked for on 2026-10-07: (a).
-2. **footman's curated API page.** `fm footman.pages` writes
+1. **footman's curated API page.** `fm footman.pages` writes
    `docs/_generated/api.md` from `_API_SECTIONS`, a table of sections
    with a sentence of prose each and the exported names in a chosen
    order; each name renders as a mkdocstrings directive, `::: 
@@ -1186,9 +1173,9 @@ recommendation. Owner: Willem, unless named.
    Recommendation: (c). The value in footman's page is the order and
    the prose, not the generator; the validation is worth keeping and
    is generic once it is an option of the mkdocstrings generator.
-3. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
+2. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
    bench's and the store's, outside this design. Owner: the issue.
-4. **#1200's foundation library**: whether the advisory lock, the pid
+3. **#1200's foundation library**: whether the advisory lock, the pid
    probe and the atomic write join one distribution below footman.
    This design adds no lock; phase 16's shared temp roots and two
    gates in one checkout are the cases it would serve. Owner: Willem,
