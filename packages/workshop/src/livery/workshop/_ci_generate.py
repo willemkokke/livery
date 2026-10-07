@@ -31,6 +31,8 @@ from livery.workshop._points import (
     Point,
     emitted_points,
     inherited_jobs,
+    job_installs,
+    job_seams,
     points,
 )
 from livery.workshop._pythons import gate_pythons, python_matrix
@@ -54,16 +56,17 @@ UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
 
 
-def _facts(root: Path) -> dict[str, Any]:
+def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str, Any]:
     """What the emitters read: the contract's CI facts, matrix derived.
 
     Runners, the required context, and the forge kind come from
     ``workshop.toml``; the Python matrix from the root
     ``pyproject.toml``'s floor and the workshop's newest supported
-    minor; the uv pin from the lock. Nothing here is an answer: the
-    answers hold identity alone.
+    minor; the uv pin from the lock; what a job installs and where it
+    deploys from the functions the job names, over *everything*, the
+    points the files render, *root*'s when absent. Nothing here is an
+    answer: the answers hold identity alone.
     """
-    from livery.workshop._docs_contract import docs_requirements, publish_seam
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._wheels import member_roster, wheel_runners
@@ -87,13 +90,11 @@ def _facts(root: Path) -> dict[str, Any]:
         # bootstrap then stays unpinned rather than inventing a
         # version.
         "uv_pin": locked_uv_version(root),
-        # The union of the declared docs-generator requirements: the
-        # system tools the docs jobs install before building.
-        "docs_requirements": (
-            list(docs_requirements(root)) if (root / "packages").is_dir() else []
-        ),
-        # declaring packages' generators can render their trees.
-        "publish_seam": publish_seam(root),
+        # The system packages each job installs before it enters, and
+        # the seam each deploying job publishes through, by point and
+        # job: the extension that contributes a job knows why.
+        "installs": job_installs(root, everything),
+        "seams": job_seams(root, everything),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
@@ -211,21 +212,24 @@ def _conan_cache_step() -> str:
     )
 
 
-def _docs_requirements_step(answers: dict[str, Any], *, sudo: bool = True) -> str:
-    """The install step for the declared docs-generator requirements.
+def _installs(answers: dict[str, Any], point: Point, job: Job) -> tuple[str, ...]:
+    """The system packages *job* of *point* installs before it enters."""
+    return tuple(answers.get("installs", {}).get((point.name, job.name), ()))
 
-    Empty when no package declares any. ``sudo`` off for jobs that
-    already run as root (a container image).
-    """
-    tools = [str(tool) for tool in answers.get("docs_requirements", [])]
-    if not tools:
+
+def _seam(answers: dict[str, Any], point: Point, job: Job) -> str:
+    """The seam *job* of *point* publishes through; ``""`` when it deploys nothing."""
+    return str(answers.get("seams", {}).get((point.name, job.name), ""))
+
+
+def _installs_step(packages: tuple[str, ...]) -> str:
+    """The step installing *packages* on a GitHub- or Gitea-shaped job; empty for none."""
+    if not packages:
         return ""
-    prefix = "sudo " if sudo else ""
-    listed = " ".join(tools)
     return (
-        "      - name: Docs system requirements\n"
-        f"        run: {prefix}apt-get update -q && {prefix}apt-get install"
-        f" -y -q {listed}\n"
+        "      - name: System packages\n"
+        "        run: sudo apt-get update -q && sudo apt-get install"
+        f" -y -q {' '.join(packages)}\n"
     )
 
 
@@ -487,7 +491,7 @@ def _actions_job(
     """
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
     first = runners[0]
-    pages = forge == "github" and job.deploy and answers.get("publish_seam") == "pages"
+    pages = forge == "github" and _seam(answers, point, job) == "pages"
     lines = [_comment(job.note, "  "), f"  {job.name}:\n"]
     conditions = []
     if job.always:
@@ -542,8 +546,7 @@ def _actions_job(
         lines.append(_setup_uv_step(answers))
     lines.append(_collect_step(job, forge=forge))
     lines.append(_rung_step(answers))
-    if job.docs_tools:
-        lines.append(_docs_requirements_step(answers))
+    lines.append(_installs_step(_installs(answers, point, job)))
     if forge == "github":
         lines.append(_store_cache_step())
         if job.conan_cache:
@@ -653,15 +656,16 @@ def _gitlab_job(
     One executor, one image: a ``legs`` matrix is one leg on the first
     runner's label and the first gate Python, so its rows key the same
     leg the union expects; a ``pythons`` or ``wheels`` matrix is one
-    job. The deploy is GitLab Pages' own: a job named ``pages``
-    publishing ``public/`` is the seam. A job that pushes, or writes
-    the store, rewrites origin with the push token first, since the
-    job token cannot push.
+    job. A job deploying through the ``pages`` seam is GitLab Pages'
+    own: a job named ``pages`` publishing ``public/``. A job that
+    pushes, or writes the store, rewrites origin with the push token
+    first, since the job token cannot push.
     """
-    tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
+    packages = " ".join(_installs(answers, point, job))
     first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
     stage = "release" if point.name in ("merge", "release") else "check"
-    name = "pages" if job.deploy else job.name
+    pages = _seam(answers, point, job) == "pages"
+    name = "pages" if pages else job.name
     lines = [
         _comment(job.note),
         f"{name}:\n",
@@ -701,8 +705,9 @@ def _gitlab_job(
             "${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/"
             '${CI_PROJECT_PATH}.git"\n'
         )
-    if job.docs_tools and tools:
-        lines.append(f"    - apt-get update -q && apt-get install -y -q {tools}\n")
+    if packages:
+        # Root in the container image: no sudo.
+        lines.append(f"    - apt-get update -q && apt-get install -y -q {packages}\n")
     lines.append("    - source setup.sh\n")
     driver = _driver_step(prog, point, job, forge="gitlab")
     if driver:
@@ -717,7 +722,7 @@ def _gitlab_job(
         python = str(next(iter(answers.get("python_versions", ["3.11"]))))
         call += f' --python="{python}"'
     lines.append(f"    - {call}\n")
-    if job.deploy:
+    if pages:
         lines.append("    - mv site public\n  artifacts:\n    paths: [public]\n")
     elif job.publishes:
         lines.append(
@@ -795,10 +800,10 @@ def generate(root: Path) -> dict[str, str]:
     from livery.workshop._provenance import generated_header
 
     prog = footman.prog()
-    facts = _facts(root)
+    everything = emitted_points(root)
+    facts = _facts(root, everything)
     kind = str(facts["forge_kind"])
     header = generated_header("#")
-    everything = emitted_points(root)
     if kind in ("github", "gitea"):
         # One file per workflow: the gate and the merge point share
         # ci.yml, the nightly, the release and every contributed point

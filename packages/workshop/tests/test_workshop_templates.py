@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs extension's: importing its task module
-# contributes them to the builtin points, as the mount does.
-import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop._identity import project_facts
 from livery.workshop._templates import (
     apply_project,
     project_drift,
 )
 from workshop_composed import IDENTITY, compose_into, seed_into
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]

@@ -13,15 +13,15 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs extension's: importing its task module
-# contributes them to the builtin points, as the mount does.
-import livery.extensions.docs._tasks  # noqa: F401
 import workshop_python_checks as fake_checks
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -396,7 +396,7 @@ def test_ci_run_spawns_the_jobs_entries(
     monkeypatch.setattr(footman, "run", green)
     _ci_tasks.ci_run(point="gate", job="docs")
     assert seen == [["fm", "--profile=fm-profile-docs-build.json", "docs.build"]]
-    assert "gate/docs: docs.build (livery.extensions.docs)" in capsys.readouterr().out
+    assert "gate/docs: docs.build (docs)" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="has no job 'nope'"):
         _ci_tasks.ci_run(point="gate", job="nope")
 

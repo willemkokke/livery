@@ -352,9 +352,9 @@ def assert_configuration(root: Path) -> None:
             f" serves several forges) and re-run"
             f" `{footman.prog()} workflow.configure`."
         )
-    from livery.workshop._docs_contract import publish_seam
+    from livery.workshop._points import job_seams
 
-    if publish_seam(root) == "pages" and forge.supports("pages_config"):
+    if "pages" in job_seams(root).values() and forge.supports("pages_config"):
         repo.ensure_pages(build_type="workflow")
         print("  pages hosting asserted (workflow build type)")
     for line in reconcile_schedules(repo, forge):

@@ -388,6 +388,43 @@ def test_an_option_registers_its_checks_and_fm_extensions_says_which_are_on(
     assert _checks.checks_by_name()["typecomplete.acme"].extension == "acme.tool"
 
 
+_BRANDED = """\
+[extension]
+plugin = "{package}"
+
+[checks.brand.lint]
+run = "{package}._checks:noop"
+
+[ci.jobs.gate.brand]
+entries = ["lint.brand"]
+gates = true
+"""
+
+
+def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restored_checks: None,
+) -> None:
+    # A branded App mounts its own extension's plugin before the mount
+    # runs: the mount leaves the plugin alone, and registers what the
+    # declaration adds as it does for any other extension.
+    from livery.footman import _paths
+    from livery.workshop._points import verdict_needs, withdraw_job
+
+    _fake_extensions(tmp_path, monkeypatch, brand=_BRANDED)
+    _contract(tmp_path, '["acme.brand"]')
+    monkeypatch.setattr(_paths, "_builtin", ("acme.brand",))
+    try:
+        _mount(tmp_path)
+        assert _checks.checks_by_name()["lint.brand"].extension == "acme.brand"
+        assert "brand" in verdict_needs("gate")
+    finally:
+        withdraw_job("gate", "brand")
+    assert "did not mount its plugin" not in capsys.readouterr().err
+
+
 def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

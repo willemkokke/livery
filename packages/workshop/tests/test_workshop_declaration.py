@@ -203,6 +203,44 @@ def test_a_slot_composes_by_a_rule_or_a_reference_that_resolves(
     assert (paths.compose, paths.values) == ("union", None)
 
 
+JOB = '[ci.jobs.gate.prose]\nentries = ["acme.prose"]\n'
+
+
+def test_a_job_joins_a_builtin_point_under_a_name_the_point_does_not_have(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, '[ci.jobs.weekly.prose]\nentries = ["acme"]\n') == (
+        f"{where}: ci.jobs.weekly.prose names the point 'weekly', which is not"
+        " builtin; a job joins one of gate, merge, nightly, release"
+    )
+    assert _refusal(package, "[ci.jobs.gate.check]\n") == (
+        f"{where}: ci.jobs.gate.check names a job the gate point declares already"
+    )
+
+
+def test_an_unknown_key_or_a_grant_in_a_job_table_refuses_naming_the_file(
+    package: Path,
+) -> None:
+    where = str(package / "extension.toml")
+    unknown = _refusal(package, JOB + "writes = true\n")
+    assert unknown.startswith(where) and "has no key 'writes'" in unknown
+    secret = _refusal(package, JOB + 'token = "secret"\n')
+    assert secret.startswith(where)
+    assert "ci.jobs.gate.prose.token is 'secret'; it takes one of job" in secret
+
+
+def test_a_jobs_functions_resolve_against_the_extensions_sources(
+    package: Path,
+) -> None:
+    assert "names gone, which acme_declared._checks does not define" in _refusal(
+        package, JOB + 'installs = "acme_declared._checks:gone"\n'
+    )
+    assert "outside the extension's package acme_declared" in _refusal(
+        package, JOB + 'deploy = "elsewhere._seams:pages"\n'
+    )
+
+
 def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> None:
     where = package / "extension.toml"
     assert _refusal(
@@ -281,6 +319,41 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
     assert found.targets["docs"].contributions == (("docs.theme", "acme"),)
 
 
+def test_a_job_reads_into_a_contribution_named_for_the_extension(
+    package: Path,
+) -> None:
+    found = _declare(
+        package,
+        '[ci.jobs.merge.book]\nentries = ["acme.book.build", "acme.book.publish"]\n'
+        'needs = ["gate"]\nfetch = "tags"\ntoken = "job"\n'
+        'installs = "acme_declared._checks:judge"\n'
+        'deploy = "acme_declared._checks:mend"\nnote = "The book."\n'
+        '[for.other.ci.jobs.gate.prose]\nentries = ["acme.prose"]\ngates = true\n',
+    )
+    (book,) = found.additions.jobs
+    assert (book.point, book.job.name, book.gates, book.extension) == (
+        "merge",
+        "book",
+        False,
+        "acme",
+    )
+    assert (book.job.needs, book.job.fetch, book.job.token, book.job.note) == (
+        ("gate",),
+        "tags",
+        "job",
+        "The book.",
+    )
+    assert str(book.job.installs) == "acme_declared._checks:judge"
+    assert str(book.job.deploy) == "acme_declared._checks:mend"
+    assert [(e.point, e.job, e.task, e.source) for e in book.entries] == [
+        ("merge", "book", "acme.book.build", "acme"),
+        ("merge", "book", "acme.book.publish", "acme"),
+    ]
+    (prose,) = found.targets["other"].jobs
+    assert (prose.point, prose.job.name, prose.gates) == ("gate", "prose", True)
+    assert (prose.job.installs, prose.job.deploy) == (None, None)
+
+
 def test_a_reference_imports_when_it_runs(package: Path) -> None:
     found = _declare(package, CHECK)
     (record,) = found.additions.checks
@@ -319,3 +392,27 @@ def test_declared_checks_register_under_the_listed_name(package: Path) -> None:
         assert register_declared("acme.listed", Additions()) is False
     finally:
         _checks.restore(state)
+
+
+def test_declared_jobs_join_their_points_under_the_listed_name(package: Path) -> None:
+    from livery.workshop._extensions import register_declared
+    from livery.workshop._points import (
+        Entry,
+        builtin_schedule,
+        point_by_name,
+        verdict_needs,
+        withdraw_job,
+    )
+
+    found = _declare(package, JOB + "gates = true\n")
+    try:
+        assert register_declared("acme.listed", found.additions) is False
+        names = [job.name for job in point_by_name(None)["gate"].jobs]
+        assert names.index("prose") == names.index("gate") - 1
+        assert "prose" in verdict_needs("gate")
+        assert (
+            Entry("gate", "prose", "acme.prose", source="acme.listed")
+            in builtin_schedule()
+        )
+    finally:
+        withdraw_job("gate", "prose")

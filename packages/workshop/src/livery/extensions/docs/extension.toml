@@ -1,5 +1,5 @@
-# The docs extension: the site, its pages and its checks. Read at every
-# mount; its verbs arrive through its plugin.
+# The docs extension: the site, its pages, its checks and its CI jobs.
+# Read at every mount; its verbs arrive through its plugin.
 
 [extension]
 api-version = 1
@@ -8,7 +8,7 @@ levels = ["workspace"]
 # The footman plugin that carries the site's verbs.
 plugin = "livery.extensions.docs"
 
-# The site's title and description.
+# The site's title, its description, and where it publishes.
 [contract.root.docs.title]
 types = ["str"]
 doc = "the site's title; the project's name when absent"
@@ -16,6 +16,21 @@ doc = "the site's title; the project's name when absent"
 [contract.root.docs.description]
 types = ["str"]
 doc = "the site's one-line description"
+
+[contract.root.docs.publish]
+types = ["str"]
+values = ["pages", "container", "ssh", "none"]
+doc = "where the site publishes; the forge's default when absent: pages on GitHub and GitLab, a container on Gitea"
+
+# The verbs that write a package's pages before the site builds.
+[contract.package.docs.generators]
+types = ["list"]
+doc = "the verbs that write the package's pages: a verb's name, or a table with the system packages it needs"
+
+[contract.package.docs."generators[]"]
+types = ["str", "table"]
+verb = { types = ["str"], doc = "the verb, a task the package ships" }
+requires = { types = ["strs"], doc = "the system packages the verb needs on a docs machine" }
 
 # A package's pages beyond the generated ones.
 [contract.package.docs.coverage]
@@ -61,6 +76,29 @@ inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = tr
 [checks.docstrings.lint]
 run = "livery.extensions.docs._checks:docstrings_run"
 narrowing = "packages"
+
+# The strict site build: the gate point's verdict waits for it.
+[ci.jobs.gate.docs]
+entries = ["docs.build"]
+gates = true
+installs = "livery.extensions.docs._contract:docs_requirements"
+note = """\
+The strict site build: broken links and orphan pages go red here, \
+required through the gate context, never inside the local check."""
+
+# The site's deploy, on the merge point: the build, then the publish
+# through the seam the root contract names.
+[ci.jobs.merge.deploy]
+entries = ["docs.build", "docs.publish"]
+needs = ["gate"]
+fetch = "tags"
+token = "job"
+installs = "livery.extensions.docs._contract:docs_requirements"
+deploy = "livery.extensions.docs._contract:publish_seam"
+note = """\
+The site's deploy through the contract's seam, on the push alone. The \
+release view reads the receipt tags; a shallow tagless clone renders \
+its no-tags fallback page instead."""
 
 # The private-members policy the API reference renders: the nearest
 # contract that sets one wins.

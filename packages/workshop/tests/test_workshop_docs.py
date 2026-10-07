@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs extension's: importing its task module
-# contributes them to the builtin points, as the mount does.
 from livery.extensions.docs._site import (
     MEMBERS_SLOT,
     THEME_SLOT,
@@ -26,7 +24,7 @@ from livery.workshop._docs_contract import (
 )
 from livery.workshop._navblocks import NAV_BEGIN, NAV_END
 from livery.workshop._packages import discover_packages
-from workshop_docs_declared import docs_slots  # noqa: F401
+from workshop_docs_declared import docs_jobs, docs_slots  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -487,7 +485,7 @@ def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
 
 
 def test_the_seam_defaults_by_forge_kind(tmp_path: Path) -> None:
-    from livery.workshop._docs_contract import publish_seam
+    from livery.extensions.docs._contract import publish_seam
 
     root = _workspace(tmp_path)
     # No [forge] table at all: nothing to publish to.
@@ -506,12 +504,12 @@ def test_the_seam_defaults_by_forge_kind(tmp_path: Path) -> None:
 def test_a_declared_seam_wins_and_garbage_refuses(tmp_path: Path) -> None:
     import pytest
 
-    from livery.workshop._docs_contract import publish_seam
+    from livery.extensions.docs._contract import publish_seam
 
     root = _workspace(tmp_path, docs_table='[docs]\npublish = "ssh"\n')
     assert publish_seam(root) == "ssh"
     (root / "workshop.toml").write_text(
-        '[workspace]\n[docs]\npublish = "carrier-pigeon"\n'
+        '[workspace]\nextensions = ["docs"]\n[docs]\npublish = "carrier-pigeon"\n'
     )
     with pytest.raises(
         BaseException, match=r"docs\.publish is 'carrier-pigeon'; it takes one of pages"
@@ -551,7 +549,7 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
     assert "fm ci.run --point=merge --job=deploy" in deploy
     assert "deploy-pages" in deploy and "github-pages" in deploy
     (root / "workshop.toml").write_text(
-        '[workspace]\n[docs]\npublish = "none"\n'
+        '[workspace]\nextensions = ["docs"]\n[docs]\npublish = "none"\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
@@ -856,7 +854,7 @@ def _package(root: Path, name: str):
 def test_a_broken_generator_declaration_refuses(tmp_path: Path) -> None:
     import pytest
 
-    from livery.workshop._docs_contract import package_generators
+    from livery.extensions.docs._contract import package_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = "not-a-list"\n')
@@ -871,7 +869,7 @@ def test_a_broken_generator_declaration_refuses(tmp_path: Path) -> None:
 
 
 def test_no_declaration_means_no_generators(tmp_path: Path) -> None:
-    from livery.workshop._docs_contract import docs_requirements, package_generators
+    from livery.extensions.docs._contract import docs_requirements, package_generators
 
     root = _workspace(tmp_path)
     assert package_generators(_package(root, "core")) == []
@@ -879,7 +877,7 @@ def test_no_declaration_means_no_generators(tmp_path: Path) -> None:
 
 
 def test_declarations_parse_and_requirements_union(tmp_path: Path) -> None:
-    from livery.workshop._docs_contract import docs_requirements, package_generators
+    from livery.extensions.docs._contract import docs_requirements, package_generators
 
     root = _workspace(tmp_path)
     _declare_generators(
@@ -967,7 +965,7 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
         for content in generate(root).values():
-            assert "Docs system requirements" not in content
+            assert "System packages" not in content
             assert "apt-get install" not in content
     _declare_generators(
         root, "core", 'generators = [{ verb = "docsgen.casts", requires = ["zsh"] }]\n'
@@ -983,7 +981,7 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
     check_job = gate.split("  docs:")[0]
     assert "apt-get" not in check_job
     (root / "workshop.toml").write_text(
-        '[workspace]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
+        '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
     )
     pipeline = generate(root)[".gitlab-ci.yml"]
     # Root in the container image: no sudo.

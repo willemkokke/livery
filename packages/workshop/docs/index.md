@@ -213,20 +213,25 @@ checks pass the same clauses in its test suite.
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
 table naming `livery-workshop` as its distribution. It owns the site's
-assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots
-and the staged extension css, and it arrives through its own task entry
-point. The base keeps what it reads of a package's docs for its own
-reasons (the `[docs]` table and its generators, the layout of the
-`docs/` tree, the publish seam, the categories the site reads) and
-the nav blocks generators write; it imports no extension, which the
-layering check enforces. It lives under `livery.extensions`, a
-namespace any distribution can add an extension to.
-The site's two CI jobs come with the extension: at mount it contributes
-the gate point's `docs` job, which the verdict waits for, and the
-merge point's `deploy` job, each with the entries it runs, through
-`contribute_job` in `livery.workshop._points`; a workspace that does
-not list the extension renders neither job. A contributed job sits before
-the point's verdict job, or last on a point without one. The extension
+assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots,
+the staged extension css, the generators a package declares and the
+seam the site publishes through, and it arrives through its own task
+entry point. The base keeps what it reads of a package's docs for its
+own reasons (the `[docs]` table, the layout of the `docs/` tree, the
+categories the site reads) and the nav blocks generators write; it
+imports no extension, which the layering check enforces. It lives under
+`livery.extensions`, a namespace any distribution can add an extension
+to.
+The site's two CI jobs come with the extension: its `extension.toml`
+declares the gate point's `docs` job, which the verdict waits for, and
+the merge point's `deploy` job, as `[ci.jobs.gate.docs]` and
+`[ci.jobs.merge.deploy]`, each with the tasks it runs; a workspace that
+does not list the extension renders neither job. Each job names the
+function that lists the system packages it installs, and the deploy
+names the function that answers its publish seam, so the CI render
+installs and deploys without reading the `[docs]` table. A contributed
+job sits before the point's verdict job, or last on a point without
+one. The extension
 renders the site's development section from the prose fragments
 the mounted extensions ship for a human reader, one page per section
 under `development/`, and renders each kind's API extractor from its
