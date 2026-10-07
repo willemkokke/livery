@@ -796,7 +796,7 @@ def test_a_disarmed_behind_pr_teaches_integrate(
 
 
 def test_the_reconcile_spawns_the_runner_by_a_module_that_resolves(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib.util
     from types import SimpleNamespace
@@ -804,6 +804,10 @@ def test_the_reconcile_spawns_the_runner_by_a_module_that_resolves(
     import livery.footman as footman
     from livery.workshop import _workflow_tasks
 
+    # The spawn runs at the workspace root, so the test brings one: the
+    # wheel's isolated release leg runs the suite outside any workspace.
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    monkeypatch.chdir(tmp_path)
     spawned: list[list[str]] = []
 
     def _run(argv: list[str], **_: object) -> SimpleNamespace:
