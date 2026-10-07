@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from itertools import islice
 from typing import Any
 from urllib.parse import quote
 
@@ -556,18 +557,15 @@ class _GiteaRepository:
             else:
                 self._client.request(f"{self._base}/labels", method="POST", data=body)
 
-    def tags(self) -> tuple[str, ...]:
-        """Every tag name, complete or raising."""
-        tags = self._client.paginate(
-            lambda page: (
-                self._client.request(
-                    f"{self._base}/tags?page={page}&limit=50", none_on=(404,)
-                )
-                or []
-            ),
-            subject=f"{self._base}/tags",
-        )
-        return tuple(str(tag["name"]) for tag in tags)
+    def tags(self, prefix: str = "") -> tuple[str, ...]:
+        """Every tag name, or every one starting with *prefix*, in one request.
+
+        Gitea lists the refs under a prefix whole, unpaged, and answers
+        404 when none matches.
+        """
+        path = f"{self._base}/git/refs/tags" + (f"/{quote(prefix)}" if prefix else "")
+        refs = self._client.request(path, none_on=(404,)) or []
+        return tuple(str(ref["ref"]).removeprefix("refs/tags/") for ref in refs)
 
     def branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists."""
@@ -683,16 +681,17 @@ class _GiteaPullRequests:
         )
         return _as_pull_request(data)
 
-    def _scan(self, state: StateFilter) -> list[dict[str, Any]]:
-        """Every pull request in *state*, complete or raising.
+    def _scan(self, state: StateFilter) -> Iterator[dict[str, Any]]:
+        """The pull requests in *state*, fetched as they are read.
 
         The listing is scanned client-side because Gitea's server-side
         ``head=`` filter has been observed returning every open pull
         request when the branch name carries a ``/``; matching here
         makes the answer correct whether or not the server honours the
-        filter.
+        filter. A caller stops at its first match, so the pages after
+        it are never fetched.
         """
-        return self._client.paginate(
+        return self._client.pages(
             lambda page: (
                 self._client.request(
                     f"{self._base}/pulls?state={state}&page={page}&limit=50"
@@ -915,21 +914,44 @@ class _GiteaChecks:
             contexts=len(statuses),
         )
 
-    def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
-        """The repository's Actions runs, newest first."""
+    def runs(
+        self,
+        *,
+        head_sha: str = "",
+        event: str = "",
+        workflow: str = "",
+        limit: int = 0,
+    ) -> tuple[Run, ...]:
+        """The repository's Actions runs, newest first.
+
+        A *workflow* is asked of its own listing, and a *limit* stops the
+        walk once the newest runs are read.
+        """
         query = "".join(
             f"&{key}={quote(value)}"
             for key, value in (("head_sha", head_sha), ("event", event))
             if value
         )
-        raw = self._client.paginate(
-            lambda page: (
-                self._client.request(
-                    f"{self._base}/actions/runs?page={page}&limit=50{query}"
-                ).get("workflow_runs")
-                or []
+        listing = (
+            f"{self._base}/actions/workflows/{quote(workflow)}/runs"
+            if workflow
+            else f"{self._base}/actions/runs"
+        )
+        raw = islice(
+            self._client.pages(
+                lambda page: (
+                    (
+                        self._client.request(
+                            f"{listing}?page={page}&limit=50{query}",
+                            none_on=(404,) if workflow else (),
+                        )
+                        or {}
+                    ).get("workflow_runs")
+                    or []
+                ),
+                subject=listing,
             ),
-            subject=f"{self._base}/actions/runs",
+            limit or None,
         )
         runs = []
         for entry in raw:

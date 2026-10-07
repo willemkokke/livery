@@ -27,9 +27,14 @@ cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
   endpoints. The backend keeps the protocol's separation: listings
   pass `type=issues`, and `issue.get` on a number that names a pull
   request answers None.
-- `pr.find_by_head` scans the listing client-side: Gitea's
-  server-side `head=` filter has been observed returning every open
-  pull request when the branch name carries a `/`.
+- `pr.find_by_head` and `pr.find_by_head_sha` read the listing
+  newest first and stop at the first match. Gitea's pull request list
+  has no head filter, so an unknown `head=` is ignored and every pull
+  request comes back. `GET /repos/:owner/:repo/commits/:sha/pull`
+  finds a pull request by its merge commit only, never by its head.
+- `tags(prefix)` reads `GET /repos/:owner/:repo/git/refs/tags/:prefix`,
+  one unpaged answer; no tag under the prefix answers 404. `runs`
+  with a workflow reads that workflow's own listing.
 - `pr.is_armed` walks the issue timeline, the one read-only source of
   the schedule; a `close` or `merge_pull` event clears the armed
   state whether or not a cancel event was emitted.

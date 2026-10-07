@@ -27,7 +27,7 @@ import os
 import re
 import time
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ParamSpec
@@ -1072,23 +1072,41 @@ def submit_default(
     reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
     git = GitOps(root)
     base = resolve_base(git, base, given=footman.given("base"))
-    submit_flow(
-        repo,
-        git,
-        title=title,
-        body=body,
-        base=base,
-        closes=closes,
-        close=close,
-        armed=armed,
-        armed_reason=reason,
-        gate=gate,
-        force=force,
-        fix=fix,
-        follow_to_verdict=follow,
-        interval=interval,
-        timeout=timeout,
-    )
+    with forge_failures_named():
+        submit_flow(
+            repo,
+            git,
+            title=title,
+            body=body,
+            base=base,
+            closes=closes,
+            close=close,
+            armed=armed,
+            armed_reason=reason,
+            gate=gate,
+            force=force,
+            fix=fix,
+            follow_to_verdict=follow,
+            interval=interval,
+            timeout=timeout,
+        )
+
+
+@contextlib.contextmanager
+def forge_failures_named() -> Generator[None]:
+    """Fail with the forge's own words when it refuses or does not answer.
+
+    A submit is safe to run again, so a read that timed out or a write
+    the forge refused ends the run with the forge's message and that
+    advice, not a traceback.
+    """
+    try:
+        yield
+    except ForgeError as error:
+        fail(
+            f"{error}\n  `{footman.prog()} submit` is safe to run again: it"
+            " starts from what the forge already has"
+        )
 
 
 def worktree_for(git: GitOps, root: Path, branch: str) -> str:

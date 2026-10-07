@@ -740,10 +740,10 @@ class _FakeRepository:
             for label in config.labels:
                 state.labels[label.name] = label
 
-    def tags(self) -> tuple[str, ...]:
-        """Every tag name, in creation order."""
+    def tags(self, prefix: str = "") -> tuple[str, ...]:
+        """Every tag name starting with *prefix*, in creation order."""
         state = self._fake._require_repo(self._owner, self._name)
-        return tuple(state.tags)
+        return tuple(tag for tag in state.tags if tag.startswith(prefix))
 
     def branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists."""
@@ -1009,8 +1009,15 @@ class _FakeChecks:
             return CombinedStatus(state="none", contexts=0)
         return self._fake._derived_status(state, sha)
 
-    def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
-        """The repository's runs, newest first."""
+    def runs(
+        self,
+        *,
+        head_sha: str = "",
+        event: str = "",
+        workflow: str = "",
+        limit: int = 0,
+    ) -> tuple[Run, ...]:
+        """The repository's runs, newest first; the newest *limit* when given."""
         state = self._state()
         self._fake.faults.drop(f"/repos/{self._owner}/{self._name}/actions/runs")
         selected = [
@@ -1018,8 +1025,11 @@ class _FakeChecks:
             for run in state.runs.values()
             if (not head_sha or run.head_sha == head_sha)
             and (not event or run.event == event)
+            and (not workflow or run.workflow.rsplit("/", 1)[-1] == workflow)
         ]
         selected.sort(key=lambda run: run.id, reverse=True)
+        if limit:
+            selected = selected[:limit]
         return tuple(
             Run(
                 id=run.id,

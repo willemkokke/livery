@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from forge_gitlab_driver import GitlabConformanceDriver
+from forge_rig import rig_credentials
 from livery.forge import Unsupported
 from livery.forge.testing import (
     SCENARIOS,
@@ -21,7 +22,6 @@ from livery.forge.testing import (
     RecordingOpener,
     ReplayOpener,
     Scenario,
-    shared_env_path,
 )
 
 CASSETTES = Path(__file__).parent / "cassettes" / "gitlab"
@@ -30,26 +30,6 @@ RECORD = os.environ.get("FORGE_RECORD") == "1"
 LIVE = RECORD or os.environ.get("FORGE_LIVE") == "1"
 
 REPLAY_TOKEN = "replay-token"
-
-
-def _dev_env() -> dict[str, str]:
-    """Container credentials: the live environment, then the shared file.
-
-    Under `fm` the cascade already exported them; a bare pytest run
-    reads the shared env file the containers were seeded into.
-    """
-    pairs = {
-        key: os.environ[key]
-        for key in ("GITEA_URL", "GITEA_TOKEN", "GITLAB_URL", "GITLAB_TOKEN")
-        if os.environ.get(key)
-    }
-    shared = shared_env_path()
-    if shared.is_file():
-        for line in shared.read_text().splitlines():
-            if "=" in line and not line.startswith("#"):
-                key, _, value = line.partition("=")
-                pairs.setdefault(key.strip(), value.strip())
-    return pairs
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[s.name for s in SCENARIOS])
@@ -61,7 +41,7 @@ def test_gitlab_conformance(scenario: Scenario) -> None:
 
 
 def _run_live(scenario: Scenario) -> None:
-    env = _dev_env()
+    env = rig_credentials()
     if "GITLAB_TOKEN" not in env:
         pytest.skip("no GitLab credentials: run `fm forge.dev.up` first")
     cassette = Cassette()

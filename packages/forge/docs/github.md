@@ -52,6 +52,12 @@ answers for the running install.
   miss what was just created is not a probe. Issue listings
   themselves run several seconds behind writes, which is the
   conformance driver's `await_issue` bound.
+- Lookups ask the narrowest query GitHub has: `pr.find_by_head` sends
+  `head=<owner>:<branch>`, `pr.find_by_head_sha` asks the commit
+  (`GET /repos/:owner/:repo/commits/:sha/pulls`), `tags(prefix)` reads
+  `git/matching-refs/tags/<prefix>`, which answers whole and unpaged,
+  and `runs` with a workflow reads that workflow's own listing. Each
+  answer is matched again client-side.
 - `mergeable` is computed asynchronously after a pull request opens;
   merging inside that window is refused and callers retry.
 - Branch protection is one whole-rule PUT: the pieces the caller did

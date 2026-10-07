@@ -154,10 +154,10 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
     sha = _head_sha(repo, git)
     on_main = git.current_branch() == "main"
     newest: dict[str, Run] = {}
-    # Newest first; the scan is capped so a repository with a long
-    # run history stays cheap. A run on a sha this clone does not
+    # The newest hundred, asked of the forge so a repository with a
+    # long run history stays cheap. A run on a sha this clone does not
     # contain belongs to another branch and is skipped.
-    for run in repo.checks.runs()[:100]:
+    for run in repo.checks.runs(limit=100):
         if run.workflow in newest:
             continue
         if run.head_sha == sha or git.is_ancestor(run.head_sha, "HEAD"):
@@ -314,16 +314,27 @@ def cancel_superseded_runs(repo: Repository, sha: str) -> list[str]:
     return lines
 
 
-def point_runs(
-    repo: Repository, point: str, root: Path | None = None
-) -> tuple[Run, ...]:
-    """The runs of *point*'s workflow, newest first, whatever commit they checked.
+#: How many of a workflow's newest runs a follow or a dispatch reads. A
+#: run that started since the last read is among them, however long the
+#: history behind them is.
+RECENT_RUNS = 20
 
-    Read by the point's events so the listing stays short on a forge
-    with a long history, then kept by the workflow's file name
-    (GitHub lists the path, Gitea the file; the basename is the
-    comparison). A forge that names no workflow on a run (GitLab)
-    answers by event alone.
+
+def point_runs(
+    repo: Repository,
+    point: str,
+    root: Path | None = None,
+    *,
+    limit: int = RECENT_RUNS,
+) -> tuple[Run, ...]:
+    """The newest *limit* runs of *point*'s workflow, whatever commit they checked.
+
+    Newest first. Asked of the workflow's own listing for each of the
+    point's events, so a forge with a long history answers with one
+    page. The workflow's file name is compared here as well (GitHub
+    lists the path, Gitea the file; the basename is the comparison). A
+    forge that names no workflow on a run (GitLab) answers by event
+    alone.
     """
     from livery.workshop._points import events_of, workflow_of
 
@@ -331,10 +342,11 @@ def point_runs(
     workflow = workflow_of(point, root)
     found: dict[int, Run] = {}
     for event in events_of(root, point):
-        for run in repo.checks.runs(event=event):
+        for run in repo.checks.runs(event=event, workflow=workflow, limit=limit):
             if not run.workflow or run.workflow.rsplit("/", 1)[-1] == workflow:
                 found[run.id] = run
-    return tuple(sorted(found.values(), key=lambda run: run.id, reverse=True))
+    newest = sorted(found.values(), key=lambda run: run.id, reverse=True)
+    return tuple(newest[:limit] if limit else newest)
 
 
 def _run_line(run: Run) -> str:
@@ -565,7 +577,7 @@ def runs_status_flow(
     while True:
         try:
             if point:
-                runs = point_runs(repo, point)[:1]
+                runs = point_runs(repo, point, limit=1)
             else:
                 runs = repo.checks.runs(head_sha=sha)
         except RateLimited as exc:
@@ -665,7 +677,7 @@ def logs_flow(
     of that point's workflow.
     """
     if point:
-        runs = point_runs(repo, point)[:1]
+        runs = point_runs(repo, point, limit=1)
         subject = f"the {point} point"
     else:
         sha = _head_sha(repo, git)

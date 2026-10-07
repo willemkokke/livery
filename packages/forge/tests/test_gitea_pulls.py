@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 from livery.forge._gitea import _GiteaPullRequests
@@ -20,6 +21,9 @@ class _Client:
 
     def paginate(self, fetch: Any, *, subject: str) -> list[Any]:
         return list(fetch(1))
+
+    def pages(self, fetch: Any, *, subject: str) -> Iterator[Any]:
+        yield from fetch(1)
 
 
 def _pull(number: int, ref: str, label: str, *, merged: bool) -> dict[str, Any]:

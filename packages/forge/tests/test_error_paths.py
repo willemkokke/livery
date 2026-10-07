@@ -120,6 +120,18 @@ def test_the_page_cap_raises_rather_than_truncating() -> None:
     with pytest.raises(ForgeError, match="truncated"):
         client.paginate(lambda page: [0] * PAGE_SIZE, subject="an endless listing")
     assert PAGE_CAP * PAGE_SIZE  # the cap is a positive bound
+    # The lazy walk raises at the same bound, and only when read past it.
+    with pytest.raises(ForgeError, match="truncated"):
+        list(client.pages(lambda page: [0] * PAGE_SIZE, subject="an endless listing"))
+    fetched: list[int] = []
+
+    def endless(page: int) -> list[int]:
+        fetched.append(page)
+        return [page] * PAGE_SIZE
+
+    walk = client.pages(endless, subject="an endless listing")
+    assert next(item for item in walk if item == 2) == 2
+    assert fetched == [1, 2]
 
 
 def test_a_streaming_request_body_is_refused() -> None:
