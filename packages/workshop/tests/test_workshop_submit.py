@@ -2116,6 +2116,9 @@ def test_a_refused_arm_on_a_running_pull_request_follows_ci_and_merges_when_gree
     number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
     out = capsys.readouterr().out
     assert "CI is still running, so the submit follows it" in out
+    # Merged here, so the submit says merged, never armed.
+    assert f"  merged: PR #{number}" in out
+    assert "armed: PR" not in out
     pr = repo.pr.get(number)
     assert pr is not None and pr.merged
 
@@ -2147,6 +2150,8 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
     number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
     out = capsys.readouterr().out
     assert "arming refused" in out and "merged now" in out
+    assert f"  merged: PR #{number}" in out
+    assert "armed: PR" not in out
     pr = repo.pr.get(number)
     assert pr is not None and pr.merged
 

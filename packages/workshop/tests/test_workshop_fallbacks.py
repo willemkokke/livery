@@ -113,6 +113,24 @@ def test_arm_retries_exhaust_with_the_forges_words(
     assert "lost the auto-merge schedule" in str(caught.value)
 
 
+def test_an_arm_says_whether_it_merged_or_waits_for_green() -> None:
+    # The submit reports a merge that already happened as merged, and
+    # an arm still waiting for its checks as armed.
+    fake = FakeForge()
+    fake.create_repo(OWNER, NAME, private=True, description="t")
+    repo = fake.repository(OWNER, NAME)
+    fake.push(OWNER, NAME, "feat/x")
+    waiting = repo.pr.open("feat/x", "main", "feat: x")
+    assert _arm_verified(repo, waiting.number, title="feat: x", message="") is False
+    assert repo.pr.is_armed(waiting.number)
+    green = fake.push(OWNER, NAME, "feat/y")
+    fake.settle(OWNER, NAME, green)
+    done = repo.pr.open("feat/y", "main", "feat: y")
+    assert _arm_verified(repo, done.number, title="feat: y", message="") is True
+    merged = repo.pr.get(done.number)
+    assert merged is not None and merged.merged
+
+
 def test_the_clean_heal_reships_and_lands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

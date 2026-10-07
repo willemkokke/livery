@@ -471,12 +471,16 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> int | None
 
 def _arm_verified(
     repo: Repository, number: int, *, title: str, message: str, kind: str = ""
-) -> None:
+) -> bool:
     """Arm and read back, retrying a silently lost schedule.
 
     Each arm attempt follows the merge holds first (the arm shares
     the merge endpoint): the two quirks are separate, so each keeps
     its own loop.
+
+    Returns:
+        Whether the pull request merged before this returned, rather
+        than waiting armed for its checks.
     """
     for attempt in range(1, _ARM_RETRIES + 1):
         try:
@@ -521,14 +525,14 @@ def _arm_verified(
                 title=title,
                 message=message,
             )
-            return
+            return True
         pr = repo.pr.get(number)
         if pr is not None and pr.merged:
-            return  # the arm found green checks and merged on the spot
+            return True  # the arm found green checks and merged on the spot
         if repo.pr.is_armed(number):
             if attempt > 1:
                 print(f"  armed on attempt {attempt} (the forge lost a schedule)")
-            return
+            return False
     fail(
         f"PR #{number}: the forge lost the auto-merge schedule"
         f" {_ARM_RETRIES} times; arm it by hand or re-run"
@@ -762,14 +766,18 @@ def push_and_pr(
             repo.pr.update_body(pr.number, body)
             print("  body updated")
     if armed:
-        _arm_verified(
+        merged = _arm_verified(
             repo,
             pr.number,
             title=_merge_title(repo, plan),
             message=body,
             kind=_contract_forge_kind(git.root),
         )
-        print(f"  armed: PR #{pr.number} merges when green")
+        print(
+            f"  merged: PR #{pr.number}"
+            if merged
+            else f"  armed: PR #{pr.number} merges when green"
+        )
     return pr.number
 
 

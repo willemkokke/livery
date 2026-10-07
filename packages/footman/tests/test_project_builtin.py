@@ -142,6 +142,34 @@ def test_builtin_exclude_names_the_exclusion(providers: Path) -> None:
     assert "builtin-exclude must be a list" in bad.stderr
 
 
+def test_a_provider_moved_after_the_scan_still_offers_its_builtins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A sync in another process re-installs an editable provider at a
+    # new version, which moves its dist-info. The scan named the
+    # distribution when it read it, so the project still mounts it.
+    from livery.footman import _config, _entries
+
+    site = tmp_path / "site"
+    installed = site / "acme_moved-1.0.dist-info"
+    installed.mkdir(parents=True)
+    (installed / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: acme-moved\nVersion: 1.0\n", encoding="utf-8"
+    )
+    (installed / "entry_points.txt").write_text(
+        "[footman.builtin]\nacme_moved = acme_moved\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(site))
+    monkeypatch.setattr(_entries, "_SCAN", None)
+    monkeypatch.setattr(_entries, "_OFFERED_BY", {})
+    project = _project(
+        tmp_path, '[project]\nname = "x"\ndependencies = ["acme-moved"]\n'
+    )
+    assert _config.project_builtin(project) == ("acme_moved",)
+    installed.rename(site / "acme_moved-2.0.dist-info")
+    assert _config.project_builtin(project) == ("acme_moved",)
+
+
 # Then the rung itself.
 
 
