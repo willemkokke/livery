@@ -9,6 +9,32 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.2.0] - 2026-10-07
+
+### Added
+
+- Examples are files: a package's examples live under docs/examples/ as python files a page includes by snippet, and one harness runs each through the kind's runner, replacing footman's page-as-session harness and its three markers by @willemkokke
+- The docs layer: the site's assembly, verbs and slots move to livery.workshop.layers.docs, the base keeps the docs contract, the nav blocks and a registry of layer-rendered files, and the layers namespace spans distributions by @willemkokke
+- Every distribution root is a namespace whose public names live in its api module, and the docs layer moves to livery.extensions.docs by @willemkokke
+- Extensions replace layers: each declares itself in the workshop.extensions entry point group, and a workspace lists them by name in [workspace] extensions by @willemkokke
+- Plugins mount through the project builtin rung: the workshop mounts the listed extensions from its own entry module, and the rendered tasks.py keeps only its comment by @willemkokke
+- Clang-format and clang-tidy install from PyPI, the ssciwr wheels of LLVM's own binaries, on every host but windows-arm by @willemkokke
+- Git LFS is a workspace setting: extensions ship LFS rules, composed while [workspace] lfs is on and named while it is off, with a git_lfs record, its hooks and LFS checkouts in CI by @willemkokke
+- The copier answers move into workshop.toml: identity in [workspace], members from discovery with their own description, dev-extras and template, and the answers files go by @willemkokke
+- Tasks.py and each package's cliff.toml are composed by the fragment engine, so copier only births by @willemkokke
+- Ruff runs as its own extension, a birth finishes in the newborn's own fm, and the local loop tests an extension before its release by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- Tools.artifacts refuses a record that does not load in one line naming the file, and the layout refusal says to list the host first by @willemkokke
+- The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
+
+### Changed
+
+- A verb that reaches no forge and no tool store loads neither: the forge, store and strongroom roots serve their names on first use, and the workshop and the bench import the store where they use it by @willemkokke
+- Footman's internal modules are private, every public module under a root is its api or declared there, and other packages' sources reach footman through its api by @willemkokke
+
 ## [0.1.0] - 2026-09-29
 
 ### Added
