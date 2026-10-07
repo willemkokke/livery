@@ -21,15 +21,25 @@ BY_ID = 7
 
 
 def _recommended() -> list[str]:
-    """The editor ids the installed extensions' checks recommend, sorted."""
-    return sorted(
-        {
-            record.editor_extension
-            for entry in entry_points(group="workshop.extensions")
-            for record in getattr(entry.load(), "CHECKS", ())
-            if record.editor_extension
-        }
-    )
+    """The editor ids the installed extensions' checks recommend, sorted.
+
+    Read from each extension's declaration, its own checks and those it
+    adds to a target alike, without importing the extension.
+    """
+    from livery.workshop._declaration import read
+
+    found: set[str] = set()
+    for entry in entry_points(group="workshop.extensions"):
+        declared = read(entry.name, entry.value)
+        if declared is None:
+            continue
+        for additions in (declared.additions, *declared.targets.values()):
+            found.update(
+                check.editor_extension
+                for check in additions.checks
+                if check.editor_extension
+            )
+    return sorted(found)
 
 
 def _published(extension: str) -> bool:
