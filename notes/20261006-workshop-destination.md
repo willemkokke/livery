@@ -125,7 +125,9 @@ on.
     composes the workspace's effective schema into JSON Schema under
     `.workshop/schema/`, and the judge, the editor and the contract
     reference pages read that one file. The judge keeps the rules a
-    schema cannot say.
+    schema cannot say. A table's owner may be a dependency of the
+    base, not only an extension: `[toolroom]` is toolroom's, and its
+    schema fragment ships in `livery-toolroom-store`.
 33. **A check whose verdict is its tool's exit code is words, not
     code.** `judge`, `fix`, `safe-fix`, `env`, `matrix` and the
     placeholders the engine answers; `run` only where the words cannot
@@ -316,8 +318,9 @@ mount naming the file and the key. Every key is optional.
 
 The two files share their conventions, so a reader of one reads the
 other: kebab-case keys; an identity table named after the thing,
-`[workspace]` there and `[extension]` here; tools under `[tools]
-requires` in the one requirement grammar; an address as a table path,
+`[workspace]` there and `[extension]` here; tools under `[toolroom]
+requires` in the one requirement grammar, the table named after its
+owner like every other; an address as a table path,
 so a check is declared at `[checks.ruff.format]`, the address the
 contract configures it by, and no array of tables exists; `[ci]` for
 what reaches the CI shell; `[categories]` the same shape in both; and
@@ -331,7 +334,7 @@ a schema fragment with the shape of the file it describes.
 | `[extension] requires` | extensions it cannot work without, listed before it; it declares for them at the top level | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
 | `[extension] compatible` | extensions it combines with, from either side; a `requires` or `for` target counts as one | package | phase 11 |
 | `[extension] before`, `after` | order within a phase against named extensions | package | phase 11 |
-| `[tools] requires` | the tools its verbs need, in the root contract's own table and grammar | every | forge's dev plugin (as a plugin) |
+| `[toolroom] requires` | the tools its verbs need, in the root contract's own table and grammar | every | forge's dev plugin (as a plugin) |
 | `[options]` | option name to what it turns on | every | basedpyright |
 | `[contract.<contract>.<table>]` | the keys it owns, at the table path they have in that contract: `publish = { types = ["str"], values = [...], doc = "..." }` | every | docs |
 | `[checks.<tool>.<role>]` | a check, at the address the contract configures it by: `scope`, `narrowing`, `transport`, `threshold`, `extensions`, `claims`, `tools`, `options`, `inputs`, `after`, and either its words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or references (`run`, `fix`) | every | the eight, docs |
@@ -814,6 +817,24 @@ finds nothing); `fm check` exits 0 with the same gate members, proven
 by the gate's pinning tests; `fm ci.e2e --extension=mypy --fresh` is
 green, the matrix's proof.
 
+**10g, toolroom's table, lock and verbs.** `[tools]` becomes
+`[toolroom]` in the root and package contracts and in
+`extension.toml`, since every key in it is toolroom's and a table is
+named after its owner; `tools.lock` becomes `toolroom.lock`; the
+workshop's `tools.add`, `tools.lock`, `tools.restub` and `tools.sync`
+and the bench's `tools.*` become `fm toolroom.*`. The store ships the
+`[toolroom]` schema fragment, and a standalone toolroom reads the same
+table from `workshop.toml` where there is one and from its own
+`toolroom.toml` otherwise. No migration code: `[tools]` refuses as an
+unknown table naming `[toolroom]`, and a lock at the old name is
+named by `fm sync` with the verb that writes the new one. This slice
+depends on nothing else in phase 10 and may land first. Acceptance,
+refusals first: `test_the_old_tools_table_refuses_naming_toolroom`,
+`test_an_old_lock_name_is_named_with_the_verb_that_writes_the_new_one`;
+`fm check` exits 0; `fm ci.e2e --fresh` is green with its pinned
+lines renamed; `fm workflow.release --local` releases the store, the
+bench and the workshop.
+
 **10d, footman's and toolroom's seams.** Deliverables: `host()`,
 `colored` styles, `wants_color`, `builtins`, `project_builtins`,
 `directory_variable`, `tasks_file_name` in footman's entry module;
@@ -992,7 +1013,7 @@ the stack, which this design neither needs nor rules out).
   10e, 12a and 12b here; its 11a and 11b become 11a and 11b, its 11c
   and 11e become 13, its 11d dissolves into 11b and 11c; its 12
   becomes 14; its 13 and 14 become 15; its 15 becomes 16. Phases 10a
-  to 10d, 11c, 12c and 12d are new.
+  to 10d, 10g, 11c, 12c and 12d are new.
 - Willem, 2026-10-06, the rulings this note satisfies, quoted above.
 - Willem, 2026-10-06, after the first draft: the `.api` drop is for
   every package in livery, not footman alone. The draft's open ruling
@@ -1044,10 +1065,14 @@ the stack, which this design neither needs nor rules out).
   in "What stays verifiable".
 - Willem, 2026-10-07: `workshop.toml` and `extension.toml` keep their
   names and conventions as consistent as possible. So `[extension]` is
-  the identity table, `[tools] requires` the tools, an address is a
+  the identity table, `[toolroom] requires` the tools, an address is a
   table path in both files (`[checks.ruff.format]` declares what
   `[checks.ruff.format]` configures), `[ci.jobs...]` sits under `[ci]`,
   and a schema fragment has the shape of the file it describes.
+- Willem, 2026-10-07: `[tools]` becomes `[toolroom]`, so the table is
+  named after its owner and a standalone toolroom can share it; every
+  `fm tools.*` verb is toolroom's, so the lock and the verbs rename
+  with it: `toolroom.lock`, `fm toolroom.*`. Phase 10g.
 - 2026-10-06, on how that meets `COMPATIBLE`: composition is its own
   axis, and a `REQUIRES` or `FOR` target counts as compatible for a
   package-level pair, so `COMPATIBLE` is declared only where neither
