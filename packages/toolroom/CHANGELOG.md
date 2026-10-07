@@ -5,6 +5,21 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.10.0] - 2026-10-07
+
+### Added
+
+- Ruff runs as its own extension, a birth finishes in the newborn's own fm, and the local loop tests an extension before its release by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
+
+### Changed
+
+- Footman's internal modules are private, every public module under a root is its api or declared there, and other packages' sources reach footman through its api by @willemkokke
+
 ## [0.9.0] - 2026-10-04
 
 ### Added
