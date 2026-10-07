@@ -457,6 +457,134 @@ def test_start_of_a_plain_branch_in_this_checkout(
     assert branch_issue("fix/a-small-one") is None
 
 
+def _quiet_provision(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A worktree's sync that succeeds without running, and no sweep of real trees."""
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.tools",
+        SimpleNamespace(
+            uv=SimpleNamespace(
+                opts=lambda **_k: (
+                    lambda *a: SimpleNamespace(code=0, stdout="", stderr="")
+                )
+            ),
+            code=toolroom.code,
+            ToolError=toolroom.ToolError,
+        ),
+    )
+    monkeypatch.setattr("livery.workshop._sweep.sweep_worktrees", lambda home, **_k: [])
+
+
+def _branch_with_work(
+    rig: tuple[Path, FakeForge, GitOps], title: str, *, merged: bool
+) -> tuple[int, str, str]:
+    """An issue's branch, one pushed commit past main, that no tree holds.
+
+    With *merged*, its pull request merged and took the tip, as a merge
+    leaves a branch whose worktree it removed. The issue's number, the
+    branch, and its tip.
+    """
+    root, fake, git = rig
+    repo = fake.repository("willemkokke", "livery")
+    created = repo.issue.create(title)
+    branch = branch_name("feat", created.number, title)
+    git.create_branch(branch)
+    (root / "w.txt").write_text("w\n")
+    git.commit_all("feat: w")
+    _git(root, "push", "-u", "origin", branch)
+    tip = git.head_sha()
+    git.switch("main")
+    if merged:
+        fake.push("willemkokke", "livery", branch, sha=tip)
+        made = repo.pr.open(branch, "main", f"feat: {title}")
+        fake.settle("willemkokke", "livery", tip)
+        repo.pr.merge_now(made.number, title=f"feat: {title}")
+    return created.number, branch, tip
+
+
+def _head(tree: Path) -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_start_drops_a_merged_branch_no_tree_holds_and_starts_fresh(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The merge removed the worktree and left the branch at the merged
+    # head. That is finished work: a start of the reopened issue begins
+    # fresh from the base, and never names a tree that does not exist.
+    root, _fake, _git_ops = rig
+    _quiet_provision(monkeypatch)
+    number, branch, tip = _branch_with_work(rig, "merged work", merged=True)
+    start(str(number), open="none")
+    out = capsys.readouterr().out
+    assert "already started" not in out
+    assert f"branch {branch}: PR #1 merged, nothing only here; removed" in out
+    path = worktree_path(root, number, "merged work")
+    assert _head(path) == _head(root) != tip
+    assert GitOps(path).current_branch() == branch
+
+
+def test_start_in_this_checkout_drops_a_merged_branch_and_starts_fresh(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, _fake, git = rig
+    base = _head(root)
+    number, branch, tip = _branch_with_work(rig, "merged here", merged=True)
+    start(str(number), worktree=False)
+    out = capsys.readouterr().out
+    assert "already started" not in out and "nothing only here; removed" in out
+    assert git.current_branch() == branch
+    assert git.head_sha() == base != tip
+
+
+def test_start_re_enters_a_branch_no_tree_holds_on_its_own_tip(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # No merged pull request: work in progress whose tree went, so the
+    # start puts a worktree on the branch and keeps its commits.
+    root, _fake, _git_ops = rig
+    _quiet_provision(monkeypatch)
+    number, branch, tip = _branch_with_work(rig, "open work", merged=False)
+    start(str(number), open="none")
+    out = capsys.readouterr().out
+    assert f"branch {branch}: no merged pull request; kept" in out
+    path = worktree_path(root, number, "open work")
+    assert f"worktree {path} on {branch}, its own commits kept" in out
+    assert _head(path) == tip
+    # Run again, the tree holds the branch, and the start re-enters it.
+    start(str(number), open="none")
+    assert f"already started: {branch} at {path}" in capsys.readouterr().out
+
+
+def test_start_names_the_tree_that_holds_the_branch(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root, _fake, _git_ops = rig
+    _quiet_provision(monkeypatch)
+    number, branch, _tip = _branch_with_work(rig, "held work", merged=False)
+    elsewhere = (root.parent / "elsewhere").resolve()
+    _git(root, "worktree", "add", str(elsewhere), branch)
+    start(str(number), open="none")
+    out = capsys.readouterr().out
+    assert f"already started: {branch} at {elsewhere}" in out
+    assert not worktree_path(root, number, "held work").exists()
+
+
 def _started(
     rig: tuple[Path, FakeForge, GitOps], title: str = "the work"
 ) -> tuple[Path, FakeForge, GitOps, int, str]:
