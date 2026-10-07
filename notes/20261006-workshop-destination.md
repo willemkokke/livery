@@ -1,7 +1,7 @@
 # The workshop's destination: an engine, and the API its extensions use
 
 Status: ruled by Willem on 2026-10-07; every design question is closed
-and the extensions plan takes phases 10 to 16 from here. Written
+but open item 3, and the extensions plan takes phases 10 to 16 from here. Written
 2026-10-06 against
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218); nothing
 else here is. The extensions plan
@@ -187,7 +187,7 @@ clauses apply by what is registered, not by a declared sort.
 | --- | --- | --- | --- | --- |
 | check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `[checks.<tool>.<role>]`, `[generators.<name>]`, `[fragments."<target>"]`, `content/`, `tools`, `[options]` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
 | package | package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `[phases]`, `[queries]`, `[categories]`, `seeds/`, `[root-files."<path>"]`, `tools`, `[ci.jobs.<point>.<name>]`, `[checks.<tool>.<role>]`, `[for]` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
-| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `[checks.<tool>.<role>]`, `[ci.jobs.<point>.<name>]`, `[slots.<name>]`, `[guidance.<section>]`, `release-notes`, `[rules.<name>]`, `[fragments."<target>"]`, `contributions_for` | docs, changelog, claude, housekeeping |
+| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `[checks.<tool>.<role>]`, `[ci.jobs.<point>.<name>]`, `[slots.<name>]`, `[guidance.<section>]`, `release-notes`, `[rules.<name>]`, `[fragments."<target>"]`, `contributions_for` | docs, changelog, claude, housekeeping, coverage |
 
 The package sort has four flavours and no sub-sort: a language, a
 build system, an ecosystem and a platform differ in which phases and
@@ -226,7 +226,8 @@ third is needed:
   reference in it imported only then, so a workspace without the
   target is silent by construction.
   A house extension with opinions on python and cpp is this case, and
-  so is pytest's coverage pages for docs.
+  so are pytest's measurements for coverage and coverage's pages
+  for docs.
 
 An extension whose every registration lives in `[for.<target>]` tables, listed
 in a workspace where no target is listed, is dormant. That is not
@@ -285,7 +286,8 @@ every kind the check judges"). What changes:
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages on a kind | `KindRecord.coverage_pages` | a `[generators.<name>]` entry of pytest's `[for.docs]` table |
+| coverage pages on a kind | `KindRecord.coverage_pages` | a `[generators.<name>]` entry of the coverage extension's `[for.docs]` table, one renderer for every kind, reading the line format |
+| coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | `[qa] coverage-floor` and `coverage-epsilon`, `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` in the base | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
@@ -354,7 +356,7 @@ a schema fragment with the shape of the file it describes.
 | `[phases.<phase>]` | `pre`, `main`, `post` references; `provides` and `reads` context keys | package | phase 11 |
 | `[queries]` | query name to reference | package | phase 11 |
 | `[root-files."<path>"]` | a file written at the root while a package of it exists: `render` | package | cmake and conan (phase 11), from `KindRecord.root_files` |
-| `[for.<target>]` | the same keys, read only while both are listed; dormant when no target is, and named so | every | pytest for docs, the coverage pages (phase 11) |
+| `[for.<target>]` | the same keys, read only while both are listed; dormant when no target is, and named so | every | pytest for coverage, coverage for docs (phase 11c) |
 | `[replaces]`, `[deletes]` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
 
 A `[for.<target>]` table carries the same keys as the top level. The
@@ -597,7 +599,7 @@ factor out what the two share. The answer, in `[generators.<name>]`:
   its own, and no language extension contributes to docs.
   `contributions_for("docs")` returns every table declared for docs:
   the top level of an extension that requires `docs`, and a
-  `[for.docs]` table such as pytest's coverage pages.
+  `[for.docs]` table such as the coverage extension's pages.
 - Matching is by `extensions` against the package's listed extensions,
   then by the claims within the package: `python+nanobind+cmake` meets
   mkdocstrings' generator over its `.py` sources and doxygen's over its `.h`
@@ -676,7 +678,7 @@ later reader must re-justify.
 | `_git_ops` | `GitOps`, `GitError` | replaced by `ci_changes` |
 | `_influence` | `Changes` | public |
 | | `Inputs` | the `inputs` table of a check |
-| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | move into the docs extension as `[generators.<name>]` and its policy |
+| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | move into the docs extension as `[generators.<name>]` and its policy; the coverage pages generator is the coverage extension's |
 | | `kind_chain`, `kind_names` | go with the python checks moving to python's contribution |
 | `_navblocks` | all | moves into the docs extension |
 | `_packages` | `Package`, `discover_packages` | public already |
@@ -912,9 +914,14 @@ its own distribution requiring `docs`: the python generator, the
 handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
 `griffelib`, the generator's `paths` option at `[generators.mkdocstrings]`
 (`[docs] api` stays docs'); the
-workshop wheel drops `griffelib`. pytest's `[for.docs]` table
-declares the coverage pages generator. The docs extension reads
-both through `contributions_for("docs")` and names no language. The
+workshop wheel drops `griffelib`. The coverage extension,
+`livery.extensions.coverage`, starts in the workshop wheel the way
+docs did: its `[for.docs]` table declares the coverage pages
+generator, one renderer for every kind that reads the line format,
+and pytest's `[for.coverage]` table reduces coverage.py's data to
+that format. Open item 3 decides whether a line carries its branch
+counts. The docs extension reads both generators through
+`contributions_for("docs")` and names no language. The
 `REFERENCES` query replaces the base's python parse in the layering
 check, python's extension answering it. This repository and
 `fm new.project`'s stock list add `mkdocstrings` after `docs`.
@@ -980,6 +987,28 @@ first: `test_a_curated_package_with_an_unplaced_export_refuses_naming_it`,
 renders footman's reference with every exported name present;
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
 
+**12e, coverage.** `livery-extensions-coverage` leaves the workshop
+wheel and takes what the base holds today: the floors (a percentage
+or `auto-ratchet`), the epsilon, the ratchet's marks, the line
+format and its union across legs, `coverage.leg`, `coverage.union`,
+`coverage.enforce` and `coverage.accept`, and their CI entries. Its
+`[coverage]` table replaces `[qa]`: `floor` and `epsilon` as
+before, and `required = false` for a package whose coverage nothing
+judges. Such a package is still measured, and its page still
+renders. A package with tests is judged by default. Measuring stays
+with each test tool: pytest's `[for.coverage]` table brings
+coverage.py's configuration and the reduction to lines, and a C++
+test extension brings llvm-cov's or gcov's. A workspace that does
+not list `coverage` runs no coverage leg, so a project born with
+ruff alone is green (#1225); a listing with no measuring extension
+is dormant and named, like any `[for]`-only listing. Acceptance,
+refusals first:
+`test_a_package_with_coverage_not_required_is_never_judged`,
+`test_a_workspace_without_coverage_runs_no_coverage_leg`,
+`test_a_coverage_listing_with_no_measurer_is_dormant_and_named`;
+`fm ci.e2e --extension=ruff --fresh` is green; `fm check` on this
+repository judges every package's floor as before.
+
 ### Phase 13: the release train through phases
 
 The plan's 11c and 11e, unchanged: `stamp`, `build`, `prove`,
@@ -1017,6 +1046,7 @@ the stack, which this design neither needs nor rules out).
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor`, `coverage_pages`, `[docs] generators` as three mechanisms | `Generator` (phase 11c) |
+| `[qa] coverage-floor`, `coverage-epsilon` and the coverage machinery in the base | the coverage extension (phase 12e) |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | `tests/test_private_reaches.py` at this repository's root | the python extension's rule and `[python] private-reaches` (phase 11b) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
@@ -1148,6 +1178,16 @@ the stack, which this design neither needs nor rules out).
   because a lazy root has no group in its namespace for footman's
   loader to adopt. `fm commit --help` measured 255 ms median before
   and after, interleaved over 31 rounds.
+- Willem, 2026-10-07: coverage is its own extension, neither the
+  core's nor the test extension's, and a package can be left
+  unjudged. The site renders coverage one way for every kind, from
+  the workshop's own line format, instead of each tool's HTML in a
+  frame. Phase 11c starts the extension in the wheel with the pages
+  generator, and 12e ships it apart with the policy.
+- 2026-10-07, decided here: the opt-out is `[coverage] required =
+  false` in the package's contract, and judging is the default for
+  a package with tests. A key, not a floor of zero: the page still
+  renders, and the reader sees the package was left out on purpose.
 - 2026-10-07, 10b lands in slices, each gate-green and mergeable alone:
   the reach scan (#1220); the declaration file, read at mount for the
   eight tool extensions and for the docs extension's identity and
@@ -1185,3 +1225,14 @@ recommendation. Owner: Willem, unless named.
    This design adds no lock; phase 16's shared temp roots and two
    gates in one checkout are the cases it would serve. Owner: Willem,
    after the review.
+3. **Branch counts in the line format.** The format is file, line,
+   hits. Python's pages today come from coverage.py's arcs, which
+   show a partly taken branch.
+   - (a) Lines only. Python's partly taken branches vanish from the
+     page, and C++ branch data is dropped as well.
+   - (b) A line also carries its branches, taken out of total, as
+     lcov's `BRDA` records do. gcov, llvm-cov and Cobertura report
+     it, so every measurer can fill it. It does not change what the
+     floors judge, only what the page shows.
+
+   Recommendation: (b).
