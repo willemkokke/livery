@@ -1,0 +1,45 @@
+# The clang-tidy extension: one set of checks for every native member,
+# judged per package against its compilation database. Read at every
+# mount; a check's code is imported when the check runs.
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one set of checks for every member.
+levels = ["workspace"]
+
+# The kind whose members build with a compilation database to read; the
+# lint reads it after the build configures.
+[checks.clang-tidy.lint]
+run = "livery.extensions.clang.tidy._checks:judge_lint"
+scope = "package"
+kinds = ["cpp-conan"]
+after = ["build.configure"]
+tools = ["clang_tidy"]
+arguments = true
+claims = [
+    { category = "source", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
+    { category = "test", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
+]
+
+# The checks each native package carries, on every native kind; a deeper
+# file with `InheritParentConfig: true` adds that directory's own lines.
+[checks.clang-tidy.lint.fragments.".clang-tidy"]
+kinds = ["cpp-conan", "python-nanobind"]
+text = '''
+# Rendered by the template channel for the {{ kind }} kind; the gate keeps
+# it matching its render. A `.clang-tidy` deeper in the tree with
+# `InheritParentConfig: true` carries this package's own lines.
+#
+# The families a gate can hold green from the first commit: the bug
+# and portability checks, and the performance ones. readability-* is
+# left out on purpose, since its opinions collide with clang-format's
+# and with each other. A finding is an error, so the gate's verdict
+# stays its exit code.
+Checks: >
+  bugprone-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: "*"
+HeaderFilterRegex: "^$"
+'''

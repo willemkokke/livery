@@ -12,6 +12,7 @@ import pytest
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
+from livery.workshop._declaration import Declaration
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -575,18 +576,41 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
     assert "docs" in str(caught.value)
 
 
+def _declared(
+    *kinds: str, requires: tuple[str, ...] = (), options: dict[str, str] | None = None
+) -> Declaration:
+    """A declaration with one check judging *kinds*."""
+    from livery.workshop._checks import CheckRecord
+    from livery.workshop._declaration import Additions
+
+    def _idle(ctx: object) -> None:
+        del ctx
+
+    checks = (CheckRecord("t", "lint", _idle, kinds=kinds),) if kinds else ()
+    return Declaration(
+        "x",
+        "x",
+        Path("extension.toml"),
+        requires=requires,
+        options=options or {},
+        additions=Additions(checks),
+    )
+
+
 def _fake_declarations(
-    monkeypatch: pytest.MonkeyPatch, modules: dict[str, object]
+    monkeypatch: pytest.MonkeyPatch, declared: dict[str, Declaration]
 ) -> None:
     monkeypatch.setattr(
-        "livery.workshop._extensions.declaration", lambda name: modules.get(name)
+        "livery.workshop._extensions.declaration", lambda name: declared.get(name)
+    )
+    monkeypatch.setattr(
+        "livery.workshop._extensions.declared_options",
+        lambda name: dict(declared[name].options) if name in declared else {},
     )
 
 
 def test_an_extension_with_no_check_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
-    from types import SimpleNamespace
-
-    _fake_declarations(monkeypatch, {"quiet": SimpleNamespace(CHECKS=())})
+    _fake_declarations(monkeypatch, {"quiet": _declared()})
     with pytest.raises(_FAILURES, match="registers no check"):
         _e2e.extension_under_test("quiet")
 
@@ -594,14 +618,11 @@ def test_an_extension_with_no_check_refuses(monkeypatch: pytest.MonkeyPatch) -> 
 def test_extensions_that_require_each_other_refuse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
-    check = SimpleNamespace(kinds=("python",))
     _fake_declarations(
         monkeypatch,
         {
-            "a": SimpleNamespace(CHECKS=(check,), REQUIRES=("b",)),
-            "b": SimpleNamespace(CHECKS=(check,), REQUIRES=("a",)),
+            "a": _declared("python", requires=("b",)),
+            "b": _declared("python", requires=("a",)),
         },
     )
     with pytest.raises(_FAILURES, match="a -> b -> a"):
@@ -611,15 +632,12 @@ def test_extensions_that_require_each_other_refuse(
 def test_the_stack_lists_what_an_extension_requires_before_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
-    check = SimpleNamespace(kinds=("cpp-conan",))
     _fake_declarations(
         monkeypatch,
         {
-            "top": SimpleNamespace(CHECKS=(check,), REQUIRES=("mid", "base")),
-            "mid": SimpleNamespace(CHECKS=(check,), REQUIRES=("base",)),
-            "base": SimpleNamespace(CHECKS=(check,)),
+            "top": _declared("cpp-conan", requires=("mid", "base")),
+            "mid": _declared("cpp-conan", requires=("base",)),
+            "base": _declared("cpp-conan"),
         },
     )
     stack, kinds = _e2e.extension_under_test("top")
@@ -630,18 +648,15 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
 def test_the_extension_under_test_is_listed_with_every_option_it_declares(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
-    check = SimpleNamespace(kinds=("python",))
     _fake_declarations(
         monkeypatch,
         {
-            "top": SimpleNamespace(
-                CHECKS=(check,),
-                REQUIRES=("base",),
-                OPTIONS={"deep": "judges deeper", "wide": "judges wider"},
+            "top": _declared(
+                "python",
+                requires=("base",),
+                options={"deep": "judges deeper", "wide": "judges wider"},
             ),
-            "base": SimpleNamespace(CHECKS=(check,), OPTIONS={"x": "an option"}),
+            "base": _declared("python", options={"x": "an option"}),
         },
     )
     # What it requires is listed plainly: its options are not under test.
@@ -652,16 +667,9 @@ def test_the_extension_under_test_is_listed_with_every_option_it_declares(
 def test_the_members_are_the_loop_s_of_the_kinds_the_checks_declare(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
     _fake_declarations(
         monkeypatch,
-        {
-            "typed": SimpleNamespace(CHECKS=(SimpleNamespace(kinds=("python",)),)),
-            "both": SimpleNamespace(
-                CHECKS=(SimpleNamespace(kinds=("python", "cpp-conan")),)
-            ),
-        },
+        {"typed": _declared("python"), "both": _declared("python", "cpp-conan")},
     )
     stack, kinds = _e2e.extension_under_test("typed")
     assert stack == ("typed",)

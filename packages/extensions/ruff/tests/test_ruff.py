@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.ruff._extension as declaration
 import livery.toolroom.tools as tools
 from livery.extensions.ruff import _checks
 from livery.workshop import GateContext, Package
@@ -28,10 +27,12 @@ CONTRACT = (
 @pytest.fixture
 def registered() -> Iterator[None]:
     """Ruff's checks registered as the mount registers a listed extension's."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("ruff", declaration)
+    found = declaration("ruff")
+    assert found is not None
+    register_declared("ruff", found.additions)
     try:
         yield
     finally:

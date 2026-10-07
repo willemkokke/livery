@@ -29,11 +29,12 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 
-# The name a workspace lists in [workspace] extensions, and the module
-# whose data the workshop mounts it from. Nothing else: the extension
-# adds no verb of its own, and nothing activates by being installed.
+# The name a workspace lists in [workspace] extensions, and the package
+# whose extension.toml the workshop mounts it from. Nothing else: the
+# extension adds no verb of its own, and nothing activates by being
+# installed.
 [project.entry-points."workshop.extensions"]
-pyrefly = "livery.extensions.pyrefly._extension"
+pyrefly = "livery.extensions.pyrefly"
 
 [tool.uv.build-backend]
 # PEP 420 namespace: the importable package is livery.extensions.pyrefly and

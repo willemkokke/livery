@@ -1,5 +1,6 @@
 """pyrefly's check: the type checker over every platform at once.
 
+The extension's ``extension.toml`` declares it and names the body here.
 ``typecheck.pyrefly`` checks what ``pyrefly.toml`` includes whatever a
 run reaches: a run costs seconds, and the file pins the platforms,
 every one at once. The check hands pyrefly the words after ``--`` on
@@ -11,13 +12,7 @@ replaces `run_typecheck` here sees its replacement called.
 from __future__ import annotations
 
 import livery.toolroom.tools as tools
-from livery.workshop import CheckRecord, Claim, GateContext
-
-#: The kinds whose python files pyrefly judges.
-KINDS = ("python",)
-
-#: The suffixes pyrefly reads.
-SUFFIXES = (".py", ".pyi")
+from livery.workshop import GateContext
 
 
 def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
@@ -28,21 +23,6 @@ def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
     tools.pyrefly("check", *arguments)
 
 
-def _typecheck_run(ctx: GateContext) -> None:
+def judge_typecheck(ctx: GateContext) -> None:
+    """Type-check the configured whole; the words after ``--`` reach pyrefly."""
     run_typecheck(ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "pyrefly",
-        "typecheck",
-        _typecheck_run,
-        kinds=KINDS,
-        tools=("pyrefly",),
-        arguments=True,
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support")
-        ),
-    ),
-)

@@ -153,7 +153,7 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     checks of that kind judge them. A kind's checks bring the tools
     they run, each requirement naming `check <name>` as its site. An
     extension's site is `extension <name>`, read from its
-    declaration's `TOOLS`; an unlisted extension declares nothing
+    ``extension.toml``'s ``[toolroom] requires``; an unlisted extension declares nothing
     here, since listing is the only activation channel. A plugin the
     project mounts through its direct dependencies is `plugin <name>`,
     read from its entry module

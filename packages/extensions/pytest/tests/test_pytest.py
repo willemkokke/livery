@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.pytest._extension as declaration
 from livery.extensions.pytest import _checks
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
@@ -26,10 +25,12 @@ CONTRACT = (
 @pytest.fixture
 def registered() -> Iterator[None]:
     """Pytest's checks registered, as the mount registers a listed extension's."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("pytest", declaration)
+    found = declaration("pytest")
+    assert found is not None
+    register_declared("pytest", found.additions)
     try:
         yield
     finally:
@@ -167,9 +168,14 @@ def test_the_root_tests_directory_is_configured_only_while_it_exists(
 
 
 def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
-    record = next(r for r in declaration.CHECKS if r.name == "test.pytest")
+    from livery.workshop._extensions import declaration
+
+    found = declaration("pytest")
+    assert found is not None
     contributed = [
-        str(value) for slot, value in record.contributions if slot == "python.dev-group"
+        value
+        for slot, value in found.additions.contributions
+        if slot == "python.dev-group"
     ]
     # 7.13 is the first coverage that installs its own startup hook: an
     # older one would leave every process the tests start unmetered.

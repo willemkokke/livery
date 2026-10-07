@@ -1,0 +1,52 @@
+# The pytest extension: each python package's suite, and its
+# documentation examples. Read at every mount; a check's code is imported
+# when the check runs.
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one configuration for every member.
+levels = ["workspace"]
+
+# pytest is the record's tool in the store, for the typed handle the
+# runner calls, and its venv copy is the one that imports the project's
+# environment. A package's tests measure its source, so a source change
+# is one the test check reads, and runs the suite for.
+[checks.pytest.test]
+run = "livery.extensions.pytest._checks:judge_test"
+narrowing = "packages"
+kinds = ["python"]
+tools = ["pytest"]
+arguments = true
+flags = ["point"]
+claims = [
+    { category = "test" },
+    { category = "test-support" },
+    { category = "source", suffixes = [".py", ".pyi"] },
+]
+
+[checks.pytest.test.options.parallel]
+type = "bool"
+default = true
+doc = "run the package's suite across cores; false runs it under -n 0"
+
+[checks.pytest.examples]
+run = "livery.extensions.pytest._checks:judge_examples"
+narrowing = "packages"
+kinds = ["python"]
+tools = ["pytest"]
+arguments = true
+claims = [{ category = "example", suffixes = [".py", ".pyi"] }]
+
+# pytest and coverage import the project's environment, so they live in
+# the venv: pytest 9 for the pytest.toml it reads, coverage 7.13 for the
+# .pth it installs, which starts the meter in every python the tests
+# start once the runner arms it and imports nothing otherwise, and xdist
+# for -n auto.
+[contributions]
+"python.dev-group" = [
+    "pytest>=9.0",
+    "pytest-cov>=5",
+    "coverage>=7.13",
+    "pytest-xdist>=3.6",
+]
+"python.test.addopts" = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]

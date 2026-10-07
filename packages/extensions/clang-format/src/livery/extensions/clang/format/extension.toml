@@ -1,0 +1,36 @@
+# The clang-format extension: one style for every native member, judged
+# per package. Read at every mount; a check's code is imported when the
+# check runs.
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one style for every member.
+levels = ["workspace"]
+
+# The kinds whose members carry C or C++.
+[checks.clang-format.format]
+run = "livery.extensions.clang.format._checks:judge_format"
+fix = "livery.extensions.clang.format._checks:fix_format"
+scope = "package"
+kinds = ["cpp-conan", "python-nanobind"]
+tools = ["clang_format"]
+arguments = true
+claims = [
+    { category = "source", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
+    { category = "test", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
+    { category = "test-support", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
+]
+
+# The style each native package carries; a deeper file with
+# `BasedOnStyle: InheritParentConfig` adds that directory's own lines.
+[checks.clang-format.format.fragments.".clang-format"]
+kinds = ["cpp-conan", "python-nanobind"]
+text = '''
+# Rendered by the template channel for the {{ kind }} kind; the gate keeps
+# it matching its render. A file deeper in the tree with
+# `BasedOnStyle: InheritParentConfig` carries this package's own lines.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 88
+PointerAlignment: Left
+'''

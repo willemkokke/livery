@@ -1,14 +1,11 @@
-"""The workshop's footman plugin: what mounting the base extension runs.
+"""The base's verbs: what importing the workshop's plugin entry registers first.
 
-Advertised as the ``footman.tasks`` entry point named
-``livery.workshop``; a repository's ``tasks.py`` starts with
-``plugin("livery.workshop")`` and then calls
-[livery.workshop.mount_extensions][] itself. Importing this module
-registers the base extension's tree alone (the quality family, the
-content sync, the agent hooks); mounting the further extensions from
-inside this import would deliver their tasks under this extension's
-identity, so composition belongs to the workspace's own file. A
-repository's own tasks go below the mount lines, in its own file.
+The plugin entry ([livery.workshop._mount][]) imports this module, then
+mounts the extensions the contract lists, each through ``plugin()``
+under its own name. Importing this module registers the base's tree
+alone (the quality family, the content sync, the agent hooks): mounting
+the further extensions from inside this import would deliver their
+tasks under the base's identity.
 
 Tasks assume the working directory is the workspace root; ``fm`` is
 invoked there.

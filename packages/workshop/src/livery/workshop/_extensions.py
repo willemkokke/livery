@@ -9,14 +9,21 @@ is the list and nothing else.
 
 from __future__ import annotations
 
-import importlib
 import re
 import tomllib
 from pathlib import Path
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from livery.footman import prog
+from livery.workshop._declaration import (
+    API_VERSION,
+    FILE,
+    Additions,
+    Declaration,
+    DeclarationError,
+    declaration_file,
+    read,
+)
 
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
@@ -28,50 +35,12 @@ if TYPE_CHECKING:
 SELF = "livery.workshop"
 
 #: The entry point group an extension declares itself in: its name
-#: maps to the data module that carries its declarations.
+#: maps to the package that ships its declaration file.
 GROUP = "workshop.extensions"
 
 #: The levels an extension may be listed at.
 WORKSPACE = "workspace"
 PACKAGE = "package"
-
-#: The workshop's plugin API, the version an extension's declaring module may
-#: declare as ``API_VERSION``. Registration records grow
-#: additively, so an extension that declares nothing is taken at this
-#: version; one that declares another refuses at mount with both
-#: versions named, a sentence instead of an AttributeError later.
-API_VERSION = 1
-
-#: The attribute an extension's plugin module declares its dependencies
-#: with: the import paths of the extensions it needs mounted before it.
-DEPENDS_ATTRIBUTE = "REQUIRES"
-
-#: The attribute an extension's plugin module declares the tools its own
-#: verbs need with: requirement strings, ``docker`` or ``docker>=27``.
-#: The derived profile reads it as its fourth site, beside the kinds,
-#: the packages and the root contract.
-TOOLS_ATTRIBUTE = "TOOLS"
-
-#: The attribute an extension's plugin module declares its contributions
-#: with: a map from a target extension's import path to the module that
-#: carries the registrations for that target. The mount imports the
-#: module once both the owner and the target are mounted, so no mount
-#: code branches on what is listed.
-FOR_ATTRIBUTE = "FOR"
-
-#: The attribute an extension's declaring module declares its checks
-#: with, as data: a tuple of check records. The mount registers them
-#: for a listed extension alone, each under the extension's listed
-#: name, so the files they deliver and the drift check's widening
-#: follow the list.
-CHECKS_ATTRIBUTE = "CHECKS"
-
-#: The attribute an extension's declaring module declares its options
-#: with: a map from each option's name to what listing it turns on.
-#: A workspace turns an option on in its entry,
-#: ``basedpyright[typecomplete]``, and a check record that names the
-#: option in ``listed_with`` registers only then.
-OPTIONS_ATTRIBUTE = "OPTIONS"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
@@ -99,28 +68,52 @@ def installed_extensions() -> tuple[str, ...]:
     return tuple(sorted(_declared()))
 
 
-def declaration(extension: str) -> ModuleType | None:
-    """The data module *extension* declares itself with; None when none is installed.
+def declaration(extension: str) -> Declaration | None:
+    """*extension*'s declaration file, read and judged; None when none is installed.
 
-    Loading it imports that module alone, never the extension's
-    tasks: footman's ``plugin()`` must stay a plugin's first importer.
+    Read without importing anything of the extension: footman's
+    ``plugin()`` stays a plugin's first importer, and a check's code
+    is imported when the check runs.
+
+    Raises:
+        DeclarationError: when the package the entry point names ships
+            no declaration file, as a release written for another
+            workshop does, or the file says something this workshop
+            cannot take.
     """
     entry = _declared().get(extension)
     if entry is None:
         return None
-    module = entry.load()
-    return (
-        module
-        if isinstance(module, ModuleType)
-        else importlib.import_module(entry.value.partition(":")[0])
-    )
+    package = entry.value.partition(":")[0]
+    found = read(extension, package)
+    if found is None:
+        raise DeclarationError(
+            f"extension {extension!r}: its entry point names {package}, which ships"
+            f" no {FILE}; install a release of the extension written for this"
+            " workshop"
+        )
+    return found
+
+
+def _readable(extension: str) -> Declaration | None:
+    """*extension*'s declaration where one can be read; None for the base or none.
+
+    An extension no installed distribution declares has none, and so
+    has one whose package ships no declaration file: the mount names
+    it, and the sync installs the one this workspace builds.
+    """
+    if extension == SELF:
+        return None
+    entry = _declared().get(extension)
+    if entry is None or declaration_file(entry.value.partition(":")[0]) is None:
+        return None
+    return declaration(extension)
 
 
 def levels_of(extension: str) -> tuple[str, ...]:
     """The levels *extension* may be listed at; the workspace when it says none."""
-    module = declaration(extension)
-    declared = getattr(module, "LEVELS", (WORKSPACE,)) if module is not None else ()
-    return tuple(str(level) for level in declared)
+    found = declaration(extension)
+    return found.levels if found is not None else ()
 
 
 def distribution_of(extension: str) -> str:
@@ -230,28 +223,8 @@ def declared_options(extension: str) -> dict[str, str]:
     Empty for the base, for an extension that declares none, and for
     one no installed distribution declares.
     """
-    module = None if extension == SELF else declaration(extension)
-    return {} if module is None else _module_options(extension, module)
-
-
-def _module_options(extension: str, module: ModuleType) -> dict[str, str]:
-    """The options *module* declares for *extension*.
-
-    Raises:
-        RuntimeError: when the declaration is not a map of names to
-            what each turns on, an extension's mistake no sync repairs.
-    """
-    declared = getattr(module, OPTIONS_ATTRIBUTE, {})
-    if not isinstance(declared, dict) or not all(
-        isinstance(name, str) and isinstance(text, str)
-        for name, text in declared.items()  # pyright: ignore[reportUnknownVariableType]
-    ):
-        raise RuntimeError(
-            f"extension {extension!r} declares {OPTIONS_ATTRIBUTE} as {declared!r}; it"
-            " is a map from each option to what listing it turns on,"
-            ' {"typecomplete": "verifies that the public API is type-complete"}'
-        )
-    return {str(name): str(text) for name, text in declared.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    found = _readable(extension)
+    return {} if found is None else dict(found.options)
 
 
 def _undeclared(extension: str, options: tuple[str, ...]) -> str:
@@ -285,7 +258,7 @@ def stack_names(start: Path | None = None) -> tuple[str, ...]:
 
 
 def extension_package(extension: str) -> str:
-    """The dotted package *extension* ships from: its declaring module's package.
+    """The dotted package *extension* ships from: the one its entry point names.
 
     The base is its own; an extension no installed distribution
     declares is taken at its name, which a member mid-birth may be.
@@ -295,7 +268,7 @@ def extension_package(extension: str) -> str:
     entry = _declared().get(extension)
     if entry is None:
         return extension
-    return entry.value.partition(":")[0].rpartition(".")[0] or extension
+    return entry.value.partition(":")[0]
 
 
 def extension_names(start: Path | None = None) -> tuple[str, ...]:
@@ -306,7 +279,7 @@ def extension_names(start: Path | None = None) -> tuple[str, ...]:
 def extension_content(extension: str) -> Path | None:
     """The installed extension's ``content/`` directory, or None.
 
-    Beside the extension's declaring module, or the base's own for
+    Beside the extension's declaration file, or the base's own for
     the base. In the monorepo the "wheel" is the editable source tree,
     which is what lets the materialised links point back into the
     repository. None for an extension that is not installed or ships
@@ -315,10 +288,10 @@ def extension_content(extension: str) -> Path | None:
     if extension == SELF:
         content = Path(__file__).resolve().parent / "content"
         return content if content.is_dir() else None
-    module = declaration(extension)
-    if module is None or module.__file__ is None:
+    found = declaration(extension)
+    if found is None:
         return None
-    content = Path(module.__file__).resolve().parent / "content"
+    content = found.path.resolve().parent / "content"
     return content if content.is_dir() else None
 
 
@@ -354,16 +327,18 @@ UNDECLARED: tuple[str, ...] = ()
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount every listed extension's plugin, in order; the names mounted.
 
-    Refuses an extension declared for another workshop API version. A
-    contract without ``[workspace] extensions``, an extension no
-    installed distribution declares, and one that may not be listed at
-    the workspace level are named on stderr and skipped, never refused:
+    Refuses an extension declared for another workshop API version, and
+    one whose declaration file says something this workshop cannot take.
+    A contract without ``[workspace] extensions``, an extension no
+    installed distribution declares, one whose installed package ships
+    no declaration file, and one that may not be listed at the
+    workspace level are named on stderr and skipped, never refused:
     the mount runs on every command, ``fm sync`` among them, which is
     what installs a missing declaration, so a refusal here would stop
     the command that repairs it. An option the extension does not
     declare is named the same way and left off. The gate's layering
     check and ``fm extensions`` refuse the same problems. An extension
-    whose declaration names no ``PLUGIN`` registers what it declares
+    whose declaration names no ``plugin`` registers what it declares
     and mounts no verbs. A plugin a branded App already mounts as a
     builtin is skipped: claiming its tasks again puts the same task in
     one rung twice.
@@ -380,7 +355,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         _note(why)
     builtin = set(_paths.builtin())
     mounted = []
-    declared = contributions(start)
+    declared = declared_targets(start)
     active = resolved_targets(start)
     options = extension_options(start)
     # The base is present before this walk; every extension joins once
@@ -390,12 +365,25 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     _graft_contributions(present, declared, active, grafted)
     for extension, dist in extension_entries(start):
         if extension in builtin:
-            # The App mounted it as its own builtin: never imported here.
+            # The App mounted it as its own builtin: its plugin is never
+            # mounted here a second time.
             present.append(extension)
             _graft_contributions(present, declared, active, grafted)
             continue
-        module = declaration(extension)
-        if module is None:
+        package = extension_package(extension)
+        if extension in _declared() and declaration_file(package) is None:
+            # An environment from before this checkout's, or a release
+            # written for another workshop: named and skipped, so the
+            # sync that installs this checkout's can run.
+            undeclared.append(extension)
+            _note(
+                f"extension {extension!r}: the installed distribution ({dist})"
+                f" names {package}, which ships no {FILE}; `{prog()} sync`"
+                " installs the one this workspace builds"
+            )
+            continue
+        found = declaration(extension)
+        if found is None:
             undeclared.append(extension)
             _note(
                 f"extension {extension!r} is listed in [workspace] extensions, and no"
@@ -404,23 +392,23 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 f" entry; `{prog()} sync` installs one this workspace builds"
             )
             continue
-        check_api_version(extension, module)
-        if WORKSPACE not in levels_of(extension):
+        check_api_version(extension, found)
+        if WORKSPACE not in found.levels:
             _note(
                 f"extension {extension!r} is listed in [workspace] extensions, and it"
-                f" declares the levels {', '.join(levels_of(extension)) or 'none'};"
+                f" declares the levels {', '.join(found.levels) or 'none'};"
                 " list it in each package's `extensions` instead"
             )
             continue
         listed = options.get(extension, ())
         if why := _undeclared(extension, listed):
             _note(f"{why}; the mount leaves it off")
-        if register_declared_checks(extension, module, listed):
+        if register_declared(extension, found.additions, listed):
             mounted.append(extension)
-        name = getattr(module, "PLUGIN", None)
+        name = found.plugin
         if name and name not in builtin:
             try:
-                plugin(str(name))
+                plugin(name)
             except Exception as error:
                 _note(
                     f"extension {extension!r} did not mount its plugin {name!r}:"
@@ -457,7 +445,8 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
     them once at its start, and imports nothing: a distribution
     installed after the interpreter started may not be importable in
     it, as an editable install's path joins `sys.path` only when a
-    process starts.
+    process starts. An entry point whose package ships no declaration
+    file is not counted: a sync installs the one that does.
     """
     if not names:
         return ()
@@ -465,7 +454,12 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
 
     rescan_entry_points()
     declared = _declared()
-    return tuple(name for name in names if name in declared)
+    return tuple(
+        name
+        for name in names
+        if name in declared
+        and declaration_file(declared[name].value.partition(":")[0]) is not None
+    )
 
 
 def _note(text: str) -> None:
@@ -477,92 +471,62 @@ def _note(text: str) -> None:
 
 def _graft_contributions(
     present: list[str],
-    declared: dict[str, dict[str, str]],
+    declared: dict[str, dict[str, Additions]],
     active: dict[str, tuple[str, ...]],
     grafted: set[tuple[str, str]],
 ) -> None:
-    """Import every contribution whose owner and target are both present.
+    """Register every ``[for.<target>]`` table whose owner and target are both present.
 
     Called after each extension mounts, so a contribution lands whichever
-    of the two mounts later. A module that does not import refuses
-    naming the owner, the target and the module. A ``for`` entry
-    naming a target the owner declares nothing for mounts nothing:
-    the layering check names that entry, and it can only run inside a
-    mount that went on.
+    of the two mounts later. A ``for`` entry naming a target the owner
+    declares nothing for registers nothing: the layering check names
+    that entry, and it can only run inside a mount that went on.
     """
     for owner in present:
         for target in active.get(owner, ()):
             if target not in present or (owner, target) in grafted:
                 continue
-            module = declared.get(owner, {}).get(target)
-            if module is None:
+            additions = declared.get(owner, {}).get(target)
+            if additions is None:
                 continue
-            try:
-                importlib.import_module(module)
-            except ModuleNotFoundError as error:
-                raise RuntimeError(
-                    f"extension {owner!r} contributes {module!r} for {target}, and"
-                    f" the module does not import: {error}"
-                ) from error
+            register_declared(owner, additions)
             grafted.add((owner, target))
 
 
-def register_declared_checks(
-    extension: str, module: ModuleType, options: tuple[str, ...] = ()
+def register_declared(
+    extension: str, additions: Additions, options: tuple[str, ...] = ()
 ) -> bool:
-    """Register the checks *module* declares for *extension*; whether it declares any.
+    """Register what *additions* declares for *extension*; whether it declares a check.
 
-    Each record registers under the extension's listed name, whatever
-    it says, since the list is what decides which extension a check
-    belongs to. A record that names an option in ``listed_with``
-    registers only when *options*, the entry's, turn it on.
-
-    Raises:
-        RuntimeError: when the declaration is not a tuple of check
-            records, or a record names an option the extension does
-            not declare: an extension's mistake no sync repairs, said
-            in one sentence rather than an error further on, as a
-            wrong API version is.
+    Each check registers under the extension's listed name, since the
+    list is what decides which extension a check belongs to, and each
+    value goes into its slot under the same name. A check that names an
+    option in ``listed-with`` registers only when *options*, the
+    entry's, turn it on.
     """
     from dataclasses import replace
 
-    from livery.workshop._checks import CheckRecord, register_check
+    from livery.workshop import _slots
+    from livery.workshop._checks import register_check
 
-    declared = getattr(module, CHECKS_ATTRIBUTE, ())
-    if not isinstance(declared, tuple):
-        wrong = f"as a {type(declared).__name__}"
-    else:
-        strays = [type(r).__name__ for r in declared if not isinstance(r, CheckRecord)]
-        wrong = f"with a {strays[0]} among them" if strays else ""
-    if wrong:
-        raise RuntimeError(
-            f"extension {extension!r} declares {CHECKS_ATTRIBUTE} {wrong}; it"
-            " takes a tuple of check records. Install a release of the"
-            " extension written for this workshop."
-        )
-    records = cast("tuple[CheckRecord, ...]", declared)
-    known = _module_options(extension, module)
-    for record in records:
-        if record.listed_with and record.listed_with not in known:
-            raise RuntimeError(
-                f"extension {extension!r} registers {record.name} with the option"
-                f" {record.listed_with!r}, which its {OPTIONS_ATTRIBUTE} does not"
-                f" declare; its options are {', '.join(known) or 'none'}"
-            )
-    for record in records:
+    for record in additions.checks:
         if record.listed_with and record.listed_with not in options:
             continue
         register_check(replace(record, extension=extension))
-    return bool(records)
+    for slot in {slot for slot, _ in additions.contributions}:
+        _slots.withdraw(slot, by=extension)
+    for slot, value in additions.contributions:
+        _slots.contribute(slot, value, extension=extension, by=extension)
+    return bool(additions.checks)
 
 
-def check_api_version(extension: str, module: ModuleType) -> None:
+def check_api_version(extension: str, found: Declaration) -> None:
     """Refuse an extension whose declared API version is not this workshop's.
 
-    An extension declares ``API_VERSION`` in its declaring module; one
-    that declares nothing is taken at the current version.
+    An extension declares ``[extension] api-version`` in its declaration
+    file; one that declares none is taken at the current version.
     """
-    declared = getattr(module, "API_VERSION", API_VERSION)
+    declared = found.api_version
     if declared != API_VERSION:
         raise RuntimeError(
             f"extension {extension!r} declares workshop API version {declared!r}; this"
@@ -572,89 +536,40 @@ def check_api_version(extension: str, module: ModuleType) -> None:
         )
 
 
-def _plugin_module(extension: str) -> ModuleType | None:
-    """The listed extension's declaring module; None for the base or an absent one.
-
-    The base declares nothing about itself here, and an absent
-    extension is the mount's to refuse, naming the install.
-    """
-    if extension == SELF:
-        return None
-    return declaration(extension)
-
-
 def extension_dependencies(start: Path | None = None) -> dict[str, tuple[str, ...]]:
-    """Each listed extension's declared dependencies, import path to import paths.
+    """Each listed extension's ``[extension] requires``, name to names.
 
-    Read from the ``WORKSHOP_DEPENDS`` attribute of each extension's plugin
-    module; the workshop itself and an extension that cannot be imported
-    declare none here, since the mount teaches the install.
+    The base declares none here, and an extension no installed
+    distribution declares has none to read: the mount teaches the
+    install.
     """
     found: dict[str, tuple[str, ...]] = {}
     for extension in extension_names(start):
-        module = _plugin_module(extension)
-        declared = () if module is None else getattr(module, DEPENDS_ATTRIBUTE, ())
-        found[extension] = tuple(str(name) for name in declared)
+        declared = _readable(extension)
+        found[extension] = declared.requires if declared is not None else ()
     return found
 
 
 def extension_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
-    """Each listed extension's declared tools, import path to requirement strings.
+    """Each listed extension's ``[toolroom] requires``, name to requirement strings.
 
-    Read from ``WORKSHOP_TOOLS`` on the plugin module, a tuple of
-    requirement strings such as ``("docker>=27",)``. The workshop
-    itself and an extension that cannot be imported declare none here. A
-    value of another shape refuses naming the extension: a tool declared
-    in a shape the lock cannot read is a tool the environment lacks in
-    silence.
-
-    Raises:
-        RuntimeError: when an extension's declaration is not a tuple of
-            strings.
+    The tools the extension's own verbs need, such as ``docker>=27``.
+    The base and an extension no installed distribution declares
+    declare none here.
     """
     found: dict[str, tuple[str, ...]] = {}
     for extension in extension_names(start):
-        module = _plugin_module(extension)
-        declared = () if module is None else getattr(module, TOOLS_ATTRIBUTE, ())
-        if isinstance(declared, str) or not (
-            isinstance(declared, (tuple, list))
-            and all(isinstance(text, str) for text in declared)
-        ):
-            raise RuntimeError(
-                f"extension {extension!r} declares {TOOLS_ATTRIBUTE} as {declared!r};"
-                ' it is a tuple of requirement strings, ("docker>=27",)'
-            )
-        found[extension] = tuple(declared)
+        declared = _readable(extension)
+        found[extension] = declared.tools if declared is not None else ()
     return found
 
 
-def contributions(start: Path | None = None) -> dict[str, dict[str, str]]:
-    """Each listed extension's declared contributions, owner to target to module.
-
-    Read from ``WORKSHOP_FOR`` on the plugin module, a map from a
-    target extension's import path to the module carrying the
-    registrations for that target. A value of another shape refuses
-    naming the extension.
-
-    Raises:
-        RuntimeError: when an extension's declaration is not a map of
-            strings to strings.
-    """
-    found: dict[str, dict[str, str]] = {}
+def declared_targets(start: Path | None = None) -> dict[str, dict[str, Additions]]:
+    """Each listed extension's ``[for.<target>]`` tables, owner to target to tables."""
+    found: dict[str, dict[str, Additions]] = {}
     for extension in extension_names(start):
-        module = _plugin_module(extension)
-        declared = {} if module is None else getattr(module, FOR_ATTRIBUTE, {})
-        if not isinstance(declared, dict) or not all(
-            isinstance(target, str) and isinstance(name, str)
-            for target, name in declared.items()
-        ):
-            raise RuntimeError(
-                f"extension {extension!r} declares {FOR_ATTRIBUTE} as {declared!r}; it"
-                " is a map from a target extension's import path to the module"
-                ' carrying the registrations for it, {"livery.workshop.python":'
-                ' "acme.house.python"}'
-            )
-        found[extension] = dict(declared)
+        declared = _readable(extension)
+        found[extension] = dict(declared.targets) if declared is not None else {}
     return found
 
 
@@ -665,7 +580,7 @@ def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     once written; otherwise every declared target that is listed.
     """
     names = extension_names(start)
-    declared = contributions(start)
+    declared = declared_targets(start)
     written = extension_targets(start)
     found: dict[str, tuple[str, ...]] = {}
     for owner in names:
@@ -723,7 +638,7 @@ def closure_problems(start: Path | None = None) -> list[str]:
                     f"[workspace] extensions lists {needed} after {extension}, which"
                     f" depends on it; move {needed} before {extension}"
                 )
-    declared = contributions(start)
+    declared = declared_targets(start)
     for owner, targets in extension_targets(start).items():
         for target in targets or ():
             if target not in order:
@@ -867,11 +782,9 @@ def write_extensions(root: Path) -> list[str]:
         package_text = package_contract.read_text(encoding="utf-8")
         own = list(listed)
         for extension in listed:
-            module = declaration(extension)
-            depends = (
-                getattr(module, DEPENDS_ATTRIBUTE, ()) if module is not None else ()
-            )
-            for needed in (str(name) for name in depends):
+            found = declaration(extension)
+            depends = found.requires if found is not None else ()
+            for needed in depends:
                 if needed in own or needed in names:
                     continue
                 where = package_contract.parent.relative_to(root).as_posix()

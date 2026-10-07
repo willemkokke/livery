@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.clang.format._extension as declaration
 import livery.toolroom.tools as tools
 from livery.extensions.clang.format import _checks
 from livery.workshop import GateContext, Package
@@ -29,10 +28,12 @@ FORMATTED = "int main() { return 0; }\n"
 @pytest.fixture
 def registered() -> Iterator[None]:
     """clang-format's check registered, as the mount registers a listed extension's."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("clang-format", declaration)
+    found = declaration("clang-format")
+    assert found is not None
+    register_declared("clang-format", found.additions)
     try:
         yield
     finally:
@@ -131,7 +132,14 @@ def test_a_source_out_of_style_is_named_and_the_fix_heals_it(tmp_path: Path) -> 
     if not _clang_format_runs():
         pytest.skip("clang-format is not supplied on this host")
     package = _native(tmp_path)
-    style = _checks.STYLE.replace("{{ kind }}", "cpp-conan")
+    from livery.workshop._extensions import declaration
+
+    found = declaration("clang-format")
+    assert found is not None
+    (fragment,) = (
+        f for f in found.additions.checks[0].fragments if f.kind == "cpp-conan"
+    )
+    style = fragment.text.replace("{{ kind }}", "cpp-conan")
     (package.directory / ".clang-format").write_text(style)
     source = package.directory / "src" / "native.cpp"
     with pytest.raises(BaseException, match="clang-format would rewrite") as caught:

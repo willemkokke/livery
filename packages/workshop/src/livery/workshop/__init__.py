@@ -2,8 +2,8 @@
 
 The task surface arrives through the footman plugin
 (``plugin("livery.workshop")``); this module's own API is the extension
-walk (livery.workshop.extension_names, livery.workshop.mount_extensions,
-livery.workshop.workspace_root), the package contracts
+walk (livery.workshop.extension_names, livery.workshop.workspace_root),
+the package contracts
 (livery.workshop.discover_packages, livery.workshop.verify_workspace
 over livery.workshop.Package and livery.workshop.Edge), and the one
 helper a package's docs generator needs
@@ -11,21 +11,21 @@ helper a package's docs generator needs
 livery.forge.Forge; the workshop orchestrates local, git, and forge
 steps and never hands a raw forge verb to a user.
 
-An extension in its own wheel declares its checks with
-[livery.workshop.CheckRecord][], its claims with
-[livery.workshop.Claim][] and the files it manages with
-[livery.workshop.Fragment][], in a ``CHECKS`` tuple of its declaring
-module, and the options a workspace may list it with in an ``OPTIONS``
-map. A check's body takes a [livery.workshop.GateContext][]. A
-check that narrows by paths (``narrowing=PATHS``) reads them from
+An extension in its own wheel declares itself in an ``extension.toml``
+beside the package its ``workshop.extensions`` entry point names: its
+checks under ``[checks.<tool>.<role>]``, each naming the function that
+runs it as ``"module:function"``, and the options a workspace may list
+it with under ``[options]``. A check's body takes a
+[livery.workshop.GateContext][]. A check that narrows by paths
+(``narrowing = "paths"``) reads them from
 [livery.workshop.scoped_paths][], which answers
 [livery.workshop.WHOLE][] for the tool's configured whole, and
 calls its tool through [livery.workshop.run_batched][]; one that
-narrows by packages (``narrowing=PACKAGES``) reads them from
+narrows by packages (``narrowing = "packages"``) reads them from
 [livery.workshop.scoped_packages][], and one that judges a package
-at a time (``scope=PACKAGE``) reads its files from
+at a time (``scope = "package"``) reads its files from
 [livery.workshop.scoped_files][]. A check declares the options a
-package may set on it with [livery.workshop.Option][] and reads a
+package may set on it under the check's ``options`` and reads a
 package's value with [livery.workshop.check_option][]. A package's
 public modules are its kind's answer,
 [livery.workshop.public_modules][], and so is where its build
@@ -49,19 +49,14 @@ if TYPE_CHECKING:
     from livery.workshop._checks import PACKAGES as PACKAGES
     from livery.workshop._checks import PATHS as PATHS
     from livery.workshop._checks import WHOLE as WHOLE
-    from livery.workshop._checks import CheckRecord as CheckRecord
-    from livery.workshop._checks import Claim as Claim
     from livery.workshop._checks import GateContext as GateContext
-    from livery.workshop._checks import Option as Option
     from livery.workshop._checks import check_option as check_option
     from livery.workshop._checks import scoped_files as scoped_files
     from livery.workshop._checks import scoped_packages as scoped_packages
     from livery.workshop._checks import scoped_paths as scoped_paths
     from livery.workshop._coverage_store import workspace_suite as workspace_suite
     from livery.workshop._extensions import extension_names as extension_names
-    from livery.workshop._extensions import mount_extensions as mount_extensions
     from livery.workshop._extensions import workspace_root as workspace_root
-    from livery.workshop._fragments import Fragment as Fragment
     from livery.workshop._invoke import run_batched as run_batched
     from livery.workshop._kinds import compile_commands as compile_commands
     from livery.workshop._kinds import kind_examples as kind_examples
@@ -80,12 +75,8 @@ __all__ = [
     "PACKAGES",
     "PATHS",
     "WHOLE",
-    "CheckRecord",
-    "Claim",
     "Edge",
-    "Fragment",
     "GateContext",
-    "Option",
     "Package",
     "__version__",
     "check_option",
@@ -93,7 +84,6 @@ __all__ = [
     "discover_packages",
     "extension_names",
     "kind_examples",
-    "mount_extensions",
     "public_modules",
     "rewrite_nav_block",
     "run_batched",
@@ -109,12 +99,8 @@ __all__ = [
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
-    "CheckRecord": "livery.workshop._checks",
-    "Claim": "livery.workshop._checks",
     "Edge": "livery.workshop._packages",
-    "Fragment": "livery.workshop._fragments",
     "GateContext": "livery.workshop._checks",
-    "Option": "livery.workshop._checks",
     "PACKAGE": "livery.workshop._checks",
     "PACKAGES": "livery.workshop._checks",
     "PATHS": "livery.workshop._checks",
@@ -125,7 +111,6 @@ _EXPORTS: dict[str, str] = {
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
     "kind_examples": "livery.workshop._kinds",
-    "mount_extensions": "livery.workshop._extensions",
     "public_modules": "livery.workshop._kinds",
     "rewrite_nav_block": "livery.workshop._navblocks",
     "run_batched": "livery.workshop._invoke",

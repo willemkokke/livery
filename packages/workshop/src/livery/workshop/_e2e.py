@@ -19,7 +19,7 @@ import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import fail
@@ -30,7 +30,6 @@ from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge import Forge, Job, Repository, Run
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
@@ -1638,14 +1637,14 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         installed_extensions,
     )
 
-    module = declaration(name)
-    if module is None:
+    found = declaration(name)
+    if found is None:
         installed = ", ".join(installed_extensions()) or "none"
         fail(
             f"extension {name!r}: no installed distribution declares it;"
             f" the installed ones are {installed}"
         )
-    checks = cast("tuple[CheckRecord, ...]", tuple(getattr(module, "CHECKS", ())))
+    checks = found.additions.checks
     if not checks:
         fail(
             f"extension {name!r} registers no check: a pass would have"
@@ -1659,8 +1658,8 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         if extension in path:
             fail(f"extensions require each other: {' -> '.join((*path, extension))}")
         declared = declaration(extension)
-        for needed in getattr(declared, "REQUIRES", ()) if declared else ():
-            visit(str(needed), (*path, extension))
+        for needed in declared.requires if declared is not None else ():
+            visit(needed, (*path, extension))
         stack.append(extension)
 
     visit(name, ())

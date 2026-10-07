@@ -1,6 +1,7 @@
 """pytest's two checks: each python package's suite, and its documentation examples.
 
-``test.pytest`` narrows by packages: the workshop names the members a
+The extension's ``extension.toml`` declares both and names the bodies
+here. ``test.pytest`` narrows by packages: the workshop names the members a
 run reaches ([livery.workshop.scoped_packages][]), and the python
 kind's runner runs their suites in one call
 ([livery.workshop.run_suites][]), with the workspace's own tests
@@ -15,11 +16,7 @@ words after ``--`` on its own verb (``fm test.pytest -- -k name``).
 from __future__ import annotations
 
 from livery.workshop import (
-    PACKAGES,
-    CheckRecord,
-    Claim,
     GateContext,
-    Option,
     check_option,
     kind_examples,
     run_suites,
@@ -31,15 +28,13 @@ from livery.workshop import (
 #: The kind whose suites and examples pytest runs, its children with it.
 KIND = "python"
 
-#: The suffixes of the python files the checks claim.
-SUFFIXES = (".py", ".pyi")
-
 #: The checks' names, as the workshop addresses them.
 TEST = "test.pytest"
 EXAMPLES = "examples.pytest"
 
 
-def _test_run(ctx: GateContext) -> None:
+def judge_test(ctx: GateContext) -> None:
+    """Run the suites of the packages the run reaches, and the workspace's own tests."""
     # A package whose examples alone changed runs them, not its suite.
     members = tuple(
         package
@@ -70,7 +65,8 @@ def _test_run(ctx: GateContext) -> None:
             )
 
 
-def _examples_run(ctx: GateContext) -> None:
+def judge_examples(ctx: GateContext) -> None:
+    """Run the documentation examples of each package the run reaches."""
     for package in scoped_packages(ctx, EXAMPLES):
         if (
             ctx.scoped
@@ -90,60 +86,3 @@ def _examples_run(ctx: GateContext) -> None:
             else ()
         )
         runner(package, ctx.root, named, ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "pytest",
-        "test",
-        _test_run,
-        flags=("point",),
-        narrowing=PACKAGES,
-        kinds=(KIND,),
-        arguments=True,
-        # pytest is the record's tool in the store, for the typed handle
-        # the runner calls, and its venv copy below is the one that
-        # imports the project's environment.
-        tools=("pytest",),
-        # A package's tests measure its source, so a source change is one
-        # the test check reads, and runs the suite for.
-        claims=(
-            Claim("test"),
-            Claim("test-support"),
-            Claim("source", suffixes=SUFFIXES),
-        ),
-        options=(
-            Option(
-                "parallel",
-                "bool",
-                True,
-                "run the package's suite across cores; false runs it under -n 0",
-            ),
-        ),
-        # pytest and coverage import the project's environment, so they
-        # live in the venv: pytest 9 for the pytest.toml it reads,
-        # coverage 7.13 for the .pth it installs, which starts the meter
-        # in every python the tests start once the runner arms it and
-        # imports nothing otherwise, and xdist for -n auto.
-        contributions=(
-            ("python.dev-group", "pytest>=9.0"),
-            ("python.dev-group", "pytest-cov>=5"),
-            ("python.dev-group", "coverage>=7.13"),
-            ("python.dev-group", "pytest-xdist>=3.6"),
-            ("python.test.addopts", "-q"),
-            ("python.test.addopts", "-n auto"),
-            ("python.test.addopts", "--dist=worksteal"),
-            ("python.test.addopts", "--import-mode=importlib"),
-        ),
-    ),
-    CheckRecord(
-        "pytest",
-        "examples",
-        _examples_run,
-        narrowing=PACKAGES,
-        kinds=(KIND,),
-        tools=("pytest",),
-        arguments=True,
-        claims=(Claim("example", suffixes=SUFFIXES),),
-    ),
-)
