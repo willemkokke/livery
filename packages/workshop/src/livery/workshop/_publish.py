@@ -156,7 +156,9 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
             " only from workflow.release squashes; re-run the release to"
             " produce one."
         )
-    span = f"{point}..{ref}^"
+    # The squash's first parent, spelled without a caret, which cmd.exe
+    # drops on its way to a git run through a `.cmd` launcher on Windows.
+    span = f"{point}..{ref}~1"
     moved = git.log_paths(span, (f"packages/{package.member}",))
     if moved:
         listed = "\n".join(f"    {s}" for s in moved)

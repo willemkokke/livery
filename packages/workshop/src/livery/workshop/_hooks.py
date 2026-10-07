@@ -98,8 +98,11 @@ def _push_conflicts(repo: str | None, ref: str = "HEAD") -> bool:
         # Offline / no remote: the last-seen origin/main still answers.
         run([*git, "fetch", "--quiet", "origin", "main"], capture=True)
     try:
-        run([*git, "rev-parse", "--verify", "-q", "origin/main^{commit}"], capture=True)
-        run([*git, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], capture=True)
+        # `~0` peels to the commit; a caret would not reach a git that
+        # Windows runs through a `.cmd` launcher, which takes `^` as its
+        # escape character.
+        run([*git, "rev-parse", "--verify", "-q", "origin/main~0"], capture=True)
+        run([*git, "rev-parse", "--verify", "-q", f"{ref}~0"], capture=True)
     except RunFailed:
         # No origin/main at all, or a ref git cannot see: git refuses
         # the push itself, and neither is this guard's business.
