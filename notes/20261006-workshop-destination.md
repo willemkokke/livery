@@ -85,18 +85,17 @@ Measured on `4f2a5e53`, 2026-10-06, each claim of the brief checked:
 Numbered after the extensions plan's 25; they bind its phases from 10
 on.
 
-26. **Every registration is data on a declaring module, read at
-    mount.** The base reads `CHECKS`, `JOBS`, `SLOTS`, `GUIDANCE`,
-    `RELEASE_NOTES`, `RULES`, `CATEGORIES`, `PHASES`, `QUERIES`,
-    `ROOT_FILES` and `FRAGMENTS` the way it reads `CHECKS` today.
+26. **Every declaration is data in the extension's `extension.toml`,
+    read at mount and judged against the schema.** Behaviour is
+    referenced by name, `"module:function"`, and imported when it runs.
     Extension code calls no `register_*` function; the base exports
     none. A registry an extension owns (the docs extension's
     generators) is read the same way, through
     `livery.workshop.contributions_for`.
 27. **A registry is written at mount and read at use.** No code reads a
     registry while the mount runs, so no extension's correctness
-    depends on its position in the list beyond what `REQUIRES` and
-    `FOR` state.
+    depends on its position in the list beyond what `requires` and
+    `[for]` state.
 28. **Mount order is the base, then the package-level extensions, then
     the workspace list.** Package-level extensions mount in requires
     order over the union of every package's list, then the workspace
@@ -108,23 +107,34 @@ on.
     while the registration is in use.** A check's tools while a package
     it judges exists; a package-level extension's while a package lists
     it; a generator's while the docs extension is listed and a package
-    its claims reach exists; a workspace extension's `TOOLS` while it is
+    its claims reach exists; a workspace extension's `tools` while it is
     listed. A mounted extension whose registrations are unused costs its
-    declaring module's import and nothing else.
+    declaration file's parse and nothing else.
 30. **A public name lives in the root's entry module or a public module
     it declares, is documented, type-complete, pinned by a test and
     judged by the conformance kit.** A package's source never imports
     another distribution's underscore module or name, except through
     the allowance the reach check reads, each entry with its reason.
-31. **One `API_VERSION` at a time, no compatibility code.** A record
+31. **One `api-version` at a time, no compatibility code.** A record
     grows additively within a version. A removal or a rename bumps the
     version and the workshop's minor; the mount turns a mismatch into a
     sentence naming both versions.
-32. **The docs extension owns every word of documentation generation.**
+32. **One schema per contract, shipped as data.** The base declares
+    the schema of `extension.toml` and of its own tables; an extension
+    declares the keys it owns in `[[contract-keys]]`; `fm sync`
+    composes the workspace's effective schema into JSON Schema under
+    `.workshop/schema/`, and the judge, the editor and the contract
+    reference pages read that one file. The judge keeps the rules a
+    schema cannot say.
+33. **A check whose verdict is its tool's exit code is words, not
+    code.** `judge`, `fix`, `safe-fix`, `env`, `matrix` and the
+    placeholders the engine answers; `run` only where the words cannot
+    say it, and never both.
+34. **The docs extension owns every word of documentation generation.**
     Pages, generators, handlers, inventories, nav blocks, the members
     policy, the site's config, the publish seam and the `[docs]` table.
     Another extension contributes to it by requiring it or through
-    `FOR`, never the other way.
+    `[for]`, never the other way.
 
 ## The architecture
 
@@ -137,7 +147,7 @@ It owns:
   every key declared by its owner;
 - package discovery and the workspace graph;
 - the mount: the `workshop.extensions` entry point group, the levels,
-  `REQUIRES`, `FOR`, options, the API version check;
+  `requires`, `[for]`, options, the API version check;
 - the registries: checks, fragments and seeds, categories, slots,
   contract keys, CI points and jobs, guidance sections and fragments,
   the release notes provider, AST rules over a language's reader,
@@ -168,9 +178,9 @@ clauses apply by what is registered, not by a declared sort.
 
 | Sort | Level | May register | Seams it uses | Examples |
 | --- | --- | --- | --- | --- |
-| check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `CHECKS`, `GENERATORS`, `FRAGMENTS`, `content/`, `TOOLS`, `OPTIONS` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
-| package | package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `PHASES`, `QUERIES`, `CATEGORIES`, `seeds/`, `ROOT_FILES`, `TOOLS`, `JOBS`, `CHECKS`, `FOR` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
-| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `CHECKS`, `JOBS`, `SLOTS`, `GUIDANCE`, `RELEASE_NOTES`, `RULES`, `FRAGMENTS`, `contributions_for` | docs, changelog, claude, housekeeping |
+| check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `[[checks]]`, `[[generators]]`, `[[fragments]]`, `content/`, `tools`, `[options]` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
+| package | package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `[phases]`, `[queries]`, `[[categories]]`, `seeds/`, `[[root-files]]`, `tools`, `[[jobs]]`, `[[checks]]`, `[for]` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
+| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `[[checks]]`, `[[jobs]]`, `[[slots]]`, `[[guidance]]`, `release-notes`, `[[rules]]`, `[[fragments]]`, `contributions_for` | docs, changelog, claude, housekeeping |
 
 The package sort has four flavours and no sub-sort: a language, a
 build system, an ecosystem and a platform differ in which phases and
@@ -183,7 +193,7 @@ package lists it: the wheels job is nanobind's, with the runner labels
 its packages declare, and an engine build on its own runners is
 unreal's.
 
-No `SORT` attribute is declared. The brief's question, whether to
+No `sort` key is declared. The brief's question, whether to
 define extension types with a load order between them, is answered by
 contract 28 without a new declaration: the level is the order. Every
 package-level extension mounts before any workspace extension, so a
@@ -197,45 +207,47 @@ time.
 Two declarations say how an extension relates to another, and no
 third is needed:
 
-- `REQUIRES` says the extension cannot work without the target. It
-  declares its registrations on its own module, since a required
+- `requires` says the extension cannot work without the target. It
+  declares its registrations at the top level of its `extension.toml`,
+  since a required
   target is always present, and a listing without the target refuses
   through the layering check and its fix, naming the entry and the
   missing target. The mkdocstrings and doxygen extensions require
   `docs`.
-- `FOR` says the extension adds to the target when the target is
-  there. The contribution module is imported only when both are
-  listed, so a workspace without the target is silent by construction.
+- `[for.<target>]` says the extension adds to the target when the
+  target is there. The table is read only when both are listed, and a
+  reference in it imported only then, so a workspace without the
+  target is silent by construction.
   A house extension with opinions on python and cpp is this case, and
   so is pytest's coverage pages for docs.
 
-An extension whose every registration lives in `FOR` modules, listed
+An extension whose every registration lives in `[for.<target>]` tables, listed
 in a workspace where no target is listed, is dormant. That is not
 refused: a listing kept until the first python package arrives is a
 statement of intent. It is visible: `fm extensions` and `fm doctor`
 print the entry as dormant with the targets that would wake it,
 derived from the declarations alone. "At least one of several
 targets" has no spelling and no known case; if one appears it is a
-`REQUIRES` entry spelled as alternatives, a grammar change to rule on
+`requires` entry spelled as alternatives, a grammar change to rule on
 then.
 
-`COMPATIBLE` is a third declaration on another axis: composition, not
+`compatible` is a third declaration on another axis: composition, not
 contribution. It says two package-level extensions may sit on one
 package, and the validity rule reads it: a package's list is valid when
-every pair is connected through `REQUIRES` or compatibility, else the
-package refuses naming the pair. For a package-level pair, a `REQUIRES`
-or `FOR` target counts as compatible: contributing to an extension
-means knowing it, so `FOR = {"python": ...}` without `COMPATIBLE =
-("python",)` would be a contradiction to refuse, and deriving it removes
-the case. `COMPATIBLE` is needed only where neither side requires or
-contributes to the other, `conan` beside `nanobind` for one. The
-wheel's side is one rule as well: a compatibility claim is an extra
-(contract 15), and a `FOR` module that imports its target's public
+every pair is connected through `requires` or compatibility, else the
+package refuses naming the pair. For a package-level pair, a `requires`
+or `for` target counts as compatible: contributing to an extension
+means knowing it, so `[for.python]` without `compatible = ["python"]`
+would be a contradiction to refuse, and deriving it removes the case.
+`compatible` is needed only where neither side requires or contributes
+to the other, `conan` beside `nanobind` for one. The wheel's side is
+one rule as well: a compatibility claim is an extra (contract 15), and
+a reference under `[for.<target>]` that imports its target's public
 names is the same extra, `livery-extensions-nanobind[python]`. So three
-outcomes, each at its own place: a missing `REQUIRES` target refuses at
-the listing; an absent `FOR` target is silence, the entry dormant and
+outcomes, each at its own place: a missing `requires` target refuses at
+the listing; an absent `for` target is silence, the entry dormant and
 named; an unconnected pair refuses at the package, naming both.
-`BEFORE` and `AFTER` are declared against required or compatible
+`before` and `after` are declared against required or compatible
 extensions, which the derived compatibility covers.
 
 ### Dependencies follow use
@@ -252,29 +264,28 @@ every kind the check judges"). What changes:
 - a generator's tools (doxygen for the C++ reference) are required
   only while the docs extension is listed and a package the generator
   claims exists;
-- a declaring module imports only what its declarations name
-  (already the rule for `CHECKS`); every verb and every generator
-  imports its library (griffe, a Doxygen XML reader) inside the
-  function that runs.
+- `extension.toml` imports nothing, and a reference in it is imported
+  when it runs; every verb and every generator imports its library
+  (griffe, a Doxygen XML reader) inside the function that runs.
 
 ### What the core must not know, and the seam that replaces each
 
 | Knowledge in the core today | Where | Seam in the destination |
 | --- | --- | --- |
-| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `CONTRACT_KEYS`; the mkdocstrings extension declares the keys it reads under `[docs]` (`api`, `python-paths`) |
-| the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `Job.installs` (system packages the job installs before entering) and `Job.deploy` (the seam's value), set by the contributing extension on its `JOBS` entry |
-| pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `SETUP`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
+| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `[[contract-keys]]`; the mkdocstrings extension declares the keys it reads under `[docs]` (`api`, `python-paths`) |
+| the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `installs` (system packages the job installs before entering) and `deploy` (the seam's value), set by the contributing extension on its `[[jobs]]` entry |
+| pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `[[setup]]`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
-| which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `Job.inputs`, the same `Inputs` record a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `GENERATORS` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages on a kind | `KindRecord.coverage_pages` | a `Generator` of the same contribution |
+| which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
+| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[[generators]]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
+| coverage pages on a kind | `KindRecord.coverage_pages` | a `[[generators]]` entry of pytest's `[for.docs]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
-| the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` | nanobind's `JOBS` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
+| the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` in the base | nanobind's `[[jobs]]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the mkdocstrings extension's keys (`[docs] api`, `[docs] python-paths`), and the `MODULE_ROOTS` query |
-| the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `CHECKS` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
-| git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `RELEASE_NOTES` on its module; the base keeps the provider protocol and asks |
+| the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `[[checks]]` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
+| git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
 | the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
 | the layering check's python parse | `_ast_rules.parsed_source`, `imports_of` | the `references` query: a language extension answers what a source references; rules register against it |
@@ -291,113 +302,188 @@ name below lives in `livery.workshop`, `livery.extensions.docs`,
 entry module declares. `livery.workshop.api` is the path today; phase
 10a retires it.
 
-### The declaration vocabulary
+### The declaration file
 
-Attributes of an extension's declaring module, every one optional,
-each read at mount. Nothing here is imported; the types the values are
-built from are in the next table.
+An extension declares itself in one `extension.toml` in its wheel,
+found through the `workshop.extensions` entry point, which names the
+package that ships it. The file is a contract: the engine reads it with
+the reader that reads `workshop.toml`, judged against the schema the
+base ships, kebab-case keys, every refusal naming the file, the key,
+what the table takes and the nearest spelling. Nothing in it is
+imported at mount. Behaviour is referenced by name, `"module:function"`,
+and imported when it runs; a reference that does not import refuses at
+mount naming the file and the key. Every key is optional.
 
-| Attribute | Value | Sort | Users today, or the phase that brings one |
+| Key | Value | Sort | Users today, or the phase that brings one |
 | --- | --- | --- | --- |
-| `API_VERSION` | int | every | the eight tool extensions, docs |
-| `LEVELS` | `("workspace",)`, `("package",)` or both | every | the eight, docs |
-| `PLUGIN` | the footman plugin carrying the verbs | every | docs |
-| `REQUIRES` | extensions it cannot work without, listed before it; it declares for them on its own module | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
-| `COMPATIBLE` | extensions it combines with, from either side; a `REQUIRES` or `FOR` target counts as one | package | phase 11 |
-| `BEFORE`, `AFTER` | order within a phase against named extensions | package | phase 11 |
-| `TOOLS` | the tools its verbs need | every | forge's dev plugin (as a plugin) |
-| `OPTIONS` | option name to what it turns on | every | basedpyright |
-| `CONTRACT_KEYS` | `Declared` records | every | docs |
-| `CHECKS` | `CheckRecord` tuple | every | the eight, docs |
-| `GENERATORS` | `Generator` tuple, each naming the package-level extensions it extracts for | check | mkdocstrings (phase 11), doxygen (phase 12) |
-| `FRAGMENTS` | dynamic `Fragment` records; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
-| `JOBS` | `JobContribution` tuple; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10 moves it onto data), nanobind's wheels job (phase 11) |
-| `SLOTS` | `Slot` records it declares; `CONTRIBUTIONS` fills others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
-| `GUIDANCE` | `Section` and rendered `Prose` records; files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
-| `RELEASE_NOTES` | a `ReleaseNotes` provider | workspace | changelog (phase 10) |
-| `RULES` | `AstRule` tuple, each naming the language whose reader it reads | workspace, package | housekeeping's reach rule (phase 12) |
-| `SETUP` | repository configuration steps for `workflow.configure` | workspace | docs' pages hosting (phase 12) |
-| `CATEGORIES` | category tables | package | python, cpp (phase 11) |
-| `PHASES` | contributions to the lifecycle phases, `pre`, main, `post` | package | phase 11 |
-| `QUERIES` | `Query` to answering callable | package | phase 11 |
-| `ROOT_FILES` | the files written at the root while a package of it exists | package | cmake and conan (phase 11), from `KindRecord.root_files` |
-| `FOR` | target extension to contribution module, imported only while both are listed; dormant when no target is, and named so | every | pytest for docs, the coverage pages (phase 11) |
-| `REPLACES`, `DELETES` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
+| `api-version` | int | every | the eight tool extensions, docs |
+| `levels` | `["workspace"]`, `["package"]` or both | every | the eight, docs |
+| `plugin` | the footman plugin carrying the verbs | every | docs |
+| `requires` | extensions it cannot work without, listed before it; it declares for them at the top level | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
+| `compatible` | extensions it combines with, from either side; a `requires` or `for` target counts as one | package | phase 11 |
+| `before`, `after` | order within a phase against named extensions | package | phase 11 |
+| `tools` | the tools its verbs need | every | forge's dev plugin (as a plugin) |
+| `[options]` | option name to what it turns on | every | basedpyright |
+| `[[contract-keys]]` | a key it owns: `contract`, `path`, `types`, `values`, `doc` | every | docs |
+| `[[checks]]` | a check: `tool`, `role`, `scope`, `narrowing`, `transport`, `threshold`, `extensions`, `claims`, `tools`, `options`, `inputs`, `after`, and either its words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or references (`run`, `fix`) | every | the eight, docs |
+| `[[generators]]` | a page generator: `name`, `extensions`, `claims`, `tools`, `options`, `run` | check | mkdocstrings (phase 11), doxygen (phase 12) |
+| `[[fragments]]` | a dynamic fragment: `target`, `render`; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
+| `[[jobs]]` | a CI job for a builtin point: `point`, `name`, `entries`, `gates`, `installs`, `deploy`, `inputs`; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10), nanobind's wheels job (phase 11) |
+| `[[slots]]`, `[contributions]` | a slot it declares (`name`, `compose`, `default`, `values`), and the values it puts into others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
+| `[[guidance]]` | a section (`name`, `after`) or a rendered fragment (`section`, `topic`, `render`); files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
+| `release-notes` | a reference to the provider | workspace | changelog (phase 10) |
+| `[[rules]]` | an AST rule: `name`, `language`, `judge`, `fix` | workspace, package | housekeeping's reach rule (phase 12) |
+| `[[setup]]` | a repository configuration step for `workflow.configure` | workspace | docs' pages hosting (phase 12) |
+| `[[categories]]` | a category table: `extension`, rows of `pattern` and `category` | package | python, cpp (phase 11) |
+| `[phases.<phase>]` | `pre`, `main`, `post` references; `provides` and `reads` context keys | package | phase 11 |
+| `[queries]` | query name to reference | package | phase 11 |
+| `[[root-files]]` | a file written at the root while a package of it exists: `path`, `render` | package | cmake and conan (phase 11), from `KindRecord.root_files` |
+| `[for.<target>]` | the same keys, read only while both are listed; dormant when no target is, and named so | every | pytest for docs, the coverage pages (phase 11) |
+| `[replaces]`, `[deletes]` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
 
-A contribution module (the value of a `FOR` entry) carries the same
-attributes. The base registers what it owns from it (`CHECKS`,
-`CONTRACT_KEYS`, `RULES`) under the contributor's name; the target
-reads the rest through `contributions_for`.
+A `[for.<target>]` table carries the same keys as the top level. The
+base registers what it owns from it (`checks`, `contract-keys`,
+`rules`) under the contributor's name; the target reads the rest
+through `contributions_for`, which returns the tables.
+
+### A check in words alone
+
+A check whose whole body is "run this tool with these words over these
+paths, a non-zero exit is the verdict" needs no code. The engine already
+selects the paths a run reaches, applies the threshold, splits the list
+into the fewest calls under the command-line limit, runs the tool
+through its toolroom handle, merges several calls' failures into one
+refusal, prints the tool's output verbatim on red and chooses the fixer
+under `--fix`. What is left is the tool's name and its words:
+
+```toml
+[[checks]]
+tool = "ruff"
+role = "format"
+scope = "workspace"
+narrowing = "paths"
+tools = ["ruff>=0.16"]
+claims = [{ category = "source", suffixes = [".py"] }]
+judge = ["ruff", "format", "--check", "--force-exclude"]
+fix = ["ruff", "format", "--force-exclude"]
+```
+
+The engine appends the selected paths through the transport, or
+nothing when the run is whole. Under `--fix` it runs `fix` first and
+does not judge again; `safe-fix` is a third list where the tool
+distinguishes the two. The vocabulary that keeps it words is small, and
+closed:
+
+- placeholders the engine answers: `{cache}`, the check's directory
+  under `.workshop/.cache/<tool>/`; `{package}`, a package-scoped
+  check's directory; and a query's name, `{compile-commands}`, for
+  clang-tidy's `-p`;
+- `env`, a table of variables the call gets;
+- `matrix`, a placeholder to its values, one call per value in
+  parallel, each its own verdict: mypy's three platforms as
+  `matrix = { platform = ["linux", "darwin", "win32"] }` with
+  `--platform={platform}` and `{cache}/{platform}` in the words.
+
+Anything beyond that is code, declared as `run` instead of `judge`;
+the two are exclusive and the judge refuses both. Of the ten checks
+the eight tool extensions register, eight become words: `format.ruff`,
+`lint.ruff`, `typecheck.basedpyright`, `typecheck.mypy`, `typecheck.ty`,
+`typecheck.pyrefly`, `format.clang-format` and `lint.clang-tidy`.
+`typecomplete.basedpyright` runs one call per public module and reads a
+report, and pytest's two checks collect packages, arm coverage and
+choose `-n`: those stay code. `fm explain <check>` prints the command a
+check will run, and the conformance kit judges the words: an
+unanswered placeholder, a `matrix` key absent from the words, a `fix`
+on a role that cannot fix. What the words do not cover: a tool whose
+verdict is not its exit code, or whose paths need reshaping before the
+call; and a wrong word is found when the tool runs, not before.
+
+### The schema
+
+`Declared(contract, path, types, values)` is a schema already, in
+Python, with a judge that refuses an unknown key, a wrong type or a
+value outside its set and names the nearest spelling. The destination
+makes the schema data (contract 33). An extension declares the keys it
+owns in `[[contract-keys]]`; the base declares the schema of
+`extension.toml` and of its own tables the same way. `fm sync`
+composes the workspace's effective schema, the base plus the listed
+extensions, into JSON Schema under `.workshop/schema/` (one file for
+the root contract, one for a package's, one for `extension.toml`) and
+associates them in the composed `.vscode/settings.json`, so the editor
+completes and validates every contract as it is typed. The judge reads
+the same composed file, with a validator of its own over the subset it
+uses (types, enums, required, no unknown keys, a pattern for kebab-case
+and for user-named keys), and keeps its teaching messages. The docs
+extension renders the contract reference pages from it. JSON Schema is
+the published form because Taplo and the editors read it and every
+language a port could use validates it; the authoring form stays TOML.
+The schema covers shape. The judge keeps the rules a schema cannot say:
+`judge` and `run` are exclusive, a `matrix` key appears in the words, a
+`for` target is an extension, a `requires` entry is listed before.
 
 ### The names
 
 Grouped by the sort that needs them. "Users" names today's importer or
-the phase that brings one.
+the phase that brings one. The rule that decides what stays a Python
+name: a record an extension builds is a table in `extension.toml`; a
+type the engine hands to an extension's function, and a function an
+extension calls, stay public.
 
 **Every extension.**
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
 | `__version__` | the workshop's version | tests | `livery.workshop` |
-| `Declared` | one contract key: contract, path, types, values | docs (private today) | `livery.workshop` |
-| `Fragment` | a dynamic fragment: owner, target, render | the eight (check fragments), claude (phase 10) | `livery.workshop` |
 | `Package`, `Edge` | a discovered package and a graph edge | the eight, docs | `livery.workshop` |
 | `discover_packages`, `verify_workspace`, `workspace_root` | the workspace and its graph | docs, tests | `livery.workshop` |
 | `read_contract` | one contract's declared keys, judged | docs (`load_contract` today) | `livery.workshop` |
 | `extension_names` | the listed extensions, in order | tests | `livery.workshop` |
-| `contributions_for` | the contribution modules grafted for a target extension | docs (phase 11) | `livery.workshop` |
+| `contributions_for` | the `[for.<target>]` tables grafted for a target, and the top-level tables of the extensions that require it | docs (phase 11) | `livery.workshop` |
 | `generated_header` | the provenance header for a file an extension writes outside the engine | docs (private today) | `livery.workshop` |
-| `ci_run` | the CI run's context, or None at a desk | docs (`run_context` today) | `livery.workshop` |
-| `RunContext` | its type | docs | `livery.workshop` |
-| `Option`, `check_option` | an option a package may set, and its value | pytest | `livery.workshop` |
-| `Slot`, `slot`, `NEAREST`, `UNION`, `MERGE` | a declared slot, its composed value, the composition rules | docs (`_slots` today), the base's `pyproject.toml` template | `livery.workshop` |
+| `ci_run`, `RunContext` | the CI run's context, or None at a desk | docs (`run_context` today) | `livery.workshop` |
+| `check_option` | a package's value of an option the check declares | pytest | `livery.workshop` |
+| `slot` | a slot's composed value | docs (`_slots` today), the base's `pyproject.toml` template | `livery.workshop` |
 | `testing` | the conformance kit: `Subject`, `Clause`, `CLAUSES`, `Violation`, `judge`, `builtin_subject` | every extension's suite | `livery.workshop.testing`, declared in `livery.workshop` |
 
-**Check extensions** (the model that works; unchanged but for two
-names).
+**Check extensions** (the model that works; eight of its ten checks
+need none of these once they are words).
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `CheckRecord`, `Claim`, `GateContext` | a check, what it claims, what a run hands it | the eight | `livery.workshop` |
-| `PACKAGE`, `PACKAGES`, `PATHS`, `WHOLE`, `NONE` | the scope and narrowing vocabulary | the eight; docs needs `NONE` | `livery.workshop` |
-| `scoped_paths`, `scoped_files`, `scoped_packages` | what a run reaches | the eight | `livery.workshop` |
+| `GateContext` | what a run hands a check's `run`: the paths, the packages, the arguments, the check's own record | the three checks that stay code | `livery.workshop` |
+| `PACKAGE`, `PACKAGES`, `PATHS`, `WHOLE`, `NONE` | the scope and narrowing vocabulary | the same; docs needs `NONE` | `livery.workshop` |
+| `scoped_paths`, `scoped_files`, `scoped_packages` | what a run reaches | the same | `livery.workshop` |
 | `selected_files` | the changed files a workspace check with `inputs` judges this run | docs (`_checks.selected_files` today) | `livery.workshop` |
-| `Inputs`, `Changes` | what a workspace check reads, and what changed | docs (`_influence` today) | `livery.workshop` |
-| `run_batched` | the fewest tool calls under the command-line limit | ruff, the type checkers | `livery.workshop` |
+| `Changes` | what changed, handed to a check's `widen` reference | docs (`_influence` today) | `livery.workshop` |
+| `run_batched` | the fewest tool calls under the command-line limit | a check in code that calls a tool | `livery.workshop` |
 
-**Language and ecosystem extensions** (phase 11 brings every user).
+**Package extensions** (phase 11 brings every user).
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `Phase`, `PhaseContext` | a lifecycle phase and what its steps share | python, cpp, conan | `livery.workshop` |
+| `PhaseContext` | what a phase's steps share: the package, the root, the failure | python, cpp, conan | `livery.workshop` |
 | `Query`, `answer` | a typed question about a package, and its answer across the package's extensions | basedpyright (`public_modules`), clang-tidy (`compile_commands`), docs | `livery.workshop` |
-| `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]` | the same | `livery.workshop` |
-| `Category` | one row of a category table | python, cpp | `livery.workshop` |
-| `Seed` | nothing: seeds are files under `seeds/` | | |
+| `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]`; an extension answers them under `[queries]` | the same | `livery.workshop` |
 | `Stamper` | what the `stamp` phase writes through | python, cpp, conan | `livery.workshop` |
-| `AstRule`, `ParsedModule`, `RuleContext` | a rule over a language's reader | housekeeping | `livery.workshop` |
-| `Toolchain` records | phase 14 names them | cpp | `livery.workshop`, phase 14 |
+| `ParsedModule`, `RuleContext` | what a rule's `judge` reference receives | housekeeping | `livery.workshop` |
+| the toolchain types | phase 14 names them | cpp | `livery.workshop`, phase 14 |
 
 **Workspace extensions.**
 
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
-| `Job`, `Entry`, `JobContribution` | a CI job, its entries, its contribution to a builtin point | docs | `livery.workshop` |
-| `Section`, `Prose`, `AGENT`, `HUMAN`, `guidance` | the guidance sections, a fragment, the audiences, and the composed set for one audience | docs (human pages), claude (agent file) | `livery.workshop` |
+| `Prose`, `AGENT`, `HUMAN`, `guidance` | a guidance fragment, the audiences, and the composed set for one audience | docs (human pages), claude (agent file) | `livery.workshop` |
 | `ReleaseNotes`, `release_notes` | the provider protocol and the mounted provider | changelog, docs (the release view) | `livery.workshop` |
 | `ci_changes` | the paths changed since the base a CI run measures from, as `Changes` | docs (the docs job's skip; `GitOps` and `ci_affected_base` today) | `livery.workshop` |
 | `forge_repository` | this workspace's repository name on its forge | docs (publish by container or ssh) | `livery.workshop` |
-| `registry` | the resolved registry target of a kind | docs (the container registry) | `livery.workshop` |
-| `RegistryTarget` | its type | docs | `livery.workshop` |
-| `Setup` | one repository configuration step | docs | `livery.workshop` |
+| `registry`, `RegistryTarget` | the resolved registry target of a kind | docs (the container registry) | `livery.workshop` |
 
 **The docs extension's own public API**, `livery.extensions.docs`,
 for generator extensions and for generators in any package:
 
 | Name | Purpose | Users |
 | --- | --- | --- |
-| `Generator` | a page generator: name, extensions, claims, tools, options, `run(package, out) -> pages`; its site configuration is a `zensical.toml` fragment of its extension | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
-| `Page` | one generated page: path, title, nav position | the same |
+| `Page` | one generated page: path, title, nav position; what a generator's `run` returns | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
 | `write_nav_block`, `nav_block_markers` | emit a nav block beside generated pages, and place it | toolroom-bench, the task reference |
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
 | `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | mkdocstrings |
@@ -411,7 +497,8 @@ for generator extensions and for generators in any package:
 | `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
-| `API_VERSION` 1 | 2 | every extension built against 1 refuses at mount with a sentence naming both versions | 10 |
+| `CheckRecord`, `Claim`, `Fragment`, `Option` as constructed records | `[[checks]]`, `claims`, `[[fragments]]` and `options` tables in `extension.toml` | the eight (ours) | 10 |
+| `api-version` 1 on a module | `api-version = 2` in `extension.toml` | every extension built against 1 refuses at mount with a sentence naming both versions | 10 |
 
 Each is a break before 1.0: a minor bump of the workshop, every
 extension of ours re-released in the same wave (the ruling of
@@ -421,11 +508,11 @@ extension of ours re-released in the same wave (the ruling of
 
 The brief's first thought: expose API documentation extraction the way
 checks are exposed, each extractor naming what it operates on, and
-factor out what the two share. The answer, in `Generator`:
+factor out what the two share. The answer, in `[[generators]]`:
 
-- A generator is a record with `extensions` (the package-level
-  extensions a package lists for the generator to apply; a check's
-  `kinds` becomes the same field in phase 11), `claims`
+- A generator is a `[[generators]]` table with `extensions` (the
+  package-level extensions a package lists for the generator to apply;
+  a check's `kinds` becomes the same key in phase 11), `claims`
   (categories and suffixes, the same `Claim` a check carries), `tools`,
   `options` and a `run`. The
   docs build hands it a package and the output directory under the
@@ -434,7 +521,7 @@ factor out what the two share. The answer, in `Generator`:
   composed file the docs extension owns, rendered by a dynamic fragment
   of its own, and a generator's extension contributes its tables (the
   mkdocstrings handler block, its options and inventories) as a TOML
-  fragment in extension order. No record field carries configuration.
+  fragment in extension order. No generator key carries configuration.
 - A generator lives with the extension that owns its tool, as a check
   does: `lint.ruff` lives in ruff and names python, `build.configure`
   lives in the cpp extension. Doxygen reads C, C++, Java and more, so
@@ -449,9 +536,9 @@ factor out what the two share. The answer, in `Generator`:
   workspace that lists `docs` without it renders a site with no API
   reference and no handler block. Every generator is an extension of
   its own, and no language extension contributes to docs.
-  `contributions_for("docs")` returns every mounted module that
-  declares for docs: the declaring module of an extension that requires
-  `docs`, and a `FOR` module such as pytest's coverage pages.
+  `contributions_for("docs")` returns every table declared for docs:
+  the top level of an extension that requires `docs`, and a
+  `[for.docs]` table such as pytest's coverage pages.
 - Matching is by `extensions` against the package's listed extensions,
   then by the claims within the package: `python+nanobind+cmake` meets
   mkdocstrings' generator over its `.py` sources and doxygen's over its `.h`
@@ -466,7 +553,7 @@ factor out what the two share. The answer, in `Generator`:
   `claims`, `tools` and `options` would be a third thing to name.
 - One concept replaces three: the kind's `extractor`, the kind's
   `coverage_pages`, and the contract's `[docs] generators` verbs. A
-  package's declared generator verb is a `Generator` whose `run` calls
+  package's declared generator verb is a generator whose `run` calls
   the verb; the task reference is the docs extension's own generator
   over every package that advertises `footman.tasks`.
 - Zensical runs only its native plugins, and its mkdocstrings support
@@ -475,7 +562,7 @@ factor out what the two share. The answer, in `Generator`:
   (Doxygen XML turned into pages for C++, `rustdoc` JSON or a Markdown
   renderer for Rust, `gomarkdoc` for Go) or places a rendered tree and
   links it without cross-references (Javadoc, whose `element-list` is
-  no `objects.inv`). The record carries both shapes; the plan's open
+  no `objects.inv`). The table carries both shapes; the plan's open
   item 11 closes on it.
 
 ### One docs mechanism across footman and workshop
@@ -486,7 +573,7 @@ The brief's fourth thought. What exists twice today:
 | --- | --- | --- | --- |
 | a task tree as pages | `livery.footman.markdown.render_site`, public; `fm docs site` renders the invoking project's tree | `_taskref` renders one provider in isolation by spawning `fm --tasks-file=<probe> --json --list`, then `render_site` | one renderer: `livery.footman.docs.site` takes `provider=` and renders that plugin in isolation in-process; the task reference generator calls it and assembles the nav. A change to footman, allowed by the brief |
 | footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curated page, `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and `api = false` go; footman's reference is the generator's like every package's; the curated grouping becomes an authored page linking into it |
-| errors-and-notes page, the config, notes and globals tables, the example render, the latest-release admonition | `fm footman.pages` | | stays footman's generator verb, declared as today; a `Generator` whose `run` calls it |
+| errors-and-notes page, the config, notes and globals tables, the example render, the latest-release admonition | `fm footman.pages` | | stays footman's generator verb, declared as today; a generator whose `run` calls it |
 
 Two mechanisms for the API reference are the one real duplication;
 deleting footman's is less code and one way.
@@ -518,29 +605,31 @@ later reader must re-justify.
 
 | Module | Names used | Treatment |
 | --- | --- | --- |
-| `_checks` | `CheckRecord`, `GateContext`, `PACKAGES` | public already |
+| `_checks` | `GateContext`, `PACKAGES` | public already |
+| | `CheckRecord` | a `[[checks]]` table |
 | | `NONE`, `selected_files` | public |
-| | `check_for`, `register_check` | go: `CHECKS` is data; a check reads its own record from `GateContext` |
+| | `check_for`, `register_check` | go: `[[checks]]` is data; a check in code reads its own table from `GateContext` |
 | `_contract` | `load_contract` | public `read_contract` |
-| `_contract_keys` | `Declared` | public |
-| `_docs_contract` | everything | moves into the docs extension; `site_reads` becomes `Job.inputs`; `module_docs`, `declines_api`, `module_root` go to the python extension |
+| `_contract_keys` | `Declared` | a `[[contract-keys]]` table |
+| `_docs_contract` | everything | moves into the docs extension; `site_reads` becomes `inputs` on the job; `module_docs`, `declines_api`, `module_root` go to the python extension |
 | `_extensions` | `workspace_root` | public already |
 | `_forge_lane` | `remote_repo_name` | public `forge_repository` |
 | `_git_ops` | `GitOps`, `GitError` | replaced by `ci_changes` |
-| `_influence` | `Changes`, `Inputs` | public |
-| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | move into the docs extension as `Generator` and its policy |
+| `_influence` | `Changes` | public |
+| | `Inputs` | the `inputs` table of a check |
+| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | move into the docs extension as `[[generators]]` and its policy |
 | | `kind_chain`, `kind_names` | go with the python checks moving to python's contribution |
 | `_navblocks` | all | moves into the docs extension |
 | `_packages` | `Package`, `discover_packages` | public already |
 | | `member_depth`, `package_directories` | `Package.member` and `Package.directory` answer both |
-| `_points` | `Job`, `Entry`, `contribute_job` | `Job`, `Entry`, `JobContribution` public; `JOBS` data |
+| `_points` | `Job`, `Entry`, `contribute_job` | `Job`, `Entry`, `JobContribution` public; `[[jobs]]` data |
 | `_prose` | `Prose`, `HUMAN`, `sections`, `fragments`, `shipped`, `repository_fragments` | `Section`, `Prose`, `HUMAN`, `guidance` public |
 | `_provenance` | `format_header`, `generated_header` | `generated_header` public |
 | `_quality` | `ci_affected_base` | folded into `ci_changes` |
 | `_registries` | `resolve_registry` | public `registry` |
 | `_release_notes` | `release_notes` | public |
 | `_site_files` | `register_site_file` | goes: a whole-file fragment |
-| `_slots` | `register_slot`, `NEAREST`, `composed` | `SLOTS` data; `slot`, `NEAREST` public |
+| `_slots` | `register_slot`, `NEAREST`, `composed` | `[[slots]]` data with `compose = "nearest"`; `slot` public |
 | `_state` | `run_context` | public `ci_run` |
 
 ## Stability and proof
@@ -548,13 +637,13 @@ later reader must re-justify.
 **What a public name promises.** Its docstring is published; the
 typecomplete check verifies it; `tests/test_namespaces.py` pins the
 root's `__all__` and that every public module under a root is declared
-there; the conformance kit judges every record type an extension
-builds. Before 1.0 a name may change in a minor release; the changelog
+there; the conformance kit judges every table an extension declares
+against the schema. Before 1.0 a name may change in a minor release; the changelog
 states the break and the name that replaces it, and every extension of
 ours moves in the same wave. After 1.0 a change is a major bump.
 
-**How an extension declares its target.** `API_VERSION` on its
-declaring module, as today. The base supports one version
+**How an extension declares its target.** `api-version` in its
+`extension.toml`. The base supports one version
 (contract 31). An extension's wheel also depends on
 `livery-workshop>=<floor>` as ordinary metadata (contract 15); the
 version check is the one that produces a sentence, since a wheel
@@ -568,19 +657,21 @@ surface alone.** Two clauses join `CLAUSES`:
   or name of another distribution. The clause runs the reach scan over
   the extension's own `src`, so a third-party extension proves it in
   its own suite, where the housekeeping extension is not listed.
-- `declarations-are-data`: every attribute of the declaration
-  vocabulary the subject declares is a tuple or map of the record types
-  the api exports, and the module registers nothing at import (the kit
-  imports it under a recorder, as the walk clause does for checks).
+- `declaration-validates`: the subject's `extension.toml` validates
+  against the schema, every `module:function` it references imports,
+  and importing them registers nothing (the kit imports under a
+  recorder, as the walk clause does for checks).
+- `words-are-answerable`: every placeholder in a check's words is one
+  the engine answers, every `matrix` key appears in the words, and no
+  check declares both `judge` and `run`.
 
 And one drive: `fm ci.e2e --extension=<name>` births a project listing
 the base and the extension from this checkout's wheels and runs its
 gate. An extension that reaches a private name the wheel does not ship
 fails there.
 
-**Where #1204's check runs, and the ratchet.** The reach check is an
-`AstRule` on the housekeeping extension's python contribution
-(`RULES`), read by `layering.imports` over python's `REFERENCES` reader
+**Where #1204's check runs, and the ratchet.** The reach check is a
+`[[rules]]` entry of the housekeeping extension for python, read by `layering.imports` over python's `REFERENCES` reader
 in the one parse (contract 16). It judges every package's sources, never
 its tests, per changed file and whole when the graph changed, and
 refuses each reach by file and line. Its allowance is a contract key
@@ -610,39 +701,63 @@ new path once. Acceptance: `fm check` exits 0;
 `fm workflow.release --local`; the startup measure
 (`fm commit --help`, 255 ms median today) does not rise.
 
-**10b, the names.** Deliverables:
+**10b, the declaration file and the schema.** Deliverables:
 
-- Every name in "The names" above that needs no language extension:
-  `Declared`, `NONE`, `selected_files`, `Inputs`, `Changes`,
-  `read_contract`, `generated_header`, `ci_run`, `RunContext`,
-  `ci_changes`, `Slot`, `slot`, `NEAREST`, `UNION`, `MERGE`, `Job`,
-  `Entry`, `JobContribution`, `Section`, `Prose`, `AGENT`, `HUMAN`,
-  `guidance`, `ReleaseNotes`, `release_notes`, `forge_repository`,
-  `registry`, `RegistryTarget`, `Setup`, `contributions_for`.
-- The declaration attributes `JOBS`, `SLOTS`, `CONTRIBUTIONS`,
-  `GUIDANCE`, `RELEASE_NOTES`, `RULES`, `SETUP`, `FRAGMENTS`; every
-  `register_*` the base exports goes; the docs extension, still in the
-  wheel, declares instead of registering.
-- `Job.installs`, `Job.deploy`, `Job.inputs`; `_ci_generate`,
+- `extension.toml` with every key of "The declaration file"; the mount
+  reads it through the contract reader and the attribute readers go;
+  every `register_*` the base exports goes; a reference that does not
+  import refuses at mount; the docs extension, still in the wheel,
+  declares instead of registering.
+- The schema: the base's `[[contract-keys]]` for `extension.toml` and
+  its own tables; `fm sync` composes `.workshop/schema/workshop.json`,
+  `package.json` and `extension.json` and associates them in the
+  composed `.vscode/settings.json`; the judge reads the composed file;
+  `fm explain <contract>` names the schema it was judged by.
+- The public names of "The names" that need no package extension:
+  `NONE`, `selected_files`, `Changes`, `read_contract`,
+  `generated_header`, `ci_run`, `RunContext`, `ci_changes`, `slot`,
+  `Prose`, `AGENT`, `HUMAN`, `guidance`, `ReleaseNotes`,
+  `release_notes`, `forge_repository`, `registry`, `RegistryTarget`,
+  `contributions_for`; the records that become tables leave.
+- `installs`, `deploy` and `inputs` on a job; `_ci_generate`,
   `_workflow_tasks` and `_provenance` stop reading the `[docs]` table;
   the `project.urls` slot.
 - `rewrite_nav_block` leaves for `livery.extensions.docs`;
-  `mount_extensions` leaves the public surface; `API_VERSION = 2`; the eight tool
-  extensions and this repository move; the wave releases them.
+  `mount_extensions` leaves the public surface; `api-version = 2`; the
+  eight tool extensions and this repository move; the wave releases
+  them.
 - The pin tests first: `test_api_exports_what_the_package_exported`
   lists the new set; the reach scan as
   `tests/test_private_reaches.py` with today's table as its allowance.
 
 Acceptance, refusals first:
 
-- `test_an_extension_declared_for_api_version_1_refuses_naming_both`,
+- `test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_nearest`,
+  `test_a_reference_that_does_not_import_refuses_at_mount`,
+  `test_an_extension_declared_for_api_version_1_refuses_naming_both`,
   `test_a_declaration_that_registers_at_import_fails_the_kit`,
   `test_a_new_private_reach_refuses_naming_the_file_and_line`.
-- `fm check` exits 0.
+- `fm check` exits 0; `fm sync` writes the three schema files and the
+  editor association, proven by `git diff --exit-code` on
+  `.vscode/settings.json` after a second sync.
 - `fm ci.e2e --extension=ruff --fresh` is green on the re-released
   wheels.
 
-**10c, footman's and toolroom's seams.** Deliverables: `host()`,
+**10c, checks in words.** Deliverables: `judge`, `fix`, `safe-fix`,
+`env`, `matrix` and the placeholders of "A check in words alone"; `run`
+exclusive with `judge`; the eight checks named there become words and
+their Python bodies go; `fm explain <check>` prints the command; the
+kit's `words-are-answerable` clause. Acceptance, refusals first:
+`test_a_check_with_both_judge_and_run_refuses_naming_the_check`,
+`test_an_unanswered_placeholder_fails_the_kit`,
+`test_a_matrix_key_absent_from_the_words_fails_the_kit`; the six
+extensions whose checks are all words ship no Python beyond their
+packaging (`find packages/extensions/{ruff,mypy,ty,pyrefly,clang-format,clang-tidy}/src -name '*.py'`
+finds nothing); `fm check` exits 0 with the same gate members, proven
+by the gate's pinning tests; `fm ci.e2e --extension=mypy --fresh` is
+green, the matrix's proof.
+
+**10d, footman's and toolroom's seams.** Deliverables: `host()`,
 `colored` styles, `wants_color`, `builtins`, `project_builtins`,
 `directory_variable`, `tasks_file_name` in footman's entry module;
 `colour_controls` in toolroom's; the bench on footman's `fetch`; the
@@ -651,15 +766,15 @@ allowance holds the forge row alone; `fm check` exits 0;
 `fm workflow.release --local` releases footman, toolroom and the
 workshop.
 
-**10d, changelog ships apart.** `livery-extensions-changelog`: the
-git-cliff provider as `RELEASE_NOTES`, `cliff.toml` its fragment for
+**10e, changelog ships apart.** `livery-extensions-changelog`: the
+git-cliff provider as `release-notes`, `cliff.toml` its fragment for
 every package, `git_cliff` its tool, `CHANGELOG.md` created on the
 first record; `_cliff` leaves the base. Acceptance:
 `test_a_release_without_the_changelog_extension_writes_no_notes`;
 `fm workflow.release --local` on this repository writes the same
 entries as before.
 
-**10e, claude ships apart.** `livery-extensions-claude`: `CLAUDE.md`
+**10f, claude ships apart.** `livery-extensions-claude`: `CLAUDE.md`
 and `.workshop/fragments/` as dynamic fragments over
 `guidance(root, AGENT)`, skills, hooks and `settings.json` as its
 content, `hooks.pre-bash` its verb; `_shipped_files._agent_outputs`
@@ -671,19 +786,19 @@ after, by `git diff --exit-code` after `fm sync`.
 
 ### Phase 11: package composition and the package extensions
 
-**11a, the model** (the plan's 11a, unchanged): `COMPATIBLE`,
-`BEFORE`, `AFTER`, the validity rule, the canonical set,
-`fm extensions --combinations`, `PHASES` with `pre` and reversed
-`post`, the declared context, `QUERIES` and `answer`, `fm run`.
+**11a, the model** (the plan's 11a, unchanged): `compatible`,
+`before`, `after`, the validity rule, the canonical set,
+`fm extensions --combinations`, `[phases]` with `pre` and reversed
+`post`, the declared context, `[queries]` and `answer`, `fm run`.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
 move; `KindRecord`, `register_kind` and the kind registry go; a check's
 `kinds` becomes `extensions`, the package-level extensions a package
 lists for the check to apply, and the eight tool extensions move with
-it; nanobind declares the wheels job in `JOBS` and `_ci_generate` stops
+it; nanobind declares the wheels job under `[[jobs]]` and `_ci_generate` stops
 reading the member roster;
-`CATEGORIES` and `ROOT_FILES` as data; `run_suites`, `kind_examples`
+`[[categories]]` and `[[root-files]]` as data; `run_suites`, `kind_examples`
 and `workspace_suite` become `livery.extensions.python`, and the
 pytest extension requires `python`; `public_modules` and
 `compile_commands` become queries. The second change: the plan's sentence
@@ -692,7 +807,7 @@ a rendered `conanws.yml` resolves siblings from their sources and the
 machine's package cache is shared; what 11b still owes is that a
 container build never reuses a binary built against the host's glibc.
 
-**11c, the generators.** `Generator` and the members policy in
+**11c, the generators.** `[[generators]]` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
 `zensical.toml` becomes a composed file of the fragment engine, the
 docs extension's dynamic fragment with contributed tables; `Extractor`
@@ -700,8 +815,8 @@ and `KindRecord.coverage_pages` go. `livery-extensions-mkdocstrings`,
 its own distribution requiring `docs`: the python generator, the
 handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
 `griffelib`, the keys `[docs] api` and `[docs] python-paths`; the
-workshop wheel drops `griffelib`. pytest's `FOR = {"docs": ...}`
-module declares the coverage pages generator. The docs extension reads
+workshop wheel drops `griffelib`. pytest's `[for.docs]` table
+declares the coverage pages generator. The docs extension reads
 both through `contributions_for("docs")` and names no language. The
 `REFERENCES` query replaces the base's python parse in the layering
 check, python's extension answering it. This repository and
@@ -738,7 +853,7 @@ clone after `fm sync`, `fm check` and `fm docs.build` has no
 
 **12b, housekeeping.** `livery-extensions-housekeeping`: requires
 `mypy`, `ty` and `pyrefly`; the voice and documentation prose as
-`GUIDANCE`; the reach rule as `RULES` for python with
+`[[guidance]]`; the reach rule as a `[[rules]]` entry for python with
 `[housekeeping] reaches` as its allowance (this repository's root test
 from 10b retires); the layout rules: a namespace
 `__init__.py`, a root with public names and no `__init__.py`, a
@@ -752,7 +867,7 @@ repository runs the rule and exits 0.
 
 **12c, the C++ reference.** The pending spike first: Doxygen XML to
 Markdown before the Zensical build, measured on a native member of this
-repository. Then `livery-extensions-doxygen`: a `Generator` with
+repository. Then `livery-extensions-doxygen`: a `[[generators]]` entry with
 `extensions=("cpp",)`, claiming the native sources, `doxygen` its tool,
 pages under the package's generated tree. Acceptance: the spike's note quotes the pages rendered and the
 build time; `fm docs.build` on this repository renders the cpp member's
@@ -799,7 +914,9 @@ the stack, which this design neither needs nor rules out).
 
 | Temporary | Replaced by |
 | --- | --- |
-| `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, `register_categories`, `register_kind` | declaration attributes read at mount (phase 10, 11) |
+| `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, `register_categories`, `register_kind`, and the `[[checks]]`, `[options]`, `[for]`, `tools` attributes | `extension.toml`, read at mount (phase 10, 11) |
+| `Declared` records in Python | `[[contract-keys]]` and the composed schema under `.workshop/schema/` (phase 10b) |
+| the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor`, `coverage_pages`, `[docs] generators` as three mechanisms | `Generator` (phase 11c) |
 | `_site_files` | a whole-file fragment (phase 12a) |
@@ -818,7 +935,7 @@ the stack, which this design neither needs nor rules out).
   10e, 12a and 12b here; its 11a and 11b become 11a and 11b, its 11c
   and 11e become 13, its 11d dissolves into 11b and 11c; its 12
   becomes 14; its 13 and 14 become 15; its 15 becomes 16. Phases 10a
-  to 10c, 11c, 12c and 12d are new.
+  to 10d, 11c, 12c and 12d are new.
 - Willem, 2026-10-06, the rulings this note satisfies, quoted above.
 - Willem, 2026-10-06, after the first draft: the `.api` drop is for
   every package in livery, not footman alone. The draft's open ruling
@@ -847,6 +964,21 @@ the stack, which this design neither needs nor rules out).
   no listed target is silent or an error: `REQUIRES` is the error and
   `FOR` the silence, with a dormant entry named by `fm extensions` and
   `fm doctor`; no third declaration.
+- Willem, 2026-10-07: the extension model fits a TOML configuration
+  model, so a port of the engine stays possible. So an extension's
+  declarations are one `extension.toml`, read by the contract reader
+  and judged like `workshop.toml`, with behaviour referenced by name;
+  a record an extension built becomes a table and leaves the public
+  names.
+- Willem, 2026-10-07: a check whose verdict is its tool's exit code is
+  words in `extension.toml`, a step against technical debt; eight of
+  the ten tool checks become words, with a closed placeholder
+  vocabulary and a `matrix` for mypy's platforms.
+- Willem, 2026-10-07: TOML schemas and their verification make sense.
+  An extension declares its keys in `[[contract-keys]]`, `fm sync`
+  composes the workspace's schema into JSON Schema for the judge, the
+  editor and the reference pages, and the judge keeps the rules a
+  schema cannot say.
 - 2026-10-06, on how that meets `COMPATIBLE`: composition is its own
   axis, and a `REQUIRES` or `FOR` target counts as compatible for a
   package-level pair, so `COMPATIBLE` is declared only where neither
