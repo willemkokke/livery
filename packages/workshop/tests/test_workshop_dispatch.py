@@ -279,6 +279,53 @@ def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
     assert "UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}" in release
 
 
+def test_await_wave_retries_an_unreadable_poll_and_names_a_spent_budget(
+    rig: tuple[FakeForge, Path, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.forge import Repository, Run
+    from livery.workshop import _release_driver
+    from livery.workshop._verdict import Transient
+
+    fake, _root, _ = rig
+    repo = fake.repository(OWNER, NAME)
+    repo.checks.dispatch("release.yml", ref="main")
+    (run,) = repo.checks.runs(event="workflow_dispatch")
+    real = _release_driver._wave_runs
+    dropped = "server unreachable on GET /repos/o/r/actions/runs: Remote end closed"
+
+    def unreadable(_: Repository) -> tuple[Run, ...]:
+        raise ForgeError(dropped)
+
+    # The refusal first: a run of unreadable polls past the budget ends
+    # the wait with the forge's words and the command that follows the
+    # wave, which runs on in CI.
+    monkeypatch.setattr(_release_driver, "_wave_runs", unreadable)
+    with pytest.raises(_FAILURES) as caught:
+        await_wave(
+            repo,
+            before=set(),
+            timeout=5,
+            interval=0.0,
+            transient=Transient(budget=3, interval=0.0),
+        )
+    assert dropped in str(caught.value)
+    assert "ci.status --point=release --wait" in str(caught.value)
+    # One unreadable poll is a retry, and the wave is still found.
+    polls = iter([True])
+
+    def once(target: Repository) -> tuple[Run, ...]:
+        if next(polls, False):
+            raise ForgeError(dropped)
+        return real(target)
+
+    monkeypatch.setattr(_release_driver, "_wave_runs", once)
+    capsys.readouterr()
+    assert await_wave(repo, before=set(), timeout=5, interval=0.0) == run.id
+    assert "forge unreachable (1/5)" in capsys.readouterr().out
+
+
 def test_await_wave_answers_a_wave_newer_than_the_merge_or_none(
     rig: tuple[FakeForge, Path, GitOps],
 ) -> None:
