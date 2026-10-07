@@ -2055,22 +2055,6 @@ def unread_by_the_site(root: Path) -> str:
     )
 
 
-def _register_builtin() -> None:
-    """Declare the docs assembly's slots, until the docs extension declares them."""
-    from livery.workshop._kinds import MEMBERS_POLICIES, PUBLIC_MEMBERS
-
-    _slots.register_slot(
-        MEMBERS_SLOT,
-        compose=_slots.NEAREST,
-        default=PUBLIC_MEMBERS,
-        values=MEMBERS_POLICIES,
-    )
-    _slots.register_slot(THEME_SLOT, compose=_merge_theme, default=THEME_DEFAULT)
-
-
-_register_builtin()
-
-
 #: The development section: one page per prose section, from the
 #: human-audience fragments the mounted extensions ship and the repository's
 #: own, under the root ``docs/`` tree. Gitignored, rebuilt whole.

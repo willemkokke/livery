@@ -41,3 +41,34 @@ path = { types = ["str"], doc = "the script, relative to the package's docs/" }
 type = { types = ["str"], doc = "the script element's type" }
 defer = { types = ["bool"], doc = "whether the script runs after the page parses" }
 async = { types = ["bool"], doc = "whether the script runs as soon as it loads" }
+
+# The cross-references in the sources' docstrings resolve. A removed
+# public name runs the check over every source, since an unchanged
+# docstring may name what went away.
+[checks.docrefs.lint]
+run = "livery.extensions.docs._checks:docrefs_run"
+narrowing = "none"
+inputs = { reads = ["packages/**/src/**/*.py"], widen = "livery.extensions.docs._checks:names_removed" }
+
+# The links in the authored markdown resolve. A removed heading or a
+# deleted or moved page runs the check over every page.
+[checks.doclinks.lint]
+run = "livery.extensions.docs._checks:doclinks_run"
+narrowing = "none"
+inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = true, widen = "livery.extensions.docs._checks:headings_removed" }
+
+# Every name a python member exports has a docstring.
+[checks.docstrings.lint]
+run = "livery.extensions.docs._checks:docstrings_run"
+narrowing = "packages"
+
+# The private-members policy the API reference renders: the nearest
+# contract that sets one wins.
+[slots."docs.members"]
+compose = "nearest"
+default = "public"
+values = ["public", "all"]
+
+# The site's theme: each contribution's keys over the stock theme.
+[slots."docs.theme"]
+compose = "livery.extensions.docs._site:_merge_theme"

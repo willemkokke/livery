@@ -24,18 +24,9 @@ import sys
 from pathlib import Path
 
 from livery.footman import fail
-from livery.workshop._checks import (
-    NONE,
-    PACKAGES,
-    CheckRecord,
-    GateContext,
-    check_for,
-    selected_files,
-)
-from livery.workshop._influence import Changes, Inputs
+from livery.workshop._checks import GateContext, check_for, selected_files
+from livery.workshop._influence import Changes
 from livery.workshop._packages import member_depth, package_directories
-
-EXTENSION = "livery.extensions.docs"
 
 #: The trees the site build writes under the workspace's `docs/`, which
 #: are not authored pages.
@@ -264,10 +255,6 @@ def names_removed(changes: Changes) -> bool:
     return False
 
 
-#: The python sources a cross-reference lives in and points at.
-SOURCES = ("packages/**/src/**/*.py",)
-
-
 def docrefs_run(ctx: GateContext) -> None:
     from livery.extensions.docs._refs import reference_problems
     from livery.workshop._packages import package_directories
@@ -312,35 +299,3 @@ def docstrings_run(ctx: GateContext) -> None:
             + ", ".join(missing)
             + "; the published API page shows each one"
         )
-
-
-CHECKS = (
-    CheckRecord(
-        "docrefs",
-        "lint",
-        docrefs_run,
-        narrowing=NONE,
-        extension=EXTENSION,
-        inputs=Inputs(reads=SOURCES, widen=names_removed),
-    ),
-    CheckRecord(
-        "doclinks",
-        "lint",
-        doclinks_run,
-        narrowing=NONE,
-        extension=EXTENSION,
-        inputs=Inputs(
-            reads=("docs/**/*.md", "packages/**/docs/**/*.md"),
-            on_removal=True,
-            widen=headings_removed,
-        ),
-    ),
-    CheckRecord(
-        "docstrings",
-        "lint",
-        docstrings_run,
-        narrowing=PACKAGES,
-        extension=EXTENSION,
-    ),
-)
-"""The checks the docs extension registers as it mounts."""
