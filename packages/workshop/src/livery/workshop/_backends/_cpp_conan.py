@@ -310,7 +310,7 @@ def workspace_members(packages: Iterable[Package]) -> tuple[Package, ...]:
     )
 
 
-def workspace_file(members: Iterable[Package]) -> str:
+def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> str:
     """The `WORKSPACE_FILE` that resolves *members* from their sources.
 
     Conan finds the file by walking up from the directory a command
@@ -322,6 +322,15 @@ def workspace_file(members: Iterable[Package]) -> str:
     alone: conan reads the reference from the recipe's ``name`` and
     ``version``, so the file stays right when a release stamps the
     version.
+
+    Args:
+        members: The conan members, in the order the file lists them.
+        root: The workspace root, for a file placed outside it: each
+            path is then the member's absolute POSIX path. A Linux
+            build container mounts the root at its host path and reads
+            such a file beside the package it builds. None writes the
+            paths relative to the workspace root, for the file the
+            root holds.
     """
     lines = [
         "# The conan workspace: a conan command run inside this folder",
@@ -329,7 +338,12 @@ def workspace_file(members: Iterable[Package]) -> str:
         "# the members whose kind packages with conan; the gate keeps it",
         "# matching.",
         "packages:",
-        *(f"  - path: {member.path}" for member in members),
+        *(
+            f"  - path: {member.path}"
+            if root is None
+            else f"  - path: {(root / member.path).as_posix()}"
+            for member in members
+        ),
     ]
     return "\n".join(lines) + "\n"
 

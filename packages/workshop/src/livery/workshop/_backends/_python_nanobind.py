@@ -228,10 +228,14 @@ def conan_environment(root: Path) -> dict[str, str]:
     container build shares this machine's cache. On Linux cibuildwheel
     builds in a container with its own filesystem, so the workspace,
     the store and the conan home are mounted at their host paths and
-    the store's conan joins the container's PATH; the workspace brings
-    its conanws.yml, so a sibling resolves from its source there too. Both are read from
-    the entered environment first, then from this checkout's
-    receipts, which name the versions its lock pins.
+    the store's conan joins the container's PATH. The package itself
+    is copied to ``/project`` there, outside the workspace, so the
+    container also mounts a workspace file of its own beside it
+    ([livery.workshop._backends._python_nanobind.container_workspace][]),
+    and a sibling resolves from its source in the container too. The
+    provider and conan are read from the entered environment first,
+    then from this checkout's receipts, which name the versions its
+    lock pins.
 
     Raises:
         Failed: when the provider or conan is in neither place; the
@@ -249,12 +253,50 @@ def conan_environment(root: Path) -> dict[str, str]:
         mounts = container_mounts(
             (root, home.root, Path(conan_home), Path(provider).parent, Path(conan))
         )
+        workspace = container_workspace(root)
+        if workspace is not None:
+            mounts += f" -v {workspace}:{CONTAINER_WORKSPACE}:ro"
         env["CIBW_ENVIRONMENT_PASS_LINUX"] = (
             "CMAKE_CONAN_PROVIDER CONAN_HOME CONAN_INSTALL_ARGS"
         )
         env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
         env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{conan}:$PATH"'
     return env
+
+
+#: Where a Linux build container finds the conan workspace file: beside
+#: the package, which cibuildwheel copies to ``/project`` and builds
+#: below it. Conan looks for the file from the directory a command runs
+#: in up to, but not including, ``/``, so ``/project`` is the one place
+#: above the build directory that it reaches. cibuildwheel copies into
+#: ``/project`` without clearing it, so the mounted file stays.
+CONTAINER_WORKSPACE = "/project/conanws.yml"
+
+
+def container_workspace(root: Path) -> Path | None:
+    """The conan workspace file a Linux build container mounts; None without one.
+
+    cibuildwheel copies the package to ``/project`` in its container,
+    and conan looks for the workspace file in the directory a command
+    runs in and that directory's parents, so the root's own file is
+    never found from there. The container mounts the root at its host
+    path, so a copy that names each member by its absolute path
+    resolves each member from its source; it is written under the
+    root's ``.workshop/.cache/conan/`` and mounted at
+    `CONTAINER_WORKSPACE`. None when the root holds no workspace file,
+    as in a release leg that set it aside so a sibling resolves from
+    the package the leg created.
+    """
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import discover_packages
+
+    if not (root / _cpp_conan.WORKSPACE_FILE).is_file():
+        return None
+    members = _cpp_conan.workspace_members(discover_packages(root))
+    path = root / ".workshop" / ".cache" / "conan" / _cpp_conan.WORKSPACE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_cpp_conan.workspace_file(members, root=root), encoding="utf-8")
+    return path
 
 
 def container_mounts(paths: Sequence[Path]) -> str:

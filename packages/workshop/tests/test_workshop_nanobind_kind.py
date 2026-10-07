@@ -371,6 +371,44 @@ def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
     assert "ref:" not in text
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the build container is Linux's, in POSIX paths"
+)
+def test_the_build_container_finds_a_workspace_file_at_its_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import discover_packages
+
+    (tmp_path / "packages").mkdir()
+    _render_chain(tmp_path)
+    _render_library(tmp_path)
+    # The refusal first: a root without the file, as in a release leg
+    # that set it aside, gives the container none, so a sibling
+    # resolves from the package the leg created.
+    assert _python_nanobind.container_workspace(tmp_path) is None
+    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
+    (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(
+        _cpp_conan.workspace_file(members)
+    )
+    written = _python_nanobind.container_workspace(tmp_path)
+    assert written is not None
+    # The package builds in /project, outside the workspace. The copy
+    # names each member by its absolute path, where the container
+    # mounts the workspace.
+    library = (tmp_path / "packages" / "geometry").as_posix()
+    assert written.read_text().endswith(f"packages:\n  - path: {library}\n")
+    if sys.platform.startswith("linux"):
+        provider = tmp_path / "conan_provider.cmake"
+        monkeypatch.setattr(
+            _python_nanobind,
+            "conan_tools",
+            lambda root: (str(provider), str(tmp_path / "bin"), ""),
+        )
+        env = _python_nanobind.conan_environment(tmp_path)
+        assert f"-v {written}:/project/conanws.yml:ro" in env["CIBW_CONTAINER_ENGINE"]
+
+
 def _receipt(root: Path, tool: str, version: str, **fields: object) -> Path:
     """Write a receipt for *tool* as `fm sync` would; the file."""
     import json
@@ -520,6 +558,8 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         assert home.root.is_relative_to(tmp_path)
         assert f"-v {home.root}:" not in env["CIBW_CONTAINER_ENGINE"]
         assert str(conan_bin) in env["CIBW_ENVIRONMENT_LINUX"]
+        # No conan workspace here, so the container mounts none.
+        assert "conanws.yml" not in env["CIBW_CONTAINER_ENGINE"]
     else:
         assert "CIBW_CONTAINER_ENGINE" not in env
     # An entered environment's provider is kept as it is.
