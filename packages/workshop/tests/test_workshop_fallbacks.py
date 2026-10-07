@@ -99,6 +99,34 @@ def test_a_local_override_survives_the_fallback(
     assert override.read_text() == "mine now\n"
 
 
+def test_a_push_the_forge_failed_is_named_in_its_words_not_as_behind() -> None:
+    from livery.workshop._git_ops import GitError
+    from livery.workshop._submit import _push
+
+    class _Refusing:
+        def __init__(self, words: str) -> None:
+            self.words = words
+
+        def push(self, branch: str) -> None:
+            raise GitError(self.words)
+
+    # The refusal first: a server error is the forge's, said in its words.
+    failed = (
+        "git push -u origin fix/x exited 1:\n ! [remote rejected]  fix/x -> fix/x"
+        " (Internal Server Error)"
+    )
+    with pytest.raises(Failed) as caught:
+        _push(_Refusing(failed), "fix/x", force=False)  # type: ignore[arg-type]
+    assert "(Internal Server Error)" in str(caught.value)
+    assert "origin holds commits" not in str(caught.value)
+    assert "submit` again once the forge answers" in str(caught.value)
+    # A branch behind origin still gets the add-a-commit advice.
+    behind = "! [rejected]  fix/x -> fix/x (non-fast-forward)"
+    with pytest.raises(Failed) as caught:
+        _push(_Refusing(behind), "fix/x", force=False)  # type: ignore[arg-type]
+    assert "origin holds commits this branch does not" in str(caught.value)
+
+
 def test_a_forge_failure_in_a_submit_is_named_without_a_traceback() -> None:
     from livery.forge import ForgeError
     from livery.workshop._submit import forge_failures_named
