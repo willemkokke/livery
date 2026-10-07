@@ -17,11 +17,11 @@ from typing import Any
 import pytest
 import yaml
 
-# The site's jobs are the docs extension's: importing its task module
-# contributes them to the builtin points, as the mount does.
-import livery.extensions.docs._tasks  # noqa: F401
 import livery.footman as footman
 from livery.workshop._ci_generate import generate
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 
 KINDS = ("github", "gitea")
 
@@ -308,6 +308,21 @@ def test_wheel_platforms_render_the_wheels_matrix_before_the_wave(
 
 
 # --- GitLab, one document -----------------------------------------------------
+
+
+def test_a_gitlab_site_published_elsewhere_runs_no_pages_job(tmp_path: Path) -> None:
+    # The fallback first: a deploy through another seam keeps its own
+    # name and leaves GitLab Pages alone.
+    root = _root(tmp_path, "gitlab")
+    contract = (root / "workshop.toml").read_text()
+    (root / "workshop.toml").write_text(
+        contract.replace("extensions = []", 'extensions = ["docs"]')
+        + '\n[docs]\npublish = "ssh"\n'
+    )
+    jobs = _doc(generate(root)[".gitlab-ci.yml"])
+    assert "pages" not in jobs
+    assert "artifacts" not in jobs["deploy"]
+    assert jobs["deploy"]["script"][-1].endswith("ci.run --point=merge --job=deploy")
 
 
 def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(

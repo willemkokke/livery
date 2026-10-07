@@ -79,14 +79,7 @@ def _extension(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declare
 
 def _base() -> tuple[Declared, ...]:
     """The base's keys: this module's, and those declared beside their readers."""
-    from livery.workshop import (
-        _docs_contract,
-        _identity,
-        _lfs,
-        _points,
-        _registries,
-        _tools,
-    )
+    from livery.workshop import _identity, _lfs, _points, _registries, _tools
 
     return (
         DECLARED
@@ -94,7 +87,6 @@ def _base() -> tuple[Declared, ...]:
         + _identity.DECLARED
         + _lfs.DECLARED
         + _registries.DECLARED
-        + _docs_contract.DECLARED
         + _tools.declared_keys()
         + _points.contract_keys()
     )
@@ -174,10 +166,6 @@ DECLARED: tuple[Declared, ...] = (
     _package("ci", "table"),
     _package("ci.wheel-platforms", "strs"),
     _package("docs", "table"),
-    _package("docs.generators", "list"),
-    _package("docs.generators[]", "str", "table"),
-    _package("docs.generators[].verb", "str"),
-    _package("docs.generators[].requires", "strs"),
     _package("docs.api", "bool"),
     _package("docs.python-paths", "strs"),
 )
@@ -236,10 +224,38 @@ def _check_keys(prefix: str) -> tuple[Declared, ...]:
     )
 
 
+def _job_keys(prefix: str) -> tuple[Declared, ...]:
+    """The keys of the CI jobs an extension declares under *prefix*.
+
+    A job sits at ``<prefix>.jobs.<point>.<name>``, the address a
+    contract's ``[ci]`` table has. It names its tasks, whether the
+    point's verdict waits for it, the jobs it waits for, its checkout
+    depth, the run's own token, the functions that name what it
+    installs and where it deploys, and the comment above it. A grant
+    beyond the run's own token is the root contract's to give, so a
+    job takes no other.
+    """
+    job = f"{prefix}.jobs.*.*"
+    return (
+        _extension(prefix, "table"),
+        _extension(f"{prefix}.jobs", "table"),
+        _extension(f"{prefix}.jobs.*", "table"),
+        _extension(job, "table"),
+        _extension(f"{job}.entries", "strs"),
+        _extension(f"{job}.gates", "bool"),
+        _extension(f"{job}.needs", "strs"),
+        _extension(f"{job}.fetch", "str", values=("full", "tags", "2")),
+        _extension(f"{job}.token", "str", values=("job",)),
+        _extension(f"{job}.installs", "str"),
+        _extension(f"{job}.deploy", "str"),
+        _extension(f"{job}.note", "str"),
+    )
+
+
 #: The keys of an extension's ``extension.toml``: what it is, the tools
-#: its verbs need, the options a listing may turn on, its checks, the
-#: values it puts into slots, the contract keys it owns, and what it
-#: adds to another extension while that one is listed.
+#: its verbs need, the options a listing may turn on, its checks, its CI
+#: jobs, the values it puts into slots, the contract keys it owns, and
+#: what it adds to another extension while that one is listed.
 EXTENSION: tuple[Declared, ...] = (
     _extension("extension", "table"),
     _extension("extension.api-version", "int"),
@@ -252,6 +268,7 @@ EXTENSION: tuple[Declared, ...] = (
     _extension("options", "table"),
     _extension("options.*", "str"),
     *_check_keys("checks"),
+    *_job_keys("ci"),
     _extension("contributions", "table"),
     _extension("contributions.*", "strs"),
     # The slots the extension declares, which others put values into.
@@ -268,6 +285,7 @@ EXTENSION: tuple[Declared, ...] = (
     _extension("for", "table"),
     _extension("for.*", "table"),
     *_check_keys("for.*.checks"),
+    *_job_keys("for.*.ci"),
     _extension("for.*.contributions", "table"),
     _extension("for.*.contributions.*", "strs"),
     # An earlier extension's shipped file, ``<owner>:<name>``, replaced

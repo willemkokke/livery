@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
     from livery.toolroom.store import Spec
+    from livery.workshop._points import JobContribution
 
 #: The base. Never listed and never mounted by name: importing its
 #: plugin module is the base arriving.
@@ -346,8 +347,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     check and ``fm extensions`` refuse the same problems. An extension
     whose declaration names no ``plugin`` registers what it declares
     and mounts no verbs. A plugin a branded App already mounts as a
-    builtin is skipped: claiming its tasks again puts the same task in
-    one rung twice.
+    builtin is not mounted again, since claiming its tasks again puts
+    the same task in one rung twice; what its declaration adds
+    registers as any other extension's does.
     """
     # footman does not expose the brand's builtin set publicly; this
     # private read is one of the reaches issue #1204 closes with a seam.
@@ -373,7 +375,16 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     for extension, dist in extension_entries(start):
         if extension in builtin:
             # The App mounted it as its own builtin: its plugin is never
-            # mounted here a second time.
+            # mounted here a second time, and what its declaration adds
+            # registers all the same.
+            found = _readable(extension)
+            if found is not None:
+                check_api_version(extension, found)
+                declare_slots(extension, found.slots)
+                if register_declared(
+                    extension, found.additions, options.get(extension, ())
+                ):
+                    mounted.append(extension)
             present.append(extension)
             _graft_contributions(present, declared, active, grafted)
             continue
@@ -515,9 +526,9 @@ def register_declared(
 
     Each check registers under the extension's listed name, since the
     list is what decides which extension a check belongs to, and each
-    value goes into its slot under the same name. A check that names an
-    option in ``listed-with`` registers only when *options*, the
-    entry's, turn it on.
+    value goes into its slot and each job joins its point under the
+    same name. A check that names an option in ``listed-with`` registers
+    only when *options*, the entry's, turn it on.
     """
     from dataclasses import replace
 
@@ -532,7 +543,29 @@ def register_declared(
         _slots.withdraw(slot, by=extension)
     for slot, value in additions.contributions:
         _slots.contribute(slot, value, extension=extension, by=extension)
+    register_jobs(extension, additions.jobs)
     return bool(additions.checks)
+
+
+def register_jobs(extension: str, jobs: tuple[JobContribution, ...]) -> None:
+    """Add each of *jobs* to its builtin point, its entries' source *extension*.
+
+    Raises:
+        Failed: when another extension contributed a job of the same name
+            to the same point.
+    """
+    from dataclasses import replace
+
+    from livery.workshop._points import contribute_job
+
+    for item in jobs:
+        contribute_job(
+            item.point,
+            item.job,
+            entries=tuple(replace(entry, source=extension) for entry in item.entries),
+            gates=item.gates,
+            extension=extension,
+        )
 
 
 def declare_slots(extension: str, slots: tuple[DeclaredSlot, ...]) -> None:

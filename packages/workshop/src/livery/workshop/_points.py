@@ -36,7 +36,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -103,12 +103,18 @@ class Job:
             checkout carries the credential the push needs.
         publishes_index: Whether the job uploads to a package index,
             so the index token reaches it as ``UV_PUBLISH_TOKEN``.
-        docs_tools: Whether the docs generators' system requirements
-            are installed before the call.
+        installs: The function naming the system packages the job
+            installs before it enters, given the workspace's root;
+            None for none. The extension that contributes the job
+            names it, so the render installs them without knowing
+            what they are for.
         conan_cache: Whether the job builds native packages, so the
             lane restores and saves conan's home around it.
-        deploy: Whether the job publishes the site through the
-            contract's publish seam after the call.
+        deploy: The function naming the seam the job publishes a site
+            through after the call, given the workspace's root; None
+            for a job that publishes none. A ``pages`` seam is the
+            forge's own hosting: GitHub's grant and upload, GitLab's
+            ``pages`` job.
         publishes: The artifact the job uploads, ``""`` for none.
         collects: The artifact the job downloads first, ``""`` for none.
         environment: The named deployment environment the job runs in,
@@ -137,9 +143,9 @@ class Job:
     writes: bool = False
     pushes: bool = False
     publishes_index: bool = False
-    docs_tools: bool = False
+    installs: Callable[[Path], Sequence[str]] | None = None
     conan_cache: bool = False
-    deploy: bool = False
+    deploy: Callable[[Path], str] | None = None
     publishes: str = ""
     collects: str = ""
     environment: str = ""
@@ -767,6 +773,42 @@ def inherited_jobs(point: Point, everything: tuple[Point, ...]) -> tuple[Job, ..
 def point_by_name(root: Path | None) -> dict[str, Point]:
     """`points`, by name."""
     return {point.name: point for point in points(root)}
+
+
+def job_installs(
+    root: Path, everything: tuple[Point, ...] | None = None
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    """What each job installs before it enters, by its point and its name.
+
+    Only a job that names an ``installs`` function has an entry. Its
+    packages are sorted and named once, so the rendered file is the
+    same on every run. *everything* is the points to read; *root*'s
+    when absent.
+    """
+    everything = everything if everything is not None else points(root)
+    return {
+        (point.name, job.name): tuple(sorted(set(job.installs(root))))
+        for point in everything
+        for job in point.jobs
+        if job.installs is not None
+    }
+
+
+def job_seams(
+    root: Path, everything: tuple[Point, ...] | None = None
+) -> dict[tuple[str, str], str]:
+    """The seam each deploying job publishes through, by its point and its name.
+
+    Only a job that names a ``deploy`` function has an entry.
+    *everything* is the points to read; *root*'s when absent.
+    """
+    everything = everything if everything is not None else points(root)
+    return {
+        (point.name, job.name): job.deploy(root)
+        for point in everything
+        for job in point.jobs
+        if job.deploy is not None
+    }
 
 
 def events_of(root: Path | None, point: str) -> tuple[str, ...]:

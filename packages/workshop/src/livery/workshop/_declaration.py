@@ -4,10 +4,10 @@ An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, the tools its verbs need, the options a
-listing may turn on, its checks, the values it puts into slots, the
-contract keys it owns, what it adds to another extension while that one
-is listed, and the earlier extensions' shipped files it replaces or
-deletes. The file is a contract, read as ``workshop.toml`` is: kebab-case
+listing may turn on, its checks, its CI jobs, the values it puts into
+slots, the contract keys it owns, what it adds to another extension
+while that one is listed, and the earlier extensions' shipped files it
+replaces or deletes. The file is a contract, read as ``workshop.toml`` is: kebab-case
 keys, every key judged, every refusal naming the file.
 
 Behaviour is a reference, ``"module:function"``, imported when it runs.
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from livery.workshop._checks import CheckRecord
     from livery.workshop._contract_keys import ContractKind, Declared, Type
     from livery.workshop._influence import Inputs
+    from livery.workshop._points import JobContribution
 
 #: The declaration file's name, beside the package an entry point names.
 FILE = "extension.toml"
@@ -83,10 +84,12 @@ class Additions:
     Attributes:
         checks: The checks, as records under the extension's name.
         contributions: The values it puts into slots, each ``(slot, value)``.
+        jobs: The CI jobs it adds to the builtin points, with their entries.
     """
 
     checks: tuple[CheckRecord, ...] = ()
     contributions: tuple[tuple[str, str], ...] = ()
+    jobs: tuple[JobContribution, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -345,7 +348,52 @@ class _Reader:
             for slot, values in data.get("contributions", {}).items()
             for value in values
         )
-        return Additions(checks, contributions)
+        jobs = tuple(
+            self.job(str(point), str(name), entry, (*prefix, "ci", "jobs"))
+            for point, named in data.get("ci", {}).get("jobs", {}).items()
+            for name, entry in named.items()
+        )
+        return Additions(checks, contributions, jobs)
+
+    def job(
+        self, point: str, name: str, entry: dict[str, Any], prefix: tuple[str, ...]
+    ) -> JobContribution:
+        """The job *entry* adds to the builtin *point*, its functions resolved."""
+        from livery.workshop._points import DECLARED, Entry, Job, JobContribution
+
+        where = (*prefix, point, name)
+        builtin = {declared.name: declared for declared in DECLARED}
+        if point not in builtin:
+            raise self.refuse(
+                where,
+                f"names the point {point!r}, which is not builtin; a job joins"
+                f" one of {', '.join(builtin)}",
+            )
+        if name in {job.name for job in builtin[point].jobs}:
+            raise self.refuse(where, f"names a job the {point} point declares already")
+        job = Job(
+            name,
+            needs=tuple(str(need) for need in entry.get("needs", ())),
+            fetch=str(entry.get("fetch", "")),
+            token=str(entry.get("token", "")),
+            installs=self.reference(entry["installs"], (*where, "installs"))
+            if "installs" in entry
+            else None,
+            deploy=self.reference(entry["deploy"], (*where, "deploy"))
+            if "deploy" in entry
+            else None,
+            note=str(entry.get("note", "")),
+        )
+        return JobContribution(
+            point,
+            job,
+            entries=tuple(
+                Entry(point, name, str(task), source=self.extension)
+                for task in entry.get("entries", ())
+            ),
+            gates=bool(entry.get("gates", False)),
+            extension=self.extension,
+        )
 
     def check(
         self,

@@ -32,7 +32,6 @@ BACKEND_IMPORT = "import a backend"
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
     ("_coverage_store", "pyproject.toml"): (1, "the root pins the gate reads"),
-    ("_docs_contract", "container"): (2, "a docs publish seam, not an artifact"),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
     ("_points", "python"): (1, "a runner's interpreter version"),
     ("_pythons", "pyproject.toml"): (1, "the root's requires-python"),

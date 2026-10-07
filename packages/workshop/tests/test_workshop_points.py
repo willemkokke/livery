@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-# The site's jobs are the docs extension's: importing its task module
-# contributes them to the builtin points, as the mount does.
-import livery.extensions.docs._tasks  # noqa: F401
 from livery.workshop import _points
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -135,12 +135,10 @@ def test_each_point_names_its_workflow_and_events() -> None:
 
     assert INHERITS == {"merge": "gate"}
     # The base declares the check and the verdict; the docs job is the
-    # docs extension's, in place once its tasks module is imported.
+    # docs extension's, in place once its declaration registers.
     assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "gate"]
-    from livery.extensions.docs import _tasks as docs_tasks
     from livery.workshop._points import point_by_name
 
-    del docs_tasks
     assert [job.name for job in point_by_name(None)["gate"].jobs] == [
         "check",
         "docs",

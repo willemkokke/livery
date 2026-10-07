@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -15,10 +16,15 @@ from livery.workshop._points import (
     composed_points,
     contribute_job,
     contributed_jobs,
+    job_installs,
+    job_seams,
     point_by_name,
     verdict_needs,
     withdraw_job,
 )
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -107,15 +113,20 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
     assert nightly.name == composed_points()[2].name
 
 
-def test_the_docs_extension_contributes_the_build_and_the_deploy() -> None:
-    from livery.extensions.docs import _tasks as docs_tasks
-
-    del docs_tasks
+def test_the_docs_extension_declares_the_build_and_the_deploy(tmp_path: Path) -> None:
     gate = point_by_name(None)["gate"]
     assert [job.name for job in gate.jobs] == ["check", "docs", "gate"]
     assert gate.jobs[-1].needs == ("check", "docs")
     merge = point_by_name(None)["merge"]
-    assert merge.jobs[-1].name == "deploy" and merge.jobs[-1].deploy
+    deploy = merge.jobs[-1]
+    assert deploy.name == "deploy"
+    assert (deploy.needs, deploy.fetch, deploy.token) == (("gate",), "tags", "job")
+    # The functions the jobs name answer from the root contract.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
+    )
+    assert job_seams(tmp_path) == {("merge", "deploy"): "container"}
+    assert job_installs(tmp_path) == {("gate", "docs"): (), ("merge", "deploy"): ()}
     entries = builtin_schedule()
     tasks = [(entry.point, entry.job, entry.task) for entry in entries]
     assert ("gate", "docs", "docs.build") in tasks
@@ -124,7 +135,5 @@ def test_the_docs_extension_contributes_the_build_and_the_deploy() -> None:
     verdict = next(entry for entry in entries if entry.task == "ci.verdict")
     assert verdict.args == ("--needs=check,docs",)
     assert all(
-        entry.source == "livery.extensions.docs"
-        for entry in entries
-        if entry.task.startswith("docs.")
+        entry.source == "docs" for entry in entries if entry.task.startswith("docs.")
     )

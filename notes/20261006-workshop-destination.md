@@ -1222,6 +1222,21 @@ the stack, which this design neither needs nor rules out).
   test that composes the site without a mount declares the docs slots
   from the declaration file. The jobs and the base's `[docs]` reads are
   the second part.
+- 2026-10-07, the docs extension's registrations (#1252), second part,
+  the jobs: a job is a `[ci.jobs.<point>.<name>]` table. Besides
+  `entries`, `gates`, `installs` and `deploy` from the key table above,
+  it takes `needs`, `fetch`, `token` and `note`, the keys the site's
+  deploy needs. `token` takes `job` alone, since a grant beyond the
+  run's own token is the root contract's to give. `installs` and
+  `deploy` are references the CI render calls with the root, and a
+  job's entries register under the listed name, as a check does. The
+  generators and the publish seam move into the extension with their
+  keys, so `_ci_generate` and `_workflow_tasks` read no `[docs]` table.
+  The install step is named `System packages`, since any job may name
+  packages. Fixed in the same change: an extension a branded App mounts
+  as a builtin registers its declaration, and a GitLab deploy is the
+  `pages` job only for the `pages` seam. The `project.urls` slot and
+  the job's `inputs` are the third part.
 
 ## Open
 

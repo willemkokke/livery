@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.toolroom.tools as tools
+from livery.extensions.docs._contract import package_generators, publish_seam
 from livery.footman import doc, fail, group
 from livery.workshop import _extensions, _slots
 from livery.workshop._contract import load_contract
@@ -49,8 +50,6 @@ from livery.workshop._docs_contract import (
     NAV_TOML,
     declines_api,
     docs_table,
-    package_generators,
-    publish_seam,
     site_reads,
 )
 from livery.workshop._kinds import ALL_MEMBERS, Extractor

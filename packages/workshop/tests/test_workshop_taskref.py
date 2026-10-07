@@ -25,7 +25,7 @@ from workshop_docs_declared import docs_slots  # noqa: F401
 def _workspace(tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
-    (root / "workshop.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (root / "docs").mkdir()
     (root / "docs" / "index.md").write_text("# Home\n")
