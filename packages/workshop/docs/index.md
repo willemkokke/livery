@@ -27,6 +27,18 @@ list, a value of the wrong type and a value outside its allowed set
 each refuse on read, naming the file, the key, what the table takes,
 and the nearest spelling.
 
+`fm sync` writes the same declarations as JSON Schema, one file per
+contract under `.workshop/schema/`: `workshop.json` for the root's
+contract, `package.json` for a package's, `extension.json` for an
+`extension.toml`. Each holds the keys of the base and of the extensions
+the root contract lists, so it follows what is installed and listed,
+and it is written for the checkout alone, never committed. The composed
+`.taplo.toml` points Taplo, the language server behind Even Better TOML
+and other editors' TOML support, at each file by path from the root, so
+an editor completes and validates a contract as it is typed. The
+schema says what shape a contract has; the judge keeps the rules a
+schema cannot say.
+
 An extension is declared by an entry point in the `workshop.extensions`
 group, mapping the name a contract lists to the package that ships it.
 Beside that package sits its `extension.toml`, which the mount and the

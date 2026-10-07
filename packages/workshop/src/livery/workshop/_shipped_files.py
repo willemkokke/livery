@@ -291,7 +291,27 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         kept.append(output)
     # Every output beside the composed ones, whatever the LFS setting:
     # an output the list leaves out is one the delivery withdraws.
-    return (*kept, *_agent_outputs(root, order), *_kind_root_outputs(root)), notes
+    return (
+        *kept,
+        *_agent_outputs(root, order),
+        *_kind_root_outputs(root),
+        *_schema_outputs(root),
+    ), notes
+
+
+def _schema_outputs(root: Path) -> list[Output]:
+    """Each contract's composed JSON Schema, this checkout's own.
+
+    The schema follows what is installed and listed, so it is written
+    for this checkout alone, as the agent's fragments are, and the
+    committed ``.taplo.toml`` points the editor at it.
+    """
+    from livery.workshop._schema import schema_files
+
+    return [
+        Output(path, body, (f"{SELF}:{path}",), local=True)
+        for path, body in schema_files(root).items()
+    ]
 
 
 def _kind_root_outputs(root: Path) -> list[Output]:

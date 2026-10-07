@@ -52,6 +52,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     assert _composed(deliver(root)) == [
         "  wrote .gitattributes",
         "  wrote .gitignore",
+        "  wrote .taplo.toml",
         "  wrote .vscode/extensions.json",
         "  wrote .vscode/settings.json",
         "  wrote tasks.py",
