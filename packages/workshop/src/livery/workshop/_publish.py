@@ -349,6 +349,11 @@ def cut_tag(git: GitOps, tag: str, ref: str) -> None:
     git._run("push", "origin", tag)
 
 
+#: The words PyPI answers a new project's first upload with once one
+#: account has created as many projects as its limit allows for now.
+NEW_PROJECT_LIMIT = "Too many new projects created"
+
+
 def publish_release(
     root: Path,
     git: GitOps,
@@ -410,6 +415,15 @@ def publish_release(
     receipts: dict[str, Receipt] = {}
     failures: dict[str, BaseException] = {}
     lock = threading.Lock()
+    # A registry may limit how many new projects one account creates in
+    # a period, as PyPI does. The members whose project the registry
+    # does not know yet upload one at a time, so a refusal stops at the
+    # first of them, and the ones after it do not try.
+    new_projects = [
+        p.name for p in ordered if p.publish and not registry_for(p).versions(p.name)
+    ]
+    first_upload = threading.Lock()
+    refused_new: list[str] = []
 
     def _build_member(package: Package, version: str) -> None:
         """Build the member's artifact, or trust the matrix's collection."""
@@ -440,6 +454,36 @@ def publish_release(
         else:
             backend_for(package).build(package, root, epoch=epoch)
         assert_wheel_identity(package)
+
+    def _first_upload(package: Package, version: str, target: RegistryTarget) -> bool:
+        """Upload a new project's first version, or name the limit that stops it."""
+        from livery.workshop._kinds import backend_for
+
+        if refused_new:
+            raise SystemExit(
+                f"{package.name}: not uploaded: the registry already refused a"
+                f" new project in this wave ({refused_new[0]})"
+            )
+        try:
+            return backend_for(package).publish_artifact(
+                package, root, version=version, target=target
+            )
+        except BaseException as exc:
+            if NEW_PROJECT_LIMIT not in str(exc):
+                raise
+            refused_new.append(package.name)
+            waiting = [name for name in new_projects if name not in receipts_named()]
+            raise SystemExit(
+                f"{package.name}: the registry refuses more new projects for now"
+                f" ({NEW_PROJECT_LIMIT}): it limits how many one account creates"
+                f" in a period. New projects still to create: {', '.join(waiting)}."
+                f" Re-dispatch later with `{footman.prog()} workflow.release.dispatch`;"
+                " the wave walks past what it already published."
+            ) from exc
+
+    def receipts_named() -> set[str]:
+        with lock:
+            return {receipt.package.name for receipt in receipts.values()}
 
     def _run_member(package: Package) -> None:
         version = manifest[package.name]
@@ -516,12 +560,16 @@ def publish_release(
                     # is why a tag alone no longer ends the member:
                     # a re-run finishes the upload.
                     cut_tag(git, tag, resolved_ref)
-                published = backend_for(package).publish_artifact(
-                    package,
-                    root,
-                    version=version,
-                    target=target,
-                )
+                if package.name in new_projects:
+                    with first_upload:
+                        published = _first_upload(package, version, target)
+                else:
+                    published = backend_for(package).publish_artifact(
+                        package,
+                        root,
+                        version=version,
+                        target=target,
+                    )
             probe_until_served(
                 registry_for(package),
                 package.name,
