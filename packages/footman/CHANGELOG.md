@@ -18,6 +18,7 @@ versions may include breaking changes.
 - A flag on by default is named in help by its own spelling beside its own text, and says it is on by default and how to turn it off by @willemkokke
 - The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
 - A name a test binds on footman's api leaves it when the test ends, so a later patch of the defining module reaches the api's readers again by @willemkokke
+- The push check reads the installed plugins again, and the scan records each entry point's distribution, so a sync that moves a member under a long process keeps its tools by @willemkokke
 
 ### Changed
 
