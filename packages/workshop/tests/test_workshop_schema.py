@@ -1,37 +1,57 @@
-"""Each contract's JSON Schema, composed from its declared keys: the fallbacks first."""
+"""Each contract's JSON Schema and its judge: the refusals first."""
 
 from __future__ import annotations
 
 import json
 import tomllib
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from livery.workshop._contract_keys import (
     BASE,
+    EXTENSION,
     ContractKind,
-    judge,
-    listed_extensions,
+    declarations,
 )
-from livery.workshop._schema import DIRECTORY, FILES, compose
-from workshop_schema import problems
+from livery.workshop._schema import (
+    DIRECTORY,
+    FILES,
+    OWNER,
+    compose,
+    composed,
+    problems,
+    schema_files,
+)
 
-ROOT = Path(__file__).resolve().parents[3]
+#: How a refusal names each declared type, as the judge always has.
+_WORDS = {
+    "str": "a string",
+    "int": "an integer",
+    "number": "a number",
+    "bool": "true or false",
+    "strs": "a list of strings",
+    "list": "a list",
+    "table": "a table",
+    "any": "any value",
+}
 
 
-def _listed() -> frozenset[str]:
-    """The extensions this repository's root contract lists, the base among them."""
-    return listed_extensions(tomllib.loads((ROOT / "workshop.toml").read_text()))
+# The refusals first: an unlisted extension's key, a key the author
+# names, a list, and the words each refusal uses.
 
 
-# The fallbacks first: an extension that is not listed, and a key the
-# author names.
-
-
-def test_an_extension_installed_and_not_listed_adds_nothing() -> None:
+def test_an_unlisted_extensions_key_is_refused_naming_its_owner() -> None:
     alone = compose("root", frozenset({BASE}))
-    assert problems(alone, {"docs": {"title": "Site"}}) == ["docs.title: not declared"]
+    assert problems(alone, {"docs": {"title": "Site"}}) == [
+        "docs.title is a key of docs, which [workspace] extensions does not list;"
+        " list the extension, or remove the key"
+    ]
+    # The editor refuses it too, and its hover names the extension.
+    title = alone["properties"]["docs"]["properties"]["title"]
+    assert title["not"] == {} and title[OWNER] == "docs"
+    assert "docs" in title["description"]
     listed = compose("root", frozenset({BASE, "docs"}))
     assert problems(listed, {"docs": {"title": "Site"}}) == []
 
@@ -42,7 +62,9 @@ def test_a_key_the_author_names_is_no_fixed_property() -> None:
     assert "properties" not in options
     assert options["additionalProperties"] == {"type": "string"}
     assert problems(schema, {"options": {"deep": "judges deeper"}}) == []
-    assert problems(schema, {"options": {"deep": 3}}) == ["options.deep: is not string"]
+    assert problems(schema, {"options": {"deep": 3}}) == [
+        "options.deep is an integer (3); it takes a string"
+    ]
     # Two named levels: a check's tool, then its role.
     checks = schema["properties"]["checks"]
     assert "properties" not in checks
@@ -50,51 +72,90 @@ def test_a_key_the_author_names_is_no_fixed_property() -> None:
     assert "run" in role["properties"]
 
 
-@pytest.mark.parametrize(
-    "wrong",
-    [
-        {"forge": {"kind": "bitbucket"}},
-        {"forge": {"owner": 3}},
-        {"workspace": {"extension": []}},
-        {"workspace": {"extensions": [3]}},
-    ],
-)
-def test_the_schema_refuses_what_the_judge_refuses(wrong: dict[str, object]) -> None:
-    listed = _listed()
-    assert judge(wrong, contract="root", where="workshop.toml", listed=listed)
-    assert problems(compose("root", listed), wrong)
+def test_a_list_of_strings_is_refused_whole_and_a_lists_entries_one_by_one() -> None:
+    schema = compose("extension", None)
+    assert problems(schema, {"extension": {"requires": ["a", 3]}}) == [
+        "extension.requires is a list (['a', 3]); it takes a list of strings"
+    ]
+    assert problems(schema, {"extension": {"levels": ["workspace", "house"]}}) == [
+        "extension.levels[] is 'house'; it takes one of workspace, package"
+    ]
+    # A documented list of strings is refused whole as well.
+    package = compose("package", None)
+    generators = {"docs": {"generators": [{"verb": "v", "requires": ["zsh", 3]}]}}
+    assert problems(package, generators) == [
+        "docs.generators[].requires is a list (['zsh', 3]); it takes a list of strings"
+    ]
 
 
-# Then what the composed files accept, and where the sync puts them.
+def _keys(contract: ContractKind) -> list[tuple[str, tuple[str, ...]]]:
+    if contract == "extension":
+        return [(item.path, tuple(item.types)) for item in EXTENSION]
+    return [
+        (path, tuple(owned.declared.types))
+        for (kind, path), owned in declarations().items()
+        if kind == contract
+    ]
 
 
-def test_the_schemas_accept_every_contract_the_judge_accepts() -> None:
-    from livery.footman import installed_entry_points
-    from livery.workshop._declaration import declaration_file
-    from livery.workshop._packages import discover_packages
+def _branch(node: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    """*node*'s branch of JSON Schema type *kind*, among its choices or alone."""
+    branches = cast("list[dict[str, Any]]", node.get("anyOf", [node]))
+    return next((branch for branch in branches if branch.get("type") == kind), None)
 
-    listed = _listed()
-    contracts: list[tuple[ContractKind, Path]] = [("root", ROOT / "workshop.toml")]
-    for package in discover_packages(ROOT):
-        contracts.append(("package", package.directory / "workshop.toml"))
-    for entry in installed_entry_points("workshop.extensions"):
-        found = declaration_file(entry.value.partition(":")[0])
-        if found is not None:
-            contracts.append(("extension", found))
-    assert len(contracts) > 2
-    schemas = {name: compose(name, listed) for name in FILES}
-    for contract, path in contracts:
-        data = tomllib.loads(path.read_text("utf-8"))
-        judged = judge(
-            data,
-            contract=contract,
-            where=str(path),
-            listed=None if contract == "extension" else listed,
-        )
-        # A release leg installs this wheel alone, where the judge refuses
-        # a key of an extension that is listed and absent: then so does
-        # the schema.
-        assert bool(problems(schemas[contract], data)) == bool(judged), path
+
+def _at(schema: dict[str, Any], path: str) -> dict[str, Any] | None:
+    """The schema a declared *path* composes to; None beneath a key taking any value.
+
+    The judge looks at nothing beneath such a key, its reader does, so
+    the schema declares nothing there either.
+    """
+    node = schema
+    for segment in path.split("."):
+        name = segment.removesuffix("[]")
+        table = _branch(node, "object")
+        if table is None:
+            return None
+        properties = cast("dict[str, dict[str, Any]]", table.get("properties", {}))
+        found = properties.get(name, table.get("additionalProperties"))
+        assert isinstance(found, dict), path
+        node = cast("dict[str, Any]", found)
+        if segment.endswith("[]"):
+            array = _branch(node, "array")
+            assert array is not None, path
+            node = cast("dict[str, Any]", array["items"])
+    return node
+
+
+@pytest.mark.parametrize("contract", ["root", "package", "extension"])
+def test_every_declared_keys_refusal_names_what_it_takes_in_the_judges_words(
+    contract: ContractKind,
+) -> None:
+    from livery.workshop._schema import _spoken
+
+    schema = compose(contract, None)
+    for path, types in _keys(contract):
+        node = _at(schema, path)
+        if node is None:
+            continue
+        branches = cast("list[dict[str, Any]]", node.get("anyOf", [node]))
+        spoken = " or ".join(_spoken(branch) for branch in branches)
+        assert spoken == " or ".join(_WORDS[kind] for kind in types), path
+
+
+# Then the one statement: the file the editor reads is what the judge
+# validates against, written for this checkout alone.
+
+
+def test_the_schema_file_is_what_the_judge_validates_against(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    files = schema_files(root)
+    listed = frozenset({BASE, "docs"})
+    for contract, name in FILES.items():
+        written = json.loads(files[f"{DIRECTORY}/{name}"])
+        assert written == composed(contract, listed), name
 
 
 def test_the_sync_writes_each_schema_for_this_checkout_alone(
