@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from livery.workshop._packages import (
     member_of,
     package_directories,
     receipt_member,
+    release_tag,
 )
 from livery.workshop._pytest_layout import offenders
 from livery.workshop._pytest_speed import package_of
@@ -135,6 +137,92 @@ def test_a_receipt_names_its_member_whatever_its_depth() -> None:
     assert receipt_member("packages/extensions/ruff/v0.1.0") == "extensions/ruff"
     assert receipt_member("archive/setup") == ""
     assert receipt_member("v1.0.0") == ""
+
+
+def test_a_release_tag_parses_at_any_depth_and_refuses_every_other_shape() -> None:
+    # The refusals first: no member, a version that is not three
+    # numbers, no "v", a tag outside packages/.
+    for tag in (
+        "packages/v1.0.0",
+        "packages/forge/v1.0",
+        "packages/forge/v1.0.0-rc1",
+        "packages/forge/1.0.0",
+        "archive/setup",
+        "v1.0.0",
+    ):
+        assert release_tag(tag) is None, tag
+    assert release_tag("packages/forge/v1.2.0") == ("packages/forge", "1.2.0")
+    assert release_tag("packages/extensions/ruff/v0.10.0") == (
+        "packages/extensions/ruff",
+        "0.10.0",
+    )
+
+
+def test_a_grouped_package_verifies_its_release_tag(tmp_path: Path) -> None:
+    from livery.workshop._release import verify_release
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    directory = _package(tmp_path, "extensions/ruff")
+    (directory / "pyproject.toml").write_text(
+        '[project]\nname = "livery-extensions-ruff"\nversion = "0.1.0"\n'
+        "dependencies = []\n"
+    )
+    (directory / "CHANGELOG.md").write_text("# Changelog\n\n## 0.1.0\n\n- x\n")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    # The refusal first: the group directory is no package.
+    with pytest.raises(_FAILURES, match="not a workspace package"):
+        verify_release(tmp_path, "packages/extensions/v0.1.0")
+    plan = verify_release(tmp_path, "packages/extensions/ruff/v0.1.0")
+    assert plan.package.member == "extensions/ruff"
+    assert plan.version == "0.1.0"
+
+
+def test_the_newest_release_of_a_grouped_package_is_found() -> None:
+    from livery.workshop._update import latest_released
+
+    tags = (
+        "packages/extensions/ruff/v0.9.0",
+        "packages/extensions/ruff/v0.10.0",
+        "packages/forge/v1.0.0",
+        "archive/setup",
+    )
+    assert latest_released(tags) == {
+        "packages/extensions/ruff": "0.10.0",
+        "packages/forge": "1.0.0",
+    }
+
+
+def test_the_release_history_lists_a_grouped_package_newest_first(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.docs._site import _receipt_tags
+
+    _package(tmp_path, "forge")
+    _package(tmp_path, "extensions/ruff")
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "seed")
+    for tag in (
+        "packages/forge/v0.9.0",
+        "packages/forge/v0.10.0",
+        "packages/extensions/ruff/v0.1.0",
+        "archive/setup",
+    ):
+        git("tag", tag)
+    rows = [row[1:] for row in _receipt_tags(tmp_path)]
+    assert rows == [
+        ("forge", "livery-forge", "0.10.0"),
+        ("forge", "livery-forge", "0.9.0"),
+        ("extensions/ruff", "livery-extensions-ruff", "0.1.0"),
+    ]
 
 
 def test_an_uncut_grouped_receipt_belongs_to_its_set(tmp_path: Path) -> None:

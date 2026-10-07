@@ -13,20 +13,19 @@ from pathlib import Path
 
 from livery.footman import fail
 from livery.workshop._git_ops import GitOps
-from livery.workshop._packages import discover_packages
-
-_RELEASE_TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+)\.(\d+)\.(\d+)$")
+from livery.workshop._packages import discover_packages, release_tag
 
 
 def latest_released(tags: tuple[str, ...]) -> dict[str, str]:
     """The newest released version per package path, from *tags*."""
     latest: dict[str, tuple[int, int, int]] = {}
     for tag in tags:
-        match = _RELEASE_TAG_RE.fullmatch(tag)
-        if match is None:
+        found = release_tag(tag)
+        if found is None:
             continue
-        path = match.group(1)
-        version = (int(match.group(2)), int(match.group(3)), int(match.group(4)))
+        path, text = found
+        major, minor, patch = (int(part) for part in text.split("."))
+        version = (major, minor, patch)
         if version > latest.get(path, (-1, -1, -1)):
             latest[path] = version
     return {path: ".".join(map(str, v)) for path, v in latest.items()}
