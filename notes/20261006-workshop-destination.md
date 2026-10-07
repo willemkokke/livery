@@ -1,10 +1,11 @@
 # The workshop's destination: an engine, and the API its extensions use
 
-Status: proposed, awaiting Willem's ruling. Written 2026-10-06 against
+Status: ruled by Willem on 2026-10-07; every design question is closed
+and the extensions plan takes phases 10 to 16 from here. Written
+2026-10-06 against
 `origin/main` at `4f2a5e53`. Nothing here is built. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
-rewrites its phases 10 to 15 against a designed destination, and the
-plan takes the rewrite in once ruled.
+rewrites its phases 10 to 15 against a designed destination.
 
 ## The rulings this design satisfies
 
