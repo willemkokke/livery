@@ -26,6 +26,7 @@ from livery.workshop._docs_contract import (
 )
 from livery.workshop._navblocks import NAV_BEGIN, NAV_END
 from livery.workshop._packages import discover_packages
+from workshop_docs_declared import docs_slots  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 

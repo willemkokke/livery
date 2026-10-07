@@ -214,6 +214,14 @@ def _check_keys(prefix: str) -> tuple[Declared, ...]:
         _extension(f"{check}.claims[].category", "str"),
         _extension(f"{check}.claims[].suffixes", "strs"),
         _extension(f"{check}.claims[].ignore", "strs"),
+        # The files a workspace check reads, as the affected engine asks.
+        _extension(f"{check}.inputs", "table"),
+        _extension(f"{check}.inputs.reads", "strs"),
+        _extension(f"{check}.inputs.per-file", "bool"),
+        _extension(f"{check}.inputs.widens", "strs"),
+        _extension(f"{check}.inputs.on-removal", "bool"),
+        _extension(f"{check}.inputs.widen", "str"),
+        _extension(f"{check}.inputs.ignores", "strs"),
         _extension(f"{check}.options", "table"),
         _extension(f"{check}.options.*", "table"),
         _extension(f"{check}.options.*.type", "str", values=("bool", "str", "int")),
@@ -246,6 +254,12 @@ EXTENSION: tuple[Declared, ...] = (
     *_check_keys("checks"),
     _extension("contributions", "table"),
     _extension("contributions.*", "strs"),
+    # The slots the extension declares, which others put values into.
+    _extension("slots", "table"),
+    _extension("slots.*", "table"),
+    _extension("slots.*.compose", "str"),
+    _extension("slots.*.default", "any"),
+    _extension("slots.*.values", "list"),
     # A key's declaration is judged where it is read: the reader knows
     # the contracts and the types.
     _extension("contract", "table"),

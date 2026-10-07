@@ -19,6 +19,7 @@ from livery.extensions.docs._taskref import (
     provider_tree,
 )
 from livery.workshop._packages import discover_packages
+from workshop_docs_declared import docs_slots  # noqa: F401
 
 
 def _workspace(tmp_path: Path) -> Path:

@@ -21,6 +21,7 @@ from livery.workshop._declaration import (
     Additions,
     Declaration,
     DeclarationError,
+    DeclaredSlot,
     declaration_file,
     read,
 )
@@ -410,6 +411,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         listed = options.get(extension, ())
         if why := _undeclared(extension, listed):
             _note(f"{why}; the mount leaves it off")
+        declare_slots(extension, found.slots)
         if register_declared(extension, found.additions, listed):
             mounted.append(extension)
         name = found.plugin
@@ -531,6 +533,20 @@ def register_declared(
     for slot, value in additions.contributions:
         _slots.contribute(slot, value, extension=extension, by=extension)
     return bool(additions.checks)
+
+
+def declare_slots(extension: str, slots: tuple[DeclaredSlot, ...]) -> None:
+    """Declare *slots* for *extension*, before anything contributes to them."""
+    from livery.workshop import _slots
+
+    for slot in slots:
+        _slots.register_slot(
+            slot.name,
+            compose=slot.compose,
+            default=slot.default,
+            extension=extension,
+            values=slot.values,
+        )
 
 
 def check_api_version(extension: str, found: Declaration) -> None:

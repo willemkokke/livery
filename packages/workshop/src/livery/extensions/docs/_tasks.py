@@ -2,26 +2,21 @@
 
 Importing this module registers the ``docs`` group under the extension's
 identity, declares the site's override template as a file the CI
-render writes, registers the extension's two checks (``lint.doclinks``
-and ``lint.docstrings``), and contributes the site's two jobs to the
-builtin points: the gate point's strict build, which its verdict waits for,
-and the merge point's deploy. The base's plugin never imports it.
+render writes, and contributes the site's two jobs to the builtin
+points: the gate point's strict build, which its verdict waits for, and
+the merge point's deploy. The extension's checks are declared in its
+``extension.toml``. The base's plugin never imports it.
 """
 
 from __future__ import annotations
 
-from livery.extensions.docs._checks import CHECKS
 from livery.extensions.docs._site import docs_group, overrides_template
-from livery.workshop._checks import register_check
 from livery.workshop._points import Entry, Job, contribute_job
 from livery.workshop._site_files import register_site_file
 
 EXTENSION = "livery.extensions.docs"
 
 register_site_file("overrides/main.html", overrides_template, extension=EXTENSION)
-
-for _record in CHECKS:
-    register_check(_record)
 
 contribute_job(
     "gate",

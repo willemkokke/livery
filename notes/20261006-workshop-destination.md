@@ -1212,6 +1212,16 @@ the stack, which this design neither needs nor rules out).
   slice. Reading the nine declarations costs `fm commit --help` about
   4 ms beside 10a, interleaved over 41 rounds, 2.4 ms of it the
   reference check's parse of the modules the references name.
+- 2026-10-07, the docs extension's registrations (#1252), first part:
+  its three checks are `[checks.<tool>.lint]` tables, and a check
+  declares the files it reads as `inputs` (`reads`, `per-file`,
+  `widens`, `on-removal`, `ignores`, and `widen`, a reference). Its two
+  slots are `[slots."<name>"]` tables, composed by `union`, `nearest` or
+  a reference. The mount declares an extension's slots before its checks
+  and contributions register, so a `[for]` contribution finds them. A
+  test that composes the site without a mount declares the docs slots
+  from the declaration file. The jobs and the base's `[docs]` reads are
+  the second part.
 
 ## Open
 

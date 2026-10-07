@@ -18,6 +18,7 @@ from livery.extensions.docs._llms import (
     resolve_snippets,
     write_llms_files,
 )
+from workshop_docs_declared import docs_slots  # noqa: F401
 
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:

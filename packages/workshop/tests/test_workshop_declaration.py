@@ -145,6 +145,64 @@ def test_a_check_without_run_or_with_an_undeclared_option_refuses(
     )
 
 
+def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, CHECK + "inputs = { on-removal = true }\n") == (
+        f"{where}: checks.acme.lint.inputs names no reads: inputs name the files"
+        " the check reads"
+    )
+    assert "names gone, which acme_declared._checks does not define" in _refusal(
+        package,
+        CHECK
+        + 'inputs = { reads = ["**/*.md"], widen = "acme_declared._checks:gone" }\n',
+    )
+    found = _declare(
+        package,
+        CHECK + 'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
+        ' on-removal = true, widen = "acme_declared._checks:mend",'
+        ' ignores = ["docs/README.md"] }\n',
+    )
+    (record,) = found.additions.checks
+    assert record.inputs is not None
+    assert record.inputs.reads == ("docs/**/*.md",)
+    assert record.inputs.widens == ("mkdocs.yml",)
+    assert record.inputs.on_removal is True
+    assert record.inputs.per_file is True
+    assert str(record.inputs.widen) == "acme_declared._checks:mend"
+    assert record.inputs.ignores == ("docs/README.md",)
+
+
+def test_a_slot_composes_by_a_rule_or_a_reference_that_resolves(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, '[slots."acme.style"]\ncompose = "longest"\n') == (
+        f"{where}: slots.\"acme.style\".compose is 'longest'; a slot composes by"
+        " 'union', 'nearest', or a reference 'module:function'"
+    )
+    assert "names gone, which acme_declared._checks does not define" in _refusal(
+        package, '[slots."acme.style"]\ncompose = "acme_declared._checks:gone"\n'
+    )
+    found = _declare(
+        package,
+        '[slots."acme.depth"]\ncompose = "nearest"\ndefault = "shallow"\n'
+        'values = ["shallow", "deep"]\n'
+        '[slots."acme.style"]\ncompose = "acme_declared._checks:mend"\n'
+        '[slots."acme.paths"]\n',
+    )
+    depth, style, paths = found.slots
+    assert (depth.name, depth.compose, depth.default, depth.values) == (
+        "acme.depth",
+        "nearest",
+        "shallow",
+        ("shallow", "deep"),
+    )
+    assert str(style.compose) == "acme_declared._checks:mend"
+    assert (paths.compose, paths.values) == ("union", None)
+
+
 def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> None:
     where = package / "extension.toml"
     assert _refusal(

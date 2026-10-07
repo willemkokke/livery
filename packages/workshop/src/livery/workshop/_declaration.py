@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from livery.workshop._checks import CheckRecord
     from livery.workshop._contract_keys import ContractKind, Declared, Type
+    from livery.workshop._influence import Inputs
 
 #: The declaration file's name, beside the package an entry point names.
 FILE = "extension.toml"
@@ -89,6 +90,25 @@ class Additions:
 
 
 @dataclass(frozen=True)
+class DeclaredSlot:
+    """A slot a declaration declares, which extensions put values into.
+
+    Attributes:
+        name: The slot's name, ``docs.theme``.
+        compose: How the values compose: ``union``, ``nearest``, or the
+            function that composes them.
+        default: The value with nothing contributed; a union's is an
+            empty list.
+        values: The only values the slot accepts; None accepts any.
+    """
+
+    name: str
+    compose: str | Reference = "union"
+    default: object = None
+    values: tuple[object, ...] | None = None
+
+
+@dataclass(frozen=True)
 class Declaration:
     """An extension's declaration file, read and judged.
 
@@ -108,6 +128,7 @@ class Declaration:
             its own file of that name replaces, to the reason.
         deletes: Each earlier extension's shipped file it deletes, to the
             reason.
+        slots: The slots it declares.
     """
 
     extension: str
@@ -123,6 +144,7 @@ class Declaration:
     targets: dict[str, Additions] = field(default_factory=dict[str, Additions])
     replaces: dict[str, str] = field(default_factory=dict[str, str])
     deletes: dict[str, str] = field(default_factory=dict[str, str])
+    slots: tuple[DeclaredSlot, ...] = ()
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -176,6 +198,7 @@ _NAMED = (
     ("for", "*", "contributions"),
     ("replaces",),
     ("deletes",),
+    ("slots", "*", "default"),
 )
 
 
@@ -289,6 +312,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         targets=targets,
         replaces={str(ref): str(why) for ref, why in data.get("replaces", {}).items()},
         deletes={str(ref): str(why) for ref, why in data.get("deletes", {}).items()},
+        slots=tuple(
+            reader.slot(str(name), table)
+            for name, table in data.get("slots", {}).items()
+        ),
     )
 
 
@@ -354,6 +381,11 @@ class _Reader:
                     suffixes=tuple(claim.get("suffixes", ())),
                 )
             )
+        inputs = (
+            self.inputs(entry["inputs"], (*where, "inputs"))
+            if "inputs" in entry
+            else None
+        )
         record = CheckRecord(
             tool,
             role,
@@ -386,6 +418,7 @@ class _Reader:
             flags=tuple(entry.get("flags", ())),
             listed_with=listed_with,
             arguments=bool(entry.get("arguments", False)),
+            inputs=inputs,
         )
         for option in record.options:
             if option.kind not in ("bool", "str", "int"):
@@ -422,6 +455,49 @@ class _Reader:
                 for kind in entry["kinds"]
             )
         return tuple(found)
+
+    def slot(self, name: str, table: dict[str, Any]) -> DeclaredSlot:
+        """The slot *name* declares, its compose a rule or a reference."""
+        from livery.workshop._slots import NEAREST, UNION
+
+        where = ("slots", name)
+        rule = str(table.get("compose", UNION))
+        if rule in (UNION, NEAREST):
+            compose: str | Reference = rule
+        elif ":" in rule:
+            compose = self.reference(rule, (*where, "compose"))
+        else:
+            raise self.refuse(
+                (*where, "compose"),
+                f"is {rule!r}; a slot composes by {UNION!r}, {NEAREST!r}, or a"
+                " reference 'module:function'",
+            )
+        values = table.get("values")
+        return DeclaredSlot(
+            name,
+            compose,
+            default=table.get("default"),
+            values=tuple(values) if values is not None else None,
+        )
+
+    def inputs(self, table: dict[str, Any], where: tuple[str, ...]) -> Inputs:
+        """The files a workspace check reads, from its ``inputs`` table."""
+        from livery.workshop._influence import Inputs
+
+        if "reads" not in table:
+            raise self.refuse(
+                where, "names no reads: inputs name the files the check reads"
+            )
+        return Inputs(
+            reads=tuple(table["reads"]),
+            per_file=bool(table.get("per-file", True)),
+            widens=tuple(table.get("widens", ())),
+            on_removal=bool(table.get("on-removal", False)),
+            widen=self.reference(table["widen"], (*where, "widen"))
+            if "widen" in table
+            else None,
+            ignores=tuple(table.get("ignores", ())),
+        )
 
     def reference(self, text: object, where: tuple[str, ...]) -> Reference:
         """The reference *text* spells, resolved against the package's sources."""

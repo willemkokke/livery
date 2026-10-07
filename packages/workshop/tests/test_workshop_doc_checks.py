@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-# Importing the task module registers the checks, as the mount does.
-import livery.extensions.docs._tasks  # noqa: F401
 from livery.extensions.docs._checks import (
     assignment_docstrings,
     doclinks_run,
@@ -16,10 +15,26 @@ from livery.extensions.docs._checks import (
     undocumented_exports,
 )
 from livery.footman import Failed
+from livery.workshop import _checks as registry
 from livery.workshop._checks import GateContext, checks_by_name
 from livery.workshop._packages import Package
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def registered() -> Iterator[None]:
+    """The docs checks registered, as the mount registers the listed extension's."""
+    from livery.workshop._extensions import declaration, register_declared
+
+    state = registry.snapshot()
+    found = declaration("docs")
+    assert found is not None
+    register_declared("docs", found.additions)
+    try:
+        yield
+    finally:
+        registry.restore(state)
 
 
 def _member(root: Path, init: str, *, name: str = "thing") -> Path:
@@ -130,10 +145,10 @@ def test_a_member_without_a_package_is_passed_over(tmp_path: Path) -> None:
     assert undocumented_exports(tmp_path, [member]) == []
 
 
-def test_the_checks_are_registered_under_the_lint_role() -> None:
+def test_the_checks_are_declared_under_the_lint_role() -> None:
     registered = checks_by_name()
-    for name in ("lint.doclinks", "lint.docstrings"):
-        assert registered[name].extension == "livery.extensions.docs"
+    for name in ("lint.docrefs", "lint.doclinks", "lint.docstrings"):
+        assert registered[name].extension == "docs"
 
 
 def test_this_workspaces_links_resolve() -> None:
