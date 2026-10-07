@@ -40,6 +40,34 @@ OUTPUTS = (
 )
 
 
+def test_a_delivery_removes_what_an_older_one_left_and_keeps_a_hand_written_ignore(
+    tmp_path: Path,
+) -> None:
+    root = _repository(tmp_path)
+    fragments = root / ".workshop" / "fragments"
+    fragments.mkdir(parents=True)
+    # The keep first: an ignore file a person wrote there is theirs.
+    (fragments / ".gitignore").write_text("scratch.md\n")
+    lines = apply_untracked(root, OUTPUTS)
+    assert (fragments / ".gitignore").read_text() == "scratch.md\n"
+    assert not [line for line in lines if ".workshop/fragments" in line]
+    # Then what an older delivery wrote, which nothing reads: both go,
+    # each named.
+    (fragments / ".gitignore").write_text(
+        "# Managed by `fm sync` - the entries below are materialised from the\n"
+        "voice.interaction.md\n"
+    )
+    (fragments / ".workshop-materialised").write_text("abc voice.interaction.md\n")
+    lines = apply_untracked(root, OUTPUTS)
+    assert not (fragments / ".gitignore").exists()
+    assert not (fragments / ".workshop-materialised").exists()
+    for name in (".workshop-materialised", ".gitignore"):
+        assert (
+            f"  removed .workshop/fragments/{name}: an older sync's bookkeeping,"
+            " nothing reads it"
+        ) in lines
+
+
 def test_a_locked_write_leaves_every_tracked_file_as_it_is(tmp_path: Path) -> None:
     root = _repository(tmp_path)
     apply_untracked(root, OUTPUTS)
