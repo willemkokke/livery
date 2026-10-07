@@ -1428,6 +1428,16 @@ the stack, which this design neither needs nor rules out).
   members policy wait for phase 11's generators. The wave that
   releases the break waits for PyPI's window for the four new
   distributions.
+- 2026-10-08, the public names (#1290), found as it merged: the API
+  reference documents every root a package ships. The workshop's
+  section rendered `livery.workshop` alone, so the strict site build
+  refused the workshop's reference to
+  `livery.extensions.docs.write_nav_block`. Decided here: the
+  shallowest root keeps the section's top and its URLs, and each
+  further root's pages sit under a directory named by its dotted
+  path, so the docs extension's modules publish under
+  `packages/workshop/api/livery.extensions.docs/` until phase 12
+  ships the extension apart.
 
 ## Open
 
