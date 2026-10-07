@@ -530,12 +530,10 @@ def _agent_outputs(root: Path, order: list[str]) -> list[Output]:
 
     outputs: list[Output] = []
     settings: Output | None = None
-    listed: list[_prose.Prose] = []
     for extension in order:
         content = extension_content(extension)
         if content is None:
             continue
-        listed += _prose.shipped(extension, content)
         for kind in ("skills", "hooks"):
             shipped = content / kind
             if not shipped.is_dir():
@@ -567,8 +565,7 @@ def _agent_outputs(root: Path, order: list[str]) -> list[Output]:
             )
     if settings is not None:
         outputs.append(settings)
-    listed += _prose.repository_fragments(root)
-    chosen, own = _prose.agent_set(root, listed)
+    chosen, own = _prose.agent_set(root, _prose.in_play(root, order))
     delivered: list[str] = []
     for prose in chosen:
         if prose.render is not None:

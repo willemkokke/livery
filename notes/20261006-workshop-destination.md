@@ -5,8 +5,8 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 2026-10-06 against
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
 reach scan, the declaration file, the docs extension's registrations,
-the schema, the verification and the public names' first part are
-built, and the public names' second part is next. The extensions plan
+the schema, the verification and the public names are built, and the
+slice's breaking part is next. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1397,6 +1397,23 @@ the stack, which this design neither needs nor rules out).
   test holds the docs extension to these names until phase 12 ships it
   apart. The second part brings `ci_changes`, `Prose`, `AGENT`,
   `HUMAN`, `guidance` and `contributions_for`.
+- 2026-10-07, the public names (#1285), second part: `livery.workshop`
+  exports `ci_changes`, `Prose`, `AGENT`, `HUMAN`, `guidance` and
+  `contributions_for`. `guidance(root, audience)` is the one assembly
+  of every fragment in play, the mounted extensions' and the
+  repository's own, which the docs extension's development pages and
+  the base's agent outputs both read; the docs extension no longer
+  imports `_prose`, and `Section` stays private, since `guidance`
+  answers in section order. `ci_changes(root)` is the diff the check
+  legs read, with its merge base, so a `widen` reference can read a
+  file as it was; the docs job's skip reads it, and its skip line
+  names the run instead of the base. `contributions_for(target)`
+  reads the `[for.<target>]` tables as the file holds them, by the rule
+  the mount grafts by, and the top-level tables of an extension that
+  requires the target; `Declaration` keeps the raw tables for it. The
+  slice's breaking part is next: `rewrite_nav_block` leaves for the
+  docs extension's own public API, and `mount_extensions` leaves the
+  public surface.
 
 ## Open
 

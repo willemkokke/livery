@@ -669,6 +669,37 @@ def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     return found
 
 
+def contributions_for(
+    target: str, start: Path | None = None
+) -> dict[str, dict[str, Any]]:
+    """What the listed extensions declare for *target*, by extension, in list order.
+
+    An extension contributes its ``[for.<target>]`` table while
+    *target* is listed and the extension's listing contributes to it
+    (its ``for`` list, or every listed target it declares a table for
+    when it has none), the rule the mount grafts by; an extension
+    that requires *target* contributes its top-level tables. The
+    tables come as the declaration file holds them, and an extension
+    that declares nothing for *target* is left out, as is every
+    extension when *target* is not listed. *start* is a directory in
+    the workspace, the working directory when absent.
+    """
+    names = extension_names(start)
+    if target not in names:
+        return {}
+    active = resolved_targets(start)
+    found: dict[str, dict[str, Any]] = {}
+    for owner in names:
+        declared = _readable(owner)
+        if declared is None or owner == target:
+            continue
+        if target in declared.requires:
+            found[owner] = dict(declared.tables)
+        elif target in active.get(owner, ()) and target in declared.target_tables:
+            found[owner] = dict(declared.target_tables[target])
+    return found
+
+
 def describe_extensions(start: Path | None = None) -> list[str]:
     """The lines ``fm extensions`` prints: each extension with what it declares."""
     names = extension_names(start)

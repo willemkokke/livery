@@ -311,6 +311,40 @@ def repository_fragments(root: Path) -> list[Prose]:
     return shipped(REPOSITORY, root)
 
 
+def in_play(root: Path, order: Iterable[str] | None = None) -> list[Prose]:
+    """Every shipped fragment in play: each extension's set in *order*, then the own.
+
+    *order* is the mounted extensions' order, the workspace's stack when
+    absent. An extension that ships no content adds nothing.
+    """
+    from livery.workshop._extensions import extension_content, stack_names
+
+    listed: list[Prose] = []
+    for extension in stack_names(root) if order is None else order:
+        content = extension_content(extension)
+        if content is not None:
+            listed += shipped(extension, content)
+    return [*listed, *repository_fragments(root)]
+
+
+def guidance(root: Path, audience: str) -> list[Prose]:
+    """The guidance one reader gets in the workspace at *root*, in reading order.
+
+    *audience* is [livery.workshop.AGENT][] or [livery.workshop.HUMAN][].
+    The set is every fragment the mounted extensions ship, every
+    fragment an extension renders, and the repository's own under
+    ``fragments/``: by section, then by extension in mount order, the
+    repository's own last, then by name. A fragment written for the
+    other reader is left out, and so is one for a kind no package in the
+    workspace is or derives from.
+
+    Raises:
+        ValueError: when two fragments in the set deliver under one name,
+            naming both.
+    """
+    return fragments(root, in_play(root), audience)
+
+
 def present_kinds(root: Path) -> frozenset[str]:
     """The kinds a package present in *root* is or derives from."""
     from livery.workshop._kinds import kind_chain, kind_names

@@ -268,6 +268,59 @@ def test_the_docs_job_reads_the_docs_and_the_readme_and_not_the_notes(
     assert [jobs_reading(tmp_path, path) for path in unread] == [()] * len(unread)
 
 
+def test_ci_changes_is_the_runs_diff_against_its_base_or_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import ci_changes
+    from livery.workshop._git_ops import GitError
+
+    broken: list[str] = []
+
+    class FakeGit:
+        def __init__(self, root: Path) -> None:
+            del root
+
+        def fetch(self) -> None:
+            if broken:
+                raise GitError(broken[0])
+
+        def changed_paths(self, base: str) -> list[str]:
+            return [f"changed-against-{base}.md"]
+
+        def merge_base(self, base: str) -> str:
+            del base
+            return "b" * 40
+
+    monkeypatch.setattr("livery.workshop._git_ops.GitOps", FakeGit)
+    # The fallbacks first: at a desk, and outside a pull request's
+    # narrowing, the run judges everything.
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda environ=None: None)
+    assert ci_changes(tmp_path) is None
+    monkeypatch.setattr(
+        "livery.workshop._state.run_context", lambda environ=None: object()
+    )
+    monkeypatch.setattr(
+        "livery.workshop._quality.ci_affected_base", lambda root, run: ""
+    )
+    assert ci_changes(tmp_path) is None
+    monkeypatch.setattr(
+        "livery.workshop._quality.ci_affected_base", lambda root, run: "main"
+    )
+    # A diff git cannot read judges everything, and says why.
+    broken.append("no network")
+    assert ci_changes(tmp_path) is None
+    assert (
+        "affected-legs: no diff against origin/main; everything is judged (no network)"
+        in capsys.readouterr().out
+    )
+    broken.clear()
+    # Then the run's changes, from the merge base a widen reference reads.
+    changes = ci_changes(tmp_path)
+    assert changes is not None
+    assert changes.paths == ("changed-against-main.md",)
+    assert changes.before == "b" * 40 and changes.root == tmp_path
+
+
 def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -290,8 +343,14 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
             del base
             return list(changed)
 
+        def merge_base(self, base: str) -> str:
+            del base
+            return "b" * 40
+
     monkeypatch.setattr("livery.workshop._git_ops.GitOps", FakeGit)
-    monkeypatch.setattr(_points, "run_context", lambda environ=None: object())
+    monkeypatch.setattr(
+        "livery.workshop._state.run_context", lambda environ=None: object()
+    )
     # The fallbacks first. Outside a pull request's narrowing every
     # entry runs.
     monkeypatch.setattr(
@@ -304,7 +363,10 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     # A diff that cannot be read runs the job and says why.
     broken.append("no network")
     assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""
-    assert "gate/docs: no diff against origin/main; running" in capsys.readouterr().out
+    assert (
+        "affected-legs: no diff against origin/main; everything is judged"
+        in capsys.readouterr().out
+    )
     broken.clear()
     # A job that declares no inputs always runs.
     assert _points.unread_by_the_job(tmp_path, "merge", "deploy") == ""
@@ -318,7 +380,7 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""
     changed[:] = ["notes/musings.md"]
     assert _points.unread_by_the_job(tmp_path, "gate", "docs") == (
-        "  gate/docs: nothing the job reads changed against origin/main (1 path(s)"
+        "  gate/docs: nothing the job reads changed in this run (1 path(s)"
         " changed); its entries are skipped"
     )
     changed.append("docs/index.md")

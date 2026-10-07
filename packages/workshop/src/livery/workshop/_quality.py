@@ -161,6 +161,39 @@ def ci_affected_base(root: Path, run: RunContext | None) -> str:
     return run.base_ref
 
 
+def ci_changes(root: Path) -> Changes | None:
+    """What this CI run changed against the base it measures from; None for everything.
+
+    A pull request's run in a workspace that declares ``[ci]
+    affected-legs`` measures from its base branch: the paths changed
+    since the merge base with ``origin/<base>``, committed or not, with
+    that merge base, so a ``widen`` reference can read a file as it
+    was. None at a desk, on any other event, without
+    ``affected-legs``, and when git cannot answer; the run then judges
+    everything, and the line printed says why.
+    """
+    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._influence import Changes
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    base = ci_affected_base(root, run) if run is not None else ""
+    if not base:
+        return None
+    git = GitOps(root)
+    try:
+        git.fetch()
+        paths = tuple(git.changed_paths(base))
+        before = git.merge_base(base)
+    except GitError as error:
+        print(
+            f"  affected-legs: no diff against origin/{base}; everything is"
+            f" judged ({error})"
+        )
+        return None
+    return Changes(root, paths, before)
+
+
 def verified_already(root: Path) -> Verified | None:
     """The record's full row for this checkout's tree, or ``None`` to run the gate.
 

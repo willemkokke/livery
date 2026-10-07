@@ -516,6 +516,43 @@ def _grafted() -> bool:
     return "lint.house" in _checks.checks_by_name()
 
 
+def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import contributions_for
+
+    _house(tmp_path, monkeypatch)
+    _fake_extensions(
+        tmp_path,
+        monkeypatch,
+        cpp="",
+        needy=(
+            '[extension]\nrequires = ["acme.python"]\n\n'
+            '[checks.needy.lint]\nrun = "{package}._checks:noop"\n'
+        ),
+    )
+    # The empty answers first: a target the workspace does not list, and
+    # a contribution whose listing points it at another target.
+    _contract(tmp_path, '["acme.house"]')
+    assert contributions_for("acme.python", tmp_path) == {}
+    _contract(
+        tmp_path,
+        '["acme.python", "acme.cpp", { name = "acme.house", for = ["acme.cpp"] }]',
+    )
+    assert contributions_for("acme.python", tmp_path) == {}
+    # Then the table the mount grafts, as the file holds it, and the
+    # top-level tables of an extension that requires the target.
+    _contract(tmp_path, '["acme.python", "acme.house", "acme.needy"]')
+    assert contributions_for("acme.python", tmp_path) == {
+        "acme.house": {
+            "checks": {"house": {"lint": {"run": "acme.house._checks:noop"}}}
+        },
+        "acme.needy": {
+            "checks": {"needy": {"lint": {"run": "acme.needy._checks:noop"}}}
+        },
+    }
+
+
 def _mount(root: Path) -> None:
     from livery.footman import _registry as registry
 
