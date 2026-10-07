@@ -142,19 +142,35 @@ class Reconciled:
     """True when the drift sync succeeded and the receipt was
     rewritten."""
     changed: tuple[str, ...] = ()
-    """The ``dist-info`` names the sync added, removed, or replaced;
-    non-empty means this process may be running stale code."""
+    """The ``dist-info`` names the sync added, removed, or replaced, or
+    whose entry points it rewrote; non-empty means this process may be
+    running stale code."""
     failure: str = ""
     """uv's own words when the sync failed; empty otherwise."""
 
 
-def installed_distributions(root: Path) -> frozenset[str]:
-    """Every ``*.dist-info`` name in the venv, across platform layouts."""
-    found: set[str] = set()
+def installed_distributions(root: Path) -> dict[str, str]:
+    """Every ``*.dist-info`` name in the venv, to its entry points' digest.
+
+    Read across platform layouts. A name alone misses an editable
+    member re-installed at the same version with new entry points: its
+    directory keeps its name, and a process that mounted the old entry
+    points would go on with them. The digest of each
+    ``entry_points.txt`` (empty without one) makes that re-install a
+    change.
+    """
+    import hashlib
+
+    found: dict[str, str] = {}
     for pattern in ("lib/python*/site-packages", "Lib/site-packages"):
         for site in (root / ".venv").glob(pattern):
-            found.update(entry.name for entry in site.glob("*.dist-info"))
-    return frozenset(found)
+            for entry in site.glob("*.dist-info"):
+                try:
+                    points = (entry / "entry_points.txt").read_bytes()
+                except OSError:
+                    points = b""
+                found[entry.name] = hashlib.sha256(points).hexdigest() if points else ""
+    return found
 
 
 def reconcile(root: Path) -> Reconciled:
@@ -198,7 +214,13 @@ def reconcile(root: Path) -> Reconciled:
     manifests.write_text(digest, "utf-8")
     result.synced = True
     after = installed_distributions(root)
-    result.changed = tuple(sorted(before ^ after))
+    result.changed = tuple(
+        sorted(
+            name
+            for name in before.keys() | after.keys()
+            if before.get(name) != after.get(name)
+        )
+    )
     return result
 
 
