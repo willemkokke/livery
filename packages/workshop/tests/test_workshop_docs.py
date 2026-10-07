@@ -1594,8 +1594,15 @@ def test_the_coverage_nav_entry_appends_like_the_changelog(
 def test_the_coverage_page_stays_out_of_the_context_file(tmp_path: Path) -> None:
     from livery.extensions.docs._llms import _machine_page
 
-    assert _machine_page("packages/core/coverage.md")
-    assert not _machine_page("packages/core/guide.md")
+    members = ("core", "extensions/widgets")
+    # The refusals first: an authored page, and an authored page in a
+    # subdirectory that shares a generated page's name.
+    assert not _machine_page("packages/core/guide.md", members)
+    assert not _machine_page("packages/core/guide/changelog.md", members)
+    assert _machine_page("packages/core/coverage.md", members)
+    # A package in a group directory is read like any other.
+    assert _machine_page("packages/extensions/widgets/changelog.md", members)
+    assert _machine_page("packages/extensions/widgets/api/widgets.md", members)
 
 
 def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
