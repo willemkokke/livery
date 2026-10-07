@@ -1,0 +1,25 @@
+# The mypy extension: the type checker, once per platform, over the python
+# files it claims. Read at every mount; a check's code is imported when
+# the check runs.
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one configuration for every member.
+levels = ["workspace"]
+
+[checks.mypy.typecheck]
+run = "livery.extensions.mypy._checks:judge_typecheck"
+narrowing = "paths"
+kinds = ["python"]
+tools = ["mypy"]
+arguments = true
+claims = [
+    { category = "source", suffixes = [".py", ".pyi"] },
+    { category = "test", suffixes = [".py", ".pyi"] },
+    { category = "test-support", suffixes = [".py", ".pyi"] },
+]
+
+# mypy reads the members' own stubs from the venv, so it rides the dev
+# group beside the store's copy.
+[contributions]
+"python.dev-group" = ["mypy>=1.14"]

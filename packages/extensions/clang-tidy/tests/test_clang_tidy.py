@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.clang.tidy._extension as declaration
 from livery.extensions.clang.tidy import _checks
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
@@ -25,10 +24,12 @@ CONTRACT = (
 @pytest.fixture
 def registered() -> Iterator[None]:
     """clang-tidy's check registered, as the mount registers a listed extension's."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("clang-tidy", declaration)
+    found = declaration("clang-tidy")
+    assert found is not None
+    register_declared("clang-tidy", found.additions)
     try:
         yield
     finally:

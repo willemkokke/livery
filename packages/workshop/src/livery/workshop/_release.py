@@ -25,13 +25,12 @@ from livery.workshop import _cliff as _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package, discover_packages, release_tag
 from livery.workshop._release_notes import NO_PROVIDER, release_notes
 from livery.workshop._versions import derive_version
 
 release = group("release", help="The release train's CI entries")
 
-_TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+\.\d+\.\d+)$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -70,10 +69,10 @@ def verify_release(
     """
     from livery.workshop._kinds import requires_pyproject
 
-    match = _TAG_RE.fullmatch(tag)
-    if match is None:
-        fail(f"tag {tag!r} does not match packages/<pkg>/v<semver>")
-    path, version = match.group(1), match.group(2)
+    found = release_tag(tag)
+    if found is None:
+        fail(f"tag {tag!r} does not match packages/<member>/v<semver>")
+    path, version = found
     packages = {package.path: package for package in discover_packages(root)}
     package = packages.get(path)
     if package is None:
@@ -121,7 +120,7 @@ def verify_release(
 
 @release.task(name="verify", hidden=True)
 def release_verify(
-    tag: Annotated[str, doc("the release tag, packages/<pkg>/v<semver>")],
+    tag: Annotated[str, doc("the release tag, packages/<member>/v<semver>")],
 ) -> None:
     """Verify *tag* against the tree; the train's gate before building.
 

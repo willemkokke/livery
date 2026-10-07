@@ -1,5 +1,6 @@
 """ty's check: the type checker over every platform at once.
 
+The extension's ``extension.toml`` declares it and names the body here.
 ``typecheck.ty`` checks what ``ty.toml`` includes whatever a run
 reaches: a run costs seconds, and the file pins the platforms, every
 one at once. The check hands ty the words after ``--`` on its own
@@ -11,16 +12,7 @@ its runner on this module when it runs, so a test that replaces
 from __future__ import annotations
 
 import livery.toolroom.tools as tools
-from livery.workshop import CheckRecord, Claim, GateContext
-
-#: The kinds whose python files ty judges.
-KINDS = ("python",)
-
-#: The suffixes ty reads.
-SUFFIXES = (".py", ".pyi")
-
-#: The editor extension that answers with ty's verdict as the gate's.
-EDITOR = "astral-sh.ty"
+from livery.workshop import GateContext
 
 
 def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
@@ -31,22 +23,6 @@ def run_typecheck(arguments: tuple[str, ...] = ()) -> None:
     tools.ty.check(*arguments)
 
 
-def _typecheck_run(ctx: GateContext) -> None:
+def judge_typecheck(ctx: GateContext) -> None:
+    """Type-check the configured whole; the words after ``--`` reach ty."""
     run_typecheck(ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "ty",
-        "typecheck",
-        _typecheck_run,
-        kinds=KINDS,
-        tools=("ty",),
-        arguments=True,
-        editor_extension=EDITOR,
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support")
-        ),
-    ),
-)

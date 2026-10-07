@@ -1,6 +1,7 @@
 """basedpyright's two checks: the type checker, and type completeness as its option.
 
-``typecheck.basedpyright`` narrows by paths: the workshop names the
+The extension's ``extension.toml`` declares both and names the bodies
+here. ``typecheck.basedpyright`` narrows by paths: the workshop names the
 paths a run reaches ([livery.workshop.scoped_paths][]) and splits
 them into calls ([livery.workshop.run_batched][]). A run that
 reaches the whole calls basedpyright with no path, since basedpyright
@@ -21,37 +22,13 @@ from functools import partial
 
 import livery.toolroom.tools as tools
 from livery.workshop import (
-    PACKAGES,
-    PATHS,
     WHOLE,
-    CheckRecord,
-    Claim,
-    Fragment,
     GateContext,
     public_modules,
     run_batched,
     scoped_packages,
     scoped_paths,
 )
-
-#: The kinds whose python files basedpyright judges.
-KINDS = ("python",)
-
-#: The suffixes basedpyright reads.
-SUFFIXES = (".py", ".pyi")
-
-#: The option that registers the type-completeness check.
-TYPECOMPLETE = "typecomplete"
-
-#: The editor's language server: basedpyright's own, reading the same file.
-EDITOR = "detachhead.basedpyright"
-
-#: The type checker that answers in the editor is the one this
-#: workspace configures: the editor's default python language server
-#: is off, so it adds no second verdict with settings of its own.
-SETTINGS = """\
-{"python.languageServer": "None"}
-"""
 
 
 def run_typecheck(paths: tuple[str, ...] = (), arguments: tuple[str, ...] = ()) -> None:
@@ -77,7 +54,8 @@ def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) 
         tools.basedpyright(*arguments, verifytypes=module, ignoreexternal=True)
 
 
-def _typecheck_run(ctx: GateContext) -> None:
+def judge_typecheck(ctx: GateContext) -> None:
+    """Type-check the paths the run reaches, or the configured whole."""
     chosen = scoped_paths(ctx, "typecheck.basedpyright")
     if chosen == WHOLE:
         run_typecheck(arguments=ctx.arguments)
@@ -85,36 +63,7 @@ def _typecheck_run(ctx: GateContext) -> None:
     run_batched(chosen, partial(run_typecheck, arguments=ctx.arguments))
 
 
-def _typecomplete_run(ctx: GateContext) -> None:
+def judge_typecomplete(ctx: GateContext) -> None:
+    """Verify the public modules of each package the run reaches."""
     for package in scoped_packages(ctx, "typecomplete.basedpyright"):
         run_typecomplete(public_modules(package), ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "basedpyright",
-        "typecheck",
-        _typecheck_run,
-        narrowing=PATHS,
-        kinds=KINDS,
-        tools=("basedpyright",),
-        arguments=True,
-        fragments=(Fragment(".vscode/settings.json", SETTINGS),),
-        editor_extension=EDITOR,
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support")
-        ),
-    ),
-    CheckRecord(
-        "basedpyright",
-        "typecomplete",
-        _typecomplete_run,
-        narrowing=PACKAGES,
-        kinds=KINDS,
-        tools=("basedpyright",),
-        arguments=True,
-        claims=(Claim("source", suffixes=SUFFIXES),),
-        listed_with=TYPECOMPLETE,
-    ),
-)

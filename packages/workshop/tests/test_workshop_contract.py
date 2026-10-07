@@ -88,21 +88,21 @@ def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> N
 
 
 def test_two_owners_declaring_one_key_refuse_naming_both(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _contract_keys
+
+    package = tmp_path / "site" / "acme_extension"
+    package.mkdir(parents=True)
+    (package / "extension.toml").write_text(
+        '[contract.root.forge.kind]\ntypes = ["str"]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path / "site"))
 
     class _Entry:
         name = "acme.extension"
         group = "workshop.extensions"
-
-        @staticmethod
-        def load() -> object:
-            from types import SimpleNamespace
-
-            return SimpleNamespace(
-                CONTRACT_KEYS=(_contract_keys.Declared("root", "forge.kind", ("str",)),)
-            )
+        value = "acme_extension"
 
     from livery.footman import _entries  # pyright: ignore[reportPrivateUsage]
 

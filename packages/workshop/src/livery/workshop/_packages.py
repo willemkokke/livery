@@ -11,6 +11,7 @@ invariant (the forge's stdlib rule) kept.
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -237,15 +238,30 @@ def package_directories(root: Path) -> tuple[Path, ...]:
     return tuple(sorted(found, key=lambda path: path.as_posix()))
 
 
+_RELEASE_TAG = re.compile(rf"({PACKAGES_DIR}(?:/[^/]+)+)/v(\d+\.\d+\.\d+)")
+
+
+def release_tag(tag: str) -> tuple[str, str] | None:
+    """The package path and version a release *tag* names; None for another tag.
+
+    A release tag is ``packages/<member>/v<major>.<minor>.<patch>``, and
+    the member may sit in a group directory:
+    ``packages/extensions/widgets/v1.2.0`` names
+    ``("packages/extensions/widgets", "1.2.0")``. Every reader of
+    release tags parses them here, so a package at any depth under
+    ``packages/`` releases like any other.
+    """
+    match = _RELEASE_TAG.fullmatch(tag)
+    return (match.group(1), match.group(2)) if match else None
+
+
 def receipt_member(tag: str) -> str:
     """The member a release receipt *tag* names, or ``""`` for another tag.
 
     ``packages/extensions/widgets/v1.2.0`` names ``extensions/widgets``.
     """
-    head, _, version = tag.rpartition("/v")
-    if not version or not head.startswith(f"{PACKAGES_DIR}/"):
-        return ""
-    return head.removeprefix(f"{PACKAGES_DIR}/")
+    found = release_tag(tag)
+    return found[0].removeprefix(f"{PACKAGES_DIR}/") if found else ""
 
 
 def member_depth(root: Path, relative: Path) -> int:

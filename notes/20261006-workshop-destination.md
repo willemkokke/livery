@@ -1188,6 +1188,30 @@ the stack, which this design neither needs nor rules out).
   false` in the package's contract, and judging is the default for
   a package with tests. A key, not a floor of zero: the page still
   renders, and the reader sees the package was left out on purpose.
+- 2026-10-07, 10b lands in slices, each gate-green and mergeable alone:
+  the reach scan (#1220); the declaration file, read at mount for the
+  eight tool extensions and for the docs extension's identity and
+  contract keys (#1222); the docs extension's registrations; the schema;
+  the verification; the public names. The first slice's allowance holds
+  three reaches #1204 does not list: the bench reads `_NEGATIONS`,
+  `_WRAPPERS` and `_console_entrypoint` on `livery.toolroom.tools`, with
+  no seam designed yet.
+- 2026-10-07, the declaration file (#1222), what the key table above
+  does not say: a check's static configuration stays on the check,
+  `[checks.<tool>.<role>.fragments]`, a project file's text or a package
+  file's `{ kinds, text }`, so it leaves with the check as before; a
+  check also takes `kinds` (until phase 11's `extensions`),
+  `tests-only`, `arguments`, `flags`, `roles`, `listed-with` and
+  `editor-extension`; a key holding a dot is one name, since the judge
+  walks a contract's tables. An installed package that ships no
+  declaration file, an environment from before the change, is named and
+  skipped at mount, and `fm sync` installs the one the workspace builds,
+  so no checkout strands. The kit's `contribution-modules` clause
+  becomes `declaration-validates`: the file reads and every reference
+  resolves; importing them under a recorder joins in the verification
+  slice. Reading the nine declarations costs `fm commit --help` about
+  4 ms beside 10a, interleaved over 41 rounds, 2.4 ms of it the
+  reference check's parse of the modules the references name.
 
 ## Open
 

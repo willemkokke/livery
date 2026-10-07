@@ -1,0 +1,43 @@
+# The docs extension: the site, its pages and its checks. Read at every
+# mount; its verbs arrive through its plugin.
+
+[extension]
+api-version = 1
+# Listed in [workspace] extensions.
+levels = ["workspace"]
+# The footman plugin that carries the site's verbs.
+plugin = "livery.extensions.docs"
+
+# The site's title and description.
+[contract.root.docs.title]
+types = ["str"]
+doc = "the site's title; the project's name when absent"
+
+[contract.root.docs.description]
+types = ["str"]
+doc = "the site's one-line description"
+
+# A package's pages beyond the generated ones.
+[contract.package.docs.coverage]
+types = ["list"]
+doc = "the static coverage reports the package's own tooling writes"
+
+[contract.package.docs."coverage[]"]
+types = ["table"]
+label = { types = ["str"], doc = "the report's name on the page" }
+path = { types = ["str"], doc = "the report's directory, relative to the package" }
+
+[contract.package.docs.extra-css]
+types = ["strs"]
+doc = "stylesheets for the package's pages, relative to its docs/"
+
+[contract.package.docs.extra-javascript]
+types = ["list"]
+doc = "scripts for the package's pages: a path, or a table with its attributes"
+
+[contract.package.docs."extra-javascript[]"]
+types = ["str", "table"]
+path = { types = ["str"], doc = "the script, relative to the package's docs/" }
+type = { types = ["str"], doc = "the script element's type" }
+defer = { types = ["bool"], doc = "whether the script runs after the page parses" }
+async = { types = ["bool"], doc = "whether the script runs as soon as it loads" }

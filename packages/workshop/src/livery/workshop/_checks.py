@@ -135,7 +135,7 @@ class GateContext:
 
 @dataclass(frozen=True)
 class Option:
-    """One option a package may set on a check, in its ``[checks.<role>.<tool>]`` table.
+    """One option a package may set on a check, in its ``[checks.<tool>.<role>]`` table.
 
     Attributes:
         name: The option's key, kebab-case.
@@ -182,7 +182,7 @@ class CheckRecord:
     """One check, completely.
 
     A check's name is its role and its tool, ``test.pytest``: the
-    verb ``fm test.pytest``, the ``[checks.test.pytest]`` table of its
+    verb ``fm test.pytest``, the ``[checks.pytest.test]`` table of its
     options, the gate's lines, and every lookup use it.
 
     Attributes:
@@ -236,7 +236,7 @@ class CheckRecord:
             the check judges, naming ``check <name>`` as its site, and
             leaves it when the check is unregistered.
         options: The options a package may set under
-            ``[checks.<role>.<tool>]``; ``enabled`` is every check's.
+            ``[checks.<tool>.<role>]``; ``enabled`` is every check's.
         contributions: ``(slot, value)`` pairs the record puts into
             slots at registration, the dev group's lines say; withdrawn
             with the record.
@@ -253,7 +253,7 @@ class CheckRecord:
             tool with per-file ignores renders its ignores from them.
         roles: Further roles the check implements; it answers to
             ``<role>.<tool>`` under each, and its options stay in its
-            own table, ``[checks.<role>.<tool>]`` for ``role``.
+            own table, ``[checks.<tool>.<role>]`` for ``role``.
         flags: The command-line flags the check reads, from `FLAGS`:
             ``point`` for a check that selects tests by CI point. A
             generated verb offers the flags its checks declare, and
@@ -262,7 +262,8 @@ class CheckRecord:
             check, which a workspace turns on in its list,
             ``basedpyright[typecomplete]``; empty for a check that
             registers whenever its extension is listed. The extension
-            declares the option in its ``OPTIONS``.
+            declares the option under ``[options]`` in its
+            ``extension.toml``.
         arguments: Whether the check hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
             which it reads from [livery.workshop.GateContext][]'s

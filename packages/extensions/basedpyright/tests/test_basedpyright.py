@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.basedpyright._extension as declaration
 import livery.toolroom.tools as tools
 from livery.extensions.basedpyright import _checks
 from livery.workshop import GateContext, Package
@@ -29,10 +28,12 @@ CONTRACT = (
 @pytest.fixture
 def registered() -> Iterator[None]:
     """Both checks registered, as the mount registers ``basedpyright[typecomplete]``."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("basedpyright", declaration, ("typecomplete",))
+    found = declaration("basedpyright")
+    assert found is not None
+    register_declared("basedpyright", found.additions, ("typecomplete",))
     try:
         yield
     finally:

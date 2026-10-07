@@ -25,6 +25,7 @@ from pathlib import Path
 
 from livery.extensions.docs._site import _project_name, zensical_config
 from livery.workshop._docs_contract import docs_table
+from livery.workshop._packages import discover_packages
 
 #: Site-tree prefixes whose pages never enter ``llms-full.txt``:
 #: machine territory whose content is history or reference the
@@ -32,13 +33,22 @@ from livery.workshop._docs_contract import docs_table
 MACHINE_PREFIXES = ("releases/",)
 
 
-def _machine_page(path: str) -> bool:
-    """Whether *path* is machine-appended rather than authored."""
+def _machine_page(path: str, members: tuple[str, ...]) -> bool:
+    """Whether *path* is machine-appended rather than authored.
+
+    A package's pages live under ``packages/<member>/``, and *members*
+    names every member, so a package in a group directory
+    (``packages/extensions/widgets/changelog.md``) is read like any
+    other, and an authored page in a subdirectory is never taken for
+    a package's generated one.
+    """
     if path.startswith(MACHINE_PREFIXES):
         return True
-    return bool(
-        re.fullmatch(r"packages/[^/]+/(changelog\.md|coverage\.md|api/.+)", path)
-    )
+    for member in members:
+        rest = path.removeprefix(f"packages/{member}/")
+        if rest != path and re.fullmatch(r"changelog\.md|coverage\.md|api/.+", rest):
+            return True
+    return False
 
 
 def _nav_pages(nav: list[object]) -> list[tuple[str, str]]:
@@ -163,6 +173,7 @@ def llms_files(root: Path) -> tuple[str, str]:
         site += "/"
     nav = tomllib.loads(zensical_config(root))["project"]["nav"]
     pages = _nav_pages(nav)
+    members = tuple(package.member for package in discover_packages(root))
     index = [f"# {title}", ""]
     if description:
         index += [f"> {description}", ""]
@@ -180,7 +191,7 @@ def llms_files(root: Path) -> tuple[str, str]:
             if summary
             else f"- [{page_title}]({url})"
         )
-        if _machine_page(page):
+        if _machine_page(page, members):
             continue
         full += ["", "---", "", f"<!-- {page_title} - {url} -->", "", resolved]
     return ("\n".join(index) + "\n", "\n".join(full) + "\n")

@@ -348,6 +348,7 @@ def require_mounted(
     from livery.workshop._extensions import (
         declared_now,
         extension_entries,
+        stale_declarations,
         unmounted,
     )
     from livery.workshop._pythons import venv_python
@@ -357,7 +358,10 @@ def require_mounted(
     if not missing:
         return
     installed = declared_now(missing)
-    if installed != missing:
+    # An environment from before the checkout's declares an extension
+    # by an entry point whose package ships no declaration file: its
+    # metadata is what `uv sync` brings current.
+    if installed != missing or stale_declarations(root):
         run_uv("sync", *flags, root=root)
         installed = declared_now(missing)
     absent = [name for name in missing if name not in installed]

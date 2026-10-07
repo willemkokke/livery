@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-import importlib
-import importlib.util
 import inspect
 import io
-import sys
 import tempfile
 import threading
 import tomllib
@@ -32,7 +29,6 @@ from livery.workshop._checks import (
     answering,
     checks_by_name,
 )
-from livery.workshop._extensions import FOR_ATTRIBUTE
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
 from livery.workshop._packages import Package
@@ -47,9 +43,9 @@ class Subject:
     before the kit does.
 
     Attributes:
-        extension: The extension's import path, ``acme.extension``: its plugin
-            module, where the kit reads what the extension declares, its
-            contributions to other extensions among them.
+        extension: The extension's package, ``acme.extension``: where its
+            ``extension.toml`` sits, which the kit reads as the mount
+            does.
         kinds: The kinds the extension registers, and the kinds whose
             category tables it extends.
         checks: The checks the extension registers.
@@ -99,7 +95,7 @@ BACKEND_PROTOCOL = "backend-protocol"
 NEAREST_FRAGMENT = "nearest-fragment"
 CATEGORY_TABLE = "category-table"
 CHECK_ORDER = "check-order"
-CONTRIBUTION_MODULES = "contribution-modules"
+DECLARATION_VALIDATES = "declaration-validates"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -424,47 +420,25 @@ def _check_order(subject: Subject) -> list[Violation]:
     return violations
 
 
-# An extension's contributions to other extensions.
+# An extension's declaration file.
 
 
-def _imports(module: str) -> bool:
-    """Whether *module* is imported already, or can be found without running it."""
-    if module in sys.modules:
-        return True
-    try:
-        return importlib.util.find_spec(module) is not None
-    except (ImportError, ValueError):
-        return False
+def _declaration_validates(subject: Subject) -> list[Violation]:
+    from livery.workshop._declaration import DeclarationError, declaration_file, read
 
-
-def _contribution_modules(subject: Subject) -> list[Violation]:
-    if not _imports(subject.extension):
+    if declaration_file(subject.extension) is None:
         return []
-    declared: object = getattr(
-        importlib.import_module(subject.extension), FOR_ATTRIBUTE, {}
-    )
-    if not isinstance(declared, dict) or not all(
-        isinstance(target, str) and isinstance(module, str)
-        for target, module in declared.items()  # pyright: ignore[reportUnknownVariableType]
-    ):
+    try:
+        read(subject.extension, subject.extension)
+    except DeclarationError as error:
         return [
             Violation(
-                CONTRIBUTION_MODULES,
+                DECLARATION_VALIDATES,
                 f"extension {subject.extension}",
-                f"{FOR_ATTRIBUTE} is not a map from a target extension's import path"
-                " to a module; the mount refuses the extension",
+                f"{error}; the mount refuses the extension",
             )
         ]
-    return [
-        Violation(
-            CONTRIBUTION_MODULES,
-            f"extension {subject.extension} for {target}",
-            f"names {module}, which does not import; the mount refuses once"
-            f" {target} is listed",
-        )
-        for target, module in declared.items()  # pyright: ignore[reportUnknownVariableType]
-        if not _imports(str(module))  # pyright: ignore[reportUnknownArgumentType]
-    ]
+    return []
 
 
 # An extension's configuration files, through the workshop's own render.
@@ -842,10 +816,11 @@ CLAUSES: tuple[Clause, ...] = (
         _check_order,
     ),
     Clause(
-        CONTRIBUTION_MODULES,
-        "An extension declares its contributions to other extensions as a map from a"
-        " target extension's import path to a module that imports.",
-        _contribution_modules,
+        DECLARATION_VALIDATES,
+        "An extension's extension.toml holds only the keys the workshop declares,"
+        " each of its type, and every reference in it names a function its"
+        " module defines.",
+        _declaration_validates,
     ),
     Clause(
         FRAGMENT_DRIFT,

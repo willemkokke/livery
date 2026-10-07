@@ -224,7 +224,7 @@ def test_the_monorepo_is_in_sync() -> None:
         declaration,
         extension_names,
         extension_options,
-        register_declared_checks,
+        register_declared,
     )
 
     # A sync runs after the mount, which registers the listed
@@ -234,9 +234,9 @@ def test_the_monorepo_is_in_sync() -> None:
     try:
         options = extension_options(ROOT)
         for name in extension_names(ROOT):
-            module = declaration(name)
-            if module is not None:
-                register_declared_checks(name, module, options.get(name, ()))
+            found = declaration(name)
+            if found is not None:
+                register_declared(name, found.additions, options.get(name, ()))
         before = _tracked_state()
         first = sync_workspace(ROOT)
         assert sync_workspace(ROOT) == []

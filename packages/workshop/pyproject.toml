@@ -64,10 +64,10 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 "livery.extensions.docs" = "livery.extensions.docs._tasks"
 
 # The workshop extensions this wheel ships, by the name a workspace
-# lists: each maps to the data module that declares it, which the mount
-# and the contract judge load without the extension's tasks.
+# lists: each maps to the package beside its extension.toml, which the
+# mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
-docs = "livery.extensions.docs._extension"
+docs = "livery.extensions.docs"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts

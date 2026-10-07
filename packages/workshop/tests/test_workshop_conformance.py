@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import types
 from collections.abc import Iterator
 from dataclasses import replace
@@ -179,26 +178,33 @@ def test_a_check_after_nothing_or_after_itself_breaks_the_check_order(
     ]
 
 
-def test_a_contribution_off_the_shape_or_naming_a_missing_module_breaks_the_clause(
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    extension = types.ModuleType("acme_kit_extension")
-    monkeypatch.setitem(sys.modules, "acme_kit_extension", extension)
-    extension.FOR = ["acme.python"]  # type: ignore[attr-defined]
-    assert _names(Subject("acme_kit_extension"), "contribution-modules") == [
-        "contribution-modules: extension acme_kit_extension: FOR is not a map"
-        " from a target extension's import path to a module; the mount refuses the"
-        " extension"
+    package = tmp_path / "acme_kit_extension"
+    package.mkdir()
+    (package / "_checks.py").write_text("def judged(ctx):\n    del ctx\n")
+    declaration = package / "extension.toml"
+    declaration.write_text('[extension]\napi-version = 1\nlevel = ["workspace"]\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
+        f"declaration-validates: extension acme_kit_extension: {declaration}:\n"
+        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
+        " requires; did you mean 'levels'?; the mount refuses the extension"
     ]
-    extension.FOR = {  # type: ignore[attr-defined]
-        "acme.python": "acme_kit_extension_absent.python",
-        "acme.cpp": "json",
-    }
-    assert _names(Subject("acme_kit_extension"), "contribution-modules") == [
-        "contribution-modules: extension acme_kit_extension for acme.python: names"
-        " acme_kit_extension_absent.python, which does not import; the mount refuses"
-        " once acme.python is listed"
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_extension._checks:judge"\n'
+    )
+    assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
+        f"declaration-validates: extension acme_kit_extension: {declaration}:"
+        " checks.acme.lint.run names judge, which acme_kit_extension._checks does"
+        " not define at its top level; did you mean 'judged'?; the mount refuses"
+        " the extension"
     ]
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_extension._checks:judged"\n'
+    )
+    assert _names(Subject("acme_kit_extension"), "declaration-validates") == []
 
 
 def _tidy(text: str = "Checks: acme-*\n") -> Subject:
@@ -490,7 +496,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "nearest-fragment",
         "category-table",
         "check-order",
-        "contribution-modules",
+        "declaration-validates",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",

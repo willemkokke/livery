@@ -1,5 +1,6 @@
 """clang-format's check: each native package's C and C++ files, in its own style.
 
+The extension's ``extension.toml`` declares it and names the body here.
 ``format.clang-format`` judges one package at a time: the files its
 claims reach in the package, or the files a run names
 ([livery.workshop.scoped_files][]). The style is the package's own
@@ -17,33 +18,7 @@ from pathlib import Path
 
 import livery.toolroom.tools as tools
 from livery.footman import fail, prog
-from livery.workshop import (
-    PACKAGE,
-    CheckRecord,
-    Claim,
-    Fragment,
-    GateContext,
-    Package,
-    scoped_files,
-)
-
-#: The kinds whose members carry C or C++.
-KINDS = ("cpp-conan", "python-nanobind")
-
-#: The suffixes clang-format reads.
-SUFFIXES = (".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx")
-
-#: The style each native package carries; a deeper file with
-#: ``BasedOnStyle: InheritParentConfig`` adds that directory's own lines.
-STYLE = """\
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A file deeper in the tree with
-# `BasedOnStyle: InheritParentConfig` carries this package's own lines.
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 88
-PointerAlignment: Left
-"""
+from livery.workshop import GateContext, Package, scoped_files
 
 #: A violation line: the file, then its line and column, then the
 #: complaint. The path is read up to the line number rather than to the
@@ -100,30 +75,13 @@ def _package(ctx: GateContext) -> Package:
     return ctx.package
 
 
-def _format_run(ctx: GateContext) -> None:
+def judge_format(ctx: GateContext) -> None:
+    """Refuse a file of the package clang-format would rewrite."""
     files = scoped_files(ctx, "format.clang-format")
     run_format(_package(ctx), files, fix=False, arguments=ctx.arguments)
 
 
-def _format_fix(ctx: GateContext) -> None:
+def fix_format(ctx: GateContext) -> None:
+    """Rewrite the package's files with its own .clang-format."""
     files = scoped_files(ctx, "format.clang-format")
     run_format(_package(ctx), files, fix=True, arguments=ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "clang-format",
-        "format",
-        _format_run,
-        scope=PACKAGE,
-        fix=_format_fix,
-        kinds=KINDS,
-        tools=("clang_format",),
-        arguments=True,
-        fragments=tuple(Fragment(".clang-format", STYLE, kind=kind) for kind in KINDS),
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support")
-        ),
-    ),
-)

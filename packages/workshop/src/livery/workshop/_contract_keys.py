@@ -2,9 +2,9 @@
 
 Every key of a ``workshop.toml`` is declared by its owner: the base
 declares its own here, and an extension declares the keys it reads
-as ``CONTRACT_KEYS`` in the data module its ``workshop.extensions``
-entry point names. Loading a declaration imports that module alone,
-never the extension's tasks.
+under ``[contract.<contract>.<table>]`` in its ``extension.toml``,
+read without importing the extension. The base also declares the keys
+of ``extension.toml`` itself, the ``extension`` contract.
 
 [livery.workshop._contract.load_contract][] judges every contract it
 reads against the declarations: a key no owner declares, a key whose
@@ -14,7 +14,9 @@ the file, the key, what the table takes, and the nearest match.
 
 A path is dotted. ``*`` stands for any one name in a table whose
 keys are the user's (``tools.modes.*``); ``[]`` stands for the
-entries of a list (``ci.schedule[].every``).
+entries of a list (``ci.schedule[].every``). A key the user names may
+hold a dot itself (``".vscode/settings.json"``): the judge walks a
+contract's keys one table at a time, so such a key is one name.
 """
 
 from __future__ import annotations
@@ -22,19 +24,22 @@ from __future__ import annotations
 import difflib
 import functools
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from livery.footman import fail
 
-#: The two kinds of contract: the workspace's at the root, a package's
-#: in its directory.
-ContractKind = Literal["root", "package"]
+#: The kinds of contract: the workspace's at the root, a package's in
+#: its directory, and an extension's declaration file.
+ContractKind = Literal["root", "package", "extension"]
 
 #: The value types a key may take. ``strs`` is a list of strings;
 #: ``list`` is a list whose entries the ``[]`` path declares; ``table``
 #: is a table whose keys are declared beneath it; ``any`` is a value
 #: the reader judges itself, nothing beneath it declared here.
 Type = Literal["str", "int", "number", "bool", "strs", "list", "table", "any"]
+
+#: The value types, as a declaration file spells them.
+TYPES: tuple[str, ...] = get_args(Type)
 
 #: The base extension's name, always mounted.
 BASE = "livery.workshop"
@@ -45,16 +50,19 @@ class Declared:
     """One key a contract may hold.
 
     Attributes:
-        contract: The contract it belongs in, ``root`` or ``package``.
+        contract: The contract it belongs in, ``root``, ``package`` or
+            ``extension``.
         path: The dotted path, with ``*`` and ``[]`` as above.
         types: The value types it takes, any one of them.
         values: The values it takes, when it takes only some.
+        doc: One line saying what the key changes.
     """
 
     contract: ContractKind
     path: str
     types: tuple[Type, ...]
     values: tuple[str, ...] = ()
+    doc: str = ""
 
 
 def _root(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
@@ -63,6 +71,10 @@ def _root(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
 
 def _package(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
     return Declared("package", path, types, values)
+
+
+def _extension(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
+    return Declared("extension", path, types, values)
 
 
 def _base() -> tuple[Declared, ...]:
@@ -78,6 +90,7 @@ def _base() -> tuple[Declared, ...]:
 
     return (
         DECLARED
+        + EXTENSION
         + _identity.DECLARED
         + _lfs.DECLARED
         + _registries.DECLARED
@@ -170,6 +183,88 @@ DECLARED: tuple[Declared, ...] = (
 )
 
 
+def _check_keys(prefix: str) -> tuple[Declared, ...]:
+    """The keys of the checks an extension declares under *prefix*.
+
+    A check sits at ``<prefix>.<tool>.<role>``, the address a contract
+    configures it by.
+    """
+    check = f"{prefix}.*.*"
+    return (
+        _extension(prefix, "table"),
+        _extension(f"{prefix}.*", "table"),
+        _extension(check, "table"),
+        _extension(f"{check}.run", "str"),
+        _extension(f"{check}.fix", "str"),
+        _extension(f"{check}.scope", "str", values=("workspace", "package")),
+        _extension(f"{check}.narrowing", "str", values=("paths", "packages", "none")),
+        _extension(f"{check}.transport", "str", values=("argv", "file", "config")),
+        _extension(f"{check}.threshold", "number"),
+        _extension(f"{check}.kinds", "strs"),
+        _extension(f"{check}.tests-only", "bool"),
+        _extension(f"{check}.after", "strs"),
+        _extension(f"{check}.tools", "strs"),
+        _extension(f"{check}.arguments", "bool"),
+        _extension(f"{check}.flags", "strs"),
+        _extension(f"{check}.roles", "strs"),
+        _extension(f"{check}.listed-with", "str"),
+        _extension(f"{check}.editor-extension", "str"),
+        _extension(f"{check}.claims", "list"),
+        _extension(f"{check}.claims[]", "table"),
+        _extension(f"{check}.claims[].category", "str"),
+        _extension(f"{check}.claims[].suffixes", "strs"),
+        _extension(f"{check}.claims[].ignore", "strs"),
+        _extension(f"{check}.options", "table"),
+        _extension(f"{check}.options.*", "table"),
+        _extension(f"{check}.options.*.type", "str", values=("bool", "str", "int")),
+        _extension(f"{check}.options.*.default", "any"),
+        _extension(f"{check}.options.*.doc", "str"),
+        # A project file's fragment is its text; a package file's is
+        # its text and the kinds whose packages render it.
+        _extension(f"{check}.fragments", "table"),
+        _extension(f"{check}.fragments.*", "str", "table"),
+        _extension(f"{check}.fragments.*.kinds", "strs"),
+        _extension(f"{check}.fragments.*.text", "str"),
+    )
+
+
+#: The keys of an extension's ``extension.toml``: what it is, the tools
+#: its verbs need, the options a listing may turn on, its checks, the
+#: values it puts into slots, the contract keys it owns, and what it
+#: adds to another extension while that one is listed.
+EXTENSION: tuple[Declared, ...] = (
+    _extension("extension", "table"),
+    _extension("extension.api-version", "int"),
+    _extension("extension.levels", "list"),
+    _extension("extension.levels[]", "str", values=("workspace", "package")),
+    _extension("extension.plugin", "str"),
+    _extension("extension.requires", "strs"),
+    _extension("toolroom", "table"),
+    _extension("toolroom.requires", "strs"),
+    _extension("options", "table"),
+    _extension("options.*", "str"),
+    *_check_keys("checks"),
+    _extension("contributions", "table"),
+    _extension("contributions.*", "strs"),
+    # A key's declaration is judged where it is read: the reader knows
+    # the contracts and the types.
+    _extension("contract", "table"),
+    _extension("contract.*", "table"),
+    _extension("contract.*.*", "any"),
+    _extension("for", "table"),
+    _extension("for.*", "table"),
+    *_check_keys("for.*.checks"),
+    _extension("for.*.contributions", "table"),
+    _extension("for.*.contributions.*", "strs"),
+    # An earlier extension's shipped file, ``<owner>:<name>``, replaced
+    # by this one's file of the same name or deleted, to the reason.
+    _extension("replaces", "table"),
+    _extension("replaces.*", "str"),
+    _extension("deletes", "table"),
+    _extension("deletes.*", "str"),
+)
+
+
 @dataclass(frozen=True)
 class _Owned:
     declared: Declared
@@ -181,12 +276,13 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     """Every installed owner's declarations, by contract and path.
 
     The base's come from this module and the readers it names; every
-    extension's from the ``CONTRACT_KEYS`` of its declaration, installed
-    or not listed alike, so a key of an unlisted extension is named as
-    that extension's.
-    Two owners declaring one path refuse, naming both.
+    extension's from the ``[contract]`` tables of its declaration file,
+    installed or not listed alike, so a key of an unlisted extension is
+    named as that extension's. Two owners declaring one path refuse,
+    naming both.
     """
     from livery.footman import installed_entry_points
+    from livery.workshop._declaration import contract_keys
 
     found: dict[tuple[ContractKind, str], _Owned] = {}
 
@@ -202,8 +298,7 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
 
     take(BASE, _base())
     for entry in installed_entry_points("workshop.extensions"):
-        loaded: Any = entry.load()
-        take(entry.name, tuple(getattr(loaded, "CONTRACT_KEYS", ())))
+        take(entry.name, contract_keys(entry.value))
     return found
 
 
@@ -260,6 +355,51 @@ def _spoken(types: tuple[str, ...]) -> str:
     return " or ".join(words.get(name, name) for name in types)
 
 
+def shown(path: tuple[str, ...]) -> str:
+    """*path* dotted, a name holding a dot quoted, as a reader writes it."""
+    return ".".join(f'"{part}"' if "." in part else part for part in path)
+
+
+@dataclass(frozen=True)
+class _Index:
+    """One contract's declarations, by path and by the number of names in it."""
+
+    paths: dict[tuple[str, ...], _Owned]
+    lengths: dict[int, list[tuple[tuple[str, ...], _Owned]]]
+
+
+_INDEXES: dict[ContractKind, tuple[object, _Index]] = {}
+
+
+def _index(contract: ContractKind) -> _Index:
+    """*contract*'s declarations, indexed once per set of declarations.
+
+    The ``extension`` contract is the base's alone, since an extension
+    declares keys in a workspace's contracts and never in another
+    extension's file: its index needs no other owner's declarations,
+    which a mount would otherwise read for every installed extension.
+    """
+    known: object = EXTENSION if contract == "extension" else declarations()
+    held = _INDEXES.get(contract)
+    if held is None or held[0] is not known:
+        owned_by = (
+            {(item.contract, item.path): _Owned(item, BASE) for item in EXTENSION}
+            if contract == "extension"
+            else declarations()
+        )
+        paths = {
+            tuple(path.split(".")): owned
+            for (kind, path), owned in owned_by.items()
+            if kind == contract
+        }
+        lengths: dict[int, list[tuple[tuple[str, ...], _Owned]]] = {}
+        for parts, owned in paths.items():
+            lengths.setdefault(len(parts), []).append((parts, owned))
+        held = (known, _Index(paths, lengths))
+        _INDEXES[contract] = held
+    return held[1]
+
+
 class _Judge:
     def __init__(
         self,
@@ -270,57 +410,60 @@ class _Judge:
         self.contract: ContractKind = contract
         self.where = where
         self.listed = listed
-        self.known = declarations()
+        self.index = _index(contract)
         self.problems: list[str] = []
 
-    def _find(self, path: str) -> _Owned | None:
+    @staticmethod
+    def _matches(declared: tuple[str, ...], wanted: tuple[str, ...]) -> bool:
+        return len(declared) == len(wanted) and all(
+            part in ("*", name) for part, name in zip(declared, wanted, strict=True)
+        )
+
+    def _find(self, path: tuple[str, ...]) -> _Owned | None:
         """The declaration *path* falls under: its own, else the most literal match."""
-        found = self.known.get((self.contract, path))
+        found = self.index.paths.get(path)
         if found is not None:
             return found
-        wanted = path.split(".")
         best: tuple[int, _Owned] | None = None
-        for (contract, declared), owned in self.known.items():
-            parts = declared.split(".")
-            if contract != self.contract or len(parts) != len(wanted):
-                continue
-            if all(p in ("*", w) for p, w in zip(parts, wanted, strict=True)):
-                literal = sum(p != "*" for p in parts)
+        for declared, owned in self.index.lengths.get(len(path), ()):
+            if self._matches(declared, path):
+                literal = sum(part != "*" for part in declared)
                 if best is None or literal > best[0]:
                     best = (literal, owned)
         return best[1] if best else None
 
-    def _siblings(self, parent: str) -> list[str]:
-        prefix = f"{parent}." if parent else ""
+    def _siblings(self, parent: tuple[str, ...]) -> list[str]:
         names: set[str] = set()
-        for contract, path in self.known:
-            if contract != self.contract or not path.startswith(prefix):
+        for declared in self.index.paths:
+            if len(declared) <= len(parent) or not self._matches(
+                declared[: len(parent)], parent
+            ):
                 continue
-            rest = path[len(prefix) :]
-            name = rest.split(".")[0].removesuffix("[]")
+            name = declared[len(parent)].removesuffix("[]")
             if name and name != "*":
                 names.add(name)
         return sorted(names)
 
-    def table(self, data: dict[str, Any], parent: str) -> None:
+    def table(self, data: dict[str, Any], parent: tuple[str, ...]) -> None:
         for key, value in data.items():
-            path = f"{parent}.{key}" if parent else key
+            path = (*parent, key)
             owned = self._find(path)
             if owned is None:
                 self._unknown(key, parent)
                 continue
             if self.listed is not None and owned.owner not in self.listed:
                 self.problems.append(
-                    f"{path} is a key of {owned.owner}, which [workspace] extensions"
-                    " does not list; list the extension, or remove the key"
+                    f"{shown(path)} is a key of {owned.owner}, which [workspace]"
+                    " extensions does not list; list the extension, or remove the key"
                 )
                 continue
             self.value(value, path, owned.declared)
 
-    def value(self, value: object, path: str, declared: Declared) -> None:
+    def value(self, value: object, path: tuple[str, ...], declared: Declared) -> None:
+        named = shown(path)
         if not _fits(value, declared.types):
             self.problems.append(
-                f"{path} is {_ACTUAL.get(_type_of(value), _type_of(value))}"
+                f"{named} is {_ACTUAL.get(_type_of(value), _type_of(value))}"
                 f" ({value!r}); it takes {_spoken(declared.types)}"
             )
             return
@@ -328,7 +471,7 @@ class _Judge:
             near = difflib.get_close_matches(value, declared.values, n=1)
             hint = f"; did you mean {near[0]!r}?" if near else ""
             self.problems.append(
-                f"{path} is {value!r}; it takes one of"
+                f"{named} is {value!r}; it takes one of"
                 f" {', '.join(declared.values)}{hint}"
             )
             return
@@ -337,14 +480,16 @@ class _Judge:
         if isinstance(value, dict):
             self.table(value, path)  # pyright: ignore[reportUnknownArgumentType]
         elif isinstance(value, list) and "list" in declared.types:
-            entry = self.known.get((self.contract, f"{path}[]"))
+            entries = (*path[:-1], f"{path[-1]}[]")
+            entry = self._find(entries)
             if entry is None:
                 return
             for item in value:  # pyright: ignore[reportUnknownVariableType]
-                self.value(item, f"{path}[]", entry.declared)
+                self.value(item, entries, entry.declared)
 
-    def _unknown(self, key: str, parent: str) -> None:
-        table = f"[{parent.replace('[]', '')}]" if parent else "the top level"
+    def _unknown(self, key: str, parent: tuple[str, ...]) -> None:
+        named = shown(tuple(part.removesuffix("[]") for part in parent))
+        table = f"[{named}]" if parent else "the top level"
         known = self._siblings(parent)
         near = difflib.get_close_matches(key, known, n=1)
         hint = f"; did you mean {near[0]!r}?" if near else ""
@@ -372,7 +517,7 @@ def judge(
         One line per problem, in the contract's order.
     """
     judged = _Judge(contract, where, listed)
-    judged.table(data, "")
+    judged.table(data, ())
     return judged.problems
 
 

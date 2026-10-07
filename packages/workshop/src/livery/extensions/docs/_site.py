@@ -59,7 +59,7 @@ from livery.workshop._navblocks import (
     NAV_END,
     nav_block_file,
 )
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package, discover_packages, release_tag
 from livery.workshop._prose import (
     HUMAN,
     Prose,
@@ -1161,14 +1161,18 @@ def _receipt_tags(root: Path) -> list[tuple[str, str, str, str]]:
     names = {p.member: p.name for p in discover_packages(root)}
     tags: list[tuple[str, str, str, str]] = []
     for line in result.stdout.splitlines():
-        match = re.fullmatch(
-            r"packages/([^/]+)/v(\d+\.\d+\.\d+) (\d{4}-\d{2}-\d{2})", line.strip()
-        )
-        if match is None:
+        tag, _, date = line.strip().partition(" ")
+        found = release_tag(tag)
+        if found is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             continue
-        directory, version, date = match.groups()
+        path, version = found
+        directory = path.removeprefix("packages/")
         tags.append((date, directory, names.get(directory, directory), version))
-    tags.sort(key=lambda tag: (tag[0], tag[3]), reverse=True)
+    # Newest first; a version sorts by its numbers, so 0.10.0 follows 0.9.0.
+    tags.sort(
+        key=lambda tag: (tag[0], tuple(int(part) for part in tag[3].split("."))),
+        reverse=True,
+    )
     return tags
 
 

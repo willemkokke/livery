@@ -13,8 +13,8 @@ belongs to the workspace, and no check judges it.
 Within one extension, a later tree of the chain wins over an earlier
 one for the same path (a kind's tree over `package-base`). Two
 extensions seeding one path follow the shipped files' rule: the later
-one declares `REPLACES` or `DELETES` in its declaration module, or the
-birth refuses naming both. The fragment engine
+one declares the earlier's under `[replaces]` or `[deletes]` in its
+`extension.toml`, or the birth refuses naming both. The fragment engine
 ([livery.workshop._fragment_engine.plan][]) keeps files current;
 this module only writes them once.
 """
@@ -134,8 +134,8 @@ def plan(
             low, high = sorted((held, fragment), key=lambda f: rank[f.owner])
             fail(
                 f"{path} is seeded by both {low.ref} and {high.ref}: {high.owner}"
-                f" declares REPLACES = {{{low.ref!r}: <reason>}} to take it,"
-                " or DELETES to drop it"
+                f' declares [replaces] "{low.ref}" = "<reason>" in its'
+                " extension.toml to take it, or [deletes] to drop it"
             )
         if held is None or tree_rank[_tree(fragment)] > tree_rank[_tree(held)]:
             chosen[path] = fragment
