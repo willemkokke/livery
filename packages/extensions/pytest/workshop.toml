@@ -11,7 +11,7 @@ description = "pytest as a check of the livery workshop: each python package's s
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.5.0"
+floor = "0.6.0"
 
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
@@ -21,4 +21,4 @@ coverage-floor = 100
 [[depends]]
 path = "packages/footman"
 kind = "test"
-floor = "0.56.0"
+floor = "0.58.0"

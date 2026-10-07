@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-forge"
-version = "0.5.0"
+version = "0.6.0"
 description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
 readme = "README.md"
 license = "MIT"
@@ -27,8 +27,8 @@ github-secrets = ["pynacl>=1.5"]
 # dependencies: livery.forge is stdlib-only at import time, and the
 # plugin loads only through footman's own plugin().
 test = [
-    "livery-footman>=0.55.0",
-    "livery-toolroom>=0.9.0",
+    "livery-footman>=0.58.0",
+    "livery-toolroom>=0.10.0",
 ]
 
 [project.entry-points."footman.tasks"]

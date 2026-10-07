@@ -9,27 +9,27 @@ dev-extras = ["dev"]
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.9.0"
+floor = "0.10.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.56.0"
+floor = "0.58.0"
 
 [[depends]]
 path = "packages/forge"
 kind = "build"
-floor = "0.5.0"
+floor = "0.6.0"
 
 [[depends]]
 path = "packages/toolroom-store"
 kind = "runtime"
-floor = "0.1.0"
+floor = "0.2.0"
 
 [[depends]]
 path = "packages/strongroom"
 kind = "runtime"
-floor = "0.3.0"
+floor = "0.4.0"
 
 [docs]
 extra-css = ["assets/workshop.css"]

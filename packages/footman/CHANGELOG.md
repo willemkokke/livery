@@ -5,6 +5,24 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.58.0] - 2026-10-07
+
+### Added
+
+- Ruff runs as its own extension, a birth finishes in the newborn's own fm, and the local loop tests an extension before its release by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- Fm self.install reads the index again and says the version it ended on by @willemkokke
+- A flag on by default is named in help by its own spelling beside its own text, and says it is on by default and how to turn it off by @willemkokke
+- The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
+- A name a test binds on footman's api leaves it when the test ends, so a later patch of the defining module reaches the api's readers again by @willemkokke
+
+### Changed
+
+- Footman's internal modules are private, every public module under a root is its api or declared there, and other packages' sources reach footman through its api by @willemkokke
+
 ## [0.57.0] - 2026-10-05
 
 ### Added

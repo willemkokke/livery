@@ -9,6 +9,17 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.2.0] - 2026-10-07
+
+### Added
+
+- Ruff runs as its own extension, a birth finishes in the newborn's own fm, and the local loop tests an extension before its release by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- One process at a time supplies a tool version: a second supply waits for the first and finds it present, and a view record retired mid-read is left out instead of crashing the probe by @willemkokke
+
 ## [0.1.0] - 2026-10-04
 
 ### Added
