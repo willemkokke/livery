@@ -485,7 +485,9 @@ def describe(root: Path, relative: Path) -> list[str]:
     """The lines ``fm explain`` prints for *relative*: category, channel, claims.
 
     A file is claimed by each check that reads it and each CI job whose
-    declared inputs read it, the job as ``<point>/<job>``.
+    declared inputs read it, the job as ``<point>/<job>``. A contract
+    also names the schema it is judged by, with the owners whose keys
+    the schema holds.
     """
     from livery.workshop._packages import discover_packages
     from livery.workshop._points import jobs_reading
@@ -508,6 +510,11 @@ def describe(root: Path, relative: Path) -> list[str]:
     claims.extend(jobs_reading(root, relative.as_posix()))
     if claims:
         lines.append(f"    claimed by: {', '.join(claims)}")
+    from livery.workshop._schema import judged_by
+
+    schema = judged_by(root, relative)
+    if schema:
+        lines.append(f"    {schema}")
     lines.extend(f"    {line}" for line in owned_lines(root, relative))
     return lines
 

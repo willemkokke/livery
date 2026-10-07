@@ -1268,6 +1268,11 @@ the stack, which this design neither needs nor rules out).
   file, the base's keys as TOML, `[toolroom]`'s fragment in
   `livery-toolroom-store` and `fm explain <contract>` are the next
   parts.
+- 2026-10-07, `fm explain <contract>` (#1262): a contract's lines end
+  with `schema: .workshop/schema/<file> (<owners>)`, the base then the
+  listed extensions in list order; an `extension.toml` names the base
+  alone. Which contract a file is: the root's `workshop.toml`, a
+  package's beneath `packages/`, or any `extension.toml`.
 
 ## Open
 
