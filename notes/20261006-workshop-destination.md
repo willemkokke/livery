@@ -630,7 +630,7 @@ The brief's fourth thought. What exists twice today:
 | Job | footman | workshop docs extension | Destination |
 | --- | --- | --- | --- |
 | a task tree as pages | `livery.footman.markdown.render_site`, public; `fm docs site` renders the invoking project's tree | `_taskref` renders one provider in isolation by spawning `fm --tasks-file=<probe> --json --list`, then `render_site` | one renderer: `livery.footman.docs.site` takes `provider=` and renders that plugin in isolation in-process; the task reference generator calls it and assembles the nav. A change to footman, allowed by the brief |
-| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curation becomes authored pages footman owns, each name a mkdocstrings directive in the order and with the prose of today's table; the mkdocstrings generator's `curated` option writes no per-module pages and checks every export is placed and no directive names a vanished name; `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and the page writer go (open item 2) |
+| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curation becomes authored pages footman owns, each name a mkdocstrings directive in the order and with the prose of today's table; the mkdocstrings generator's `curated` option writes no per-module pages and checks every export is placed and no directive names a vanished name; `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and the page writer go (Willem's ruling of 2026-10-07) |
 | errors-and-notes page, the config, notes and globals tables, the example render, the latest-release admonition | `fm footman.pages` | | stays footman's generator verb, declared as today; a generator whose `run` calls it |
 
 Two mechanisms for the API reference are the one real duplication;
@@ -1109,6 +1109,10 @@ the stack, which this design neither needs nor rules out).
 - Willem, 2026-10-07: the reach check lives in the python package
   extension, with an option to turn it off. Ruled as recommended;
   open item closed.
+- Willem, 2026-10-07: footman's Python reference stays curated, option
+  (c): authored pages with mkdocstrings directives in today's order and
+  prose, validated by the mkdocstrings generator's `curated` option;
+  footman's table and page writer go (phase 12d). Open item closed.
 - Willem, 2026-10-07: a generator's own settings split by meaning,
   option (c): `[docs] api` stays the docs extension's key, and a
   generator's settings are its options set at `[generators.<name>]`,
@@ -1140,42 +1144,9 @@ the stack, which this design neither needs nor rules out).
 Each with its options, what each option does not cover, and a
 recommendation. Owner: Willem, unless named.
 
-1. **footman's curated API page.** `fm footman.pages` writes
-   `docs/_generated/api.md` from `_API_SECTIONS`, a table of sections
-   with a sentence of prose each and the exported names in a chosen
-   order; each name renders as a mkdocstrings directive, `::: 
-   livery.footman.run`, and `_api_markdown` validates the table
-   against `__all__`: an export in no section fails, a stale entry
-   fails. footman's contract sets `[docs] api = false` so the
-   per-module reference is not built for it. Three options:
-   (a) Delete the curation; the mkdocstrings generator renders
-   footman's reference per module like every package's. Less code
-   (the table, the validation and the page writer go) and one
-   mechanism. It does not cover the curated order and the section
-   prose, which the per-module page cannot give: footman's entry
-   module has about ninety names, and a reader gets them in source
-   order under one heading.
-   (b) Keep both: the curated page and the per-module reference. It
-   does not cover "one way", documents the surface twice, and keeps
-   footman-specific generator code.
-   (c) Keep the curation as authored pages and make the validation
-   generic. A package that curates writes its reference pages by hand
-   with mkdocstrings directives, in the order and with the prose it
-   wants, which is what the generated page already is; the
-   mkdocstrings extension offers a `curated` option on its generator
-   that, when set, writes no per-module pages and instead checks that
-   every export of the package appears in a directive on some authored
-   page and that no directive names a name that is gone. footman's
-   table and page writer go; its curation survives as `docs/api/*.md`
-   it owns. It does not cover a package that wants both a curated
-   overview and the per-module pages, which stays two pages of the
-   same surface.
-   Recommendation: (c). The value in footman's page is the order and
-   the prose, not the generator; the validation is worth keeping and
-   is generic once it is an option of the mkdocstrings generator.
-2. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
+1. **#1187's remaining rows** (`records/` and `tools.graphs/`): the
    bench's and the store's, outside this design. Owner: the issue.
-3. **#1200's foundation library**: whether the advisory lock, the pid
+2. **#1200's foundation library**: whether the advisory lock, the pid
    probe and the atomic write join one distribution below footman.
    This design adds no lock; phase 16's shared temp roots and two
    gates in one checkout are the cases it would serve. Owner: Willem,
