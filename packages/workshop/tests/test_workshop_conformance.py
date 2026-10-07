@@ -239,7 +239,36 @@ def test_a_reference_whose_module_registers_at_import_breaks_the_clause(
     assert _names(Subject("acme_kit_registers"), clause) == []
 
 
-def test_every_installed_extensions_references_register_nothing() -> None:
+def test_a_job_entry_naming_a_task_the_extension_does_not_define_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "acme_kit_jobs"
+    package.mkdir()
+    declaration = package / "extension.toml"
+    declaration.write_text('[ci.jobs.gate.acme]\nentries = ["acme.build"]\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "entries-name-defined-tasks"
+    # The fallback first: an extension that defines no task names none.
+    assert _names(Subject("acme_kit_jobs"), clause) == [
+        "entries-name-defined-tasks: ci.jobs.gate.acme.entries: names acme.build,"
+        " and the extension defines no task"
+    ]
+    (package / "_verbs.py").write_text(
+        "from livery.footman import group\n\n"
+        'acme = group("acme")\n\n\n'
+        '@acme.task(name="build")\n'
+        "def acme_build() -> None: ...\n"
+    )
+    declaration.write_text('[ci.jobs.gate.acme]\nentries = ["acme.biuld"]\n')
+    assert _names(Subject("acme_kit_jobs"), clause) == [
+        "entries-name-defined-tasks: ci.jobs.gate.acme.entries: names acme.biuld,"
+        " which the extension does not define; did you mean 'acme.build'?"
+    ]
+    declaration.write_text('[ci.jobs.gate.acme]\nentries = ["acme.build"]\n')
+    assert _names(Subject("acme_kit_jobs"), clause) == []
+
+
+def test_every_installed_extension_passes_the_declaration_clauses() -> None:
     from livery.footman import installed_entry_points
 
     packages = sorted(
@@ -249,10 +278,12 @@ def test_every_installed_extensions_references_register_nothing() -> None:
         }
     )
     assert packages
+    clauses = {"references-register-nothing", "entries-name-defined-tasks"}
     found = [
-        line
+        str(violation)
         for package in packages
-        for line in _names(Subject(package), "references-register-nothing")
+        for violation in judge(Subject(package))
+        if violation.clause in clauses
     ]
     assert found == []
 
@@ -548,6 +579,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "check-order",
         "declaration-validates",
         "references-register-nothing",
+        "entries-name-defined-tasks",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",

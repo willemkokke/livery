@@ -224,7 +224,9 @@ check runs `after` is registered, and following them never leads back
 to it; an extension's `extension.toml` holds only declared keys, each of
 its type, and every reference in it names a function its module
 defines; importing a module a reference names registers nothing, which
-the kit proves by importing each in a process of its own; a check's
+the kit proves by importing each in a process of its own; every task a
+CI job's entries name is one the extension defines, read from its
+sources; a check's
 fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
