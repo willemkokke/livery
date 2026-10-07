@@ -14,9 +14,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import fail
 from livery.workshop._packages import Package
 from livery.workshop._release_notes import register_release_notes
 
@@ -79,7 +79,7 @@ def _lane_token(kind: str, url: str) -> str:
     refuses to connect without a token, as Gitea and GitLab do, means
     the lane has none either.
     """
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
     from livery.workshop._forge_lane import _connect
 
     try:
@@ -163,7 +163,7 @@ def _refused_lookup(root: Path) -> str:
     """
     import time
 
-    from livery.forge.api import ForgeError, RateLimited
+    from livery.forge import ForgeError, RateLimited
     from livery.workshop._forge_lane import this_repository
 
     try:

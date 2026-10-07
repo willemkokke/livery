@@ -2,7 +2,7 @@
 
 ``format.clang-format`` judges one package at a time: the files its
 claims reach in the package, or the files a run names
-([livery.workshop.api.scoped_files][]). The style is the package's own
+([livery.workshop.scoped_files][]). The style is the package's own
 ``.clang-format``, which the extension writes and a file deeper in the
 tree may extend. The check hands clang-format the words after ``--``
 on its own verb (``fm format.clang-format -- --verbose``). A body
@@ -15,9 +15,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail, prog
-from livery.workshop.api import (
+import livery.toolroom.tools as tools
+from livery.footman import fail, prog
+from livery.workshop import (
     PACKAGE,
     CheckRecord,
     Claim,

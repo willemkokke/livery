@@ -11,11 +11,10 @@ from unittest import mock
 
 import pytest
 
-from livery.footman import _complete, _manifest, _paths
+from livery.footman import _complete, _manifest, _paths, task
 from livery.footman import _registry as registry
 from livery.footman._complete import _tasks_file_from, complete, complete_cli
 from livery.footman._params import Many, doc, matching, nosplit, suggest
-from livery.footman.api import task
 
 
 @pytest.fixture(autouse=True)
@@ -614,7 +613,7 @@ def _broken_project(tmp_path, monkeypatch):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\n")
     (proj / "tasks.py").write_text(
-        "import livery.footman.api as footman\n\nthis is a syntax error\n"
+        "import livery.footman as footman\n\nthis is a syntax error\n"
     )
     monkeypatch.chdir(proj)
     return proj
@@ -656,7 +655,7 @@ def test_a_fixed_tasks_file_recovers_past_the_marker_age(tmp_path, monkeypatch, 
     # hand and run the stale-while-revalidate spawn inline, so the dance is
     # deterministic — one stale-served press, then the healthy tree.
     (proj / "tasks.py").write_text(
-        "import livery.footman.api as footman\n\n@footman.task\ndef hi(): ...\n"
+        "import livery.footman as footman\n\n@footman.task\ndef hi(): ...\n"
     )
     manifest = _paths.cwd_manifest_path()
     old = time.time() - 60
@@ -680,7 +679,7 @@ def test_a_broken_f_file_marks_its_own_key(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     monkeypatch.chdir(proj)
     tf = proj / "custom.py"
-    tf.write_text("import livery.footman.api as footman\n\nthis is a syntax error\n")
+    tf.write_text("import livery.footman as footman\n\nthis is a syntax error\n")
     rc = complete_cli(["--", f"-f={tf}", ""])
     captured = capsys.readouterr()
     assert rc == _complete._EXIT_BROKEN
@@ -735,7 +734,7 @@ def test_a_user_tasks_file_counts_too(tmp_path, monkeypatch):
     monkeypatch.setenv("FOOTMAN_CONFIG_DIR", str(cfgdir))
     before = _paths.user_stamp()
     (cfgdir / "tasks.py").write_text(
-        "from livery.footman.api import task\n", encoding="utf-8"
+        "from livery.footman import task\n", encoding="utf-8"
     )
     assert _paths.user_stamp() != before
 
@@ -821,7 +820,7 @@ def test_the_marker_ages_fast_and_spawns_with_the_override(tmp_path, monkeypatch
     proj.mkdir()
     monkeypatch.chdir(proj)
     tf = proj / "custom.py"
-    tf.write_text("import livery.footman.api as footman\n\nthis is a syntax error\n")
+    tf.write_text("import livery.footman as footman\n\nthis is a syntax error\n")
     assert complete_cli(["--", f"-f={tf}", ""]) == _complete._EXIT_BROKEN
     key = _paths.source_manifest_path(Path.cwd(), tf)
     old = time.time() - 60
@@ -860,14 +859,14 @@ def test_the_marker_names_the_stale_environment_fix(tmp_path):
 
 
 def test_stock_complete_dispatch_keys_the_brand_version(tmp_path, monkeypatch):
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.footman import _paths
 
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "tasks.py").write_text(
-        "import livery.footman.api as footman\n\n@footman.task\ndef hi(): ...\n"
+        "import livery.footman as footman\n\n@footman.task\ndef hi(): ...\n"
     )
     monkeypatch.chdir(proj)
     monkeypatch.setattr(sys, "argv", ["fm", "--complete", "--", ""])
@@ -1035,7 +1034,7 @@ def _dynamic_project(tmp_path):
     (proj / "tasks.py").write_text(
         "from pathlib import Path\n"
         "from typing import Annotated\n"
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "from livery.footman._params import suggest\n\n"
         "def _targets():\n"
         "    return Path('targets.txt').read_text().split()\n\n"
@@ -1200,7 +1199,7 @@ def test_cold_cache_builds_and_serves(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef lint(): ...\n@task\ndef check(): ...\n"
+        "from livery.footman import task\n\n@task\ndef lint(): ...\n@task\ndef check(): ...\n"
     )
     monkeypatch.chdir(proj)
     # nothing cached: the first completion builds the manifest and serves it,
@@ -1222,7 +1221,7 @@ def test_a_planted_footman_py_is_never_imported_by_a_tab(tmp_path, monkeypatch, 
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef lint(): ..."
+        "from livery.footman import task\n\n@task\ndef lint(): ..."
     )
     (proj / "footman.py").write_text(  # the plant, waiting to be imported
         "import pathlib\n\npathlib.Path(__file__).with_name('ran').touch()\n"
@@ -1242,7 +1241,7 @@ def test_cold_f_cache_builds_and_serves(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "other.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef ship(): ...\n"
+        "from livery.footman import task\n\n@task\ndef ship(): ...\n"
     )
     monkeypatch.chdir(proj)
     # a finished `-f <file>` with a cold cache builds that file's (cwd, file)
@@ -1350,7 +1349,7 @@ def test_cold_evidence_reports_the_childs_own_words(tmp_path, monkeypatch):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     monkeypatch.chdir(proj)
 
@@ -1535,7 +1534,7 @@ def test_stale_schema_cache_rebuilds_instead_of_walking(tmp_path, monkeypatch, c
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef lint(): ...\n"
+        "from livery.footman import task\n\n@task\ndef lint(): ...\n"
     )
     monkeypatch.chdir(proj)
     stale = _paths.cwd_manifest_path()
@@ -1884,7 +1883,7 @@ def test_the_off_spelling_says_what_it_turns_off():
     """A bool global answers to `--no-x` too, and the splitter accepts it — so
     completion offers it. One option read from the other end, so it carries
     the same line rather than none."""
-    from livery.footman.api import GlobalOption
+    from livery.footman import GlobalOption
 
     reg = registry.Group("root")
     with registry.capture() as captured:

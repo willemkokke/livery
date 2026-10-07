@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import livery.toolroom.tools.api as tools
-from livery.footman.api import Context, doc, fail, group
+import livery.toolroom.tools as tools
+from livery.footman import Context, doc, fail, group
 
 # Registers the base's release notes provider, git-cliff into
 # CHANGELOG.md, until the changelog extension ships it.
@@ -87,9 +87,8 @@ def verify_release(
         problems += notes.verify(package, version)
     if requires_pyproject(package.kind):
         # The modules the kind's stamper writes the version into: a
-        # namespace root's api.py, or a regular package's __init__.py.
-        # A package with neither, one with no public names, carries its
-        # version in its manifest alone.
+        # package's __init__.py. A package with none, a namespace with
+        # no public names, carries its version in its manifest alone.
         modules = [
             home
             for home in backend_for(package).stamp_version(package).homes()
@@ -99,7 +98,7 @@ def verify_release(
         if modules and not any(
             stamp in module.read_text("utf-8") for module in modules
         ):
-            problems.append(f"no api.py or __init__.py under src/ declares {stamp}")
+            problems.append(f"no __init__.py under src/ declares {stamp}")
     released = set(GitOps(root).tags())
     for edge in package.depends:
         if not edge.floor:
@@ -257,7 +256,7 @@ def release_replay(
     """
     import sys
 
-    from livery.forge.api import SimpleRegistry
+    from livery.forge import SimpleRegistry
     from livery.workshop._registries import resolve_registry
     from livery.workshop._replay import replay_flow
     from livery.workshop._state import run_context
@@ -380,7 +379,7 @@ def release_driver(
     checkout's workshop drives the wave and nothing is installed; a
     re-run then does what the first run did.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     if not workshop:
         print("  driver: the checkout's own workshop drives the wave")

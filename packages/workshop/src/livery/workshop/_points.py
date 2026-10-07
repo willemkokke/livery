@@ -42,8 +42,8 @@ from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 
-import livery.footman.api as footman
-from livery.footman.api import Tasks, fail
+import livery.footman as footman
+from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared
 from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
@@ -1202,7 +1202,7 @@ def _spawn(argv: list[str], env: dict[str, str]) -> int:
     and what each verb said belongs there in order, green or red.
     *env* is the child's whole environment.
     """
-    from livery.footman.api import run
+    from livery.footman import run
 
     return run(argv, nofail=True, capture=False, env=env).code
 

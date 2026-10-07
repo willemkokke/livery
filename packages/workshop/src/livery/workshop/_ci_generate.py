@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import livery.footman.api as footman
+import livery.footman as footman
 from livery.workshop._contract import load_contract
 from livery.workshop._points import (
     EVENT_NAMES,

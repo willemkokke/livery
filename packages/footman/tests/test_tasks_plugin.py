@@ -19,7 +19,7 @@ from livery.footman._executor import TaskResult
 def plugin_project(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import group, plugin, task\n"
+        "from livery.footman import group, plugin, task\n"
         "# mounted FIRST on purpose: the local group() below adopts the\n"
         "# mounted docs group — order must not matter\n"
         "plugin('footman.docs')\n"
@@ -41,10 +41,10 @@ def plugin_project(tmp_path, monkeypatch):
 
 
 def test_bare_import_never_loads_first_party_tasks():
-    # Hot-path guard: importing the api must not import a plugin family,
-    # though the api declares the docs family.
+    # Hot-path guard: importing footman must not import a plugin family,
+    # though its entry module declares the docs family.
     probe = (
-        "import livery.footman.api, sys;"
+        "import livery.footman, sys;"
         " print(any(m in sys.modules for m in"
         " ('livery.footman._tasks', 'livery.footman.docs')))"
     )
@@ -119,7 +119,7 @@ def test_site_writes_indexes_and_pages(plugin_project, capsys):
 def test_branded_cli_documents_itself(plugin_project):
     # A branded CLI's pages carry its own name with no flag at all: the
     # invoking brand rides the task context, and --prog stays the override.
-    from livery.footman.api import App
+    from livery.footman import App
     from livery.footman.testing import Runner
 
     acme = Runner(App(name="Acme", prog="acme", version="1.0"))
@@ -330,7 +330,7 @@ def test_page_follows_the_sort_setting(plugin_project, capsys):
         "[project]\nname='x'\n[tool.footman]\nsort = true\n"
     )
     (plugin_project / "tasks.py").write_text(
-        "from livery.footman.api import plugin, task\n"
+        "from livery.footman import plugin, task\n"
         "plugin('footman.docs')\n"
         "@task\n"
         "def zebra(): ...\n"

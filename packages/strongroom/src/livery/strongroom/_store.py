@@ -7,7 +7,7 @@ record beside the ref under a per-ref lock. The layout is the one in
 `spec/layout.md`; the index under `index/` is this implementation's
 own and not a format.
 
-Reach for [livery.strongroom.api.Store][]: `create` or `open`, then `land`
+Reach for [livery.strongroom.Store][]: `create` or `open`, then `land`
 and `path` for objects, `ref` and `set_ref` for names.
 """
 
@@ -324,8 +324,8 @@ class ScrubReport:
 class Store:
     """A local store: `objects/` by digest, `refs/` by name.
 
-    Open one with [livery.strongroom.api.Store.create][] or
-    [livery.strongroom.api.Store.open][]. Every namespace a caller will
+    Open one with [livery.strongroom.Store.create][] or
+    [livery.strongroom.Store.open][]. Every namespace a caller will
     write is declared at open with its mutation class; `pins/` and
     `pending/` are declared by the store.
 
@@ -646,7 +646,7 @@ class Store:
         return path
 
     def read(self, digest: Digest) -> bytes:
-        """The object's bytes, through [livery.strongroom.api.Store.path][]."""
+        """The object's bytes, through [livery.strongroom.Store.path][]."""
         return self.path(digest).read_bytes()
 
     def verify(self, digest: Digest) -> int:
@@ -784,7 +784,7 @@ class Store:
 
         The folder becomes a store of this store's algorithm when it is
         not one already, and afterwards opens as a
-        [livery.strongroom.api.FolderSource][] that serves every filled
+        [livery.strongroom.FolderSource][] that serves every filled
         digest. Each object is fetched through this store's sources.
 
         Args:
@@ -949,7 +949,7 @@ class Store:
         The pending ref is a root while it exists, so a sweep during the
         publish keeps every object the target names. Nothing removes a
         pending ref on a clock; a crashed publish is retired
-        deliberately with [livery.strongroom.api.Store.retire][].
+        deliberately with [livery.strongroom.Store.retire][].
 
         Args:
             target: the tree or version to publish; present here.
@@ -979,7 +979,7 @@ class Store:
         """Commit a publish: move the real ref, then drop the pending one.
 
         The move obeys the namespace's mutation class exactly as
-        [livery.strongroom.api.Store.set_ref][] does.
+        [livery.strongroom.Store.set_ref][] does.
 
         Raises:
             NoSuchPending: when `pending/<pending_id>` does not exist.
@@ -1042,7 +1042,7 @@ class Store:
     ) -> Group:
         """Append a move to the group; its manifest roots the target from now on.
 
-        The arguments are [livery.strongroom.api.Store.set_ref][]'s. The
+        The arguments are [livery.strongroom.Store.set_ref][]'s. The
         move is checked at commit, not here; only the target's
         presence is required now.
 
@@ -1108,7 +1108,7 @@ class Store:
         records = tx.records
         ```
 
-        See [livery.strongroom.api.Transaction][] for what each exit does.
+        See [livery.strongroom.Transaction][] for what each exit does.
         """
         return groups.transaction(self, by=by, lease=lease)
 

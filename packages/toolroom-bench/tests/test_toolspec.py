@@ -21,7 +21,7 @@ import pytest
 
 from livery.footman import _globals
 from livery.toolroom.bench import _drivers, _toolhelp, _toolspec
-from livery.toolroom.store.api import NameCollision, Option, ToolSpec, Verb, render
+from livery.toolroom.store import NameCollision, Option, ToolSpec, Verb, render
 from toolroom_bench_readings import repository_records  # noqa: F401
 
 CLAP = """\
@@ -191,7 +191,7 @@ def test_a_tools_own_switches_come_from_its_record_and_reads_inherit_them(
     from pathlib import Path
 
     from livery.toolroom.bench import _drivers
-    from livery.toolroom.store.api import Record
+    from livery.toolroom.store import Record
 
     record = Record.load(Path(__file__).resolve().parents[3] / "records" / "gh.jsonl")
     assert record.layout.env == {"GH_NO_UPDATE_NOTIFIER": "1"}
@@ -660,8 +660,8 @@ def test_rendered_stub_imports_only_what_it_uses():
     # verb, and `uv tool` would otherwise write `class Tool(Tool)`. The rest
     # import bare: reader-facing names in every hover.
     assert (
-        "from livery.toolroom.tools.api import Argv, Flag\n"
-        "from livery.toolroom.tools.api import Tool as ToolBase"
+        "from livery.toolroom.tools import Argv, Flag\n"
+        "from livery.toolroom.tools import Tool as ToolBase"
     ) in plain
 
     choosy = render(
@@ -877,7 +877,7 @@ def test_positionals_accept_paths():
 
 
 def test_every_driver_maps_to_a_bridge_attribute():
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     for driver in _drivers.DRIVERS:
         assert isinstance(getattr(tools, driver.key), tools.Tool)
@@ -1099,7 +1099,7 @@ def test_color_probes_git_as_flag_forced(capsys):
 
 def test_colorprobe_categorises_git_and_unprobed():
     from livery.toolroom.bench import _colorprobe, _drivers
-    from livery.toolroom.store.api import ToolSpec
+    from livery.toolroom.store import ToolSpec
 
     git = _drivers._resolve("git")
     assert git is not None
@@ -1243,7 +1243,7 @@ def test_audit_strict_gives_automation_something_to_trip_on(stubs, capsys):
 
 @needs_ruff
 def test_audit_reports_a_runtime_table_that_disagrees(stubs, monkeypatch):
-    import livery.toolroom.tools.api as bridge
+    import livery.toolroom.tools as bridge
     from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setitem(bridge._NEGATIONS, "ruff", {"fix": "--never-fix"})
@@ -1253,7 +1253,7 @@ def test_audit_reports_a_runtime_table_that_disagrees(stubs, monkeypatch):
 
 @needs_uv
 def test_audit_reports_a_wrappers_table_that_disagrees(stubs, monkeypatch):
-    import livery.toolroom.tools.api as bridge
+    import livery.toolroom.tools as bridge
     from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setitem(bridge._WRAPPERS, "uv", frozenset({"run"}))  # missing tool.run
@@ -1293,7 +1293,7 @@ def test_a_tool_with_no_entry_point_is_not_a_click_tool():
 
 
 def test_an_entry_point_that_is_not_click_falls_through(monkeypatch):
-    import livery.toolroom.tools.api as bridge
+    import livery.toolroom.tools as bridge
 
     monkeypatch.setattr(
         bridge, "_console_entrypoint", lambda name: SimpleNamespace(load=lambda: len)
@@ -1302,7 +1302,7 @@ def test_an_entry_point_that_is_not_click_falls_through(monkeypatch):
 
 
 def test_an_entry_point_that_will_not_import_is_not_a_spec(monkeypatch):
-    import livery.toolroom.tools.api as bridge
+    import livery.toolroom.tools as bridge
 
     def explode():
         raise ImportError("that tool is broken")
@@ -1888,7 +1888,7 @@ def test_every_driver_mirrors_how_tools_py_builds_its_tool():
     drifted once (the Tool was in-process, the driver never said so, so its
     stub read "available"), so the two are pinned to each other here.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     for driver in _drivers.DRIVERS:
         tool = getattr(tools, driver.key)
@@ -1970,7 +1970,7 @@ def test_click_arguments_give_the_shape_exactly():
 
 
 def test_stub_renders_positional_only_and_keyword_only():
-    from livery.toolroom.store.api import Option
+    from livery.toolroom.store import Option
 
     # A keyword-only verb (positional="none") with an option forbids positionals
     # via `*,`; the option must be passed by keyword.
@@ -2006,7 +2006,7 @@ def test_stub_renders_positional_only_and_keyword_only():
 
 
 def test_stub_falls_back_when_the_lead_collides_with_an_option():
-    from livery.toolroom.store.api import Option
+    from livery.toolroom.store import Option
 
     verb = Verb(
         name="pip_install",
@@ -2395,7 +2395,7 @@ def test_version_tuple_reads_the_leading_integers_and_stops():
     "not newer". The chain breaks the tie on publication date; the snapshot
     guard, which has no second date to consult, declines to move.
     """
-    from livery.toolroom.tools.api import version_tuple
+    from livery.toolroom.tools import version_tuple
 
     assert version_tuple("2.55.0") == (2, 55, 0)
     assert version_tuple("0.6.0-wk.5") == (0, 6, 0)  # the tail is anybody's grammar
@@ -2627,7 +2627,7 @@ def test_click_extraction_requires_the_import_and_the_binary_to_agree(monkeypatc
     """
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as bridge
+    import livery.toolroom.tools as bridge
 
     driver = _drivers.find("mkdocs")
     assert driver is not None

@@ -12,7 +12,7 @@ lands every host's artifact into a store at another root, a mirror by
 construction.
 
 Nothing here prints; every step reaches the caller through the
-progress callback. Reach for [livery.toolroom.store.api.Store][].
+progress callback. Reach for [livery.toolroom.store.Store][].
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from functools import partial
 from io import BytesIO
 from pathlib import Path
 
-from livery.strongroom.api import (
+from livery.strongroom import (
     Digest,
     IntegrityError,
     MissingObject,
@@ -42,7 +42,7 @@ from livery.strongroom.api import (
     Value,
     ViewRecord,
 )
-from livery.strongroom.api import Store as ObjectStore
+from livery.strongroom import Store as ObjectStore
 from livery.toolroom.store._exclusive import exclusive
 from livery.toolroom.store._fetch import UnpackError, fetch_bytes, unpack
 from livery.toolroom.store._home import TOOLS, Home
@@ -56,7 +56,7 @@ from livery.toolroom.store._record import (
     host_key,
     resolve,
 )
-from livery.toolroom.tools.api import version_tuple
+from livery.toolroom.tools import version_tuple
 
 
 def _by() -> Subject:

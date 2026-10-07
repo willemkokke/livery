@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from livery.forge.api import ForgeError, PullRequest, Repository
+from livery.forge import ForgeError, PullRequest, Repository
 from livery.forge.testing import FakeDriver
 
 
@@ -121,7 +121,7 @@ def test_a_skipped_run_is_not_a_verdict() -> None:
 
 
 def test_configure_stores_protected_tag_patterns_idempotently() -> None:
-    from livery.forge.api import RepoConfig
+    from livery.forge import RepoConfig
 
     driver = FakeDriver()
     repo = driver.fresh_repo()
@@ -136,7 +136,7 @@ def test_the_pipeline_success_block_refuses_red_without_contexts() -> None:
     # The GitLab shape: no named contexts anywhere, only the
     # pipeline-success block, and a red head still cannot merge; a
     # green one can.
-    from livery.forge.api import RepoConfig
+    from livery.forge import RepoConfig
 
     driver = FakeDriver()
     repo, pr, sha = _repo_with_open_pr(driver)

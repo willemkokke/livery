@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._points import (
     DECLARED,
     Entry,

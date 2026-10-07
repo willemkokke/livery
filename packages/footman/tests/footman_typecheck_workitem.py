@@ -20,8 +20,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import Literal, TypeAlias, assert_type
 
-from livery.footman._step import StepFn, WorkItem
-from livery.footman.api import (
+from livery.footman import (
     AuditEntry,
     Context,
     Lane,
@@ -36,6 +35,7 @@ from livery.footman.api import (
     task,
     use_context,
 )
+from livery.footman._step import StepFn, WorkItem
 
 # The moments' vocabulary — the audit's own words, spec-fixed even though
 # the runtime carries them as plain strings.

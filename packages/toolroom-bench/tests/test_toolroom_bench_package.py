@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.metadata import version
 
-import livery.toolroom.bench.api as package
+import livery.toolroom.bench as package
 
 
 def test_the_version_is_the_installed_distributions() -> None:

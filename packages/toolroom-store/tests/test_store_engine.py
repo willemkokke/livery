@@ -17,9 +17,8 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom.api import Digest, FolderSource
-from livery.toolroom.store import _engine
-from livery.toolroom.store.api import (
+from livery.strongroom import Digest, FolderSource
+from livery.toolroom.store import (
     Artifact,
     Event,
     Home,
@@ -29,6 +28,7 @@ from livery.toolroom.store.api import (
     RecordError,
     Store,
     StoreError,
+    _engine,
     resolve,
 )
 from toolroom_store_archives import make_tar, make_zip, sha
@@ -574,7 +574,7 @@ def test_fetch_builds_a_mirror_an_offline_store_installs_from(
 def test_the_running_machine_is_the_default_host(home: Home) -> None:
     import platform
 
-    from livery.toolroom.store.api import host_key
+    from livery.toolroom.store import host_key
 
     assert Store(home).host == host_key(platform.system(), platform.machine())
 
@@ -707,7 +707,7 @@ def store_of(home: Home) -> Store:
 
 
 def _uv_tool(name: str = "ruff", *versions: str) -> Record:
-    from livery.toolroom.store.api import Surface
+    from livery.toolroom.store import Surface
 
     return Record(
         name,
@@ -1343,7 +1343,7 @@ def test_an_origin_that_does_not_answer_is_a_store_refusal_naming_the_url(
     The workspace reports it and goes on, which a raw exception would
     not let it do.
     """
-    from livery.strongroom.api import Unreachable
+    from livery.strongroom import Unreachable
 
     artifacts, _data = _tool()
     record = _record("tool", artifacts)

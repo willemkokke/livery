@@ -1,13 +1,13 @@
 """Reading over HTTP, and unpacking what was read: bytes, JSON, a file, an archive.
 
-One retrying read over [livery.strongroom.api.fetch_url][] for the store
+One retrying read over [livery.strongroom.fetch_url][] for the store
 and for every reader built on it. A transient failure (a connection
 that dropped, a timeout, a 408, a 429, a 5xx) is tried again after a
 pause; an answer (a 404, a 403) is final at once, since asking again
-does not change it. Reach for [livery.toolroom.store.api.fetch_bytes][]
-for an index, [livery.toolroom.store.api.fetch_json][] for a forge API
-with its token, [livery.toolroom.store.api.fetch_file][] for an asset
-cached by name, and [livery.toolroom.store.api.unpack][] to extract an
+does not change it. Reach for [livery.toolroom.store.fetch_bytes][]
+for an index, [livery.toolroom.store.fetch_json][] for a forge API
+with its token, [livery.toolroom.store.fetch_file][] for an asset
+cached by name, and [livery.toolroom.store.unpack][] to extract an
 archive whole into a directory.
 """
 
@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom.api import Unreachable, fetch_url
+from livery.strongroom import Unreachable, fetch_url
 from livery.toolroom.store._record import ARCHIVE_SUFFIXES
 
 USER_AGENT = "livery-toolroom"
@@ -57,7 +57,7 @@ def api_headers(url: str) -> dict[str, str]:
     unauthenticated API calls an hour per address and 5,000 with a
     token, and a shared runner spends the smaller budget on whoever
     else is on it. Only a URL on GitHub's API host gets the token;
-    [livery.strongroom.api.fetch_url][] keeps it off any other host a
+    [livery.strongroom.fetch_url][] keeps it off any other host a
     redirect reaches.
     """
     headers = {"User-Agent": USER_AGENT}
@@ -93,7 +93,7 @@ def fetch_bytes(
 ) -> bytes:
     """The bytes at *url*, read whole; a transient failure is tried *tries* times.
 
-    *headers* default to [livery.toolroom.store.api.api_headers][] for the
+    *headers* default to [livery.toolroom.store.api_headers][] for the
     URL.
 
     Raises:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from livery.toolroom.store import Option, Verb
 from livery.toolroom.store._stub import (
     _annotation,
     _arg_lines,
@@ -12,7 +13,6 @@ from livery.toolroom.store._stub import (
     _verbs,
     platforms_phrase,
 )
-from livery.toolroom.store.api import Option, Verb
 
 
 def test_an_option_that_takes_a_value_or_stands_alone_is_a_valued_flag():

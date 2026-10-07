@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.forge.api import ForgeError
+from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop import _replay
 from livery.workshop._git_ops import GitOps

@@ -1,5 +1,5 @@
 # --8<-- [start:part-1]
-from livery.footman.api import parallel, run, task
+from livery.footman import parallel, run, task
 
 TARGETS = ("linux-x86_64", "linux-arm64", "darwin-arm64")
 
@@ -28,7 +28,7 @@ def serve(port: int = 8000):
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.toolroom.tools.api import docker, mkdocs, terraform
+from livery.toolroom.tools import docker, mkdocs, terraform
 
 
 @task
@@ -50,7 +50,7 @@ def site():
 # --8<-- [end:part-3]
 
 # --8<-- [start:part-4]
-from livery.footman.api import task, run
+from livery.footman import task, run
 
 
 @task(cwd="root", rel="services/api")
@@ -66,7 +66,7 @@ def bundle():
 # --8<-- [end:part-4]
 
 # --8<-- [start:part-5]
-from livery.footman.api import project_root, task, run
+from livery.footman import project_root, task, run
 
 
 @task
@@ -77,8 +77,8 @@ def audit(path: str = ".", affected: bool = False):
 # --8<-- [end:part-5]
 
 # --8<-- [start:part-6]
-import livery.footman.api as footman
-from livery.footman.api import task, run
+import livery.footman as footman
+from livery.footman import task, run
 
 
 @task(serial=True)
@@ -104,7 +104,7 @@ def publish(ctx):
 
 # --8<-- [start:part-9]
 from typing import Annotated
-from livery.footman.api import ask, task, run
+from livery.footman import ask, task, run
 
 
 @task(confirm="Publish to PyPI?")
@@ -117,7 +117,7 @@ def release(version: Annotated[str, ask()]):
 
 # --8<-- [start:part-10]
 # svc/api/tasks.py; the repo root also defines `check`
-from livery.footman.api import inherited, run, task
+from livery.footman import inherited, run, task
 
 
 @task
@@ -130,7 +130,7 @@ def check(fix: bool = False, contracts: bool = True):
 
 # --8<-- [start:part-11]
 from pathlib import Path
-from livery.footman.api import task, track, progress
+from livery.footman import task, track, progress
 
 
 def load_records() -> list: ...  # your own work, whatever shape it takes
@@ -154,7 +154,7 @@ def index(path: Path):
 
 # --8<-- [start:part-12]
 from pathlib import Path
-from livery.footman.api import fetch, parallel, step, task
+from livery.footman import fetch, parallel, step, task
 
 TOOLCHAIN = {
     "protoc": ("https://example.com/protoc-27.tar.gz", "9f86d081884c…"),
@@ -188,7 +188,7 @@ def coverage() -> dict:
 
 # --8<-- [start:part-14]
 # acme_cli.py
-from livery.footman.api import App
+from livery.footman import App
 
 app = App(name="Acme", prog="acme", version="1.4.0")
 

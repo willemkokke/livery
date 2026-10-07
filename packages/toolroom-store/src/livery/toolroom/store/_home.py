@@ -8,7 +8,7 @@ so that one process at a time supplies that version. Nothing here
 reads an environment variable: the caller passes the home, toolroom's
 machinery its data directory, hse its own.
 
-Reach for [livery.toolroom.store.api.Home][] and its `open_store`.
+Reach for [livery.toolroom.store.Home][] and its `open_store`.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from livery.strongroom.api import Namespace, Source, Store
+from livery.strongroom import Namespace, Source, Store
 
 TOOLS = "tools"
 """The namespace of installed tools: `tools/<name>@<version>` names the

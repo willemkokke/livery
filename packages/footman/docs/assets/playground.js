@@ -33,8 +33,8 @@ const REVISION_MARK = "example: revision";
 
 const DEFAULT_FILES = {
   "tasks.py": `from typing import Literal
-from livery.footman.api import fail, run, task
-from livery.toolroom.tools.api import pytest, ruff
+from livery.footman import fail, run, task
+from livery.toolroom.tools import pytest, ruff
 
 @task
 def lint(fix: bool = False):
@@ -264,7 +264,7 @@ def _fm_install_stubs(index_url, target=None):
     import hashlib
 
     try:
-        from livery.toolroom.store.api import Observation, render_observation
+        from livery.toolroom.store import Observation, render_observation
     except ImportError:
         return 0
 
@@ -272,7 +272,7 @@ def _fm_install_stubs(index_url, target=None):
     # under its stubs/, the handles beside them, never inside the tools
     # package's own directory.
     if target is None:
-        import livery.toolroom.tools.api as tools
+        import livery.toolroom.tools as tools
 
         target = Path(tools.__file__).resolve().parents[1]
     target = Path(target)
@@ -323,7 +323,7 @@ def _fm_install_stubs(index_url, target=None):
     def cls(name):
         return "".join(part.title() for part in name.replace("-", "_").split("_"))
 
-    index = ["from livery.toolroom.tools.api import Result"]
+    index = ["from livery.toolroom.tools import Result"]
     index += [
         "from livery.toolroom.stubs." + n + " import " + cls(n) + " as " + cls(n)
         for n in written
@@ -425,7 +425,7 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
-    import livery.footman.api as footman
+    import livery.footman as footman
     import livery.footman._context
 
     footman.parallel  # resolve the lazy re-export before overriding it

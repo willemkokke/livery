@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._dev_release import (
     DevPlan,
     build_dev,
@@ -323,29 +323,26 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
     assert pyproject.stat().st_mtime_ns == stamped_at
 
 
-def test_a_namespace_roots_api_is_stamped_and_restored(
+def test_a_roots_init_is_stamped_and_restored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    member = root / "packages" / "core"
-    # A root that is a namespace keeps its version in api.py.
-    package_dir = next(p.parent for p in (member / "src").rglob("*.py"))
-    api = package_dir / "api.py"
-    api.write_text('__version__ = "0.1.0"\n')
+    # A root keeps its version in its __init__.py.
+    init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
     version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
     seen: list[str] = []
 
     def _boom(*_args: object, **_kwargs: object) -> Path:
-        seen.append(api.read_text())
+        seen.append(init.read_text())
         raise Failed("uv build exploded")
 
     monkeypatch.setattr("livery.workshop._backends._python.build", _boom)
     with pytest.raises(_FAILURES):
         build_dev(root, DevPlan(discover_packages(root)[0], version))
-    assert seen and seen[0] != '__version__ = "0.1.0"\n'
-    assert api.read_text() == '__version__ = "0.1.0"\n'
+    assert seen and seen[0] != '__version__ = "0.2.0"\n'
+    assert init.read_text() == '__version__ = "0.2.0"\n'
 
 
 def test_the_branch_routes_the_act(

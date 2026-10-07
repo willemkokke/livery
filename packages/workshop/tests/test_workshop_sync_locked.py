@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._fragment_engine import Output, apply_untracked, tracked_local
 from livery.workshop._sync import stale_locks
 
@@ -72,7 +72,7 @@ def test_a_lock_that_is_not_current_is_named(
         ),
     )
     monkeypatch.setattr(
-        "livery.toolroom.tools.api.uv",
+        "livery.toolroom.tools.uv",
         SimpleNamespace(opts=lambda **kwargs: lambda *args: refused),
     )
     monkeypatch.setattr(
@@ -93,7 +93,7 @@ def test_a_lock_uv_cannot_compare_is_not_called_stale(
         code=2, stdout="", stderr="error: Failed to fetch: `https://pypi.org/simple`\n"
     )
     monkeypatch.setattr(
-        "livery.toolroom.tools.api.uv",
+        "livery.toolroom.tools.uv",
         SimpleNamespace(opts=lambda **kwargs: lambda *args: offline),
     )
     assert stale_locks(tmp_path) == [

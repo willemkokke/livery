@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from livery.forge.api import GitlabForge, RepoConfig, Unsupported
+from livery.forge import GitlabForge, RepoConfig, Unsupported
 from livery.forge.testing import Cassette, Exchange, ReplayOpener
 
 BASE = "http://gitlab.local/api/v4"

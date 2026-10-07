@@ -6,11 +6,10 @@ from typing import Annotated, Literal
 
 import pytest
 
-from livery.footman import _manifest, markdown
+from livery.footman import _manifest, markdown, task
 from livery.footman import _registry as registry
 from livery.footman._params import doc
 from livery.footman._registry import group
-from livery.footman.api import task
 
 
 @pytest.fixture

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
-from livery.forge.api import Repository
+from livery.footman import Failed
+from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import arming_reason, ci_automerge

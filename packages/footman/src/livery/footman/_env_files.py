@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman.api as footman
+import livery.footman as footman
 from livery.footman._params import matching
 from livery.footman._registry import GlobalOption
 

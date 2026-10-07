@@ -20,10 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail
-from livery.toolroom.tools.api import pytest
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import fail
+from livery.toolroom.tools import pytest
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import Extractor
 from livery.workshop._packages import Neighbours, Package
@@ -42,14 +42,14 @@ PY_SUFFIXES = (".py", ".pyi")
 def public_modules(package: Package) -> tuple[str, ...]:
     """The modules that declare *package*'s public API.
 
-    A namespace root declares it in its ``api``; a root that is a
-    regular package, or a single module, is its own declaration. A
-    public package beneath a root keeps its own import path and is
-    declared in the root's ``api`` as well, imported for the checkers
-    alone and listed in ``__all__``: the verifier follows the
-    declaration into it, reading the ``py.typed`` at the
-    distribution's root. A root with neither declares nothing; a
-    package with no src tree is its distribution name's module.
+    A root that is a regular package, or a single module, is its own
+    declaration. A public package beneath a root keeps its own import
+    path and is declared in the root's ``__init__`` as well, imported
+    for the checkers alone and listed in ``__all__``: the verifier
+    follows the declaration into it, reading the ``py.typed`` at the
+    distribution's root. A namespace root, one with no ``__init__``,
+    declares nothing; a package with no src tree is its distribution
+    name's module.
     """
     src = package.directory / "src"
     if not src.is_dir():
@@ -57,9 +57,7 @@ def public_modules(package: Package) -> tuple[str, ...]:
     modules: list[str] = []
     for root in module_roots(package) or (module_for(package),):
         directory = src.joinpath(*root.split("."))
-        if (directory / "api.py").is_file():
-            modules.append(f"{root}.api")
-        elif (directory / "__init__.py").is_file() or directory.with_suffix(
+        if (directory / "__init__.py").is_file() or directory.with_suffix(
             ".py"
         ).is_file():
             modules.append(root)
@@ -125,13 +123,10 @@ class _Stamper:
     def homes(self) -> list[Path]:
         """``pyproject.toml``, and every module that may carry ``__version__``.
 
-        That is a namespace root's ``api.py`` or a regular package's
-        ``__init__.py``.
+        That is a package's ``__init__.py``.
         """
         src = self._package.directory / "src"
-        modules = (
-            [*src.rglob("__init__.py"), *src.rglob("api.py")] if src.is_dir() else []
-        )
+        modules = [*src.rglob("__init__.py")] if src.is_dir() else []
         return [self._package.directory / "pyproject.toml", *sorted(modules)]
 
     def stamp(self, version: str) -> list[str]:
@@ -1498,9 +1493,9 @@ def module_roots(package: Package) -> tuple[str, ...]:
 
     The build backend's ``module-name`` where the manifest declares
     one, since that is what the wheel ships. Otherwise each topmost
-    directory under ``src`` holding an ``api.py`` (a namespace root)
-    or an ``__init__.py`` (a regular package) on its branch, which
-    finds nothing under a root with no public names. Never derived
+    directory under ``src`` holding an ``__init__.py`` on its branch,
+    which finds nothing under a namespace root, one with no public
+    names. Never derived
     from the distribution name: three distributions share the
     ``livery.toolroom`` namespace, so a transformed name would
     attribute two of them to the third. A package with no python
@@ -1547,8 +1542,7 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     construction, and whatever the extension stack mounts with it, so its
     imports of either are not dependencies of the distribution. The
     fact lives in the package's own metadata; nothing here needs to
-    be told a second time. An entry naming a namespace root's ``api``
-    stands for the root.
+    be told a second time.
     """
     pyproject = package.directory / "pyproject.toml"
     if not pyproject.is_file():
@@ -1558,10 +1552,7 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     modules = []
     for group in ("footman.tasks", "footman.builtin"):
         for target in (groups.get(group) or {}).values():
-            module = str(target).partition(":")[0]
-            # A root's api module is the root's face: a plugin named
-            # there is the whole root, as a regular package's root was.
-            modules.append(module.removesuffix(".api"))
+            modules.append(str(target).partition(":")[0])
     return tuple(modules)
 
 

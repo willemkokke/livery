@@ -43,12 +43,12 @@ test = [
 ]
 
 [project.entry-points."footman.tasks"]
-"livery.toolroom.bench" = "livery.toolroom.bench.api"
+"livery.toolroom.bench" = "livery.toolroom.bench:tasks"
 
 # A project that depends on the bench directly gets the tools verbs
 # through footman's project rung.
 [project.entry-points."footman.builtin"]
-"livery.toolroom.bench" = "livery.toolroom.bench.api"
+"livery.toolroom.bench" = "livery.toolroom.bench:tasks"
 
 [project.entry-points.pytest11]
 # Every test session with the bench installed runs apart from the
@@ -60,8 +60,7 @@ livery-toolroom-bench-isolation = "livery.toolroom.bench._pytest_isolation"
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.toolroom_bench and
-# there is no livery/__init__.py anywhere in this repository.
-# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
+# The importable package is livery.toolroom.bench, its entry module the
+# root's __init__.py; livery and livery.toolroom are PEP 420 namespaces
+# with no __init__.py.
 module-name = "livery.toolroom.bench"
-namespace = true

@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver, Plugin, Provision
-from livery.toolroom.store.api import fetch_bytes
+from livery.toolroom.store import fetch_bytes
 
 PYPI = "https://pypi.org/pypi/{package}/json"
 TIMEOUT = 30
@@ -204,7 +204,7 @@ def releases(driver: Driver) -> list[Release]:
         return []
     found = _stable(found)
     if driver.provision.floor:
-        from livery.toolroom.tools.api import version_tuple
+        from livery.toolroom.tools import version_tuple
 
         cut = version_tuple(driver.provision.floor)
         found = [r for r in found if version_tuple(r.version) >= cut]
@@ -243,7 +243,7 @@ def _order(found: list[Release]) -> list[Release]:
     versions, and fixed there. Measured across all 24 listable tools and
     3,214 stable releases, this ordering is total with no collisions.
     """
-    from livery.toolroom.tools.api import version_tuple
+    from livery.toolroom.tools import version_tuple
 
     return sorted(
         found,
@@ -291,7 +291,7 @@ def _read_index(url: str) -> bytes:
     `Unreachable` ends the run when the store's tries are spent: an
     index that will not answer must never read as "nothing new".
     """
-    from livery.toolroom.store.api import FetchError
+    from livery.toolroom.store import FetchError
 
     try:
         return fetch_bytes(url)
@@ -498,7 +498,7 @@ def _install_dotnet(release: Release, into: Path) -> Path | None:
     finds its SDK beside itself.
     """
     from livery.toolroom.bench import _provision
-    from livery.toolroom.store.api import UnpackError, unpack
+    from livery.toolroom.store import UnpackError, unpack
 
     tree = into / "dotnet" / release.version
     try:
@@ -561,7 +561,7 @@ def _forge(driver: Driver, host: str, pages: int = 1) -> list[Release]:
     compose listing runs out in late 2022, which is well inside the range
     docker itself goes back to.
     """
-    from livery.toolroom.tools.api import read_version
+    from livery.toolroom.tools import read_version
 
     repo = driver.provision.repo
     if not repo:
@@ -813,7 +813,7 @@ def install_plugin(plugin: Plugin, on_or_before: str, home: Path) -> bool:
     should say.
     """
     from livery.toolroom.bench import _provision
-    from livery.toolroom.tools.api import version_tuple
+    from livery.toolroom.tools import version_tuple
 
     found = _listing(plugin.repo, 3)
     floor = version_tuple(plugin.since) if plugin.since else ()
@@ -1076,7 +1076,7 @@ def _install_npm(driver: Driver, version: str, into: Path) -> Path | None:
     """
     import shutil
 
-    from livery.toolroom.store.api import bun_global_project, npm_cli
+    from livery.toolroom.store import bun_global_project, npm_cli
 
     package = driver.provision.target(driver.name)
     env = {
@@ -1120,7 +1120,7 @@ def _install_nodejs(release: Release, into: Path) -> Path | None:
     beside itself, and the node tier's installs need it there.
     """
     from livery.toolroom.bench import _provision
-    from livery.toolroom.store.api import UnpackError, unpack
+    from livery.toolroom.store import UnpackError, unpack
 
     tree = into / "node"
     try:
@@ -1174,7 +1174,7 @@ def _capture(argv: list[str], env: dict[str, str] | None = None) -> str:
     Empty is not "nothing to report": the callers treat a tool they cannot
     read as one they have not looked at, the same as an unreachable index.
     """
-    from livery.footman.api import run as _fm_run
+    from livery.footman import run as _fm_run
 
     try:
         done = _fm_run(
@@ -1195,7 +1195,7 @@ def _capture(argv: list[str], env: dict[str, str] | None = None) -> str:
 
 def _run(argv: list[str], env: dict[str, str] | None = None) -> bool:
     """Whether *argv* succeeded. A fetch step, not a step in the report."""
-    from livery.footman.api import run as _fm_run
+    from livery.footman import run as _fm_run
 
     try:
         done = _fm_run(argv, recorded=False, timeout=300, nofail=True, env=env)

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.workshop import discover_packages, verify_workspace
 from livery.workshop._contract import contract_paths
 from livery.workshop._packages import (
     member_depth,
@@ -18,7 +19,6 @@ from livery.workshop._pytest_layout import offenders
 from livery.workshop._pytest_speed import package_of
 from livery.workshop._release_driver import uncut_in_set
 from livery.workshop._seeds import derived
-from livery.workshop.api import discover_packages, verify_workspace
 
 _FAILURES = (BaseException,)
 

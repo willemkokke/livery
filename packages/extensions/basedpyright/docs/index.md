@@ -33,10 +33,11 @@ extensions = ["basedpyright[typecomplete]"]
 
 It verifies that each package's public API has a fully known type, through
 `basedpyright --verifytypes`. A package's public API is what its roots
-declare: a namespace root's `api` module, which declares its public
-packages too (imported under `TYPE_CHECKING` and listed in `__all__`), or a
-root that is a regular package. A root with nothing public verifies
-nothing. The verifier reads the `py.typed` at the distribution's root.
+declare: a root that is a regular package declares it in its `__init__`,
+its public packages too (imported under `TYPE_CHECKING` and listed in
+`__all__`). A namespace root, one with no `__init__`, has nothing public
+and verifies nothing. The verifier reads the `py.typed` at the
+distribution's root.
 
 A package turns either check off in its own contract:
 

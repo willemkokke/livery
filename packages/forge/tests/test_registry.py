@@ -1,4 +1,4 @@
-"""livery.forge.api.SimpleRegistry against JSON and HTML simple indexes."""
+"""livery.forge.SimpleRegistry against JSON and HTML simple indexes."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from livery.forge.api import ForgeError, SimpleRegistry
+from livery.forge import ForgeError, SimpleRegistry
 
 
 def _anchor(filename: str) -> str:

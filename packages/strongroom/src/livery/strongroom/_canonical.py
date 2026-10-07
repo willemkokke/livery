@@ -8,8 +8,8 @@ whole class keeps the number serialisation to plain digits, which
 every language prints the same way. The same canonicaliser serves
 every format, so one set of vectors proves it.
 
-Reach for [livery.strongroom.api.canonical][] to produce bytes and
-[livery.strongroom.api.FormatError][] to catch a refusal.
+Reach for [livery.strongroom.canonical][] to produce bytes and
+[livery.strongroom.FormatError][] to catch a refusal.
 """
 
 from __future__ import annotations

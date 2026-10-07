@@ -35,7 +35,7 @@ the command surface actually changed. Reproduce with
 
 Footman's `main()` checks for `--complete` **before importing the framework or
 your tasks**, dispatching straight to the stdlib-only resolver. A bare
-`import livery.footman.api as footman` pays for nothing but the entry module — no pathlib, no
+`import livery.footman as footman` pays for nothing but the entry module — no pathlib, no
 subprocess, no typing, which an invariant test pins. That is why a keystroke
 costs what it does rather than what re-importing your project costs. When a
 live value is genuinely needed (a dynamic completer, or the first build in a

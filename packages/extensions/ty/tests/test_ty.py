@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 import livery.extensions.ty._extension as declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.ty import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 ROOT = Path(__file__).resolve().parents[4]
 

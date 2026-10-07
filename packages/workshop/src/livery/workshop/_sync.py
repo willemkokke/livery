@@ -29,8 +29,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-import livery.footman.api as footman
-from livery.footman.api import Forward, doc, fail, task
+import livery.footman as footman
+from livery.footman import Forward, doc, fail, task
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
@@ -159,7 +159,7 @@ def _rebase_step(
     parks with the teaching. A rebase stopped by anything other than a
     conflict leaves the branch as it was and prints git's words.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     branch = git.current_branch()
     foreign = _foreign_authors(git, upstream or onto)
@@ -658,8 +658,8 @@ def stale_locks(root: Path) -> list[str]:
     against its sites. A workspace without a lock has nothing here to
     judge.
     """
-    import livery.toolroom.tools.api as tools
-    from livery.toolroom.store.api import LOCK_FILE
+    import livery.toolroom.tools as tools
+    from livery.toolroom.store import LOCK_FILE
     from livery.workshop._tools import lock_is_current
 
     problems: list[str] = []

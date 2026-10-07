@@ -11,14 +11,14 @@ the moves and drops the pending ref. A crash between two applies
 leaves the journal with its count, and `commit` on the same id
 replays it. `retire` abandons a group nothing of which has moved.
 
-The single publish, [livery.strongroom.api.Store.publish_begin][] and
-[livery.strongroom.api.Store.publish_commit][], shares the pending
+The single publish, [livery.strongroom.Store.publish_begin][] and
+[livery.strongroom.Store.publish_commit][], shares the pending
 namespace and the move code but names its ref at commit, so its
 pending ref names the target itself and carries no journal.
 
-The functions here are the bodies of the [livery.strongroom.api.Store][]
+The functions here are the bodies of the [livery.strongroom.Store][]
 methods of the same names; reach for the methods, and for
-[livery.strongroom.api.Store.transaction][] in everyday code.
+[livery.strongroom.Store.transaction][] in everyday code.
 """
 
 from __future__ import annotations
@@ -394,7 +394,7 @@ class Transaction:
     commit refused on its checks retires the group too, since nothing
     moved, and the refusal is what the `with` raises. A commit that
     stopped between two applies re-raises and leaves the group for a
-    later [livery.strongroom.api.Store.commit][] on its id.
+    later [livery.strongroom.Store.commit][] on its id.
 
     Attributes:
         id: the group's pending ref name, known after entry.
@@ -434,7 +434,7 @@ class Transaction:
 
 @contextlib.contextmanager
 def transaction(store: Store, *, by: Subject, lease: float) -> Generator[Transaction]:
-    """The body of [livery.strongroom.api.Store.transaction][]."""
+    """The body of [livery.strongroom.Store.transaction][]."""
     handle = Transaction(store, by=by, lease=lease)
     handle.id = begin(store, by=by, lease=lease).id
     try:

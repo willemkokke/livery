@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-import livery.footman.api as footman
+import livery.footman as footman
 
 BASE_EXTENSION = "livery.workshop"
 AGENT = "agent"

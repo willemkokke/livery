@@ -5,7 +5,9 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import livery.strongroom.api as package
+import pytest
+
+import livery.strongroom as package
 
 
 def _loaded_after(statement: str) -> list[str]:
@@ -22,14 +24,25 @@ def _loaded_after(statement: str) -> list[str]:
 
 
 def test_importing_the_root_loads_no_module_of_the_package() -> None:
-    assert _loaded_after("import livery.strongroom.api") == ["livery.strongroom.api"]
+    assert _loaded_after("import livery.strongroom") == []
 
 
 def test_one_name_loads_only_the_module_that_defines_it() -> None:
-    assert _loaded_after("from livery.strongroom.api import FormatError") == [
-        "livery.strongroom._canonical",
-        "livery.strongroom.api",
+    assert _loaded_after("from livery.strongroom import FormatError") == [
+        "livery.strongroom._canonical"
     ]
+
+
+def test_a_public_package_is_served_on_first_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The import system binds a package on the root at its first import;
+    # a program that imported the root alone reaches it through the root,
+    # which imports it then.
+    import livery.strongroom.cbor as cbor
+
+    monkeypatch.delattr(package, "cbor")
+    assert package.cbor is cbor
 
 
 def test_every_public_name_resolves() -> None:

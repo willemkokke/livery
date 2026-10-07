@@ -21,15 +21,15 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import livery.footman.api as footman
-from livery.footman.api import fail
-from livery.forge.api import ForgeError
+import livery.footman as footman
+from livery.footman import fail
+from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
 from livery.workshop._series import LOOP
 from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
-    from livery.forge.api import Forge, Job, Repository, Run
+    from livery.forge import Forge, Job, Repository, Run
     from livery.workshop._checks import CheckRecord
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
@@ -252,7 +252,7 @@ def _require_runner_docker(kind: str) -> None:
     """
     import json
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     if CURRENT.mode == "host":
         # The runner is a process of this machine, and cibuildwheel
@@ -359,7 +359,7 @@ def provision(kind: str = "gitea") -> None:
     own package registry authenticates with the same credential as
     its API. Re-running is the recovery procedure.
     """
-    from livery.forge.api import ForgeError, RepoConfig
+    from livery.forge import ForgeError, RepoConfig
 
     forge, token = _dev_forge(kind)
     try:
@@ -537,7 +537,7 @@ def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
     the forge's own conan registry; each registry is built once and
     polled through the wave's wait.
     """
-    from livery.forge.api import SimpleRegistry
+    from livery.forge import SimpleRegistry
     from livery.workshop._backends import _cpp_conan
 
     _, token = _dev_forge(kind)
@@ -600,7 +600,7 @@ def _loop_home(kind: str) -> Path:
     different registries and different histories, and one pass must
     never adopt the other lane's checkout.
     """
-    from livery.footman.api import data_dir
+    from livery.footman import data_dir
 
     home = data_dir() / "workshop-e2e"
     if CURRENT.name:
@@ -731,7 +731,7 @@ def checkout_index(
     """
     import tempfile
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._packages import discover_packages
 
     members = set(dev_members(root, extensions))
@@ -819,7 +819,7 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
     now. Returns the published versions by distribution name, for the
     loop's lock to pin exactly.
     """
-    from livery.footman.api import run
+    from livery.footman import run
     from livery.workshop._extensions import workspace_root
     from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import discover_packages
@@ -971,7 +971,7 @@ def _rmtree(path: Path) -> None:
 
 def _unpushed_commits(root: Path) -> list[str]:
     """The commits on any local branch of *root* that its origin does not hold."""
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     fetched = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
         "fetch", "--quiet", "origin"
@@ -1036,7 +1036,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
 
 def _has_remote(root: Path) -> bool:
     """Whether the loop's workspace at *root* has its forge remote."""
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     probe = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
     return probe("remote", "get-url", "origin").code == 0
@@ -1052,7 +1052,7 @@ def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     validates the token and ignores the username (measured), and
     ``oauth2`` is the conventional stand-in.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     bare = _lane(kind).alias.removeprefix("http://")
     url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
@@ -1073,7 +1073,7 @@ def _lock_pins(root: Path, pins: dict[str, str]) -> None:
     pins name the four versions outright; everything else keeps its
     locked version.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     args = [f"--upgrade-package={name}=={version}" for name, version in pins.items()]
     result = toolroom.uv.opts(cwd=root, nofail=True)("lock", *args)
@@ -1479,7 +1479,7 @@ def _align_main(root: Path) -> None:
     squashes supersede, so a fast-forward regularly cannot. What
     goes is printed, never silently vanished.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root)("fetch", "origin")
     gone = toolroom.git.opts(cwd=root, nofail=True)(
@@ -1531,7 +1531,7 @@ def _fresh_branch(root: Path, name: str) -> None:
     a future edit can separate: the tree is reset to origin, cleaned,
     and swept of stale local branches before this one is recreated.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     _align_main(root)
     toolroom.git.opts(cwd=root)("switch", "-C", name)
@@ -1571,7 +1571,7 @@ def _loop_fm(
     verb exercise the dev wheels end to end. ``--yes`` rides every
     call, because the loop is automation and silence never confirms.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     # The caller's VIRTUAL_ENV points at the worktree; the loop's uv
     # must resolve the loop's own venv, so the variable stays behind.
@@ -1631,7 +1631,7 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             the installed ones; when *name* registers no check; when its
             requirements form a cycle.
     """
-    from livery.toolroom.store.api import Spec
+    from livery.toolroom.store import Spec
     from livery.workshop._extensions import (
         declaration,
         declared_options,
@@ -1927,7 +1927,7 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     finish already lowered) is printed and the mark stands; the proof
     reads the same lines either way.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._git_ops import GitOps
 
     contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
@@ -2015,7 +2015,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     # with a lease on that ref, which git refuses as stale against a
     # branch that is gone. A pruning fetch drops the stale ref (or
     # refreshes it when a failed pass left the branch behind).
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -2147,7 +2147,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         " skips its gate."
     )
     head = git.head_sha()
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -2232,7 +2232,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
         " workspace tests and says so."
     )
     head = git.head_sha()
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -2423,7 +2423,7 @@ def _release_act(root: Path, kind: str) -> None:
     registry and cuts the receipt tag. Done means measured: the
     served version and the annotated tag, never the exit code alone.
     """
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._release_driver import release_name
 
     # Only the members without a receipt release: the driver refuses a
@@ -2578,7 +2578,7 @@ def _require_receipt_protected(root: Path, tag: str, kind: str = "gitea") -> Non
     import json
     import urllib.request
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     # Forced: a receipt recut by a later wave is a new tag object, and
     # the workspace may still hold the one an earlier pass fetched.
@@ -2784,7 +2784,7 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
 
 def _listed_extensions(root: Path) -> tuple[str, ...]:
     """The entries *root*'s contract lists, options spelled; empty with no contract."""
-    from livery.toolroom.store.api import Spec
+    from livery.toolroom.store import Spec
     from livery.workshop._extensions import extension_names, extension_options
 
     if not (root / "workshop.toml").is_file():

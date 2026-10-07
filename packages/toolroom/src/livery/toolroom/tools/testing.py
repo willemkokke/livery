@@ -46,7 +46,7 @@ from collections.abc import Generator, Mapping
 from pathlib import Path
 from typing import Any
 
-import livery.toolroom.tools.api as _toolroom
+import livery.toolroom.tools as _toolroom
 from livery.toolroom.tools import _host
 from livery.toolroom.tools._host import Argv, Result, ToolError
 
@@ -216,8 +216,8 @@ def answers(
     fm_failed: Any = None
     if hosted:
         try:
-            from livery.footman.api import Result as fm_result
-            from livery.footman.api import RunFailed as fm_failed
+            from livery.footman import Result as fm_result
+            from livery.footman import RunFailed as fm_failed
         except ImportError:
             raise ImportError(
                 "answers(hosted=True) simulates the hosted lane, which is "

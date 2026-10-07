@@ -17,9 +17,8 @@ keeps the signature it wraps).
 from pathlib import Path
 from typing import Annotated, assert_type
 
-import livery.footman.api as footman
-from livery.footman._registry import TaskFn, Tasks, TaskView
-from livery.footman.api import (
+import livery.footman as footman
+from livery.footman import (
     App,
     Arg,
     Brand,
@@ -58,6 +57,7 @@ from livery.footman.api import (
     task,
     track,
 )
+from livery.footman._registry import TaskFn, Tasks, TaskView
 from livery.footman.testing import InvokeResult, Runner, TaskResult, recording
 
 
@@ -228,7 +228,7 @@ def _failing_speaks_noreturn() -> None:
 
 
 def _composition_returns_groups() -> None:
-    from livery.footman.api import include, plugin
+    from livery.footman import include, plugin
 
     grafted = include("shared_tasks", only=["lint"])
     assert_type(grafted, Group)

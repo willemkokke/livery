@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from livery.workshop._influence import Changes
     from livery.workshop._verified import Verified
 
-import livery.footman.api as footman
-from livery.footman.api import Forward, doc, fail, group, parallel, task
+import livery.footman as footman
+from livery.footman import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._checks import GateContext
@@ -318,7 +318,7 @@ def named_files(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
     untracked and not ignored, or every file under it outside a git
     checkout. A path outside the root, or naming nothing, is left out.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     found: set[str] = set()
     for path in paths:
@@ -1081,7 +1081,7 @@ def _git_identity(root: Path) -> str:
     """Who is accepting: the git identity, or the user name the shell has."""
     import os
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
         "config", "user.name"

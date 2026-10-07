@@ -5,8 +5,10 @@ Status: written 2026-10-02 from Willem's rulings of 2026-10-01 and
 #1036). Later phases mark each slice built in place, with its issue.
 Phase 9 is built: the eight tool extensions are distributions of
 their own and this repository lists them (issues #1149, #1159, #1164,
-#1168, #1170, #1175, #1176 and #1181). Phases 10 to 15 are not
-started. It is the one plan from now until the end of
+#1168, #1170, #1175, #1176 and #1181). Phases 10 to 16 come from
+the destination note (`notes/20261006-workshop-destination.md`),
+ruled by Willem on 2026-10-07; 10a is built (issue #1218) and the
+rest is not started. It is the one plan from now until the end of
 the refactor, and it supersedes three plans whose remaining work it
 carries: the extensible gate plan
 (`notes/20260905-extensible-gate-plan.md`), the empty shell plan
@@ -595,10 +597,10 @@ livery/                                  PEP 420, no __init__.py down to a distr
 
 Each extension is `livery-extensions-<name>`, in
 `packages/extensions/<name>/`; discovery allows one group directory,
-which has no contract of its own. A root's `__init__.py` content moves
-to the root's `api` module and nothing else does; no path contains
-`api` twice. `api` and `testing` are reserved names under a root.
-These are our conventions, checked by the housekeeping extension; a
+which has no contract of its own. A root's `__init__.py` declares its
+public names; what need not load is imported under `TYPE_CHECKING` and
+served on first use. `testing` is a reserved name under a root; `api`
+is an ordinary module name. These are our conventions, checked by the housekeeping extension; a
 third-party extension lives under any name.
 
 ## Phases

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._release import (
     prepare_release,
@@ -91,16 +91,15 @@ def test_verify_reads_the_version_where_the_stamper_writes_it(seeds: Seeds) -> N
     (package / "__init__.py").write_text('"""The tool."""\n')
     with pytest.raises(_FAILURES) as caught:
         verify_release(root, "packages/tool/v0.2.0")
-    assert 'no api.py or __init__.py under src/ declares __version__ = "0.2.0"' in str(
+    assert 'no __init__.py under src/ declares __version__ = "0.2.0"' in str(
         caught.value
     )
-    # A namespace root keeps its version in its api.py.
-    (package / "__init__.py").unlink()
-    (package / "api.py").write_text('__version__ = "0.2.0"\n')
+    # A root keeps its version in its __init__.py.
+    (package / "__init__.py").write_text('__version__ = "0.2.0"\n')
     assert verify_release(root, "packages/tool/v0.2.0").version == "0.2.0"
     # A root with no public names has no module to carry it: the
     # manifest alone does.
-    (package / "api.py").unlink()
+    (package / "__init__.py").unlink()
     (package / "_extension.py").write_text("API_VERSION = 1\n")
     assert verify_release(root, "packages/tool/v0.2.0").version == "0.2.0"
 

@@ -1,6 +1,6 @@
 """What each curated tool accepted, version by version, in its record.
 
-A tool's record ([livery.toolroom.store.api.Record][]) carries each
+A tool's record ([livery.toolroom.store.Record][]) carries each
 version's surface one verb at a time, forward and inherited; this
 module is the bench's side of it. Reading a tool gives a surface,
 `surface_of`; several platforms' readings of one version fold into one
@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store.api import Observation, Option, Record, ToolSpec
+    from livery.toolroom.store import Observation, Option, Record, ToolSpec
 
 import itertools
 import json
@@ -31,8 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.store.api import RecordDelta, Surface, spec_from
-from livery.toolroom.tools.api import version_tuple
+from livery.toolroom.store import RecordDelta, Surface, spec_from
+from livery.toolroom.tools import version_tuple
 
 EXTRACTOR = 4
 """The extractor generation that produced an observation.
@@ -334,7 +334,7 @@ def _option_fields(option: Option, **replaced: Any) -> dict[str, Any]:
 
 def versions(record: Record) -> list[str]:
     """Every version read, newest first: the versions whose delta carries a surface."""
-    from livery.toolroom.store.api import observations
+    from livery.toolroom.store import observations
 
     return [seen.version for seen in reversed(observations(record))]
 
@@ -350,7 +350,7 @@ def observation(record: Record, version: str) -> Observation | None:
     A version the record does not track answers `None` too: to a reader
     of surfaces an unknown version and an unread one are one case.
     """
-    from livery.toolroom.store.api import surface_at
+    from livery.toolroom.store import surface_at
 
     if version not in record.versions:
         return None
@@ -415,7 +415,7 @@ class _Reading:
 
 
 def _readings(record: Record) -> list[_Reading]:
-    from livery.toolroom.store.api import observations
+    from livery.toolroom.store import observations
 
     seen = {found.version: found for found in observations(record)}
     out: list[_Reading] = []
@@ -435,7 +435,7 @@ def _readings(record: Record) -> list[_Reading]:
 
 def _assemble(record: Record, readings: list[_Reading]) -> Record:
     """The record rebuilt from *readings*: sparse surfaces derived in sequence."""
-    from livery.toolroom.store.api import Record
+    from livery.toolroom.store import Record
 
     deltas: list[RecordDelta] = []
     previous: dict[str, Any] | None = None
@@ -562,7 +562,7 @@ def new(
     provision floor, stamped on the axis when one is declared; *runtime*
     is what an npm package runs on, stamped the same way.
     """
-    from livery.toolroom.store.api import Record
+    from livery.toolroom.store import Record
 
     return Record(
         name,
@@ -848,7 +848,7 @@ def load(path: Path) -> Record | None:
         RecordError: for a record that is there and does not validate;
             a broken record is corrected, never read as no record.
     """
-    from livery.toolroom.store.api import Record
+    from livery.toolroom.store import Record
 
     if not path.is_file():
         return None
@@ -887,7 +887,7 @@ class Chain:
             ValueError: when *upto* is not a version the record has read,
                 or nothing was read at all.
         """
-        from livery.toolroom.store.api import observations
+        from livery.toolroom.store import observations
 
         found = list(observations(record))
         if upto:
@@ -943,7 +943,7 @@ def union(
 
 def union_of(chain: Chain, *, name: str, in_process: bool = False) -> ToolSpec:
     """The union over *chain*; see `union`."""
-    from livery.toolroom.store.api import Option, ToolSpec, Verb
+    from livery.toolroom.store import Option, ToolSpec, Verb
 
     versions_ = chain.versions  # newest first
     floor_ = versions_[-1]

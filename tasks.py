@@ -12,7 +12,7 @@ its own or a plugin it mounts by hand.
 """
 
 # -- workshop: region tasks, yours to edit; the render keeps it --
-from livery.footman.api import plugin
+from livery.footman import plugin
 
 # footman's own docs pages (`fm footman.pages`): this repository builds
 # them, so it mounts the plugin itself; a project depending on footman

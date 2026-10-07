@@ -2,7 +2,7 @@
 
 GitHub and Gitea time a workflow through its own ``schedule`` trigger,
 so they have no schedule to create through the API; every method here
-raises [livery.forge.api.Unsupported][] naming the capability, which is
+raises [livery.forge.Unsupported][] naming the capability, which is
 what lets a caller probe ``supports("pipeline_schedules")`` first and
 stay idempotent.
 """
@@ -16,7 +16,7 @@ from livery.forge._types import Schedule
 
 
 class DeclinedSchedules:
-    """The `livery.forge.api.Schedules` of a forge that keeps its clock in the file."""
+    """The `livery.forge.Schedules` of a forge that keeps its clock in the file."""
 
     def __init__(self, forge_name: str) -> None:
         self._forge_name = forge_name

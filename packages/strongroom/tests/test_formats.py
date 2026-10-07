@@ -6,7 +6,7 @@ import io
 
 import pytest
 
-from livery.strongroom.api import (
+from livery.strongroom import (
     ALGORITHMS,
     SHA256,
     Digest,

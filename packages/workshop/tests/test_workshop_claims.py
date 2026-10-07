@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 import workshop_python_checks as fake_checks
 from livery.workshop import _checks
 from livery.workshop._checks import (

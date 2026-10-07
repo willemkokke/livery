@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail
+import livery.toolroom.tools as tools
+from livery.footman import fail
 
 
 def run_uv(*args: str, root: Path) -> None:

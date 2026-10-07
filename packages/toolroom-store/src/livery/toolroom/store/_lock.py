@@ -17,8 +17,8 @@ The lock is a file in the repository, `tools.lock`, so every checkout
 and every runner installs the same version; it moves only through a
 lock or an upgrade, never on its own.
 
-Reach for [livery.toolroom.store.api.Requirement][],
-[livery.toolroom.store.api.resolve_lock][] and [livery.toolroom.store.api.Lock][].
+Reach for [livery.toolroom.store.Requirement][],
+[livery.toolroom.store.resolve_lock][] and [livery.toolroom.store.Lock][].
 """
 
 from __future__ import annotations
@@ -29,11 +29,11 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom.api import Digest
+from livery.strongroom import Digest
 from livery.toolroom.store._catalogue import Catalogue, CatalogueError, Listed
 from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, version_key
 from livery.toolroom.store._requirement import Scope, Spec, SpecError
-from livery.toolroom.tools.api import version_tuple
+from livery.toolroom.tools import version_tuple
 
 LOCK_FILE = "tools.lock"
 """The lock's name at the repository root."""
@@ -83,7 +83,7 @@ class Requirement:
         platforms or host keys, each excluded with a leading ``!``:
         ``dotnet_coverage@windows``, ``tea>=1.1@linux,macos-arm``,
         ``docker?@!windows-arm``. The grammar is
-        [livery.toolroom.store.api.Spec][]'s; a tool requirement takes
+        [livery.toolroom.store.Spec][]'s; a tool requirement takes
         no options.
 
         Raises:

@@ -62,7 +62,7 @@ def install_hooks(root: Path) -> list[str]:
     `git lfs install --local` is idempotent: it writes the hooks and
     the checkout's filter configuration only where they are missing.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     if not (root / ".git").exists():
         return []

@@ -3,8 +3,8 @@
 Every error message names what was found and what was expected, so a
 caller prints it and a reader knows the next action. A caller that
 only wants to know "did the store refuse" catches
-[livery.strongroom.api.StoreError][]; one that retries on a lost race
-catches [livery.strongroom.api.RefConflict][].
+[livery.strongroom.StoreError][]; one that retries on a lost race
+catches [livery.strongroom.RefConflict][].
 """
 
 from __future__ import annotations

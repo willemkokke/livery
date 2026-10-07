@@ -24,8 +24,8 @@ from collections.abc import Callable
 from typing import Literal
 from urllib.parse import quote
 
+from livery.forge import Forge, ForgeError, GitlabForge, Repository, Run
 from livery.forge._http import JsonClient, Opener
-from livery.forge.api import Forge, ForgeError, GitlabForge, Repository, Run
 from livery.forge.testing import Outcome
 
 #: The pipeline every conformance project is seeded with.

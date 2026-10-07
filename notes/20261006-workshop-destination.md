@@ -3,7 +3,8 @@
 Status: ruled by Willem on 2026-10-07; every design question is closed
 and the extensions plan takes phases 10 to 16 from here. Written
 2026-10-06 against
-`origin/main` at `4f2a5e53`. Nothing here is built. The extensions plan
+`origin/main` at `4f2a5e53`. 10a is built (issue #1218); nothing
+else here is. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -305,8 +306,7 @@ public under the names in the next section.
 Ruling 5 puts every root's public names in its `__init__.py`. So a
 name below lives in `livery.workshop`, `livery.extensions.docs`,
 `livery.footman` or `livery.toolroom.tools`, or in a public module the
-entry module declares. `livery.workshop.api` is the path today; phase
-10a retires it.
+entry module declares.
 
 ### The declaration file
 
@@ -758,14 +758,14 @@ here; the mapping is in the decision record.
 
 ### Phase 10: the API as a contract, and its first consumers
 
-**10a, the entry module.** Every root's `api.py` becomes `__init__.py`
-in one wave, footman included (ruling 5);
-what need not load is imported under `TYPE_CHECKING` and served by
+**10a, the entry module: built (issue #1218).** Every root's `api.py`
+becomes `__init__.py` in one wave, footman included (ruling 5); what
+need not load is imported under `TYPE_CHECKING` and served by
 `__getattr__`; `tests/test_namespaces.py` pins the new shape;
 `typecomplete` verifies `__init__`; 10b's pins are written against the
 new path once. Acceptance: `fm check` exits 0;
 `fm workflow.release --local`; the startup measure
-(`fm commit --help`, 255 ms median today) does not rise.
+(`fm commit --help`, 255 ms median) does not rise.
 
 **10b, the declaration file and the schema.** Deliverables:
 
@@ -1139,6 +1139,15 @@ the stack, which this design neither needs nor rules out).
 - 2026-10-06: the brief's "No language extension exists yet", "the
   docs extension imports 20 private workshop modules" and "the eight
   tool extensions use 20 names" all hold on `4f2a5e53`.
+- 2026-10-07, 10a: the six roots with an entry module drop
+  `namespace = true` from `[tool.uv.build-backend]`, so `uv build`
+  refuses a root that lost its `__init__.py`; the workshop's wheel
+  keeps the flag for `livery.extensions.docs`, which has none. The
+  workshop no longer reads `api.py` as a root's mark or a version's
+  home. The bench's task entry points name `livery.toolroom.bench:tasks`,
+  because a lazy root has no group in its namespace for footman's
+  loader to adopt. `fm commit --help` measured 255 ms median before
+  and after, interleaved over 31 rounds.
 
 ## Open
 

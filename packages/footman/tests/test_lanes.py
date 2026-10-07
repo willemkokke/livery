@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from livery.footman.api import Context, lane, parallel, step, use_context
+from livery.footman import Context, lane, parallel, step, use_context
 
 # --- deadlock regressions ----------------------------------------------------
 #
@@ -22,8 +22,8 @@ from livery.footman.api import Context, lane, parallel, step, use_context
 
 _DEADLOCK_SOURCE = """
 import time
-import livery.footman.api as footman
-from livery.footman.api import step, task
+import livery.footman as footman
+from livery.footman import step, task
 
 db = footman.lane("db", reason="the one test database")
 
@@ -129,9 +129,7 @@ def test_two_claimants_serialise_and_unrelated_work_overlaps():
 def test_redeclaring_a_taken_name_is_a_provenance_refusal():
     lane("test-unique")
     with pytest.raises(ValueError, match=r"already declared at .*test_lanes"):
-        exec(
-            "from livery.footman.api import lane\nlane('test-unique')"
-        )  # a second site
+        exec("from livery.footman import lane\nlane('test-unique')")  # a second site
 
 
 def test_the_cwd_lane_applies_the_directory_for_the_hold(tmp_path):
@@ -140,7 +138,7 @@ def test_the_cwd_lane_applies_the_directory_for_the_hold(tmp_path):
             """
             import os
 
-            from livery.footman.api import cwd_lane, task
+            from livery.footman import cwd_lane, task
 
             @task(lanes=(cwd_lane,), cwd="asinvoked")
             def where() -> str:
@@ -163,7 +161,7 @@ def test_a_string_in_lanes_is_taught_at_the_declaration():
     # being clean of the name `migrate` nor leaves it behind for a later
     # test — it used to pass only by registration-order luck.
     from livery.footman import _registry as registry
-    from livery.footman.api import task
+    from livery.footman import task
 
     with registry.capture(), pytest.raises(TypeError, match="Lane handles, not str"):
 
@@ -173,7 +171,7 @@ def test_a_string_in_lanes_is_taught_at_the_declaration():
 
 def test_a_string_in_opts_lanes_is_taught():
     from livery.footman import _registry as registry
-    from livery.footman.api import task
+    from livery.footman import task
 
     with registry.capture():
 

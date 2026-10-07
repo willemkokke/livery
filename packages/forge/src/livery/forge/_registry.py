@@ -1,4 +1,4 @@
-"""The package-index reader: livery.forge.api.Registry over the simple API.
+"""The package-index reader: livery.forge.Registry over the simple API.
 
 One backend for every simple-API index, PyPI and the forges' own
 registries alike: the simple API is the one interface they share,
@@ -100,7 +100,7 @@ class SimpleRegistry:
 
         An unpublished name answers the empty tuple (the index's 404
         is that answer, not an error); an unreachable index raises
-        livery.forge.api.ForgeError with the reason, and so does an index
+        livery.forge.ForgeError with the reason, and so does an index
         whose answer is neither PEP 691 JSON nor PEP 503 HTML.
         """
         canonical = name.replace("_", "-").lower()

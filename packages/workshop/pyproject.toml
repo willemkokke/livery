@@ -105,9 +105,9 @@ livery-workshop-layout = "livery.workshop._pytest_layout"
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.workshop and
-# there is no livery/__init__.py anywhere in this repository.
-# The wheel carries the base and the docs extension, both namespaces:
-# the base's public names live in livery.workshop.api.
+# The wheel ships two roots under the PEP 420 namespace livery: the
+# base, livery.workshop, whose entry module is its __init__.py, and the
+# docs extension, livery.extensions.docs, a namespace with no public
+# names. The flag lets uv ship a root with no __init__.py.
 module-name = ["livery.workshop", "livery.extensions.docs"]
 namespace = true

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from livery.footman.api import fail
+from livery.footman import fail
 
 #: The nav block the emitter owns; an edit between these is drift.
 NAV_BEGIN = "# docs-nav:begin (generated; the emitter owns this block)"

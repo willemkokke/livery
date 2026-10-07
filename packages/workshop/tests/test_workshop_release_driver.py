@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
@@ -169,23 +169,20 @@ def test_rollback_restores_exactly_what_prepare_writes(
     assert git.is_clean()
 
 
-def test_rollback_restores_a_namespace_packages_api_version(
+def test_rollback_restores_the_version_in_a_roots_init(
     workspace: tuple[FakeForge, GitOps, Path],
 ) -> None:
-    # A namespace package keeps __version__ in its api.py, not in an
-    # __init__.py; the rollback restores what the stamper wrote there.
+    # A root keeps __version__ in its __init__.py; the rollback restores
+    # what the stamper wrote there.
     _fake, git, root = workspace
-    api = root / "packages" / "core" / "src" / "livery" / "core" / "api.py"
-    api.write_text('"""The API."""\n\n__version__ = "0.2.0"\n')
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "chore: an api module")
+    init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
     members = resolve_set(root, ("core",))
     from livery.workshop._release import prepare_release
 
     prepare_release(root, "packages/core", "9.9.9")
-    assert '__version__ = "9.9.9"' in api.read_text()
+    assert '__version__ = "9.9.9"' in init.read_text()
     rollback_prepare(root, members)
-    assert '__version__ = "0.2.0"' in api.read_text()
+    assert '__version__ = "0.2.0"' in init.read_text()
     assert git.is_clean()
 
 
@@ -1081,7 +1078,7 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     # under test with its argv recorded.
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._backends import _python
 
     _fake, _git_seam, root = workspace

@@ -21,10 +21,10 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import doc, fail
-from livery.forge.api import ForgeError, Repository, Run
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import doc, fail
+from livery.forge import ForgeError, Repository, Run
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
@@ -241,8 +241,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
             )
             if (package.directory / name).is_file()
         )
-        # Every file the kind's stamper writes a version into: a
-        # namespace package keeps `__version__` in its `api.py`. A kind
+        # Every file the kind's stamper writes a version into. A kind
         # that cannot name them restores the rest regardless.
         with contextlib.suppress(Exception):
             paths.extend(
@@ -1443,7 +1442,7 @@ def workflow_release_publish(
     """
     import os
 
-    from livery.forge.api import SimpleRegistry
+    from livery.forge import SimpleRegistry
     from livery.workshop._extensions import workspace_root
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import Registry, publish_release

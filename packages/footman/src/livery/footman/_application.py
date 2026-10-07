@@ -36,7 +36,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from livery.footman.api import __version__
+from livery.footman import __version__
 
 
 def _prefix_from(prog: str) -> str:

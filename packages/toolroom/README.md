@@ -4,7 +4,7 @@ Typed surfaces for command-line tools, generated from the tools
 themselves.
 
 ```python
-from livery.toolroom.tools.api import git, cmake, ruff
+from livery.toolroom.tools import git, cmake, ruff
 
 git.switch("-c", "release/v1.4")
 cmake.build("build", parallel=8)

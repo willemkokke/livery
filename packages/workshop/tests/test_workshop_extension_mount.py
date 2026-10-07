@@ -416,7 +416,7 @@ def test_a_extension_declaring_tools_off_the_shape_refuses_naming_it(
     _contract(tmp_path, '["acme.odd"]')
     with pytest.raises(RuntimeError, match=r"acme\.odd.*TOOLS"):
         _extensions.extension_tools(tmp_path)
-    from livery.footman.api import Failed
+    from livery.footman import Failed
     from livery.workshop._tools import requirements
 
     with pytest.raises(Failed, match=r"acme\.odd"):

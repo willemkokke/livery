@@ -212,11 +212,11 @@ def _write(path: Path, body: str) -> Path:
 def test_cascade_appends_new_names(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef a():...\n",
+        "from livery.footman import task\n@task\ndef a():...\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef b():...\n",
+        "from livery.footman import task\n@task\ndef b():...\n",
     )
     merged = _discover.load_tree([root, sub])
     assert set(merged.tasks) == {"a", "b"}
@@ -225,11 +225,11 @@ def test_cascade_appends_new_names(tmp_path):
 def test_cascade_local_overrides_by_name(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef build():\n    return 1\n",
+        "from livery.footman import task\n@task\ndef build():\n    return 1\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef build():\n    return 0\n",
+        "from livery.footman import task\n@task\ndef build():\n    return 0\n",
     )
     merged = _discover.load_tree([root, sub])
     # the local (svc) build wins, and is tagged with the svc directory
@@ -240,11 +240,11 @@ def test_cascade_local_overrides_by_name(tmp_path):
 def test_cascade_merges_groups(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import group\nd = group('dist')\n@d.task\ndef build():...\n",
+        "from livery.footman import group\nd = group('dist')\n@d.task\ndef build():...\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import group\nd = group('dist')\n@d.task\ndef deploy():...\n",
+        "from livery.footman import group\nd = group('dist')\n@d.task\ndef deploy():...\n",
     )
     merged = _discover.load_tree([root, sub])
     assert set(merged.groups["dist"].tasks) == {"build", "deploy"}
@@ -256,7 +256,7 @@ def test_cascade_isolates_sibling_helpers(tmp_path, capsys):
     (tmp_path / "helpers.py").write_text("VALUE = 'root'\n")
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\nimport helpers\n"
+        "from livery.footman import task\nimport helpers\n"
         "@task\ndef a():\n    print(helpers.VALUE)\n",
     )
     svc = tmp_path / "svc"
@@ -264,7 +264,7 @@ def test_cascade_isolates_sibling_helpers(tmp_path, capsys):
     (svc / "helpers.py").write_text("VALUE = 'svc'\n")
     sub = _write(
         svc / "tasks.py",
-        "from livery.footman.api import task\nimport helpers\n"
+        "from livery.footman import task\nimport helpers\n"
         "@task\ndef b():\n    print(helpers.VALUE)\n",
     )
     merged = _discover.load_tree([root, sub])
@@ -284,7 +284,7 @@ def test_cascade_isolates_sibling_packages_submodules(tmp_path, capsys):
     (tmp_path / "pkg" / "sub.py").write_text("VALUE = 'root'\n")
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\nimport pkg.sub\n"
+        "from livery.footman import task\nimport pkg.sub\n"
         "@task\ndef a():\n    print(pkg.sub.VALUE)\n",
     )
     svc = tmp_path / "svc"
@@ -293,7 +293,7 @@ def test_cascade_isolates_sibling_packages_submodules(tmp_path, capsys):
     (svc / "pkg" / "sub.py").write_text("VALUE = 'svc'\n")
     sub = _write(
         svc / "tasks.py",
-        "from livery.footman.api import task\nimport pkg.sub\n"
+        "from livery.footman import task\nimport pkg.sub\n"
         "@task\ndef b():\n    print(pkg.sub.VALUE)\n",
     )
     merged = _discover.load_tree([root, sub])
@@ -308,7 +308,7 @@ def test_failed_cascade_import_resets_registry(tmp_path):
     # in the global registry for the rest of the process.
     bad = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef ghost(): ...\n"
+        "from livery.footman import task\n@task\ndef ghost(): ...\n"
         "raise RuntimeError('boom')\n",
     )
     with pytest.raises(_discover.TasksImportError):
@@ -346,11 +346,11 @@ def test_explicit_config_keys_its_own_completion_manifest(tmp_path, monkeypatch)
     # refuses. It rides a (cwd, config) key now, exactly as -f does.
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef plainly(): ...\n",
+        "from livery.footman import task\n@task\ndef plainly(): ...\n",
     )
     _write(
         tmp_path / "alt_tasks.py",
-        "from livery.footman.api import task\n@task\ndef otherly(): ...\n",
+        "from livery.footman import task\n@task\ndef otherly(): ...\n",
     )
     (tmp_path / "alt.toml").write_text('tasks = "alt_tasks.py"\n')
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -369,11 +369,11 @@ def test_background_refresh_honours_the_cascade_setting(tmp_path, monkeypatch):
     # then refuses by name.
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef above(): ...\n",
+        "from livery.footman import task\n@task\ndef above(): ...\n",
     )
     _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef below(): ...\n",
+        "from livery.footman import task\n@task\ndef below(): ...\n",
     )
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -390,18 +390,18 @@ def test_background_refresh_honours_the_cascade_setting(tmp_path, monkeypatch):
 def test_cascade_tags_defining_dir(tmp_path):
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef a():...\n",
+        "from livery.footman import task\n@task\ndef a():...\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef b():...\n",
+        "from livery.footman import task\n@task\ndef b():...\n",
     )
     merged = _discover.load_tree([root, sub])
     assert _discover.defining_dir(merged.tasks["a"]) == str(tmp_path)
     assert _discover.defining_dir(merged.tasks["b"]) == str(tmp_path / "svc")
 
 
-SHARED = "from livery.footman import _context as context\nfrom livery.footman.api import task\n@task\ndef where():\n    pass\n"
+SHARED = "from livery.footman import _context as context\nfrom livery.footman import task\n@task\ndef where():\n    pass\n"
 
 
 def test_one_task_at_two_addresses_with_two_folders_is_refused(tmp_path):
@@ -413,11 +413,11 @@ def test_one_task_at_two_addresses_with_two_folders_is_refused(tmp_path):
     _write(tmp_path / "shared.py", SHARED)
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import include\ninclude('shared', into='rootside')\n",
+        "from livery.footman import include\ninclude('shared', into='rootside')\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import include\ninclude('shared', into='svcside')\n",
+        "from livery.footman import include\ninclude('shared', into='svcside')\n",
     )
     with pytest.raises(_discover.TasksImportError) as caught:
         _discover.load_tree([root, sub])
@@ -435,11 +435,11 @@ def test_a_nearer_file_may_shadow_the_same_task_with_itself(tmp_path):
     _write(tmp_path / "shared.py", SHARED)
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import include\ninclude('shared')\n",
+        "from livery.footman import include\ninclude('shared')\n",
     )
     sub = _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import include\ninclude('shared')\n",
+        "from livery.footman import include\ninclude('shared')\n",
     )
     merged = _discover.load_tree([root, sub])
     assert _discover.defining_dir(merged.tasks["where"]) == str(tmp_path / "svc")
@@ -452,15 +452,15 @@ def test_two_providers_may_share_a_helper(tmp_path):
     _write(tmp_path / "common.py", SHARED)
     _write(
         tmp_path / "alpha.py",
-        "from livery.footman.api import include\ninclude('common')\n",
+        "from livery.footman import include\ninclude('common')\n",
     )
     _write(
         tmp_path / "beta.py",
-        "from livery.footman.api import include\ninclude('common')\n",
+        "from livery.footman import include\ninclude('common')\n",
     )
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import include\n"
+        "from livery.footman import include\n"
         "include('alpha', into='alpha')\ninclude('beta', into='beta')\n",
     )
     merged = _discover.load_tree([root])
@@ -475,7 +475,7 @@ def test_a_second_load_may_restamp_the_same_function(tmp_path):
     _write(tmp_path / "shared.py", SHARED)
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import include\ninclude('shared')\n",
+        "from livery.footman import include\ninclude('shared')\n",
     )
     assert _discover.load_tree([root]).tasks["where"] is not None
     merged = _discover.load_tree([root])  # would refuse if the claim persisted
@@ -487,7 +487,7 @@ def test_load_tree_leaves_no_global_state(tmp_path):
 
     root = _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef a():...\n",
+        "from livery.footman import task\n@task\ndef a():...\n",
     )
     _discover.load_tree([root])
     assert registry.root.tasks == {}  # reset after building
@@ -666,13 +666,13 @@ def mono(tmp_path, monkeypatch):
     (tmp_path / ".git").mkdir()
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "@task\ndef build():\n    print('root-build')\n"
         "@task\ndef test():\n    print('root-test')\n",
     )
     _write(
         tmp_path / "svc" / "api" / "tasks.py",
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "@task\ndef serve():\n    print('api-serve')\n"
         "@task\ndef build():\n    print('api-build')\n",
     )
@@ -706,13 +706,13 @@ def test_ceiling_excludes_files_above_git(tmp_path, monkeypatch, capsys):
     # whose ceiling walk reached it, invisibly in alphabetical runs.
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef outside():...\n",
+        "from livery.footman import task\n@task\ndef outside():...\n",
     )
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     _write(
         repo / "svc" / "api" / "tasks.py",
-        "from livery.footman.api import task\n@task\ndef serve():...\n",
+        "from livery.footman import task\n@task\ndef serve():...\n",
     )
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
     monkeypatch.chdir(repo / "svc" / "api")
@@ -746,7 +746,7 @@ def test_config_tasks_filename_in_cascade(mono, monkeypatch, capsys):
     _write(mono / "footman.toml", "tasks = 'jobs.py'\n")
     _write(
         mono / "jobs.py",
-        "from livery.footman.api import task\n@task\ndef custom():\n    print('via-jobs')\n",
+        "from livery.footman import task\n@task\ndef custom():\n    print('via-jobs')\n",
     )
     monkeypatch.chdir(mono)
     assert _app.run(["custom"]) == 0
@@ -765,14 +765,14 @@ def _inherit_repo(tmp_path, monkeypatch, leaf_body: str):
     # `usr/bin` is on PATH).
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "@task\ndef check(fix: bool = False):\n"
         '    """Root gate."""\n'
         '    print(f"root fix={fix}")\n',
     )
     _write(
         tmp_path / "svc" / "tasks.py",
-        "from livery.footman.api import inherited, task\n"
+        "from livery.footman import inherited, task\n"
         "@task\ndef check(fix: bool = False):\n"
         '    """Mid gate."""\n'
         "    inherited()(fix=fix)\n"
@@ -785,7 +785,7 @@ def _inherit_repo(tmp_path, monkeypatch, leaf_body: str):
 
 
 LEAF = (
-    "from livery.footman.api import inherited, task\n"
+    "from livery.footman import inherited, task\n"
     "@task\ndef check(fix: bool = False, contracts: bool = True):\n"
     '    """Leaf gate."""\n'
     "    inherited()(fix=fix)\n"
@@ -806,8 +806,7 @@ def test_inherited_names_the_task_it_calls(tmp_path, monkeypatch, capsys):
     # functools.wraps keeps the name, so `parallel(inherited(), extra)`
     # labels its live line honestly instead of showing an anonymous call.
     _inherit_repo(tmp_path, monkeypatch, LEAF)
-    from livery.footman import _discover
-    from livery.footman.api import Context, inherited, use_context
+    from livery.footman import Context, _discover, inherited, use_context
 
     files = _paths.task_files(Path.cwd(), tmp_path)
     tree = _discover.load_tree(files)
@@ -819,7 +818,7 @@ def test_inherited_forwarding_is_explicit(tmp_path, monkeypatch, capsys):
     # The leaf chooses what to pass: the root never sees --contracts, and
     # can be given a different value entirely.
     leaf = (
-        "from livery.footman.api import inherited, task\n"
+        "from livery.footman import inherited, task\n"
         "@task\ndef check(fix: bool = False, contracts: bool = True):\n"
         '    """Leaf gate."""\n'
         "    inherited()(fix=False)\n"
@@ -833,7 +832,7 @@ def test_inherited_without_a_shadow_is_taught(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     _write(
         tmp_path / "tasks.py",
-        "from livery.footman.api import inherited, task\n"
+        "from livery.footman import inherited, task\n"
         "@task\ndef solo():\n"
         '    """No parent."""\n'
         "    inherited()\n",
@@ -884,7 +883,7 @@ def _three_level_tree(tmp_path):
     (repo / ".git").mkdir()
     for d in (outer, repo, pkg):
         (d / "tasks.py").write_text(
-            "from livery.footman.api import task\n", encoding="utf-8"
+            "from livery.footman import task\n", encoding="utf-8"
         )
     return outer, repo, pkg
 

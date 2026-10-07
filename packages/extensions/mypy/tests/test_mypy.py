@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 import livery.extensions.mypy._extension as declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.mypy import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -115,7 +115,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
 def test_a_platform_that_fails_fails_the_call_and_the_others_still_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.footman.api import fail
+    from livery.footman import fail
 
     ran: list[str] = []
 

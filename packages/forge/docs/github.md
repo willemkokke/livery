@@ -1,6 +1,6 @@
 # GitHub backend
 
-`livery.forge.api.GithubForge`: the protocol over REST v3 plus the one
+`livery.forge.GithubForge`: the protocol over REST v3 plus the one
 GraphQL pair auto-merge requires.
 
 ## Construction and the token rule
@@ -32,7 +32,7 @@ answers for the running install.
 - Auto-merge is GraphQL only (`enablePullRequestAutoMerge` /
   `disablePullRequestAutoMerge`); everything else is REST. GraphQL
   failures answer 200 with an `errors` array, which the backend
-  raises as `livery.forge.api.ForgeError` with GitHub's words verbatim.
+  raises as `livery.forge.ForgeError` with GitHub's words verbatim.
 - GitHub only arms a pull request that something blocks: the
   repository needs `allow_auto_merge` on and branch protection naming
   required contexts (the check context is the job name). Re-arming

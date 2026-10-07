@@ -219,7 +219,7 @@ def test_conformance_replays_by_default_and_probes_the_forges_when_live(
     from types import SimpleNamespace
     from typing import cast
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     runs: list[tuple[tuple[str, ...], dict[str, str]]] = []
 

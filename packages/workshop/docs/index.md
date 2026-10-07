@@ -457,12 +457,12 @@ absence.
 
 - `fm check`: format, lint, four gating type checkers, public-API
   type-completeness, the tests with per-package coverage floors, and
-  the render gate. Type-completeness covers what each root declares:
-  a namespace root's `api`, or a root that is a regular package. A
-  public package beneath a root keeps its own import path and is
-  declared in the root's `api` as well, imported under `TYPE_CHECKING`
-  and listed in `__all__`, and the verifier follows the declaration
-  into it; `py.typed` sits at the distribution's root. Every gate walks the check registry the same way,
+  the render gate. Type-completeness covers what each root declares
+  in its `__init__`; a namespace root, one with no `__init__`, declares
+  nothing. A public package beneath a root keeps its own import path
+  and is declared in the root's `__init__` as well, imported under
+  `TYPE_CHECKING` and listed in `__all__`, and the verifier follows the
+  declaration into it; `py.typed` sits at the distribution's root. Every gate walks the check registry the same way,
   whole or narrowed, on a machine or on a leg: under `--fix` every
   fixer that applies rewrites first, one at a time, then every judge
   runs in one parallel block, a check that rewrote not judged again;

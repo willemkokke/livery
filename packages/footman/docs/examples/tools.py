@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
-from livery.footman.api import task, run
-from livery.toolroom.tools.api import pytest, ruff
+from livery.footman import task, run
+from livery.toolroom.tools import pytest, ruff
 
 
 @task
@@ -12,7 +12,7 @@ def check():
 
 # --8<-- [start:part-2]
 from pathlib import Path
-from livery.footman.api import fetch, task
+from livery.footman import fetch, task
 
 
 @task
@@ -26,8 +26,8 @@ def vendor():
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.footman.api import passthrough, task
-from livery.toolroom.tools.api import pytest
+from livery.footman import passthrough, task
+from livery.toolroom.tools import pytest
 
 
 @task
@@ -36,7 +36,7 @@ def test():
 # --8<-- [end:part-3]
 
 # --8<-- [start:part-4]
-from livery.footman.api import Context, task, run
+from livery.footman import Context, task, run
 
 
 @task

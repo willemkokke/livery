@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop.api import extension_names, mount_extensions, workspace_root
+from livery.workshop import extension_names, mount_extensions, workspace_root
 
 ROOT = Path(__file__).resolve().parents[3]
 

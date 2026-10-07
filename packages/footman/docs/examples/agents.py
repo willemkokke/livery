@@ -1,7 +1,7 @@
 # --8<-- [start:part-1]
 from dataclasses import dataclass, field
 from typing import Annotated
-from livery.footman.api import RunFailed, fail, group, stdin, task
+from livery.footman import RunFailed, fail, group, stdin, task
 
 hooks = group("hooks", hidden=True, help="Agent lifecycle hooks")
 

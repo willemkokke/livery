@@ -64,7 +64,7 @@ adds is that somebody named it, which `given()` reports:
 
 
 ```python
-from livery.footman.api import task, given
+from livery.footman import task, given
 
 
 @task

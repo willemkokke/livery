@@ -9,8 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.strongroom import _lifecycle
-from livery.strongroom.api import (
+from livery.strongroom import (
     Clock,
     Digest,
     Entry,
@@ -28,6 +27,7 @@ from livery.strongroom.api import (
     Tombstone,
     Tree,
     Version,
+    _lifecycle,
     digest_of,
 )
 

@@ -6,7 +6,7 @@ below is this extension's namespace: hang the extension's own verbs on it,
 or leave it empty while the extension ships content alone.
 """
 
-from livery.footman.api import group
+from livery.footman import group
 
 {{ project_slug }} = group(
     "{{ project_slug }}", help="the {{ project_slug }} extension's verbs"

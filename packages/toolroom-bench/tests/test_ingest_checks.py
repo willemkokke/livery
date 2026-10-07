@@ -14,11 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from livery.strongroom.api import FolderSource, digest_of
-from livery.strongroom.api import Store as ObjectStore
+from livery.strongroom import FolderSource, digest_of
+from livery.strongroom import Store as ObjectStore
 from livery.toolroom.bench import _ingest
-from livery.toolroom.store import _engine
-from livery.toolroom.store.api import (
+from livery.toolroom.store import (
     Artifact,
     Home,
     Layout,
@@ -26,6 +25,7 @@ from livery.toolroom.store.api import (
     RecordDelta,
     Store,
     Surface,
+    _engine,
 )
 from toolroom_bench_readings import repository_records  # noqa: F401
 
@@ -273,7 +273,7 @@ def test_a_version_that_passes_reports_every_host_and_its_diff(tmp_path, monkeyp
 def test_the_verify_verb_prints_the_report_and_is_red_on_a_finding(
     tmp_path, monkeypatch, capsys
 ):
-    from livery.footman.api import Failed
+    from livery.footman import Failed
     from livery.toolroom.bench import _tasks
 
     rig = _Rig(tmp_path, monkeypatch)

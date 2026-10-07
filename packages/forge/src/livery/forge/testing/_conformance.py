@@ -19,7 +19,7 @@ on a real forge, and no scenario ever sleeps.
 
 Scenarios assert the contract and only the contract: where forges may
 legitimately differ, the scenario either probes
-livery.forge.api.Forge.supports or does not look.
+livery.forge.Forge.supports or does not look.
 """
 
 from __future__ import annotations

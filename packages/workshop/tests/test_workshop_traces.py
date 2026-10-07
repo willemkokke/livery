@@ -335,7 +335,7 @@ def test_a_good_into_is_read_and_a_wrong_key_stops_the_push(
 
 def _forge(jobs: tuple[object, ...], *, created: str = "") -> object:
     """A repository answering one run's jobs, and the run itself when asked."""
-    from livery.forge.api import Run
+    from livery.forge import Run
 
     run = Run(
         77,
@@ -370,7 +370,7 @@ def _job(
     conclusion: str = "success",
     steps: tuple[object, ...] = (),
 ) -> object:
-    from livery.forge.api import Job
+    from livery.forge import Job
 
     return Job(1, name, status, conclusion, started, completed, steps)  # type: ignore[arg-type]
 
@@ -427,7 +427,7 @@ def _epoch(stamp: str) -> float:
 def test_a_run_the_forge_cannot_be_asked_about_assembles_nothing(work: Path) -> None:
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     repo = cast(Repository, cast(Any, _forge(())))
     made = _traces.assemble(work, repo, "not-a-number")
@@ -441,7 +441,7 @@ def test_a_leg_whose_trace_will_not_parse_is_named_and_the_others_assemble(
 ) -> None:
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     _pushed(
@@ -478,7 +478,7 @@ def test_the_run_is_its_jobs_their_steps_and_every_leg_that_left_a_trace(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository, Step
+    from livery.forge import Repository, Step
 
     created = "2026-09-27T10:00:00Z"
     late, early = "2026-09-27T10:00:30Z", "2026-09-27T10:00:05Z"
@@ -548,7 +548,7 @@ def test_a_channel_that_cannot_be_listed_still_assembles_the_skeleton(
     """Origin unreachable: the forge's own times are the whole answer."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
@@ -565,7 +565,7 @@ def test_a_stamp_the_forge_spells_wrongly_is_not_a_moment(
     """A job whose times do not parse is drawn as one that has none."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository, Step
+    from livery.forge import Repository, Step
 
     jobs = (
         _job("check", started="yesterday", completed="today"),
@@ -592,7 +592,7 @@ def test_a_run_the_forge_does_not_list_draws_no_waits(
     """The wait before a job needs the run's own acceptance; without it, none."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
@@ -609,7 +609,7 @@ def test_a_legs_ref_without_a_trace_on_it_is_named(
     """A ref the channel holds that carries no trace is said, not assumed."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     _in_ci(monkeypatch, run="77", leg="check")
     ref = _traces.TRACES.series("77", "check").ref
@@ -627,7 +627,7 @@ def test_a_ref_the_channel_cannot_read_names_the_job_it_belonged_to(
     """Whatever the store refuses, the line says which job it was about."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     _pushed(work, monkeypatch, leg="check", origin=1.0, tasks={"check": 1.0})
     monkeypatch.setattr(
@@ -655,7 +655,7 @@ def test_a_forge_stamp_without_an_offset_is_read_as_utc(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     if not hasattr(time, "tzset"):
         pytest.skip("no tzset: the zone cannot be moved from inside the process")
@@ -700,7 +700,7 @@ def test_a_command_keeping_no_trace_drops_nothing(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     asked: list[str] = []
 
@@ -732,7 +732,7 @@ def test_the_run_a_command_followed_joins_its_own_trace(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     _pushed(
@@ -756,7 +756,7 @@ def test_a_run_is_written_where_a_person_can_open_it(
 ) -> None:
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     _pushed(
@@ -786,7 +786,7 @@ def test_a_run_whose_traces_have_aged_out_writes_the_skeleton_alone(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
@@ -806,7 +806,7 @@ def test_a_run_nobody_can_name_refuses_to_write_a_file(
 ) -> None:
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     repo = cast(Repository, cast(Any, _forge(())))
     path, lines = _traces.write_run(work, repo, head_sha="abc123")
@@ -836,7 +836,7 @@ def test_a_trace_can_never_fail_the_command_it_watched(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     box = work / "box"
     box.mkdir()
@@ -864,7 +864,7 @@ def test_a_matrix_leg_joins_its_job_by_the_name_the_forge_uses(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     began = "2026-09-27T10:00:00Z"
     forge_name = "check (ubuntu-latest, 3.14)"
@@ -893,7 +893,7 @@ def test_a_job_the_forge_gave_no_extent_is_an_event_and_never_a_span(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository, Step
+    from livery.forge import Repository, Step
 
     jobs = (
         # Ends a second before it starts, as a skipped job came back.
@@ -940,7 +940,7 @@ def test_a_trace_outside_its_jobs_span_is_said_and_never_drawn(
     """
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     created = "2026-09-27T11:00:00Z"
     # A trace that began before the job the forge timed.
@@ -987,7 +987,7 @@ def test_a_jobs_entries_and_its_residue_add_up_to_the_span_the_forge_reported(
     """The point of the residue: a reader adds a job up and nothing is missing."""
     from typing import Any, cast
 
-    from livery.forge.api import Repository
+    from livery.forge import Repository
 
     created = "2026-09-27T12:00:00Z"
     _pushed(
@@ -1069,7 +1069,7 @@ def test_a_commit_nobody_can_walk_from_is_a_root_and_a_loop_cannot_spin(
     """
     from typing import cast
 
-    from livery.forge.api import PullRequest, Repository
+    from livery.forge import PullRequest, Repository
 
     class _Checks:
         def runs(self, *, head_sha: str = "", event: str = "") -> tuple[object, ...]:

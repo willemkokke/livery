@@ -27,7 +27,7 @@ def installed_entry_points(group: str | None = None) -> tuple[EntryPoint, ...]:
     The first call scans every installed distribution; every later call
     in the process answers from that scan. A process that installs a
     distribution and must see it calls
-    [livery.footman.api.rescan_entry_points][] first.
+    [livery.footman.rescan_entry_points][] first.
     """
     global _SCAN
     if _SCAN is None:

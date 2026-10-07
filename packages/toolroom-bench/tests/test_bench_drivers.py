@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 
 
 def test_manual_source_driver_is_never_extracted():
@@ -67,7 +67,7 @@ def test_negation_table_matches_what_the_tools_say():
     import mkdocs.__main__ as entry
 
     from livery.toolroom.bench._toolspec import from_click
-    from livery.toolroom.tools.api import _NEGATIONS
+    from livery.toolroom.tools import _NEGATIONS
 
     assert from_click(entry.cli, name="mkdocs").negations() == _NEGATIONS["mkdocs"]
 
@@ -83,7 +83,7 @@ def test_wrappers_table_matches_what_the_tools_declare():
     # so drift fails fast in the local `fm check` gate. Skipped in CI (marker
     # above): CI's tool versions differ from the curated table.
     from livery.toolroom.bench import _drivers
-    from livery.toolroom.tools.api import _WRAPPERS
+    from livery.toolroom.tools import _WRAPPERS
 
     for driver in _drivers.DRIVERS:
         if driver.base or not _drivers.installed(driver):

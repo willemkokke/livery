@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import livery.footman.api as footman
-from livery.footman.api import fail
+import livery.footman as footman
+from livery.footman import fail
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
@@ -214,10 +214,10 @@ def dev_release(
     refusal costs nothing. With ``local`` (or with no custom index
     configured, which degrades to the same run and says so) nothing
     leaves the machine and nothing is asked. A publish always confirms
-    per member. Where nobody can answer, ``livery.footman.api.confirm``
+    per member. Where nobody can answer, ``livery.footman.confirm``
     takes its default no and the refusal teaches the explicit
     ``--yes``: a decline and an unanswered question are told apart by
-    [livery.footman.api.attended][], which knows about ``--no-input`` and
+    [livery.footman.attended][], which knows about ``--no-input`` and
     ``--dry-run`` as well as the terminal, so silence never publishes
     under any of them.
     """

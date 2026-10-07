@@ -10,8 +10,8 @@ replaces `run_typecheck` here sees its replacement called.
 
 from __future__ import annotations
 
-import livery.toolroom.tools.api as tools
-from livery.workshop.api import CheckRecord, Claim, GateContext
+import livery.toolroom.tools as tools
+from livery.workshop import CheckRecord, Claim, GateContext
 
 #: The kinds whose python files pyrefly judges.
 KINDS = ("python",)

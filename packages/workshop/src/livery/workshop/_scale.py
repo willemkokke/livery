@@ -48,9 +48,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import doc, fail
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import doc, fail
 from livery.workshop._ci_tasks import ci
 
 #: The members a fixture holds by default, per template kind.

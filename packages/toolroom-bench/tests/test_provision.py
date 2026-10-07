@@ -50,7 +50,7 @@ def test_only_takes_a_set_of_tools(tmp_path):
 
 def test_a_spent_fetch_is_a_provision_error_naming_the_url(tmp_path, monkeypatch):
     """The retry lives in the store; what the bench adds is its own refusal."""
-    from livery.toolroom.store.api import FetchError
+    from livery.toolroom.store import FetchError
 
     def spent(url, *_a, **_kw):
         raise FetchError(f"{url}: reset", status=None)
@@ -70,7 +70,7 @@ def test_strict_turns_a_failed_tier_into_a_failed_run(tmp_path, monkeypatch):
     — cspell and markdownlint were skipped for want of the tool that had
     failed two steps earlier.
     """
-    from livery.footman.api import Failed
+    from livery.footman import Failed
     from livery.toolroom.bench import _tasks as tools
 
     outcomes = [

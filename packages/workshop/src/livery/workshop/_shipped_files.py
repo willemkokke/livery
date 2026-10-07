@@ -27,8 +27,8 @@ from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
-from livery.footman import api as footman
-from livery.footman.api import fail
+import livery.footman as footman
+from livery.footman import fail
 from livery.workshop._extensions import (
     SELF,
     declaration,

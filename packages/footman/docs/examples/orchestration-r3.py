@@ -1,6 +1,6 @@
 # The page shows the part below. The lines above it give the part the
 # names the page's earlier examples defined.
-from livery.footman.api import task
+from livery.footman import task
 
 
 @task
@@ -17,7 +17,7 @@ def test(): ...
 
 # --8<-- [start:part-1]
 from typing import Annotated
-from livery.footman.api import task
+from livery.footman import task
 from livery.footman._params import forward
 
 

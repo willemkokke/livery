@@ -52,7 +52,7 @@ with `origin/main`.
   starts warm; `fm env.set KEY --scope=shared` writes it.
 - Failure reasons are printed verbatim, never read as booleans.
 - Whether a person is there is one question with one answer:
-  `livery.footman.api.attended()`, which knows `--no-input` and
+  `livery.footman.attended()`, which knows `--no-input` and
   `--dry-run` as well as the terminal. A module that imports the
   runner never asks the terminal itself, because a hand-rolled check
   ignores those flags in silence, and the layering lint refuses one.
@@ -109,7 +109,7 @@ pushed alone.
 ## Layering
 
 Dependencies point only downward; the workspace's layering lint
-(`livery.workshop.api.verify_workspace`) enforces the contract graph. The
+(`livery.workshop.verify_workspace`) enforces the contract graph. The
 importable namespace is PEP 420: **never create a namespace-level
 `__init__.py`**.
 
@@ -143,7 +143,7 @@ This is the final form; there are no typing clean-up passes later.
 - The voice and word rules of the imported guidance fragments apply to
   docstrings the same as to every other published sentence.
 - Refer to other objects by their full public import path, wrapped
-  as a reference (`[livery.forge.api.Forge][]`), so generated API docs
+  as a reference (`[livery.forge.Forge][]`), so generated API docs
   cross-link them across packages; a bare dotted path stays plain
   text.
 

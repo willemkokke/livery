@@ -10,11 +10,17 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
-from livery.strongroom.api import Store as ObjectStore
-from livery.strongroom.api import digest_of
-from livery.toolroom.store import _engine
-from livery.toolroom.store.api import Artifact, Layout, Record, RecordDelta, Surface
+from livery.footman import Failed
+from livery.strongroom import Store as ObjectStore
+from livery.strongroom import digest_of
+from livery.toolroom.store import (
+    Artifact,
+    Layout,
+    Record,
+    RecordDelta,
+    Surface,
+    _engine,
+)
 from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
 from workshop_hosts import (  # noqa: F401
     HOSTS,
@@ -721,7 +727,7 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
     path = tmp_path / "tea.json"
     path.write_text(json.dumps(receipt.to_json()))
     assert _tools.Receipt.load(path) == receipt
-    from livery.toolroom.store.api import default_mode
+    from livery.toolroom.store import default_mode
 
     assert (
         default_mode("download"),

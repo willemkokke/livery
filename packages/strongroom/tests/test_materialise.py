@@ -13,8 +13,7 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import _rungs, _store, _views
-from livery.strongroom.api import (
+from livery.strongroom import (
     PATH_BUDGET,
     Digest,
     Entry,
@@ -33,6 +32,9 @@ from livery.strongroom.api import (
     Unreachable,
     ViewEntry,
     ViewRecord,
+    _rungs,
+    _store,
+    _views,
     digest_of,
 )
 

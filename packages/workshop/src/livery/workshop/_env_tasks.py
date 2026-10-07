@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as toolroom
-from livery.footman.api import Arg, Stdout, doc, fail, group, pre_tasks
-from livery.forge.api import RepoConfig
+import livery.footman as footman
+import livery.toolroom.tools as toolroom
+from livery.footman import Arg, Stdout, doc, fail, group, pre_tasks
+from livery.forge import RepoConfig
 from livery.workshop._envfile import (
     Source,
     cascade_dirs,
@@ -59,7 +59,7 @@ def _workspace() -> tuple[Path, Path]:
 
 def _shared_dir() -> Path:
     """Where ``.repo.shared.env`` lives: the runner's config directory."""
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     return footman.config_dir()
 
@@ -181,7 +181,7 @@ def _warn_unmounted_extensions(root: Path) -> None:
     ]
     if not declared:
         return
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     sys.stderr.write(
         f"{footman.prog()}: the contract declares extensions"
@@ -770,7 +770,7 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
     The protocol's secret store is write-only and carries no delete,
     so an empty value is a refusal naming the forge's own controls.
     """
-    from livery.forge.api import Unsupported
+    from livery.forge import Unsupported
     from livery.workshop._forge_lane import admin_repository
 
     if not value:

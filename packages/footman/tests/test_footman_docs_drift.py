@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import livery.footman.api as footman
+import livery.footman as footman
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -217,8 +217,8 @@ def _documented_jq() -> list[tuple[str, str]]:
 RECIPES = _documented_jq()
 
 _ENVELOPE_TASKS = """
-import livery.footman.api as footman
-from livery.footman.api import task
+import livery.footman as footman
+from livery.footman import task
 
 
 @task

@@ -109,7 +109,7 @@ def test_a_birth_test_that_reaches_the_network_refuses_naming_the_host() -> None
     # The fallback before the births: a fetch the fakes miss fails here,
     # by name, rather than passing or failing with whatever the live
     # site answers at that moment.
-    from livery.strongroom.api import fetch_url
+    from livery.strongroom import fetch_url
 
     with (
         pytest.raises(
@@ -134,7 +134,7 @@ def test_the_verb_is_offered_outside_a_project_and_inside_one(tmp_path: Path) ->
     bridge = tmp_path / "bridge-config"
     bridge.mkdir()
     (bridge / "tasks.py").write_text(
-        'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
+        'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -414,7 +414,7 @@ def test_the_birth_finishes_with_the_runner_its_environment_holds(
     ) -> None:
         seen.append((argv, cwd, capture))
 
-    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr("livery.footman.run", _run)
     before = Path.cwd()
     _REAL_HAND_OFF(tmp_path, owner="acme", local=True)
     # Inside the project, sharing the console, passing what the

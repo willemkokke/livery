@@ -353,7 +353,7 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
 def test_the_runner_spawns_each_entry_with_the_legs_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -527,7 +527,7 @@ def test_a_dispatched_points_inputs_reach_its_entries(
 ) -> None:
     import json
 
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -579,7 +579,7 @@ def test_a_dispatched_points_inputs_reach_its_entries(
 def test_the_nightly_point_runs_the_whole_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -703,7 +703,7 @@ def test_a_job_that_went_red_still_keeps_its_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A red job's timeline is the one most worth having."""
-    from livery.footman.api import Failed
+    from livery.footman import Failed
     from livery.workshop import _traces
 
     root = _root(tmp_path)

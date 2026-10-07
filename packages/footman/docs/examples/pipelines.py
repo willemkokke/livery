@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 from typing import Annotated
-from livery.footman.api import Stdout, stdin, task
+from livery.footman import Stdout, stdin, task
 
 
 @task
@@ -32,7 +32,7 @@ def on_edit(event: Annotated[Event, stdin]) -> None:
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-from livery.footman.api import run, task
+from livery.footman import run, task
 
 
 @task

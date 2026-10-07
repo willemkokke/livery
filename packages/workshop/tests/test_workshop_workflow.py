@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
-from livery.forge.api import ForgeError
+from livery.footman import Failed
+from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._diagnostics import gather_bundle, record
 from livery.workshop._git_ops import GitOps
@@ -632,7 +632,7 @@ def test_a_merged_workflow_is_found_by_sha_after_branch_deletion(
     # A forge that auto-deletes the head branch strips head_branch off
     # the merged PR; the gather must fall back to the branch head sha
     # or a completed workflow reads as having no PR at all.
-    from livery.forge.api import RepoConfig
+    from livery.forge import RepoConfig
 
     fake, git = engine_rig
     repo = _repo(fake)
@@ -681,7 +681,7 @@ def test_the_interactive_picker_asks_and_silence_stops(
     first = _wf(WorkflowState.FAILED, name="release/forge")
     second = _wf(WorkflowState.PREPARING, name="update/dependencies")
     # Declining the select aborts nothing, ever.
-    monkeypatch.setattr("livery.footman.api.select", lambda message, options: None)
+    monkeypatch.setattr("livery.footman.select", lambda message, options: None)
     with pytest.raises(SystemExit) as caught:
         abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     assert "nothing aborted" in str(caught.value)
@@ -690,9 +690,7 @@ def test_the_interactive_picker_asks_and_silence_stops(
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
     git.switch("main")
-    monkeypatch.setattr(
-        "livery.footman.api.select", lambda message, options: options[1][1]
-    )
+    monkeypatch.setattr("livery.footman.select", lambda message, options: options[1][1])
     monkeypatch.setattr(
         "livery.workshop._workflow_tasks._reconcile_configuration",
         lambda _git, _sha: None,
@@ -808,7 +806,7 @@ def test_engine_says_nothing_to_submit_when_prepare_answers_none(
 def test_engine_tidies_its_own_leftover_then_starts_fresh(
     engine_rig: tuple[FakeForge, _EngineGit],
 ) -> None:
-    from livery.forge.api import RepoConfig
+    from livery.forge import RepoConfig
     from livery.workshop._workflow_engine import run_workflow
 
     fake, git = engine_rig

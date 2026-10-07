@@ -38,7 +38,7 @@ def test_a_global_option_parses_freezes_and_answers(tmp_path):
         textwrap.dedent(
             """
             from typing import Literal
-            from livery.footman.api import GlobalOption, task
+            from livery.footman import GlobalOption, task
 
             MODE = GlobalOption(
                 "lint-mode", Literal["loose", "strict"],
@@ -275,7 +275,7 @@ def test_suggest_answers_a_global_by_name(tmp_path, monkeypatch):
             from pathlib import Path
             from typing import Annotated
 
-            from livery.footman.api import GlobalOption, task
+            from livery.footman import GlobalOption, task
             from livery.footman._params import env, suggest
 
             def _targets():
@@ -568,8 +568,8 @@ def test_a_literal_no_x_beside_a_bool_x_is_refused():
 
 
 _SECTIONED = """
-import livery.footman.api as footman
-from livery.footman.api import GlobalOption, task
+import livery.footman as footman
+from livery.footman import GlobalOption, task
 
 footman.config_section("devkit")
 REGION = GlobalOption("region", str, default="eu", config=True)
@@ -603,9 +603,9 @@ def test_env_outranks_config_for_a_global(tmp_path, monkeypatch):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman.api as footman
+            import livery.footman as footman
             from typing import Annotated
-            from livery.footman.api import GlobalOption, task
+            from livery.footman import GlobalOption, task
             from livery.footman._params import env
 
             footman.config_section("devkit")
@@ -633,8 +633,8 @@ def test_a_broken_plugin_config_value_teaches_with_the_keys_address(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            import livery.footman.api as footman
-            from livery.footman.api import GlobalOption, task
+            import livery.footman as footman
+            from livery.footman import GlobalOption, task
 
             footman.config_section("devkit")
             LEVEL = GlobalOption("level", int, default=1, config=True)

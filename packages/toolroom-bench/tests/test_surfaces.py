@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from livery.toolroom.bench import _surfaces
-from livery.toolroom.store.api import Option, RecordError, ToolSpec, Verb
+from livery.toolroom.store import Option, RecordError, ToolSpec, Verb
 from toolroom_bench_readings import (
     chain_of,
     described,
@@ -436,7 +436,7 @@ def test_a_version_tracked_but_never_read_takes_its_first_reading():
     read. Its first reading is placed on it, and a merge into it is the
     same first reading, never a fold into a surface it does not have.
     """
-    from livery.toolroom.store.api import Artifact, Layout, Record, RecordDelta
+    from livery.toolroom.store import Artifact, Layout, Record, RecordDelta
 
     sha = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
     record = Record(
@@ -1088,7 +1088,7 @@ def test_the_same_release_is_observed_once_per_run(tmp_path, monkeypatch):
     request for the same (tool, version) joins the first execution and is
     reported as a shared row, not re-installed.
     """
-    from livery.footman.api import Group
+    from livery.footman import Group
     from livery.footman.testing import Runner
     from livery.toolroom.bench import _drivers, _toolfetch
     from livery.toolroom.bench import _tasks as tools

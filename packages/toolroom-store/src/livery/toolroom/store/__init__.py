@@ -8,13 +8,13 @@ it, collects it as a tree, and names the tree under
 this package lays out; a checkout's bin directory links the
 executables, and a delta says what to put on PATH.
 
-Reach for [livery.toolroom.store.api.Record][] to read a record,
-[livery.toolroom.store.api.resolve][] for one host's deployment,
-[livery.toolroom.store.api.surface_at][] for one version's command line,
-[livery.toolroom.store.api.Catalogue][] for what a consumer resolves against
-and [livery.toolroom.store.api.resolve_lock][] for the repository's lock,
-[livery.toolroom.store.api.Home][] for the store's directories, and
-[livery.toolroom.store.api.Store][] to install, link, emit and fetch.
+Reach for [livery.toolroom.store.Record][] to read a record,
+[livery.toolroom.store.resolve][] for one host's deployment,
+[livery.toolroom.store.surface_at][] for one version's command line,
+[livery.toolroom.store.Catalogue][] for what a consumer resolves against
+and [livery.toolroom.store.resolve_lock][] for the repository's lock,
+[livery.toolroom.store.Home][] for the store's directories, and
+[livery.toolroom.store.Store][] to install, link, emit and fetch.
 """
 
 from __future__ import annotations

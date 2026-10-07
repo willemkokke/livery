@@ -88,7 +88,7 @@ result)` fires after the body, whatever the outcome. Both run on the task's
 worker thread, in parallel across tasks:
 
 ```python
-import livery.footman.api as footman
+import livery.footman as footman
 
 
 @footman.pre_task

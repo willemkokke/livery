@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.workshop._packages import discover_packages
 from livery.workshop._versions import bump, derive_version
 from workshop_seeds import cliff_config

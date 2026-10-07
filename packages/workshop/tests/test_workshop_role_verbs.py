@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Group
+from livery.footman import Group
 from livery.workshop import _checks, _quality
 from livery.workshop._checks import (
     CheckRecord,
@@ -188,12 +188,12 @@ def test_the_words_after_the_dashes_split_off_the_paths(
 ) -> None:
     # footman hands the variadic parameter the words after -- as well,
     # last, and names them through passthrough().
-    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-k", "a.py"])
+    monkeypatch.setattr("livery.footman.passthrough", lambda: ["-k", "a.py"])
     assert _checks.split_arguments(("a.py", "-k", "a.py")) == (
         ("a.py",),
         ("-k", "a.py"),
     )
-    monkeypatch.setattr("livery.footman.api.passthrough", lambda: [])
+    monkeypatch.setattr("livery.footman.passthrough", lambda: [])
     assert _checks.split_arguments(("a.py",)) == (("a.py",), ())
 
 
@@ -215,7 +215,7 @@ def test_only_a_checks_own_verb_hands_its_tool_the_words_after_the_dashes(
     root = Group("root")
     generate_verbs(root)
     test = root.groups["test"]
-    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-k", "slow"])
+    monkeypatch.setattr("livery.footman.passthrough", lambda: ["-k", "slow"])
     # The refusals first: the role's verb runs several checks, and a
     # check that wraps no tool takes none; neither runs anything.
     with pytest.raises(
@@ -255,7 +255,7 @@ def test_the_words_after_the_dashes_reach_the_checks_context(
 def test_the_gate_takes_no_words_after_the_dashes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("livery.footman.api.passthrough", lambda: ["-x"])
+    monkeypatch.setattr("livery.footman.passthrough", lambda: ["-x"])
     with pytest.raises(
         _FAILURES, match=r"check` runs several checks, and the words after --"
     ):

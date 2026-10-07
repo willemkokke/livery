@@ -25,8 +25,8 @@ def test_zero_runtime_dependencies() -> None:
 def test_the_console_scripts_are_this_packages() -> None:
     scripts = _pyproject()["project"]["scripts"]
     assert scripts == {
-        "footman": "livery.footman.api:main",
-        "fm": "livery.footman.api:main",
+        "footman": "livery.footman:main",
+        "fm": "livery.footman:main",
     }
 
 
@@ -49,6 +49,6 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
 
 
 def test_the_stock_builtin_is_self_only() -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     assert footman.BUILTIN == ("footman.self", "footman.janitor")

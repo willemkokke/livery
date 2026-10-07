@@ -25,7 +25,7 @@ from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._state import slug
 
 if TYPE_CHECKING:

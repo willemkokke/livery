@@ -1,8 +1,8 @@
 """One interface to GitHub, Gitea, and GitLab.
 
-The protocols are the whole surface: livery.forge.api.Forge for one
-server, livery.forge.api.Repository for one repository on it, and
-livery.forge.api.Registry for one package index. Every verb exists because
+The protocols are the whole surface: livery.forge.Forge for one
+server, livery.forge.Repository for one repository on it, and
+livery.forge.Registry for one package index. Every verb exists because
 a development workflow uses it; a verb no workflow uses is removed.
 The protocols are frozen: every backend, the verified fake included,
 passes the one conformance suite in livery.forge.testing, and a change

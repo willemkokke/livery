@@ -24,7 +24,7 @@ Extraction, richest first:
 Nothing here runs on the completion hot path, and nothing here is
 imported by `tools.py` at call time: the extracted facts are recorded,
 and the extractor only runs when a reading is taken. The data classes
-it fills, [livery.toolroom.store.api.ToolSpec][] and its parts, live in the
+it fills, [livery.toolroom.store.ToolSpec][] and its parts, live in the
 store, which renders them; this module is the reading side.
 """
 
@@ -33,7 +33,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store.api import Option, ToolSpec, Verb
+    from livery.toolroom.store import Option, ToolSpec, Verb
 
 from typing import Any
 
@@ -63,7 +63,7 @@ def from_click(command: Any, *, name: str = "", version: str = "") -> ToolSpec:
     `secondary_opts` — `--clean` / `--dirty` — which is exactly the fact
     `off` needs and cannot infer.
     """
-    from livery.toolroom.store.api import ToolSpec
+    from livery.toolroom.store import ToolSpec
 
     tool = name or getattr(command, "name", "") or ""
     commands = getattr(command, "commands", None)
@@ -84,7 +84,7 @@ def from_click(command: Any, *, name: str = "", version: str = "") -> ToolSpec:
 
 
 def _verb_from_click(name: str, command: Any) -> Verb:
-    from livery.toolroom.store.api import Option, Verb
+    from livery.toolroom.store import Option, Verb
 
     options = []
     arguments = []

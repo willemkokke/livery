@@ -20,7 +20,7 @@ classifiers = [
 
 [project.optional-dependencies]
 # Sealed-box encryption for GitHub CI secrets: turns the ci_secrets
-# capability on for livery.forge.api.GithubForge.
+# capability on for livery.forge.GithubForge.
 github-secrets = ["pynacl>=1.5"]
 # The suite drives the dev plugin, the one part of this package that
 # reaches for the runner and the tool handles. Never runtime
@@ -51,8 +51,7 @@ test = [
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.forge and there is
-# no livery/__init__.py anywhere in this repository.
+# The importable package is livery.forge, its entry module the root's
+# __init__.py; livery is a PEP 420 namespace with no __init__.py
+# anywhere in this repository.
 module-name = "livery.forge"
-# The root is a namespace too: its public names live in livery.forge.api.
-namespace = true

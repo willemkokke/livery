@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import livery.footman.api as footman
+import livery.footman as footman
 from livery.workshop._sync import sync_workspace
 from workshop_links import link_entries as materialise
 
@@ -211,9 +211,9 @@ def test_the_monorepo_is_in_sync() -> None:
     # materialised links (both gitignored), so the first sync may
     # speak; after it, a second run says nothing and no tracked file
     # changed, so the committed state and the shipped content agree.
-    import livery.workshop.api
+    import livery.workshop
 
-    if not Path(livery.workshop.api.__file__).resolve().is_relative_to(ROOT):
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
         # The release train's isolated leg runs this suite against the
         # installed wheel; syncing the monorepo from there would
         # re-point the repository's real links at the scratch venv.

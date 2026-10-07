@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import pytest
 
-from livery.forge._merge_state import _GITLAB_DETAILED, MERGE_STATES
-from livery.forge.api import (
+from livery.forge import (
     CombinedStatus,
     ForgeError,
     classify_gitea_merge_refusal,
     classify_github_mergeable_state,
     classify_gitlab_detailed_status,
 )
+from livery.forge._merge_state import _GITLAB_DETAILED, MERGE_STATES
 
 
 def _combined(state: str) -> CombinedStatus:
@@ -46,7 +46,7 @@ def test_a_refusal_on_gitlab_or_github_classifies_the_published_hold() -> None:
     # GitHub refusal is unmapped and never waited on. With it, the
     # hold decides, the forge's words ride along, and the go word
     # under a refusal is the recompute the refusal raced.
-    from livery.forge.api import classify_merge_refusal
+    from livery.forge import classify_merge_refusal
 
     common = {"combined": _combined("success"), "item_state": "open", "merged": False}
     for kind in ("gitlab", "github"):

@@ -268,7 +268,7 @@ def test_the_emitters_call_the_running_brand(
 ) -> None:
     import re
 
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.workshop._ci_generate import generate
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -635,7 +635,7 @@ def test_the_rendered_prose_spells_the_brand(
     destination = tmp_path / "branded"
     seed_into(destination, "project", {**answers, "runner_prog": "hse"})
     # The composed tasks.py takes the brand from the running process.
-    monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
+    monkeypatch.setattr("livery.footman.prog", lambda: "hse")
     tasks = (compose_into(destination) / "tasks.py").read_text()
     assert "Run with ``hse <task>``" in tasks
     assert "``hse check``" in tasks
@@ -652,7 +652,7 @@ def test_the_rendered_answers_never_store_the_brand(
     assert not (destination / ".copier-answers.yml").exists()  # no answers file
     # The composed project file takes the brand from the process, as the
     # render does.
-    monkeypatch.setattr("livery.footman.api.prog", lambda: "hse")
+    monkeypatch.setattr("livery.footman.prog", lambda: "hse")
     compose_into(destination)
     assert "# Composed by `hse sync`" in (destination / "pyproject.toml").read_text()
 
@@ -675,7 +675,7 @@ def test_the_shell_and_completion_lines_run_the_brand() -> None:
 def test_the_pipe_guard_recognises_the_brand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.workshop._hooks import _runs_runner
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -726,7 +726,7 @@ def test_a_write_under_a_brand_rebrands_and_reemits(
 ) -> None:
     # Rebranding an instance is exactly a write of its composed and
     # generated files under the branded CLI: they take the running brand.
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.workshop._templates import apply_project
 
     instance = seeds("born-instance", _build_instance) / "instance"

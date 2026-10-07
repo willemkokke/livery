@@ -18,7 +18,7 @@ from livery.extensions.docs._site import (
     scoped_config,
     zensical_config,
 )
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._docs_contract import (
     materialise_module_docs,
     module_docs,
@@ -93,8 +93,8 @@ def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
 def test_a_root_with_no_public_names_keeps_its_docs_where_the_wheel_ships(
     tmp_path: Path,
 ) -> None:
-    # Neither api.py nor __init__.py marks the root, so nothing is found
-    # until the build names the module it ships.
+    # No __init__.py marks the root, so nothing is found until the build
+    # names the module it ships.
     root = _workspace(tmp_path)
     core = next(p for p in discover_packages(root) if p.directory.name == "core")
     module = core.directory / "src" / "acme" / "core"
@@ -905,7 +905,7 @@ def test_a_failing_generator_names_the_verb_and_package(
 
     import pytest
 
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
@@ -937,7 +937,7 @@ def test_generators_run_in_declaration_order_at_the_root(
 ) -> None:
     import shutil as shutil_module
 
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)

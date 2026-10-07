@@ -18,12 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared
 
 if TYPE_CHECKING:
-    from livery.forge.api import RegistryKind
+    from livery.forge import RegistryKind
 
 #: The env cascade's declaration variables, per kind. The python
 #: pair predates the ladder and stays: addresses in the committed
@@ -233,7 +233,7 @@ def _forge_registry(root: Path, kind: str) -> tuple[str, str] | None:
     its token through its own dialect never surfaces it here, and the
     read then rides anonymously, which a public owner serves.
     """
-    from livery.forge.api import Unsupported
+    from livery.forge import Unsupported
     from livery.workshop._forge_lane import this_forge
     from livery.workshop._tokens import forge_token
 

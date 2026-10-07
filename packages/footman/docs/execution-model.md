@@ -66,7 +66,7 @@ asked for:
 
 ```python
 from typing import Annotated
-from livery.footman.api import env, task
+from livery.footman import env, task
 
 
 @task
@@ -137,7 +137,7 @@ code*, in one name and three positions:
 ```python
 import shutil
 
-from livery.footman.api import step
+from livery.footman import step
 
 
 @step  # 1. a function that IS a step
@@ -207,7 +207,7 @@ That makes `task(fn)` the general way to run a plain callable *as a task*,
 in a block or out of one:
 
 ```python
-from livery.footman.api import parallel, task
+from livery.footman import parallel, task
 
 with parallel() as p:
     build("web")

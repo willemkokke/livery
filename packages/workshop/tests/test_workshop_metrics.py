@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.forge.api import Step
+from livery.forge import Step
 from livery.forge.testing import FakeForge
 from livery.workshop import _metrics, _state
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -296,8 +296,8 @@ def test_collect_keeps_the_halves_while_a_completed_job_is_red(
     # the legs: the halves must still be there for that union.
     from typing import Any, cast
 
+    from livery.forge import Repository
     from livery.forge._types import Job, Run
-    from livery.forge.api import Repository
 
     sha = "e" * 40
     run = _state.RunContext("gitea", "78", "push", "refs/heads/main")
@@ -404,8 +404,8 @@ def test_collect_records_every_job_and_the_runs_wall(
 ) -> None:
     from typing import Any, cast
 
+    from livery.forge import Repository
     from livery.forge._types import Job, Run
-    from livery.forge.api import Repository
 
     sha = "d" * 40
     run = _state.RunContext("gitea", "77", "push", "refs/heads/main")
