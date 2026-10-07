@@ -504,9 +504,9 @@ class GitOps:
         out = self._run("log", "--format=%s", span, "--", *paths)
         return tuple(line for line in out.splitlines() if line.strip())
 
-    def last_commit_touching(self, path: str) -> str:
-        """The newest commit at or before HEAD that changed *path*; empty if none."""
-        return self._run("log", "-1", "--format=%H", "HEAD", "--", path).strip()
+    def last_commit_touching(self, path: str, *, ref: str = "HEAD") -> str:
+        """The newest commit at or before *ref* that changed *path*; empty if none."""
+        return self._run("log", "-1", "--format=%H", ref, "--", path).strip()
 
     def files_in_commit(self, ref: str) -> list[str]:
         """The paths the commit at *ref* changed."""

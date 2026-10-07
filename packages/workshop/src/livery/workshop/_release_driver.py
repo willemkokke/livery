@@ -898,11 +898,13 @@ def dispatch_flow(
 ) -> list[str]:
     """Dispatch the wave for a merged, unpublished release, or say why not.
 
-    Reads the manifest at HEAD, or at *at*, an older release squash
-    a later release has moved past. *workshop* names a released
-    driver for the wave instead of the squash's own, the recovery for
-    a wave whose workshop was the fault; empty runs the squash's.
-    Green when there is none, or when
+    Reads the manifest on ``origin/<base>`` after a fetch, whatever
+    commit this checkout stands on, or at *at*, an older release squash
+    a later release has moved past. A checkout behind the base would
+    otherwise send the wave to the squash a later release took over.
+    *workshop* names a released driver for the wave instead of the
+    squash's own, the recovery for a wave whose workshop was the fault;
+    empty runs the squash's. Green when there is none, or when
     every member's receipt tag is already on the remote: the
     manifest is permanent residue of the last release, so presence
     is not the signal, missing receipts are. A wave already in
@@ -916,7 +918,7 @@ def dispatch_flow(
     """
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    where = at or "HEAD"
+    where = at or _base_ref(git, base)
     text = git.file_at(where, MANIFEST)
     recorded = read_manifest(text) if text else None
     if not recorded:
@@ -932,10 +934,10 @@ def dispatch_flow(
             f"  the wave is already in flight: run {live[0].id};"
             f" uncut so far: {', '.join(missing)}"
         ]
-    stamping = at or git.last_commit_touching(MANIFEST)
+    stamping = at or git.last_commit_touching(MANIFEST, ref=where)
     if not stamping:
         return [
-            f"  {MANIFEST} is at HEAD but no commit touches it: nothing to dispatch"
+            f"  {MANIFEST} is at {where} but no commit touches it: nothing to dispatch"
         ]
     _require_release_squash(git, stamping, base)
     seen = {run.id for run in _wave_runs(repo)}

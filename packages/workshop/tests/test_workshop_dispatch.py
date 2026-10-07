@@ -69,7 +69,7 @@ def test_no_manifest_is_nothing_to_dispatch(
     fake, root, git = rig
     repo = fake.repository(OWNER, NAME)
     assert dispatch_flow(root, repo, git) == [
-        "  no release manifest at HEAD: nothing to dispatch"
+        "  no release manifest at origin/main: nothing to dispatch"
     ]
     assert repo.checks.runs(event="workflow_dispatch") == ()
 
@@ -147,34 +147,46 @@ def _branch_stamp(root: Path, fake: FakeForge, branch: str) -> str:
     return sha
 
 
-def test_a_dispatch_from_a_release_branch_is_refused_naming_the_squash_on_the_base(
+def test_a_dispatch_reads_the_base_whatever_branch_the_checkout_is_on(
     rig: tuple[FakeForge, Path, GitOps],
 ) -> None:
     fake, root, git = rig
     repo = fake.repository(OWNER, NAME)
     stamp = _branch_stamp(root, fake, "workflow/release/thing")
-    # No squash on the base yet: the refusal says so.
+    # The refusal first: a branch's own stamp commit, named by hand, is
+    # no release squash, and the wave would refuse it.
     with pytest.raises((SystemExit, Failed)) as caught:
-        dispatch_flow(root, repo, git)
+        dispatch_flow(root, repo, git, at=stamp)
     message = str(caught.value)
     assert f"{stamp[:12]} carries no Mined-At line" in message
     assert "origin/main holds no release squash" in message
+    # Bare, the dispatch reads the base: no release has merged yet.
+    (line,) = dispatch_flow(root, repo, git)
+    assert line == "  no release manifest at origin/main: nothing to dispatch"
     assert repo.checks.runs(event="workflow_dispatch") == ()
-    # The squash lands on main (the pull request body's line rides
-    # into it); the checkout is still on the branch, as an act that
-    # armed and returned once left it.
+    # The squash lands on main; the checkout is still on the branch, as
+    # an act that armed and returned once left it, and the dispatch
+    # goes to the squash the base holds.
     _git(root, "checkout", "-q", "main")
     squash = _stamp(root, fake, ("thing", "1.2.0"))
     _git(root, "checkout", "-q", "workflow/release/thing")
-    with pytest.raises((SystemExit, Failed)) as caught:
-        dispatch_flow(root, repo, git)
-    message = str(caught.value)
-    assert f"the newest release squash on origin/main is {squash[:12]}" in message
-    assert f"--at={squash[:12]}" in message
-    assert repo.checks.runs(event="workflow_dispatch") == ()
-    # Named by hand, the squash dispatches from any branch.
-    (line,) = dispatch_flow(root, repo, git, at=squash, timeout=5, interval=0.05)
+    (line,) = dispatch_flow(root, repo, git, timeout=5, interval=0.05)
     assert line.startswith(f"  dispatched the wave at {squash[:12]}")
+
+
+def test_a_checkout_behind_the_base_dispatches_the_newer_squash(
+    rig: tuple[FakeForge, Path, GitOps],
+) -> None:
+    # A later release took over the older squash's receipts. A checkout
+    # still standing on the older squash reads the base, so the wave
+    # goes to the newer one, never to the squash it replaced.
+    fake, root, git = rig
+    repo = fake.repository(OWNER, NAME)
+    older = _stamp(root, fake, ("thing", "1.2.0"))
+    newer = _stamp(root, fake, ("thing", "1.2.0"), ("other", "0.3.0"))
+    _git(root, "reset", "-q", "--hard", older)
+    (line,) = dispatch_flow(root, repo, git, timeout=5, interval=0.05)
+    assert line.startswith(f"  dispatched the wave at {newer[:12]}")
 
 
 # --- the dispatch --------------------------------------------------------------
