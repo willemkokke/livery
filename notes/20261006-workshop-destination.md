@@ -1251,6 +1251,23 @@ the stack, which this design neither needs nor rules out).
   package its listed name's entry point names, so a change to an
   extension's sources judges its checks whole again. The
   `project.urls` slot waits on Open item 4.
+- 2026-10-07, the schema (#1256), first part: `fm sync` composes the
+  three files from the records the judge already holds, the base's and
+  the listed extensions', in draft 7, the newest Taplo validates. They
+  are written for the checkout alone, as `.workshop/` is, and the
+  repair writes them for a checkout that never synced. Decided here,
+  against the ruled association in `.vscode/settings.json`: the
+  association is a composed `.taplo.toml`. Even Better TOML matches a
+  settings association's regex against the document's absolute URI,
+  without lookaround, so the root's `workshop.toml` and a package's
+  cannot be told apart, and it leaves overlapping patterns undefined. A
+  `.taplo.toml` rule's include globs match from the root, and every
+  Taplo client reads the file, the CLI and other editors' language
+  servers among them. The base recommends Even Better TOML in the
+  composed `.vscode/extensions.json`. The judge reading the composed
+  file, the base's keys as TOML, `[toolroom]`'s fragment in
+  `livery-toolroom-store` and `fm explain <contract>` are the next
+  parts.
 
 ## Open
 

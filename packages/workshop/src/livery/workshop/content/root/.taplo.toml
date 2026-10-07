@@ -1,0 +1,23 @@
+# Composed by `{{ prog }} sync` from the base's template; the gate keeps
+# it matching. Taplo, the language server behind an editor's TOML
+# support, reads it: each contract is completed and validated against
+# the JSON Schema `{{ prog }} sync` composes for it under
+# .workshop/schema/, from the keys the base and the listed extensions
+# declare. The rules match paths from this directory, so the root's
+# workshop.toml and a package's never meet.
+
+[[rule]]
+include = ["workshop.toml"]
+schema = { path = ".workshop/schema/workshop.json" }
+
+[[rule]]
+include = ["packages/**/workshop.toml"]
+schema = { path = ".workshop/schema/package.json" }
+
+[[rule]]
+include = ["**/extension.toml"]
+schema = { path = ".workshop/schema/extension.json" }
+
+# The repository's own rules, whole tables of their own.
+# -- workshop: region rules, yours to edit; the render keeps it --
+# -- workshop: end rules --

@@ -5,9 +5,11 @@
   // repository's own: `fm check --fix` moves a setting added
   // anywhere else, VS Code's own included, into it.
   //
-  // The extensions the registered checks carry a marketplace id for,
-  // and nothing else: a check without a verified id recommends none.
+  // Even Better TOML, whose language server reads the contracts'
+  // schemas, and the extensions the registered checks carry a
+  // marketplace id for: a check without a verified id recommends none.
   "recommendations": [
+    "tamasfe.even-better-toml",
     "charliermarsh.ruff",
     "detachhead.basedpyright",
     "astral-sh.ty",
