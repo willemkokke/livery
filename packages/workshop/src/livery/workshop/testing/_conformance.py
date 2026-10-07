@@ -11,7 +11,7 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from livery.workshop import _checks
 from livery.workshop._categories import (
@@ -32,6 +32,9 @@ from livery.workshop._checks import (
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
 from livery.workshop._packages import Package
+
+if TYPE_CHECKING:
+    from livery.workshop._declaration import Additions, Declaration, Reference
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,7 @@ NEAREST_FRAGMENT = "nearest-fragment"
 CATEGORY_TABLE = "category-table"
 CHECK_ORDER = "check-order"
 DECLARATION_VALIDATES = "declaration-validates"
+REFERENCES_REGISTER_NOTHING = "references-register-nothing"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -439,6 +443,83 @@ def _declaration_validates(subject: Subject) -> list[Violation]:
             )
         ]
     return []
+
+
+def _references(declared: Declaration) -> list[tuple[str, Reference]]:
+    """Each reference *declared* names, with the key that names it."""
+    from livery.workshop._contract_keys import shown
+    from livery.workshop._declaration import Reference
+
+    found: list[tuple[str, object]] = []
+    tables: list[tuple[tuple[str, ...], Additions]] = [((), declared.additions)]
+    tables += [(("for", target), table) for target, table in declared.targets.items()]
+    for prefix, additions in tables:
+        for record in additions.checks:
+            where = shown((*prefix, "checks", record.tool, record.role))
+            found += [(f"{where}.run", record.run), (f"{where}.fix", record.fix)]
+            if record.inputs is not None:
+                found.append((f"{where}.inputs.widen", record.inputs.widen))
+        for item in additions.jobs:
+            where = shown((*prefix, "ci", "jobs", item.point, item.job.name))
+            found += [
+                (f"{where}.installs", item.job.installs),
+                (f"{where}.deploy", item.job.deploy),
+            ]
+    found += [
+        (f"{shown(('slots', slot.name))}.compose", slot.compose)
+        for slot in declared.slots
+    ]
+    return [(key, value) for key, value in found if isinstance(value, Reference)]
+
+
+def _registered_by_import(module: str) -> list[str]:
+    """What importing *module* registers, in a process of its own."""
+    import json
+    import os
+    import sys
+
+    import livery.footman as footman
+
+    path = os.pathsep.join(entry for entry in sys.path if entry)
+    result = footman.run(
+        [sys.executable, "-m", "livery.workshop.testing._import_probe", module],
+        env={**os.environ, "PYTHONPATH": path},
+        nofail=True,
+    )
+    if result.code != 0:
+        lines = result.stderr.strip().splitlines()
+        return [f"its import fails: {lines[-1] if lines else result.code}"]
+    return [str(line) for line in json.loads(result.stdout)]
+
+
+def _references_register_nothing(subject: Subject) -> list[Violation]:
+    from livery.workshop._declaration import DeclarationError, declaration_file, read
+
+    if declaration_file(subject.extension) is None:
+        return []
+    try:
+        declared = read(subject.extension, subject.extension)
+    except DeclarationError:
+        return []  # declaration-validates names the file
+    if declared is None:
+        return []
+    named: dict[str, list[str]] = {}
+    for key, reference in _references(declared):
+        named.setdefault(reference.module, []).append(key)
+    violations: list[Violation] = []
+    for module, keys in named.items():
+        added = _registered_by_import(module)
+        if added:
+            violations.append(
+                Violation(
+                    REFERENCES_REGISTER_NOTHING,
+                    f"{module}, named by {', '.join(keys)}",
+                    f"importing it registers {'; '.join(added)}; the mount"
+                    " registers what the declaration says, so a reference's"
+                    " module only defines",
+                )
+            )
+    return violations
 
 
 # An extension's configuration files, through the workshop's own render.
@@ -821,6 +902,13 @@ CLAUSES: tuple[Clause, ...] = (
         " each of its type, and every reference in it names a function its"
         " module defines.",
         _declaration_validates,
+    ),
+    Clause(
+        REFERENCES_REGISTER_NOTHING,
+        "Importing a module a declaration's reference names registers nothing:"
+        " the declaration says what the extension adds, and the mount"
+        " registers it.",
+        _references_register_nothing,
     ),
     Clause(
         FRAGMENT_DRIFT,

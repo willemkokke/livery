@@ -1302,6 +1302,16 @@ the stack, which this design neither needs nor rules out).
   every owner and the base alone) are byte-identical before and
   after. `[tools]` stays the base's until phase 10g; a doc on every
   key is the verification slice's.
+- 2026-10-07, the verification (#1266), first part: the kit's
+  `references-register-nothing` clause imports each module a
+  declaration's references name, in a process of its own with the
+  workshop's registration functions recording and footman's tree
+  captured, and names each module whose import registers anything. The
+  docs theme's compose function moves to `livery.extensions.docs._theme`,
+  since `_site` defines the `docs` verbs at import. The typed reference
+  module per extension waits for the public names, whose role types it
+  imports; the ci jobs' entries read against the plugin's tasks by AST
+  are the next part.
 
 ## Open
 

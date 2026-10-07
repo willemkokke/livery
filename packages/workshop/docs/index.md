@@ -221,8 +221,11 @@ to the nearest kind's fragment, one owner per kind and file; a path's
 category is the most specific rule's, the nearer kind winning a tie
 between kinds and two rules of one kind never tying; every check a
 check runs `after` is registered, and following them never leads back
-to it; an extension's `WORKSHOP_FOR` maps each target to a module that
-imports; a check's fragments render with the kit's probe answers, the
+to it; an extension's `extension.toml` holds only declared keys, each of
+its type, and every reference in it names a function its module
+defines; importing a module a reference names registers nothing, which
+the kit proves by importing each in a process of its own; a check's
+fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
 once a check is withdrawn and no other check renders its per-package

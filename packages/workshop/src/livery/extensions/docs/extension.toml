@@ -124,4 +124,4 @@ values = ["public", "all"]
 
 # The site's theme: each contribution's keys over the stock theme.
 [slots."docs.theme"]
-compose = "livery.extensions.docs._site:_merge_theme"
+compose = "livery.extensions.docs._theme:merge_theme"
