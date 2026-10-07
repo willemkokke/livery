@@ -29,7 +29,7 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -729,19 +729,28 @@ class _GitlabRepository:
             else:
                 self._client.request(f"{self._base}/labels", method="POST", data=body)
 
-    def tags(self) -> tuple[str, ...]:
-        """Every tag name, complete or raising."""
+    def tags(self, prefix: str = "") -> tuple[str, ...]:
+        """Every tag name, or every one starting with *prefix*, complete or raising.
+
+        GitLab matches a prefix on the server: a search starting with
+        ``^`` matches names that begin with the rest. Its match is the
+        prefix's, so the names are checked again here.
+        """
+        search = f"&search={quote('^' + prefix, safe='')}" if prefix else ""
         tags = self._client.paginate(
             lambda page: (
                 self._client.request(
-                    f"{self._base}/repository/tags?page={page}&per_page=50",
+                    f"{self._base}/repository/tags?page={page}&per_page=100{search}",
                     none_on=(404,),
                 )
                 or []
             ),
             subject=f"{self._base}/repository/tags",
+            size=100,
         )
-        return tuple(str(tag["name"]) for tag in tags)
+        return tuple(
+            str(tag["name"]) for tag in tags if str(tag["name"]).startswith(prefix)
+        )
 
     def branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists."""
@@ -907,8 +916,25 @@ class _GitlabPullRequests:
         return None
 
     def find_by_head_sha(self, sha: str) -> PullRequest | None:
-        """The merge request whose head commit is *sha*, or None."""
-        for raw in self._scan(""):
+        """The merge request whose head commit is *sha*, or None.
+
+        Asked of the commit: GitLab lists the merge requests that carry
+        it, so the project's history costs nothing. The head commit is
+        matched here.
+        """
+        rows = self._client.pages(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/repository/commits/{quote(sha, safe='')}"
+                    f"/merge_requests?page={page}&per_page=100",
+                    none_on=(404,),
+                )
+                or []
+            ),
+            subject=f"{self._base}/repository/commits/{sha}/merge_requests",
+            size=100,
+        )
+        for raw in rows:
             if raw.get("sha") == sha:
                 return _as_pull_request(raw)
         return None
@@ -1163,7 +1189,11 @@ class _GitlabChecks:
         self._base = base
 
     def _pipelines(self, query: str) -> list[dict[str, Any]]:
-        return self._client.paginate(
+        return list(self._pipelines_newest(query))
+
+    def _pipelines_newest(self, query: str) -> Iterator[dict[str, Any]]:
+        """The pipelines, newest first, fetched as they are read."""
+        return self._client.pages(
             lambda page: (
                 self._client.request(
                     f"{self._base}/pipelines?page={page}&per_page=50{query}"
@@ -1195,7 +1225,14 @@ class _GitlabChecks:
             return CombinedStatus(state="success", contexts=len(pipelines))
         return CombinedStatus(state="failure", contexts=len(pipelines))
 
-    def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+    def runs(
+        self,
+        *,
+        head_sha: str = "",
+        event: str = "",
+        workflow: str = "",
+        limit: int = 0,
+    ) -> tuple[Run, ...]:
         """One Run per pipeline, newest first.
 
         The pipeline ``source`` maps into the protocol's event
@@ -1207,11 +1244,18 @@ class _GitlabChecks:
         for, and every other pipeline stays unnamed.
         """
         query = f"&sha={quote(head_sha, safe='')}" if head_sha else ""
-        runs = []
-        for entry in self._pipelines(query):
+        runs: list[Run] = []
+        for entry in self._pipelines_newest(query):
+            if limit and len(runs) == limit:
+                break
             source = str(entry.get("source", ""))
             mapped = _EVENTS.get(source, source)
             if event and mapped != event:
+                continue
+            # Only a dispatched pipeline carries a workflow's name; an
+            # unnamed one may belong to any workflow and is kept.
+            name = str(entry.get("name") or "")
+            if workflow and name and name.rsplit("/", 1)[-1] != workflow:
                 continue
             status, conclusion = _run_state(str(entry.get("status", "")))
             runs.append(

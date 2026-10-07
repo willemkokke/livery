@@ -844,10 +844,18 @@ RELEASE_WORKFLOW = "release.yml"
 
 
 def _wave_runs(repo: Repository) -> tuple[Run, ...]:
-    """The release workflow's dispatched runs, newest first."""
+    """The release workflow's newest dispatched runs, newest first.
+
+    Asked of the workflow's own listing, so every poll of a wave reads
+    one page whatever else was dispatched.
+    """
+    from livery.workshop._ci_tasks import RECENT_RUNS
+
     return tuple(
         run
-        for run in repo.checks.runs(event="workflow_dispatch")
+        for run in repo.checks.runs(
+            event="workflow_dispatch", workflow=RELEASE_WORKFLOW, limit=RECENT_RUNS
+        )
         if run.workflow.rsplit("/", 1)[-1] == RELEASE_WORKFLOW
     )
 

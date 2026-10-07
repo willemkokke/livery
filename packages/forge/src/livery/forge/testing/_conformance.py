@@ -251,11 +251,16 @@ def _branches(driver: ForgeDriver) -> None:
 
 
 def _tags(driver: ForgeDriver) -> None:
-    """Tags lists every tag pushed."""
+    """Tags lists every tag pushed, and a prefix narrows it on the forge."""
     repo = driver.fresh_repo()
     assert repo.tags() == ()
+    assert repo.tags(prefix="packages/") == ()
     driver.create_tag(repo.owner, repo.name, "packages/forge/v0.0.1")
+    driver.create_tag(repo.owner, repo.name, "packages/forgery/v0.0.1")
     assert "packages/forge/v0.0.1" in repo.tags()
+    # The prefix is the name's start: forgery's tag is not forge's.
+    assert repo.tags(prefix="packages/forge/v") == ("packages/forge/v0.0.1",)
+    assert repo.tags(prefix="packages/none/") == ()
 
 
 def _addresses(driver: ForgeDriver) -> None:
@@ -573,6 +578,13 @@ def _runs_jobs_log(driver: ForgeDriver) -> None:
     ids = [run.id for run in listed]
     assert ids == sorted(ids, reverse=True), "runs must list newest first"
     assert {first, second} <= {run.head_sha for run in listed}
+    # A limit keeps the newest, and a workflow keeps its own runs; a
+    # forge that names no workflow on a run (GitLab) has none to ask by.
+    assert [run.id for run in repo.checks.runs(limit=1)] == ids[:1]
+    workflow = listed[0].workflow.rsplit("/", 1)[-1]
+    if workflow:
+        own = {run.id for run in listed if run.workflow.endswith(workflow)}
+        assert own <= {run.id for run in repo.checks.runs(workflow=workflow)}
     for_first = repo.checks.runs(head_sha=first)
     assert len(for_first) == 1
     run = for_first[0]

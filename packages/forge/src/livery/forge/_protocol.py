@@ -239,12 +239,24 @@ class Checks(Protocol):
         """
         ...
 
-    def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+    def runs(
+        self,
+        *,
+        head_sha: str = "",
+        event: str = "",
+        workflow: str = "",
+        limit: int = 0,
+    ) -> tuple[Run, ...]:
         """The repository's runs, newest first.
 
-        *head_sha* and *event* filter when given. The tuple is
-        complete for the query or the call raises; a truncated listing
-        is never returned as the answer.
+        *head_sha* and *event* filter when given. *workflow* names a
+        workflow file (``release.yml``): GitHub and Gitea list that
+        workflow's runs alone, and GitLab, whose pipelines carry a name
+        only when dispatched, keeps the unnamed ones as well. With
+        *limit*, the newest *limit* runs: the listing is read only until
+        there are enough. Without it, the tuple is complete for the
+        query or the call raises; a truncated listing is never returned
+        as the answer.
         """
         ...
 
@@ -592,12 +604,13 @@ class Repository(Protocol):
         """
         ...
 
-    def tags(self) -> tuple[str, ...]:
-        """Every tag name on the repository.
+    def tags(self, prefix: str = "") -> tuple[str, ...]:
+        """Every tag name on the repository, or every one starting with *prefix*.
 
         Complete or raising, like every listing: release trains probe
         "does this tag exist" here, and a truncated answer would turn
-        that probe into a guess.
+        that probe into a guess. A *prefix* is matched by the forge, so
+        a package's tags cost one query however many tags others have.
         """
         ...
 

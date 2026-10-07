@@ -2309,7 +2309,7 @@ def _prove_nightly(root: Path, kind: str) -> None:
 
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run = point_runs(repo, "nightly")[0]
+    run = point_runs(repo, "nightly", limit=1)[0]
     jobs = repo.checks.jobs(run.id)
     _require_lines(
         repo,
@@ -2346,7 +2346,7 @@ def _prove_dispatched_gate(root: Path, kind: str) -> None:
 
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run = point_runs(repo, "gate")[0]
+    run = point_runs(repo, "gate", limit=1)[0]
     if run.event != "workflow_dispatch":
         fail(
             f"the newest gate run {run.id} is a {run.event} run, not the"

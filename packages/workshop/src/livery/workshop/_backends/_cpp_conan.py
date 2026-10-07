@@ -648,9 +648,7 @@ class ConanRegistry:
         repository = self._repository
         prefix = f"{path}/v"
         versions = []
-        for tag in repository.tags():
-            if not tag.startswith(prefix):
-                continue
+        for tag in repository.tags(prefix=prefix):
             version = tag[len(prefix) :]
             if repository.release.get(tag) is None:
                 continue

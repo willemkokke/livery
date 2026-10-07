@@ -99,6 +99,21 @@ def test_a_local_override_survives_the_fallback(
     assert override.read_text() == "mine now\n"
 
 
+def test_a_forge_failure_in_a_submit_is_named_without_a_traceback() -> None:
+    from livery.forge import ForgeError
+    from livery.workshop._submit import forge_failures_named
+
+    with pytest.raises(Failed) as caught, forge_failures_named():
+        raise ForgeError(
+            "server unreachable on GET /repos/o/r/pulls: The read operation timed out"
+        )
+    assert "server unreachable on GET /repos/o/r/pulls" in str(caught.value)
+    assert "submit` is safe to run again" in str(caught.value)
+    # Anything that is not the forge's passes through as it is.
+    with pytest.raises(KeyError), forge_failures_named():
+        raise KeyError("not the forge's")
+
+
 def test_arm_retries_exhaust_with_the_forges_words(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

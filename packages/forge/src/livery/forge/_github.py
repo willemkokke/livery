@@ -28,7 +28,8 @@ import importlib.util
 import os
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from itertools import islice
 from typing import Any
 from urllib.parse import quote
 
@@ -402,7 +403,7 @@ class _GithubRepository:
         self._forge = forge
         self._client = client
         self._base = f"/repos/{quote(owner)}/{quote(name)}"
-        self.pr: PullRequests = _GithubPullRequests(forge, client, self._base)
+        self.pr: PullRequests = _GithubPullRequests(forge, client, self._base, owner)
         self.checks: Checks = _GithubChecks(forge, client, self._base)
         self.issue: Issues = _GithubIssues(forge, client, self._base)
         self.release: Releases = _GithubReleases(client, self._base)
@@ -631,18 +632,20 @@ class _GithubRepository:
             else:
                 self._client.request(f"{self._base}/labels", method="POST", data=body)
 
-    def tags(self) -> tuple[str, ...]:
-        """Every tag name, complete or raising."""
-        tags = self._client.paginate(
-            lambda page: (
-                self._client.request(
-                    f"{self._base}/tags?page={page}&per_page=50", none_on=(404,)
-                )
-                or []
-            ),
-            subject=f"{self._base}/tags",
+    def tags(self, prefix: str = "") -> tuple[str, ...]:
+        """Every tag name, or every one starting with *prefix*, in one request.
+
+        GitHub's matching refs answer whole in one response, unpaged;
+        an empty repository has no refs to match and answers 409.
+        """
+        refs = (
+            self._client.request(
+                f"{self._base}/git/matching-refs/tags/{quote(prefix)}",
+                none_on=(404, 409),
+            )
+            or []
         )
-        return tuple(str(tag["name"]) for tag in tags)
+        return tuple(str(ref["ref"]).removeprefix("refs/tags/") for ref in refs)
 
     def branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists."""
@@ -760,10 +763,13 @@ mutation($id: ID!) {
 class _GithubPullRequests:
     """The pull request operations of one GitHub repository."""
 
-    def __init__(self, forge: GithubForge, client: JsonClient, base: str) -> None:
+    def __init__(
+        self, forge: GithubForge, client: JsonClient, base: str, owner: str
+    ) -> None:
         self._forge = forge
         self._client = client
         self._base = base
+        self._owner = owner
 
     def open(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
         """Open a pull request (``POST /pulls``)."""
@@ -774,11 +780,19 @@ class _GithubPullRequests:
         )
         return _as_pull_request(data)
 
-    def _scan(self, state: StateFilter) -> list[dict[str, Any]]:
-        return self._client.paginate(
+    def _scan(self, state: StateFilter, *, head: str = "") -> Iterator[dict[str, Any]]:
+        """The pull requests in *state*, newest first, fetched as they are read.
+
+        *head* asks the server for the pull requests whose head is that
+        branch of this repository's owner, which GitHub answers with
+        one short page.
+        """
+        narrowed = f"&head={quote(self._owner)}:{quote(head)}" if head else ""
+        return self._client.pages(
             lambda page: (
                 self._client.request(
-                    f"{self._base}/pulls?state={state}&page={page}&per_page=50"
+                    f"{self._base}/pulls?state={state}{narrowed}"
+                    f"&page={page}&per_page=50"
                 )
                 or []
             ),
@@ -790,18 +804,36 @@ class _GithubPullRequests:
     ) -> PullRequest | None:
         """The pull request whose head branch is *branch*, or None.
 
-        Matched client-side over the listing, as every backend does:
-        the answer is then correct whether or not the server's own
-        filter would have been.
+        Asked with the server's ``head`` filter, so a repository's
+        history costs one request, and matched client-side as every
+        backend does: a server that ignored the filter still gives the
+        right answer, read until the first match.
         """
-        for raw in self._scan(state):
+        for raw in self._scan(state, head=branch):
             if (raw.get("head") or {}).get("ref") == branch:
                 return self.get(int(raw["number"]))
         return None
 
     def find_by_head_sha(self, sha: str) -> PullRequest | None:
-        """The pull request whose head commit is *sha*, or None."""
-        for raw in self._scan("all"):
+        """The pull request whose head commit is *sha*, or None.
+
+        Asked of the commit: GitHub lists the pull requests that carry
+        it, a merged one whose branch is gone among them, so the
+        repository's history costs nothing. The head commit is matched
+        here.
+        """
+        rows = self._client.pages(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/commits/{quote(sha)}/pulls?page={page}&per_page=100",
+                    none_on=(404, 422),
+                )
+                or []
+            ),
+            subject=f"{self._base}/commits/{sha}/pulls",
+            size=100,
+        )
+        for raw in rows:
             if (raw.get("head") or {}).get("sha") == sha:
                 return self.get(int(raw["number"]))
         return None
@@ -1016,21 +1048,46 @@ class _GithubChecks:
                 state = "failure"
         return CombinedStatus(state=state, contexts=contexts)
 
-    def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
-        """The repository's Actions runs, newest first."""
+    def runs(
+        self,
+        *,
+        head_sha: str = "",
+        event: str = "",
+        workflow: str = "",
+        limit: int = 0,
+    ) -> tuple[Run, ...]:
+        """The repository's Actions runs, newest first.
+
+        A *workflow* is asked of its own listing, and a *limit* stops the
+        walk once the newest runs are read.
+        """
         query = "".join(
             f"&{key}={quote(value)}"
             for key, value in (("head_sha", head_sha), ("event", event))
             if value
         )
-        raw = self._client.paginate(
-            lambda page: (
-                self._client.request(
-                    f"{self._base}/actions/runs?page={page}&per_page=50{query}"
-                ).get("workflow_runs")
-                or []
+        listing = (
+            f"{self._base}/actions/workflows/{quote(workflow)}/runs"
+            if workflow
+            else f"{self._base}/actions/runs"
+        )
+        per_page = min(limit, 100) if limit else 50
+        raw = islice(
+            self._client.pages(
+                lambda page: (
+                    (
+                        self._client.request(
+                            f"{listing}?page={page}&per_page={per_page}{query}",
+                            none_on=(404,) if workflow else (),
+                        )
+                        or {}
+                    ).get("workflow_runs")
+                    or []
+                ),
+                subject=listing,
+                size=per_page,
             ),
-            subject=f"{self._base}/actions/runs",
+            limit or None,
         )
         runs = []
         for entry in raw:

@@ -70,7 +70,7 @@ and discovery joins the protocol only when a workflow demands it.
 | Verb | Does |
 | --- | --- |
 | `configure(config)` | idempotent drift repair; None fields untouched; see `livery.forge.RepoConfig` |
-| `tags()` | every tag name; the release train's existence probe |
+| `tags(prefix="")` | every tag name, or those starting with *prefix*, matched by the forge; the release train's existence probe |
 | `branch_exists(branch)` | existence |
 | `protection(branch)` | the branch's `livery.forge.Protection`, or None; what a backend cannot read reads as inert |
 | `delete_branch(branch)` | idempotent; the abort path's cleanup (merge-path deletion is configuration) |
@@ -100,7 +100,7 @@ reached on (see `quirks.md`).
 | --- | --- |
 | `open(head, base, title, body)` | open; refuses a duplicate open head |
 | `find_by_head(branch, *, state)` | reliable for open pull requests |
-| `find_by_head_sha(sha)` | finds a merged pull request after its branch is gone |
+| `find_by_head_sha(sha)` | finds a merged pull request after its branch is gone; asked of the commit where the forge can |
 | `get(number)` | the pull request or None |
 | `update_title(number, title)` | the review-facing name and the future squash subject |
 | `update_body(number, body)` | the description, and the future squash message |
@@ -124,7 +124,7 @@ the waiting caller.
 | Verb | Does |
 | --- | --- |
 | `status(sha)` | the one combined verdict; `none` (nothing reported) is distinct from `pending` |
-| `runs(*, head_sha, event)` | newest first |
+| `runs(*, head_sha, event, workflow, limit)` | newest first; a workflow is asked of its own listing, and a limit stops the read at the newest |
 | `jobs(run)` | a run's jobs |
 | `job_log(job)` | the raw log; quoted verbatim in triage, never boolean-ised |
 | `rerun(run, *, failed_only=True)` | failed jobs by default; refuses a live run |

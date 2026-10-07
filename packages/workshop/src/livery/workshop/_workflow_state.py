@@ -296,7 +296,7 @@ def gather(
                     head=pr.head_sha or "HEAD",
                 )
         elif pr_state == "merged" and kind is WorkflowKind.RELEASE:
-            tags = set(repo.tags())
+            tags = set(repo.tags(prefix="packages/"))
             # The receipt: each member's tag, whatever version it
             # carries, present on the repository after this merge.
             tagged = tuple(

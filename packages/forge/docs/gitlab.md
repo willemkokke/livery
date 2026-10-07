@@ -83,7 +83,7 @@ awaiting a licensed surface to record against.
 | `configure`: protection | `POST /projects/:path/protected_branches` | the default branch, direct pushes to maintainers-and-up; re-running with the same levels is a no-op |
 | `configure`: `secrets` / `variables` | `POST` / `PUT /projects/:path/variables` | one variables API serves both; a secret is stored `masked` where its value satisfies GitLab's masking rules (single line, 8 characters or more, base64 alphabet) and stored unmasked otherwise, which the backend reports rather than hides |
 | `configure`: `labels` | `POST` / `PUT /projects/:path/labels` | by name; create when missing, update colour and description when present |
-| `tags` | `GET /projects/:path/repository/tags` | names only |
+| `tags` | `GET /projects/:path/repository/tags?search=^prefix` | names only; a search starting with `^` matches the start of a name, and the backend checks the prefix again |
 | `branch_exists` | `GET /projects/:path/repository/branches/:branch` | 404 is False; the branch name is URL-encoded |
 | `protection` | `GET /projects/:path/protected_branches/:branch` plus `GET /projects/:path/approval_rules` | the guarded flag and the codeowner field from the record, the approval count as the highest over the rules; an unlicensed server's rules 404 and read as zero |
 | `delete_branch` | `DELETE /projects/:path/repository/branches/:branch` | 404 is success |
@@ -106,7 +106,7 @@ and on a licensed instance `configure` turns enforcement on through
 | --- | --- | --- |
 | `open` | `POST /projects/:path/merge_requests` | `source_branch`, `target_branch`, `title`, `description`; 409 when an open MR for the source exists |
 | `find_by_head` | `GET /projects/:path/merge_requests?source_branch=` | GitLab states are `opened` / `closed` / `merged` / `locked`; the protocol's `closed` filter takes both `closed` and `merged`, so the backend queries `state=all` and filters. GitLab keeps `source_branch` on merged MRs, which exceeds the contract; nothing may rely on that |
-| `find_by_head_sha` | `GET /projects/:path/merge_requests?state=all` | no sha filter exists; the backend matches the `sha` field client-side, complete-or-raise |
+| `find_by_head_sha` | `GET /projects/:path/repository/commits/:sha/merge_requests` | the merge requests that carry the commit; the backend keeps the one whose `sha` field, its head, is the commit |
 | `get` | `GET /projects/:path/merge_requests/:iid` | the protocol number is the iid |
 | `update_title` | `PUT /projects/:path/merge_requests/:iid` | `title` |
 | `update_body` | `PUT /projects/:path/merge_requests/:iid` | `description` |
@@ -127,7 +127,7 @@ not commit statuses.
 | Method | GitLab | Semantics |
 | --- | --- | --- |
 | `status` | `GET /projects/:path/pipelines?sha=` | no pipelines is `none`; the skipped pipelines do not count as contexts (nothing ran); the newest remaining pipeline decides: `success` is `success`, `failed` and `canceled` are `failure`, every other state (`created`, `pending`, `running`, `canceling`, `manual`, and kin) is `pending` |
-| `runs` | `GET /projects/:path/pipelines?sha=&...` | one Run per pipeline: `id` is the pipeline id, `workflow` is empty (one pipeline definition per project), `event` is the pipeline `source` |
+| `runs` | `GET /projects/:path/pipelines?sha=&...` | one Run per pipeline, newest first, read only until a limit is met: `id` is the pipeline id, `workflow` is the pipeline's `name`, which only a dispatched pipeline carries, and `event` is the pipeline `source`. A workflow filter keeps the unnamed pipelines, since any workflow may own them |
 | `jobs` | `GET /projects/:path/pipelines/:id/jobs` | job `id`, `name`, status and conclusion mapped as for pipelines |
 | `job_log` | `GET /projects/:path/jobs/:id/trace` | plain text |
 | `rerun` | `POST /projects/:path/pipelines/:id/retry` | retries failed and cancelled jobs, which is the `failed_only=True` contract; GitLab cannot re-run a whole pipeline under the same id, so `failed_only=False` also maps to retry and the docstring's "all of them" is best-effort here |

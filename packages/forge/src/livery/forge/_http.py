@@ -19,7 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from email.message import Message
 from http.client import HTTPMessage
 from typing import IO, Any, Protocol
@@ -447,22 +447,40 @@ class JsonClient:
         fetch: Callable[[int], list[Any]],
         *,
         subject: str,
+        size: int = PAGE_SIZE,
     ) -> list[Any]:
         """Collect every page from *fetch*, or raise on an unfinished walk.
 
         *fetch* takes a 1-based page number and returns that page's
-        items; a batch shorter than livery.forge._http.PAGE_SIZE ends
-        the walk. Hitting livery.forge._http.PAGE_CAP with a full last
-        page raises livery.forge.ForgeError naming *subject*: the
-        listing is not complete, and a prefix is never the answer.
+        items; a batch shorter than *size*, the page size *fetch* asks
+        for, ends the walk. Hitting livery.forge._http.PAGE_CAP with a
+        full last page raises livery.forge.ForgeError naming *subject*:
+        the listing is not complete, and a prefix is never the answer.
         """
-        items: list[Any] = []
+        return list(self.pages(fetch, subject=subject, size=size))
+
+    def pages(
+        self,
+        fetch: Callable[[int], list[Any]],
+        *,
+        subject: str,
+        size: int = PAGE_SIZE,
+    ) -> Iterator[Any]:
+        """Yield the items from *fetch* page by page, fetching as they are read.
+
+        The walk [livery.forge._http.JsonClient.paginate][] collects,
+        for a caller that stops at its first match: no page after the
+        one holding it is fetched. *size* is the page size *fetch* asks
+        for, and a shorter page is the last. The walk raises as
+        ``paginate`` does, and only when a caller reads past
+        [livery.forge._http.PAGE_CAP][] full pages.
+        """
         page = 1
         while page <= PAGE_CAP:
             batch = fetch(page)
-            items.extend(batch)
-            if len(batch) < PAGE_SIZE:
-                return items
+            yield from batch
+            if len(batch) < size:
+                return
             page += 1
         raise ForgeError(
             f"scanned {PAGE_CAP * PAGE_SIZE} entries of {subject} and the"
