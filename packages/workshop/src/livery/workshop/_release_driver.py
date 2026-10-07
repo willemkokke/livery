@@ -51,9 +51,27 @@ class MemberPlan:
     version: str
 
 
+#: The longest the members' joined directories may run in a release's
+#: name. The name is a branch, and a checkout keeps a branch as a file
+#: under ``.git/refs/remotes/origin/``: past Windows' path limit there,
+#: a CI checkout fails before anything runs.
+NAME_LIMIT = 64
+
+
 def release_name(members: tuple[str, ...]) -> str:
-    """The workflow name a set earns: sorted directories, ``+``-joined."""
-    return "release/" + "+".join(sorted(members))
+    """The workflow name a set earns: its directories, sorted and ``+``-joined.
+
+    A set whose joined directories run past `NAME_LIMIT` is named by
+    its size and a digest of them instead, so the branch stays short
+    and the same set always earns the same name.
+    """
+    joined = "+".join(sorted(members))
+    if len(joined) <= NAME_LIMIT:
+        return f"release/{joined}"
+    import hashlib
+
+    digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()[:12]
+    return f"release/{len(members)}-packages-{digest}"
 
 
 def resolve_set(root: Path, paths: tuple[str, ...]) -> tuple[Package, ...]:

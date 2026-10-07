@@ -8,6 +8,7 @@ it, the flows' own edges are what they force.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -599,6 +600,13 @@ def test_recovery_refuses_a_prepared_branch_whose_base_moved(
 
 def test_release_name_sorts_its_members() -> None:
     assert release_name(("workshop", "forge")) == "release/forge+workshop"
+    # A long set is named by its size and a digest: short whatever its
+    # size, and the same set earns the same name in any order.
+    many = tuple(f"extensions/tool-{index}" for index in range(15))
+    named = release_name(many)
+    assert re.fullmatch(r"release/15-packages-[0-9a-f]{12}", named), named
+    assert release_name(tuple(reversed(many))) == named
+    assert release_name(many[:-1]) != named
 
 
 def test_the_base_gate_timeout_names_failed_run_creation(

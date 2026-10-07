@@ -484,18 +484,34 @@ def _arm_verified(
                 repo, kind, number, repo.pr.arm, number, title=title, message=message
             )
         except ForgeError as error:
-            # GitHub arms only a pull request that something blocks; one
-            # already green is refused with "in clean status". Merged
-            # when green was the intent, and it is green: merge it now.
+            # GitHub arms only a pull request that something blocks, so one
+            # already green is refused with "in clean status", and it refuses
+            # a squash subject it finds too long whatever the state. Merged
+            # when green was the intent either way: a running CI is followed
+            # to its verdict, and a green one merges now.
             pr = repo.pr.get(number)
             if pr is None or pr.merged or pr.state != "open":
                 raise
-            if repo.checks.status(pr.head_sha).state != "success":
-                raise
-            print(
-                f"  arming refused ({error}); the pull request is already"
-                " green, so it is merged now"
-            )
+            state = repo.checks.status(pr.head_sha).state
+            if state in ("pending", "none"):
+                print(
+                    f"  arming refused ({error}); CI is still running, so the"
+                    " submit follows it and merges when green"
+                )
+                _wait_for_verdict(repo, number)
+                pr = repo.pr.get(number) or pr
+                state = repo.checks.status(pr.head_sha).state
+            elif state == "success":
+                print(
+                    f"  arming refused ({error}); the pull request is already"
+                    " green, so it is merged now"
+                )
+            if state != "success":
+                fail(
+                    f"PR #{number}: arming was refused ({error}), and CI is {state}:"
+                    f" fix it and `{footman.prog()} submit`. A red pull request"
+                    " is never merged."
+                )
             _follow_merge_state(
                 repo,
                 kind,
