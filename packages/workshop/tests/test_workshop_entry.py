@@ -449,6 +449,37 @@ def test_drift_syncs_records_and_names_the_changed_code(
     assert ran == [(tmp_path, _reconcile.SYNCED)]
 
 
+def test_a_sync_that_rewrites_entry_points_at_the_same_version_names_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An editable member re-installed at the same version keeps its
+    # dist-info's name, and new entry points are a change all the same:
+    # the process mounted the old ones.
+    import livery.toolroom.tools as toolroom
+    from livery.workshop import _reconcile
+
+    (tmp_path / "uv.lock").write_text(LOCK)
+    site = _venv_site(tmp_path, "member-1.0.0", "other-2.0.0")
+    points = site / "member-1.0.0.dist-info" / "entry_points.txt"
+    points.write_text("[workshop.extensions]\nmember = member._extension\n")
+    _reconcile.receipt_path(tmp_path).write_bytes(b"an older lock")
+
+    def _opts(**kwargs: object) -> object:
+        def _sync(*args: str) -> object:
+            points.write_text("[workshop.extensions]\nmember = member\n")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _sync
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    result = _reconcile.reconcile(tmp_path)
+    assert result.synced
+    assert result.changed == ("member-1.0.0.dist-info",)
+    # A sync that rewrites nothing names nothing.
+    _reconcile.receipt_path(tmp_path).write_bytes(b"an older lock")
+    assert _reconcile.reconcile(tmp_path).changed == ()
+
+
 def test_an_unchanged_sync_does_not_rerun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
