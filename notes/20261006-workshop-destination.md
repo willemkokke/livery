@@ -1336,6 +1336,17 @@ the stack, which this design neither needs nor rules out).
   skipping them, never reads; `registries.python.prerelease` takes uv's
   five values. The research behind the docs found #1273, #1275, #1276
   and #1277.
+- Willem, 2026-10-07: keep the composed `.taplo.toml` that points the
+  editor at each contract's schema (#1256).
+- Willem, 2026-10-07: a CI job an extension contributes takes the run's
+  own token alone. How a job could ever get more is recorded now, with
+  security-minded approaches, in #1280, to be ruled before one needs it.
+- Willem, 2026-10-07: confirms the coverage decisions recorded on
+  2026-10-07 as written: the site renders coverage one way from the
+  line format, phase 11c starts the extension and 12e ships it apart,
+  and the opt-out is `[coverage] required = false`.
+- Willem, 2026-10-07, on Open item 4: to review in detail; as
+  proposed, it is too complex for what it brings.
 
 ## Open
 

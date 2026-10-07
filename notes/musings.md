@@ -631,3 +631,13 @@ general key-to-value node with directories as one schema, or a
 directory-only node. Users: the lineage note's mutable index keyed by
 digest, the state store's series, a registry index, training-sample
 indexes.
+
+## 2026-10-07: a minimal CI image from the contract
+
+A job that installs system packages pays `apt-get install` on every run
+(the "System packages" step, from a job's `installs`). That is worth
+revisiting when the workshop generates a minimal docker image from the
+contract. Two ways in: store the install instructions with each tool
+record, `apt-get` lines and their kin, so an image assembles from the
+records; or let toolroom itself build the minimal image, since it
+already knows every tool the lock pins for a host.

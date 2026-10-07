@@ -571,6 +571,36 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
 
 
+_HOUSE_DEEP = """\
+[options]
+deep = "judges the python extension's packages deeper"
+
+[for."acme.python".checks.house.lint]
+run = "{package}._checks:noop"
+listed-with = "deep"
+"""
+
+
+def test_a_grafted_check_registers_under_the_options_its_owners_listing_turns_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    _fake_extensions(tmp_path, monkeypatch, house=_HOUSE_DEEP, python="")
+    # The fallback first: listed without the option, the check stays off.
+    _contract(tmp_path, '["acme.python", "acme.house"]')
+    _mount(tmp_path)
+    assert not _grafted()
+    # Turned on, it registers whichever of the two the list names first.
+    for listed in (
+        '["acme.python", "acme.house[deep]"]',
+        '["acme.house[deep]", "acme.python"]',
+    ):
+        if _grafted():
+            _checks.unregister_check("lint.house")
+        _contract(tmp_path, listed)
+        _mount(tmp_path)
+        assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
+
+
 def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
