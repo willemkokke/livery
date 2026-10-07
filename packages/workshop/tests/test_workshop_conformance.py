@@ -207,6 +207,56 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == []
 
 
+def test_a_reference_whose_module_registers_at_import_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "acme_kit_registers"
+    package.mkdir()
+    (package / "_checks.py").write_text(
+        "from livery.workshop._checks import CheckRecord, register_check\n"
+        "\n\n"
+        "def judged(ctx):\n"
+        "    del ctx\n"
+        "\n\n"
+        'register_check(CheckRecord("acme", "lint", judged))\n'
+    )
+    (package / "_pure.py").write_text("def judged(ctx):\n    del ctx\n")
+    declaration = package / "extension.toml"
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_registers._checks:judged"\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "references-register-nothing"
+    assert _names(Subject("acme_kit_registers"), clause) == [
+        "references-register-nothing: acme_kit_registers._checks, named by"
+        " checks.acme.lint.run: importing it registers a call to"
+        " livery.workshop._checks.register_check; the mount registers what the"
+        " declaration says, so a reference's module only defines"
+    ]
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_registers._pure:judged"\n'
+    )
+    assert _names(Subject("acme_kit_registers"), clause) == []
+
+
+def test_every_installed_extensions_references_register_nothing() -> None:
+    from livery.footman import installed_entry_points
+
+    packages = sorted(
+        {
+            entry.value.partition(":")[0]
+            for entry in installed_entry_points("workshop.extensions")
+        }
+    )
+    assert packages
+    found = [
+        line
+        for package in packages
+        for line in _names(Subject(package), "references-register-nothing")
+    ]
+    assert found == []
+
+
 def _tidy(text: str = "Checks: acme-*\n") -> Subject:
     """An extension whose check carries a .clang-tidy for the child kind."""
     _parent, child = _family()
@@ -497,6 +547,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "category-table",
         "check-order",
         "declaration-validates",
+        "references-register-nothing",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",
