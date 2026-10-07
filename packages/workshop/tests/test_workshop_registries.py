@@ -39,6 +39,11 @@ def test_an_unknown_kind_refuses_naming_the_vocabulary(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     with pytest.raises(_FAILURES, match="python, conan, container"):
         resolve_registry(root, "npm")
+    # The public name refuses the same way.
+    from livery.workshop import registry
+
+    with pytest.raises(_FAILURES, match="python, conan, container"):
+        registry(root, "npm")
 
 
 def test_no_rung_answering_refuses_teaching_the_declaration(

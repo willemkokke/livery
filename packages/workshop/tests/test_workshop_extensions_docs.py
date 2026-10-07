@@ -117,3 +117,44 @@ def test_the_root_docs_table_is_the_extensions_to_read() -> None:
 
     assert callable(_contract.docs_table)
     assert not hasattr(_docs_contract, "docs_table")
+
+
+#: The workshop modules whose names the docs extension reads through
+#: the workshop's public ones instead.
+_REPLACED = frozenset(
+    {
+        "_checks",
+        "_contract",
+        "_forge_lane",
+        "_influence",
+        "_provenance",
+        "_registries",
+        "_release_notes",
+        "_slots",
+        "_state",
+    }
+)
+
+
+def test_the_docs_extension_reads_the_workspace_through_public_names() -> None:
+    # The reach scan reads the workshop's wheel as one distribution, so
+    # it cannot see the extension reading the base; this holds every read
+    # a public name replaces until the extension ships apart.
+    found: list[str] = []
+    docs = ROOT / "packages/workshop/src/livery/extensions/docs"
+    for path in sorted(docs.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
+            if not isinstance(node, ast.ImportFrom) or node.module is None:
+                continue
+            if node.module == "livery.workshop":
+                found += [
+                    f"{path.name}:{node.lineno} livery.workshop.{alias.name}"
+                    for alias in node.names
+                    if alias.name in _REPLACED
+                ]
+            elif (
+                node.module.startswith("livery.workshop.")
+                and node.module.split(".")[2] in _REPLACED
+            ):
+                found.append(f"{path.name}:{node.lineno} {node.module}")
+    assert found == []

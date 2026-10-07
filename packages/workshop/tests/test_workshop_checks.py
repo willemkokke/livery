@@ -81,6 +81,39 @@ def test_an_unknown_check_name_refuses_naming_the_registry(restored_registries):
         unregister_check("nothing")
 
 
+def test_selected_files_refuses_a_context_that_names_no_check(tmp_path: Path) -> None:
+    # A context built by hand names no check, so the question has no
+    # subject; a check's run is handed one that does.
+    from livery.workshop import selected_files
+
+    with pytest.raises(_FAILURES, match=r"names none: .* sets GateContext\.check"):
+        selected_files(GateContext(root=tmp_path, packages=()))
+
+
+def test_a_check_is_handed_a_context_naming_it_and_asks_what_it_judges(
+    restored_registries, tmp_path: Path
+) -> None:
+    from livery.workshop import Changes, selected_files
+    from livery.workshop._influence import Inputs
+
+    seen: list[tuple[str, frozenset[str] | None]] = []
+
+    def asks(ctx: GateContext) -> None:
+        seen.append((ctx.check, selected_files(ctx)))
+
+    register_check(
+        CheckRecord("asker", "lint", asks, narrowing=NONE, inputs=Inputs(("docs/**",)))
+    )
+    # A run that knows nothing of the changes: every file it reads.
+    run_check("lint.asker", GateContext(root=tmp_path, packages=()))
+    assert seen == [("lint.asker", None)]
+    # A run that knows: the changed files among those it reads.
+    seen.clear()
+    changes = Changes(tmp_path, ("docs/a.md", "src/x.py"))
+    run_check("lint.asker", GateContext(root=tmp_path, packages=(), changes=changes))
+    assert seen == [("lint.asker", frozenset({"docs/a.md"}))]
+
+
 # Then the fake check: registered, run, narrowed, skipped by name.
 
 

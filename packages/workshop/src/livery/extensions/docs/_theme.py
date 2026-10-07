@@ -7,7 +7,6 @@ nothing.
 
 from __future__ import annotations
 
-
 #: The slot deciding the theme block's values. The base's block is
 #: the default; a theme extension contributes a table of the keys it
 #: changes, and contributions merge key by key in contribution order,

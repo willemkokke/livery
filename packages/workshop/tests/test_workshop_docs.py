@@ -1202,7 +1202,8 @@ def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
     withdraw(THEME_SLOT, by="acme.site")
     contribute(THEME_SLOT, "Lato", extension="acme.site", by="acme.site")
     with pytest.raises(
-        SlotError, match="^slot 'docs.theme': a contribution is a table of the theme's"
+        SlotError,
+        match=r"^slot 'docs\.theme': a contribution is a table of the theme's",
     ):
         theme_values()
 

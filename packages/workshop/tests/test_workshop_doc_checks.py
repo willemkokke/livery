@@ -55,7 +55,9 @@ def test_a_broken_link_and_a_dead_anchor_are_named(tmp_path: Path) -> None:
     problems = link_problems(tmp_path)
     assert "docs/index.md: missing.md does not exist" in problems
     assert "docs/index.md: other.md#nowhere anchors nothing" in problems
-    ctx = GateContext(root=tmp_path, packages=())
+    # The context names the check, as a run's does: the check asks it
+    # which files it judges.
+    ctx = GateContext(root=tmp_path, packages=(), check="lint.doclinks")
     with pytest.raises(Failed, match="links that resolve nothing"):
         doclinks_run(ctx)
     (docs / "index.md").write_text("# Home\n\n[good](other.md#a-real-heading)\n")

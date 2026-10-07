@@ -64,12 +64,12 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.workshop import testing as testing
-    from livery.workshop._checks import GateContext as GateContext
     from livery.workshop._checks import NONE as NONE
     from livery.workshop._checks import PACKAGE as PACKAGE
     from livery.workshop._checks import PACKAGES as PACKAGES
     from livery.workshop._checks import PATHS as PATHS
     from livery.workshop._checks import WHOLE as WHOLE
+    from livery.workshop._checks import GateContext as GateContext
     from livery.workshop._checks import check_option as check_option
     from livery.workshop._checks import scoped_files as scoped_files
     from livery.workshop._checks import scoped_packages as scoped_packages
@@ -103,18 +103,18 @@ if TYPE_CHECKING:
 __version__ = "0.6.0"
 
 __all__ = [
-    "Changes",
-    "Edge",
-    "GateContext",
     "NONE",
     "PACKAGE",
     "PACKAGES",
     "PATHS",
+    "WHOLE",
+    "Changes",
+    "Edge",
+    "GateContext",
     "Package",
     "RegistryTarget",
     "ReleaseNotes",
     "RunContext",
-    "WHOLE",
     "__version__",
     "check_option",
     "ci_run",

@@ -42,6 +42,21 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
     )
 
 
+def test_read_contract_judges_the_contract_in_a_directory(tmp_path: Path) -> None:
+    from livery.workshop import read_contract
+
+    # The refusal first: the public reader judges as the loader does.
+    path = _workspace(tmp_path, '\n[ci]\nrunner = ["ubuntu-latest"]\n')
+    message = _refusal(lambda: read_contract(path.parent))
+    assert message.startswith(f"{path}:\n") and "no key 'runner'" in message
+    # Then a root's keys, and a package's, by the directory each sits in.
+    member = _workspace(
+        tmp_path, "[ci]\nautomerge = true\n", 'kind = "python"\nname = "m"\n'
+    )
+    assert read_contract(tmp_path)["ci"] == {"automerge": True}
+    assert read_contract(member.parent)["name"] == "m"
+
+
 def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
     tmp_path: Path,
 ) -> None:
