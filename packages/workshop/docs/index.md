@@ -25,7 +25,9 @@ extension that reads it, and a contract holds nothing else: a key no
 extension declares, a key of an extension the root contract does not
 list, a value of the wrong type and a value outside its allowed set
 each refuse on read, naming the file, the key, what the table takes,
-and the nearest spelling.
+and the nearest spelling. The base declares its own keys the way an
+extension does, in the `contract.toml` its package ships beside its
+code, the keys of `extension.toml` among them.
 
 The declarations compose into one JSON Schema per contract, and the
 judge validates a contract against it. `fm sync` writes the same

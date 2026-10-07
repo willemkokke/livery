@@ -1289,6 +1289,19 @@ the stack, which this design neither needs nor rules out).
   the judge and the editor both name the extension. The judge adds the
   composition's import and one composition per contract to a command,
   about 1.5 ms. The kebab-case spelling stays a refusal of the parse.
+- 2026-10-07, the schema (#1265), third part: the base declares its
+  keys in `livery/workshop/contract.toml`, in an extension's `[contract]`
+  grammar extended to the `extension` contract, which only the base's
+  file may declare. The composer repeats the `checks`, `ci` and
+  `contributions` keys of `extension.toml` under `for.*`, so the file
+  states them once. A key named `types`, `values` or `doc` is a key when
+  its declaration is a table; a list or a string under those names is
+  the declaration's own. Values the code also holds (`MODES`,
+  `CADENCES`, the registry kinds, the LFS key) are written in the file
+  and held equal by a test. The six composed schemas (each contract,
+  every owner and the base alone) are byte-identical before and
+  after. `[tools]` stays the base's until phase 10g; a doc on every
+  key is the verification slice's.
 
 ## Open
 
