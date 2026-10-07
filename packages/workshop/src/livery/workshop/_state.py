@@ -681,6 +681,17 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
     return None
 
 
+def ci_run(environ: dict[str, str] | None = None) -> RunContext | None:
+    """The CI run this process belongs to, or None at a desk.
+
+    Read from the runner's environment, *environ* when given, the
+    process's own otherwise: GitHub's and Gitea's ``GITHUB_*``
+    variables, GitLab's ``CI_*``. An extension that behaves
+    differently in CI asks this, never a variable of one forge.
+    """
+    return run_context(environ)
+
+
 def identity() -> tuple[str, str]:
     """Who the store's commits are by: the runner's name, an invalid domain."""
     prog = footman.prog()

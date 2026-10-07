@@ -133,6 +133,24 @@ def load_contract(path: Path) -> dict[str, Any]:
     return data
 
 
+def read_contract(directory: Path) -> dict[str, Any]:
+    """The contract in *directory*, its keys judged: the workspace's or a package's.
+
+    *directory* is the workspace root or a package's directory, and the
+    contract is its ``workshop.toml``. A package's contract is judged
+    against the extensions the workspace lists, the root's against its
+    own list, so a key of an extension the workspace does not list
+    refuses naming the extension.
+
+    Raises:
+        Failed: when the contract holds a key no listed extension and
+            not the workshop declares, or a value of the wrong type,
+            naming the file and every such key.
+        FileNotFoundError: when *directory* holds no contract.
+    """
+    return load_contract(directory / CONTRACT)
+
+
 def _package_workspace(path: Path) -> Path | None:
     """The workspace root of the package contract at *path*; None for a root's.
 

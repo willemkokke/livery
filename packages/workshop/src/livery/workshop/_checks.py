@@ -99,6 +99,9 @@ class GateContext:
         arguments: The words after ``--`` on a check's own verb, which
             a check that takes them (``CheckRecord.arguments``) hands
             its tool; empty in every other run.
+        check: The running check's name, ``<role>.<tool>``, which the
+            run sets as it hands the context to the check; empty
+            outside a check's run.
     """
 
     root: Path
@@ -115,6 +118,7 @@ class GateContext:
     selection: tuple[str, ...] = ()
     changes: Changes | None = None
     arguments: tuple[str, ...] = ()
+    check: str = ""
 
     @property
     def scoped(self) -> bool:
@@ -1173,6 +1177,9 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
     body = record.fix if fix else record.run
     if body is None:
         return
+    # The context names the check it is handed to, so the check's own
+    # questions about this run (selected_files) need no lookup by name.
+    ctx = replace(ctx, check=record.name)
     if not fix and footman.current().in_task:
         # Inside a run the scheduler dedups a task call, so the earlier
         # check runs once for the whole gate; outside one (a test
@@ -1224,7 +1231,30 @@ def workspace_selected(ctx: GateContext) -> tuple[str, ...]:
     )
 
 
-def selected_files(record: CheckRecord, ctx: GateContext) -> frozenset[str] | None:
+def selected_files(ctx: GateContext) -> frozenset[str] | None:
+    """The files the running check judges in this run; None for every file it reads.
+
+    A workspace check that declares ``inputs`` judges, in a run that
+    knows what changed, the changed files among its inputs, and what
+    its ``widen`` reference adds; in a run that knows nothing of the
+    changes, it judges every file it reads, and this is None. The
+    context names the running check, so a check asks with the context
+    its run was handed.
+
+    Raises:
+        Failed: when *ctx* names no check: one built by hand, outside
+            a check's run.
+    """
+    if not ctx.check:
+        fail(
+            "selected_files() answers for the running check, and this"
+            " GateContext names none: call it with the context a check's"
+            " run is handed, which sets GateContext.check"
+        )
+    return _selected_files(check_for(ctx.check), ctx)
+
+
+def _selected_files(record: CheckRecord, ctx: GateContext) -> frozenset[str] | None:
     """The files *record* judges in this run; None for every file it reads."""
     selection = selected(record, ctx)
     return None if selection.whole else frozenset(selection.files)
@@ -1658,7 +1688,7 @@ def _register_builtin() -> None:
     def render_run(ctx: GateContext) -> None:
         from livery.workshop import _quality
 
-        _quality.drift_check(files=selected_files(check_for("drift.check"), ctx))
+        _quality.drift_check(files=_selected_files(check_for("drift.check"), ctx))
 
     def render_fix(ctx: GateContext) -> None:
         # A rewriter is not judged again under --fix, so the fix judges
@@ -1677,14 +1707,14 @@ def _register_builtin() -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
-            files=selected_files(check_for("provenance.check"), ctx)
+            files=_selected_files(check_for("provenance.check"), ctx)
         )
 
     def provenance_fix(ctx: GateContext) -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
-            fix=True, files=selected_files(check_for("provenance.check"), ctx)
+            fix=True, files=_selected_files(check_for("provenance.check"), ctx)
         )
 
     def graph_run(ctx: GateContext) -> None:
@@ -1703,14 +1733,14 @@ def _register_builtin() -> None:
     def imports_run(ctx: GateContext) -> None:
         from livery.workshop._packages import verify_imports
 
-        verify_imports(ctx.root, selected_files(check_for("layering.imports"), ctx))
+        verify_imports(ctx.root, _selected_files(check_for("layering.imports"), ctx))
 
     def imports_fix(ctx: GateContext) -> None:
         from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
         from livery.workshop._packages import verify_imports
         from livery.workshop._uv import run_uv
 
-        files = selected_files(check_for("layering.imports"), ctx)
+        files = _selected_files(check_for("layering.imports"), ctx)
         # Every rule's fix runs here, inside the one rewrite and over
         # the one parse; the judgments follow in the check's judge.
         context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)

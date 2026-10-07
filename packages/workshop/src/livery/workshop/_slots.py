@@ -155,7 +155,15 @@ def composed(name: str) -> object:
         )
     values = [c.value for c in slot.contributions]
     if not isinstance(slot.compose, str):
-        return slot.compose(values)
+        try:
+            return slot.compose(values)
+        except SlotError:
+            raise
+        except ValueError as error:
+            # A compose reference refuses with ValueError, and the slot
+            # is named here, once, so the reference says only what is
+            # wrong with the contributions.
+            raise SlotError(f"slot {name!r}: {error}") from error
     if slot.compose == UNION:
         found: list[object] = []
         # Extensions in the order they first contributed, the mount
@@ -192,6 +200,22 @@ def composed(name: str) -> object:
             " one of them yields"
         )
     return nearest.value
+
+
+def slot(name: str) -> object:
+    """The value the slot *name* composes to from the mounted extensions' contributions.
+
+    A list slot is the union of the contributions, in mount order; a
+    scalar slot is the nearest contribution; a slot whose owner names a
+    compose reference is that function's answer over every
+    contribution.
+
+    Raises:
+        ValueError: when *name* is undeclared, when a scalar slot has
+            two claims from one extension, or when the compose reference
+            refuses the contributions; the message names the slot.
+    """
+    return composed(name)
 
 
 def all_composed() -> dict[str, object]:

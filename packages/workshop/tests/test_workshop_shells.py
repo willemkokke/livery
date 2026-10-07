@@ -324,9 +324,9 @@ def test_forge_lane_reads_the_contract_and_the_remote(
     root.mkdir()
     _git(root, "init", "--initial-branch=main")
     _git(root, "remote", "add", "origin", "git@github.com:acme/widgets.git")
-    assert _forge_lane.remote_repo_name(root) == "widgets"
+    assert _forge_lane.forge_repository(root) == "widgets"
     _git(root, "remote", "set-url", "origin", "https://github.com/acme/widgets")
-    assert _forge_lane.remote_repo_name(root) == "widgets"
+    assert _forge_lane.forge_repository(root) == "widgets"
 
     class FakeConnectable:
         def __init__(self) -> None:

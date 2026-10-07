@@ -1192,15 +1192,18 @@ def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
     from livery.workshop._slots import SlotError, contribute, withdraw
 
     contribute(THEME_SLOT, {"font.body": "Lato"}, extension="acme.site", by="acme.site")
+    # The composition names the slot, once; the theme says what is wrong.
     with pytest.raises(
         SlotError,
-        match=r"unknown key 'font\.body'; the keys are language, font\.text,"
-        r" font\.code, features, palette",
+        match=r"^slot 'docs\.theme': unknown key 'font\.body'; the keys are"
+        r" language, font\.text, font\.code, features, palette$",
     ):
         theme_values()
     withdraw(THEME_SLOT, by="acme.site")
     contribute(THEME_SLOT, "Lato", extension="acme.site", by="acme.site")
-    with pytest.raises(SlotError, match="a table of the theme's keys, not 'Lato'"):
+    with pytest.raises(
+        SlotError, match="^slot 'docs.theme': a contribution is a table of the theme's"
+    ):
         theme_values()
 
 

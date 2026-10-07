@@ -97,6 +97,21 @@ def _normalise(value: str) -> str:
     return value
 
 
+def registry(root: Path, kind: str) -> RegistryTarget:
+    """The registry the workspace at *root* reads and publishes *kind* artifacts at.
+
+    *kind* is ``python``, ``conan`` or ``container``. The first rung
+    that names one wins: the environment's variables for the kind, the
+    contract's ``[registries]`` table, the forge's own registry of the
+    kind, then the ecosystem's default.
+
+    Raises:
+        Failed: when *kind* is not an artifact registry kind, naming
+            the three.
+    """
+    return resolve_registry(root, kind)
+
+
 def resolve_registry(root: Path, kind: str) -> RegistryTarget:
     """The registry for *kind*, through the ladder; refusal teaches.
 

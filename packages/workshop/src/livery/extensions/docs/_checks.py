@@ -24,8 +24,7 @@ import sys
 from pathlib import Path
 
 from livery.footman import fail
-from livery.workshop._checks import GateContext, check_for, selected_files
-from livery.workshop._influence import Changes
+from livery.workshop import Changes, GateContext, selected_files
 from livery.workshop._packages import member_depth, package_directories
 
 #: The trees the site build writes under the workspace's `docs/`, which
@@ -264,7 +263,7 @@ def docrefs_run(ctx: GateContext) -> None:
         for directory in package_directories(ctx.root)
         if (directory / "src").is_dir()
     ]
-    files = selected_files(check_for("lint.docrefs"), ctx)
+    files = selected_files(ctx)
     if files is None:
         judged = sorted(path for src in sources for path in src.rglob("*.py"))
     else:
@@ -277,7 +276,7 @@ def docrefs_run(ctx: GateContext) -> None:
 
 
 def doclinks_run(ctx: GateContext) -> None:
-    problems = link_problems(ctx.root, selected_files(check_for("lint.doclinks"), ctx))
+    problems = link_problems(ctx.root, selected_files(ctx))
     if problems:
         fail("links that resolve nothing:\n  " + "\n  ".join(problems))
 

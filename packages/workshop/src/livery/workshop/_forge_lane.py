@@ -33,8 +33,16 @@ _REMOTE_RE = re.compile(
 )
 
 
-def remote_repo_name(root: Path) -> str:
-    """The repository name the ``origin`` remote points at."""
+def forge_repository(root: Path) -> str:
+    """This workspace's repository name on its forge: the name ``origin`` points at.
+
+    The remote's URL in either spelling, ``https://host/owner/name`` or
+    ``git@host:owner/name``, with or without ``.git``.
+
+    Raises:
+        Failed: when *root* has no ``origin`` remote, or its URL names
+            no owner and name.
+    """
     result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
         "remote", "get-url", "origin"
     )
@@ -123,7 +131,7 @@ def admin_repository(root: Path) -> tuple[Repository, str]:
     if not owner:
         fail("workshop.toml [forge] must carry kind and owner")
     forge, var = admin_forge(root)
-    return forge.repository(owner, remote_repo_name(root)), var
+    return forge.repository(owner, forge_repository(root)), var
 
 
 def this_repository(root: Path) -> Repository:
@@ -132,4 +140,4 @@ def this_repository(root: Path) -> Repository:
     owner = str((contract.get("forge") or {}).get("owner", ""))
     if not owner:
         fail("workshop.toml [forge] must carry kind and owner")
-    return this_forge(root).repository(owner, remote_repo_name(root))
+    return this_forge(root).repository(owner, forge_repository(root))
