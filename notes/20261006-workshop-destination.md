@@ -421,6 +421,50 @@ The schema covers shape. The judge keeps the rules a schema cannot say:
 `judge` and `run` are exclusive, a `matrix` key appears in the words, a
 `for` target is an extension, a `requires` entry is listed before.
 
+### What stays verifiable
+
+A declaration in TOML loses the type checker's eye on its references,
+and nearly all of it is won back, one layer at a time:
+
+1. The judge at mount: a reference's module exists in the extension's
+   package and its name is defined at the module's top level, read
+   from the AST without importing.
+2. The type checkers: `fm sync` writes a generated module per
+   extension under `typings/`, one typed assignment per reference,
+   `check: Callable[[GateContext], None] = format`, so the four
+   checkers verify every signature against the role the reference
+   fills, a query's answerer against its `Query[T]` included, with no
+   code of ours comparing signatures.
+3. The conformance kit: importing every reference under a recorder
+   registers nothing.
+
+Everything else the TOML names is judged without a run:
+
+| What a table names | Verified that |
+| --- | --- |
+| `tools`, and the first word of `judge` | the tool is in the catalogue and the lock, its floor parses through `Spec`, and the first word names a tool the check declares |
+| `claims` | each category is one some extension registers; each suffix starts with a dot |
+| `extensions` on a check or generator | each names a package-level extension that is installed or follows the naming convention |
+| `requires`, `compatible`, `for` | each target exists and may be listed at its level; a `requires` target is in the wheel's `Requires-Dist` and a `for` target is one of its extras (contract 15) |
+| `after` | names a registered check, and following `after` never returns (an existing clause) |
+| `contributions`, `options` | the slot exists and the value is in its set; the option is one the extension declares |
+| `[[contract-keys]]` | kebab-case paths, known types, values of those types, a `doc` on every key, no two extensions declaring one key |
+| `[[jobs]]` | the point is builtin, the name unused, each entry's task one the plugin defines, read from its `@group.task` decorators by AST |
+| `[[fragments]]`, `[replaces]`, `[deletes]` | a file fragment exists under `content/`, a TOML fragment parses, a template renders with the probe data (an existing clause), and a replaced owner and name exist among the installed extensions |
+| the words | every placeholder is answered, every `matrix` key is used, `fix` only on a role that fixes, `judge` and `run` exclusive |
+| `[[guidance]]` | the section exists, `after` exists, the names parse, no duplicates |
+| `[phases.<phase>]` | the phase is one of the nine; across the mounted set one provider per key, a provider for every reader, no cycle |
+| `[queries]` | the name is one the base defines |
+| `[[categories]]` | the patterns are globs, and specificity never ties within one extension (an existing clause) |
+| `api-version`, `levels`, `plugin` | the version is the engine's, the levels are valid, the plugin is an entry point in the wheel's metadata |
+
+Where each runs: the judge at mount for shape and existence; the gate,
+through the layering check's one parse, for an extension that lives in
+the workspace; the conformance kit, in the extension's own suite, for
+the whole table; the type checkers for signatures. What no layer sees
+before a run: a tool's words beyond their shape, a system package name
+under `installs`, a job's runner label.
+
 ### The names
 
 Grouped by the sort that needs them. "Users" names today's importer or
@@ -713,6 +757,9 @@ new path once. Acceptance: `fm check` exits 0;
   `package.json` and `extension.json` and associates them in the
   composed `.vscode/settings.json`; the judge reads the composed file;
   `fm explain <contract>` names the schema it was judged by.
+- The verification of "What stays verifiable": the judge's AST read of
+  every reference; the generated `typings/` module per extension that
+  the four type checkers verify; the kit's clauses over every table.
 - The public names of "The names" that need no package extension:
   `NONE`, `selected_files`, `Changes`, `read_contract`,
   `generated_header`, `ci_run`, `RunContext`, `ci_changes`, `slot`,
@@ -734,6 +781,9 @@ Acceptance, refusals first:
 
 - `test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_nearest`,
   `test_a_reference_that_does_not_import_refuses_at_mount`,
+  `test_a_reference_with_the_wrong_signature_fails_typecheck` (a
+  generated module with a wrong assignment, judged by
+  `fm typecheck`),
   `test_an_extension_declared_for_api_version_1_refuses_naming_both`,
   `test_a_declaration_that_registers_at_import_fails_the_kit`,
   `test_a_new_private_reach_refuses_naming_the_file_and_line`.
@@ -979,6 +1029,12 @@ the stack, which this design neither needs nor rules out).
   composes the workspace's schema into JSON Schema for the judge, the
   editor and the reference pages, and the judge keeps the rules a
   schema cannot say.
+- Willem, 2026-10-07: a reference's target is verified by AST, and
+  whatever else can be verified despite TOML is. So the judge reads
+  every reference's existence from the AST, a generated typed module
+  per extension lets the four type checkers verify every signature,
+  and the kit judges every table against what it names; the list is
+  in "What stays verifiable".
 - 2026-10-06, on how that meets `COMPATIBLE`: composition is its own
   axis, and a `REQUIRES` or `FOR` target counts as compatible for a
   package-level pair, so `COMPATIBLE` is declared only where neither
