@@ -384,7 +384,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     # its mount ran.
     present = [SELF]
     grafted: set[tuple[str, str]] = set()
-    _graft_contributions(present, declared, active, grafted)
+    _graft_contributions(present, declared, active, grafted, options)
     for extension, dist in extension_entries(start):
         if extension in builtin:
             # The App mounted it as its own builtin: its plugin is never
@@ -399,7 +399,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 ):
                     mounted.append(extension)
             present.append(extension)
-            _graft_contributions(present, declared, active, grafted)
+            _graft_contributions(present, declared, active, grafted, options)
             continue
         package = extension_package(extension)
         if extension in _declared() and declaration_file(package) is None:
@@ -452,7 +452,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 if extension not in mounted:
                     mounted.append(extension)
         present.append(extension)
-        _graft_contributions(present, declared, active, grafted)
+        _graft_contributions(present, declared, active, grafted, options)
     # An extension's checks registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
     from livery.workshop._checks import generate_verbs
@@ -513,13 +513,16 @@ def _graft_contributions(
     declared: dict[str, dict[str, Additions]],
     active: dict[str, tuple[str, ...]],
     grafted: set[tuple[str, str]],
+    options: dict[str, tuple[str, ...]],
 ) -> None:
     """Register every ``[for.<target>]`` table whose owner and target are both present.
 
     Called after each extension mounts, so a contribution lands whichever
     of the two mounts later. A ``for`` entry naming a target the owner
     declares nothing for registers nothing: the layering check names
-    that entry, and it can only run inside a mount that went on.
+    that entry, and it can only run inside a mount that went on. A check
+    in the table registers under the options the owner's listing turns
+    on, *options*, as a check at the file's top level does.
     """
     for owner in present:
         for target in active.get(owner, ()):
@@ -528,7 +531,7 @@ def _graft_contributions(
             additions = declared.get(owner, {}).get(target)
             if additions is None:
                 continue
-            register_declared(owner, additions)
+            register_declared(owner, additions, options.get(owner, ()))
             grafted.add((owner, target))
 
 
