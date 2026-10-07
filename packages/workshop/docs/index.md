@@ -41,7 +41,9 @@ installed and listed, and they are written for the checkout alone,
 never committed. The composed `.taplo.toml` points Taplo, the language
 server behind Even Better TOML and other editors' TOML support, at
 each file by path from the root, so an editor completes and validates
-a contract as it is typed and refuses what the judge refuses. The
+a contract as it is typed and refuses what the judge refuses. Each
+key's doc is its description there, shown when a person hovers the
+key; every key the base and the listed extensions declare carries one. The
 schema says what shape a contract has; a rule a schema cannot say
 stays with the code that reads the key.
 
@@ -228,8 +230,8 @@ the kit proves by importing each in a process of its own; every task a
 CI job's entries name is one the extension defines, read from its
 sources; every category a check's claims name is one an extension
 registers, every suffix starting with a dot; the plugin an
-`extension.toml` names is an installed `footman.tasks` entry point; a
-check's
+`extension.toml` names is an installed `footman.tasks` entry point;
+every contract key an extension declares carries a doc; a check's
 fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and

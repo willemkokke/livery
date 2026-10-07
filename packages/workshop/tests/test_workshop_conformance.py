@@ -313,6 +313,26 @@ def test_a_plugin_no_distribution_declares_breaks_the_clause(
     assert _names(Subject("acme_kit_plugin"), clause) == []
 
 
+def test_a_contract_key_without_a_doc_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "acme_kit_keys"
+    package.mkdir()
+    declaration = package / "extension.toml"
+    declaration.write_text('[contract.package.acme.depth]\ntypes = ["str"]\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "contract-keys-documented"
+    assert _names(Subject("acme_kit_keys"), clause) == [
+        "contract-keys-documented: extension acme_kit_keys: declares the package"
+        " contract key acme.depth with no doc; the editor shows a key by its doc,"
+        " and so will the reference pages"
+    ]
+    declaration.write_text(
+        '[contract.package.acme.depth]\ntypes = ["str"]\ndoc = "how deep acme reads"\n'
+    )
+    assert _names(Subject("acme_kit_keys"), clause) == []
+
+
 def test_every_installed_extension_passes_the_declaration_clauses() -> None:
     from livery.footman import installed_entry_points
 
@@ -328,6 +348,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         "entries-name-defined-tasks",
         "claims-name-categories",
         "plugin-is-an-entry-point",
+        "contract-keys-documented",
     }
     found = [
         str(violation)
@@ -632,6 +653,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "entries-name-defined-tasks",
         "claims-name-categories",
         "plugin-is-an-entry-point",
+        "contract-keys-documented",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",
