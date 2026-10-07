@@ -16,6 +16,7 @@ while it is pre-1.0 a minor version may include breaking changes.
 - Pyrefly runs as its own extension, configured by the root pyrefly.toml, and the base checks no types by @willemkokke
 - A check's own verb hands the tool it wraps the words after --, and fm check and the role verbs refuse them, naming the verbs that take them by @willemkokke
 - Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+- Every extension declares itself in extension.toml, read at mount without importing it, and the check records leave the public names by @willemkokke
 
 ### Changed
 

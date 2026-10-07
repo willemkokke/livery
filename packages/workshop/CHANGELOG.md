@@ -24,6 +24,7 @@
 - A check's own verb hands the tool it wraps the words after --, and fm check and the role verbs refuse them, naming the verbs that take them by @willemkokke
 - Conan members resolve from their sources through a rendered conanws.yml instead of editables registered in the conan home, so checkouts never collide and nothing outlives a workspace by @willemkokke
 - Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+- Every extension declares itself in extension.toml, read at mount without importing it, and the check records leave the public names by @willemkokke
 
 ### Fixed
 
@@ -41,6 +42,10 @@
 - A flag on by default is named in help by its own spelling beside its own text, and says it is on by default and how to turn it off by @willemkokke
 - The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
 - A refused arm follows a running CI and merges when green, and a release of many members is named by its size and a digest by @willemkokke
+- The push check reads the installed plugins again, and the scan records each entry point's distribution, so a sync that moves a member under a long process keeps its tools by @willemkokke
+- A release tag names its package at any depth under packages/, so a grouped package verifies, raises floors, and shows in the release history by @willemkokke
+- A Linux wheel build mounts a conan workspace file beside the package it builds, so a sibling library resolves from its source inside the container by @willemkokke
+- A sync that rewrites a distribution's entry points at the same version runs the command again, so it never goes on with extensions it mounted before by @willemkokke
 
 ### Changed
 
