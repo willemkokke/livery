@@ -6,7 +6,8 @@ import json
 
 import pytest
 
-from livery.footman import _describe
+from livery.footman import Invocation, _describe
+from livery.footman._invocation import Frozen
 from livery.footman._registry import Group
 from livery.footman.testing import Runner
 
@@ -48,6 +49,75 @@ def test_docs_url_error_refuses_the_broken_shapes():
     assert error is not None and "{page}" in error and "{path}" in error
     assert _describe.docs_url_error(7) is not None
     assert _describe.docs_url_error("   ") is not None
+
+
+# --- a plugin's template, set at pre_tasks ------------------------------------
+
+
+def test_the_invocation_refuses_a_template_it_cannot_fill():
+    inv = Invocation()
+    with pytest.raises(ValueError, match=r"\{page\}"):
+        inv.docs_url = "https://d.dev/{page}/"
+    with pytest.raises(ValueError, match=r"inv\.docs_url"):
+        inv.docs_url = "   "
+    assert inv.docs_url is None  # a refused write changes nothing
+    inv.docs_url = "https://d.dev/tasks/{path}/"
+    assert inv.docs_url == "https://d.dev/tasks/{path}/"
+    inv.docs_url = None  # None turns the links off
+    assert inv.docs_url is None
+
+
+def test_a_frozen_invocation_refuses_a_template():
+    inv = Invocation(docs_url="https://d.dev/tasks/{path}/")
+    inv.freeze()
+    with pytest.raises(Frozen):
+        inv.docs_url = "https://d.dev/#{slug}"
+    assert inv.docs_url == "https://d.dev/tasks/{path}/"
+
+
+def _hooked(tmp_path, template: str, *, waits: bool = True):
+    (tmp_path / "tasks.py").write_text(
+        "from livery.footman import pre_tasks, task\n\n"
+        "@pre_tasks\n"
+        "def link(inv):\n"
+        + ("    if inv.docs_url is None:\n        " if waits else "    ")
+        + f"inv.docs_url = {template!r}\n\n"
+        "@task\n"
+        "def build():\n"
+        '    """Build it."""\n'
+    )
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    return tmp_path
+
+
+def test_a_hook_that_sets_a_broken_template_is_refused_by_name(tmp_path):
+    project = _hooked(tmp_path, "https://hook.dev/{page}/", waits=False)
+    result = Runner().invoke("--list", cwd=project)
+    assert not result.ok
+    assert "'link'" in result.stderr and "{page}" in result.stderr
+
+
+def test_a_pre_tasks_hook_links_task_names_on_every_invocation(tmp_path):
+    project = _hooked(tmp_path, "https://hook.dev/tasks/{slug}/")
+    # Twice in one process: the hook runs on each invocation, and the
+    # configuration read resets the template between them.
+    for _ in range(2):
+        result = Runner().invoke("--json build", cwd=project)
+        assert result.ok, result.stderr
+        envelope = json.loads(result.stdout)
+        (item,) = [i for i in envelope["items"] if i.get("task") == "build"]
+        assert item["docs_url"] == "https://hook.dev/tasks/build/"
+
+
+def test_a_configured_template_comes_before_a_hook_that_waits_for_none(tmp_path):
+    project = _hooked(tmp_path, "https://hook.dev/tasks/{slug}/")
+    (project / "pyproject.toml").write_text(
+        "[project]\nname='x'\n[tool.footman]\n"
+        'docs-url = "https://docs.example.dev/tasks/{path}/"\n'
+    )
+    result = Runner().invoke("--help build", cwd=project)
+    assert result.ok, result.stderr
+    assert "docs: https://docs.example.dev/tasks/build/" in result.stdout
 
 
 # --- the surfaces, end to end -------------------------------------------------

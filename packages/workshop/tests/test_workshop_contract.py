@@ -45,9 +45,10 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
 def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
     tmp_path: Path,
 ) -> None:
+    # The root's [docs] is the extension's whole, so it refuses at the table.
     path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
     assert (
-        "docs.title is a key of docs, which [workspace]"
+        "docs is a key of docs, which [workspace]"
         " extensions does not list; list the extension, or remove the key"
     ) in _refusal(lambda: _contract.load_contract(path))
     # A package's key of that extension refuses against its root's list.

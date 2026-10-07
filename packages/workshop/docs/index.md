@@ -251,10 +251,20 @@ assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots,
 the staged extension css, the generators a package declares and the
 seam the site publishes through, and it arrives through its own task
 entry point. The base keeps what it reads of a package's docs for its
-own reasons (the `[docs]` table and the layout of the `docs/` tree)
-and the nav blocks generators write; it imports no extension, which
-the layering check enforces. It lives under `livery.extensions`, a
-namespace any distribution can add an extension to.
+own reasons (a package's `[docs] api` and the layout of the `docs/`
+tree) and the nav blocks generators write; it imports no extension,
+which the layering check enforces. It lives under `livery.extensions`,
+a namespace any distribution can add an extension to.
+The root contract's `[docs]` table is the extension's, `site-url`
+among its keys. A `pre_tasks` hook of the extension links each task
+name in `--help`, `--list` and `--json` rows to the task's page on the
+site, through the redirect page `tasks/<name>/` under `site-url`,
+where `<name>` is the task's address with its dots as dashes. A
+workspace whose pages live elsewhere sets a URL template in
+`[workspace] docs-url` instead, which the base's own hook hands to
+footman: `{path}` is the task's address joined by slashes, `{slug}`
+joined by dashes. That key comes before the site's, and footman's own
+configured `docs-url` before both.
 The site's two CI jobs come with the extension: its `extension.toml`
 declares the gate point's `docs` job, which the verdict waits for, and
 the merge point's `deploy` job, as `[ci.jobs.gate.docs]` and

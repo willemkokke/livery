@@ -13,7 +13,7 @@ invoked there.
 
 from __future__ import annotations
 
-from livery.footman import fail, task
+from livery.footman import Invocation, fail, pre_tasks, task
 
 # Importing registers each module's tasks with footman.
 from livery.workshop import _checks as _checks_module
@@ -74,6 +74,37 @@ def extensions() -> None:
     for line in lines:
         print(line)
     print("  ... then the instance's own files, which always win")
+
+
+@pre_tasks
+def link_task_names(inv: Invocation) -> None:
+    """Link task names to the contract's ``[workspace] docs-url``, when it sets one.
+
+    A configured ``docs-url`` comes first, and an extension that links
+    task names to pages of its own leaves this key's template in place.
+    The contract is read raw, as the mount reads it: the hook runs on
+    every command, ``fm sync`` among them, so a template footman cannot
+    fill is named on stderr and links nothing, and the command goes on.
+    """
+    import tomllib
+
+    from livery.workshop._extensions import _note, _workspace_table, workspace_root
+
+    root = workspace_root()
+    if inv.docs_url is not None or root is None:
+        return
+    try:
+        workspace = _workspace_table(root) or {}
+    except (OSError, tomllib.TOMLDecodeError):
+        return
+    template = workspace.get("docs-url")
+    if not isinstance(template, str):
+        # Absent, or a value the contract's judge refuses by name.
+        return
+    try:
+        inv.docs_url = template
+    except ValueError as error:
+        _note(f"workshop.toml [workspace] docs-url: {error}; no task links")
 
 
 # The role verbs, generated from the checks registered above: every

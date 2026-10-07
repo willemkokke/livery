@@ -93,16 +93,27 @@ def test_the_base_task_module_does_not_import_the_site() -> None:
     assert "_docs" not in source and "extensions.docs" not in source
 
 
-@pytest.mark.parametrize("module", ["_ci_generate", "_workflow_tasks", "_provenance"])
-def test_the_ci_render_and_the_configure_read_no_docs_table(module: str) -> None:
+@pytest.mark.parametrize(
+    "module", ["_ci_generate", "_workflow_tasks", "_provenance", "_templates"]
+)
+def test_the_base_modules_read_no_docs_table(module: str) -> None:
     # What a docs job installs, where it deploys and what it reads are
-    # declared on the job, so none of these modules knows the [docs] table.
+    # declared on the job, and task names link through the extension's
+    # own hook, so none of these modules knows the [docs] table.
     path = ROOT / f"packages/workshop/src/livery/workshop/{module}.py"
     assert "_docs_contract" not in path.read_text()
 
 
-@pytest.mark.parametrize("name", ["docs_table", "materialise_module_docs"])
+@pytest.mark.parametrize("name", ["declines_api", "materialise_module_docs"])
 def test_the_base_seam_carries_what_the_base_reads(name: str) -> None:
     from livery.workshop import _docs_contract
 
     assert callable(getattr(_docs_contract, name))
+
+
+def test_the_root_docs_table_is_the_extensions_to_read() -> None:
+    from livery.extensions.docs import _contract
+    from livery.workshop import _docs_contract
+
+    assert callable(_contract.docs_table)
+    assert not hasattr(_docs_contract, "docs_table")
