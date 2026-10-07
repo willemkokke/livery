@@ -101,6 +101,8 @@ CHECK_ORDER = "check-order"
 DECLARATION_VALIDATES = "declaration-validates"
 REFERENCES_REGISTER_NOTHING = "references-register-nothing"
 ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
+CLAIMS_NAME_CATEGORIES = "claims-name-categories"
+PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -446,15 +448,38 @@ def _declaration_validates(subject: Subject) -> list[Violation]:
     return []
 
 
+def _declared_of(subject: Subject) -> tuple[Path, Declaration] | None:
+    """The subject's declaration file and what it declares; None without one.
+
+    None as well for a file that refuses, which ``declaration-validates``
+    names: the clauses that read a declaration judge only one that reads.
+    """
+    from livery.workshop._declaration import DeclarationError, declaration_file, read
+
+    path = declaration_file(subject.extension)
+    if path is None:
+        return None
+    try:
+        declared = read(subject.extension, subject.extension)
+    except DeclarationError:
+        return None
+    return None if declared is None else (path, declared)
+
+
+def _additions_of(declared: Declaration) -> list[tuple[tuple[str, ...], Additions]]:
+    """The top level's additions, then each ``[for.<target>]``'s, with their keys."""
+    tables: list[tuple[tuple[str, ...], Additions]] = [((), declared.additions)]
+    tables += [(("for", target), table) for target, table in declared.targets.items()]
+    return tables
+
+
 def _references(declared: Declaration) -> list[tuple[str, Reference]]:
     """Each reference *declared* names, with the key that names it."""
     from livery.workshop._contract_keys import shown
     from livery.workshop._declaration import Reference
 
     found: list[tuple[str, object]] = []
-    tables: list[tuple[tuple[str, ...], Additions]] = [((), declared.additions)]
-    tables += [(("for", target), table) for target, table in declared.targets.items()]
-    for prefix, additions in tables:
+    for prefix, additions in _additions_of(declared):
         for record in additions.checks:
             where = shown((*prefix, "checks", record.tool, record.role))
             found += [(f"{where}.run", record.run), (f"{where}.fix", record.fix)]
@@ -494,18 +519,11 @@ def _registered_by_import(module: str) -> list[str]:
 
 
 def _references_register_nothing(subject: Subject) -> list[Violation]:
-    from livery.workshop._declaration import DeclarationError, declaration_file, read
-
-    if declaration_file(subject.extension) is None:
-        return []
-    try:
-        declared = read(subject.extension, subject.extension)
-    except DeclarationError:
-        return []  # declaration-validates names the file
-    if declared is None:
+    found = _declared_of(subject)
+    if found is None:
         return []
     named: dict[str, list[str]] = {}
-    for key, reference in _references(declared):
+    for key, reference in _references(found[1]):
         named.setdefault(reference.module, []).append(key)
     violations: list[Violation] = []
     for module, keys in named.items():
@@ -527,25 +545,17 @@ def _entries_name_defined_tasks(subject: Subject) -> list[Violation]:
     import difflib
 
     from livery.workshop._contract_keys import shown
-    from livery.workshop._declaration import (
-        DeclarationError,
-        declaration_file,
-        defined_tasks,
-        read,
-    )
+    from livery.workshop._declaration import defined_tasks
 
-    path = declaration_file(subject.extension)
-    if path is None:
+    found = _declared_of(subject)
+    if found is None:
         return []
-    try:
-        declared = read(subject.extension, subject.extension)
-    except DeclarationError:
-        return []  # declaration-validates names the file
-    if declared is None:
-        return []
-    tables: list[tuple[tuple[str, ...], Additions]] = [((), declared.additions)]
-    tables += [(("for", target), table) for target, table in declared.targets.items()]
-    jobs = [(prefix, item) for prefix, additions in tables for item in additions.jobs]
+    path, declared = found
+    jobs = [
+        (prefix, item)
+        for prefix, additions in _additions_of(declared)
+        for item in additions.jobs
+    ]
     if not jobs:
         return []
     defined = sorted(defined_tasks(path.parent))
@@ -565,6 +575,65 @@ def _entries_name_defined_tasks(subject: Subject) -> list[Violation]:
                 )
             violations.append(Violation(ENTRIES_NAME_DEFINED_TASKS, where, reason))
     return violations
+
+
+def _claims_name_categories(subject: Subject) -> list[Violation]:
+    import difflib
+
+    from livery.workshop._categories import known_categories
+    from livery.workshop._contract_keys import shown
+
+    found = _declared_of(subject)
+    if found is None:
+        return []
+    known = sorted(known_categories())
+    violations: list[Violation] = []
+    for prefix, additions in _additions_of(found[1]):
+        for record in additions.checks:
+            where = shown((*prefix, "checks", record.tool, record.role, "claims"))
+            for claim in record.claims:
+                if claim.category not in known:
+                    near = difflib.get_close_matches(claim.category, known, n=1)
+                    hint = f"; did you mean {near[0]!r}?" if near else ""
+                    violations.append(
+                        Violation(
+                            CLAIMS_NAME_CATEGORIES,
+                            where,
+                            f"names the category {claim.category!r}, which no"
+                            f" extension registers{hint}; the check claims no"
+                            " file of it",
+                        )
+                    )
+                violations += [
+                    Violation(
+                        CLAIMS_NAME_CATEGORIES,
+                        where,
+                        f"names the suffix {suffix!r}; a suffix starts with a dot,"
+                        f" {'.' + suffix!r}",
+                    )
+                    for suffix in claim.suffixes
+                    if not suffix.startswith(".")
+                ]
+    return violations
+
+
+def _plugin_is_an_entry_point(subject: Subject) -> list[Violation]:
+    from livery.footman import installed_entry_points
+
+    found = _declared_of(subject)
+    if found is None or not found[1].plugin:
+        return []
+    plugin = found[1].plugin
+    if plugin in {entry.name for entry in installed_entry_points("footman.tasks")}:
+        return []
+    return [
+        Violation(
+            PLUGIN_IS_AN_ENTRY_POINT,
+            f"extension {subject.extension}",
+            f"names the plugin {plugin!r}, which no installed distribution"
+            " declares in footman.tasks; the mount cannot mount its verbs",
+        )
+    ]
 
 
 # An extension's configuration files, through the workshop's own render.
@@ -960,6 +1029,18 @@ CLAUSES: tuple[Clause, ...] = (
         "Every task a CI job's entries name is one the extension defines, read"
         " from its sources: a group and a task decorated in it.",
         _entries_name_defined_tasks,
+    ),
+    Clause(
+        CLAIMS_NAME_CATEGORIES,
+        "Every category a check's claims name is one an extension registers,"
+        " and every suffix starts with a dot.",
+        _claims_name_categories,
+    ),
+    Clause(
+        PLUGIN_IS_AN_ENTRY_POINT,
+        "The plugin an extension.toml names is a footman.tasks entry point an"
+        " installed distribution declares.",
+        _plugin_is_an_entry_point,
     ),
     Clause(
         FRAGMENT_DRIFT,

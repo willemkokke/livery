@@ -226,7 +226,10 @@ its type, and every reference in it names a function its module
 defines; importing a module a reference names registers nothing, which
 the kit proves by importing each in a process of its own; every task a
 CI job's entries name is one the extension defines, read from its
-sources; a check's
+sources; every category a check's claims name is one an extension
+registers, every suffix starting with a dot; the plugin an
+`extension.toml` names is an installed `footman.tasks` entry point; a
+check's
 fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and

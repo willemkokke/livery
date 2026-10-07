@@ -268,6 +268,51 @@ def test_a_job_entry_naming_a_task_the_extension_does_not_define_breaks_the_clau
     assert _names(Subject("acme_kit_jobs"), clause) == []
 
 
+def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "acme_kit_claims"
+    package.mkdir()
+    (package / "_checks.py").write_text("def judged(ctx):\n    del ctx\n")
+    declaration = package / "extension.toml"
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_claims._checks:judged"\n'
+        'claims = [{ category = "sources", suffixes = ["py"] }]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "claims-name-categories"
+    assert _names(Subject("acme_kit_claims"), clause) == [
+        "claims-name-categories: checks.acme.lint.claims: names the category"
+        " 'sources', which no extension registers; did you mean 'source'?; the"
+        " check claims no file of it",
+        "claims-name-categories: checks.acme.lint.claims: names the suffix 'py';"
+        " a suffix starts with a dot, '.py'",
+    ]
+    declaration.write_text(
+        '[checks.acme.lint]\nrun = "acme_kit_claims._checks:judged"\n'
+        'claims = [{ category = "source", suffixes = [".py"] }]\n'
+    )
+    assert _names(Subject("acme_kit_claims"), clause) == []
+
+
+def test_a_plugin_no_distribution_declares_breaks_the_clause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "acme_kit_plugin"
+    package.mkdir()
+    declaration = package / "extension.toml"
+    declaration.write_text('[extension]\nplugin = "acme.nowhere"\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "plugin-is-an-entry-point"
+    assert _names(Subject("acme_kit_plugin"), clause) == [
+        "plugin-is-an-entry-point: extension acme_kit_plugin: names the plugin"
+        " 'acme.nowhere', which no installed distribution declares in"
+        " footman.tasks; the mount cannot mount its verbs"
+    ]
+    declaration.write_text('[extension]\nplugin = "livery.extensions.docs"\n')
+    assert _names(Subject("acme_kit_plugin"), clause) == []
+
+
 def test_every_installed_extension_passes_the_declaration_clauses() -> None:
     from livery.footman import installed_entry_points
 
@@ -278,7 +323,12 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         }
     )
     assert packages
-    clauses = {"references-register-nothing", "entries-name-defined-tasks"}
+    clauses = {
+        "references-register-nothing",
+        "entries-name-defined-tasks",
+        "claims-name-categories",
+        "plugin-is-an-entry-point",
+    }
     found = [
         str(violation)
         for package in packages
@@ -580,6 +630,8 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "declaration-validates",
         "references-register-nothing",
         "entries-name-defined-tasks",
+        "claims-name-categories",
+        "plugin-is-an-entry-point",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",
