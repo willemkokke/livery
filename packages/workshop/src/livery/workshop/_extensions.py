@@ -323,6 +323,11 @@ MOUNTED: bool = False
 #: ([livery.workshop._extensions.unmounted][]).
 UNDECLARED: tuple[str, ...] = ()
 
+#: Of those, the ones an installed distribution declares by an entry point
+#: whose package ships no declaration file: an environment from before the
+#: checkout's, which a sync's ``uv sync`` brings current.
+STALE: tuple[str, ...] = ()
+
 
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount every listed extension's plugin, in order; the names mounted.
@@ -347,7 +352,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     # private read is one of the reaches issue #1204 closes with a seam.
     from livery.footman import _paths, plugin
 
-    global MOUNTED, UNDECLARED
+    global MOUNTED, UNDECLARED, STALE
     MOUNTED = True
     undeclared: list[str] = []
     root = workspace_root(start)
@@ -355,6 +360,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         _note(why)
     builtin = set(_paths.builtin())
     mounted = []
+    stale: list[str] = []
     declared = declared_targets(start)
     active = resolved_targets(start)
     options = extension_options(start)
@@ -376,6 +382,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             # written for another workshop: named and skipped, so the
             # sync that installs this checkout's can run.
             undeclared.append(extension)
+            stale.append(extension)
             _note(
                 f"extension {extension!r}: the installed distribution ({dist})"
                 f" names {package}, which ships no {FILE}; `{prog()} sync`"
@@ -426,7 +433,19 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
 
     generate_verbs()
     UNDECLARED = tuple(undeclared)
+    STALE = tuple(stale)
     return tuple(mounted)
+
+
+def stale_declarations(start: Path | None = None) -> tuple[str, ...]:
+    """The listed extensions the mount found installed from before this checkout.
+
+    Each has an entry point whose package ships no declaration file, so
+    the environment's metadata is older than the source: ``uv sync``
+    brings it current.
+    """
+    listed = extension_names(start)
+    return tuple(name for name in STALE if name in listed)
 
 
 def unmounted(start: Path | None = None) -> tuple[str, ...]:
@@ -445,8 +464,7 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
     them once at its start, and imports nothing: a distribution
     installed after the interpreter started may not be importable in
     it, as an editable install's path joins `sys.path` only when a
-    process starts. An entry point whose package ships no declaration
-    file is not counted: a sync installs the one that does.
+    process starts.
     """
     if not names:
         return ()
@@ -454,12 +472,7 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
 
     rescan_entry_points()
     declared = _declared()
-    return tuple(
-        name
-        for name in names
-        if name in declared
-        and declaration_file(declared[name].value.partition(":")[0]) is not None
-    )
+    return tuple(name for name in names if name in declared)
 
 
 def _note(text: str) -> None:

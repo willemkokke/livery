@@ -125,7 +125,7 @@ class Declaration:
     deletes: dict[str, str] = field(default_factory=dict[str, str])
 
 
-_LOCATED: dict[tuple[str, tuple[str, ...]], Path | None] = {}
+_LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
 
 
 def directory(package: str) -> Path | None:
@@ -133,13 +133,15 @@ def directory(package: str) -> Path | None:
 
     The directory that carries the declaration file when several hold
     the package's parts, as a namespace's portions do. Found once per
-    import path: a mount asks for each extension's several times.
+    import path, since a mount asks for each extension's several times;
+    an absence is never kept, so a package installed later is found.
     """
     key = (package, tuple(sys.path))
     if key in _LOCATED:
         return _LOCATED[key]
     found = _locate(package)
-    _LOCATED[key] = found
+    if found is not None:
+        _LOCATED[key] = found
     return found
 
 

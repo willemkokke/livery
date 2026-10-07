@@ -114,6 +114,17 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
     with pytest.raises(Failed, match="cannot mount"):
         require_mounted(tmp_path)
     assert ran == [("sync",)]
+    # Declared by an entry point whose package ships no declaration
+    # file, an environment from before the checkout's: uv sync brings its
+    # metadata current, though every entry point is there already.
+    ran.clear()
+    monkeypatch.setattr("livery.workshop._extensions.declared_now", lambda names: names)
+    monkeypatch.setattr(
+        "livery.workshop._extensions.stale_declarations", lambda start: ("mypy",)
+    )
+    with pytest.raises(Failed, match="cannot mount"):
+        require_mounted(tmp_path)
+    assert ran == [("sync",)]
     # Every listed extension mounted: nothing to do.
     monkeypatch.setattr("livery.workshop._extensions.unmounted", lambda start: ())
     ran.clear()
