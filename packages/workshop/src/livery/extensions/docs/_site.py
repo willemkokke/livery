@@ -50,7 +50,6 @@ from livery.workshop._docs_contract import (
     NAV_TOML,
     declines_api,
     docs_table,
-    site_reads,
 )
 from livery.workshop._kinds import ALL_MEMBERS, Extractor
 from livery.workshop._navblocks import (
@@ -1837,11 +1836,6 @@ def docs_build(
     docs did not move keeps its mount; ``--full`` rebuilds them all.
     """
     root = _root()
-    if not package and not full:
-        skip = unread_by_the_site(root)
-        if skip:
-            print(skip)
-            return
     require_sources(root)
     _generate_all(root, full=full)
     if package:
@@ -2017,41 +2011,6 @@ def docs_serve(
         return
     generate_release_pages(root)
     tools.zensical.opts(cwd=root).serve()
-
-
-def unread_by_the_site(root: Path) -> str:
-    """The line that skips the build when nothing the site reads changed, or empty.
-
-    Only a pull request's docs job on a workspace declaring
-    ``[ci] affected-legs`` skips, the same terms the check legs
-    narrow on; the merge point's build and a person's own run always
-    build. The diff against the base branch is read the way the check
-    legs read it.
-    """
-    from livery.workshop._git_ops import GitError, GitOps
-    from livery.workshop._packages import discover_packages
-    from livery.workshop._quality import ci_affected_base
-    from livery.workshop._state import run_context
-
-    run = run_context()
-    base = ci_affected_base(root, run) if run is not None else ""
-    if not base:
-        return ""
-    git = GitOps(root)
-    try:
-        git.fetch()
-        paths = git.changed_paths(base)
-    except GitError as error:
-        print(f"  docs: no diff against origin/{base}; building ({error})")
-        return ""
-    packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    read = [path for path in paths if site_reads(root, packages, path)]
-    if read:
-        return ""
-    return (
-        f"  docs: nothing the site reads changed against origin/{base}"
-        f" ({len(paths)} path(s) changed); the build is skipped"
-    )
 
 
 #: The development section: one page per prose section, from the

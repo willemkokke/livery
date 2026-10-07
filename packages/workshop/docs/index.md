@@ -119,11 +119,15 @@ Its **channel** says who wrote the file and where to edit it,
 answered by ranked rules an extension may add to. The workspace root is a
 unit of its own, with `notes/`, the site's files and `README.md`
 categorised beside its tests, and a `src/` at the root refuses in the
-layering check, since the root is never a package. The site build
-claims the categories it reads, prose, nav, asset, example and the
-root's site files, so a pull request that changes only `notes/` skips
-the docs job with a line saying so, and `fm explain` prints
-`claimed by: site` on a file the build reads.
+layering check, since the root is never a package. A CI job may
+declare the files its entries read as `inputs`, the table a check
+declares: a pull request's run that changed none of them, nor the
+sources of the extension that contributed the job, skips the job's
+entries with a line saying so. The docs extension's gate job reads the
+workspace's `docs/`, `zensical.toml` and `README.md` and each package's
+pages, nav, assets, examples and generated pages, so a pull request
+that changes only `notes/` skips the site build, and `fm explain`
+prints `claimed by: gate/docs` on a file the build reads.
 
 A check also says what its tool needs of the workspace. Its `tools`
 reach the tool profile for every kind the check judges, each
@@ -217,19 +221,19 @@ assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots,
 the staged extension css, the generators a package declares and the
 seam the site publishes through, and it arrives through its own task
 entry point. The base keeps what it reads of a package's docs for its
-own reasons (the `[docs]` table, the layout of the `docs/` tree, the
-categories the site reads) and the nav blocks generators write; it
-imports no extension, which the layering check enforces. It lives under
-`livery.extensions`, a namespace any distribution can add an extension
-to.
+own reasons (the `[docs]` table and the layout of the `docs/` tree)
+and the nav blocks generators write; it imports no extension, which
+the layering check enforces. It lives under `livery.extensions`, a
+namespace any distribution can add an extension to.
 The site's two CI jobs come with the extension: its `extension.toml`
 declares the gate point's `docs` job, which the verdict waits for, and
 the merge point's `deploy` job, as `[ci.jobs.gate.docs]` and
 `[ci.jobs.merge.deploy]`, each with the tasks it runs; a workspace that
 does not list the extension renders neither job. Each job names the
-function that lists the system packages it installs, and the deploy
-names the function that answers its publish seam, so the CI render
-installs and deploys without reading the `[docs]` table. A contributed
+function that lists the system packages it installs, the deploy names
+the function that answers its publish seam, and the gate job declares
+the files the site reads, so the CI render and the shell's skip rule
+work without reading the `[docs]` table. A contributed
 job sits before the point's verdict job, or last on a point without
 one. The extension
 renders the site's development section from the prose fragments

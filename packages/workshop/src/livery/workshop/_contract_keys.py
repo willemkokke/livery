@@ -171,6 +171,24 @@ DECLARED: tuple[Declared, ...] = (
 )
 
 
+def _input_keys(owner: str) -> tuple[Declared, ...]:
+    """The keys of the ``inputs`` table under *owner*: the files a check or a job reads.
+
+    The affected engine asks them: what is read, whether each changed
+    file is judged on its own, what widens to everything, and what
+    never counts.
+    """
+    return (
+        _extension(f"{owner}.inputs", "table"),
+        _extension(f"{owner}.inputs.reads", "strs"),
+        _extension(f"{owner}.inputs.per-file", "bool"),
+        _extension(f"{owner}.inputs.widens", "strs"),
+        _extension(f"{owner}.inputs.on-removal", "bool"),
+        _extension(f"{owner}.inputs.widen", "str"),
+        _extension(f"{owner}.inputs.ignores", "strs"),
+    )
+
+
 def _check_keys(prefix: str) -> tuple[Declared, ...]:
     """The keys of the checks an extension declares under *prefix*.
 
@@ -202,14 +220,7 @@ def _check_keys(prefix: str) -> tuple[Declared, ...]:
         _extension(f"{check}.claims[].category", "str"),
         _extension(f"{check}.claims[].suffixes", "strs"),
         _extension(f"{check}.claims[].ignore", "strs"),
-        # The files a workspace check reads, as the affected engine asks.
-        _extension(f"{check}.inputs", "table"),
-        _extension(f"{check}.inputs.reads", "strs"),
-        _extension(f"{check}.inputs.per-file", "bool"),
-        _extension(f"{check}.inputs.widens", "strs"),
-        _extension(f"{check}.inputs.on-removal", "bool"),
-        _extension(f"{check}.inputs.widen", "str"),
-        _extension(f"{check}.inputs.ignores", "strs"),
+        *_input_keys(check),
         _extension(f"{check}.options", "table"),
         _extension(f"{check}.options.*", "table"),
         _extension(f"{check}.options.*.type", "str", values=("bool", "str", "int")),
@@ -231,9 +242,9 @@ def _job_keys(prefix: str) -> tuple[Declared, ...]:
     contract's ``[ci]`` table has. It names its tasks, whether the
     point's verdict waits for it, the jobs it waits for, its checkout
     depth, the run's own token, the functions that name what it
-    installs and where it deploys, and the comment above it. A grant
-    beyond the run's own token is the root contract's to give, so a
-    job takes no other.
+    installs and where it deploys, the files it reads, and the comment
+    above it. A grant beyond the run's own token is the root contract's
+    to give, so a job takes no other.
     """
     job = f"{prefix}.jobs.*.*"
     return (
@@ -248,6 +259,7 @@ def _job_keys(prefix: str) -> tuple[Declared, ...]:
         _extension(f"{job}.token", "str", values=("job",)),
         _extension(f"{job}.installs", "str"),
         _extension(f"{job}.deploy", "str"),
+        *_input_keys(job),
         _extension(f"{job}.note", "str"),
     )
 

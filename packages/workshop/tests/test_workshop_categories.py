@@ -19,6 +19,9 @@ from livery.workshop._categories import (
     unregister_channels,
 )
 from livery.workshop._packages import Package, discover_packages
+
+# The site's jobs are the docs extension's, added as the mount adds them.
+from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 
@@ -190,6 +193,7 @@ def test_explain_prints_category_channel_supplier_and_claims(
     from livery.workshop import _provenance
 
     member = _member(tmp_path, "")
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     (member / "docs" / "examples").mkdir(parents=True)
     (member / "docs" / "examples" / "first.py").write_text("x = 1\n")
     monkeypatch.setattr(_provenance, "emitted_paths", lambda root: frozenset())
@@ -197,22 +201,25 @@ def test_explain_prints_category_channel_supplier_and_claims(
     assert lines[0] == "  packages/x/docs/examples/first.py"
     assert lines[1] == "    category: example (livery.workshop)"
     assert lines[2] == "    channel: yours (livery.workshop)"
-    assert "    claimed by: lint.fake, site" in lines
+    assert "    claimed by: lint.fake, gate/docs" in lines
     note = _provenance.describe(tmp_path, Path("notes/musings.md"))
     assert note[1] == "    category: notes (livery.workshop)"
     assert not any(line.startswith("    claimed by") for line in note)
 
 
-def test_site_reads_the_docs_and_the_readme_and_not_the_notes(tmp_path: Path) -> None:
-    from livery.workshop._docs_contract import site_reads
+def test_the_docs_job_reads_the_docs_and_the_readme_and_not_the_notes(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._points import jobs_reading
 
-    packages = (
-        Package(tmp_path / "packages" / "x", "packages/x", "livery-x", "python", ()),
-    )
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     read = [
         "packages/x/docs/index.md",
+        "packages/x/docs/nav.toml",
         "packages/x/docs/examples/first.py",
         "packages/x/docs/assets/site.css",
+        "packages/x/docs/_generated/api.md",
+        "packages/group/y/docs/index.md",
         "docs/index.md",
         "zensical.toml",
         "README.md",
@@ -221,44 +228,66 @@ def test_site_reads_the_docs_and_the_readme_and_not_the_notes(tmp_path: Path) ->
         "notes/musings.md",
         "packages/x/src/livery/x/a.py",
         "packages/x/workshop.toml",
+        "packages/x/docs/examples/data.json",
     ]
-    assert all(site_reads(tmp_path, packages, path) for path in read)
-    assert not any(site_reads(tmp_path, packages, path) for path in unread)
+    assert [jobs_reading(tmp_path, path) for path in read] == [("gate/docs",)] * len(
+        read
+    )
+    assert [jobs_reading(tmp_path, path) for path in unread] == [()] * len(unread)
 
 
-def test_the_docs_job_skips_a_notes_only_change_and_builds_otherwise(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.docs._site import unread_by_the_site
+    from livery.workshop import _points
+    from livery.workshop._git_ops import GitError
 
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     changed: list[str] = ["notes/musings.md"]
+    broken: list[str] = []
 
     class FakeGit:
         def __init__(self, root: Path) -> None:
             del root
 
         def fetch(self) -> None:
-            return None
+            if broken:
+                raise GitError(broken[0])
 
         def changed_paths(self, base: str) -> list[str]:
             del base
             return list(changed)
 
     monkeypatch.setattr("livery.workshop._git_ops.GitOps", FakeGit)
-    monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda environ=None: object()
-    )
-    # Outside a pull request's narrowing the build always runs.
+    monkeypatch.setattr(_points, "run_context", lambda environ=None: object())
+    # The fallbacks first. Outside a pull request's narrowing every
+    # entry runs.
     monkeypatch.setattr(
         "livery.workshop._quality.ci_affected_base", lambda root, run: ""
     )
-    assert unread_by_the_site(tmp_path) == ""
+    assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""
     monkeypatch.setattr(
         "livery.workshop._quality.ci_affected_base", lambda root, run: "main"
     )
-    assert unread_by_the_site(tmp_path) == (
-        "  docs: nothing the site reads changed against origin/main (1 path(s)"
-        " changed); the build is skipped"
+    # A diff that cannot be read runs the job and says why.
+    broken.append("no network")
+    assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""
+    assert "gate/docs: no diff against origin/main; running" in capsys.readouterr().out
+    broken.clear()
+    # A job that declares no inputs always runs.
+    assert _points.unread_by_the_job(tmp_path, "merge", "deploy") == ""
+    # A change to the sources of the extension that contributed the job
+    # runs it, though it reads none of them.
+    monkeypatch.setattr(
+        "livery.workshop._extensions.extension_provider",
+        lambda extension, packages: "packages/site" if extension == "docs" else "",
+    )
+    changed[:] = ["packages/site/src/acme_site/pages.py"]
+    assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""
+    changed[:] = ["notes/musings.md"]
+    assert _points.unread_by_the_job(tmp_path, "gate", "docs") == (
+        "  gate/docs: nothing the job reads changed against origin/main (1 path(s)"
+        " changed); its entries are skipped"
     )
     changed.append("docs/index.md")
-    assert unread_by_the_site(tmp_path) == ""
+    assert _points.unread_by_the_job(tmp_path, "gate", "docs") == ""

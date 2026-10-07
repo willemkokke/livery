@@ -41,12 +41,16 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared
 from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
+
+if TYPE_CHECKING:
+    from livery.workshop._influence import Inputs
 
 #: The events a point may run on, in the forges' words.
 EVENT_NAMES = ("pull_request", "push", "schedule", "workflow_dispatch")
@@ -127,6 +131,9 @@ class Job:
             before its one call.
         only: When the job exists at all: ``wheels`` where a member
             declares wheel platforms, ``""`` always.
+        inputs: The files the job's entries read, declared as a check
+            declares its own: a pull request's run that changed none of
+            them skips the entries. None for a job that always runs.
         step: What the forge's run page calls the one call; the job's
             name capitalised when empty.
         note: The comment the rendered shell prints above the job.
@@ -152,6 +159,7 @@ class Job:
     dispatches: bool = False
     driver_pin: bool = False
     only: str = ""
+    inputs: Inputs | None = None
     step: str = ""
     note: str = ""
 
@@ -675,6 +683,12 @@ def contributed_jobs(point: str) -> tuple[JobContribution, ...]:
     return tuple(item for item in _CONTRIBUTED_JOBS.values() if item.point == point)
 
 
+def contributor_of(point: str, job: str) -> str:
+    """The extension that contributed *job* to *point*; the base for its own jobs."""
+    item = _CONTRIBUTED_JOBS.get((point, job))
+    return item.extension if item is not None else "livery.workshop"
+
+
 def verdict_needs(point: str) -> tuple[str, ...]:
     """What *point*'s verdict waits for: its declared needs, then the gating jobs."""
     declared = {item.name: item for item in DECLARED}
@@ -773,6 +787,61 @@ def inherited_jobs(point: Point, everything: tuple[Point, ...]) -> tuple[Job, ..
 def point_by_name(root: Path | None) -> dict[str, Point]:
     """`points`, by name."""
     return {point.name: point for point in points(root)}
+
+
+def jobs_reading(root: Path, path: str) -> tuple[str, ...]:
+    """The jobs whose declared inputs read *path*, each ``<point>/<job>``."""
+    from livery.workshop._influence import reads
+
+    return tuple(
+        f"{point.name}/{job.name}"
+        for point in points(root)
+        for job in point.jobs
+        if job.inputs is not None and reads(job.inputs, root, path)
+    )
+
+
+def unread_by_the_job(root: Path, point: str, job: str) -> str:
+    """The line that skips *job* of *point* when nothing it reads changed, or empty.
+
+    Only a job that declares ``inputs`` skips, and only on a pull
+    request's run in a workspace declaring ``[ci] affected-legs``, the
+    terms the check legs narrow on: a push, a dispatch, the clock and a
+    person's own run always run every entry. The diff against the base
+    branch is read the way the check legs read it, and the inputs
+    select as a check's do, so a change to the sources of the extension
+    that contributed the job runs it.
+    """
+    from livery.workshop._extensions import extension_provider
+    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._influence import Changes, select
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._quality import ci_affected_base
+
+    declared = next(
+        (item for item in point_by_name(root)[point].jobs if item.name == job), None
+    )
+    if declared is None or declared.inputs is None:
+        return ""
+    run = run_context()
+    base = ci_affected_base(root, run) if run is not None else ""
+    if not base:
+        return ""
+    git = GitOps(root)
+    try:
+        git.fetch()
+        paths = tuple(git.changed_paths(base))
+    except GitError as error:
+        print(f"  {point}/{job}: no diff against origin/{base}; running ({error})")
+        return ""
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    provider = extension_provider(contributor_of(point, job), packages)
+    if select(declared.inputs, Changes(root, paths), provider=provider).runs:
+        return ""
+    return (
+        f"  {point}/{job}: nothing the job reads changed against origin/{base}"
+        f" ({len(paths)} path(s) changed); its entries are skipped"
+    )
 
 
 def job_installs(
@@ -1271,9 +1340,10 @@ def run_point(
     `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
     `livery.workshop._state.POINT_VARIABLE`, which selects the
-    tests a point runs. *spawn* runs one entry's command in that
-    environment and returns its exit code; the default is the runner's
-    own child.
+    tests a point runs. A job that declares ``inputs`` runs no entry on
+    a pull request that changed nothing it reads (`unread_by_the_job`).
+    *spawn* runs one entry's command in that environment and returns
+    its exit code; the default is the runner's own child.
     """
     from livery.workshop._state import SNAPSHOT_VARIABLE, remote_snapshot
 
@@ -1281,6 +1351,10 @@ def run_point(
     entries = entries_for(root, resolved, job)
     if resolved != point:
         print(f"  point: {point} on a push is the {resolved} point")
+    skip = unread_by_the_job(root, resolved, job)
+    if skip:
+        print(skip)
+        return
     # The display name is the job's name as the forge lists it, since
     # the collect step joins the leg's row with the forge's job by it:
     # GitHub and Gitea show a matrix job as ``check (ubuntu-latest,

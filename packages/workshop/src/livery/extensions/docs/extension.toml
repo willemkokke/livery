@@ -86,6 +86,21 @@ note = """\
 The strict site build: broken links and orphan pages go red here, \
 required through the gate context, never inside the local check."""
 
+# What the site reads: the workspace's docs, its zensical.toml and
+# README, and each package's pages, nav, assets, examples and generated
+# pages. A pull request that changes none of them skips the build.
+[ci.jobs.gate.docs.inputs]
+reads = [
+    "docs/**",
+    "zensical.toml",
+    "README.md",
+    "packages/**/docs/**/*.md",
+    "packages/**/docs/nav.toml",
+    "packages/**/docs/assets/**",
+    "packages/**/docs/examples/**/*.py",
+    "packages/**/docs/_generated/**",
+]
+
 # The site's deploy, on the merge point: the build, then the publish
 # through the seam the root contract names.
 [ci.jobs.merge.deploy]
