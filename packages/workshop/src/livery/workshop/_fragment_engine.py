@@ -690,6 +690,36 @@ _IGNORE_HEADER = (
     "# yourself is not ignored and commits normally.\n"
 )
 
+#: Files an older delivery wrote into the checkout's own directories that
+#: no code writes or reads any more: the materialiser's digest list, and
+#: the managed ignore file it kept beside the agent's fragments, which
+#: the root's ignore of `.workshop/` covers. A delivery removes each it
+#: meets; no receipt names them, so the receipt rule never would.
+LEFTOVERS = (
+    ".workshop/fragments/.workshop-materialised",
+    ".workshop/fragments/.gitignore",
+)
+
+
+def _drop_leftovers(root: Path) -> list[str]:
+    """Remove what an older delivery left that nothing writes any more; the lines.
+
+    An ignore file is removed only while it carries the managed header,
+    so one a person wrote there stays.
+    """
+    lines: list[str] = []
+    for name in LEFTOVERS:
+        path = root / name
+        if not path.is_file():
+            continue
+        if path.name == ".gitignore" and not path.read_text(
+            "utf-8", errors="replace"
+        ).startswith("# Managed by `"):
+            continue
+        path.unlink()
+        lines.append(f"  removed {name}: an older sync's bookkeeping, nothing reads it")
+    return lines
+
 
 def local_receipts(root: Path) -> dict[str, str]:
     """What the engine linked or copied for this checkout alone, path to receipt."""
@@ -765,12 +795,14 @@ def _apply_local(root: Path, outputs: Sequence[Output]) -> list[str]:
     rule. A receipted entry nothing renders any more is removed while it
     is a link or an unedited copy, and kept and named otherwise. Each
     directory holding local entries outside `.workshop/` gets a
-    self-scoped `.gitignore` naming them, so an override commits.
+    self-scoped `.gitignore` naming them, so an override commits. What
+    an older delivery left that nothing writes any more (`LEFTOVERS`)
+    goes first.
     """
     from livery.workshop import _materialise
 
     receipts = _read_local(root)
-    lines: list[str] = []
+    lines: list[str] = _drop_leftovers(root)
     ours: dict[Path, list[str]] = {}
     seen: set[str] = set()
     for output in outputs:
