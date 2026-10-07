@@ -106,8 +106,7 @@ Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
 # The wheel ships two roots under the PEP 420 namespace livery: the
-# base, livery.workshop, whose entry module is its __init__.py, and the
-# docs extension, livery.extensions.docs, a namespace with no public
-# names. The flag lets uv ship a root with no __init__.py.
+# base, livery.workshop, and the docs extension, livery.extensions.docs,
+# each with its entry module, so uv refuses either root that loses its
+# __init__.py.
 module-name = ["livery.workshop", "livery.extensions.docs"]
-namespace = true

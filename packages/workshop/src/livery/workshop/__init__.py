@@ -5,9 +5,10 @@ The task surface arrives through the footman plugin
 walk (livery.workshop.extension_names, livery.workshop.workspace_root),
 the package contracts
 (livery.workshop.discover_packages, livery.workshop.verify_workspace
-over livery.workshop.Package and livery.workshop.Edge), and the one
-helper a package's docs generator needs
-(livery.workshop.rewrite_nav_block). The forge lane belongs to
+over livery.workshop.Package and livery.workshop.Edge). A package's
+docs generator writes its nav block through the docs extension's
+own names, [livery.extensions.docs.write_nav_block][]. The forge
+lane belongs to
 livery.forge.Forge; the workshop orchestrates local, git, and forge
 steps and never hands a raw forge verb to a user.
 
@@ -93,7 +94,6 @@ if TYPE_CHECKING:
     from livery.workshop._kinds import kind_examples as kind_examples
     from livery.workshop._kinds import public_modules as public_modules
     from livery.workshop._kinds import run_suites as run_suites
-    from livery.workshop._navblocks import rewrite_nav_block as rewrite_nav_block
     from livery.workshop._packages import Edge as Edge
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
@@ -146,7 +146,6 @@ __all__ = [
     "read_contract",
     "registry",
     "release_notes",
-    "rewrite_nav_block",
     "run_batched",
     "run_suites",
     "scoped_files",
@@ -192,7 +191,6 @@ _EXPORTS: dict[str, str] = {
     "read_contract": "livery.workshop._contract",
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",
-    "rewrite_nav_block": "livery.workshop._navblocks",
     "run_batched": "livery.workshop._invoke",
     "run_suites": "livery.workshop._kinds",
     "scoped_files": "livery.workshop._checks",

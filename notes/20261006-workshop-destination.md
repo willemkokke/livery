@@ -6,7 +6,7 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
 reach scan, the declaration file, the docs extension's registrations,
 the schema, the verification and the public names are built, and the
-slice's breaking part is next. The extensions plan
+release wave that ships the slice's break is next. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1414,6 +1414,20 @@ the stack, which this design neither needs nor rules out).
   slice's breaking part is next: `rewrite_nav_block` leaves for the
   docs extension's own public API, and `mount_extensions` leaves the
   public surface.
+- 2026-10-07, the public names (#1290), the breaking part: `_navblocks`
+  moves into the docs extension, and `livery.extensions.docs` gets an
+  entry module serving `write_nav_block`, `nav_block_markers` and
+  `GENERATED`; the workshop's wheel drops `namespace = true`, so `uv
+  build` refuses either root that loses its `__init__.py`.
+  `rewrite_nav_block` leaves the workshop with no replacement under its
+  name: no package's source called it, and `write_nav_block` emits the
+  block beside the generated pages, which leaves the committed
+  `nav.toml` alone. toolroom-bench writes through the public name, and
+  the reach test's `_navblocks` row goes. `mount_extensions` was
+  private already, in `livery.workshop._extensions`. `Page` and the
+  members policy wait for phase 11's generators. The wave that
+  releases the break waits for PyPI's window for the four new
+  distributions.
 
 ## Open
 

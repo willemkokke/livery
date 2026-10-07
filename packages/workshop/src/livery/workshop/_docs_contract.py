@@ -27,7 +27,9 @@ MOUNT = "docs/packages"
 #: and strips the prefix from every link into it.
 GENERATED_DIR = "_generated"
 
-
+#: The generated tree's name with its slash, as a link into it is
+#: written: where a generator writes a package's pages, under the
+#: package's ``docs/``.
 GENERATED = GENERATED_DIR + "/"
 
 

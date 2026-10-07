@@ -8,21 +8,21 @@ from pathlib import Path
 
 import pytest
 
+from livery.extensions.docs._navblocks import NAV_BEGIN, NAV_END
 from livery.extensions.docs._site import (
     MEMBERS_SLOT,
-    THEME_SLOT,
     mount_package_docs,
     named_package,
     scoped_config,
     zensical_config,
 )
+from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import Failed
 from livery.workshop._docs_contract import (
     materialise_module_docs,
     module_docs,
     module_docs_dir,
 )
-from livery.workshop._navblocks import NAV_BEGIN, NAV_END
 from livery.workshop._packages import discover_packages
 from workshop_docs_declared import docs_jobs, docs_slots  # noqa: F401
 
@@ -728,47 +728,6 @@ def test_the_mount_leaves_nav_toml_behind(tmp_path: Path) -> None:
     mount_package_docs(root)
     assert (root / "docs/packages/core/guide.md").is_file()
     assert not (root / "docs/packages/core/nav.toml").exists()
-
-
-# The marker rewrite: refusals first.
-
-
-def test_the_block_rewrite_refuses_without_its_markers(tmp_path: Path) -> None:
-    import pytest
-
-    from livery.workshop._navblocks import rewrite_nav_block
-
-    with pytest.raises(BaseException, match="no home"):
-        rewrite_nav_block(tmp_path / "absent.toml", "tools", [])
-    path = tmp_path / "nav.toml"
-    path.write_text("nav = [\n]\n")
-    with pytest.raises(BaseException, match="tools"):
-        rewrite_nav_block(path, "tools", [])
-
-
-def test_the_block_rewrite_reindents_and_is_idempotent(tmp_path: Path) -> None:
-    from livery.workshop._navblocks import rewrite_nav_block
-
-    path = tmp_path / "nav.toml"
-    path.write_text(
-        "nav = [\n"
-        '    { "Index" = "index.md" },\n'
-        "    # nav:begin tools\n"
-        "    # nav:end tools\n"
-        "]\n"
-    )
-    entries = ['{ "One" = "_generated/one.md" },', '{ "Two" = "_generated/two.md" },']
-    rewrite_nav_block(path, "tools", entries)
-    first = path.read_text()
-    # The generator hands unindented lines; the block's own
-    # indentation comes from the marker.
-    assert '    { "One" = "_generated/one.md" },\n' in first
-    rewrite_nav_block(path, "tools", entries)
-    assert path.read_text() == first
-    rewrite_nav_block(path, "tools", ['{ "Three" = "_generated/three.md" },'])
-    third = path.read_text()
-    assert "one.md" not in third and "three.md" in third
-    assert '    { "Index" = "index.md" },\n' in third  # the hand tree kept
 
 
 # The scoped preview. Refusal first.

@@ -64,10 +64,6 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("livery-toolroom-bench", "livery.toolroom.store._engine.download"): (
         "a plain download: footman's public fetch, phase 10d"
     ),
-    ("livery-toolroom-bench", "livery.workshop._navblocks.write_nav_block"): (
-        "a nav block beside generated pages: the docs extension's"
-        " write_nav_block, phase 10b"
-    ),
     ("livery-workshop", "livery.footman._config"): (
         "the project's builtin families: footman's project_builtins(root), phase 10d"
     ),
