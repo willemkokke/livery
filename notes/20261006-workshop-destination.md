@@ -5,8 +5,8 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 2026-10-06 against
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
 reach scan, the declaration file, the docs extension's registrations,
-the schema and the verification are built, and the public names are
-next. The extensions plan
+the schema, the verification and the public names' first part are
+built, and the public names' second part is next. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1378,6 +1378,25 @@ the stack, which this design neither needs nor rules out).
   named on stderr and links nothing, as the mount names what it
   skips. `docs_table` moves into the extension; a package's
   `[docs] api` stays the base's until the API extractor moves.
+- 2026-10-07, the public names (#1285), first part: `livery.workshop`
+  exports `NONE`, `selected_files`, `Changes`, `read_contract`,
+  `generated_header`, `ci_run`, `RunContext`, `slot`, `ReleaseNotes`,
+  `release_notes`, `forge_repository`, `registry` and `RegistryTarget`,
+  and the docs extension reads the workspace through them. Decided
+  here: `GateContext` names the running check, `check`, set as a run
+  hands it over, so `selected_files(ctx)` takes the context alone and
+  `check_for` leaves the extension; the field is the check's name, not
+  its record, which stays off the public surface. `read_contract` takes
+  the directory a contract sits in, so an extension never spells the
+  file's name. `generated_header` takes the lines an extension's own
+  file opens with. A compose reference refuses with `ValueError`, which
+  the composition names as the slot's, so no error type is public.
+  `ci_run`, `read_contract` and `registry` sit beside the names the
+  base's own code calls; `remote_repo_name` became `forge_repository`.
+  The reach scan reads the workshop's wheel as one distribution, so a
+  test holds the docs extension to these names until phase 12 ships it
+  apart. The second part brings `ci_changes`, `Prose`, `AGENT`,
+  `HUMAN`, `guidance` and `contributions_for`.
 
 ## Open
 

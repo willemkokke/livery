@@ -7,8 +7,6 @@ nothing.
 
 from __future__ import annotations
 
-from livery.workshop import _slots
-
 #: The slot deciding the theme block's values. The base's block is
 #: the default; a theme extension contributes a table of the keys it
 #: changes, and contributions merge key by key in contribution order,
@@ -63,22 +61,21 @@ def merge_theme(values: list[object]) -> object:
     """The theme's values: the default, each contribution's keys over it.
 
     Raises:
-        SlotError: when a contribution is not a table, or names a key
-            outside the block's vocabulary.
+        ValueError: when a contribution is not a table, or names a key
+            outside the block's vocabulary; the composition names the
+            slot.
     """
     theme: dict[str, object] = dict(THEME_DEFAULT)
     for value in values:
         if not isinstance(value, dict):
-            raise _slots.SlotError(
-                f"slot {THEME_SLOT!r}: a contribution is a table of the theme's"
-                f" keys, not {value!r}"
+            raise ValueError(
+                f"a contribution is a table of the theme's keys, not {value!r}"
             )
         table: dict[object, object] = dict(value)
         for key, setting in table.items():
             if not isinstance(key, str) or key not in THEME_DEFAULT:
-                raise _slots.SlotError(
-                    f"slot {THEME_SLOT!r}: unknown key {key!r}; the keys are"
-                    f" {', '.join(THEME_DEFAULT)}"
+                raise ValueError(
+                    f"unknown key {key!r}; the keys are {', '.join(THEME_DEFAULT)}"
                 )
             theme[key] = setting
     return theme

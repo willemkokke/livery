@@ -46,8 +46,7 @@ from livery.extensions.docs._contract import (
 )
 from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import doc, fail, group
-from livery.workshop import _extensions, _slots
-from livery.workshop._contract import load_contract
+from livery.workshop import _extensions, read_contract, slot
 from livery.workshop._docs_contract import (
     GENERATED,
     GENERATED_DIR,
@@ -100,7 +99,7 @@ def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
     thing to it. A path reaching outside the package refuses.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = load_contract(contract_path)
+    contract = read_contract(package.directory)
     table = contract.get("docs") or {}
     declared = table.get("coverage") if isinstance(table, dict) else None
     if declared is None:
@@ -524,7 +523,7 @@ MEMBERS_SLOT = "docs.members"
 
 def members_policy() -> str:
     """The composed private-members policy, ``public`` or ``all``."""
-    return str(_slots.composed(MEMBERS_SLOT))
+    return str(slot(MEMBERS_SLOT))
 
 
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
@@ -536,7 +535,7 @@ def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
     Anything else refuses naming the file and the entry.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = load_contract(contract_path)
+    contract = read_contract(package.directory)
     table = contract.get("docs") or {}
     if not isinstance(table, dict):
         return ([], [])
@@ -668,7 +667,7 @@ def _extra_asset_lines(root: Path) -> list[str]:
 
 def theme_values() -> dict[str, object]:
     """The composed theme block's values, by key."""
-    composed = _slots.composed(THEME_SLOT)
+    composed = slot(THEME_SLOT)
     assert isinstance(composed, dict)
     table: dict[object, object] = dict(composed)
     return {str(key): value for key, value in table.items()}
@@ -1039,7 +1038,7 @@ def changelog_page(root: Path, package: Package) -> str | None:
     if not changelog.is_file():
         return None
     text = changelog.read_text("utf-8")
-    from livery.workshop._release_notes import release_notes
+    from livery.workshop import release_notes
 
     notes = release_notes()
     try:
@@ -1460,7 +1459,7 @@ def materialise_preview(root: Path, package: Package) -> Path:
     touched. Callers run the mount and generation passes first, so
     the copied trees are current.
     """
-    from livery.workshop._provenance import generated_header
+    from livery.workshop import generated_header
 
     name = package.member
     base = root / PREVIEW / name
@@ -1550,11 +1549,10 @@ def _publish_container(root: Path) -> None:
     """
     import tempfile
 
-    from livery.workshop._forge_lane import remote_repo_name
-    from livery.workshop._registries import resolve_registry
+    from livery.workshop import forge_repository, registry
 
-    target = resolve_registry(root, "container")
-    repo = remote_repo_name(root)
+    target = registry(root, "container")
+    repo = forge_repository(root)
     image = f"{target.url}/{repo}-docs:latest".lower()
     dockerfile = "FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"
     with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile", delete=False) as handle:
@@ -1593,9 +1591,9 @@ def _publish_ssh(root: Path) -> None:
     if not (host and user and docs_root):
         print("  ssh seam unconfigured (DOCS_HOST/DOCS_USER/DOCS_ROOT): skipping")
         return
-    from livery.workshop._forge_lane import remote_repo_name
+    from livery.workshop import forge_repository
 
-    target = f"{docs_root}/{remote_repo_name(root)}"
+    target = f"{docs_root}/{forge_repository(root)}"
     destination = f"{user}@{host}"
     prepare = tools.ssh.opts(cwd=root, nofail=True, recorded=False)(
         destination, f"rm -rf {target} && mkdir -p {target}"
@@ -1699,14 +1697,14 @@ def write_site_config(root: Path) -> Path:
     and the extension set. The header says so, since the file reads
     like a rendered one.
     """
-    from livery.workshop._provenance import format_header
+    from livery.workshop import generated_header
 
-    header = format_header(
+    header = generated_header(
+        "#",
         (
             "Assembled by the docs build from workshop.toml and every package's",
             "section; gitignored and rewritten on every docs verb, never edited.",
         ),
-        "#",
     )
     path = root / SITE_CONFIG
     path.write_text(header + zensical_config(root), encoding="utf-8")
@@ -1784,13 +1782,13 @@ def docs_build(
     releases = generate_release_pages(root)
     if releases:
         print(f"  release view: {', '.join(releases)}")
-    from livery.workshop._state import run_context
+    from livery.workshop import ci_run
 
     print(source_summary(root))
     result = tools.zensical.opts(cwd=root, nofail=True).build(clean=True, strict=True)
     if result.code != 0:
         fail(f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}")
-    in_ci = run_context() is not None
+    in_ci = ci_run() is not None
     for line in generator_lines(result.stdout, result.stderr, in_ci=in_ci):
         print(line)
     from livery.extensions.docs._llms import write_llms_files

@@ -24,7 +24,13 @@ calls its tool through [livery.workshop.run_batched][]; one that
 narrows by packages (``narrowing = "packages"``) reads them from
 [livery.workshop.scoped_packages][], and one that judges a package
 at a time (``scope = "package"``) reads its files from
-[livery.workshop.scoped_files][]. A check declares the options a
+[livery.workshop.scoped_files][]. One that narrows by neither
+(``narrowing = "none"``, [livery.workshop.NONE][]) judges the whole
+workspace in every scope, and when it declares ``inputs`` it asks
+[livery.workshop.selected_files][] which of them this run's change
+touched, with the context its run was handed; its ``widen``
+reference receives the run's [livery.workshop.Changes][]. A check
+declares the options a
 package may set on it under the check's ``options`` and reads a
 package's value with [livery.workshop.check_option][]. A package's
 public modules are its kind's answer,
@@ -34,6 +40,19 @@ A kind also runs tests: the suites of several packages in one call,
 [livery.workshop.run_suites][], the workspace's own tests among
 them as [livery.workshop.workspace_suite][], and a package's
 documentation examples, [livery.workshop.kind_examples][].
+
+An extension reads the workspace through the names the engine reads
+it by: a contract's judged keys, [livery.workshop.read_contract][];
+a slot's composed value, [livery.workshop.slot][]; the CI run it
+belongs to, [livery.workshop.ci_run][], a
+[livery.workshop.RunContext][] or None at a desk; the workspace's
+repository on its forge, [livery.workshop.forge_repository][]; the
+registry an artifact kind goes to, [livery.workshop.registry][], a
+[livery.workshop.RegistryTarget][]; and the mounted release-notes
+provider, [livery.workshop.release_notes][], which answers the
+[livery.workshop.ReleaseNotes][] protocol. A file an extension
+writes outside the engine opens with
+[livery.workshop.generated_header][].
 """
 
 from __future__ import annotations
@@ -45,6 +64,7 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.workshop import testing as testing
+    from livery.workshop._checks import NONE as NONE
     from livery.workshop._checks import PACKAGE as PACKAGE
     from livery.workshop._checks import PACKAGES as PACKAGES
     from livery.workshop._checks import PATHS as PATHS
@@ -54,9 +74,13 @@ if TYPE_CHECKING:
     from livery.workshop._checks import scoped_files as scoped_files
     from livery.workshop._checks import scoped_packages as scoped_packages
     from livery.workshop._checks import scoped_paths as scoped_paths
+    from livery.workshop._checks import selected_files as selected_files
+    from livery.workshop._contract import read_contract as read_contract
     from livery.workshop._coverage_store import workspace_suite as workspace_suite
     from livery.workshop._extensions import extension_names as extension_names
     from livery.workshop._extensions import workspace_root as workspace_root
+    from livery.workshop._forge_lane import forge_repository as forge_repository
+    from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
     from livery.workshop._kinds import compile_commands as compile_commands
     from livery.workshop._kinds import kind_examples as kind_examples
@@ -67,30 +91,51 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import verify_workspace as verify_workspace
+    from livery.workshop._provenance import generated_header as generated_header
+    from livery.workshop._registries import RegistryTarget as RegistryTarget
+    from livery.workshop._registries import registry as registry
+    from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
+    from livery.workshop._release_notes import release_notes as release_notes
+    from livery.workshop._slots import slot as slot
+    from livery.workshop._state import RunContext as RunContext
+    from livery.workshop._state import ci_run as ci_run
 
 __version__ = "0.6.0"
 
 __all__ = [
+    "NONE",
     "PACKAGE",
     "PACKAGES",
     "PATHS",
     "WHOLE",
+    "Changes",
     "Edge",
     "GateContext",
     "Package",
+    "RegistryTarget",
+    "ReleaseNotes",
+    "RunContext",
     "__version__",
     "check_option",
+    "ci_run",
     "compile_commands",
     "discover_packages",
     "extension_names",
+    "forge_repository",
+    "generated_header",
     "kind_examples",
     "public_modules",
+    "read_contract",
+    "registry",
+    "release_notes",
     "rewrite_nav_block",
     "run_batched",
     "run_suites",
     "scoped_files",
     "scoped_packages",
     "scoped_paths",
+    "selected_files",
+    "slot",
     "testing",
     "verify_workspace",
     "workspace_root",
@@ -99,25 +144,38 @@ __all__ = [
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
+    "Changes": "livery.workshop._influence",
     "Edge": "livery.workshop._packages",
     "GateContext": "livery.workshop._checks",
+    "NONE": "livery.workshop._checks",
     "PACKAGE": "livery.workshop._checks",
     "PACKAGES": "livery.workshop._checks",
     "PATHS": "livery.workshop._checks",
     "Package": "livery.workshop._packages",
+    "RegistryTarget": "livery.workshop._registries",
+    "ReleaseNotes": "livery.workshop._release_notes",
+    "RunContext": "livery.workshop._state",
     "WHOLE": "livery.workshop._checks",
     "check_option": "livery.workshop._checks",
+    "ci_run": "livery.workshop._state",
     "compile_commands": "livery.workshop._kinds",
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
+    "forge_repository": "livery.workshop._forge_lane",
+    "generated_header": "livery.workshop._provenance",
     "kind_examples": "livery.workshop._kinds",
     "public_modules": "livery.workshop._kinds",
+    "read_contract": "livery.workshop._contract",
+    "registry": "livery.workshop._registries",
+    "release_notes": "livery.workshop._release_notes",
     "rewrite_nav_block": "livery.workshop._navblocks",
     "run_batched": "livery.workshop._invoke",
     "run_suites": "livery.workshop._kinds",
     "scoped_files": "livery.workshop._checks",
     "scoped_packages": "livery.workshop._checks",
     "scoped_paths": "livery.workshop._checks",
+    "selected_files": "livery.workshop._checks",
+    "slot": "livery.workshop._slots",
     "verify_workspace": "livery.workshop._packages",
     "workspace_root": "livery.workshop._extensions",
     "workspace_suite": "livery.workshop._coverage_store",

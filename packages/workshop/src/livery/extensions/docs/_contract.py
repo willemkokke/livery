@@ -14,8 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from livery.footman import fail
-from livery.workshop._contract import load_contract
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop import Package, discover_packages, read_contract
 
 #: Where the site may publish: the forge's own hosting, a container, a
 #: host over ssh, or nowhere.
@@ -27,7 +26,7 @@ DEFAULT_SEAMS = {"github": "pages", "gitlab": "pages", "gitea": "container"}
 
 def docs_table(root: Path) -> dict[str, object]:
     """The root contract's ``[docs]`` table; empty when undeclared."""
-    contract = load_contract(root / "workshop.toml")
+    contract = read_contract(root)
     table = contract.get("docs") or {}
     return dict(table) if isinstance(table, dict) else {}
 
@@ -43,7 +42,7 @@ def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:
     without a declaration.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = load_contract(contract_path)
+    contract = read_contract(package.directory)
     table = contract.get("docs") or {}
     declared = table.get("generators") if isinstance(table, dict) else None
     if declared is None:
@@ -91,7 +90,7 @@ def publish_seam(root: Path) -> str:
     the contract's judge holds it to; without it the forge kind picks
     its default from `DEFAULT_SEAMS`.
     """
-    contract = load_contract(root / "workshop.toml")
+    contract = read_contract(root)
     table = contract.get("docs") or {}
     declared = str(table.get("publish", "")) if isinstance(table, dict) else ""
     if declared:

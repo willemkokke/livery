@@ -269,6 +269,15 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
     assert gitlab == _state.RunContext("gitlab", "42", "push", "main")
 
 
+def test_ci_run_is_the_public_answer_and_none_at_a_desk() -> None:
+    from livery.workshop import RunContext, ci_run
+
+    assert ci_run({}) is None
+    environ = {"GITLAB_CI": "true", "CI_PIPELINE_ID": "42"}
+    found = ci_run(environ)
+    assert isinstance(found, RunContext) and found == _state.run_context(environ)
+
+
 def test_the_run_context_head_falls_back_when_the_payload_is_missing_or_junk(
     tmp_path: Path,
 ) -> None:

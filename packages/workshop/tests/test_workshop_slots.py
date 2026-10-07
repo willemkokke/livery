@@ -58,6 +58,42 @@ def test_a_bad_compose_rule_refuses() -> None:
         register_slot("acme.bad", compose="merge")
 
 
+def test_a_compose_reference_refuses_with_value_error_and_the_slot_is_named_once(
+    scratch_slots,
+) -> None:
+    def picky(values: list[object]) -> object:
+        if any(not isinstance(value, str) for value in values):
+            raise ValueError("every contribution is a string")
+        return ",".join(str(value) for value in values)
+
+    def reads_another(values: list[object]) -> object:
+        return composed("acme.none")
+
+    register_slot("acme.scalar", compose=picky, extension="acme.brand")
+    contribute("acme.scalar", 3, extension="acme.brand", by="acme.brand")
+    with pytest.raises(
+        SlotError, match=r"^slot 'acme\.scalar': every contribution is a string$"
+    ):
+        composed("acme.scalar")
+    # A reference that reads another slot gets that slot's refusal,
+    # which names it already, and it passes through as it is.
+    register_slot("acme.scalar", compose=reads_another, extension="acme.brand")
+    with pytest.raises(SlotError, match=r"^slot 'acme\.none' is not declared"):
+        composed("acme.scalar")
+
+
+def test_the_public_slot_answers_the_composed_value_and_refuses_as_value_error(
+    scratch_slots,
+) -> None:
+    from livery.workshop import slot
+
+    with pytest.raises(ValueError, match=r"slot 'acme\.none' is not declared"):
+        slot("acme.none")
+    register_slot("acme.list", extension="acme.brand")
+    contribute("acme.list", ["a"], extension="acme.brand", by="acme.brand")
+    assert slot("acme.list") == composed("acme.list") == ["a"]
+
+
 def test_a_value_outside_the_declared_values_refuses_naming_them(
     scratch_slots,
 ) -> None:
