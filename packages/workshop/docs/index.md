@@ -143,7 +143,9 @@ entries with a line saying so. The docs extension's gate job reads the
 workspace's `docs/`, `zensical.toml` and `README.md` and each package's
 pages, nav, assets, examples and generated pages, so a pull request
 that changes only `notes/` skips the site build, and `fm explain`
-prints `claimed by: gate/docs` on a file the build reads.
+prints `claimed by: gate/docs` on a file the build reads. On a
+contract it also names the schema the contract is judged by, and the
+owners whose keys that schema holds.
 
 A check also says what its tool needs of the workspace. Its `tools`
 reach the tool profile for every kind the check judges, each

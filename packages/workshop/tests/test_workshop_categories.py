@@ -207,6 +207,38 @@ def test_explain_prints_category_channel_supplier_and_claims(
     assert not any(line.startswith("    claimed by") for line in note)
 
 
+def test_explain_names_the_schema_a_contract_is_judged_by(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _provenance
+
+    _member(tmp_path, "")
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    monkeypatch.setattr(_provenance, "emitted_paths", lambda root: frozenset())
+
+    def schema(path: str) -> list[str]:
+        lines = _provenance.describe(tmp_path, Path(path))
+        return [line for line in lines if line.startswith("    schema:")]
+
+    # The fallback first: a file that is no contract names no schema.
+    assert schema("notes/musings.md") == []
+    assert schema("packages/x/pyproject.toml") == []
+    assert schema("workshop.toml") == [
+        "    schema: .workshop/schema/workshop.json (livery.workshop, docs)"
+    ]
+    assert schema("packages/x/workshop.toml") == [
+        "    schema: .workshop/schema/package.json (livery.workshop, docs)"
+    ]
+    # An extension's file holds the base's keys alone, whatever the root lists.
+    assert schema("packages/x/src/livery/x/extension.toml") == [
+        "    schema: .workshop/schema/extension.json (livery.workshop)"
+    ]
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    assert schema("workshop.toml") == [
+        "    schema: .workshop/schema/workshop.json (livery.workshop)"
+    ]
+
+
 def test_the_docs_job_reads_the_docs_and_the_readme_and_not_the_notes(
     tmp_path: Path,
 ) -> None:

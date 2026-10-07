@@ -208,6 +208,43 @@ def composed(contract: ContractKind, listed: frozenset[str] | None) -> dict[str,
     return cast("dict[str, Any]", held[1])
 
 
+def contract_of(root: Path, relative: Path) -> ContractKind | None:
+    """Which contract the file at *relative* is; None for a file that is no contract.
+
+    The root's ``workshop.toml``, a package's beneath ``packages/``, or
+    any ``extension.toml``.
+    """
+    from livery.workshop._contract import _package_workspace
+
+    if relative.name == "extension.toml":
+        return "extension"
+    if relative.name != "workshop.toml":
+        return None
+    if relative == Path("workshop.toml"):
+        return "root"
+    return "package" if _package_workspace(root / relative) == root else None
+
+
+def judged_by(root: Path, relative: Path) -> str:
+    """The line naming the schema the file at *relative* is judged by; empty for none.
+
+    The file under ``.workshop/schema/``, and the owners whose keys it
+    holds: the base, then the extensions the root lists, in list order.
+    An ``extension.toml`` is judged by the base's keys alone.
+    """
+    from livery.workshop._contract_keys import BASE
+
+    contract = contract_of(root, relative)
+    if contract is None:
+        return ""
+    owners = [BASE]
+    if contract != "extension":
+        from livery.workshop._extensions import extension_names
+
+        owners += extension_names(root)
+    return f"schema: {DIRECTORY}/{FILES[contract]} ({', '.join(owners)})"
+
+
 def schema_files(root: Path) -> dict[str, bytes]:
     """Each contract's composed schema for *root*, by its path under the root."""
     from livery.workshop._contract import _root_tables
