@@ -23,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._checks import (
     NONE,
     PACKAGES,
@@ -190,7 +190,7 @@ def undocumented_exports(root: Path, members: list[Path]) -> list[str]:
     interpreter running this one, which is the workspace's own, so a
     package's import-time effects stay out of the gate's process.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     targets: list[tuple[str, list[str]]] = []
     for member in members:

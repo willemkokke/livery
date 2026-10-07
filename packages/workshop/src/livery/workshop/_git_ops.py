@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 
 
 class GitError(RuntimeError):

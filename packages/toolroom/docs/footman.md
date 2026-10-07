@@ -21,8 +21,8 @@ a script earns a receipt, captures through the task's lane, obeys
 around it.
 
 ```python
-from livery.footman.api import task
-from livery.toolroom.tools.api import ruff, pytest
+from livery.footman import task
+from livery.toolroom.tools import ruff, pytest
 
 
 @task

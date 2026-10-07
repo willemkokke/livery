@@ -15,7 +15,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Sequence
 
-from livery.footman.api import Failed, fail
+from livery.footman import Failed, fail
 
 #: How a path list reaches the tool: on its command line.
 ARGV = "argv"

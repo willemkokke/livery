@@ -28,7 +28,7 @@ import tomllib
 from pathlib import Path
 from typing import cast
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._navblocks import nav_block_markers, write_nav_block
 from livery.workshop._packages import Package, discover_packages
 
@@ -66,7 +66,7 @@ def provider_tree(root: Path, identity: str) -> dict[str, object]:
     """
     import shutil as _shutil
 
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     runner = _shutil.which(footman.prog())
     if not runner:
@@ -78,7 +78,7 @@ def provider_tree(root: Path, identity: str) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as scratch:
         probe = Path(scratch) / "only.py"
         probe.write_text(
-            f'from livery.footman.api import plugin\n\nplugin("{identity}")\n',
+            f'from livery.footman import plugin\n\nplugin("{identity}")\n',
             encoding="utf-8",
         )
         result = footman.run(
@@ -207,7 +207,7 @@ def generate_task_reference(root: Path) -> list[str]:
     marker pair refuses naming the file: where the section sits in
     the tree is the author's decision.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.footman import markdown
 
     prog = footman.prog()

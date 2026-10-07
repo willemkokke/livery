@@ -14,8 +14,8 @@ The store installs, links, emits and fetches:
 ```python
 from pathlib import Path
 
-from livery.strongroom.api import FolderSource
-from livery.toolroom.store.api import Home, Record, Store, records_in
+from livery.strongroom import FolderSource
+from livery.toolroom.store import Home, Record, Store, records_in
 
 store = Store(
     Home(Path.home() / ".local/share/toolroom"),

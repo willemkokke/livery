@@ -5,7 +5,7 @@ message, the receipt of the call that produced it when there is one,
 and attachments: blobs a consumer hangs on the version without
 touching the tree. Its digest is the digest of its canonical JSON.
 
-Reach for [livery.strongroom.api.Version][].
+Reach for [livery.strongroom.Version][].
 """
 
 from __future__ import annotations

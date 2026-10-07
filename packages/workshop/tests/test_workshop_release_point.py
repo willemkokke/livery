@@ -112,7 +112,7 @@ def test_the_wave_builds_unless_ci_collected_wheels(
 def test_the_driver_pin_installs_nothing_on_an_empty_input(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
     from livery.workshop._release import release_driver
 
     seen: list[tuple[str, ...]] = []

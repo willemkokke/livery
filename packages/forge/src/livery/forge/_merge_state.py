@@ -14,7 +14,7 @@ decides by category, never by forge dialect:
   without merging).
 - ``success``: it is merged, including discovered merged.
 
-A forge answer outside the map raises [livery.forge.api.ForgeError][]
+A forge answer outside the map raises [livery.forge.ForgeError][]
 naming the native words: the map is updated in software, never
 guessed at runtime, and an unmapped state must not hang a wait.
 """
@@ -41,7 +41,7 @@ class MergeState:
         state: The union vocabulary member (``computing``,
             ``checks-red``, ``behind``, ...).
         category: What a caller does with it; see
-            [livery.forge.api.MergeCategory][].
+            [livery.forge.MergeCategory][].
         message: One user-facing sentence: the situation, and for a
             recoverable state what would recover it.
         native: The forge's own words, verbatim; empty when the
@@ -293,7 +293,7 @@ def classify_merge_refusal(
     Gitea's prose classifier handles ``gitea`` and the empty kind
     (the fake speaks Gitea's words). GitLab and GitHub classify
     *hold*, their published state field read after the refusal
-    through [livery.forge.api.PullRequests.merge_hold][]; a refusal
+    through [livery.forge.PullRequests.merge_hold][]; a refusal
     while that field already reads as the go (``mergeable``,
     ``clean``) is the recompute the refusal raced, and follows
     through as ``computing``. An empty *hold* on those forges is

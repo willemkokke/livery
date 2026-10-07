@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._submit import prepare
@@ -858,7 +858,7 @@ def _removed_upstream(tmp_path: Path, clone: Path, origin: Path) -> Path:
 def test_a_removed_packages_leftovers_go_once_the_checkout_moves_past_the_removal(
     seeds: Seeds, tmp_path: Path
 ) -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     clone, origin = _rig(seeds)
     package = _removed_upstream(tmp_path, clone, origin)

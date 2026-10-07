@@ -16,12 +16,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, cast
 
-from livery.footman.api import prog
+from livery.footman import prog
 
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
-    from livery.toolroom.store.api import Spec
+    from livery.toolroom.store import Spec
 
 #: The base. Never listed and never mounted by name: importing its
 #: plugin module is the base arriving.
@@ -89,7 +89,7 @@ def workspace_root(start: Path | None = None) -> Path | None:
 
 def _declared() -> dict[str, EntryPoint]:
     """Every installed extension's entry point, by name."""
-    from livery.footman.api import installed_entry_points
+    from livery.footman import installed_entry_points
 
     return {entry.name: entry for entry in installed_entry_points(GROUP)}
 
@@ -174,7 +174,7 @@ def listing(text: str) -> Spec:
     read is taken whole as a name: no distribution declares it, so
     the mount names it, and the layering check refuses the spelling.
     """
-    from livery.toolroom.store.api import Spec, SpecError
+    from livery.toolroom.store import Spec, SpecError
 
     try:
         return Spec.parse(text, where="[workspace] extensions")
@@ -370,8 +370,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """
     # footman does not expose the brand's builtin set publicly; this
     # private read is one of the reaches issue #1204 closes with a seam.
-    from livery.footman import _paths
-    from livery.footman.api import plugin
+    from livery.footman import _paths, plugin
 
     global MOUNTED, UNDECLARED
     MOUNTED = True
@@ -462,7 +461,7 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
     """
     if not names:
         return ()
-    from livery.footman.api import rescan_entry_points
+    from livery.footman import rescan_entry_points
 
     rescan_entry_points()
     declared = _declared()
@@ -652,7 +651,7 @@ def contributions(start: Path | None = None) -> dict[str, dict[str, str]]:
             raise RuntimeError(
                 f"extension {extension!r} declares {FOR_ATTRIBUTE} as {declared!r}; it"
                 " is a map from a target extension's import path to the module"
-                ' carrying the registrations for it, {"livery.workshop.api.python":'
+                ' carrying the registrations for it, {"livery.workshop.python":'
                 ' "acme.house.python"}'
             )
         found[extension] = dict(declared)
@@ -756,7 +755,7 @@ def listing_problems(root: Path) -> list[str]:
     distribution declares is
     [livery.workshop._extensions.level_problems][]'s to name.
     """
-    from livery.toolroom.store.api import Spec, SpecError
+    from livery.toolroom.store import Spec, SpecError
 
     problems: list[str] = []
     for entry in _listed(root):

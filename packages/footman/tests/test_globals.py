@@ -253,7 +253,7 @@ def test_in_process_callable_reads_the_env_it_was_given(monkeypatch):
                 seen["pair"] = (os.environ.get("BASE"), os.environ.get("EXTRA"))
                 return 0
 
-            from livery.footman.api import step
+            from livery.footman import step
 
             # exactly this env, nothing inherited — the step's own overlay
             step(tool).opts(env={"EXTRA": "call"})()()
@@ -1034,7 +1034,7 @@ def test_zero_arg_entry_parallelises_via_the_router(monkeypatch):
     # the cross-handshake deadlocks-and-fails if they serialise on a lock.
     import sys as _s
 
-    import livery.toolroom.tools.api as _tools
+    import livery.toolroom.tools as _tools
 
     e1, e2 = threading.Event(), threading.Event()
     seen = {}

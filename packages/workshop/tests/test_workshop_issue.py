@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._issue_tasks import (
@@ -68,7 +68,7 @@ def rig(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
     monkeypatch.setattr("livery.workshop._issue_tasks._me", lambda _repo: "fake-user")
-    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
     return root, fake, git
 
@@ -181,7 +181,7 @@ def test_the_worktree_lives_under_the_runners_home(
 ) -> None:
     # The home is the runner's own data directory, asked of footman:
     # a footman plugin owns no home of its own.
-    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "runner")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "runner")
     path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
     assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
 
@@ -191,7 +191,7 @@ def test_work_started_inside_a_worktree_lands_beside_the_rest(
 ) -> None:
     # Stacked work starts from the parent's worktree, whose directory
     # is named after its branch: the folder is the repository's.
-    monkeypatch.setattr("livery.footman.api.data_dir", lambda: tmp_path / "runner")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "runner")
     main = tmp_path / "repo"
     main.mkdir()
     _git(main, "init", "-q", "-b", "main")
@@ -290,7 +290,7 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     def _uv(*args: str) -> SimpleNamespace:
         provisioned.append("uv " + " ".join(args))
@@ -344,7 +344,7 @@ def test_a_start_run_again_syncs_the_worktree_its_first_run_left_unsynced(
     codes = [1, 0]
     provisioned: list[str] = []
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     def _uv(*args: str) -> SimpleNamespace:
         provisioned.append("uv " + " ".join(args))
@@ -409,7 +409,7 @@ def test_start_of_a_plain_branch_files_nothing_and_opens_its_worktree(
     root, fake, git = rig
     repo = fake.repository("willemkokke", "livery")
     before = len(repo.issue.list(state="all"))
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     monkeypatch.setattr(
         "livery.workshop._issue_tasks.tools",
@@ -702,7 +702,7 @@ def test_create_falls_back_when_the_label_is_refused(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     real_create = fake_module._FakeIssues.create
@@ -946,7 +946,7 @@ def test_start_with_a_title_survives_a_label_refusal(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     real_create = fake_module._FakeIssues.create
@@ -967,7 +967,7 @@ def test_the_fail_opens_note_and_continue(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
     from livery.forge.testing import _fake as fake_module
 
     root, fake, git = rig
@@ -1037,7 +1037,7 @@ def test_open_code_missing_binary_is_a_note(
 ) -> None:
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._issue_tasks import _open_work
 
     def _missing(*_a: object, **_k: object) -> object:

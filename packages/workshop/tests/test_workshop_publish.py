@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (
@@ -199,7 +199,7 @@ def test_an_empty_publish_token_variable_never_reaches_uv(
     from types import SimpleNamespace
     from typing import cast
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
     from livery.workshop._publish import publish_wheels
 
     package = Package(
@@ -245,7 +245,7 @@ def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
     # surfaces verbatim.
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
     from livery.workshop._publish import publish_wheels
 
     package = Package(

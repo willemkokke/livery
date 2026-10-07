@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 from livery.workshop._state import Keyed, RunContext, Series, drop
 
 if TYPE_CHECKING:
-    from livery.forge.api import Job, Repository
+    from livery.forge import Job, Repository
 
 #: The rows' schema. A reader skips a row of another version and
 #: names it; a new field is the same version, a changed meaning is

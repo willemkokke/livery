@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
-from livery.footman.api import fail, prog
+from livery.footman import fail, prog
 
 PACKAGE_PREFIX = "package/"
 """The target prefix that names a path inside each package of the owner."""
@@ -742,7 +742,7 @@ def tracked_local(root: Path, outputs: Sequence[Output]) -> list[str]:
     was committed before that, and stays tracked whatever the ignore
     file says. Empty when git cannot answer.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     local = [output.path for output in outputs if output.local]
     if not local:

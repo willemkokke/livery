@@ -2,7 +2,7 @@
 
 A directory under ``packages/`` is a package exactly when it carries a
 ``workshop.toml``; everything the workshop knows about a package it
-learns there. livery.workshop.api.verify_workspace is the layering lint:
+learns there. livery.workshop.verify_workspace is the layering lint:
 contracts present, declared edges agreeing with the native manifests
 in both directions, the graph acyclic, and the one package-specific
 invariant (the forge's stdlib rule) kept.
@@ -149,7 +149,7 @@ class Leftover:
 
 def _ls_files(root: Path, relative: str, *args: str) -> tuple[tuple[str, ...], str]:
     """The files ``git ls-files`` lists under *relative*; git's words if it fails."""
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
         "ls-files", "-z", *args, "--", relative
@@ -196,7 +196,7 @@ def _no_contract(root: Path, directory: Path) -> str:
     member = directory.relative_to(root / PACKAGES_DIR).as_posix()
     if leftover(root, directory).state != RESIDUE:
         return f"{member}: no workshop.toml"
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     return (
         f"{member}: no workshop.toml, and git tracks nothing under"
@@ -222,7 +222,7 @@ def package_directories(root: Path) -> tuple[Path, ...]:
     A package lives at ``packages/<name>/`` or, inside a group
     directory, at ``packages/<group>/<name>/``. The directories are
     returned whether or not they carry a contract;
-    [livery.workshop.api.discover_packages][] judges them. Reach for
+    [livery.workshop.discover_packages][] judges them. Reach for
     this where a glob would assume one level.
     """
     packages_dir = root / PACKAGES_DIR
@@ -269,7 +269,7 @@ def member_of(relative: str, members: Iterable[str]) -> str:
 
     *relative* is a posix path from the workspace root
     (``packages/extensions/widgets/src/x.py``); *members* are package
-    members as [livery.workshop.api.Package][] names them
+    members as [livery.workshop.Package][] names them
     (``extensions/widgets``). The longest match wins.
     """
     found = ""
@@ -284,12 +284,11 @@ def member_of(relative: str, members: Iterable[str]) -> str:
 def root_marks(src: Path) -> list[Path]:
     """The files that mark an importable root under *src*, shallowest first.
 
-    A namespace root carries an ``api.py``, a regular package an
-    ``__init__.py``; the topmost of either on a branch is that
-    branch's root.
+    A root carries an ``__init__.py``; the topmost on a branch is that
+    branch's root. A namespace, one with no ``__init__.py``, marks
+    nothing.
     """
-    marks = [*src.rglob("__init__.py"), *src.rglob("api.py")]
-    return sorted(marks, key=lambda path: (len(path.parts), path))
+    return sorted(src.rglob("__init__.py"), key=lambda path: (len(path.parts), path))
 
 
 def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
@@ -420,7 +419,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       import time, plus its one declared lazy extra (PyNaCl), because
       the whole ecosystem stands on it being dependency-free. The one
       exception is the dev plugin under ``_dev``, which may also
-      import livery.footman.api as footman and toolroom: its only loader is footman's
+      import livery.footman as footman and toolroom: its only loader is footman's
       ``plugin()``, and only a workshop workspace mounts extensions, so
       both are present whenever it loads.
     """
@@ -847,7 +846,7 @@ def _terminal_is_asked_through_the_runner(
 ) -> list[str]:
     """Violations of the one-answer rule: ask the runner, never the terminal.
 
-    A module that imports the runner has [livery.footman.api.attended][]
+    A module that imports the runner has [livery.footman.attended][]
     in reach, which knows ``--no-input`` and ``--dry-run`` as well as
     the terminal, where asking the terminal ignores both in silence.
     The runner's own sources implement that answer and are exempt, and
@@ -870,7 +869,7 @@ def _terminal_is_asked_through_the_runner(
         problems.extend(
             f"{source.relative_to(root)} asks the terminal with {spelling}():"
             " a module that imports the runner asks"
-            " livery.footman.api.attended() instead, which knows --no-input"
+            " livery.footman.attended() instead, which knows --no-input"
             " and --dry-run as well"
             for spelling in _terminal_calls(parsed.tree)
         )

@@ -1,8 +1,8 @@
 """Ruff's two checks: the formatter, then the linter, over the python files they claim.
 
 Each check narrows by paths: the workshop names the paths a run reaches
-([livery.workshop.api.scoped_paths][]) and splits them into calls
-([livery.workshop.api.run_batched][]), and a body only calls ruff. Each
+([livery.workshop.scoped_paths][]) and splits them into calls
+([livery.workshop.run_batched][]), and a body only calls ruff. Each
 check hands ruff the words after ``--`` on its own verb
 (``fm lint.ruff -- --statistics``). A body resolves its runner on this
 module when it runs, so a test that replaces `run_format` or `run_lint`
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import livery.toolroom.tools.api as tools
-from livery.workshop.api import (
+import livery.toolroom.tools as tools
+from livery.workshop import (
     PATHS,
     CheckRecord,
     Claim,

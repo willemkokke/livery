@@ -5,7 +5,9 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import livery.forge.api as package
+import pytest
+
+import livery.forge as package
 
 
 def _loaded_after(statement: str) -> list[str]:
@@ -22,14 +24,25 @@ def _loaded_after(statement: str) -> list[str]:
 
 
 def test_importing_the_root_loads_no_module_of_the_package() -> None:
-    assert _loaded_after("import livery.forge.api") == ["livery.forge.api"]
+    assert _loaded_after("import livery.forge") == []
 
 
 def test_one_name_loads_only_the_module_that_defines_it() -> None:
-    assert _loaded_after("from livery.forge.api import ForgeError") == [
-        "livery.forge._errors",
-        "livery.forge.api",
+    assert _loaded_after("from livery.forge import ForgeError") == [
+        "livery.forge._errors"
     ]
+
+
+def test_a_public_package_is_served_on_first_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The import system binds a package on the root at its first import;
+    # a program that imported the root alone reaches it through the root,
+    # which imports it then.
+    import livery.forge.testing as testing
+
+    monkeypatch.delattr(package, "testing")
+    assert package.testing is testing
 
 
 def test_every_public_name_resolves() -> None:

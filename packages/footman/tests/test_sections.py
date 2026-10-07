@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-import livery.footman.api as footman
+import livery.footman as footman
 from livery.footman import _context as context
 from livery.footman.testing import Runner
 
@@ -19,8 +19,8 @@ TASKS = textwrap.dedent(
     import time
     from datetime import datetime, timedelta
 
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
 
     @task
     def worked():

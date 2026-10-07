@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.toolroom.store.api import ToolSpec
+    from livery.toolroom.store import ToolSpec
 
 import contextlib
 import os
@@ -150,7 +150,7 @@ def _fm_run(*args: Any, **kwargs: Any) -> Any:
     """`context.run`, imported at call time (the probe is reachable from the
     stub tooling, which has no interest in the run machinery).
     """
-    from livery.footman.api import run
+    from livery.footman import run
 
     return run(*args, **kwargs)
 

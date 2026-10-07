@@ -155,8 +155,8 @@ string your editor cannot help you with.
 Python:
 
 ```python
-from livery.footman.api import task
-from livery.toolroom.tools.api import ruff
+from livery.footman import task
+from livery.toolroom.tools import ruff
 
 
 @task

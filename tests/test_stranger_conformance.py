@@ -199,7 +199,7 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "run",
             "python",
             "-c",
-            "import livery.toolroom.tools.api as t;"
+            "import livery.toolroom.tools as t;"
             " t.conan.opts(nofail=False)('profile', 'detect', '--exist-ok')",
         ],
     ):

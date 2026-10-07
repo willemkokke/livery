@@ -46,8 +46,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.strongroom.api import Source
-    from livery.toolroom.store.api import (
+    from livery.strongroom import Source
+    from livery.toolroom.store import (
         Catalogue,
         Deployment,
         Ensured,
@@ -69,7 +69,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
-from livery.footman.api import Failed, fail, prog, run
+from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
 from livery.workshop._contract_keys import Declared, Type
 from livery.workshop._kinds import kind_chain
@@ -109,7 +109,7 @@ TYPINGS_PACKAGE = ("livery", "toolroom")
 
 def declared_keys() -> tuple[Declared, ...]:
     """The ``[tools]`` keys a contract may hold, the modes taken from the store."""
-    from livery.toolroom.store.api import MODES
+    from livery.toolroom.store import MODES
 
     def root(path: str, *types: Type, values: tuple[str, ...] = ()) -> Declared:
         return Declared("root", path, types, values)
@@ -136,7 +136,7 @@ def tools_table(path: Path) -> dict[str, object]:
 
 
 def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
-    from livery.toolroom.store.api import LockError, Requirement
+    from livery.toolroom.store import LockError, Requirement
 
     declared = cast("list[str]", table.get("requires", []))
     try:
@@ -159,7 +159,7 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     read from its entry module
     ([livery.workshop._tools.plugin_tools][]).
     """
-    from livery.toolroom.store.api import LockError, Requirement
+    from livery.toolroom.store import LockError, Requirement
     from livery.workshop._extensions import extension_tools
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
@@ -221,8 +221,10 @@ def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
         Failed: when a declaration is not a tuple or list of strings,
             naming the plugin.
     """
-    from livery.footman import _config  # pyright: ignore[reportPrivateUsage]
-    from livery.footman.api import installed_entry_points
+    from livery.footman import (
+        _config,  # pyright: ignore[reportPrivateUsage]
+        installed_entry_points,
+    )
 
     declared = {entry.name: entry for entry in installed_entry_points("workshop.tools")}
     found: dict[str, tuple[str, ...]] = {}
@@ -301,7 +303,7 @@ def unrequired_allowances(root: Path) -> tuple[str, ...]:
 
 def _host_probe_gap(listing: Catalogue, name: str, version: str, host: str) -> str:
     """Why *name* cannot be found on PATH by its own name; empty when it can."""
-    from livery.toolroom.store.api import DOWNLOAD_KINDS, CatalogueError, RecordError
+    from livery.toolroom.store import DOWNLOAD_KINDS, CatalogueError, RecordError
 
     listed = listing.listed(name)
     if listed.kind not in DOWNLOAD_KINDS:
@@ -342,7 +344,7 @@ def this_host() -> str:
     """This machine's host key as the store names it: ``macos-arm``."""
     import platform
 
-    from livery.toolroom.store.api import host_key
+    from livery.toolroom.store import host_key
 
     return host_key(platform.system(), platform.machine())
 
@@ -358,7 +360,7 @@ def supported_hosts(root: Path) -> tuple[str, ...]:
     Raises a refusal for a token that is neither a platform nor a host
     key, and for a list that is empty or leaves no host.
     """
-    from livery.toolroom.store.api import HOSTS, Scope, SpecError
+    from livery.toolroom.store import HOSTS, Scope, SpecError
 
     every = DEFAULT_HOSTS or HOSTS
     path = root / "workshop.toml"
@@ -497,7 +499,7 @@ def store_cannot_supply(root: Path) -> str:
 
 def _is_records(source: str) -> bool:
     """Whether *source* is a directory of records rather than an index."""
-    from livery.toolroom.store.api import POINTER, records_in
+    from livery.toolroom.store import POINTER, records_in
 
     if "://" in source:
         return False
@@ -517,7 +519,7 @@ def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
 
 def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
     """The catalogue at *source*, records or index, with no build first."""
-    from livery.toolroom.store.api import Catalogue, CatalogueError
+    from livery.toolroom.store import Catalogue, CatalogueError
 
     if _is_records(source):
         return Catalogue.of_records(Path(source))
@@ -533,22 +535,22 @@ def _home() -> Home:
 
 def store_home() -> Home:
     """The store's home on this machine: `toolroom` in the runner's data directory."""
-    from livery.footman.api import data_dir
-    from livery.toolroom.store.api import Home
+    from livery.footman import data_dir
+    from livery.toolroom.store import Home
 
     return Home(data_dir() / "toolroom")
 
 
 def lock_path(root: Path) -> Path:
     """The lock's file, `tools.lock` at the root."""
-    from livery.toolroom.store.api import LOCK_FILE
+    from livery.toolroom.store import LOCK_FILE
 
     return root / LOCK_FILE
 
 
 def current_lock(root: Path) -> Lock | None:
     """The lock as committed, or `None` when the repository has none yet."""
-    from livery.toolroom.store.api import Lock, LockError
+    from livery.toolroom.store import Lock, LockError
 
     path = lock_path(root)
     if not path.is_file():
@@ -579,7 +581,7 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
         not: no lock at all, a requirement nothing satisfies, or the
         tools whose entries would move.
     """
-    from livery.toolroom.store.api import LOCK_FILE, LockError, resolve_lock
+    from livery.toolroom.store import LOCK_FILE, LockError, resolve_lock
 
     held = current_lock(root)
     if held is None:
@@ -628,7 +630,7 @@ def write_lock(
     stands, which is what an install the graph could not satisfy asks
     for.
     """
-    from livery.toolroom.store.api import LockError, resolve_lock
+    from livery.toolroom.store import LockError, resolve_lock
 
     listing = catalogue(root, offline=offline)
     kept = current_lock(root)
@@ -701,8 +703,8 @@ def resolve_graph(
     not materialised its tools yet locks the version and says the
     graph waits.
     """
-    from livery.strongroom.api import digest_of
-    from livery.toolroom.store.api import Graph
+    from livery.strongroom import digest_of
+    from livery.toolroom.store import Graph
 
     directory = graphs_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
@@ -719,7 +721,7 @@ def _pypi_graph(
 ) -> tuple[str, str]:
     """Uv's universal hashed requirements for *package*; what resolved it."""
     _ = runtime
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
     from livery.workshop._pythons import python_floor
 
     with tempfile.TemporaryDirectory() as scratch:
@@ -761,7 +763,7 @@ def _npm_graph(
         node = Path(held.tool_dir) / exe("node")
     if not node.is_file():
         return "", f"the node receipt names no executable under {held.tool_dir}"
-    from livery.toolroom.store.api import npm_cli
+    from livery.toolroom.store import npm_cli
 
     with tempfile.TemporaryDirectory() as scratch:
         where = Path(scratch)
@@ -816,7 +818,7 @@ def _graph_path(root: Path, locked: Locked) -> Path | None:
     lock recorded, is not installed from: the tool installs the way
     it did, and the next lock writes the graph again.
     """
-    from livery.strongroom.api import digest_of
+    from livery.strongroom import digest_of
 
     if locked.graph is None:
         return None
@@ -828,7 +830,7 @@ def _graph_path(root: Path, locked: Locked) -> Path | None:
 
 def graphs_dir(root: Path) -> Path:
     """Where the resolved graphs live, beside the lock."""
-    from livery.toolroom.store.api import GRAPHS
+    from livery.toolroom.store import GRAPHS
 
     return root / GRAPHS
 
@@ -849,7 +851,7 @@ def _kept_graph(
     graph. A version that moved, a graph never written, and a file
     edited or gone since are each resolved again.
     """
-    from livery.strongroom.api import digest_of
+    from livery.strongroom import digest_of
 
     before = kept.tools.get(name) if kept is not None else None
     if before is None or before.version != locked.version or before.graph is None:
@@ -884,7 +886,7 @@ def with_graphs(
     answer from an index, so it moves the lock, and a lock moves when
     a person says so, never as a side effect of installing.
     """
-    from livery.toolroom.store.api import CatalogueError
+    from livery.toolroom.store import CatalogueError
 
     directory = graphs_dir(root)
     tools: dict[str, Locked] = {}
@@ -957,7 +959,7 @@ def with_runtimes(
     catalogue does not list is left for the resolver to refuse by
     name.
     """
-    from livery.toolroom.store.api import CatalogueError, Requirement
+    from livery.toolroom.store import CatalogueError, Requirement
 
     everywhere = {requirement.name for requirement in found if not requirement.hosts}
     present = {(requirement.name, requirement.hosts) for requirement in found}
@@ -992,7 +994,7 @@ def declare(root: Path, text: str) -> bool:
     spelling, is left as it is. The contract is edited in place: the
     `[tools]` table gains the entry, or is added at the end with it.
     """
-    from livery.toolroom.store.api import LockError, Requirement
+    from livery.toolroom.store import LockError, Requirement
 
     try:
         Requirement.parse(text, site="workshop.toml")
@@ -1202,7 +1204,7 @@ def mode_of(
     *paths* are the deployment's, which decide a download's default.
     Raises a refusal naming the override when it is not one of `MODES`.
     """
-    from livery.toolroom.store.api import MODES, default_mode
+    from livery.toolroom.store import MODES, default_mode
 
     overrides = cast(
         "dict[str, str]", tools_table(root / "workshop.toml").get("modes", {})
@@ -1218,7 +1220,7 @@ def mode_of(
 
 def sources(root: Path) -> tuple[Source, ...]:
     """The tiers consulted before an origin, `[tools] sources`: folders or URLs."""
-    from livery.strongroom.api import FolderSource, HttpSource
+    from livery.strongroom import FolderSource, HttpSource
 
     declared = cast("list[str]", tools_table(root / "workshop.toml").get("sources", []))
     found: list[Source] = []
@@ -1287,7 +1289,7 @@ def site_floors(root: Path) -> dict[str, tuple[str, str]]:
     machine honours them here, since the machine's own copy is never
     the locked version.
     """
-    from livery.toolroom.store.api import version_key
+    from livery.toolroom.store import version_key
 
     highest: dict[str, tuple[str, str]] = {}
     for requirement in requirements(root):
@@ -1338,7 +1340,7 @@ def materialise(
     refused, strict or not: the verbs that need it name its absence
     when they run.
     """
-    from livery.toolroom.store.api import (
+    from livery.toolroom.store import (
         DOWNLOAD_KINDS,
         LOCK_FILE,
         RUNTIMES,
@@ -1551,7 +1553,7 @@ def _no_command(listing: Catalogue, name: str, version: str) -> bool:
     """Whether *name* is a download with no entry point: no command, so no stub."""
     import platform
 
-    from livery.toolroom.store.api import CatalogueError, RecordError, host_key
+    from livery.toolroom.store import CatalogueError, RecordError, host_key
 
     if listing.listed(name).kind != "download":
         return False
@@ -1587,7 +1589,7 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     the steady state of every sync; otherwise a stub already on disk
     as the source renders it is kept, so a checker's cache stands.
     """
-    from livery.toolroom.store.api import CatalogueError
+    from livery.toolroom.store import CatalogueError
 
     source = index_source(root)
     lock = current_lock(root)
@@ -1646,8 +1648,8 @@ def source_mark(source: str) -> str:
     A directory of records is its stat fingerprint; an index, by
     directory or URL, is the digest of its pointer document.
     """
-    from livery.strongroom.api import canonical, digest_of
-    from livery.toolroom.store.api import read_pointer, tree_fingerprint
+    from livery.strongroom import canonical, digest_of
+    from livery.toolroom.store import read_pointer, tree_fingerprint
 
     if _is_records(source):
         return tree_fingerprint([source])
@@ -1724,12 +1726,12 @@ def handles_index(names: list[str]) -> str:
     this module, so the handle `uv` types as `Uv[Result]` exactly
     when `stubs/uv.pyi` is beside it.
     """
-    from livery.toolroom.store.api import class_name
+    from livery.toolroom.store import class_name
 
     lines = [
         f"# Rendered by `{prog()} tools.restub`: the handles this workspace",
         "# locks. Do not edit by hand.",
-        "from livery.toolroom.tools.api import Result",
+        "from livery.toolroom.tools import Result",
     ]
     lines += [
         f"from livery.toolroom.stubs.{name} import"

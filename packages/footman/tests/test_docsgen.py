@@ -55,9 +55,9 @@ def test_the_home_page_quotes_the_newest_release(tmp_path, monkeypatch):
 
 def test_the_api_page_speaks_the_public_import_path(tmp_path):
     """Directives carry the contract spelling, so anchors and the
-    inventory link `livery.footman.api.run`, never the defining module."""
+    inventory link `livery.footman.run`, never the defining module."""
     page = _docsgen._api_markdown()
-    assert "::: livery.footman.api.run" in page
+    assert "::: livery.footman.run" in page
     assert "::: footman." not in page
 
 
@@ -97,11 +97,6 @@ def test_pages_writes_every_promised_file(tmp_path, monkeypatch):
     package = Path(__file__).resolve().parents[1]
     (tmp_path / "CHANGELOG.md").write_text(
         (package / "CHANGELOG.md").read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    (tmp_path / "src" / "livery" / "footman").mkdir(parents=True)
-    (tmp_path / "src" / "livery" / "footman" / "api.py").write_text(
-        (package / "src" / "livery" / "footman" / "api.py").read_text(encoding="utf-8"),
-        encoding="utf-8",
     )
     written: list[Path] = []
     monkeypatch.setattr(_docsgen, "_write_tasks_page", lambda out: written.append(out))

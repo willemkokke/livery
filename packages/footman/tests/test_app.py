@@ -16,7 +16,7 @@ from livery.footman._split import Segment
 TASKS = '''
 from typing import Annotated
 
-from livery.footman.api import doc, fail, task, group
+from livery.footman import doc, fail, task, group
 
 @task
 def hi(name: str = "world"):
@@ -145,7 +145,7 @@ def test_group_task_variadic(project, capsys):
 
 
 def test_version(project, capsys):
-    from livery.footman.api import __version__
+    from livery.footman import __version__
 
     assert _app.run(["--version"]) == 0
     assert __version__ in capsys.readouterr().out
@@ -161,7 +161,7 @@ def test_dry_run_runs_bodies_and_fakes_footmans_work(project, capsys):
     # The rehearsal: inline code executes (it was never footman's to fake);
     # the recorded run() is faked into a receipt and no subprocess spawns.
     (project / "tasks.py").write_text(
-        "from livery.footman.api import run, task\n"
+        "from livery.footman import run, task\n"
         "@task\n"
         "def ship():\n"
         "    print('inline ran')\n"
@@ -271,7 +271,7 @@ def test_a_bad_marker_is_a_taught_cli_refusal_not_a_traceback(tmp_path):
             """
             from typing import Annotated
 
-            from livery.footman.api import task
+            from livery.footman import task
 
             def lister():
                 return []
@@ -306,7 +306,7 @@ def test_a_raising_strict_completer_is_a_taught_cli_refusal(tmp_path):
             """
             from typing import Annotated
 
-            from livery.footman.api import task
+            from livery.footman import task
             from livery.footman._params import suggest
 
             def boom():
@@ -350,7 +350,7 @@ def test_a_code_the_shell_cannot_carry_still_fails(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman.api import task
+            from livery.footman import task
 
             @task
             def big() -> int:
@@ -507,7 +507,7 @@ def test_a_wrong_case_file_mid_cascade_is_complained_about(
     # top missed exactly the monorepo case, where the file that is not
     # loading is a package's own, several levels down from either.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
-    (tmp_path / "tasks.py").write_text("from livery.footman.api import task\n")
+    (tmp_path / "tasks.py").write_text("from livery.footman import task\n")
     middle = tmp_path / "packages" / "web"
     deep = middle / "src"
     deep.mkdir(parents=True)
@@ -577,14 +577,14 @@ def test_listings_split_project_from_global(tmp_path, monkeypatch, capsys):
     config = tmp_path / "config" / "footman"
     config.mkdir(parents=True)
     (config / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef scratch():\n    'Mine, everywhere.'\n"
+        "from livery.footman import task\n\n@task\ndef scratch():\n    'Mine, everywhere.'\n"
     )
     monkeypatch.setenv("FOOTMAN_CONFIG_DIR", str(config))
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\n")
     (proj / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef build():\n    'Build it.'\n"
+        "from livery.footman import task\n\n@task\ndef build():\n    'Build it.'\n"
     )
     monkeypatch.chdir(proj)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -607,7 +607,7 @@ def test_one_section_is_not_labelled_as_one_of_two(tmp_path, monkeypatch, capsys
     # there — and never prints a heading over blank space.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef build():\n    'Build it.'\n"
+        "from livery.footman import task\n\n@task\ndef build():\n    'Build it.'\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -626,7 +626,7 @@ def test_a_group_straddling_the_split_heads_both_sections(
     config = tmp_path / "config"
     (config / "footman").mkdir(parents=True)
     (config / "footman" / "tasks.py").write_text(
-        "from livery.footman.api import group\n\n"
+        "from livery.footman import group\n\n"
         "docs = group('docs')\n\n"
         "@docs.task\ndef notes():\n    'Personal notes.'\n"
     )
@@ -634,7 +634,7 @@ def test_a_group_straddling_the_split_heads_both_sections(
     (tmp_path / "proj").mkdir()
     (tmp_path / "proj" / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "proj" / "tasks.py").write_text(
-        "from livery.footman.api import group\n\n"
+        "from livery.footman import group\n\n"
         "docs = group('docs')\n\n"
         "@docs.task\ndef build():\n    'Build the docs.'\n"
     )
@@ -692,7 +692,7 @@ def test_binding_refusals_exit_usage_end_to_end(tmp_path, monkeypatch):
     (tmp_path / "tasks.py").write_text(
         "import uuid\n"
         "from typing import Annotated\n"
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "from livery.footman._params import between, env\n"
         "@task\n"
         "def ident(id: uuid.UUID): ...\n"
@@ -735,7 +735,7 @@ def test_tasks_file_does_not_poison_completion_cache(project):
     assert "hi" in before
 
     other = project / "other.py"
-    other.write_text("from livery.footman.api import task\n@task\ndef solo(): ...\n")
+    other.write_text("from livery.footman import task\n@task\ndef solo(): ...\n")
     assert _app.run([f"-f={other}", "solo"]) == 0
     after = cache.read_text()
     assert after == before  # cache untouched
@@ -765,7 +765,7 @@ def test_directory_restores_cwd(project):
     sub = project / "sub"
     sub.mkdir()
     (sub / "tasks.py").write_text(
-        "from livery.footman.api import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     before = os.getcwd()
     assert _app.run([f"-C={sub}", "t"]) == 0
@@ -836,7 +836,7 @@ def test_tasks_file_override(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     alt = tmp_path / "custom.py"
     alt.write_text(
-        "from livery.footman.api import task\n\n@task\ndef only():\n    print('only-ran')\n"
+        "from livery.footman import task\n\n@task\ndef only():\n    print('only-ran')\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -849,7 +849,7 @@ def test_config_tasks_file(tmp_path, monkeypatch, capsys):
         "[project]\nname='x'\n[tool.footman]\ntasks = 'custom.py'\n"
     )
     (tmp_path / "custom.py").write_text(
-        "from livery.footman.api import task\n\n@task\ndef only():\n    print('cfg-ran')\n"
+        "from livery.footman import task\n\n@task\ndef only():\n    print('cfg-ran')\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1155,7 +1155,7 @@ def test_tasks_syntax_error_reported_cleanly(tmp_path, monkeypatch, capsys):
 def test_duplicate_task_name_is_a_user_error(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "@task\n"
         "def build(): ...\n"
         "@task(name='build')\n"
@@ -1233,7 +1233,7 @@ def test_missing_explicit_config_is_an_error(project, capsys):
 def test_keyboard_interrupt_exits_130(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1251,7 +1251,7 @@ def test_a_generator_exit_is_not_a_task_failure(tmp_path, monkeypatch):
     # door like an interrupt, rather than becoming a receipt.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n@task\ndef stop():\n    raise GeneratorExit\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise GeneratorExit\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1395,7 +1395,7 @@ def test_jobs_changes_the_timing_key(project):
 def test_progress_false_task_opts_the_run_out(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "@task(progress=False)\n"
         "def odd():\n"
         '    "No rhyme nor reason to its duration."\n'
@@ -1449,7 +1449,7 @@ def test_json_help_refusal_still_envelopes(project, capsys):
 
 
 def test_json_version(project, capsys):
-    from livery.footman.api import __version__
+    from livery.footman import __version__
 
     assert _app.run(["--json", "--version"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1464,7 +1464,7 @@ def test_json_step_rows_redact_a_secret_argument(tmp_path):
     from livery.footman.testing import Runner
 
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import run, task\n"
+        "from livery.footman import run, task\n"
         "from livery.footman._params import Secret\n"
         "\n"
         "@task\n"
@@ -1522,7 +1522,7 @@ def test_json_dry_run_emits_the_report_envelope(project, capsys):
 def test_json_interrupt_envelope(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1574,7 +1574,7 @@ def test_json_returned_mirrors_coercion_types(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "import dataclasses, datetime, decimal, enum, pathlib, uuid\n"
-        "from livery.footman.api import task\n"
+        "from livery.footman import task\n"
         "class Colour(enum.Enum):\n"
         "    RED = 'red'\n"
         "@dataclasses.dataclass\n"
@@ -1730,7 +1730,7 @@ def test_color_always_paints_when_piped(project, capsys):
     # (a pipe into `less -R`). capsys' stdout fails isatty, yet the rehearsed
     # receipt paints.
     (project / "tasks.py").write_text(
-        "from livery.footman.api import run, task\n@task\ndef ship():\n    run('touch x')\n"
+        "from livery.footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
     )
     assert _app.run(["--color=always", "-n", "ship"]) == 0
     out = capsys.readouterr().out
@@ -1772,7 +1772,7 @@ def test_force_color_env_paints_when_piped(project, monkeypatch, capsys):
     # FORCE_COLOR is the environment rung of `always`; NO_COLOR (higher, and the
     # never rung) still wins over it.
     (project / "tasks.py").write_text(
-        "from livery.footman.api import run, task\n@task\ndef ship():\n    run('touch x')\n"
+        "from livery.footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
     )
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -2078,7 +2078,7 @@ _SCRIPT_BLOCK = '''\
 # /// script
 # dependencies = ["livery-footman", "cowsay"]
 # ///
-from livery.footman.api import task
+from livery.footman import task
 
 @task
 def hi(name: str = "world"):
@@ -2258,7 +2258,7 @@ def test_a_block_without_the_runner_is_refused(script_project, monkeypatch, caps
 def test_a_block_with_no_dependencies_asks_for_no_world(script_project, monkeypatch):
     (script_project / "tasks.py").write_text(
         '# /// script\n# requires-python = ">=3.11"\n# ///\n'
-        'from livery.footman.api import task\n\n@task\ndef hi(name: str = "world"):\n'
+        'from livery.footman import task\n\n@task\ndef hi(name: str = "world"):\n'
         '    """Say hello."""\n    print(f"hello {name}")\n',
         encoding="utf-8",
     )
@@ -2273,7 +2273,7 @@ def test_a_malformed_block_warns_once_and_runs_anyway(
 ):
     (script_project / "tasks.py").write_text(
         "# /// script\n# dependencies = [oops\n# ///\n"
-        'from livery.footman.api import task\n\n@task\ndef hi(name: str = "world"):\n'
+        'from livery.footman import task\n\n@task\ndef hi(name: str = "world"):\n'
         '    """Say hello."""\n    print(f"hello {name}")\n',
         encoding="utf-8",
     )
@@ -2314,8 +2314,8 @@ def test_a_failed_script_import_teaches_where_the_environment_went(
     # declared dependency fails. The refusal says why, and how out.
     (script_project / "tasks.py").write_text(
         _SCRIPT_BLOCK.replace(
-            "from livery.footman.api import task",
-            "import cowsay\nfrom livery.footman.api import task",
+            "from livery.footman import task",
+            "import cowsay\nfrom livery.footman import task",
         ),
         encoding="utf-8",
     )
@@ -2357,7 +2357,7 @@ def test_where_is_strict_about_empty_segments(project, capsys):
 # --- [tool.footman] sort: alphabetical listings, definition order default ----
 
 _UNSORTED_TASKS = """
-from livery.footman.api import group, task
+from livery.footman import group, task
 
 
 @task
@@ -2476,7 +2476,7 @@ def test_sort_flag_never_masks_a_broken_config_value(unsorted_project, capsys):
 
 
 _HIDDEN_TASKS = """
-from livery.footman.api import group, task
+from livery.footman import group, task
 
 
 @task
@@ -2637,7 +2637,7 @@ def test_a_single_dash_misspelling_refuses_instead_of_acting(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman.api import task
+            from livery.footman import task
 
             @task
             def hi():
@@ -2665,7 +2665,7 @@ def test_a_mistyped_tasks_config_key_refuses_loudly(tmp_path):
     from livery.footman.testing import Runner
 
     (tmp_path / "tasks.py").write_text(
-        "from livery.footman.api import task\n\n\n@task\ndef hi():\n    print('hi')\n"
+        "from livery.footman import task\n\n\n@task\ndef hi():\n    print('hi')\n"
     )
     (tmp_path / "footman.toml").write_text("tasks = 123\n")
     r = Runner().invoke("--list", cwd=tmp_path)

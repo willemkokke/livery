@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 import livery.extensions.clang.format._extension as declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.clang.format import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 CONTRACT = (
     "[workspace]\n"
@@ -146,7 +146,7 @@ def test_a_source_out_of_style_is_named_and_the_fix_heals_it(tmp_path: Path) -> 
 def test_the_words_after_the_dashes_reach_clang_format_after_its_mode(
     tmp_path: Path,
 ) -> None:
-    from livery.toolroom.tools.api import Result
+    from livery.toolroom.tools import Result
     from livery.toolroom.tools.testing import answers
 
     package = _native(tmp_path)

@@ -23,15 +23,15 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import Arg, doc, fail, hidden
-from livery.forge.api import Forge, ForgeError, Repository
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import Arg, doc, fail, hidden
+from livery.forge import Forge, ForgeError, Repository
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import new as new_group
 
 if TYPE_CHECKING:
-    from livery.toolroom.tools.api import Result
+    from livery.toolroom.tools import Result
 
 #: The web host each kind means when the contract carries no URL.
 _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}

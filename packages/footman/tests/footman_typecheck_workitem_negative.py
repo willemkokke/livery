@@ -11,7 +11,7 @@ executed suites instead.
 """
 
 from footman_typecheck_workitem import lint
-from livery.footman.api import Result, ResultView, parallel, step
+from livery.footman import Result, ResultView, parallel, step
 
 
 def _declared_means_recorded() -> None:

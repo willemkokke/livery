@@ -15,7 +15,7 @@ from livery.extensions.docs._checks import (
     link_problems,
     undocumented_exports,
 )
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._checks import GateContext, checks_by_name
 from livery.workshop._packages import Package
 

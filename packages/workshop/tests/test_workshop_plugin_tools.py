@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 
 
 def _plugin(monkeypatch: pytest.MonkeyPatch, declared: object) -> None:

@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
+from livery.forge import ForgeError, RateBudget, RateLimited
 from livery.forge._http import JsonClient
-from livery.forge.api import ForgeError, RateBudget, RateLimited
 
 
 def _headers(values: dict[str, str]) -> email.message.Message:
@@ -147,7 +147,7 @@ def test_a_retry_after_that_is_neither_seconds_nor_a_date_falls_to_the_reset() -
 
 
 def test_every_repository_view_reports_its_clients_budget() -> None:
-    from livery.forge.api import GiteaForge, GithubForge, GitlabForge
+    from livery.forge import GiteaForge, GithubForge, GitlabForge
     from livery.forge.testing import FakeForge
 
     opener = _Answering(None)

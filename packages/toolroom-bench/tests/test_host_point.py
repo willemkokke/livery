@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.toolroom.bench import _tasks
-from livery.toolroom.store.api import (
+from livery.toolroom.store import (
     Artifact,
     Ensured,
     Layout,

@@ -16,7 +16,7 @@ script or a project that keeps it out by `builtin-exclude` mounts it
 like any plugin:
 
 ```python
-from livery.footman.api import plugin
+from livery.footman import plugin
 
 plugin("footman.profile")
 ```
@@ -65,8 +65,8 @@ The trace subdivides further wherever a task says so. Three primitives, all
 recorded on the run's clock and carried on the task's row:
 
 ```python
-import livery.footman.api as footman
-from livery.footman.api import task
+import livery.footman as footman
+from livery.footman import task
 
 
 @task
@@ -174,7 +174,7 @@ replaces its own process wraps the replacing in footman's own handoff:
 
 
 ```python
-import livery.footman.api as footman
+import livery.footman as footman
 
 with footman.handing_off() as handed:
     os.execve(uv, cmd, {**os.environ, **handed})

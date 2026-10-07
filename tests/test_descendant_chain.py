@@ -336,7 +336,7 @@ def _chain(
     bridge = tmp_path / "bridge-config"
     (bridge / "footman").mkdir(parents=True, exist_ok=True)
     (bridge / "footman" / "tasks.py").write_text(
-        'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
+        'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
     bridged = {
         **env,
@@ -418,7 +418,7 @@ def _chain(
                 '    """Generate the tools page and its nav block."""\n'
                 "    from pathlib import Path\n"
                 "\n"
-                "    from livery.workshop.api import rewrite_nav_block\n"
+                "    from livery.workshop import rewrite_nav_block\n"
                 "\n"
                 f'    docs = Path("packages/{BRAND}/docs")\n'
                 '    out = docs / "_generated"\n'

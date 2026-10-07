@@ -1,7 +1,7 @@
 """The one requirement grammar: ``name[option,...]?>=floor@scope``, parsed once.
 
 Every site that names a tool or an extension spells it the same way,
-and [livery.toolroom.store.api.Spec][] is the one parser:
+and [livery.toolroom.store.Spec][] is the one parser:
 
 - ``[...]`` names options: a tool's profile, or an extension's
   switches;
@@ -13,7 +13,7 @@ and [livery.toolroom.store.api.Spec][] is the one parser:
 
 The parser enforces the grammar alone. What a site allows of it (a
 floor, options, ``?``) is the site's own rule, so a refusal there names
-the site. [livery.toolroom.store.api.Scope][] resolves a scope against
+the site. [livery.toolroom.store.Scope][] resolves a scope against
 the hosts a workspace supports.
 """
 
@@ -146,7 +146,7 @@ class Spec:
         Raises:
             SpecError: for a spelling the grammar does not read, an
                 empty or malformed option, or a scope
-                [livery.toolroom.store.api.Scope.parse][] refuses.
+                [livery.toolroom.store.Scope.parse][] refuses.
         """
         found = _SPEC.match(text)
         if found is None:

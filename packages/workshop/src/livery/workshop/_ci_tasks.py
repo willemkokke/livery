@@ -27,9 +27,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import livery.footman.api as footman
-from livery.footman.api import doc, fail, group, pre_tasks, task
-from livery.forge.api import (
+import livery.footman as footman
+from livery.footman import doc, fail, group, pre_tasks, task
+from livery.forge import (
     Capability,
     Forge,
     ForgeError,
@@ -469,7 +469,7 @@ def dispatch_flow(
 
 def footman_prog() -> str:
     """The runner's name, for a remedy in a message."""
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     return footman.prog()
 
@@ -763,7 +763,7 @@ def sweep_tool_store(environ: dict[str, str] | None = None) -> str:
     found = _os.environ if environ is None else environ
     if not found.get("GITHUB_ACTIONS"):
         return ""
-    from livery.strongroom.api import LockTimeout, StoreError
+    from livery.strongroom import LockTimeout, StoreError
     from livery.workshop._tools import _home  # pyright: ignore[reportPrivateUsage]
 
     try:

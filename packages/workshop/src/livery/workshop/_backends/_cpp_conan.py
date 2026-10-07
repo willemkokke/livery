@@ -30,13 +30,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 from xml.etree import ElementTree
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.forge.api import Repository
-    from livery.toolroom.tools.api import Result
+    from livery.forge import Repository
+    from livery.toolroom.tools import Result
     from livery.workshop._packages import Neighbours, Package
     from livery.workshop._registries import RegistryTarget
 
@@ -285,7 +285,7 @@ def cache_name(name: str, version: str, host: str = "") -> str:
     *host* defaults to the machine running this, as the store keys
     hosts.
     """
-    from livery.toolroom.store.api import host_key
+    from livery.toolroom.store import host_key
 
     return CACHE_NAME.format(
         name=name,
@@ -456,7 +456,7 @@ def publish_to_releases(package: Package, root: Path, *, version: str) -> bool:
             the message names the re-run, which resumes where this
             one stopped.
     """
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
     from livery.workshop._forge_lane import this_repository
 
     tag = f"{package.path}/v{version}"

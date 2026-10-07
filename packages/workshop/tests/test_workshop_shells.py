@@ -17,7 +17,7 @@ import pytest
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
 import workshop_python_checks as fake_checks
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
@@ -341,7 +341,7 @@ def test_forge_lane_reads_the_contract_and_the_remote(
         (root / "workshop.toml").write_text(
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
-        import livery.forge.api as forge
+        import livery.forge as forge
 
         for cls_name in ("GithubForge", "GiteaForge", "GitlabForge"):
             monkeypatch.setattr(
@@ -385,7 +385,7 @@ def test_ci_run_spawns_the_jobs_entries(
 ) -> None:
     from types import SimpleNamespace
 
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     seen: list[list[str]] = []
 
@@ -441,7 +441,7 @@ def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
 def test_superseded_runs_are_cancelled_and_a_refusal_is_named(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
 
     fake, _root = rig
     repo = fake.repository(OWNER, NAME)

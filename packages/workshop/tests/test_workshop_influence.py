@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop._graph import reaches_no_package
 from livery.workshop._influence import WHOLE, Changes, Inputs, Selection, select
 

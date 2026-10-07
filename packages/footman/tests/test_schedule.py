@@ -8,11 +8,10 @@ import threading
 
 import pytest
 
-from livery.footman import _manifest, _schedule
+from livery.footman import _manifest, _schedule, parallel, run
 from livery.footman._registry import Group
 from livery.footman._split import ChainError, Segment, split_chain
 from livery.footman._step import step
-from livery.footman.api import parallel, run
 
 
 def drive(build, line, **kw):
@@ -774,7 +773,7 @@ def test_the_clock_never_overrules_the_request_stamp():
 
 
 def test_block_children_carry_the_written_order_as_their_stamp():
-    from livery.footman.api import parallel
+    from livery.footman import parallel
     from livery.footman.testing import Runner
 
     reg = Group("root")

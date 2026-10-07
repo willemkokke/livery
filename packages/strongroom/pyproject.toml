@@ -30,8 +30,7 @@ dependencies = []
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.strongroom and
-# there is no livery/__init__.py anywhere in this repository.
+# The importable package is livery.strongroom, its entry module the
+# root's __init__.py; livery is a PEP 420 namespace with no __init__.py
+# anywhere in this repository.
 module-name = "livery.strongroom"
-# The root is a namespace too: its public names live in livery.strongroom.api.
-namespace = true

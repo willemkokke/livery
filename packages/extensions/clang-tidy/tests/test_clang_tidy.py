@@ -10,8 +10,8 @@ import pytest
 
 import livery.extensions.clang.tidy._extension as declaration
 from livery.extensions.clang.tidy import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 CONTRACT = (
     "[workspace]\n"
@@ -139,7 +139,7 @@ def test_a_question_no_program_answers_reads_as_no_answer() -> None:
 def test_a_finding_refuses_with_clang_tidy_s_own_words(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.toolroom.tools.api import Result
+    from livery.toolroom.tools import Result
     from livery.toolroom.tools.testing import answers
 
     package = _native(tmp_path)

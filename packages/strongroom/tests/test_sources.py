@@ -14,9 +14,7 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import _store
-from livery.strongroom._sources import REDIRECTS
-from livery.strongroom.api import (
+from livery.strongroom import (
     ALGORITHMS,
     LAYOUT_VERSION,
     MANIFEST_NAME,
@@ -34,10 +32,12 @@ from livery.strongroom.api import (
     Subject,
     Tombstone,
     Unreachable,
+    _store,
     digest_of,
     fetch_url,
     silent,
 )
+from livery.strongroom._sources import REDIRECTS
 
 HELLO = digest_of(b"hello")
 

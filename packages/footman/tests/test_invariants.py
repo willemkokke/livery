@@ -85,7 +85,7 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     # either way — which is exactly the invariant.
     probe = (
         "import json, sys\n"
-        "from livery.footman.api import main\n"
+        "from livery.footman import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"
@@ -114,10 +114,9 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     loaded = set(json.loads(line[len("LOADED ") :]))
     # The hot path's whole allowance. Growing this set is a decision about
     # the ~30 ms budget, not a test to appease — that is why it is exact.
-    # The namespace and api are the entry: api took over from __init__.
+    # The package's __init__ is the entry.
     assert loaded <= {
         "livery.footman",
-        "livery.footman.api",
         "livery.footman._complete",
         "livery.footman._paths",
     }, sorted(loaded)
@@ -158,7 +157,7 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
 
     probe = (
         "import json, sys\n"
-        "from livery.footman.api import main\n"
+        "from livery.footman import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"

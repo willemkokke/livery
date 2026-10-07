@@ -1,6 +1,6 @@
 # The page shows the part below. The lines above it give the part the
 # names the page's earlier examples defined.
-from livery.footman.api import task
+from livery.footman import task
 
 
 @task

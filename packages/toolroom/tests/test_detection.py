@@ -12,8 +12,8 @@ import sys
 
 import pytest
 
-import livery.toolroom.tools.api as tools
-from livery.toolroom.tools.api import ToolError
+import livery.toolroom.tools as tools
+from livery.toolroom.tools import ToolError
 
 
 def test_a_bare_call_is_standalone_even_with_footman_imported():

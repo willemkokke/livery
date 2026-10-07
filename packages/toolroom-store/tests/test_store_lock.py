@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom.api import Digest, Entry
-from livery.toolroom.store.api import (
+from livery.strongroom import Digest, Entry
+from livery.toolroom.store import (
     Artifact,
     Catalogue,
     CatalogueError,
@@ -353,7 +353,7 @@ def test_a_lock_file_off_the_shape_is_refused_naming_the_file(tmp_path):
 
 
 def test_an_index_that_is_not_one_is_refused_naming_the_source(tmp_path):
-    from livery.toolroom.store.api import Home
+    from livery.toolroom.store import Home
 
     home = Home(tmp_path / "home")
     with pytest.raises(CatalogueError, match=r"no pointer can be read"):
@@ -501,8 +501,8 @@ def test_the_catalogue_reads_the_same_deployments_from_the_records_and_the_index
 
     The deployment digests agree by construction.
     """
-    from livery.strongroom.api import Entry, Store, Tree, canonical
-    from livery.toolroom.store.api import Home
+    from livery.strongroom import Entry, Store, Tree, canonical
+    from livery.toolroom.store import Home
 
     tea = _archive("tea", ("1.0.0", THREE), ("1.1.0", ("linux-x64",)))
     root = _records(tmp_path, tea, _delegated("ruff", "0.16.4"))
@@ -599,20 +599,20 @@ def test_versions_order_by_number_then_patchlevel_then_date():
 
 
 def _index_store(tmp_path: Path) -> Any:
-    from livery.strongroom.api import Store
+    from livery.strongroom import Store
 
     return Store.create(tmp_path / "index")
 
 
 def _blob(store: Any, name: str, value: Any) -> Any:
-    from livery.strongroom.api import Entry, canonical
+    from livery.strongroom import Entry, canonical
 
     data = canonical(value)
     return Entry(name, "blob", store.put(data), len(data))
 
 
 def _tree_entry(store: Any, name: str, entries: list[Any]) -> Any:
-    from livery.strongroom.api import Entry, Tree
+    from livery.strongroom import Entry, Tree
 
     data = Tree.of(entries).encode()
     return Entry(name, "tree", store.put(data), len(data))
@@ -629,7 +629,7 @@ def test_an_index_version_whose_reading_is_off_its_shape_is_refused(tmp_path):
     may parse to something other than an object; each names the tool,
     the version and the fault.
     """
-    from livery.toolroom.store.api import Home
+    from livery.toolroom.store import Home
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
@@ -666,7 +666,7 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
 
     The catalogue reads on demand, and the pointer alone opens it.
     """
-    from livery.toolroom.store.api import Home
+    from livery.toolroom.store import Home
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
@@ -717,8 +717,8 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
 
 
 def test_a_deployment_the_source_cannot_serve_refuses_naming_it(tmp_path):
-    from livery.strongroom.api import Digest as _Digest
-    from livery.toolroom.store.api import Home
+    from livery.strongroom import Digest as _Digest
+    from livery.toolroom.store import Home
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
@@ -732,7 +732,7 @@ def test_a_deployment_the_source_cannot_serve_refuses_naming_it(tmp_path):
         ],
     )
     # The pointer's tree names a host blob the store never landed.
-    from livery.strongroom.api import Entry
+    from livery.strongroom import Entry
 
     version = _tree_entry(
         store,
@@ -742,7 +742,7 @@ def test_a_deployment_the_source_cannot_serve_refuses_naming_it(tmp_path):
                 "hosts",
                 "tree",
                 store.put(
-                    __import__("livery.strongroom.api", fromlist=["Tree"])
+                    __import__("livery.strongroom", fromlist=["Tree"])
                     .Tree.of([Entry("windows-x64", "blob", gone, 1)])
                     .encode()
                 ),
@@ -783,9 +783,8 @@ def test_a_published_index_is_read_by_url_through_an_http_source(tmp_path, monke
     The pointer's fetch is faked and the source's kind asserted, since no
     server serves the layout in a test.
     """
-    from livery.strongroom.api import HttpSource
-    from livery.toolroom.store import _catalogue, _engine
-    from livery.toolroom.store.api import Home
+    from livery.strongroom import HttpSource
+    from livery.toolroom.store import Home, _catalogue, _engine
 
     served = json.dumps({"schema": 1, "tools": {}}).encode("utf-8")
     asked: list[str] = []
@@ -805,7 +804,7 @@ def test_a_published_index_is_read_by_url_through_an_http_source(tmp_path, monke
 def test_a_stub_is_rendered_from_the_index_and_refused_for_a_version_never_read(
     tmp_path,
 ):
-    from livery.toolroom.store.api import Home, class_name
+    from livery.toolroom.store import Home, class_name
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
@@ -895,12 +894,12 @@ def test_the_index_is_read_on_demand_a_tool_and_a_version_at_a_time(tmp_path):
     hosts when they are, so a version tree nobody asks for can be
     missing without a refusal.
     """
-    from livery.toolroom.store.api import Home
+    from livery.toolroom.store import Home
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
-    from livery.strongroom.api import Link
-    from livery.toolroom.store.api import read_pointer
+    from livery.strongroom import Link
+    from livery.toolroom.store import read_pointer
 
     axis = _delegated("ruff", "1.0.0").to_json()
     missing = "sha256:" + "2" * 64
@@ -974,7 +973,7 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     import os
     import time
 
-    from livery.toolroom.store.api import BUILD_FILE, build_current, tree_fingerprint
+    from livery.toolroom.store import BUILD_FILE, build_current, tree_fingerprint
 
     records = tmp_path / "records"
     records.mkdir(parents=True)

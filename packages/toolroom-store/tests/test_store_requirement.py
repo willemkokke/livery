@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from livery.toolroom.store.api import (
+from livery.toolroom.store import (
     HOSTS,
     LockError,
     Requirement,

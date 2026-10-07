@@ -1,15 +1,15 @@
-"""The Gitea backend: livery.forge.api.Forge over Gitea's REST v1 API.
+"""The Gitea backend: livery.forge.Forge over Gitea's REST v1 API.
 
 Server floor: the 1.28 line, the first with workflow-run cancellation.
-Every other operation works on earlier servers; livery.forge.api.Checks.cancel_run
-probes the version once and raises livery.forge.api.Unsupported naming it
+Every other operation works on earlier servers; livery.forge.Checks.cancel_run
+probes the version once and raises livery.forge.Unsupported naming it
 when the server predates the endpoint.
 
-Construction and the token rule: livery.forge.api.GiteaForge.connect
+Construction and the token rule: livery.forge.GiteaForge.connect
 resolves the server once, an explicit ``url`` beating the configured
 ``GITEA_URL``, and reads ``GITEA_TOKEN`` unless a token is passed. The
 token belongs to the configured host and no other:
-livery.forge.api.gitea_is_configured_host is the test to apply before
+livery.forge.gitea_is_configured_host is the test to apply before
 constructing a client for a checkout's remote, and a foreign host is
 read anonymously (``token=""``) instead of being sent a token it never
 issued.
@@ -65,7 +65,7 @@ from livery.forge._types import (
 )
 
 #: The first Gitea line with run cancellation, this backend's floor for
-#: livery.forge.api.Checks.cancel_run.
+#: livery.forge.Checks.cancel_run.
 CANCEL_FLOOR = (1, 28)
 
 
@@ -152,9 +152,9 @@ def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
 
 
 class GiteaForge:
-    """One Gitea server, spoken to through livery.forge.api.Forge's verbs.
+    """One Gitea server, spoken to through livery.forge.Forge's verbs.
 
-    Build with livery.forge.api.GiteaForge.connect; the constructor takes
+    Build with livery.forge.GiteaForge.connect; the constructor takes
     the resolved values and applies no environment fallbacks.
 
     Args:
@@ -382,7 +382,7 @@ class GiteaForge:
 
 
 class _GiteaRepository:
-    """The livery.forge.api.Repository view onto one Gitea repository."""
+    """The livery.forge.Repository view onto one Gitea repository."""
 
     def __init__(
         self, forge: GiteaForge, client: JsonClient, owner: str, name: str
@@ -1155,7 +1155,7 @@ class _GiteaIssues:
     """The issue operations of one Gitea repository.
 
     Gitea's issue endpoints serve pull requests too; every listing here
-    passes ``type=issues`` and livery.forge.api.Issues.get answers None for
+    passes ``type=issues`` and livery.forge.Issues.get answers None for
     a number that names a pull request, so the two spaces never mix.
     """
 

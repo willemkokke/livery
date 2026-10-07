@@ -1,20 +1,20 @@
 """pytest's two checks: each python package's suite, and its documentation examples.
 
 ``test.pytest`` narrows by packages: the workshop names the members a
-run reaches ([livery.workshop.api.scoped_packages][]), and the python
+run reaches ([livery.workshop.scoped_packages][]), and the python
 kind's runner runs their suites in one call
-([livery.workshop.api.run_suites][]), with the workspace's own tests
-([livery.workshop.api.workspace_suite][]) beside them. A member whose
+([livery.workshop.run_suites][]), with the workspace's own tests
+([livery.workshop.workspace_suite][]) beside them. A member whose
 suite is not worker-safe sets the check's ``parallel`` option to false
 and runs in a call of its own, under ``-n 0``. ``examples.pytest`` runs
 each member's documentation examples with its kind's examples runner
-([livery.workshop.api.kind_examples][]). Each check hands pytest the
+([livery.workshop.kind_examples][]). Each check hands pytest the
 words after ``--`` on its own verb (``fm test.pytest -- -k name``).
 """
 
 from __future__ import annotations
 
-from livery.workshop.api import (
+from livery.workshop import (
     PACKAGES,
     CheckRecord,
     Claim,

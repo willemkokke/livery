@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from livery.forge.api import Repository
+from livery.forge import Repository
 from livery.workshop._state import Series
 from livery.workshop._verdict import Verdict
 

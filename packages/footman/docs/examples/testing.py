@@ -2,7 +2,7 @@
 from livery.footman.testing import Runner
 
 TASKS = """
-from livery.footman.api import task, run
+from livery.footman import task, run
 
 @task
 def format():
@@ -32,7 +32,7 @@ def test_the_check_pipeline(tmp_path):
 # --8<-- [start:part-2]
 def test_release_dry(fm_project):
     fm = fm_project("""
-        from livery.footman.api import task, run
+        from livery.footman import task, run
 
         @task
         def release(version: str, push: bool = False):
@@ -66,7 +66,7 @@ def test_check_pipeline_shape(fm):
 # --8<-- [end:part-3]
 
 # --8<-- [start:part-4]
-from livery.footman.api import App
+from livery.footman import App
 from livery.footman.testing import Runner
 
 

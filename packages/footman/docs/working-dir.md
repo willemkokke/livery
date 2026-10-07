@@ -172,7 +172,7 @@ silently new lane that contends with nothing. Re-declaring a taken name
 is an error naming both sites:
 
 ```python
-from livery.footman.api import lane, task
+from livery.footman import lane, task
 
 db = lane("database", reason="serialises the shared dev DB")
 

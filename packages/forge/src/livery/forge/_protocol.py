@@ -1,9 +1,9 @@
 """The protocols every backend implements and every workflow calls.
 
-livery.forge.api.Forge is one server: identity, capabilities, and the
-repositories it hosts. livery.forge.api.Repository is one repository on
+livery.forge.Forge is one server: identity, capabilities, and the
+repositories it hosts. livery.forge.Repository is one repository on
 that server, with its operations grouped the way the workflows name
-them: ``pr``, ``checks``, ``issue``, ``release``. livery.forge.api.Registry
+them: ``pr``, ``checks``, ``issue``, ``release``. livery.forge.Registry
 is a package index, kept apart because a forge and a registry are only
 sometimes the same server.
 
@@ -16,7 +16,7 @@ Four rules hold across every method:
 - Listings are complete or they raise. A method that returns a
   sequence returns everything the query matches. When a backend cannot
   read to the end (a pagination cap, a truncated answer), it raises
-  livery.forge.api.ForgeError instead of returning a prefix, because "not
+  livery.forge.ForgeError instead of returning a prefix, because "not
   in this list" is an answer callers act on.
 - Probe before acting. Every verb is safe to re-run, and re-running a
   workflow is its recovery procedure. Where an operation is not
@@ -24,11 +24,11 @@ Four rules hold across every method:
   request), the protocol pairs it with the read that makes the caller's
   probe-then-act loop idempotent.
 - Capabilities, not pretence. Where forges differ, the
-  difference is a named livery.forge.api.Capability. A backend asked for
-  an operation it declined by name raises livery.forge.api.Unsupported;
-  callers that can degrade probe livery.forge.api.Forge.supports first.
+  difference is a named livery.forge.Capability. A backend asked for
+  an operation it declined by name raises livery.forge.Unsupported;
+  callers that can degrade probe livery.forge.Forge.supports first.
 
-Failures carry the server's own words: every livery.forge.api.ForgeError
+Failures carry the server's own words: every livery.forge.ForgeError
 message quotes what the server said, and no failure is ever reduced to
 a bare boolean.
 """
@@ -72,9 +72,9 @@ class PullRequests(Protocol):
     def open(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
         """Open a pull request from *head* into *base* and return it.
 
-        Raises livery.forge.api.ForgeError when an open pull request for
+        Raises livery.forge.ForgeError when an open pull request for
         *head* already exists; find and reuse it with
-        livery.forge.api.PullRequests.find_by_head first.
+        livery.forge.PullRequests.find_by_head first.
         """
         ...
 
@@ -87,7 +87,7 @@ class PullRequests(Protocol):
         head branch was auto-deleted may no longer carry the branch
         name on some forges, so "None" here does not prove no such
         pull request ever existed: find a finished one by
-        livery.forge.api.PullRequests.find_by_head_sha instead.
+        livery.forge.PullRequests.find_by_head_sha instead.
         """
         ...
 
@@ -137,10 +137,10 @@ class PullRequests(Protocol):
         """Merge pull request *number* immediately.
 
         *title* is the squash commit subject, *message* its body. A
-        refusal raises livery.forge.api.ForgeError with the status a
+        refusal raises livery.forge.ForgeError with the status a
         caller branches on: 405 when the checks are not green, 409 on
         a conflict. A caller that can wait arms instead
-        (livery.forge.api.PullRequests.arm).
+        (livery.forge.PullRequests.arm).
 
         Merging an already merged pull request is success: re-running
         a verb is its recovery procedure, and backends whose forge
@@ -156,12 +156,12 @@ class PullRequests(Protocol):
         *message* its body. Arming an already armed pull request
         replaces the schedule, title included. The merge itself
         happens server-side: the caller observes it through
-        livery.forge.api.Checks.status and livery.forge.api.PullRequests.get,
+        livery.forge.Checks.status and livery.forge.PullRequests.get,
         never performs it. Push to an armed pull request only after
-        livery.forge.api.PullRequests.disarm: a push into a live schedule
+        livery.forge.PullRequests.disarm: a push into a live schedule
         races the merge, and the merge can take the pre-push head.
 
-        Raises livery.forge.api.Unsupported on a forge without the
+        Raises livery.forge.Unsupported on a forge without the
         ``auto_merge`` capability.
         """
         ...
@@ -189,8 +189,8 @@ class PullRequests(Protocol):
         GitLab's ``detailed_merge_status`` and GitHub's
         ``mergeable_state``; empty on a forge that publishes none
         (Gitea says why in the merge refusal's prose instead).
-        [livery.forge.api.classify_merge_refusal][] reads it to classify a
-        refusal on those forges. Raises livery.forge.api.ForgeError with
+        [livery.forge.classify_merge_refusal][] reads it to classify a
+        refusal on those forges. Raises livery.forge.ForgeError with
         status 404 when the pull request does not exist.
         """
         ...
@@ -207,9 +207,9 @@ class PullRequests(Protocol):
         """The merge-scheduling history of pull request *number*.
 
         Oldest first. The record that shows a created-then-lost
-        schedule. Raises livery.forge.api.Unsupported on a forge without
+        schedule. Raises livery.forge.Unsupported on a forge without
         the ``schedule_events`` capability; ask
-        livery.forge.api.Forge.supports first.
+        livery.forge.Forge.supports first.
         """
         ...
 
@@ -226,7 +226,7 @@ class Checks(Protocol):
     """One repository's CI: the combined verdict, runs, jobs, and logs.
 
     GitHub and Gitea run workflows, GitLab runs pipelines. A run here
-    is either; livery.forge.api.Run says how the two map.
+    is either; livery.forge.Run says how the two map.
     """
 
     def status(self, sha: str) -> CombinedStatus:
@@ -234,7 +234,7 @@ class Checks(Protocol):
 
         Polling this is the observation model: a workflow that armed a
         merge watches the verdict here and observes the merge through
-        livery.forge.api.PullRequests.get. A commit nothing has reported
+        livery.forge.PullRequests.get. A commit nothing has reported
         for answers ``none``, never ``pending``.
         """
         ...
@@ -265,7 +265,7 @@ class Checks(Protocol):
 
         ``failed_only`` is the cheap and usually correct choice: a
         green matrix leg does not need re-running to re-test a red
-        one. Raises livery.forge.api.ForgeError while the run is still in
+        one. Raises livery.forge.ForgeError while the run is still in
         progress, because there is nothing to re-run yet.
         """
         ...
@@ -276,13 +276,13 @@ class Checks(Protocol):
         Required on every forge: superseded pushes cancel their stale
         runs, a dispatch storm is withdrawn, a starving queue is
         relieved by this verb instead of a wait. Raises
-        livery.forge.api.ForgeError when the run is already terminal, so a
+        livery.forge.ForgeError when the run is already terminal, so a
         caller re-running its workflow probes the run's status first.
 
         ``force=True`` marks the jobs cancelled immediately and
         discards later runner reports, for a run whose runner stopped
         answering. It is capability-gated: a forge without
-        ``force_cancel`` raises livery.forge.api.Unsupported naming the
+        ``force_cancel`` raises livery.forge.Unsupported naming the
         capability, and plain cancel remains available.
         """
         ...
@@ -306,7 +306,7 @@ class Schedules(Protocol):
 
     The clock for a forge that keeps it outside the workflow file
     (capability ``pipeline_schedules``). A forge whose clock is in
-    the file raises livery.forge.api.Unsupported naming the capability
+    the file raises livery.forge.Unsupported naming the capability
     from every method.
     """
 
@@ -345,9 +345,9 @@ class Releases(Protocol):
     ) -> Release:
         """Create the release for *tag* and return it.
 
-        Raises livery.forge.api.ForgeError when *tag* already has a
+        Raises livery.forge.ForgeError when *tag* already has a
         release. A re-run therefore probes with
-        livery.forge.api.Releases.get first and skips the create: that
+        livery.forge.Releases.get first and skips the create: that
         pair is the idempotent whole.
         """
         ...
@@ -369,9 +369,9 @@ class Releases(Protocol):
     ) -> Asset:
         """Attach *data* to *tag*'s release as the file *name*; the asset.
 
-        Raises livery.forge.api.ForgeError when *tag* has no release, or
+        Raises livery.forge.ForgeError when *tag* has no release, or
         when the release already carries an asset named *name*. A
-        re-run therefore probes with livery.forge.api.Releases.assets
+        re-run therefore probes with livery.forge.Releases.assets
         first and skips the upload: that pair is the idempotent whole.
         """
         ...
@@ -379,7 +379,7 @@ class Releases(Protocol):
     def assets(self, tag: str) -> tuple[Asset, ...]:
         """The files attached to *tag*'s release, in the forge's order.
 
-        Raises livery.forge.api.ForgeError when *tag* has no release.
+        Raises livery.forge.ForgeError when *tag* has no release.
         """
         ...
 
@@ -390,7 +390,7 @@ class Releases(Protocol):
         lane's credential, and each forge addresses the bytes its own
         way, so a caller never builds the download URL itself.
 
-        Raises livery.forge.api.ForgeError when *tag* has no release or
+        Raises livery.forge.ForgeError when *tag* has no release or
         the release carries no asset named *name*.
         """
         ...
@@ -415,9 +415,9 @@ class Issues(Protocol):
         """Open an issue and return it.
 
         *labels* are label names; ensure they exist first with
-        livery.forge.api.Repository.configure. A creator that must not
+        livery.forge.Repository.configure. A creator that must not
         file duplicates searches for its marker text with
-        livery.forge.api.Issues.search before creating.
+        livery.forge.Issues.search before creating.
         """
         ...
 
@@ -475,7 +475,7 @@ class Issues(Protocol):
 
         Only the provided (non-empty) fields change; clearing a text
         to empty is not part of the contract. A number that names
-        nothing raises [livery.forge.api.ForgeError][].
+        nothing raises [livery.forge.ForgeError][].
         """
         ...
 
@@ -489,7 +489,7 @@ class Issues(Protocol):
         The thread continues the work order the body opened, so it is
         read whole, the way the body is. Only what people wrote is a
         comment: a forge's own system notes are left out. Raises
-        livery.forge.api.ForgeError with status 404 when the issue does
+        livery.forge.ForgeError with status 404 when the issue does
         not exist.
         """
         ...
@@ -516,7 +516,7 @@ class Repository(Protocol):
     """One repository on one forge.
 
     A cheap value bound to the owner and name, obtained from
-    livery.forge.api.Forge.repository. The operation groups mirror the
+    livery.forge.Forge.repository. The operation groups mirror the
     workflow vocabulary: ``pr.open``, ``checks.status``,
     ``issue.search``, ``release.get``.
     """
@@ -561,7 +561,7 @@ class Repository(Protocol):
 
         Idempotent: hosting already enabled with *build_type* is left
         alone, and a different build type is moved to it. Raises
-        livery.forge.api.Unsupported where the forge has no Pages API to
+        livery.forge.Unsupported where the forge has no Pages API to
         configure (capability ``pages_config``).
         """
         ...
@@ -582,7 +582,7 @@ class Repository(Protocol):
         stated fields are made true whether or not they already were.
         Project birth and release aftercare run the same call.
 
-        Raises livery.forge.api.Unsupported when a stated field needs a
+        Raises livery.forge.Unsupported when a stated field needs a
         capability the forge declines by name: ``required_contexts``
         on GitLab, ``min_approvals`` on an unlicensed GitLab
         instance, ``ci_secrets`` on a GitHub install without the
@@ -608,11 +608,11 @@ class Repository(Protocol):
     def protection(self, branch: str) -> Protection | None:
         """The protection configured for *branch*, or None when none is.
 
-        The read side of livery.forge.api.RepoConfig, normalised per
-        livery.forge.api.Protection: a flag the forge cannot express reads
+        The read side of livery.forge.RepoConfig, normalised per
+        livery.forge.Protection: a flag the forge cannot express reads
         as its inert value. Reading protection may need an
         administrating token on some forges; a refusal raises
-        livery.forge.api.ForgeError for the caller to degrade on.
+        livery.forge.ForgeError for the caller to degrade on.
         """
         ...
 
@@ -686,7 +686,7 @@ class Forge(Protocol):
         """The server's version string.
 
         Backends with a version floor check it here and raise
-        livery.forge.api.Unsupported naming the version when the server
+        livery.forge.Unsupported naming the version when the server
         predates an operation.
         """
         ...
@@ -699,7 +699,7 @@ class Forge(Protocol):
         uploads (the forge-registry shape); ``conan`` answers the
         remote URL a conan client configures; ``container`` answers
         the reference prefix an image tag starts with. Raises
-        livery.forge.api.Unsupported, naming the kind, where this forge
+        livery.forge.Unsupported, naming the kind, where this forge
         hosts no such registry. The forge is the default provider,
         never the owner: resolution and external declarations are
         the caller's business.
@@ -711,7 +711,7 @@ class Forge(Protocol):
 
         The honesty valve: a caller that can degrade asks here first,
         and a backend never pretends. The names are the
-        livery.forge.api.Capability vocabulary.
+        livery.forge.Capability vocabulary.
         """
         ...
 
@@ -769,9 +769,9 @@ class Forge(Protocol):
         The repository is initialised with a default branch that
         carries no protection: the creator may push its own history
         over the initial commit, and protection starts when the caller
-        configures it. Raises livery.forge.api.ForgeError when it already
+        configures it. Raises livery.forge.ForgeError when it already
         exists; ensure-exists callers probe with
-        livery.forge.api.Forge.get_repo first. On GitLab, *owner* may be a
+        livery.forge.Forge.get_repo first. On GitLab, *owner* may be a
         group path.
         """
         ...
@@ -804,7 +804,7 @@ class Registry(Protocol):
         """The published versions of package *name*, oldest first.
 
         An unpublished name answers the empty tuple; an unreachable
-        index raises livery.forge.api.ForgeError. The release train's
+        index raises livery.forge.ForgeError. The release train's
         "does the index see it yet" probe.
         """
         ...

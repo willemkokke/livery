@@ -11,8 +11,8 @@ import pytest
 
 import livery.extensions.pytest._extension as declaration
 from livery.extensions.pytest import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 CONTRACT = (
     "[workspace]\n"

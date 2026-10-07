@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom.api import Digest, Entry, ManifestError, Tree
+from livery.strongroom import Digest, Entry, ManifestError, Tree
 from livery.toolroom.bench import _index, _surfaces
-from livery.toolroom.store.api import (
+from livery.toolroom.store import (
     Artifact,
     Layout,
     Record,
@@ -356,7 +356,7 @@ def test_a_build_after_which_nothing_moved_reads_no_record(tmp_path, monkeypatch
     import os
     import time
 
-    from livery.toolroom.store.api import build_current
+    from livery.toolroom.store import build_current
 
     root = _driven(tmp_path, monkeypatch)
     into = tmp_path / "index"

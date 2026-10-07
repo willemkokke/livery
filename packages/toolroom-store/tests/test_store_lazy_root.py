@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import livery.toolroom.store.api as package
+import livery.toolroom.store as package
 
 
 def _loaded_after(statement: str) -> list[str]:
@@ -22,15 +22,12 @@ def _loaded_after(statement: str) -> list[str]:
 
 
 def test_importing_the_root_loads_no_module_of_the_package() -> None:
-    assert _loaded_after("import livery.toolroom.store.api") == [
-        "livery.toolroom.store.api"
-    ]
+    assert _loaded_after("import livery.toolroom.store") == []
 
 
 def test_one_name_loads_only_the_module_that_defines_it() -> None:
-    assert _loaded_after("from livery.toolroom.store.api import HOSTS") == [
-        "livery.toolroom.store._record",
-        "livery.toolroom.store.api",
+    assert _loaded_after("from livery.toolroom.store import HOSTS") == [
+        "livery.toolroom.store._record"
     ]
 
 

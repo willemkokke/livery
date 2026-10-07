@@ -19,10 +19,9 @@ from __future__ import annotations
 
 import pytest
 
-from livery.footman import _executor, _manifest, _schedule
+from livery.footman import _executor, _manifest, _schedule, fail
 from livery.footman._registry import Group, task_retries
 from livery.footman._split import split_chain
-from livery.footman.api import fail
 
 
 def states(rows):

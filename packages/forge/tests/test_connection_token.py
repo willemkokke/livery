@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from livery.forge.api import GiteaForge, GithubForge, GitlabForge
+from livery.forge import GiteaForge, GithubForge, GitlabForge
 from livery.forge.testing import FakeForge
 
 

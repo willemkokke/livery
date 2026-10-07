@@ -15,11 +15,11 @@ import pytest
 
 import livery.extensions.clang.format._extension as declaration
 import livery.extensions.clang.tidy._extension as tidy_declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.clang.format import _checks as clang_format
 from livery.extensions.clang.tidy import _checks as clang_tidy
+from livery.workshop import Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import Package
 
 # The workshop's test helper: pytest's pythonpath carries every tests
 # directory, which basedpyright's search path does not.
@@ -101,9 +101,9 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
 def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
     tmp_path: Path, registered: None
 ) -> None:
+    from livery.workshop import compile_commands
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._shipped_files import settle_package
-    from livery.workshop.api import compile_commands
 
     destination = tmp_path / "packages" / "native"
     seed_into(

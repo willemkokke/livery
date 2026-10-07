@@ -25,7 +25,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._extensions import extension_content, stack_names
 from livery.workshop._fragment_engine import Fragment
 

@@ -12,7 +12,7 @@ the lines it wants printed. ``dry_run`` asks it to say what would go
 and remove nothing. A sweeper does the same work wherever it runs:
 what is safe to remove is decided by its own rule, never by who is
 watching, and a sweeper wanting a quieter voice asks
-[livery.footman.api.attended][] like anything else.
+[livery.footman.attended][] like anything else.
 A sweeper that raises is named and the
 rest still run; one whose entry point cannot load is named and
 skipped. The convention for what a sweeper may touch is footman's own:

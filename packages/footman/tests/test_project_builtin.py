@@ -16,7 +16,7 @@ from livery.footman.testing import Runner
 # `acme-deep`, installed only because `acme-direct` depends on it.
 DIRECT = textwrap.dedent(
     '''
-    from livery.footman.api import task
+    from livery.footman import task
 
     @task
     def hello():
@@ -31,7 +31,7 @@ DIRECT = textwrap.dedent(
 )
 DEEP = textwrap.dedent(
     '''
-    from livery.footman.api import task
+    from livery.footman import task
 
     @task
     def deep():
@@ -89,7 +89,7 @@ def _project(root: Path, pyproject: str, tasks: str = "") -> Path:
     (project / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     (project / "tasks.py").write_text(
         tasks
-        or 'from livery.footman.api import task\n\n@task\ndef build():\n    """Build."""\n',
+        or 'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n',
         encoding="utf-8",
     )
     return project
@@ -160,7 +160,7 @@ def test_a_root_task_shadows_a_plugin_task_and_inherits_it(providers: Path) -> N
         '[project]\nname = "x"\ndependencies = ["acme-direct"]\n',
         tasks=textwrap.dedent(
             '''
-            from livery.footman.api import inherited, task
+            from livery.footman import inherited, task
 
             @task
             def hello():

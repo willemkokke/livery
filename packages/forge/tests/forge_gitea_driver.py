@@ -28,8 +28,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
+from livery.forge import Forge, ForgeError, GiteaForge, Repository, Run
 from livery.forge._http import JsonClient, Opener
-from livery.forge.api import Forge, ForgeError, GiteaForge, Repository, Run
 from livery.forge.testing import Outcome
 
 ROOT = Path(__file__).resolve().parents[3]

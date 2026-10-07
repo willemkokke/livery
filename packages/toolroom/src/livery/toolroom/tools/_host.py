@@ -316,7 +316,7 @@ def note(text: str) -> None:
     demotions it describes are behaviour-preserving either way.
     """
     if hosted():
-        from livery.footman.api import current, real_stderr
+        from livery.footman import current, real_stderr
 
         if current().verbose:
             real_stderr().write(text)
@@ -383,8 +383,8 @@ def run(
     in-process lane too.
     """
     if hosted():
+        from livery.footman import run as fm_run
         from livery.footman._context import Invocation
-        from livery.footman.api import run as fm_run
 
         painted: dict[str, Any] = {}
         if _run_takes_colour(fm_run):

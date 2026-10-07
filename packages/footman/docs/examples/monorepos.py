@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 # ~/.config/footman/tasks.py
-from livery.footman.api import run, task
+from livery.footman import run, task
 
 
 @task

@@ -21,7 +21,7 @@ def test_fm_project_scaffolds_and_runs(pytester: pytest.Pytester):
         """
         def test_release(fm_project):
             fm = fm_project('''
-                from livery.footman.api import task, run
+                from livery.footman import task, run
 
                 @task
                 def release(version: str):
@@ -43,7 +43,7 @@ def test_fm_project_honours_a_custom_tasks_filename(pytester: pytest.Pytester):
         """
         def test_named(fm_project):
             fm = fm_project('''
-                from livery.footman.api import task
+                from livery.footman import task
 
                 @task
                 def ship():
@@ -60,7 +60,7 @@ def test_fm_record_captures_commands_without_running_them(pytester: pytest.Pytes
     commands it would issue are captured instead of executed."""
     pytester.makepyfile(
         """
-        from livery.footman.api import run, task
+        from livery.footman import run, task
 
         @task
         def lint(fix: bool = False):
@@ -79,7 +79,7 @@ def test_fm_runner_targets_the_current_project(pytester: pytest.Pytester):
     """The bare `fm` fixture drives whatever project the test runs in."""
     pytester.makepyfile(
         tasks="""
-        from livery.footman.api import task
+        from livery.footman import task
 
         @task
         def hello():
@@ -283,27 +283,51 @@ def test_a_test_never_inherits_the_drop_box_but_the_suite_still_reports(
     assert fragment.name.startswith("pytest-")
 
 
-def test_a_name_a_test_binds_on_the_api_leaves_it_when_the_test_ends(
+def test_a_submodule_a_test_imports_first_stays_on_the_package(
     pytester: pytest.Pytester,
 ):
-    # The api serves most names through its module __getattr__, so a patch of
-    # the defining module reaches every reader of the api. A test that patches
-    # the api itself binds the name into the api's namespace, and monkeypatch's
+    # The import system binds a submodule on its package at the first
+    # import, and an attribute walk to it (monkeypatch's dotted targets
+    # among them) needs that binding: the plugin unbinds what a test
+    # bound, never a submodule. A fresh process, so the import is a first.
+    pytester.makepyfile(
+        """
+        import sys
+
+        import livery.footman as footman
+
+        def test_one_imports_a_submodule_first():
+            assert "livery.footman._fetch" not in sys.modules
+            import livery.footman._fetch
+
+        def test_two_reaches_it_by_attribute():
+            assert footman._fetch is sys.modules["livery.footman._fetch"]
+        """
+    )
+    pytester.runpytest_subprocess("-p", "no:cacheprovider").assert_outcomes(passed=2)
+
+
+def test_a_name_a_test_binds_on_the_package_leaves_it_when_the_test_ends(
+    pytester: pytest.Pytester,
+):
+    # The package serves most names through its module __getattr__, so a
+    # patch of the defining module reaches every reader. A test that patches
+    # the package itself binds the name into its namespace, and monkeypatch's
     # restore then binds the original there for good: the next test's patch of
     # the defining module would reach nobody. The plugin unbinds it.
     pytester.makepyfile(
         """
-        import livery.footman.api as api
+        import livery.footman as footman
         import livery.footman._context as context
 
-        def test_one_patches_the_api(monkeypatch):
-            monkeypatch.setattr(api, "data_dir", lambda: "fake")
-            assert api.data_dir() == "fake"
+        def test_one_patches_the_package(monkeypatch):
+            monkeypatch.setattr(footman, "data_dir", lambda: "fake")
+            assert footman.data_dir() == "fake"
 
         def test_two_patches_the_defining_module(monkeypatch):
-            assert "data_dir" not in vars(api)
+            assert "data_dir" not in vars(footman)
             monkeypatch.setattr(context, "data_dir", lambda: "patched")
-            from livery.footman.api import data_dir
+            from livery.footman import data_dir
             assert data_dir() == "patched"
         """
     )

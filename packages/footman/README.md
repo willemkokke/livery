@@ -47,8 +47,8 @@ uv add --dev footman        # or: pip install footman
 ```python
 # tasks.py
 from typing import Literal
-from livery.footman.api import task, group, run
-from livery.toolroom.tools.api import pytest, ruff
+from livery.footman import task, group, run
+from livery.toolroom.tools import pytest, ruff
 
 
 @task
@@ -119,8 +119,8 @@ project at all — drop it in any directory and run it:
 # /// script
 # dependencies = ["livery-footman", "httpx"]
 # ///
-import livery.footman.api as footman
-from livery.footman.api import task
+import livery.footman as footman
+from livery.footman import task
 
 
 @task

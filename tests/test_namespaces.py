@@ -1,25 +1,29 @@
-"""This repository's namespace roots: each holds its public names in one api module.
+"""This repository's roots: each holds its public names in its __init__.py.
 
-Our convention, not the workshop's: every distribution root is a PEP 420
-namespace with no __init__.py, its public names live in <root>.api,
-and api and testing are names no module takes anywhere but
-directly under a root. The api holds what an __init__.py would hold: a
-public package under a root keeps its own path, and the api declares it,
-imported for the checkers and listed in __all__. A root with no public
-names, an extension's, has no api either.
+Our convention, not the workshop's: every distribution root with public
+names is a regular package whose __init__.py declares them, imports
+what need not load under TYPE_CHECKING and serves it on first use. The
+shared namespaces, livery, livery.toolroom and livery.extensions, carry
+no __init__.py, nor does a root with no public names, an extension's.
+A public package under a root keeps its own path and its root declares
+it, and testing is a name no module takes anywhere but directly under
+a root.
 """
 
 from __future__ import annotations
 
 import ast
 import importlib
+import json
+import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: Each root's public names when its __init__.py held them: the move to
-#: api changes where they live and nothing else. livery.toolroom.tools
-#: has no __all__, so its public module names stand in.
+#: Each root's public names. livery.toolroom.tools has no __all__, so
+#: its public module names stand in.
 EXPORTS: dict[str, list[str]] = {
     "livery.footman": [
         "App",
@@ -429,8 +433,8 @@ SOURCES = {
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
 }
 
-#: The roots with no public names: a namespace with neither api.py nor
-#: __init__.py, reached through an entry point alone.
+#: The roots with no public names: a namespace with no __init__.py,
+#: reached through an entry point alone.
 BARE = {
     "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
     "livery.extensions.basedpyright": (
@@ -439,43 +443,62 @@ BARE = {
     "livery.extensions.ruff": "packages/extensions/ruff/src/livery/extensions/ruff",
 }
 
+#: The shared namespaces under a member's src directory.
+NAMESPACES = ("livery", "livery/toolroom", "livery/extensions")
+
 #: The names a module takes only directly under a root.
-RESERVED = ("api", "testing")
+RESERVED = ("testing",)
+
+#: The private modules importing a root loads, beyond the root itself:
+#: what its entry module needs at runtime. The handles bind the result
+#: types for real and build the colour table at import.
+EAGER = {
+    "livery.toolroom.tools": [
+        "livery.toolroom.tools._colordata",
+        "livery.toolroom.tools._host",
+    ],
+}
 
 
-def _public(module: object) -> list[str]:
+def _public(module: ModuleType) -> list[str]:
     declared = getattr(module, "__all__", None)
     if declared is not None:
         return sorted(declared)
-    # A tool handle is made on first use and kept on the module, so
-    # which handles exist depends on what ran before: the module's own
-    # names are the surface.
+    # A tool handle is made on first use and kept on the module, and a
+    # submodule is bound there by its first import, so which of either
+    # exists depends on what ran before: the module's own names are the
+    # surface.
     tool = getattr(module, "Tool", None)
     return sorted(
         name
         for name, value in vars(module).items()
-        if not name.startswith("_") and not (tool and isinstance(value, tool))
+        if not name.startswith("_")
+        and not (tool and isinstance(value, tool))
+        and not (
+            isinstance(value, ModuleType)
+            and value.__name__ == f"{module.__name__}.{name}"
+        )
     )
 
 
-def test_api_exports_what_the_package_exported() -> None:
+def test_each_root_exports_its_public_names() -> None:
     for root, names in EXPORTS.items():
-        assert _public(importlib.import_module(f"{root}.api")) == names, root
+        assert _public(importlib.import_module(root)) == names, root
 
 
-def test_every_distribution_root_is_a_namespace_with_one_api() -> None:
+def test_every_root_with_public_names_is_a_package_and_every_namespace_is_not() -> None:
     problems: list[str] = []
     roots = {ROOT / path for path in SOURCES.values()}
-    for directory in roots:
-        if (directory / "__init__.py").exists():
-            problems.append(f"{directory}: a root carries no __init__.py")
-        if not (directory / "api.py").is_file():
-            problems.append(f"{directory}: a root holds its names in api.py")
+    for directory in sorted(roots):
+        if not (directory / "__init__.py").is_file():
+            problems.append(f"{directory}: a root declares its names in __init__.py")
     # A member at either depth: packages/<name>/ or packages/<group>/<name>/.
     for src in sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("packages/*/*/src")]):
-        for namespace in (src / "livery", src / "livery" / "extensions"):
-            if (namespace / "__init__.py").exists():
-                problems.append(f"{namespace}: a namespace carries no __init__.py")
+        for namespace in NAMESPACES:
+            if (src / namespace / "__init__.py").exists():
+                problems.append(
+                    f"{src / namespace}: a namespace carries no __init__.py"
+                )
         for path in sorted(src.rglob("*")):
             if "__pycache__" in path.parts or path.stem not in RESERVED:
                 continue
@@ -484,13 +507,37 @@ def test_every_distribution_root_is_a_namespace_with_one_api() -> None:
     assert problems == []
 
 
+def test_importing_a_root_loads_only_what_its_entry_module_needs() -> None:
+    # One fresh interpreter per root: what an earlier import loaded
+    # would hide what this one loads.
+    loaded: dict[str, list[str]] = {}
+    for root in SOURCES:
+        script = (
+            "import importlib, json, sys\n"
+            "before = set(sys.modules)\n"
+            f"importlib.import_module({root!r})\n"
+            f"prefix = {root!r} + '.'\n"
+            "print(json.dumps(sorted(m for m in set(sys.modules) - before"
+            " if m.startswith(prefix))))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        loaded[root] = json.loads(result.stdout)
+    assert loaded == {root: EAGER.get(root, []) for root in SOURCES}
+
+
 def _declared(root: str) -> set[str]:
-    """The names a root's api declares: its `__all__`, else its stub's re-exports."""
-    api = importlib.import_module(f"{root}.api")
-    declared = getattr(api, "__all__", None)
+    """The names a root declares: its `__all__`, else its stub's re-exports."""
+    module = importlib.import_module(root)
+    declared = getattr(module, "__all__", None)
     if declared is not None:
         return set(declared)
-    stub = ROOT / SOURCES[root] / "api.pyi"
+    stub = ROOT / SOURCES[root] / "__init__.pyi"
     return {
         alias.name
         for node in ast.walk(ast.parse(stub.read_text(encoding="utf-8")))
@@ -500,17 +547,17 @@ def _declared(root: str) -> set[str]:
     }
 
 
-def test_every_public_module_under_a_root_is_its_api_or_declared_there() -> None:
-    # typecomplete verifies what a root's api declares and nothing else,
-    # so a module or package directly under a root without a leading
-    # underscore is the api, or the api declares it.
+def test_every_public_module_under_a_root_is_declared_by_the_root() -> None:
+    # typecomplete verifies what a root declares, so a module or package
+    # directly under a root without a leading underscore is declared
+    # there.
     problems: list[str] = []
     for root, path in SOURCES.items():
         declared = _declared(root)
-        # A declaration the api cannot serve is a lie the checkers believe.
-        api = importlib.import_module(f"{root}.api")
+        # A declaration the root cannot serve is a lie the checkers believe.
+        module = importlib.import_module(root)
         for name in sorted(declared):
-            getattr(api, name)
+            getattr(module, name)
         for child in sorted((ROOT / path).iterdir()):
             if child.name.startswith(("_", ".")):
                 continue
@@ -522,19 +569,16 @@ def test_every_public_module_under_a_root_is_its_api_or_declared_there() -> None
                 name = child.stem
             else:
                 continue
-            if name != "api" and name not in declared:
-                problems.append(
-                    f"{root}.{name}: public, and {root}.api declares no {name}"
-                )
+            if name not in declared:
+                problems.append(f"{root}.{name}: public, and {root} declares no {name}")
     assert problems == []
 
 
-def test_a_root_with_no_public_names_has_neither_api_nor_init() -> None:
+def test_a_root_with_no_public_names_has_no_init() -> None:
     problems = [
-        f"{path}: {name} in a root with no public names"
+        f"{path}: __init__.py in a root with no public names"
         for path in BARE.values()
-        for name in ("api.py", "__init__.py")
-        if (ROOT / path / name).exists()
+        if (ROOT / path / "__init__.py").exists()
     ]
     assert problems == []
     assert all((ROOT / path).is_dir() for path in BARE.values())

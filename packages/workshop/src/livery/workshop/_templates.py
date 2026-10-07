@@ -15,8 +15,8 @@ import re
 from pathlib import Path
 from typing import Annotated, Any
 
-import livery.footman.api as footman
-from livery.footman.api import doc, fail, group
+import livery.footman as footman
+from livery.footman import doc, fail, group
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
     stack_entries,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.forge.api import Repository
+from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -52,7 +52,7 @@ def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
     monkeypatch.setenv("GITLAB_TOKEN", "the-lane-token")
     fake = FakeForge()
     monkeypatch.setattr(
-        "livery.forge.api.GitlabForge.connect",
+        "livery.forge.GitlabForge.connect",
         staticmethod(lambda url, token: fake),
     )
     calls: list[tuple[str, str, object]] = []
@@ -167,7 +167,7 @@ def test_provisioning_creates_then_reuses_and_writes_the_secret(
     monkeypatch.setenv("GITEA_TOKEN", "the-lane-token")
     fake = FakeForge()
     monkeypatch.setattr(
-        "livery.forge.api.GiteaForge.connect",
+        "livery.forge.GiteaForge.connect",
         staticmethod(lambda url, token: fake),
     )
     _e2e.provision("gitea")
@@ -232,7 +232,7 @@ def test_the_runner_probe_refuses_a_missing_runner_and_a_missing_socket(
     # socket passes quietly.
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     answer = {"code": 1, "stdout": ""}
     seen: list[tuple[str, ...]] = []
@@ -268,7 +268,7 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     # refused delete holds on every forge.
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     pushes: list[tuple[str, ...]] = []
     deny = {"code": 0}
@@ -384,7 +384,7 @@ def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
             code=code[0], stdout="  updated pyproject.toml\n", stderr="no index"
         )
 
-    monkeypatch.setattr("livery.footman.api.run", run)
+    monkeypatch.setattr("livery.footman.run", run)
     with pytest.raises(_FAILURES, match="the pass's render of the loop exited 3"):
         _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
     code[0] = 0
@@ -400,7 +400,7 @@ def test_the_tree_reset_keeps_what_sync_materialises(
     """A reset cleans a pass's residue and never the stubs, receipts or venv."""
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     calls: list[tuple[str, ...]] = []
 
@@ -427,7 +427,7 @@ def test_the_serving_probe_asks_each_member_s_own_registry(
     """A python member is probed on the simple index, the conan member on its target."""
     from types import SimpleNamespace
 
-    import livery.forge.api as forge_package
+    import livery.forge as forge_package
     from livery.workshop import _registries
     from livery.workshop._backends import _cpp_conan
 
@@ -687,7 +687,7 @@ def test_the_birth_lists_the_stack_of_the_pass(
         seen.append(argv)
         return SimpleNamespace(code=0, stdout="", stderr="")
 
-    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr("livery.footman.run", _run)
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
     _e2e._birth("gitea", "http://localhost:1")
     assert not any(arg.startswith("--stack") for arg in seen[-1])
@@ -700,7 +700,7 @@ def test_the_loop_s_own_fm_never_asks_a_signer(
 ) -> None:
     from types import SimpleNamespace
 
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     # The pass's own write lands in the task's environment, so the
     # process's carries no setting: the child must get it anyway.
@@ -805,9 +805,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         lambda root, git, package: "0.3.0" if package.name == "livery-forge" else "",
     )
     ran: list[list[str]] = []
-    monkeypatch.setattr(
-        "livery.footman.api.run", lambda argv, **kwargs: ran.append(argv)
-    )
+    monkeypatch.setattr("livery.footman.run", lambda argv, **kwargs: ran.append(argv))
     purged: list[tuple[str, object]] = []
 
     def _purge(base: str, owner: str, **kwargs: object) -> list[str]:
@@ -882,7 +880,7 @@ def test_the_birth_reads_the_dev_index_before_any_other(
         seen.append(dict(env))
         return SimpleNamespace(code=0, stdout="", stderr="")
 
-    monkeypatch.setattr("livery.footman.api.run", _run)
+    monkeypatch.setattr("livery.footman.run", _run)
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
     monkeypatch.setenv("UV_INDEX", "https://mirror.example/simple")
     _e2e._birth("gitea", "http://localhost:1")
@@ -911,7 +909,7 @@ def test_the_checkout_index_refuses_a_member_without_a_version(
 def test_the_checkout_index_builds_what_a_newborn_installs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     _member(tmp_path, "workshop", "toolroom")
     _member(tmp_path, "toolroom")
@@ -1029,7 +1027,7 @@ class _SlowDeleteForge(FakeForge):
     finishes = True
 
     def delete_repo(self, owner: str, name: str) -> None:
-        from livery.forge.api import ForgeError
+        from livery.forge import ForgeError
 
         if self.finishes:
             super().delete_repo(owner, name)
@@ -1039,7 +1037,7 @@ class _SlowDeleteForge(FakeForge):
 def test_a_delete_that_outruns_the_client_is_waited_for_or_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.forge.api import ForgeError
+    from livery.forge import ForgeError
 
     monkeypatch.setattr(
         "livery.forge._registry.purge_packages",
@@ -1183,7 +1181,7 @@ def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
 
 
 def test_an_unknown_scenario_refuses_naming_the_sets_and_the_scenarios() -> None:
-    from livery.footman.api import Failed
+    from livery.footman import Failed
 
     with pytest.raises(
         Failed, match=r"'nonesuch' is not a scenario or a set; the sets are develop"
@@ -1221,7 +1219,7 @@ def test_a_choice_resolves_its_needs_once_in_the_registry_s_order() -> None:
 
 
 def test_a_scenario_is_timed_with_its_runs_and_a_failure_is_marked() -> None:
-    from livery.footman.api import Failed
+    from livery.footman import Failed
 
     pass_ = _e2e.Pass("gitea", "http://gitea:3000")
 

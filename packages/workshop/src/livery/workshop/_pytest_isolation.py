@@ -19,7 +19,7 @@ registered from outside the test files is dropped before the first
 test, so a test never meets another package's ``lint`` or ``check``
 because a worker happened to collect that package's tests. And a test
 that leaves tasks or groups of its own in footman's root group
-([livery.footman.api.root_group][]) fails at its teardown naming
+([livery.footman.root_group][]) fails at its teardown naming
 them; a production module a test imported lazily is dropped the same
 way as at collection. The registry is
 restored either way, so the next test in the same worker never
@@ -109,7 +109,7 @@ def _from_tests(group: Any) -> bool:
 
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Remember the registry the session started with."""
-    from livery.footman.api import root_group
+    from livery.footman import root_group
 
     session.stash[_BASELINE] = (
         frozenset(root_group.tasks),
@@ -125,7 +125,7 @@ def pytest_collection_finish(session: pytest.Session) -> None:
     surface into the global root, which no test asked for. Those go
     before the first test.
     """
-    from livery.footman.api import root_group
+    from livery.footman import root_group
 
     tasks0, groups0 = session.stash.get(_BASELINE, (frozenset(), frozenset()))
     root = root_group
@@ -142,7 +142,7 @@ def pytest_collection_finish(session: pytest.Session) -> None:
 @pytest.fixture(autouse=True)
 def _global_registry_stays() -> Iterator[None]:
     """Fail a test that leaves tasks in the global registry, and restore it."""
-    from livery.footman.api import root_group
+    from livery.footman import root_group
 
     root = root_group
     tasks, groups = dict(root.tasks), dict(root.groups)

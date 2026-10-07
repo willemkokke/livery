@@ -20,7 +20,7 @@ import yaml
 # The site's jobs are the docs extension's: importing its task module
 # contributes them to the builtin points, as the mount does.
 import livery.extensions.docs._tasks  # noqa: F401
-import livery.footman.api as footman
+import livery.footman as footman
 from livery.workshop._ci_generate import generate
 
 KINDS = ("github", "gitea")

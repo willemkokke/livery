@@ -6,10 +6,10 @@ import types
 
 import pytest
 
+from livery.footman import Context
 from livery.footman import _registry as registry
 from livery.footman._params import Forward
 from livery.footman._registry import Group, RegistrationError
-from livery.footman.api import Context
 
 
 def test_sample_fixture_stays_out_of_the_global_registry(root):

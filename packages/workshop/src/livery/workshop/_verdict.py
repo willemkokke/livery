@@ -30,8 +30,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-import livery.footman.api as footman
-from livery.forge.api import ForgeError, RateBudget, RateLimited, Repository
+import livery.footman as footman
+from livery.forge import ForgeError, RateBudget, RateLimited, Repository
 from livery.workshop._git_ops import GitOps
 
 EXIT_CONFLICTS = 10

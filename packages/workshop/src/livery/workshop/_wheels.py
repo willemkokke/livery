@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import kind_for, kind_names
 from livery.workshop._packages import Package, discover_packages

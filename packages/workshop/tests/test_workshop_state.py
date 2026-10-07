@@ -213,7 +213,7 @@ def test_a_window_keeps_the_newest_names(repos: tuple[Path, Path]) -> None:
 def test_the_commit_is_a_root_with_identity_and_skip_ci(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     _, work = repos

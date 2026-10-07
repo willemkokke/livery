@@ -20,7 +20,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from livery.footman.api import fail
+from livery.footman import fail
 
 
 def toml_string(value: str) -> str:

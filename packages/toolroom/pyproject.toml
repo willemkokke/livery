@@ -41,6 +41,6 @@ Repository = "https://github.com/willemkokke/livery"
 [tool.uv.build-backend]
 # PEP 420 namespaces: livery and livery.toolroom carry no __init__.py
 # anywhere, so the store and the machinery ship as their own
-# distributions under livery.toolroom; the handles are this one.
+# distributions under livery.toolroom; the handles are this one, its
+# entry module the root's __init__.py.
 module-name = "livery.toolroom.tools"
-namespace = true

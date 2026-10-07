@@ -15,8 +15,8 @@ One module, three kinds of contribution:
 ```python
 # acme_devkit/footman_tasks.py
 from pathlib import Path
-import livery.footman.api as footman
-from livery.footman.api import GlobalOption, task
+import livery.footman as footman
+from livery.footman import GlobalOption, task
 
 REGION = GlobalOption("region", str, default="eu", help="deployment region")
 
@@ -68,7 +68,7 @@ provider. Footman's own `footman.docs`,
 An installed plugin is inert metadata until a tasks file says otherwise:
 
 ```python
-from livery.footman.api import plugin
+from livery.footman import plugin
 
 plugin("acme.devkit", into="acme")  # fm acme.deploy
 ```

@@ -60,7 +60,7 @@ def test_a_wide_task_name_aligns_its_step_column(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman.api import run, task
+            from livery.footman import run, task
 
             @task(name="构建")
             def build():
@@ -90,7 +90,7 @@ def test_the_run_summary_column_aligns_too(tmp_path):
     (tmp_path / "tasks.py").write_text(
         textwrap.dedent(
             """
-            from livery.footman.api import task
+            from livery.footman import task
 
             @task(name="构建")
             def build(): ...

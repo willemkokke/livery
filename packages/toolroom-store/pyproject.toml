@@ -38,8 +38,7 @@ test = [
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.toolroom_store and
-# there is no livery/__init__.py anywhere in this repository.
-# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
+# The importable package is livery.toolroom.store, its entry module the
+# root's __init__.py; livery and livery.toolroom are PEP 420 namespaces
+# with no __init__.py.
 module-name = "livery.toolroom.store"
-namespace = true

@@ -28,7 +28,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from livery.footman.api import fail
+from livery.footman import fail
 
 # The four builtin categories live beside the registry that answers
 # them and are re-exported here as the kind's vocabulary.
@@ -287,7 +287,7 @@ class KindRecord:
             none, which the examples check says by name. A child kind
             takes the nearest ancestor's.
         suites: How the kind runs the test suites of several packages
-            in one call ([livery.workshop.api.run_suites][]); None for
+            in one call ([livery.workshop.run_suites][]); None for
             a kind that runs none that way. A child kind takes the
             nearest ancestor's.
         coverage_pages: How the kind renders the coverage report
@@ -509,7 +509,7 @@ def run_suites(
     The kind's own runner, else its nearest ancestor's. *arguments* go
     to the runner unchanged. The call collects each package's own
     tests and nothing else, the workspace's own among them when
-    [livery.workshop.api.workspace_suite][] is in *packages*.
+    [livery.workshop.workspace_suite][] is in *packages*.
     *selection* names, per package path, the test files that stand for
     the package's suite, and *point* selects that CI point's tests.
 

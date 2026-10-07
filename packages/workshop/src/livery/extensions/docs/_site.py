@@ -38,8 +38,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
-import livery.toolroom.tools.api as tools
-from livery.footman.api import doc, fail, group
+import livery.toolroom.tools as tools
+from livery.footman import doc, fail, group
 from livery.workshop import _extensions, _slots
 from livery.workshop._contract import load_contract
 from livery.workshop._docs_contract import (
@@ -193,7 +193,7 @@ def run_generators(root: Path) -> list[str]:
     """
     import shutil as _shutil
 
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     ran: list[str] = []
     runner = ""
@@ -1653,8 +1653,8 @@ def _publish_ssh(root: Path) -> None:
     """
     import os
 
-    import livery.footman.api as footman
-    import livery.toolroom.tools.api as tools
+    import livery.footman as footman
+    import livery.toolroom.tools as tools
 
     host = os.environ.get("DOCS_HOST", "")
     user = os.environ.get("DOCS_USER", "")
@@ -1922,7 +1922,7 @@ def require_site(root: Path) -> None:
     with nothing on disk, and the publish that followed was the one
     to fail; the build is the one that knows, so it says so.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     index = root / "site" / "index.html"
     if not index.is_file():

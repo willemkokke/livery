@@ -5,7 +5,7 @@ the site build turns the name into a link; one that names nothing
 stops the strict build. `lint.docrefs` finds them in the changed
 sources and resolves each with griffe, the library the site build
 reads the sources with, so the two agree on what a name reaches:
-through an `api` module's re-export, to a method by its class. Only a
+through a package's re-export, to a method by its class. Only a
 reference under a namespace a workspace member provides is judged; the
 site build judges the rest against the inventories it is given.
 
@@ -149,7 +149,7 @@ def unresolved(root: Path, paths: list[str], sources: list[Path]) -> set[str]:
     the site's source links, and a gate's own process spawns nothing
     behind the runner's back.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     result = footman.run(
         [sys.executable, "-m", "livery.extensions.docs._refs"],

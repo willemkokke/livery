@@ -14,7 +14,7 @@ import platform
 
 import pytest
 
-from livery.toolroom.store.api import host_key
+from livery.toolroom.store import host_key
 from livery.workshop import _tools
 
 GATED = ("linux-x64", "macos-arm", "windows-x64")

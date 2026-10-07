@@ -13,8 +13,7 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import _store
-from livery.strongroom.api import (
+from livery.strongroom import (
     LAYOUT_VERSION,
     MANIFEST_NAME,
     Digest,
@@ -35,6 +34,7 @@ from livery.strongroom.api import (
     UnknownNamespace,
     Version,
     WriteOnceRefused,
+    _store,
     canonical,
     check_timestamp,
     digest_of,
@@ -563,7 +563,7 @@ def test_two_processes_landing_the_same_bytes_both_succeed(tmp_path: Path) -> No
     root = tmp_path / "shared"
     Store.create(root)
     script = (
-        "import sys; from pathlib import Path; from livery.strongroom.api import Store;"
+        "import sys; from pathlib import Path; from livery.strongroom import Store;"
         f" s = Store.open(Path({str(root)!r})); s.land(b'x' * 300000)"
     )
     children = [

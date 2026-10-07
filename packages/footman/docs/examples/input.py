@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 from typing import Annotated, Literal
-from livery.footman.api import ask, task
+from livery.footman import ask, task
 
 
 @task
@@ -12,7 +12,7 @@ def deploy(env: Annotated[Literal["staging", "prod"], ask()]): ...
 # --8<-- [end:part-1]
 
 # --8<-- [start:part-2]
-from livery.footman.api import suggest
+from livery.footman import suggest
 
 
 def stale_branches() -> list[str]:
@@ -25,7 +25,7 @@ def prune(branch: Annotated[str, ask(), suggest(stale_branches)]): ...
 
 # --8<-- [start:part-3]
 from typing import Annotated
-from livery.footman.api import Secret, Stdout, ask, run, task
+from livery.footman import Secret, Stdout, ask, run, task
 
 
 @task
@@ -55,7 +55,7 @@ def creds(token: Secret) -> Stdout[dict]:
 # --8<-- [end:part-6]
 
 # --8<-- [start:part-7]
-from livery.footman.api import prompt, select, task
+from livery.footman import prompt, select, task
 
 
 @task(interactive=True)
@@ -66,7 +66,7 @@ def scaffold():
 # --8<-- [end:part-7]
 
 # --8<-- [start:part-8]
-from livery.footman.api import attended, colored, tty
+from livery.footman import attended, colored, tty
 
 
 @task(interactive=True)

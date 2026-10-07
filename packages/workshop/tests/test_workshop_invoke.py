@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed, fail
+from livery.footman import Failed, fail
 from livery.workshop._checks import CheckRecord, GateContext, register_check, run_check
 from livery.workshop._invoke import batches, run_batched, runs_whole
 from livery.workshop._packages import Package

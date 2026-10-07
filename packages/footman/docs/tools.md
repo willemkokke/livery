@@ -30,7 +30,7 @@ exactly what broke:
 --8<-- "packages/footman/docs/examples/tools.py:part-1"
 ```
 
-Each toolroom handle is imported by name: `from livery.toolroom.tools.api import git` gives
+Each toolroom handle is imported by name: `from livery.toolroom.tools import git` gives
 you a typed `git` you call as `git.commit(…)`, and a tool nobody has heard
 of imports just the same and runs as a subprocess. This page covers `run()` and
 the task context; the handles — flag translation, disabling flags,

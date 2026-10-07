@@ -57,7 +57,7 @@ def test_a_refresh_that_moved_nothing_submits_nothing():
 def test_a_refused_submit_names_the_branch_that_stands():
     from datetime import date
 
-    from livery.footman.api import Failed
+    from livery.footman import Failed
 
     with pytest.raises(
         (Failed, SystemExit),
@@ -156,7 +156,7 @@ def test_a_dry_run_says_what_it_would_do_and_touches_nothing():
 def test_the_event_versions_with_a_host_are_verified_and_a_finding_holds(monkeypatch):
     """A tool with no host stages nothing; one with a host is checked per version."""
     from livery.toolroom.bench import _ingest
-    from livery.toolroom.store.api import Artifact, Layout, Record, RecordDelta
+    from livery.toolroom.store import Artifact, Layout, Record, RecordDelta
 
     sha = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
     hosted = Record(

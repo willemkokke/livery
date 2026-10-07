@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.toolroom.store.api import Catalogue, Record, observations, records_in
+from livery.toolroom.store import Catalogue, Record, observations, records_in
 
 GOLDENS = Path(__file__).resolve().parent / "goldens"
 

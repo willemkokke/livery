@@ -13,7 +13,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from livery.footman.api import fail
+from livery.footman import fail
 from livery.workshop._contract import load_contract
 
 

@@ -24,7 +24,7 @@ import functools
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from livery.footman.api import fail
+from livery.footman import fail
 
 #: The two kinds of contract: the workspace's at the root, a package's
 #: in its directory.
@@ -186,7 +186,7 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     that extension's.
     Two owners declaring one path refuse, naming both.
     """
-    from livery.footman.api import installed_entry_points
+    from livery.footman import installed_entry_points
 
     found: dict[tuple[ContractKind, str], _Owned] = {}
 

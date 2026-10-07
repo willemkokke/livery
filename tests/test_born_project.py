@@ -78,7 +78,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     bridge = tmp_path / "bridge-config"
     bridge.mkdir()
     (bridge / "tasks.py").write_text(
-        'from livery.footman.api import plugin\n\nplugin("livery.workshop")\n'
+        'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
     born = {
         **env,

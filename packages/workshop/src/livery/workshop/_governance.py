@@ -16,8 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from livery.footman.api import fail
-from livery.forge.api import Codeowners, CodeownersEntry, Forge, RepoConfig
+from livery.footman import fail
+from livery.forge import Codeowners, CodeownersEntry, Forge, RepoConfig
 from livery.workshop._contract import load_contract
 
 
@@ -47,7 +47,7 @@ def offline_forge(root: Path) -> Forge:
     gate may hold a backend offline; nothing built here may be used
     for a network call.
     """
-    from livery.forge.api import GiteaForge, GithubForge, GitlabForge
+    from livery.forge import GiteaForge, GithubForge, GitlabForge
 
     contract = load_contract(root / "workshop.toml")
     table = contract.get("forge") or {}

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
+from livery.footman import Failed
 from livery.workshop import _coverage_store, _verified
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package

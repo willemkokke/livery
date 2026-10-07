@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.api import Failed
-from livery.forge.api import RegistryKind, Repository, Unsupported
+from livery.footman import Failed
+from livery.forge import RegistryKind, Repository, Unsupported
 from livery.forge.testing import FakeForge
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._packages import Package

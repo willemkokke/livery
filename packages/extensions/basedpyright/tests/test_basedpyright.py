@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 
 import livery.extensions.basedpyright._extension as declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.basedpyright import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -46,12 +46,12 @@ def _workspace(root: Path, extensions: str) -> Path:
 
 
 def _member(root: Path, name: str, *, checks: str = "") -> Package:
-    """A python member whose namespace root's api declares its public names."""
+    """A python member whose root's __init__ declares its public names."""
     directory = root / "packages" / name
     source = directory / "src" / "acme" / name
     source.mkdir(parents=True)
     (directory / "tests").mkdir()
-    (source / "api.py").write_text('__all__ = ["VALUE"]\nVALUE = 1\n')
+    (source / "__init__.py").write_text('__all__ = ["VALUE"]\nVALUE = 1\n')
     (source / "py.typed").write_text("")
     turned_off = (("enabled", False),) if checks else ()
     return Package(
@@ -182,7 +182,7 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     assert unit is not None
     record = registry.check_for("typecomplete.basedpyright")
     record.run(GateContext(root=tmp_path, packages=(off, one, unit)))
-    assert verified == [(("acme.one.api",), ())]
+    assert verified == [(("acme.one",), ())]
     assert (
         "typecomplete.basedpyright: packages/off skips (turned off in"
         " packages/off/workshop.toml)" in capsys.readouterr().out
@@ -190,7 +190,7 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     # The words after -- on the check's own verb reach each verification.
     verified.clear()
     record.run(GateContext(root=tmp_path, packages=(one,), arguments=("--outputjson",)))
-    assert verified == [(("acme.one.api",), ("--outputjson",))]
+    assert verified == [(("acme.one",), ("--outputjson",))]
 
 
 def test_each_public_module_is_verified_with_its_dependencies_external(
@@ -202,15 +202,15 @@ def test_each_public_module_is_verified_with_its_dependencies_external(
     )
     _checks.run_typecomplete(())
     assert calls == []
-    _checks.run_typecomplete(("acme.one.api", "acme.two"))
+    _checks.run_typecomplete(("acme.one", "acme.two"))
     assert calls == [
-        ((), {"verifytypes": "acme.one.api", "ignoreexternal": True}),
+        ((), {"verifytypes": "acme.one", "ignoreexternal": True}),
         ((), {"verifytypes": "acme.two", "ignoreexternal": True}),
     ]
     calls.clear()
-    _checks.run_typecomplete(("acme.one.api",), ("--outputjson",))
+    _checks.run_typecomplete(("acme.one",), ("--outputjson",))
     assert calls == [
-        (("--outputjson",), {"verifytypes": "acme.one.api", "ignoreexternal": True})
+        (("--outputjson",), {"verifytypes": "acme.one", "ignoreexternal": True})
     ]
 
 

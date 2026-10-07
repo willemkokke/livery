@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from forge_gitlab_driver import GitlabConformanceDriver
-from livery.forge.api import Unsupported
+from livery.forge import Unsupported
 from livery.forge.testing import (
     SCENARIOS,
     Cassette,

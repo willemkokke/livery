@@ -118,7 +118,7 @@ def is_cli_process() -> bool:
     shelled out to ``uv sync`` once per test would be slow and
     destructive.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     if not sys.argv or not sys.argv[0]:
         return False
@@ -186,7 +186,7 @@ def reconcile(root: Path) -> Reconciled:
             return result
     result.drifted = True
     before = installed_distributions(root)
-    import livery.toolroom.tools.api as toolroom
+    import livery.toolroom.tools as toolroom
 
     sync = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)("sync", "--frozen")
     if sync.code != 0:
@@ -230,7 +230,7 @@ def repair(root: Path) -> list[str]:
     and nothing a commit holds changed. A checkout holding both costs
     two file checks. A process a repair started repairs nothing.
     """
-    from livery.toolroom.store.api import LOCK_FILE
+    from livery.toolroom.store import LOCK_FILE
     from livery.workshop._fragment_engine import LOCAL_RECEIPT
     from livery.workshop._tools import receipts_dir
 
@@ -262,7 +262,7 @@ def apply(root: Path) -> bool:
         environment before it, from receipts the repair may have written
         since, so it enters again.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     try:
         repaired = repair(root)
@@ -311,7 +311,7 @@ def _reexec(root: Path, cause: str) -> None:
     this everywhere else cannot catch it. Both spellings take the
     environment explicitly, so there is nothing to catch.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
 
     prog = footman.prog()
     done = {part for part in os.environ.get(_GUARD, "").split(",") if part}

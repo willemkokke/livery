@@ -20,8 +20,8 @@ TASKS = textwrap.dedent(
     import time
     from datetime import datetime, timedelta
 
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
     from livery.footman._compose import plugin
 
     plugin("footman.profile")
@@ -136,8 +136,8 @@ def test_the_trace_carries_the_run(tmp_path, monkeypatch):
 
 SECRET_TASKS = textwrap.dedent(
     """
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
     from livery.footman._compose import plugin
     from livery.footman._params import Secret
 
@@ -194,8 +194,8 @@ FRAGMENT_TASKS = textwrap.dedent(
     import sys
     import time
 
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
     from livery.footman._compose import plugin
 
     plugin("footman.profile")
@@ -280,8 +280,8 @@ CHILD_TASKS = textwrap.dedent(
     """
     import sys
 
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
     from livery.footman._compose import plugin
 
     plugin("footman.profile")
@@ -308,8 +308,8 @@ HANDOFF_TASKS = textwrap.dedent(
     import sys
     from pathlib import Path
 
-    import livery.footman.api as footman
-    from livery.footman.api import task
+    import livery.footman as footman
+    from livery.footman import task
     from livery.footman._compose import plugin
     from livery.footman import profile
 
@@ -362,7 +362,7 @@ def _own_cache_and_unarmed_after(tmp_path_factory, monkeypatch) -> Iterator[None
     """
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
     yield
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.footman import profile
 
     os.environ.pop(profile.DROP, None)
@@ -410,7 +410,7 @@ def test_the_exit_sweep_removes_every_box_not_only_the_newest(monkeypatch):
     left one directory behind per run in every process that armed more than
     once: a test session, or a runner embedding several invocations.
     """
-    import livery.footman.api as footman
+    import livery.footman as footman
     from livery.footman import profile
 
     boxes: list[Path] = []

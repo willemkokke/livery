@@ -14,7 +14,7 @@ BLOCK = """\
 # requires-python = ">=3.11"
 # dependencies = ["livery-footman", "rich"]
 # ///
-from livery.footman.api import task
+from livery.footman import task
 
 @task
 def build(): ...

@@ -275,9 +275,9 @@ def tool_scan(src: Path, tools: set[str]) -> Counter[tuple[str, str]]:
 
 
 def test_the_base_names_no_tool_an_extension_brings() -> None:
-    import livery.workshop.api
+    import livery.workshop
 
-    if not Path(livery.workshop.api.__file__).resolve().is_relative_to(ROOT):
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
         # The release train's isolated leg installs the workshop's wheel
         # alone, and no extension that depends on the workshop is there
         # to say which tools it brings.

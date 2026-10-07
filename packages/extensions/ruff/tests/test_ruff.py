@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 import livery.extensions.ruff._extension as declaration
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 from livery.extensions.ruff import _checks
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
-from livery.workshop.api import GateContext, Package
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -274,11 +274,11 @@ def test_this_repository_s_configuration_is_what_a_bare_ruff_reads() -> None:
         )
         return shown.stdout
 
-    root_file = settings("packages/workshop/src/livery/workshop/api.py")
+    root_file = settings("packages/workshop/src/livery/workshop/__init__.py")
     assert f'Settings path: "{ROOT / "ruff.toml"}"' in root_file
     cache = f'cache_dir = "{ROOT / ".workshop" / ".cache" / "ruff"}"'
     assert cache in root_file
     # A package's own file extends the root's and shares its cache.
-    package_file = settings("packages/footman/src/livery/footman/api.py")
+    package_file = settings("packages/footman/src/livery/footman/__init__.py")
     assert f'Settings path: "{ROOT / "packages/footman/ruff.toml"}"' in package_file
     assert cache in package_file

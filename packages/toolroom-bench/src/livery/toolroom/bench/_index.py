@@ -34,8 +34,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.strongroom.api import Digest, Entry, Store
-    from livery.toolroom.store.api import Record
+    from livery.strongroom import Digest, Entry, Store
+    from livery.toolroom.store import Record
 
 import json
 from collections.abc import Iterable
@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.strongroom.api import Subject
+from livery.strongroom import Subject
 
 INDEX = "index"
 """The namespace of the index store: `index/<tool>` names the tool's tree; volatile."""
@@ -84,7 +84,7 @@ def record_digest(path: Path) -> Digest:
     digests the same, one edited anywhere does not, and the cost is a
     read of the bytes rather than a parse and a canonical dump.
     """
-    from livery.strongroom.api import digest_of
+    from livery.strongroom import digest_of
 
     return digest_of(f"{path.name}\0".encode() + path.read_bytes() + b"\0")
 
@@ -95,7 +95,7 @@ def open_index(into: Path) -> Store:
     Raises:
         ManifestError: when *into* holds a store of another layout.
     """
-    from livery.strongroom.api import Namespace, Store
+    from livery.strongroom import Namespace, Store
 
     namespaces = (Namespace(INDEX, "volatile"),)
     if (into / "strongroom.json").is_file():
@@ -132,7 +132,7 @@ def load_records(records: Path) -> list[Record]:
         RecordError: for a record that does not validate, as the store
             refuses it.
     """
-    from livery.toolroom.store.api import Record, records_in
+    from livery.toolroom.store import Record, records_in
 
     return [Record.load(path) for path in records_in(records)]
 
@@ -159,7 +159,7 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
         RecordError: for a record that does not validate.
         ValueError: for a pointer that is not one.
     """
-    from livery.toolroom.store.api import (
+    from livery.toolroom.store import (
         BUILD_FILE,
         RECORD_SUFFIX,
         build_current,
@@ -235,7 +235,7 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
 
 def _standing(into: Path) -> Built | None:
     """The last build's answer, when every tree and ref the pointer names stand."""
-    from livery.strongroom.api import Digest
+    from livery.strongroom import Digest
 
     pointer = read_pointer(into)
     if pointer is None:
@@ -263,7 +263,7 @@ def _standing(into: Path) -> Built | None:
 
 def materialise(store: Store, record: Record) -> Digest:
     """Land *record* whole into *store* and return its tree's digest."""
-    from livery.toolroom.store.api import observations
+    from livery.toolroom.store import observations
 
     entries: list[Entry] = [
         _blob(store, "tool", record.to_json()),
@@ -307,20 +307,20 @@ def materialise(store: Store, record: Record) -> Digest:
 
 
 def _deployment(record: Record, version: str, host: str) -> dict[str, Any]:
-    from livery.toolroom.store.api import resolve
+    from livery.toolroom.store import resolve
 
     return resolve(record, version, host).to_json()
 
 
 def _blob(store: Store, name: str, value: Any) -> Entry:
-    from livery.strongroom.api import Entry, canonical
+    from livery.strongroom import Entry, canonical
 
     data = canonical(value)
     return Entry(name, "blob", store.put(data), len(data))
 
 
 def _tree(store: Store, name: str, entries: Iterable[Entry]) -> Entry:
-    from livery.strongroom.api import Entry, Tree
+    from livery.strongroom import Entry, Tree
 
     data = Tree.of(entries).encode()
     return Entry(name, "tree", store.put(data), len(data))

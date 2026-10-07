@@ -41,8 +41,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
-import livery.footman.api as footman
-from livery.footman.api import Group, doc, fail, group, prog, root_group
+import livery.footman as footman
+from livery.footman import Group, doc, fail, group, prog, root_group
 from livery.workshop import _fragments, _slots
 from livery.workshop._fragments import Fragment
 
@@ -265,7 +265,7 @@ class CheckRecord:
             declares the option in its ``OPTIONS``.
         arguments: Whether the check hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
-            which it reads from [livery.workshop.api.GateContext][]'s
+            which it reads from [livery.workshop.GateContext][]'s
             ``arguments``. A check that wraps no tool leaves it off, and
             its verb refuses them.
 
@@ -650,7 +650,7 @@ def _package_files(package: Package) -> tuple[str, ...]:
     package is ignored, so no claim reaches it; a tracked file deleted
     from the tree is left out.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
 
     listing = tools.git.opts(cwd=package.directory, recorded=False)(
         "ls-files", "--cached", "--others", "--exclude-standard", "-z"
@@ -918,7 +918,7 @@ def split_arguments(paths: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str,
     footman hands a task's variadic parameter the words after ``--``
     too, last, and names them through ``passthrough()``.
     """
-    from livery.footman.api import passthrough
+    from livery.footman import passthrough
 
     after = tuple(passthrough())
     if after and paths[-len(after) :] == after:
@@ -1343,7 +1343,7 @@ def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None
     root and categorised by the workspace's table. None when the root
     is not a git checkout, and then every check that applies runs.
     """
-    import livery.toolroom.tools.api as tools
+    import livery.toolroom.tools as tools
     from livery.workshop._categories import category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._provenance import unit_of
@@ -1579,7 +1579,7 @@ def scoped_files(
 
     *package* is the run's own package unless named: a package check
     names none, and a check that narrows by packages names each one
-    [livery.workshop.api.scoped_packages][] answers. The files the run
+    [livery.workshop.scoped_packages][] answers. The files the run
     names, when it names any; else every file the check's claims reach
     in the package, an untracked new one among them.
 

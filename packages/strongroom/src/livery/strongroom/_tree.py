@@ -6,8 +6,8 @@ JSON, and every name obeys the portable-name rules so a tree is
 refused where the producer can fix it, never discovered at checkout
 on the platform that cannot represent it.
 
-Reach for [livery.strongroom.api.Tree][] to build or decode one and
-[livery.strongroom.api.check_name][] to validate a name on its own.
+Reach for [livery.strongroom.Tree][] to build or decode one and
+[livery.strongroom.check_name][] to validate a name on its own.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def check_name(name: str) -> str:
     """Return *name* when it is portable, or refuse it.
 
     The rules: non-empty, not `.` or `..`, Unicode NFC, at most
-    [livery.strongroom.api.NAME_BUDGET][] UTF-8 bytes, no separator, no
+    [livery.strongroom.NAME_BUDGET][] UTF-8 bytes, no separator, no
     control character, none of `<>:"|?*`, no trailing dot or space,
     and not a Windows-reserved stem such as `CON` or `LPT1` in any
     case, with or without an extension.
@@ -182,8 +182,8 @@ class Link:
 class Tree:
     """A directory: its entries, sorted by name bytes.
 
-    Build one with [livery.strongroom.api.Tree.of][], which sorts and
-    validates; decode one with [livery.strongroom.api.Tree.decode][],
+    Build one with [livery.strongroom.Tree.of][], which sorts and
+    validates; decode one with [livery.strongroom.Tree.decode][],
     which refuses a tree whose bytes are not already canonical.
 
     Attributes:

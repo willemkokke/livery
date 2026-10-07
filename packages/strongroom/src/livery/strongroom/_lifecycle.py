@@ -14,7 +14,7 @@ An erased object becomes a tombstone under its path: the name stays
 valid in every tree that carries it, the bytes go, and landing it
 again is refused while the tombstone stands.
 
-The functions here are the bodies of the [livery.strongroom.api.Store][]
+The functions here are the bodies of the [livery.strongroom.Store][]
 methods of the same names; reach for the methods.
 """
 

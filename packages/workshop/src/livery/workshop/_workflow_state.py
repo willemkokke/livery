@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from livery.forge.api import ForgeError, Repository, Unsupported
+from livery.forge import ForgeError, Repository, Unsupported
 from livery.workshop._git_ops import GitOps
 
 #: Reserved workflow branches live under this prefix.

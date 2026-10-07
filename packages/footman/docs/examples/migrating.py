@@ -1,6 +1,6 @@
 # --8<-- [start:part-1]
 # footman
-from livery.footman.api import run, task
+from livery.footman import run, task
 
 
 @task

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import livery.forge.api
+import livery.forge
 
 
 def test_imports_and_carries_a_version() -> None:
@@ -11,11 +11,11 @@ def test_imports_and_carries_a_version() -> None:
     # Against the installed metadata, never a literal: the release
     # train stamps the version, and a spelled copy here would need a
     # hand edit every release.
-    assert livery.forge.api.__version__ == version("livery-forge")
+    assert livery.forge.__version__ == version("livery-forge")
 
 
 def test_unsupported_is_an_exception() -> None:
-    assert issubclass(livery.forge.api.Unsupported, Exception)
+    assert issubclass(livery.forge.Unsupported, Exception)
 
 
 def test_namespace_is_pep420() -> None:

@@ -2,9 +2,9 @@
 
 ``lint.clang-tidy`` judges one package at a time, after the package's
 build is configured: the files its claims reach in the package, or the
-files a run names ([livery.workshop.api.scoped_files][]), against the
+files a run names ([livery.workshop.scoped_files][]), against the
 compilation database the package's kind says its build writes
-([livery.workshop.api.compile_commands][]). The checks are the
+([livery.workshop.compile_commands][]). The checks are the
 package's own ``.clang-tidy``, which the extension writes. The check
 hands clang-tidy the words after ``--`` on its own verb
 (``fm lint.clang-tidy -- --checks=-*,bugprone-*``). A body resolves its
@@ -17,10 +17,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import livery.footman.api as footman
-import livery.toolroom.tools.api as tools
-from livery.footman.api import fail
-from livery.workshop.api import (
+import livery.footman as footman
+import livery.toolroom.tools as tools
+from livery.footman import fail
+from livery.workshop import (
     PACKAGE,
     CheckRecord,
     Claim,

@@ -1,5 +1,5 @@
 # --8<-- [start:part-1]
-from livery.footman.api import run, task
+from livery.footman import run, task
 
 
 @task(cwd="root", rel="services/api")
@@ -8,7 +8,7 @@ def deploy():
 # --8<-- [end:part-1]
 
 # --8<-- [start:part-2]
-import livery.footman.api as footman
+import livery.footman as footman
 
 
 @task
@@ -18,7 +18,7 @@ def bundle():
 # --8<-- [end:part-2]
 
 # --8<-- [start:part-3]
-import livery.toolroom.tools.api as tools
+import livery.toolroom.tools as tools
 
 run("npm run build", rel="web")  # this one call, in <cwd>/web
 tools.npm.opts(rel="web").run("build")  # same, through the handle

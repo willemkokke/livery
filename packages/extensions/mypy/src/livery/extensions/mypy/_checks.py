@@ -1,8 +1,8 @@
 """mypy's check: the type checker, once per platform, over the python files it claims.
 
 ``typecheck.mypy`` narrows by paths: the workshop names the paths a run
-reaches ([livery.workshop.api.scoped_paths][]) and splits them into
-calls ([livery.workshop.api.run_batched][]); a run that reaches the
+reaches ([livery.workshop.scoped_paths][]) and splits them into
+calls ([livery.workshop.run_batched][]); a run that reaches the
 whole calls mypy with no path, so it reads the ``files`` of
 ``mypy.ini``. mypy has no all-platforms mode, so every call checks
 linux, darwin and win32 in parallel, each with a cache of its own:
@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from functools import partial
 
-import livery.toolroom.tools.api as tools
-from livery.footman.api import parallel, step
-from livery.workshop.api import (
+import livery.toolroom.tools as tools
+from livery.footman import parallel, step
+from livery.workshop import (
     PATHS,
     WHOLE,
     CheckRecord,
