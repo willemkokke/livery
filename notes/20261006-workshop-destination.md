@@ -1319,6 +1319,12 @@ the stack, which this design neither needs nor rules out).
   groups, and `@<group>.task` decorators named as footman names them.
   It runs in the kit, not at mount: reading the docs extension's
   sources takes about 17 ms, which every command would pay.
+- 2026-10-07, the verification (#1271), third part: the kit's
+  `claims-name-categories` clause holds a check's claims to the
+  categories some extension registers, each suffix starting with a
+  dot, and `plugin-is-an-entry-point` holds an `extension.toml`'s
+  plugin to an installed `footman.tasks` entry point. The clauses that
+  read a declaration share one reader and one walk over its tables.
 
 ## Open
 
