@@ -103,7 +103,9 @@ class Verified:
 
 def tree_id(git: GitOps, ref: str = "HEAD") -> str:
     """The tree id *ref* points at."""
-    return git._run("rev-parse", f"{ref}^{{tree}}").strip()
+    # `<ref>:` names the root tree, as `^{tree}` does without a caret,
+    # which cmd.exe drops on its way to a git run through a `.cmd` launcher.
+    return git._run("rev-parse", f"{ref}:").strip()
 
 
 def write_marker(

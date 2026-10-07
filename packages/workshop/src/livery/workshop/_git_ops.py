@@ -360,8 +360,11 @@ class GitOps:
         a tag, ``HEAD``, ``HEAD~3``. Empty rather than raising, because
         a name that resolves to nothing is an answer the caller reports.
         """
+        # `~0` peels to the commit as `^{commit}` does. A caret never
+        # reaches git on Windows: the store runs git through a `.cmd`
+        # launcher, and cmd.exe takes `^` as its escape character.
         result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", "--verify", f"{ref}^{{commit}}"
+            "rev-parse", "--verify", f"{ref}~0"
         )
         return result.stdout.strip() if result.code == 0 else ""
 
