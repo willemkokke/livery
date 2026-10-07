@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0] - 2026-10-07
+
+### Added
+
+- A rate-limited forge response names when the budget returns, and a watch waits for it and slows while it runs low by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- The descendant chain passes again: it drives the dev containers with the credentials their seed recorded and takes this checkout's code from the checkout index by @willemkokke
+- The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
+
+### Changed
+
+- Footman's internal modules are private, every public module under a root is its api or declared there, and other packages' sources reach footman through its api by @willemkokke
+
 ## [0.5.0] - 2026-10-04
 
 ### Added
