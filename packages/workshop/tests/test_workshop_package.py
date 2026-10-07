@@ -60,7 +60,6 @@ def test_the_surface_is_declared() -> None:
         "read_contract",
         "registry",
         "release_notes",
-        "rewrite_nav_block",
         "run_batched",
         "run_suites",
         "scoped_files",
@@ -73,6 +72,17 @@ def test_the_surface_is_declared() -> None:
         "workspace_root",
         "workspace_suite",
     ]
+
+
+def test_the_nav_block_helpers_are_the_docs_extensions_and_not_the_workshops() -> None:
+    # The break first: the workshop serves no nav block helper.
+    with pytest.raises(AttributeError, match="rewrite_nav_block"):
+        workshop_module.rewrite_nav_block  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
+    import livery.extensions.docs as docs
+
+    assert docs.nav_block_markers("tools") == ("# nav:begin tools", "# nav:end tools")
+    assert docs.GENERATED == "_generated/"
+    assert callable(docs.write_nav_block)
 
 
 def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name() -> (

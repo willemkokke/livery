@@ -1824,10 +1824,11 @@ def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
 
 
 def test_pages_emits_the_tools_nav_block_beside_the_pages(tmp_path):
-    # The block is written through the workshop's emitter, which a
-    # release leg does not install (the bench declares no dependency
-    # on it); the proof runs where the workshop is.
-    pytest.importorskip("livery.workshop")
+    # The block is written through the docs extension's emitter, which
+    # a release leg does not install (the bench declares no dependency
+    # on the workshop's wheel, which ships it); the proof runs where
+    # the extension is.
+    pytest.importorskip("livery.extensions.docs")
     from livery.toolroom.bench import _tasks as tools_tasks
 
     generated = tmp_path / "_generated"

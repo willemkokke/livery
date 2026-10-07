@@ -2118,25 +2118,45 @@ INVENTORIES = ("https://docs.python.org/3/objects.inv",)
 
 
 def api_pages(package: Package) -> list[tuple[str, str]]:
-    """(page path, dotted import path) per module, public first.
+    """(page path, dotted import path) per module of each root, public first.
 
     Every module gets a page, underscore-private included: the
     standards fragment publishes a docstring the moment it is
     written. Public sorts before private at every level of the
     tree, and a package's ``__init__`` is its index page. A package
-    may decline the whole reference with ``[docs] api = false``,
-    the shape a forwarding shim takes: its surface is another
-    package's, and documenting the forwarders would document the
-    real thing twice.
+    that ships more than one root, as a wheel shipping two does,
+    documents each: the shallowest root's pages sit at the
+    reference's top, and each further root's under a directory named
+    by its dotted path, after them. A package may decline the whole
+    reference with ``[docs] api = false``, the shape a forwarding
+    shim takes: its surface is another package's, and documenting the
+    forwarders would document the real thing twice.
     """
     from livery.workshop._docs_contract import declines_api, module_root
+    from livery.workshop._packages import root_marks
 
     if declines_api(package):
         return []
-    root = module_root(package)
-    if root is None:
-        return []
     src = package.directory / "src"
+    roots: list[Path] = []
+    if src.is_dir():
+        # Each topmost mark is a root; a mark under one is its package.
+        for mark in root_marks(src):
+            if not any(mark.parent.is_relative_to(root) for root in roots):
+                roots.append(mark.parent)
+    if not roots:
+        # A root with no __init__.py: the module its kind says it owns.
+        owned = module_root(package)
+        roots = [] if owned is None else [owned]
+    pages: list[tuple[str, str]] = []
+    for index, root in enumerate(roots):
+        prefix = "" if index == 0 else ".".join(root.relative_to(src).parts) + "/"
+        pages += [(prefix + page, dotted) for page, dotted in _root_pages(src, root)]
+    return pages
+
+
+def _root_pages(src: Path, root: Path) -> list[tuple[str, str]]:
+    """(page path, dotted import path) per module under *root*, public first."""
     entries: list[tuple[tuple[tuple[bool, str], ...], str, str]] = []
     for path in root.rglob("*.py"):
         if path.name == "__main__.py" or "_docs" in path.parts:

@@ -44,6 +44,11 @@ from livery.extensions.docs._contract import (
     package_generators,
     publish_seam,
 )
+from livery.extensions.docs._navblocks import (
+    NAV_BEGIN,
+    NAV_END,
+    nav_block_file,
+)
 from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import doc, fail, group
 from livery.workshop import HUMAN, _extensions, guidance, read_contract, slot
@@ -55,11 +60,6 @@ from livery.workshop._docs_contract import (
     declines_api,
 )
 from livery.workshop._kinds import ALL_MEMBERS, Extractor
-from livery.workshop._navblocks import (
-    NAV_BEGIN,
-    NAV_END,
-    nav_block_file,
-)
 from livery.workshop._packages import Package, discover_packages, release_tag
 
 #: The config the build assembles and zensical reads, at the root; gitignored.

@@ -409,7 +409,7 @@ def _chain(
         )
         # The generator seam's in-repo consumer: the member declares
         # a docs generator (a task its extension plugin already ships the
-        # group for) that writes a page and rewrites its nav block.
+        # group for) that writes a page and emits its nav block beside it.
         with (member / "src" / "dummy" / BRAND / "_tasks.py").open("a") as handle:
             handle.write(
                 f'\n\n@{BRAND}.task(name="docsgen")\n'
@@ -417,14 +417,14 @@ def _chain(
                 '    """Generate the tools page and its nav block."""\n'
                 "    from pathlib import Path\n"
                 "\n"
-                "    from livery.workshop import rewrite_nav_block\n"
+                "    from livery.extensions.docs import write_nav_block\n"
                 "\n"
                 f'    docs = Path("packages/{BRAND}/docs")\n'
                 '    out = docs / "_generated"\n'
                 "    out.mkdir(parents=True, exist_ok=True)\n"
                 '    (out / "tools.md").write_text("# Tools\\n\\nGenerated.\\n")\n'
-                "    rewrite_nav_block(\n"
-                '        docs / "nav.toml",\n'
+                "    write_nav_block(\n"
+                "        out,\n"
                 '        "tools",\n'
                 '        [\'{ "Tools" = "_generated/tools.md" },\'],\n'
                 "    )\n"
