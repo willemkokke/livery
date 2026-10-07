@@ -1325,6 +1325,17 @@ the stack, which this design neither needs nor rules out).
   dot, and `plugin-is-an-entry-point` holds an `extension.toml`'s
   plugin to an installed `footman.tasks` entry point. The clauses that
   read a declaration share one reader and one walk over its tables.
+- Willem, 2026-10-07: keep the composed `.taplo.toml` that points the
+  editor at each contract's schema (#1256).
+- Willem, 2026-10-07: a CI job an extension contributes takes the run's
+  own token alone. How a job could ever get more is recorded now, with
+  security-minded approaches, in #1280, to be ruled before one needs it.
+- Willem, 2026-10-07: confirms the coverage decisions recorded on
+  2026-10-07 as written: the site renders coverage one way from the
+  line format, phase 11c starts the extension and 12e ships it apart,
+  and the opt-out is `[coverage] required = false`.
+- Willem, 2026-10-07, on Open item 4: to review in detail; as
+  proposed, it is too complex for what it brings.
 
 ## Open
 
