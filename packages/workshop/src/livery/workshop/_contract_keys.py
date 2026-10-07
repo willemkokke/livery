@@ -7,10 +7,11 @@ read without importing the extension. The base also declares the keys
 of ``extension.toml`` itself, the ``extension`` contract.
 
 [livery.workshop._contract.load_contract][] judges every contract it
-reads against the declarations: a key no owner declares, a key whose
-owner the root's ``[workspace] extensions`` does not list, a value of the
-wrong type and a value outside its allowed set each refuse, naming
-the file, the key, what the table takes, and the nearest match.
+reads against the JSON Schema the declarations compose
+([livery.workshop._schema.composed][]): a key no owner declares, a key
+whose owner the root's ``[workspace] extensions`` does not list, a value
+of the wrong type and a value outside its allowed set each refuse,
+naming the file, the key, what the table takes, and the nearest match.
 
 A path is dotted. ``*`` stands for any one name in a table whose
 keys are the user's (``tools.modes.*``); ``[]`` stands for the
@@ -21,7 +22,6 @@ contract's keys one table at a time, so such a key is one name.
 
 from __future__ import annotations
 
-import difflib
 import functools
 from dataclasses import dataclass
 from typing import Any, Literal, get_args
@@ -346,199 +346,9 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     return found
 
 
-def _type_of(value: object) -> str:
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int):
-        return "int"
-    if isinstance(value, float):
-        return "number"
-    if isinstance(value, str):
-        return "str"
-    if isinstance(value, list):
-        return "list"
-    if isinstance(value, dict):
-        return "table"
-    return type(value).__name__
-
-
-def _fits(value: object, types: tuple[Type, ...]) -> bool:
-    actual = _type_of(value)
-    for wanted in types:
-        if wanted == "any" or wanted == actual:
-            return True
-        if wanted == "number" and actual == "int":
-            return True
-        if wanted == "strs" and isinstance(value, list):
-            return all(isinstance(item, str) for item in value)  # pyright: ignore[reportUnknownVariableType]
-    return False
-
-
-#: How a refusal names the type a value has.
-_ACTUAL = {
-    "str": "a string",
-    "int": "an integer",
-    "number": "a number",
-    "bool": "a boolean",
-    "list": "a list",
-    "table": "a table",
-}
-
-
-def _spoken(types: tuple[str, ...]) -> str:
-    words: dict[str, str] = {
-        "str": "a string",
-        "int": "an integer",
-        "number": "a number",
-        "bool": "true or false",
-        "strs": "a list of strings",
-        "list": "a list",
-        "table": "a table",
-        "any": "any value",
-    }
-    return " or ".join(words.get(name, name) for name in types)
-
-
 def shown(path: tuple[str, ...]) -> str:
     """*path* dotted, a name holding a dot quoted, as a reader writes it."""
     return ".".join(f'"{part}"' if "." in part else part for part in path)
-
-
-@dataclass(frozen=True)
-class _Index:
-    """One contract's declarations, by path and by the number of names in it."""
-
-    paths: dict[tuple[str, ...], _Owned]
-    lengths: dict[int, list[tuple[tuple[str, ...], _Owned]]]
-
-
-_INDEXES: dict[ContractKind, tuple[object, _Index]] = {}
-
-
-def _index(contract: ContractKind) -> _Index:
-    """*contract*'s declarations, indexed once per set of declarations.
-
-    The ``extension`` contract is the base's alone, since an extension
-    declares keys in a workspace's contracts and never in another
-    extension's file: its index needs no other owner's declarations,
-    which a mount would otherwise read for every installed extension.
-    """
-    known: object = EXTENSION if contract == "extension" else declarations()
-    held = _INDEXES.get(contract)
-    if held is None or held[0] is not known:
-        owned_by = (
-            {(item.contract, item.path): _Owned(item, BASE) for item in EXTENSION}
-            if contract == "extension"
-            else declarations()
-        )
-        paths = {
-            tuple(path.split(".")): owned
-            for (kind, path), owned in owned_by.items()
-            if kind == contract
-        }
-        lengths: dict[int, list[tuple[tuple[str, ...], _Owned]]] = {}
-        for parts, owned in paths.items():
-            lengths.setdefault(len(parts), []).append((parts, owned))
-        held = (known, _Index(paths, lengths))
-        _INDEXES[contract] = held
-    return held[1]
-
-
-class _Judge:
-    def __init__(
-        self,
-        contract: ContractKind,
-        where: str,
-        listed: frozenset[str] | None,
-    ) -> None:
-        self.contract: ContractKind = contract
-        self.where = where
-        self.listed = listed
-        self.index = _index(contract)
-        self.problems: list[str] = []
-
-    @staticmethod
-    def _matches(declared: tuple[str, ...], wanted: tuple[str, ...]) -> bool:
-        return len(declared) == len(wanted) and all(
-            part in ("*", name) for part, name in zip(declared, wanted, strict=True)
-        )
-
-    def _find(self, path: tuple[str, ...]) -> _Owned | None:
-        """The declaration *path* falls under: its own, else the most literal match."""
-        found = self.index.paths.get(path)
-        if found is not None:
-            return found
-        best: tuple[int, _Owned] | None = None
-        for declared, owned in self.index.lengths.get(len(path), ()):
-            if self._matches(declared, path):
-                literal = sum(part != "*" for part in declared)
-                if best is None or literal > best[0]:
-                    best = (literal, owned)
-        return best[1] if best else None
-
-    def _siblings(self, parent: tuple[str, ...]) -> list[str]:
-        names: set[str] = set()
-        for declared in self.index.paths:
-            if len(declared) <= len(parent) or not self._matches(
-                declared[: len(parent)], parent
-            ):
-                continue
-            name = declared[len(parent)].removesuffix("[]")
-            if name and name != "*":
-                names.add(name)
-        return sorted(names)
-
-    def table(self, data: dict[str, Any], parent: tuple[str, ...]) -> None:
-        for key, value in data.items():
-            path = (*parent, key)
-            owned = self._find(path)
-            if owned is None:
-                self._unknown(key, parent)
-                continue
-            if self.listed is not None and owned.owner not in self.listed:
-                self.problems.append(
-                    f"{shown(path)} is a key of {owned.owner}, which [workspace]"
-                    " extensions does not list; list the extension, or remove the key"
-                )
-                continue
-            self.value(value, path, owned.declared)
-
-    def value(self, value: object, path: tuple[str, ...], declared: Declared) -> None:
-        named = shown(path)
-        if not _fits(value, declared.types):
-            self.problems.append(
-                f"{named} is {_ACTUAL.get(_type_of(value), _type_of(value))}"
-                f" ({value!r}); it takes {_spoken(declared.types)}"
-            )
-            return
-        if declared.values and isinstance(value, str) and value not in declared.values:
-            near = difflib.get_close_matches(value, declared.values, n=1)
-            hint = f"; did you mean {near[0]!r}?" if near else ""
-            self.problems.append(
-                f"{named} is {value!r}; it takes one of"
-                f" {', '.join(declared.values)}{hint}"
-            )
-            return
-        if "any" in declared.types:
-            return
-        if isinstance(value, dict):
-            self.table(value, path)  # pyright: ignore[reportUnknownArgumentType]
-        elif isinstance(value, list) and "list" in declared.types:
-            entries = (*path[:-1], f"{path[-1]}[]")
-            entry = self._find(entries)
-            if entry is None:
-                return
-            for item in value:  # pyright: ignore[reportUnknownVariableType]
-                self.value(item, entries, entry.declared)
-
-    def _unknown(self, key: str, parent: tuple[str, ...]) -> None:
-        named = shown(tuple(part.removesuffix("[]") for part in parent))
-        table = f"[{named}]" if parent else "the top level"
-        known = self._siblings(parent)
-        near = difflib.get_close_matches(key, known, n=1)
-        hint = f"; did you mean {near[0]!r}?" if near else ""
-        takes = ", ".join(known) if known else "no keys"
-        self.problems.append(f"{table} has no key {key!r}: it takes {takes}{hint}")
 
 
 def judge(
@@ -550,6 +360,11 @@ def judge(
 ) -> list[str]:
     """The refusals *data* earns as a *contract*; empty when it is sound.
 
+    Judged against the contract's composed schema
+    ([livery.workshop._schema.composed][]), the one `fm sync` writes
+    for the editor, in the judge's words
+    ([livery.workshop._schema.problems][]).
+
     Args:
         data: The parsed contract.
         contract: Which contract it is.
@@ -560,9 +375,10 @@ def judge(
     Returns:
         One line per problem, in the contract's order.
     """
-    judged = _Judge(contract, where, listed)
-    judged.table(data, ())
-    return judged.problems
+    from livery.workshop._schema import composed, problems
+
+    del where
+    return problems(composed(contract, listed), data)
 
 
 def listed_extensions(root_data: dict[str, Any]) -> frozenset[str]:
