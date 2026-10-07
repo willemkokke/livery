@@ -1273,6 +1273,22 @@ the stack, which this design neither needs nor rules out).
   listed extensions in list order; an `extension.toml` names the base
   alone. Which contract a file is: the root's `workshop.toml`, a
   package's beneath `packages/`, or any `extension.toml`.
+- 2026-10-07, the schema (#1258), second part: the contract judge
+  validates against the composed schema, with a validator of its own
+  over the subset it uses, and keeps every teaching message. It reads
+  the composition the files are written from, held per set of
+  declarations, never the file: a file written before an extension was
+  installed or listed would misjudge until the next sync. Two shapes
+  JSON Schema says less exactly than the records did are fixed here. A
+  list of strings is the array whose items are a bare string, judged
+  whole, its doc set aside; a test checks every declared key's refusal
+  words against its record's types, so a list whose entries are
+  declared as bare strings, which would read as a list of strings,
+  fails that test. An unlisted extension's key is a
+  property that takes no value and carries its owner (`x-owner`), so
+  the judge and the editor both name the extension. The judge adds the
+  composition's import and one composition per contract to a command,
+  about 1.5 ms. The kebab-case spelling stays a refusal of the parse.
 
 ## Open
 

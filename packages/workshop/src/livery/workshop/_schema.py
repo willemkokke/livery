@@ -1,28 +1,32 @@
-"""Compose each contract's JSON Schema from the keys its owners declare.
+"""Each contract's JSON Schema, composed from its owners' keys, and its judge.
 
-The contract judge holds every key a contract may have as a record
+Every key a contract may have is declared as a record
 ([livery.workshop._contract_keys.Declared][]): the base's own, and each
-installed extension's from its declaration file. `fm sync` writes them
-as JSON Schema under ``.workshop/schema/``, one file per contract, from
-the base and the extensions the root contract lists, and the composed
-``.taplo.toml`` points Taplo, the language server behind an editor's
-TOML support, at them: a contract is completed and validated as it is
-typed. The schema says what shape a contract has; the judge keeps the
-rules a schema cannot say.
+installed extension's from its declaration file. The records compose
+into one JSON Schema per contract, for the base and the extensions the
+root contract lists. The contract judge validates a contract against
+that schema, in its own words, and `fm sync` writes it under
+``.workshop/schema/``, where the composed ``.taplo.toml`` points Taplo,
+the language server behind an editor's TOML support: the judge and the
+editor read one statement of each contract's shape.
 
 A key's types become JSON Schema types, its values an ``enum`` and its
-doc the ``description``. A table whose keys the author names (``*``
-in a declared path) takes ``additionalProperties`` with the entry's
-schema; every other table refuses a key it does not declare, as the
-judge does.
+doc the ``description``. A table whose keys the author names (``*`` in
+a declared path) takes ``additionalProperties`` with the entry's
+schema, and a key the table declares by name wins over that entry;
+every other table refuses a key it does not declare. A key of an
+installed extension the root does not list stays in the schema as a
+key that takes no value, carrying its owner, so the judge and the
+editor both name the extension to list.
 """
 
 from __future__ import annotations
 
+import difflib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from livery.workshop._contract_keys import ContractKind, Declared
@@ -41,6 +45,10 @@ FILES: dict[ContractKind, str] = {
 #: The JSON Schema draft the files declare: the newest Taplo validates.
 DRAFT = "http://json-schema.org/draft-07/schema#"
 
+#: The keyword naming the extension that owns a key the root does not
+#: list; a validator that does not know it ignores it, as the draft says.
+OWNER = "x-owner"
+
 #: What each file describes, for its title.
 _TITLES: dict[ContractKind, str] = {
     "root": "workshop.toml at a workspace's root",
@@ -48,20 +56,32 @@ _TITLES: dict[ContractKind, str] = {
     "extension": "extension.toml beside an extension's package",
 }
 
+#: The schema of a list of strings: the one array the judge names whole.
+_STRINGS: dict[str, Any] = {"type": "array", "items": {"type": "string"}}
+
 
 @dataclass
 class _Node:
-    """One key of a contract, with what is declared beneath it."""
+    """One key of a contract, with what is declared beneath it.
+
+    Attributes:
+        declared: The key's record; None for a table only its keys declare.
+        unlisted: The owner of a key the root does not list; empty for
+            a key the composed schema takes.
+        children: The keys declared beneath it, ``*`` for the author's.
+        items: A list's entries, when the list declares them.
+    """
 
     declared: Declared | None = None
+    unlisted: str = ""
     children: dict[str, _Node] = field(default_factory=dict[str, "_Node"])
     items: _Node | None = None
 
 
-def _tree(keys: list[Declared]) -> _Node:
+def _tree(keys: list[tuple[Declared, str]]) -> _Node:
     """The contract's keys as a tree: ``*`` a child, ``[]`` a list's entries."""
     root = _Node()
-    for declared in keys:
+    for declared, unlisted in keys:
         node = root
         for segment in declared.path.split("."):
             name = segment.removesuffix("[]")
@@ -71,6 +91,7 @@ def _tree(keys: list[Declared]) -> _Node:
                     node.items = _Node()
                 node = node.items
         node.declared = declared
+        node.unlisted = unlisted
     return root
 
 
@@ -103,7 +124,7 @@ def _branch(kind: str, node: _Node) -> dict[str, Any]:
     if kind == "bool":
         return {"type": "boolean"}
     if kind == "strs":
-        return {"type": "array", "items": {"type": "string"}}
+        return dict(_STRINGS)
     if kind == "list":
         entries = _schema(node.items) if node.items is not None else {}
         return {"type": "array", "items": entries}
@@ -114,6 +135,14 @@ def _branch(kind: str, node: _Node) -> dict[str, Any]:
 
 def _schema(node: _Node) -> dict[str, Any]:
     """A key's schema: each of its types, any one of them, and its doc."""
+    if node.unlisted:
+        return {
+            "description": (
+                f"a key of {node.unlisted}, which [workspace] extensions does not list"
+            ),
+            "not": {},
+            OWNER: node.unlisted,
+        }
     types = node.declared.types if node.declared is not None else ("table",)
     branches = [_branch(kind, node) for kind in types]
     found = branches[0] if len(branches) == 1 else {"anyOf": branches}
@@ -123,22 +152,30 @@ def _schema(node: _Node) -> dict[str, Any]:
 
 
 def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, Any]:
-    """The JSON Schema of *contract*, from the keys the base and *listed* declare.
+    """The JSON Schema of *contract* for the base and the *listed* extensions.
 
     *listed* holds the names the root contract lists the extensions by,
-    the base among them; None takes every installed owner. An
-    extension's keys in the ``extension`` contract are the base's alone,
-    since an extension declares keys in a workspace's contracts and
-    never in another extension's file.
+    the base among them; None takes every installed owner as listed.
+    The ``extension`` contract is the base's alone, since an extension
+    declares keys in a workspace's contracts and never in another
+    extension's file: composing it reads no other owner's declarations,
+    which a mount would otherwise read for every installed extension.
     """
-    from livery.workshop._contract_keys import BASE, declarations
+    from livery.workshop._contract_keys import BASE, EXTENSION, declarations
 
-    keys = [
-        owned.declared
-        for (kind, _path), owned in sorted(declarations().items())
-        if kind == contract
-        and (listed is None or owned.owner == BASE or owned.owner in listed)
-    ]
+    if contract == "extension":
+        keys = [(declared, "") for declared in EXTENSION]
+    else:
+        keys = [
+            (
+                owned.declared,
+                ""
+                if listed is None or owned.owner == BASE or owned.owner in listed
+                else owned.owner,
+            )
+            for (kind, _path), owned in sorted(declarations().items())
+            if kind == contract
+        ]
     return {
         "$schema": DRAFT,
         "$comment": (
@@ -149,6 +186,26 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
         "title": _TITLES[contract],
         **_object(_tree(keys)),
     }
+
+
+_COMPOSED: dict[tuple[ContractKind, frozenset[str] | None], tuple[object, Any]] = {}
+
+
+def composed(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, Any]:
+    """`compose`, once per set of declarations: what the judge validates against.
+
+    The judge reads the composition the schema files are written from,
+    never the files, so a file written before an extension was
+    installed or listed cannot misjudge a key until the next sync.
+    """
+    from livery.workshop._contract_keys import EXTENSION, declarations
+
+    known: object = EXTENSION if contract == "extension" else declarations()
+    held = _COMPOSED.get((contract, listed))
+    if held is None or held[0] is not known:
+        held = (known, compose(contract, listed))
+        _COMPOSED[(contract, listed)] = held
+    return cast("dict[str, Any]", held[1])
 
 
 def contract_of(root: Path, relative: Path) -> ContractKind | None:
@@ -196,7 +253,184 @@ def schema_files(root: Path) -> dict[str, bytes]:
     listed = listed_extensions(_root_tables(root / "workshop.toml"))
     return {
         f"{DIRECTORY}/{name}": (
-            json.dumps(compose(contract, listed), indent=2) + "\n"
+            json.dumps(composed(contract, listed), indent=2) + "\n"
         ).encode("utf-8")
         for contract, name in FILES.items()
     }
+
+
+# The judge: a contract against its schema, refused in the judge's words.
+
+
+def problems(schema: dict[str, Any], data: dict[str, Any]) -> list[str]:
+    """Each refusal *data* earns against *schema*, in the contract's order.
+
+    An unknown key names its table, the keys the table takes and the
+    nearest spelling; a key of an extension the root does not list
+    names the extension; a value of the wrong type names what the key
+    takes; a value outside its set names the set and the nearest. A key
+    that takes any value is judged by its reader, and nothing beneath it
+    here.
+    """
+    found: list[str] = []
+    _table(schema, data, (), found)
+    return found
+
+
+def _table(
+    schema: dict[str, Any],
+    data: dict[str, Any],
+    parent: tuple[str, ...],
+    found: list[str],
+) -> None:
+    from livery.workshop._contract_keys import shown
+
+    properties = cast("dict[str, dict[str, Any]]", schema.get("properties", {}))
+    named = schema.get("additionalProperties", False)
+    for key, value in data.items():
+        path = (*parent, key)
+        child = properties.get(key)
+        if child is None and isinstance(named, dict):
+            child = cast("dict[str, Any]", named)
+        if child is None:
+            found.append(_unknown(key, parent, sorted(properties)))
+            continue
+        owner = child.get(OWNER)
+        if owner is not None:
+            found.append(
+                f"{shown(path)} is a key of {owner}, which [workspace] extensions"
+                " does not list; list the extension, or remove the key"
+            )
+            continue
+        _value(child, value, path, found)
+
+
+def _unknown(key: str, parent: tuple[str, ...], known: list[str]) -> str:
+    from livery.workshop._contract_keys import shown
+
+    named = shown(tuple(part.removesuffix("[]") for part in parent))
+    table = f"[{named}]" if parent else "the top level"
+    near = difflib.get_close_matches(key, known, n=1)
+    hint = f"; did you mean {near[0]!r}?" if near else ""
+    takes = ", ".join(known) if known else "no keys"
+    return f"{table} has no key {key!r}: it takes {takes}{hint}"
+
+
+def _value(
+    schema: dict[str, Any], value: object, path: tuple[str, ...], found: list[str]
+) -> None:
+    from livery.workshop._contract_keys import shown
+
+    branches = cast("list[dict[str, Any]]", schema.get("anyOf", [schema]))
+    named = shown(path)
+    fitting = [branch for branch in branches if _fits(branch, value)]
+    if not fitting:
+        actual = _type_of(value)
+        found.append(
+            f"{named} is {_ACTUAL.get(actual, actual)} ({value!r});"
+            f" it takes {' or '.join(_spoken(branch) for branch in branches)}"
+        )
+        return
+    if isinstance(value, str):
+        allowed = next((branch["enum"] for branch in fitting if "enum" in branch), None)
+        if allowed is not None and value not in allowed:
+            near = difflib.get_close_matches(value, allowed, n=1)
+            hint = f"; did you mean {near[0]!r}?" if near else ""
+            found.append(
+                f"{named} is {value!r}; it takes one of {', '.join(allowed)}{hint}"
+            )
+            return
+    if any(_takes_any(branch) for branch in fitting):
+        return
+    if isinstance(value, dict):
+        table = next(branch for branch in fitting if branch.get("type") == "object")
+        _table(table, cast("dict[str, Any]", value), path, found)
+    elif isinstance(value, list):
+        array = next(branch for branch in fitting if branch.get("type") == "array")
+        entries = cast("dict[str, Any]", array.get("items", {}))
+        if _is_strings(array) or _takes_any(entries):
+            return
+        listed_at = (*path[:-1], f"{path[-1]}[]")
+        for item in cast("list[object]", value):
+            _value(entries, item, listed_at, found)
+
+
+def _is_strings(branch: dict[str, Any]) -> bool:
+    """Whether *branch* is a list of strings, its doc set aside."""
+    return {key: value for key, value in branch.items() if key != "description"} == (
+        _STRINGS
+    )
+
+
+def _takes_any(schema: dict[str, Any]) -> bool:
+    """Whether *schema* takes every value: no type, no choices, nothing beneath."""
+    return not any(key in schema for key in ("type", "anyOf", "enum", "not"))
+
+
+def _fits(branch: dict[str, Any], value: object) -> bool:
+    """Whether *value* has the type *branch* takes; a list of strings, whole."""
+    kind = branch.get("type")
+    if kind is None:
+        return _takes_any(branch)
+    if kind == "string":
+        return isinstance(value, str)
+    if kind == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind == "boolean":
+        return isinstance(value, bool)
+    if kind == "object":
+        return isinstance(value, dict)
+    if kind == "array":
+        if not isinstance(value, list):
+            return False
+        if _is_strings(branch):
+            return all(isinstance(item, str) for item in cast("list[object]", value))
+        return True
+    return False
+
+
+def _type_of(value: object) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, dict):
+        return "table"
+    return type(value).__name__
+
+
+#: How a refusal names the type a value has.
+_ACTUAL = {
+    "str": "a string",
+    "int": "an integer",
+    "number": "a number",
+    "bool": "a boolean",
+    "list": "a list",
+    "table": "a table",
+}
+
+#: How a refusal names what a key takes, by JSON Schema type.
+_WORDS = {
+    "string": "a string",
+    "integer": "an integer",
+    "number": "a number",
+    "boolean": "true or false",
+    "array": "a list",
+    "object": "a table",
+}
+
+
+def _spoken(branch: dict[str, Any]) -> str:
+    """What *branch* takes, as a refusal says it."""
+    if _is_strings(branch):
+        return "a list of strings"
+    kind = branch.get("type")
+    return _WORDS.get(str(kind), "any value") if kind is not None else "any value"
