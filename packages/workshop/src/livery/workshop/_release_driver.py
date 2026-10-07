@@ -30,6 +30,7 @@ from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages, receipt_member
 from livery.workshop._release import prepare_release
+from livery.workshop._verdict import Transient
 from livery.workshop._versions import derive_version
 from livery.workshop._workflow_engine import Submission, run_workflow
 from livery.workshop._workflow_state import WorkflowKind
@@ -764,8 +765,14 @@ class ReleaseDriver:
                 f" `{footman.prog()} workflow.release.dispatch`"
             )
             return
-        before = {run.id for run in _wave_runs(self._repo)}
-        run_id = await_wave(self._repo, before=before, timeout=self._wave_timeout)
+        transient = Transient(interval=_WAVE_POLL)
+        before = {run.id for run in _wave_runs_answered(self._repo, transient)}
+        run_id = await_wave(
+            self._repo,
+            before=before,
+            timeout=self._wave_timeout,
+            transient=transient,
+        )
         if run_id is None:
             fail(
                 "merged, but no release wave appeared within"
@@ -779,7 +786,10 @@ class ReleaseDriver:
             f"  merged; the merge point dispatched the wave, run {run_id}; the"
             " receipt tags say when each member is done"
         )
-        run = next((r for r in _wave_runs(self._repo) if r.id == run_id), None)
+        run = next(
+            (r for r in _wave_runs_answered(self._repo, transient) if r.id == run_id),
+            None,
+        )
         if run is None:
             return
         from livery.workshop._ci_tasks import follow_run
@@ -860,24 +870,61 @@ def _wave_runs(repo: Repository) -> tuple[Run, ...]:
     )
 
 
+#: Seconds between the train's polls of the wave's runs.
+_WAVE_POLL = 5.0
+
+
+def _wave_runs_answered(
+    repo: Repository, transient: Transient, *, interval: float = _WAVE_POLL
+) -> tuple[Run, ...]:
+    """The wave's runs, asked again while the forge does not answer.
+
+    An unreadable poll is a retry, as ``fm ci.status --wait`` treats it:
+    *transient* counts the run of them, and a spent budget ends the train
+    with the forge's words and the command that follows the wave, which
+    runs on in CI whatever happens here.
+    """
+    while True:
+        try:
+            runs = _wave_runs(repo)
+        except ForgeError as error:
+            if transient.note(error):
+                fail(
+                    transient.giving_up(
+                        "the wave runs on in CI; follow it with"
+                        f" `{footman.prog()} ci.status --point=release --wait`"
+                    ).strip()
+                )
+            time.sleep(interval)
+            continue
+        transient.reset()
+        return runs
+
+
 def await_wave(
     repo: Repository,
     *,
     before: set[int],
     timeout: float = 1800.0,
-    interval: float = 5.0,
+    interval: float = _WAVE_POLL,
+    transient: Transient | None = None,
 ) -> int | None:
     """The id of the newest wave run not in *before*, or ``None`` when none appears.
 
     Any state counts: a wave that already finished by the time the
     poll saw it is still the wave that ran, and a confirmation that
-    demanded a live run would miss a fast forge.
+    demanded a live run would miss a fast forge. An unreadable poll is
+    retried within *transient*'s budget.
     """
-    import time
-
+    if transient is None:
+        transient = Transient(interval=interval)
     deadline = time.monotonic() + timeout
     while True:
-        new = [run for run in _wave_runs(repo) if run.id not in before]
+        new = [
+            run
+            for run in _wave_runs_answered(repo, transient, interval=interval)
+            if run.id not in before
+        ]
         if new:
             return new[0].id
         if time.monotonic() >= deadline:
