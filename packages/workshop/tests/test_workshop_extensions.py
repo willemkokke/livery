@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import extension_names, mount_extensions, workspace_root
+from livery.workshop import extension_names, workspace_root
+from livery.workshop._extensions import mount_extensions
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -176,43 +177,6 @@ def test_declared_but_unmounted_extensions_teach_the_rerender(
     monkeypatch.setattr(_extensions, "MOUNTED", False)
     _warn_unmounted_extensions(tmp_path)
     assert capsys.readouterr().err == ""
-
-
-def test_a_declaration_whose_checks_are_not_records_refuses_naming_what_it_found() -> (
-    None
-):
-    from types import ModuleType
-
-    from livery.workshop._extensions import register_declared_checks
-
-    module = ModuleType("acme_declaration")
-    module.CHECKS = ["lint.acme"]  # type: ignore[attr-defined]
-    with pytest.raises(
-        RuntimeError,
-        match=r"extension 'acme' declares CHECKS as a list; it takes a tuple",
-    ):
-        register_declared_checks("acme", module)
-    module.CHECKS = ("lint.acme",)  # type: ignore[attr-defined]
-    with pytest.raises(RuntimeError, match=r"declares CHECKS with a str among them"):
-        register_declared_checks("acme", module)
-
-
-def test_declared_checks_register_under_the_listed_name(registry_state: None) -> None:
-    from types import ModuleType
-
-    from livery.workshop._checks import CheckRecord, GateContext, checks_by_name
-    from livery.workshop._extensions import register_declared_checks
-
-    def idle(ctx: GateContext) -> None:
-        del ctx
-
-    module = ModuleType("acme_declaration")
-    assert register_declared_checks("acme", module) is False
-    module.CHECKS = (  # type: ignore[attr-defined]
-        CheckRecord("acme", "lint", idle, extension="whatever.it.says"),
-    )
-    assert register_declared_checks("acme", module) is True
-    assert checks_by_name()["lint.acme"].extension == "acme"
 
 
 def test_an_uninstalled_extension_is_taken_at_the_family_s_distribution() -> None:

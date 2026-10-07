@@ -1,0 +1,263 @@
+"""An extension.toml, read without importing the extension: refusals, then the read."""
+
+from __future__ import annotations
+
+import importlib
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+from livery.workshop._declaration import (
+    Additions,
+    Declaration,
+    DeclarationError,
+    read,
+)
+
+BODIES = """\
+def judge(ctx):
+    del ctx
+
+
+def mend(ctx):
+    del ctx
+"""
+
+
+@pytest.fixture
+def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """An importable package ``acme_declared`` with check bodies and no declaration."""
+    directory = tmp_path / "site" / "acme_declared"
+    directory.mkdir(parents=True)
+    (directory / "_checks.py").write_text(BODIES)
+    monkeypatch.syspath_prepend(str(tmp_path / "site"))
+    importlib.invalidate_caches()
+    yield directory
+    sys.modules.pop("acme_declared._checks", None)
+    sys.modules.pop("acme_declared", None)
+
+
+def _declare(package: Path, text: str) -> Declaration:
+    (package / "extension.toml").write_text(text)
+    found = read("acme", "acme_declared")
+    assert found is not None
+    return found
+
+
+def _refusal(package: Path, text: str) -> str:
+    (package / "extension.toml").write_text(text)
+    with pytest.raises(DeclarationError) as caught:
+        read("acme", "acme_declared")
+    return str(caught.value)
+
+
+CHECK = '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+
+
+# The refusals first.
+
+
+def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_nearest(
+    package: Path,
+) -> None:
+    refused = _refusal(package, '[extension]\nlevel = ["workspace"]\n')
+    assert refused == (
+        f"{package / 'extension.toml'}:\n"
+        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
+        " requires; did you mean 'levels'?"
+    )
+    refused = _refusal(package, CHECK + 'narowing = "paths"\n')
+    assert "[checks.acme.lint] has no key 'narowing'" in refused
+    assert "did you mean 'narrowing'?" in refused
+
+
+def test_a_value_of_the_wrong_type_or_outside_its_set_refuses(package: Path) -> None:
+    assert "extension.api-version is a string ('1'); it takes an integer" in _refusal(
+        package, '[extension]\napi-version = "1"\n'
+    )
+    refused = _refusal(package, CHECK + 'scope = "packages"\n')
+    assert (
+        "checks.acme.lint.scope is 'packages'; it takes one of workspace, package"
+        in (refused)
+    )
+    assert "did you mean 'package'?" in refused
+    assert "checks.acme is a string" in _refusal(package, '[checks]\nacme = "lint"\n')
+
+
+def test_a_key_spelled_with_an_underscore_refuses_naming_its_spelling(
+    package: Path,
+) -> None:
+    refused = _refusal(package, "[extension]\napi_version = 1\n")
+    assert refused == (
+        f"{package / 'extension.toml'}: keys are kebab-case; found"
+        " extension.api_version (spell it api-version)"
+    )
+    # A name the author chooses is data: a fragment's file, a slot, a
+    # shipped file's reference.
+    _declare(
+        package,
+        CHECK
+        + '[checks.acme.lint.fragments]\n".vscode/settings.json" = "{}"\n'
+        + '[replaces]\n"acme.base:root/my_file.txt" = "ours"\n',
+    )
+
+
+def test_a_reference_that_does_not_import_refuses_at_mount(package: Path) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, CHECK.replace(":judge", ":jduge")) == (
+        f"{where}: checks.acme.lint.run names jduge, which acme_declared._checks"
+        " does not define at its top level; did you mean 'judge'?"
+    )
+    assert _refusal(package, CHECK.replace("._checks:", "._chekcs:")) == (
+        f"{where}: checks.acme.lint.run names acme_declared._chekcs, which"
+        " acme_declared does not contain"
+    )
+    assert _refusal(package, CHECK.replace("acme_declared._checks", "json")) == (
+        f"{where}: checks.acme.lint.run names json, outside the extension's package"
+        " acme_declared; a reference names the extension's own code"
+    )
+    assert "a reference is 'module:function'" in _refusal(
+        package, CHECK.replace(":judge", "")
+    )
+    # Read from the source: nothing of the extension was imported.
+    assert "acme_declared._checks" not in sys.modules
+
+
+def test_a_check_without_run_or_with_an_undeclared_option_refuses(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, "[checks.acme.lint]\narguments = true\n") == (
+        f"{where}: checks.acme.lint names no run: a check runs a reference"
+    )
+    assert _refusal(package, CHECK + 'listed-with = "deep"\n') == (
+        f"{where}: checks.acme.lint.listed-with is 'deep', which [options] does not"
+        " declare; its options are none"
+    )
+    assert _refusal(package, CHECK + 'claims = [{ suffixes = [".py"] }]\n') == (
+        f"{where}: checks.acme.lint.claims[0] names no category: a claim has one"
+    )
+    assert "is a package file's fragment" in _refusal(
+        package,
+        CHECK + '[checks.acme.lint.fragments.".clang-tidy"]\ntext = "x"\n',
+    )
+
+
+def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> None:
+    where = package / "extension.toml"
+    assert _refusal(
+        package, '[contract.extension.extension]\nx = { types = ["str"] }\n'
+    ) == (
+        f"{where}: [contract.extension] names no contract; an extension declares"
+        " keys in root, package"
+    )
+    assert "[contract.root.acme] types is ['text']" in _refusal(
+        package, '[contract.root.acme]\ntypes = ["text"]\n'
+    )
+
+
+# Then the read.
+
+
+def test_every_key_is_optional(package: Path) -> None:
+    found = _declare(package, "")
+    assert found.api_version == 1
+    assert found.levels == ("workspace",)
+    assert found.plugin == ""
+    assert found.additions.checks == ()
+
+
+def test_a_declaration_reads_into_records_named_for_the_extension(
+    package: Path,
+) -> None:
+    found = _declare(
+        package,
+        '[extension]\nlevels = ["workspace", "package"]\nplugin = "acme.tasks"\n'
+        'requires = ["docs"]\n'
+        '[toolroom]\nrequires = ["docker>=27"]\n'
+        '[options]\ndeep = "judges every file, not only the changed ones"\n'
+        + CHECK
+        + 'fix = "acme_declared._checks:mend"\nnarrowing = "paths"\n'
+        'kinds = ["python"]\ntools = ["acme"]\narguments = true\n'
+        'listed-with = "deep"\n'
+        'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
+        "[checks.acme.lint.options.strict]\n"
+        'type = "bool"\ndefault = false\ndoc = "refuses warnings too"\n'
+        '[checks.acme.lint.fragments.".acme"]\nkinds = ["cpp", "cpp-conan"]\n'
+        'text = "strict: true\\n"\n'
+        '[contributions]\n"python.dev-group" = ["acme>=1"]\n'
+        '[contract.root.acme.mode]\ntypes = ["str"]\nvalues = ["fast", "slow"]\n'
+        'doc = "how hard acme looks"\n'
+        '[for.docs.contributions]\n"docs.theme" = ["acme"]\n',
+    )
+    assert found.levels == ("workspace", "package")
+    assert (found.plugin, found.requires, found.tools) == (
+        "acme.tasks",
+        ("docs",),
+        ("docker>=27",),
+    )
+    assert found.options == {"deep": "judges every file, not only the changed ones"}
+    (record,) = found.additions.checks
+    assert (record.name, record.extension, record.listed_with) == (
+        "lint.acme",
+        "acme",
+        "deep",
+    )
+    assert (str(record.run), str(record.fix)) == (
+        "acme_declared._checks:judge",
+        "acme_declared._checks:mend",
+    )
+    assert [(c.category, c.ignore, c.suffixes) for c in record.claims] == [
+        ("source", ("X1",), (".py",))
+    ]
+    assert [(o.name, o.kind, o.default) for o in record.options] == [
+        ("strict", "bool", False)
+    ]
+    assert [(f.file, f.kind) for f in record.fragments] == [
+        (".acme", "cpp"),
+        (".acme", "cpp-conan"),
+    ]
+    assert found.additions.contributions == (("python.dev-group", "acme>=1"),)
+    assert found.targets["docs"].contributions == (("docs.theme", "acme"),)
+
+
+def test_a_reference_imports_when_it_runs(package: Path) -> None:
+    found = _declare(package, CHECK)
+    (record,) = found.additions.checks
+    assert "acme_declared._checks" not in sys.modules
+    record.run(object())  # type: ignore[arg-type]
+    assert "acme_declared._checks" in sys.modules
+
+
+def test_the_contract_keys_a_declaration_owns_are_read_without_the_rest(
+    package: Path,
+) -> None:
+    from livery.workshop._declaration import contract_keys
+
+    (package / "extension.toml").write_text(
+        '[contract.package.acme."paths[]"]\ntypes = ["table"]\n'
+        'path = { types = ["str"], doc = "a path" }\n'
+    )
+    assert [
+        (k.contract, k.path, k.types, k.doc) for k in contract_keys("acme_declared")
+    ] == [
+        ("package", "acme.paths[]", ("table",), ""),
+        ("package", "acme.paths[].path", ("str",), "a path"),
+    ]
+    assert contract_keys("acme_absent_package") == ()
+
+
+def test_declared_checks_register_under_the_listed_name(package: Path) -> None:
+    from livery.workshop import _checks
+    from livery.workshop._extensions import register_declared
+
+    found = _declare(package, CHECK)
+    state = _checks.snapshot()
+    try:
+        assert register_declared("acme.listed", found.additions) is True
+        assert _checks.checks_by_name()["lint.acme"].extension == "acme.listed"
+        assert register_declared("acme.listed", Additions()) is False
+    finally:
+        _checks.restore(state)

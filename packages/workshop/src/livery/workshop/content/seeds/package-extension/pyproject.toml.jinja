@@ -5,9 +5,9 @@
 "{{ import_path }}" = "{{ import_path }}._tasks"
 
 # The workshop extension this package is, by the name a workspace
-# lists: the data module that declares it.
+# lists: the package beside its extension.toml.
 [project.entry-points."workshop.extensions"]
-"{{ import_path }}" = "{{ import_path }}._extension"
+"{{ import_path }}" = "{{ import_path }}"
 
 # The branded App: the workshop surface under this extension's name.
 [project.scripts]

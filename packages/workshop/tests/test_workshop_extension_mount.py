@@ -22,12 +22,21 @@ _FAILURES = (BaseException,)
 def _fake_extensions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **modules: str
 ) -> None:
-    """Importable packages ``acme.<name>`` with the given module bodies."""
+    """Packages ``acme.<name>``, each declaring the given ``extension.toml``.
+
+    ``{package}`` in a declaration stands for the package's import path,
+    and each package's ``_checks`` defines ``noop`` for a check to run.
+    """
     site = tmp_path / "site"
     (site / "acme").mkdir(parents=True, exist_ok=True)
-    for name, body in modules.items():
-        (site / "acme" / name).mkdir(exist_ok=True)
-        (site / "acme" / name / "__init__.py").write_text(textwrap.dedent(body))
+    for name, text in modules.items():
+        package = site / "acme" / name
+        package.mkdir(exist_ok=True)
+        (package / "__init__.py").write_text("")
+        (package / "_checks.py").write_text("def noop(ctx):\n    del ctx\n")
+        (package / "extension.toml").write_text(
+            textwrap.dedent(text).replace("{package}", f"acme.{name}")
+        )
     monkeypatch.syspath_prepend(str(site))
     import importlib
 
@@ -68,14 +77,14 @@ def _noop(ctx: GateContext) -> None:
 def test_an_incompatible_api_version_refuses_naming_both(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, old="API_VERSION = 99\n")
-    import acme.old  # type: ignore[import-not-found]
-
+    _fake_extensions(tmp_path, monkeypatch, old="[extension]\napi-version = 99\n")
+    found = _extensions.declaration("acme.old")
+    assert found is not None
     with pytest.raises(
         RuntimeError,
         match="declares workshop API version 99; this workshop is version 1",
     ):
-        _extensions.check_api_version("acme.old", acme.old)
+        _extensions.check_api_version("acme.old", found)
     # Mount refuses it before anything registers.
     _contract(tmp_path, '["acme.old"]')
     from livery.footman import _registry as registry
@@ -90,7 +99,7 @@ def test_a_missing_dependency_and_a_misordered_one_are_named(
     _fake_extensions(
         tmp_path,
         monkeypatch,
-        brand='REQUIRES = ("acme.base",)\n',
+        brand='[extension]\nrequires = ["acme.base"]\n',
         base="",
     )
     _contract(tmp_path, '["acme.brand"]')
@@ -129,7 +138,7 @@ def test_the_fix_adds_the_missing_extension_before_its_dependent(
     _fake_extensions(
         tmp_path,
         monkeypatch,
-        brand='REQUIRES = ("acme.base",)\n',
+        brand='[extension]\nrequires = ["acme.base"]\n',
         base="",
     )
     (tmp_path / "workshop.toml").write_text(
@@ -153,10 +162,11 @@ def test_the_fix_adds_the_missing_extension_before_its_dependent(
     )
 
 
-def test_an_undeclared_extension_is_taken_at_the_current_version() -> None:
-    import types
+def test_a_declaration_without_an_api_version_is_taken_at_the_current_version() -> None:
+    from livery.workshop._declaration import Declaration
 
-    _extensions.check_api_version("acme.quiet", types.ModuleType("acme.quiet"))
+    quiet = Declaration("acme.quiet", "acme.quiet", Path("extension.toml"))
+    _extensions.check_api_version("acme.quiet", quiet)
 
 
 def test_the_gate_names_what_a_extension_registered_and_withdrew(
@@ -225,9 +235,9 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     # An install declares it: the next look finds it by its entry point,
     # and imports nothing, since a distribution installed after the
     # interpreter started may not be importable in it.
-    _fake_extensions(
-        tmp_path, monkeypatch, later="", unloadable="raise ImportError('later')"
-    )
+    _fake_extensions(tmp_path, monkeypatch, later="", unloadable="")
+    unloadable = tmp_path / "site" / "acme" / "unloadable" / "__init__.py"
+    unloadable.write_text("raise ImportError('later')\n")
     assert _extensions.declared_now(("acme.later", "acme.unloadable")) == (
         "acme.later",
         "acme.unloadable",
@@ -250,7 +260,7 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     _fake_extensions(
         tmp_path,
         monkeypatch,
-        native='LEVELS = ("package",)\n',
+        native='[extension]\nlevels = ["package"]\n',
         site="",
     )
     # A package-level extension in the workspace list: the gate refuses,
@@ -281,18 +291,15 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
 # The options an entry turns on: the refusals first, then what they register.
 
 _OPTIONED = """\
-from livery.workshop._checks import CheckRecord
+[options]
+deep = "judges deeper"
 
+[checks.acme.lint]
+run = "{package}._checks:noop"
 
-def _noop(ctx):
-    del ctx
-
-
-OPTIONS = {"deep": "judges deeper"}
-CHECKS = (
-    CheckRecord("acme", "lint", _noop),
-    CheckRecord("acme", "typecomplete", _noop, listed_with="deep"),
-)
+[checks.acme.typecomplete]
+run = "{package}._checks:noop"
+listed-with = "deep"
 """
 
 
@@ -342,21 +349,20 @@ def test_an_option_the_extension_does_not_declare_refuses_and_mounts_off(
     assert "typecomplete.acme" not in names
 
 
-def test_a_record_for_an_option_its_extension_does_not_declare_refuses(
+def test_a_check_for_an_option_its_extension_does_not_declare_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    import importlib
+    from livery.workshop._declaration import DeclarationError
 
     _fake_extensions(
         tmp_path,
         monkeypatch,
-        tool=_OPTIONED.replace('OPTIONS = {"deep": "judges deeper"}', "OPTIONS = {}"),
-        odd='OPTIONS = ("deep",)\n',
+        tool=_OPTIONED.replace('[options]\ndeep = "judges deeper"\n', ""),
+        odd='options = ["deep"]\n',
     )
-    module = importlib.import_module("acme.tool")
-    with pytest.raises(RuntimeError, match="its options are none"):
-        _extensions.register_declared_checks("acme.tool", module, ("deep",))
-    with pytest.raises(RuntimeError, match=r"acme\.odd.*OPTIONS.*map"):
+    with pytest.raises(DeclarationError, match="its options are none"):
+        _extensions.declaration("acme.tool")
+    with pytest.raises(DeclarationError, match=r"options is a list"):
         _extensions.declared_options("acme.odd")
 
 
@@ -386,7 +392,10 @@ def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fake_extensions(
-        tmp_path, monkeypatch, tool=_OPTIONED + 'REQUIRES = ("acme.base",)\n', base=""
+        tmp_path,
+        monkeypatch,
+        tool='[extension]\nrequires = ["acme.base"]\n' + _OPTIONED,
+        base="",
     )
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = [\n    "acme.tool[deep]",\n]\n'
@@ -412,14 +421,15 @@ def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
 def test_a_extension_declaring_tools_off_the_shape_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, odd='TOOLS = "docker"\n')
+    from livery.workshop._declaration import DeclarationError
+
+    _fake_extensions(tmp_path, monkeypatch, odd='[toolroom]\nrequires = "docker"\n')
     _contract(tmp_path, '["acme.odd"]')
-    with pytest.raises(RuntimeError, match=r"acme\.odd.*TOOLS"):
+    with pytest.raises(DeclarationError, match=r"toolroom\.requires is a string"):
         _extensions.extension_tools(tmp_path)
-    from livery.footman import Failed
     from livery.workshop._tools import requirements
 
-    with pytest.raises(Failed, match=r"acme\.odd"):
+    with pytest.raises(_FAILURES, match=r"toolroom\.requires"):
         requirements(tmp_path)
 
 
@@ -428,7 +438,9 @@ def test_an_unlisted_extensions_tools_never_enter_the_profile(
 ) -> None:
     from livery.workshop._tools import requirements, tool_names
 
-    _fake_extensions(tmp_path, monkeypatch, tooled='TOOLS = ("docker>=27",)\n')
+    _fake_extensions(
+        tmp_path, monkeypatch, tooled='[toolroom]\nrequires = ["docker>=27"]\n'
+    )
     _contract(tmp_path, "[]")
     assert "extension acme.tooled" not in {r.site for r in requirements(tmp_path)}
     assert "docker" not in tool_names(tmp_path)
@@ -443,21 +455,28 @@ def test_an_unlisted_extensions_tools_never_enter_the_profile(
 def test_a_extension_declaring_contributions_off_the_shape_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, odd='FOR = ["acme.python"]\n')
+    from livery.workshop._declaration import DeclarationError
+
+    _fake_extensions(tmp_path, monkeypatch, odd='for = ["acme.python"]\n')
     _contract(tmp_path, '["acme.odd"]')
-    with pytest.raises(RuntimeError, match=r"acme\.odd.*FOR"):
-        _extensions.contributions(tmp_path)
+    with pytest.raises(DeclarationError, match=r"for is a list"):
+        _extensions.declared_targets(tmp_path)
+
+
+#: A house's check for a python extension, registered while both are listed.
+_HOUSE = """\
+[for."acme.python".checks.house.lint]
+run = "{package}._checks:noop"
+"""
 
 
 def _house(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A house contributing to a python extension, and that extension, importable."""
-    _fake_extensions(
-        tmp_path,
-        monkeypatch,
-        house='FOR = {"acme.python": "acme.house_python"}\n',
-        house_python="GRAFTED = True\n",
-        python="",
-    )
+    """A house contributing to a python extension, and that extension."""
+    _fake_extensions(tmp_path, monkeypatch, house=_HOUSE, python="")
+
+
+def _grafted() -> bool:
+    return "lint.house" in _checks.checks_by_name()
 
 
 def _mount(root: Path) -> None:
@@ -468,12 +487,10 @@ def _mount(root: Path) -> None:
 
 
 def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_named(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
     # The mount goes on without the target, and the layering check,
     # which runs inside a working fm, names the entry.
-    import sys
-
     _house(tmp_path, monkeypatch)
     _fake_extensions(tmp_path, monkeypatch, cpp="")
     (tmp_path / "workshop.toml").write_text(
@@ -481,7 +498,7 @@ def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_
         '    "acme.cpp",\n    { name = "acme.house", for = ["acme.cpp"] },\n]\n'
     )
     _mount(tmp_path)
-    assert "acme.house_python" not in sys.modules
+    assert not _grafted()
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
         "[workspace] extensions: the entry for acme.house names acme.cpp in `for`,"
@@ -490,48 +507,43 @@ def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_
 
 
 def test_a_contribution_for_an_unlisted_target_never_mounts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    import sys
-
     _house(tmp_path, monkeypatch)
     _contract(tmp_path, '["acme.house"]')
     _mount(tmp_path)
-    assert "acme.house_python" not in sys.modules
+    assert not _grafted()
     assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
     assert "    for: acme.python" not in _extensions.describe_extensions(tmp_path)
 
 
 def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    import sys
-
     _house(tmp_path, monkeypatch)
     for listed in (
         '["acme.python", "acme.house"]',
         '["acme.house", "acme.python"]',
     ):
-        monkeypatch.delitem(sys.modules, "acme.house_python", raising=False)
+        if _grafted():
+            _checks.unregister_check("lint.house")
         _contract(tmp_path, listed)
         _mount(tmp_path)
-        assert sys.modules["acme.house_python"].GRAFTED is True
+        assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
         assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
 
 
-def test_a_contribution_module_that_does_not_import_refuses_naming_all_three(
+def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fake_extensions(
-        tmp_path,
-        monkeypatch,
-        house='FOR = {"acme.python": "acme.absent_module"}\n',
-        python="",
+        tmp_path, monkeypatch, house=_HOUSE.replace(":noop", ":absent"), python=""
     )
     _contract(tmp_path, '["acme.python", "acme.house"]')
     with pytest.raises(
-        RuntimeError, match=r"acme\.house.*acme\.absent_module.*acme\.python"
+        RuntimeError,
+        match=r'for\."acme\.python"\.checks\.house\.lint\.run names absent',
     ):
         _mount(tmp_path)
 

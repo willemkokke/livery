@@ -1,6 +1,7 @@
 """Ruff's two checks: the formatter, then the linter, over the python files they claim.
 
-Each check narrows by paths: the workshop names the paths a run reaches
+The extension's ``extension.toml`` declares both and names the bodies
+here. Each check narrows by paths: the workshop names the paths a run reaches
 ([livery.workshop.scoped_paths][]) and splits them into calls
 ([livery.workshop.run_batched][]), and a body only calls ruff. Each
 check hands ruff the words after ``--`` on its own verb
@@ -14,20 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import livery.toolroom.tools as tools
-from livery.workshop import (
-    PATHS,
-    CheckRecord,
-    Claim,
-    Fragment,
-    GateContext,
-    run_batched,
-    scoped_paths,
-)
-
-#: The kinds whose python files ruff judges: a python package's, and a
-#: native package's ``conanfile.py``, beside clang-format over its
-#: sources.
-KINDS = ("python", "cpp-conan")
+from livery.workshop import GateContext, run_batched, scoped_paths
 
 #: The suffixes ruff reads; a foreign file a run names passes through.
 SUFFIXES = (".py", ".pyi")
@@ -36,12 +24,6 @@ SUFFIXES = (".py", ".pyi")
 #: flight has not finished writing, an import added before the code
 #: that uses it.
 SAFE_UNFIXABLE = "F401"
-
-#: The editor formats python with ruff, as the gate does.
-EDITOR = "charliermarsh.ruff"
-SETTINGS = """\
-{"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}}
-"""
 
 
 def python_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
@@ -104,14 +86,16 @@ def run_lint(
         )
 
 
-def _format_run(ctx: GateContext) -> None:
+def judge_format(ctx: GateContext) -> None:
+    """Refuse a file ruff would reformat, over the paths the run reaches."""
     run_batched(
         scoped_paths(ctx, "format.ruff"),
         lambda batch: run_format(check=True, paths=batch, arguments=ctx.arguments),
     )
 
 
-def _format_fix(ctx: GateContext) -> None:
+def fix_format(ctx: GateContext) -> None:
+    """Reformat the paths the run reaches."""
     run_batched(
         scoped_paths(ctx, "format.ruff"),
         lambda batch: run_format(
@@ -120,73 +104,19 @@ def _format_fix(ctx: GateContext) -> None:
     )
 
 
-def _lint_run(ctx: GateContext) -> None:
+def judge_lint(ctx: GateContext) -> None:
+    """Refuse what ruff's rules find, over the paths the run reaches."""
     run_batched(
         scoped_paths(ctx, "lint.ruff"),
         lambda batch: run_lint(fix=False, paths=batch, arguments=ctx.arguments),
     )
 
 
-def _lint_fix(ctx: GateContext) -> None:
+def fix_lint(ctx: GateContext) -> None:
+    """Apply ruff's fixes over the paths the run reaches; under --safe-fix, some."""
     run_batched(
         scoped_paths(ctx, "lint.ruff"),
         lambda batch: run_lint(
             fix=not ctx.safe, safe_fix=ctx.safe, paths=batch, arguments=ctx.arguments
         ),
     )
-
-
-#: An example keeps the layout its page shows: ruff judges its names,
-#: and nothing of its style.
-_EXAMPLE_IGNORES = (
-    "D",
-    "E",
-    "I",
-    "UP",
-    "B",
-    "SIM",
-    "C4",
-    "RUF",
-    "F401",
-    "F811",
-    "F841",
-)
-
-CHECKS = (
-    CheckRecord(
-        "ruff",
-        "format",
-        _format_run,
-        narrowing=PATHS,
-        fix=_format_fix,
-        kinds=KINDS,
-        tools=("ruff",),
-        arguments=True,
-        fragments=(Fragment(".vscode/settings.json", SETTINGS),),
-        editor_extension=EDITOR,
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support", "configuration")
-        ),
-    ),
-    CheckRecord(
-        "ruff",
-        "lint",
-        _lint_run,
-        narrowing=PATHS,
-        fix=_lint_fix,
-        kinds=KINDS,
-        tools=("ruff",),
-        arguments=True,
-        editor_extension=EDITOR,
-        # Test bodies explain themselves by name and assertion, so the
-        # docstring rules stop at the tests.
-        claims=(
-            Claim("source", suffixes=SUFFIXES),
-            Claim("test", ignore=("D1",), suffixes=SUFFIXES),
-            Claim("example", ignore=_EXAMPLE_IGNORES, suffixes=SUFFIXES),
-            Claim("test-support", ignore=("D1",), suffixes=SUFFIXES),
-            Claim("configuration", suffixes=SUFFIXES),
-        ),
-    ),
-)

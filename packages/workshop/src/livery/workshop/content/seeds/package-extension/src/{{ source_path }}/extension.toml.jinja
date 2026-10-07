@@ -1,0 +1,13 @@
+# Seeded from the package-extension seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+#
+# What the workshop mounts {{ import_path }} from, read at every mount
+# without importing the extension.
+
+[extension]
+api-version = 1
+# Listed in [workspace] extensions.
+levels = ["workspace"]
+# The footman plugin that carries this extension's verbs.
+plugin = "{{ import_path }}"

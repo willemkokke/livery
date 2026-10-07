@@ -388,13 +388,12 @@ def _chain(
         shutil.copy2(BASE_ROOT / ".gitignore", ignore)
         with ignore.open("a") as handle:
             handle.write("brandx-build/\n")
-        with (package / "_extension.py").open("a") as handle:
+        with (package / "extension.toml").open("a") as handle:
             handle.write(
-                "\n#: The base files this extension ships in place of the base's.\n"
-                "REPLACES = {\n"
-                '    "livery.workshop:.gitignore": "the brand ignores its own'
-                ' build tree",\n'
-                "}\n"
+                "\n# The base files this extension ships in place of the base's.\n"
+                "[replaces]\n"
+                '"livery.workshop:.gitignore" = "the brand ignores its own'
+                ' build tree"\n'
             )
         fragment = member / "src" / "dummy" / BRAND / "content" / "fragments"
         with (fragment / f"rules.{BRAND}.md").open("a") as handle:

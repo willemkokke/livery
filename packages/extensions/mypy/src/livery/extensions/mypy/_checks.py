@@ -1,5 +1,6 @@
 """mypy's check: the type checker, once per platform, over the python files it claims.
 
+The extension's ``extension.toml`` declares it and names the body here.
 ``typecheck.mypy`` narrows by paths: the workshop names the paths a run
 reaches ([livery.workshop.scoped_paths][]) and splits them into
 calls ([livery.workshop.run_batched][]); a run that reaches the
@@ -19,21 +20,7 @@ from functools import partial
 
 import livery.toolroom.tools as tools
 from livery.footman import parallel, step
-from livery.workshop import (
-    PATHS,
-    WHOLE,
-    CheckRecord,
-    Claim,
-    GateContext,
-    run_batched,
-    scoped_paths,
-)
-
-#: The kinds whose python files mypy judges.
-KINDS = ("python",)
-
-#: The suffixes mypy reads.
-SUFFIXES = (".py", ".pyi")
+from livery.workshop import WHOLE, GateContext, run_batched, scoped_paths
 
 #: The platforms every call checks, linux first: a bare ``mypy`` checks
 #: linux, the platform ``mypy.ini`` names.
@@ -60,29 +47,10 @@ def run_typecheck(paths: tuple[str, ...] = (), arguments: tuple[str, ...] = ()) 
     parallel(*(step(on, title=f"mypy_{platform}")(platform) for platform in PLATFORMS))
 
 
-def _typecheck_run(ctx: GateContext) -> None:
+def judge_typecheck(ctx: GateContext) -> None:
+    """Type-check the paths the run reaches, or the configured files, per platform."""
     chosen = scoped_paths(ctx, "typecheck.mypy")
     if chosen == WHOLE:
         run_typecheck(arguments=ctx.arguments)
         return
     run_batched(chosen, partial(run_typecheck, arguments=ctx.arguments))
-
-
-CHECKS = (
-    CheckRecord(
-        "mypy",
-        "typecheck",
-        _typecheck_run,
-        narrowing=PATHS,
-        kinds=KINDS,
-        tools=("mypy",),
-        arguments=True,
-        claims=tuple(
-            Claim(category, suffixes=SUFFIXES)
-            for category in ("source", "test", "test-support")
-        ),
-        # mypy reads the members' own stubs from the venv, so it rides
-        # the dev group beside the store's copy.
-        contributions=(("python.dev-group", "mypy>=1.14"),),
-    ),
-)

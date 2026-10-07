@@ -1,5 +1,6 @@
 """clang-tidy's check: each cpp package's sources, over its compilation database.
 
+The extension's ``extension.toml`` declares it and names the body here.
 ``lint.clang-tidy`` judges one package at a time, after the package's
 build is configured: the files its claims reach in the package, or the
 files a run names ([livery.workshop.scoped_files][]), against the
@@ -20,46 +21,7 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop import (
-    PACKAGE,
-    CheckRecord,
-    Claim,
-    Fragment,
-    GateContext,
-    Package,
-    compile_commands,
-    scoped_files,
-)
-
-#: The kind whose members build with a compilation database to read.
-KINDS = ("cpp-conan",)
-
-#: The kinds whose members carry the checks' file, the native ones.
-CARRIERS = ("cpp-conan", "python-nanobind")
-
-#: The suffixes clang-tidy reads.
-SUFFIXES = (".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx")
-
-#: The checks each native package carries; a deeper file with
-#: ``InheritParentConfig: true`` adds that directory's own lines.
-CHECKS_FILE = """\
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A `.clang-tidy` deeper in the tree with
-# `InheritParentConfig: true` carries this package's own lines.
-#
-# The families a gate can hold green from the first commit: the bug
-# and portability checks, and the performance ones. readability-* is
-# left out on purpose, since its opinions collide with clang-format's
-# and with each other. A finding is an error, so the gate's verdict
-# stays its exit code.
-Checks: >
-  bugprone-*,
-  performance-*,
-  portability-*,
-  -bugprone-easily-swappable-parameters
-WarningsAsErrors: "*"
-HeaderFilterRegex: "^$"
-"""
+from livery.workshop import GateContext, Package, compile_commands, scoped_files
 
 
 def _asked(argv: list[str]) -> str:
@@ -130,28 +92,11 @@ def run_lint(
         )
 
 
-def _lint_run(ctx: GateContext) -> None:
+def judge_lint(ctx: GateContext) -> None:
+    """Run clang-tidy over the package's files the run reaches, against its database."""
     package = ctx.package
     assert package is not None  # the gate hands a package check its package
     database = compile_commands(package)
     if database is None or not database.is_file():
         return
     run_lint(package, scoped_files(ctx, "lint.clang-tidy"), database, ctx.arguments)
-
-
-CHECKS = (
-    CheckRecord(
-        "clang-tidy",
-        "lint",
-        _lint_run,
-        scope=PACKAGE,
-        kinds=KINDS,
-        after=("build.configure",),
-        tools=("clang_tidy",),
-        arguments=True,
-        fragments=tuple(
-            Fragment(".clang-tidy", CHECKS_FILE, kind=kind) for kind in CARRIERS
-        ),
-        claims=(Claim("source", suffixes=SUFFIXES), Claim("test", suffixes=SUFFIXES)),
-    ),
-)

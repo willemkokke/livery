@@ -28,31 +28,56 @@ each refuse on read, naming the file, the key, what the table takes,
 and the nearest spelling.
 
 An extension is declared by an entry point in the `workshop.extensions`
-group, mapping the name a contract lists to a data module the mount
-and the contract judge load without the extension's tasks. That
-module declares:
+group, mapping the name a contract lists to the package that ships it.
+Beside that package sits its `extension.toml`, which the mount and the
+contract judge read without importing the extension. The file is a
+contract like `workshop.toml`: kebab-case keys, every key judged, and a
+refusal naming the file, the key, what the table takes and the nearest
+spelling. Every key is optional:
 
-- `API_VERSION`, the extension API it was written for, refused at
-  mount when it is not this workshop's;
-- `LEVELS`, where it may be listed: `"workspace"` in
+- `[extension] api-version`, the extension API it was written for,
+  refused at mount when it is not this workshop's;
+- `[extension] levels`, where it may be listed: `"workspace"` in
   `[workspace] extensions`, `"package"` in a package's own
   `extensions`; a listing at another level refuses;
-- `PLUGIN`, the footman plugin carrying its verbs, mounted in list
-  order;
-- `REQUIRES`, the extensions it needs listed before it, which the
-  layering check keeps listed and its `--fix` writes at the level each
-  declares;
-- `TOOLS`, the tools its own verbs need, `("docker?>=27",)`, one of
-  the sites the tool profile reads;
-- `CONTRACT_KEYS`, the contract keys it reads;
-- `CHECKS`, the check records it adds to the gate, a tuple the mount
-  registers under the listed name, which the gate prints beside each;
-- `OPTIONS`, a map from each option a workspace may turn on to what it
-  turns on, `{"typecomplete": "verifies ..."}`; a check record that
-  names an option in `listed_with` registers only when the entry turns
-  it on;
-- `FOR`, a map from a target extension to the module carrying the
-  registrations for that target, `{"python": "acme.house.python"}`.
+- `[extension] plugin`, the footman plugin carrying its verbs, mounted
+  in list order;
+- `[extension] requires`, the extensions it needs listed before it,
+  which the layering check keeps listed and its `--fix` writes at the
+  level each declares;
+- `[toolroom] requires`, the tools its own verbs need,
+  `["docker?>=27"]`, one of the sites the tool profile reads;
+- `[contract.<contract>.<table>]`, the contract keys it reads, each a
+  table with its `types`, and its `values` and `doc` where it has them;
+- `[checks.<tool>.<role>]`, each check it adds to the gate, registered
+  under the listed name, which the gate prints beside each;
+- `[options]`, each option a workspace may turn on, to what it turns
+  on; a check whose `listed-with` names an option registers only when
+  the entry turns it on;
+- `[contributions]`, the values it puts into slots, by slot;
+- `[for.<target>]`, the same tables, read only while the target is
+  listed;
+- `[replaces]` and `[deletes]`, an earlier extension's shipped file,
+  `"<owner>:<name>"`, that its own file of that name replaces or that it
+  deletes, to the reason.
+
+A check names the functions that run it as `"module:function"`, in the
+extension's own package, and each is imported when the check runs:
+
+```toml
+[checks.ruff.format]
+run = "livery.extensions.ruff._checks:judge_format"
+fix = "livery.extensions.ruff._checks:fix_format"
+narrowing = "paths"
+kinds = ["python"]
+tools = ["ruff"]
+arguments = true
+claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
+```
+
+The mount reads each reference from its module's source. A module
+outside the package, or a name the module does not define at its top
+level, refuses naming the file and the key before anything runs.
 
 An entry names its extension, and the options it turns on in brackets:
 `"basedpyright[typecomplete]"`, either as the string or as a table
@@ -62,7 +87,7 @@ option the extension does not declare refuses in the layering check,
 naming the ones it declares; the mount names it and leaves it off.
 
 A footman plugin that declares no extension is never offered as one.
-The mount imports a contribution module once both its owner and its
+The mount registers a `[for.<target>]` table once both its owner and its
 target are listed, so a house with opinions on several languages
 contributes to each only where the language is listed. The layering
 check's `--fix` writes the resolved targets into the entry once,
@@ -100,15 +125,14 @@ root's site files, so a pull request that changes only `notes/` skips
 the docs job with a line saying so, and `fm explain` prints
 `claimed by: site` on a file the build reads.
 
-A check record also carries what its tool needs of the workspace. Its
-`tools` reach the tool profile for every kind the check judges, each
+A check also says what its tool needs of the workspace. Its `tools`
+reach the tool profile for every kind the check judges, each
 requirement naming `check <name>` as its site, so unregistering a
-check removes its tool. Its `contributions` fill **slots**, the holes
-the base template leaves for the records: the `dev` dependency
-group's tool lines and pytest's `addopts` are the first two, declared
-with `register_slot` and filled with `contribute` in
-`livery.workshop._slots`, a list composing as the union in
-contribution order and a scalar taking the nearest contribution. The
+check removes its tool. An extension's `[contributions]` fill
+**slots**, the holes the base template leaves: the `dev` dependency
+group's tool lines and pytest's `addopts` are the first two, a list
+composing as the union in contribution order and a scalar taking the
+nearest contribution. The
 site's private-members policy is the third, `docs.members`: `public`
 keeps each extractor's default filter, `all` documents every member,
 and any other value refuses naming both. The theme block is the
@@ -141,7 +165,7 @@ ruff its flag. The words before `--` stay paths. A role verb runs
 several tools, so it refuses words after `--` and names the checks'
 own verbs that take them; `fm check` refuses them the same way. A
 check that wraps no tool, such as `fm drift.check`, refuses them too.
-A check says it takes them with `arguments=True` on its record, and
+A check says it takes them with `arguments = true` in its table, and
 its body reads them from the context's `arguments`.
 
 A check's `options` are what a package may set in its own contract,
@@ -354,8 +378,8 @@ out is printed when the lock is written; `fm tools.sync` names an
 optional tool its host lacks. The sites: a package kind, in its record,
 for what operates it, uv for the python kind; the checks that judge a
 kind, each naming its tools, which is how ruff, pytest and the checkers
-reach a python workspace; a listed extension, as `TOOLS` in its
-declaration, for what its own verbs need; a plugin the project mounts
+reach a python workspace; a listed extension, as `[toolroom] requires`
+in its `extension.toml`, for what its own verbs need; a plugin the project mounts
 through its direct dependencies, as a tuple in a data module its
 `workshop.tools` entry point names under the plugin's own name, loaded
 without the plugin's tasks, which is how forge's dev verbs bring

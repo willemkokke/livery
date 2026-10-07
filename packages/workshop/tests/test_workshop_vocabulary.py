@@ -239,9 +239,12 @@ def _extension_tools() -> set[str]:
     """The tools the installed extensions' checks name."""
     from importlib.metadata import entry_points
 
+    from livery.workshop._declaration import read
+
     tools: set[str] = set()
     for entry in entry_points(group="workshop.extensions"):
-        for record in getattr(entry.load(), "CHECKS", ()):
+        found = read(entry.name, entry.value)
+        for record in found.additions.checks if found is not None else ():
             tools.update((record.tool, *record.tools))
     return tools
 

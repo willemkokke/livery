@@ -13,8 +13,6 @@ from pathlib import Path
 
 import pytest
 
-import livery.extensions.clang.format._extension as declaration
-import livery.extensions.clang.tidy._extension as tidy_declaration
 import livery.toolroom.tools as tools
 from livery.extensions.clang.format import _checks as clang_format
 from livery.extensions.clang.tidy import _checks as clang_tidy
@@ -29,11 +27,13 @@ from workshop_composed import seed_into  # pyright: ignore[reportMissingImports]
 @pytest.fixture
 def registered() -> Iterator[None]:
     """The extensions' checks registered, as the mount registers them when listed."""
-    from livery.workshop._extensions import register_declared_checks
+    from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
-    register_declared_checks("clang-format", declaration)
-    register_declared_checks("clang-tidy", tidy_declaration)
+    for name in ("clang-format", "clang-tidy"):
+        found = declaration(name)
+        assert found is not None
+        register_declared(name, found.additions)
     try:
         yield
     finally:
@@ -84,9 +84,14 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
         kind=kind,
         depends=(),
     )
+    suffixes = {
+        suffix
+        for claim in registry.check_for("format.clang-format").claims
+        for suffix in claim.suffixes
+    }
     sources = tuple(
         path
-        for suffix in clang_format.SUFFIXES
+        for suffix in sorted(suffixes)
         for path in sorted(destination.rglob(f"*{suffix}"))
     )
     assert sources  # the seeds carry C or C++ to judge
