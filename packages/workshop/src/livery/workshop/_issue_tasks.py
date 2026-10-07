@@ -379,7 +379,10 @@ def start(
     (park the tree as a commit; squash-only merging evaporates it) as
     the escape. ``--agent`` launches the named agent in the worktree
     with a minimal briefing; the worktree's own instructions are the
-    real ones. Re-running on started work re-enters it.
+    real ones. Re-running on started work re-enters it, in whichever
+    tree holds the branch. A local branch no tree holds is re-entered
+    on its own tip, unless its pull request merged and took that tip:
+    the branch is finished work, so it goes and the start begins fresh.
     """
     if not ref:
         fail(
@@ -436,22 +439,29 @@ def start(
 
         for line in sweep_worktrees(worktree_home(root).parent, dry_run=False):
             print(f"  {line}")
-        if path.is_dir() or git.local_branch_exists(branch):
-            print(f"  already started: {branch} at {path}")
-            if path.is_dir():
+        held = _started_at(git, root, branch, path)
+        if held is not None:
+            print(f"  already started: {branch} at {held}")
+            if held == path:
                 # A start that failed after the worktree existed (a sync
                 # that met no network) left it unsynced; running the
                 # start again is the recovery, so it syncs again.
                 _provision(path)
             if agent:
-                _launch_agent(agent, path, briefing, branch, prompt)
+                _launch_agent(agent, held, briefing, branch, prompt)
                 return
-            _open_work(path, open)
+            _open_work(held, open)
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        git._run("worktree", "add", str(path), "-b", branch, f"origin/{base}")
-        print(f"  worktree {path} on {started}")
-        _record_parent(git, branch, from_)
+        if _kept(repo, git, root, branch):
+            # The branch outlived its worktree and is not finished work:
+            # a worktree on its own tip re-enters it, its commits kept.
+            git._run("worktree", "add", str(path), branch)
+            print(f"  worktree {path} on {branch}, its own commits kept")
+        else:
+            git._run("worktree", "add", str(path), "-b", branch, f"origin/{base}")
+            print(f"  worktree {path} on {started}")
+            _record_parent(git, branch, from_)
         _provision(path)
         if agent:
             _launch_agent(agent, path, briefing, branch, prompt)
@@ -470,13 +480,49 @@ def start(
                 "  Or work in a linked worktree:       "
                 f"{footman.prog()} start {ref}"
             )
-    if git.local_branch_exists(branch):
+    if _kept(repo, git, root, branch):
         git.switch(branch)
         print(f"  already started: back on {branch}")
         return
     git._run("checkout", "-b", branch, f"origin/{base}")
     print(f"  on {started}")
     _record_parent(git, branch, from_)
+
+
+def _started_at(git: GitOps, root: Path, branch: str, path: Path) -> Path | None:
+    """Where *branch*'s started work is: its worktree, another tree, or this checkout.
+
+    None when no tree holds the branch. The branch alone is not started
+    work: a merged one outlives the worktree its merge removed.
+    """
+    from livery.workshop._submit import worktree_for
+
+    if path.is_dir():
+        return path
+    if tree := worktree_for(git, root, branch):
+        return Path(tree)
+    if git.current_branch() == branch:
+        return root
+    return None
+
+
+def _kept(repo: Repository, git: GitOps, root: Path, branch: str) -> bool:
+    """Whether *branch* exists and stays to be re-entered; the line says why.
+
+    A branch whose pull request merged and took its tip is finished
+    work: the janitor's rule ([livery.workshop._sweep.sweep_branch][])
+    drops it here, and the start begins fresh from the base. Any other
+    branch keeps its commits.
+    """
+    if not git.local_branch_exists(branch):
+        return False
+    from livery.workshop._sweep import sweep_branch
+
+    went, line = sweep_branch(
+        root, git, branch, current=git.current_branch(), dry_run=False, repo=repo
+    )
+    print(f"  {line}")
+    return not went
 
 
 def _record_parent(git: GitOps, branch: str, parent: str) -> None:

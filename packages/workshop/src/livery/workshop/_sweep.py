@@ -216,52 +216,70 @@ def sweep_branches(root: Path | None, *, dry_run: bool) -> list[str]:
     """
     if root is None:
         return []
-    from livery.workshop._submit import (
-        merged_pull_request,
-        only_local_work,
-        worktree_for,
-    )
+    from livery.workshop._submit import worktree_for
 
-    lines: list[str] = []
-    verb = "would remove" if dry_run else "removed"
     git = GitOps(root)
     try:
         current = git.current_branch()
         branches = git.local_branches("")
     except GitError as error:
         return [f"branches: git could not answer ({error}); kept"]
+    lines: list[str] = []
     for branch in branches:
         if branch == "main" or worktree_for(git, root, branch):
             continue
-        try:
-            pull = merged_pull_request(_repository(root), git, branch)
-        except Exception as error:
-            lines.append(
-                f"branch {branch}: the forge could not be asked ({error}); kept"
-            )
-            continue
-        if pull is None:
-            lines.append(f"branch {branch}: no merged pull request; kept")
-            continue
-        only_local = only_local_work(git, root, branch, merged_head=pull.head_sha)
-        if only_local:
-            lines.append(
-                f"branch {branch}: PR #{pull.number} merged, but it holds"
-                f" {only_local}; kept"
-            )
-            continue
-        if branch == current:
-            lines.append(
-                f"branch {branch}: PR #{pull.number} merged, but the checkout"
-                f" stands on it; `{footman.prog()} sync` steps off it"
-            )
-            continue
-        lines.append(
-            f"branch {branch}: PR #{pull.number} merged, nothing only here; {verb}"
-        )
-        if not dry_run:
-            git.delete_local_branch(branch)
+        _went, line = sweep_branch(root, git, branch, current=current, dry_run=dry_run)
+        lines.append(line)
     return lines
+
+
+def sweep_branch(
+    root: Path,
+    git: GitOps,
+    branch: str,
+    *,
+    current: str,
+    dry_run: bool,
+    repo: Any = None,
+) -> tuple[bool, str]:
+    """Drop *branch* when its pull request merged and took its tip; whether it went.
+
+    The rule `sweep_branches` applies to each of the checkout's
+    branches, for one. ``fm start`` asks it before it re-enters a
+    branch that has no worktree, since a merged branch is finished work
+    and a start begins fresh. The branch the checkout stands on
+    (*current*) stays, named for ``fm sync`` to step off, and so does
+    one whose forge cannot be asked. *repo* is the forge's repository,
+    asked for when absent. The line says what went, or why it stayed.
+    """
+    from livery.workshop._submit import merged_pull_request, only_local_work
+
+    try:
+        found = merged_pull_request(
+            repo if repo is not None else _repository(root), git, branch
+        )
+    except Exception as error:
+        return False, f"branch {branch}: the forge could not be asked ({error}); kept"
+    if found is None:
+        return False, f"branch {branch}: no merged pull request; kept"
+    only_local = only_local_work(git, root, branch, merged_head=found.head_sha)
+    if only_local:
+        return False, (
+            f"branch {branch}: PR #{found.number} merged, but it holds"
+            f" {only_local}; kept"
+        )
+    if branch == current:
+        return False, (
+            f"branch {branch}: PR #{found.number} merged, but the checkout"
+            f" stands on it; `{footman.prog()} sync` steps off it"
+        )
+    if not dry_run:
+        git.delete_local_branch(branch)
+    verb = "would remove" if dry_run else "removed"
+    return (
+        True,
+        f"branch {branch}: PR #{found.number} merged, nothing only here; {verb}",
+    )
 
 
 # --- the rest of the data directory --------------------------------------------
