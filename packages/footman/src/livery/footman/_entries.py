@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
 _SCAN: tuple[EntryPoint, ...] | None = None
+_OFFERED_BY: dict[tuple[str, str, str], str] = {}
 
 
 def installed_entry_points(group: str | None = None) -> tuple[EntryPoint, ...]:
@@ -51,13 +52,34 @@ def _scan() -> tuple[EntryPoint, ...]:
 
     seen: set[str] = set()
     found: list[EntryPoint] = []
+    _OFFERED_BY.clear()
     for dist in importlib.metadata.distributions():
-        name = re.sub(r"[-_.]+", "-", dist.metadata["Name"] or "").lower()
+        given = dist.metadata["Name"] or ""
+        name = re.sub(r"[-_.]+", "-", given).lower()
         if name in seen:
             continue
         seen.add(name)
-        found.extend(dist.entry_points)
+        for entry in dist.entry_points:
+            found.append(entry)
+            _OFFERED_BY.setdefault((entry.group, entry.name, entry.value), given)
     return tuple(found)
+
+
+def distribution_of(entry: EntryPoint) -> str:
+    """The name of the distribution that offers *entry*; empty when none is known.
+
+    The scan reads each name when it reads the entry points. An entry
+    point reads its distribution's metadata later, from the directory
+    the scan found it in. A sync in another process that re-installs
+    an editable distribution at a new version moves that directory,
+    and the later read then finds no name. An entry point the scan did
+    not make answers from its own distribution.
+    """
+    found = _OFFERED_BY.get((entry.group, entry.name, entry.value))
+    if found is not None:
+        return found
+    dist = getattr(entry, "dist", None)
+    return str(getattr(dist, "name", "") or "") if dist is not None else ""
 
 
 def rescan_entry_points() -> None:

@@ -715,8 +715,7 @@ def project_builtin(root: Path) -> tuple[str, ...]:
     )
     offered: dict[str, list[str]] = {}
     for entry in _entries.installed_entry_points("footman.builtin"):
-        dist = getattr(entry, "dist", None)
-        name = _requirement_name(getattr(dist, "name", "") or "") if dist else ""
+        name = _requirement_name(_entries.distribution_of(entry))
         if name:
             offered.setdefault(name, []).append(entry.name)
     names: list[str] = []

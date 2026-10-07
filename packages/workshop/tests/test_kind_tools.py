@@ -762,6 +762,40 @@ def test_a_scoped_requirement_locks_its_tool_on_the_named_hosts_alone(
     assert _tools.lock_is_current(root) == (False, "the lock would move: tea")
 
 
+def test_a_plugin_moved_under_the_process_keeps_its_tools_in_the_push_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A sync in another process re-installs an editable plugin at a new
+    # version, so its dist-info moves, and an entry point this process
+    # scanned before the move names no distribution. The check made
+    # before a push still finds the plugin's tools.
+    from livery.footman import _entries  # pyright: ignore[reportPrivateUsage]
+    from livery.workshop._sync import stale_locks
+
+    root = _workspace(tmp_path, monkeypatch)
+    _records(root, _tea())
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "acme"\ndependencies = ["acme-plugin"]\n'
+    )
+    site = tmp_path / "site"
+    installed = site / "acme_plugin-1.0.dist-info"
+    installed.mkdir(parents=True)
+    (installed / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: acme-plugin\nVersion: 1.0\n"
+    )
+    (installed / "entry_points.txt").write_text(
+        "[footman.builtin]\nacme = acme_plugin_tools\n\n"
+        "[workshop.tools]\nacme = acme_plugin_tools:TOOLS\n"
+    )
+    (site / "acme_plugin_tools.py").write_text('TOOLS = ("tea",)\n')
+    monkeypatch.syspath_prepend(str(site))
+    monkeypatch.setattr(_entries, "_SCAN", None)
+    lock = _tools.write_lock(root)
+    assert "tea" in lock.tools
+    installed.rename(site / "acme_plugin-2.0.dist-info")
+    assert stale_locks(root) == []
+
+
 def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

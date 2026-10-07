@@ -656,9 +656,11 @@ def stale_locks(root: Path) -> list[str]:
     The two locks `sync --locked` refuses on: `uv.lock` against the
     project's declarations (``uv lock --check``) and `tools.lock`
     against its sites. A workspace without a lock has nothing here to
-    judge.
+    judge. The installed plugins are read again first, since a sync in
+    another process may have moved them under this one.
     """
     import livery.toolroom.tools as tools
+    from livery.footman import rescan_entry_points
     from livery.toolroom.store import LOCK_FILE
     from livery.workshop._tools import lock_is_current
 
@@ -684,6 +686,13 @@ def stale_locks(root: Path) -> list[str]:
                     + (f" ({error or said[-1]})" if said else "")
                 )
     if (root / LOCK_FILE).is_file():
+        # A plugin's tools are read through its installed metadata. A
+        # member stamped to a new version and synced by any command in
+        # this checkout moves to a new dist-info directory, and an entry
+        # point scanned before the move then names no distribution, which
+        # drops its plugin's tools. The release train makes this check
+        # half an hour after its scan.
+        rescan_entry_points()
         current, why = lock_is_current(root)
         if not current:
             problems.append(f"{LOCK_FILE} is not current ({why})")
