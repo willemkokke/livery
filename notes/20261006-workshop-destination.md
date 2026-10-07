@@ -277,7 +277,7 @@ every kind the check judges"). What changes:
 
 | Knowledge in the core today | Where | Seam in the destination |
 | --- | --- | --- |
-| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `[contract.<contract>.<table>]`; the mkdocstrings extension declares the keys it reads under `[docs]` (`api`, `python-paths`) |
+| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `[contract.<contract>.<table>]`, `api` among them; a generator's own settings are its `options`, set at `[generators.<name>]` in a package's contract as a check's are at `[checks.<tool>.<role>]` |
 | the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `installs` (system packages the job installs before entering) and `deploy` (the seam's value), set by the contributing extension on its `[ci.jobs.<point>.<name>]` entry |
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `[setup.<name>]`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
@@ -288,7 +288,7 @@ every kind the check judges"). What changes:
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` in the base | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
-| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | the mkdocstrings extension's keys (`[docs] api`, `[docs] python-paths`), and the `MODULE_ROOTS` query |
+| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | `[docs] api` stays the docs extension's key; the handler's search paths are the mkdocstrings generator's `paths` option, set at `[generators.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
 | the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `[checks.<tool>.<role>]` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
@@ -589,7 +589,8 @@ factor out what the two share. The answer, in `[generators.<name>]`:
   `docs`, declaring `extensions=("python",)`, its generator writing the
   handler stubs, its fragment the handler tables of `zensical.toml`,
   its checks `lint.docrefs` and `lint.docstrings`, its dependency
-  `griffelib`, its keys `[docs] api` and `[docs] python-paths`. A
+  `griffelib`, its generator's `paths` option set at
+  `[generators.mkdocstrings]`. A
   workspace that lists `docs` without it renders a site with no API
   reference and no handler block. Every generator is an extension of
   its own, and no language extension contributes to docs.
@@ -629,7 +630,7 @@ The brief's fourth thought. What exists twice today:
 | Job | footman | workshop docs extension | Destination |
 | --- | --- | --- | --- |
 | a task tree as pages | `livery.footman.markdown.render_site`, public; `fm docs site` renders the invoking project's tree | `_taskref` renders one provider in isolation by spawning `fm --tasks-file=<probe> --json --list`, then `render_site` | one renderer: `livery.footman.docs.site` takes `provider=` and renders that plugin in isolation in-process; the task reference generator calls it and assembles the nav. A change to footman, allowed by the brief |
-| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curated page, `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and `api = false` go; footman's reference is the generator's like every package's; the curated grouping becomes an authored page linking into it |
+| footman's API reference | `fm footman.pages` writes a curated page from `_API_SECTIONS`, validated against `__all__`; footman's contract sets `[docs] api = false` | the mkdocstrings extension's generator writes one page per module | the curation becomes authored pages footman owns, each name a mkdocstrings directive in the order and with the prose of today's table; the mkdocstrings generator's `curated` option writes no per-module pages and checks every export is placed and no directive names a vanished name; `_API_SECTIONS`, `_API_OMITTED`, `_api_markdown` and the page writer go (open item 2) |
 | errors-and-notes page, the config, notes and globals tables, the example render, the latest-release admonition | `fm footman.pages` | | stays footman's generator verb, declared as today; a generator whose `run` calls it |
 
 Two mechanisms for the API reference are the one real duplication;
@@ -729,12 +730,15 @@ fails there.
 
 **Where #1204's check runs, and the ratchet.** The reach check is a
 `[rules.<name>]` entry of the python extension, on by default wherever
-python is listed (Willem, 2026-10-07: a generally useful check that
-comes with python support), read by `layering.imports` over python's
-`REFERENCES` reader in the one parse (contract 16). It judges every
-package's sources, never its tests, per changed file and whole when the
-graph changed, and refuses each reach by file and line; a package turns
-it off through the check's options like any other. Its allowance is a
+python is listed (open item 1 holds the reasoning), read by
+`layering.imports` over python's `REFERENCES` reader in the one parse
+(contract 16). It judges every package's sources, never its tests, per
+changed file and whole when the graph changed, and refuses each reach
+by file and line. The rule is an option of that check,
+`private-reaches`, default true, declared by the python extension and
+set at `[checks.layering.imports]`, so a workspace that shares privates
+across its own distributions on purpose turns it off in one line
+instead of growing an allowance. Its allowance is a
 contract key the python extension declares at the root,
 `[python] private-reaches`, a list of `{ from, into, name, reason }`
 tables: facts of the workspace in the contract, the rule in code. The
@@ -905,7 +909,8 @@ docs extension's dynamic fragment with contributed tables; `Extractor`
 and `KindRecord.coverage_pages` go. `livery-extensions-mkdocstrings`,
 its own distribution requiring `docs`: the python generator, the
 handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
-`griffelib`, the keys `[docs] api` and `[docs] python-paths`; the
+`griffelib`, the generator's `paths` option at `[generators.mkdocstrings]`
+(`[docs] api` stays docs'); the
 workshop wheel drops `griffelib`. pytest's `[for.docs]` table
 declares the coverage pages generator. The docs extension reads
 both through `contributions_for("docs")` and names no language. The
@@ -963,11 +968,15 @@ reference. If the spike finds no workable route, 12c becomes a
 follow-up issue and the plan's open item 11 records why.
 
 **12d, footman's docs onto one mechanism.** `livery.footman.docs.site`
-takes `provider=`; the task reference generator calls it; footman's
-curated API page and `[docs] api = false` go, its reference rendered by
-the mkdocstrings extension's generator; the rest of `fm footman.pages` stays a declared
-generator. Acceptance: `fm docs.build` renders footman's reference
-with every exported name present (`test_the_reference_lists_every_export`);
+takes `provider=`; the task reference generator calls it. footman's
+Python reference becomes authored pages with mkdocstrings directives
+in today's order and prose, under the mkdocstrings generator's
+`curated` option, which validates them; `_API_SECTIONS`,
+`_api_markdown` and the page writer go, and the rest of
+`fm footman.pages` stays a declared generator. Acceptance, refusals
+first: `test_a_curated_package_with_an_unplaced_export_refuses_naming_it`,
+`test_a_directive_naming_a_vanished_name_refuses`; `fm docs.build`
+renders footman's reference with every exported name present;
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
 
 ### Phase 13: the release train through phases
@@ -1089,11 +1098,19 @@ the stack, which this design neither needs nor rules out).
   (contract 28 stands); the hosted lane is a `host()` seam in footman;
   Doxygen XML to Markdown is the C++ route; docs ships apart after the
   package extensions. All closed as recommended.
-- Willem, 2026-10-07: the reach check is a generally useful check that
-  comes with python support and defaults to on. So it is the python
-  extension's rule, on wherever python is listed, with
-  `[python] private-reaches` as its allowance (phase 11b), and the
-  housekeeping extension keeps the layout rules alone.
+- 2026-10-07: Willem asked whether the reach check is a generally
+  useful check that should come with python support and default to
+  on, and asked for the agent's opinion. The opinion, written into the
+  design as its position and open until ruled (open item 1): yes, the
+  python extension's rule, on wherever python is listed, an option of
+  `layering.imports` to turn off, `[python] private-reaches` as its
+  allowance (phase 11b); the housekeeping extension keeps the layout
+  rules alone.
+- Willem, 2026-10-07: a generator's own settings split by meaning,
+  option (c): `[docs] api` stays the docs extension's key, and a
+  generator's settings are its options set at `[generators.<name>]`,
+  as a check's are at `[checks.<tool>.<role>]`. No "keys under
+  another's table" mechanism.
 - Willem, 2026-10-07: every API change lands together and
   `api-version` stays 1 until the workshop keeps backwards
   compatibility; livery is the only repository that uses it, so no
@@ -1120,33 +1137,22 @@ the stack, which this design neither needs nor rules out).
 Each with its options, what each option does not cover, and a
 recommendation. Owner: Willem, unless named.
 
-1. **Where a generator's own settings live in a package's contract.**
-   Today `[docs] api = false` declines a package's reference and
-   `[docs] python-paths` adds search paths for the python handler; both
-   are read by the python backend and declared by the base. Three
-   options:
-   (a) The mkdocstrings extension declares both under `[docs]`, live
-   while both extensions are listed. It keeps every documentation
-   setting in one table, which is where a reader looks. It does not
-   cover ownership: the table's owner does not know all its keys, so
-   the refusal for `[docs] python-paths` in a workspace without
-   mkdocstrings names the key as unknown and `fm explain` has to say
-   which extension would declare it.
-   (b) Each generator keeps its own table, `[mkdocstrings] paths`. One
-   table, one owner, and the refusal names the extension. It does not
-   cover the reader's expectation that documentation settings sit
-   under `[docs]`, and it spreads them over `[docs]`, `[mkdocstrings]`
-   and `[doxygen]`.
-   (c) Split by meaning, on the pattern checks already use. "No
-   reference for this package" is the docs extension's own concept
-   whatever the generator, so `[docs] api = false` stays docs' key. A
-   generator's own settings are its options, declared on the generator
-   as a check declares `options`, and set in a package's contract at
-   the generator's address, `[generators.mkdocstrings] paths = [...]`,
-   as a check's are set at `[checks.ruff.format]`. One owner per table,
-   one place for documentation-wide settings, and no new mechanism:
-   the "keys under another's table" rule is not needed.
-   Recommendation: (c).
+1. **The reach check: python's and on by default, or housekeeping's.**
+   (a) The python extension's rule, on wherever python is listed, with
+   a `private-reaches` option on `layering.imports` to turn it off and
+   `[python] private-reaches` as the allowance. The unit it protects,
+   a distribution's underscore modules and names, is Python
+   packaging's own convention, not a house opinion; every workspace
+   with two distributions benefits and one with one pays nothing. It
+   does not cover a workspace that shares privates across its own
+   distributions on purpose, which turns the option off. basedpyright's
+   `reportPrivateUsage` overlaps on names and differs on modules (its
+   unit is the module), so the rule is not redundant and a workspace
+   without basedpyright still has it.
+   (b) The housekeeping extension's rule, beside the layout rules. It
+   does not cover a workspace that lists no housekeeping, which then
+   has no reach check, and it files a packaging convention under house
+   style. The agent's opinion, asked for on 2026-10-07: (a).
 2. **footman's curated API page.** `fm footman.pages` writes
    `docs/_generated/api.md` from `_API_SECTIONS`, a table of sections
    with a sentence of prose each and the exported names in a chosen
