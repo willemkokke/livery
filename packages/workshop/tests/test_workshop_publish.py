@@ -537,11 +537,71 @@ def test_the_member_pairs_name_each_member_from_its_contract_at_the_ref(
     ]
 
 
+def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
+    train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, git, registry, _spans = train
+    sha = _squash(root, ("base", "left", "right"))
+    # base's project exists already; the legs are new.
+    registry.serve("livery-base", "0.2.0")
+    attempted: list[str] = []
+
+    def _limited(package: Package, **kwargs: object) -> bool:
+        if package.name == "livery-base":
+            registry.serve(package.name, "0.3.0")
+            return True
+        attempted.append(package.name)
+        raise SystemExit(
+            "uv publish exited 2: Server returned status code 429 Too Many"
+            " Requests. Server says: 429 Too many new projects created"
+        )
+
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _limited)
+    with pytest.raises(_FAILURES) as caught:
+        publish_release(
+            root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+        )
+    message = str(caught.value)
+    assert "refuses more new projects for now" in message
+    assert "livery-left, livery-right" in message
+    assert "workflow.release.dispatch" in message
+    # The new projects upload one at a time, and the one after a
+    # refusal does not try.
+    assert len(attempted) == 1
+
+
+def test_new_projects_upload_one_at_a_time(
+    train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, git, registry, _spans = train
+    sha = _squash(root, ("base", "left", "right"))
+    registry.serve("livery-base", "0.2.0")
+    uploads: dict[str, tuple[float, float]] = {}
+
+    def _slow(package: Package, **kwargs: object) -> bool:
+        start = time.monotonic()
+        time.sleep(0.1)
+        registry.serve(package.name, "0.3.0")
+        uploads[package.name] = (start, time.monotonic())
+        return True
+
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _slow)
+    publish_release(
+        root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+    )
+    left, right = uploads["livery-left"], uploads["livery-right"]
+    assert left[1] <= right[0] or right[1] <= left[0]
+
+
 def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
     train,
 ) -> None:
     root, git, registry, spans = train
     sha = _squash(root, ("base", "left", "right", "apex"))
+    # Projects the registry already knows: only a new project's first
+    # upload waits for another's.
+    for member in ("base", "left", "right", "apex"):
+        registry.serve(f"livery-{member}", "0.2.0")
     receipts = publish_release(
         root,
         git,
