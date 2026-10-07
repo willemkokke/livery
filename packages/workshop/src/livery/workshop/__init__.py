@@ -52,7 +52,13 @@ registry an artifact kind goes to, [livery.workshop.registry][], a
 provider, [livery.workshop.release_notes][], which answers the
 [livery.workshop.ReleaseNotes][] protocol. A file an extension
 writes outside the engine opens with
-[livery.workshop.generated_header][].
+[livery.workshop.generated_header][]. What a CI run changed
+against the base it measures from is [livery.workshop.ci_changes][].
+The guidance for one reader, [livery.workshop.AGENT][] or
+[livery.workshop.HUMAN][], is the composed set of
+[livery.workshop.Prose][] fragments [livery.workshop.guidance][]
+answers; and what the listed extensions declare for an extension
+is [livery.workshop.contributions_for][].
 """
 
 from __future__ import annotations
@@ -77,6 +83,7 @@ if TYPE_CHECKING:
     from livery.workshop._checks import selected_files as selected_files
     from livery.workshop._contract import read_contract as read_contract
     from livery.workshop._coverage_store import workspace_suite as workspace_suite
+    from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
     from livery.workshop._extensions import workspace_root as workspace_root
     from livery.workshop._forge_lane import forge_repository as forge_repository
@@ -91,7 +98,12 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import verify_workspace as verify_workspace
+    from livery.workshop._prose import AGENT as AGENT
+    from livery.workshop._prose import HUMAN as HUMAN
+    from livery.workshop._prose import Prose as Prose
+    from livery.workshop._prose import guidance as guidance
     from livery.workshop._provenance import generated_header as generated_header
+    from livery.workshop._quality import ci_changes as ci_changes
     from livery.workshop._registries import RegistryTarget as RegistryTarget
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
@@ -103,6 +115,8 @@ if TYPE_CHECKING:
 __version__ = "0.6.0"
 
 __all__ = [
+    "AGENT",
+    "HUMAN",
     "NONE",
     "PACKAGE",
     "PACKAGES",
@@ -112,17 +126,21 @@ __all__ = [
     "Edge",
     "GateContext",
     "Package",
+    "Prose",
     "RegistryTarget",
     "ReleaseNotes",
     "RunContext",
     "__version__",
     "check_option",
+    "ci_changes",
     "ci_run",
     "compile_commands",
+    "contributions_for",
     "discover_packages",
     "extension_names",
     "forge_repository",
     "generated_header",
+    "guidance",
     "kind_examples",
     "public_modules",
     "read_contract",
@@ -144,25 +162,31 @@ __all__ = [
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
+    "AGENT": "livery.workshop._prose",
     "Changes": "livery.workshop._influence",
     "Edge": "livery.workshop._packages",
     "GateContext": "livery.workshop._checks",
+    "HUMAN": "livery.workshop._prose",
     "NONE": "livery.workshop._checks",
     "PACKAGE": "livery.workshop._checks",
     "PACKAGES": "livery.workshop._checks",
     "PATHS": "livery.workshop._checks",
     "Package": "livery.workshop._packages",
+    "Prose": "livery.workshop._prose",
     "RegistryTarget": "livery.workshop._registries",
     "ReleaseNotes": "livery.workshop._release_notes",
     "RunContext": "livery.workshop._state",
     "WHOLE": "livery.workshop._checks",
     "check_option": "livery.workshop._checks",
+    "ci_changes": "livery.workshop._quality",
     "ci_run": "livery.workshop._state",
     "compile_commands": "livery.workshop._kinds",
+    "contributions_for": "livery.workshop._extensions",
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
     "forge_repository": "livery.workshop._forge_lane",
     "generated_header": "livery.workshop._provenance",
+    "guidance": "livery.workshop._prose",
     "kind_examples": "livery.workshop._kinds",
     "public_modules": "livery.workshop._kinds",
     "read_contract": "livery.workshop._contract",

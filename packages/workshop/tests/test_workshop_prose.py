@@ -320,6 +320,59 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
     assert "voice.tone.md" not in _names(root, listed, None)
 
 
+def _in_play(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **brand: str) -> Path:
+    """A workspace stacking the base and acme.brand, with its own fragments."""
+    root = _workspace(tmp_path, "acme.brand")
+    contents = {
+        "livery.workshop": WORKSHOP_CONTENT,
+        "acme.brand": _extension(tmp_path, "acme.brand", **brand),
+    }
+    monkeypatch.setattr(
+        "livery.workshop._extensions.stack_names",
+        lambda root: ("livery.workshop", "acme.brand"),
+    )
+    monkeypatch.setattr("livery.workshop._extensions.extension_content", contents.get)
+    return root
+
+
+def test_guidance_refuses_two_fragments_in_play_of_one_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored
+) -> None:
+    from livery.workshop import HUMAN, guidance
+
+    root = _in_play(tmp_path, monkeypatch, rules__house="# theirs\n")
+    (root / "fragments").mkdir()
+    (root / "fragments" / "rules.house.md").write_text("# ours\n")
+    with pytest.raises(ValueError, match=r"two fragments deliver as rules\.house\.md"):
+        guidance(root, HUMAN)
+
+
+def test_guidance_is_one_readers_set_of_every_fragment_in_play(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored
+) -> None:
+    from livery.workshop import AGENT, HUMAN, Prose, guidance
+
+    root = _in_play(
+        tmp_path,
+        monkeypatch,
+        voice__tone__agent="# terse\n",
+        voice__tone__human="# warm\n",
+    )
+    (root / "fragments").mkdir()
+    (root / "fragments" / "rules.own.md").write_text("# ours\n")
+    human = guidance(root, HUMAN)
+    assert all(isinstance(prose, Prose) for prose in human)
+    tone = [p for p in human if p.topic == "tone"]
+    assert [p.text(root, HUMAN) for p in tone] == ["# warm\n"]
+    # The repository's own comes last in its section, after the base's.
+    rules = [p.name for p in human if p.section == "rules" and p.source is not None]
+    assert rules == ["rules.workshop.md", "rules.own.md"]
+    agent = guidance(root, AGENT)
+    assert [p.text(root, AGENT) for p in agent if p.topic == "tone"] == ["# terse\n"]
+    # The same set the fragments function gives over what is in play.
+    assert human == fragments(root, _prose.in_play(root), HUMAN)
+
+
 def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_reader(
     tmp_path: Path, restored, python_checks: object
 ) -> None:

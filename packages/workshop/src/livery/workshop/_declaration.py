@@ -127,6 +127,9 @@ class Declaration:
         options: Each option a listing may turn on, to what it turns on.
         additions: What it adds whenever it is mounted.
         targets: What it adds to each target while the target is listed.
+        target_tables: Each ``[for.<target>]`` table as the file holds it.
+        tables: The file's top-level tables but ``[extension]`` and
+            ``[for]``, as the file holds them.
         replaces: Each earlier extension's shipped file, ``<owner>:<name>``,
             its own file of that name replaces, to the reason.
         deletes: Each earlier extension's shipped file it deletes, to the
@@ -145,6 +148,10 @@ class Declaration:
     options: dict[str, str] = field(default_factory=dict[str, str])
     additions: Additions = Additions()
     targets: dict[str, Additions] = field(default_factory=dict[str, Additions])
+    target_tables: dict[str, dict[str, Any]] = field(
+        default_factory=dict[str, dict[str, Any]]
+    )
+    tables: dict[str, Any] = field(default_factory=dict[str, Any])
     replaces: dict[str, str] = field(default_factory=dict[str, str])
     deletes: dict[str, str] = field(default_factory=dict[str, str])
     slots: tuple[DeclaredSlot, ...] = ()
@@ -313,6 +320,12 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         options=options,
         additions=additions,
         targets=targets,
+        target_tables={
+            str(target): dict(table) for target, table in data.get("for", {}).items()
+        },
+        tables={
+            key: value for key, value in data.items() if key not in ("extension", "for")
+        },
         replaces={str(ref): str(why) for ref, why in data.get("replaces", {}).items()},
         deletes={str(ref): str(why) for ref, why in data.get("deletes", {}).items()},
         slots=tuple(

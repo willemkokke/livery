@@ -46,7 +46,7 @@ from livery.extensions.docs._contract import (
 )
 from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import doc, fail, group
-from livery.workshop import _extensions, read_contract, slot
+from livery.workshop import HUMAN, _extensions, guidance, read_contract, slot
 from livery.workshop._docs_contract import (
     GENERATED,
     GENERATED_DIR,
@@ -61,14 +61,6 @@ from livery.workshop._navblocks import (
     nav_block_file,
 )
 from livery.workshop._packages import Package, discover_packages, release_tag
-from livery.workshop._prose import (
-    HUMAN,
-    Prose,
-    fragments,
-    repository_fragments,
-    sections,
-    shipped,
-)
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
 SITE_CONFIG = "zensical.toml"
@@ -1946,17 +1938,6 @@ def docs_serve(
 DEVELOPMENT = "docs/development"
 
 
-def _shipped_prose(root: Path) -> list[Prose]:
-    """Every fragment in play: the mounted extensions' shipped sets, then the own."""
-    listed: list[Prose] = []
-    for extension in _extensions.stack_names(root):
-        content = _extensions.extension_content(extension)
-        if content is not None:
-            listed += shipped(extension, content)
-    listed += repository_fragments(root)
-    return listed
-
-
 def _demoted(text: str) -> str:
     """*text* with every ATX heading one level deeper, under the page's own title."""
     return re.sub(r"^(#{1,5}) ", r"#\1 ", text, flags=re.M)
@@ -1973,14 +1954,13 @@ def development_content(root: Path) -> dict[str, list[str]]:
     The pages and the nav both read this, so the nav entry never waits
     on a page a previous build wrote.
     """
+    # The guidance comes in section order, so the sections keep it.
     by_section: dict[str, list[str]] = {}
-    for prose in fragments(root, _shipped_prose(root), HUMAN):
+    for prose in guidance(root, HUMAN):
         text = prose.text(root, HUMAN).strip()
         if text:
             by_section.setdefault(prose.section, []).append(text)
-    return {
-        section: by_section[section] for section in sections() if section in by_section
-    }
+    return by_section
 
 
 def generate_development_pages(root: Path) -> list[str]:
@@ -1988,7 +1968,7 @@ def generate_development_pages(root: Path) -> list[str]:
 
     A section with no fragment for a human reader gets no page; a
     page carries each fragment's markdown in the order
-    [livery.workshop._prose.fragments][] gives, headings demoted under
+    [livery.workshop.guidance][] gives, headings demoted under
     the page's title. The index lists the pages. Rebuilt whole.
     """
     base = root / DEVELOPMENT

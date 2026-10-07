@@ -806,40 +806,31 @@ def unread_by_the_job(root: Path, point: str, job: str) -> str:
     Only a job that declares ``inputs`` skips, and only on a pull
     request's run in a workspace declaring ``[ci] affected-legs``, the
     terms the check legs narrow on: a push, a dispatch, the clock and a
-    person's own run always run every entry. The diff against the base
-    branch is read the way the check legs read it, and the inputs
-    select as a check's do, so a change to the sources of the extension
-    that contributed the job runs it.
+    person's own run always run every entry. The changes are the run's
+    own ([livery.workshop.ci_changes][]), read the way the check legs
+    read them, and the inputs select as a check's do, so a change to
+    the sources of the extension that contributed the job runs it.
     """
     from livery.workshop._extensions import extension_provider
-    from livery.workshop._git_ops import GitError, GitOps
-    from livery.workshop._influence import Changes, select
+    from livery.workshop._influence import select
     from livery.workshop._packages import discover_packages
-    from livery.workshop._quality import ci_affected_base
+    from livery.workshop._quality import ci_changes
 
     declared = next(
         (item for item in point_by_name(root)[point].jobs if item.name == job), None
     )
     if declared is None or declared.inputs is None:
         return ""
-    run = run_context()
-    base = ci_affected_base(root, run) if run is not None else ""
-    if not base:
-        return ""
-    git = GitOps(root)
-    try:
-        git.fetch()
-        paths = tuple(git.changed_paths(base))
-    except GitError as error:
-        print(f"  {point}/{job}: no diff against origin/{base}; running ({error})")
+    changes = ci_changes(root)
+    if changes is None:
         return ""
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     provider = extension_provider(contributor_of(point, job), packages)
-    if select(declared.inputs, Changes(root, paths), provider=provider).runs:
+    if select(declared.inputs, changes, provider=provider).runs:
         return ""
     return (
-        f"  {point}/{job}: nothing the job reads changed against origin/{base}"
-        f" ({len(paths)} path(s) changed); its entries are skipped"
+        f"  {point}/{job}: nothing the job reads changed in this run"
+        f" ({len(changes.paths)} path(s) changed); its entries are skipped"
     )
 
 

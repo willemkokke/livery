@@ -127,6 +127,7 @@ _REPLACED = frozenset(
         "_contract",
         "_forge_lane",
         "_influence",
+        "_prose",
         "_provenance",
         "_registries",
         "_release_notes",
