@@ -73,7 +73,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import verify_workspace as verify_workspace
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "PACKAGE",

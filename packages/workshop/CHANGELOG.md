@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.6.0] - 2026-10-07
+
+### Added
+
+- A package may live in a group directory under packages/, its member and receipt taking the longer path, and a seed's import path follows its distribution name by @willemkokke
+- Adding or removing a package affects that package alone, not every package through the root files by @willemkokke
+- Fm sync --locked changes nothing a commit holds, CI is set up by it, and fm submit checks the locks before it pushes by @willemkokke
+- Each workspace check runs when the files it reads change, on those files, and the root files no package reads affect no package by @willemkokke
+- A rate-limited forge response names when the budget returns, and a watch waits for it and slows while it runs low by @willemkokke
+- The local gate resolves the cross-references in docstrings as the API site does by @willemkokke
+- A checkout that never synced is set up by its first command, fm sync --frozen changes nothing a commit holds, fm env.check judges this host's tools, and lint.docrefs reads any source layout by @willemkokke
+- CI's check legs measure a change from the nearest tree CI's record proves, an earlier push's merge rebuilt among them, as the local gate does by @willemkokke
+- Ruff runs as its own extension, a birth finishes in the newborn's own fm, and the local loop tests an extension before its release by @willemkokke
+- Fm ci.e2e --extension=<name> tests one extension in isolation: a birth that lists it, the members of its checks' kinds, the gate on the runner by @willemkokke
+- Basedpyright runs as its own extension, with type completeness as its option, and an extension's entry turns its options on by @willemkokke
+- Mypy runs as its own extension, configured by the root mypy.ini, with a cache per platform under the workshop's state by @willemkokke
+- Ty runs as its own extension, configured by the root ty.toml, and recommends its editor extension by @willemkokke
+- Pyrefly runs as its own extension, configured by the root pyrefly.toml, and the base checks no types by @willemkokke
+- Clang-format runs as its own extension, with each native package's .clang-format, and a package's files are its checks' kinded fragments by @willemkokke
+- Clang-tidy runs as its own extension, over the compilation database its package's kind says the build writes by @willemkokke
+- Pytest runs as its own extension, configured by the root pytest.toml and .coveragerc, and the python kind's test runner collects only the packages it is handed by @willemkokke
+- A check's own verb hands the tool it wraps the words after --, and fm check and the role verbs refuse them, naming the verbs that take them by @willemkokke
+- Conan members resolve from their sources through a rendered conanws.yml instead of editables registered in the conan home, so checkouts never collide and nothing outlives a workspace by @willemkokke
+- Every distribution root declares its public names in its __init__.py and serves what need not load on first use, and the api modules go by @willemkokke
+
+### Fixed
+
+- The local loop passes on a fresh environment again, and a build leaves no docs copy in the source tree by @willemkokke
+- Fm start is a verb again: its task decorator sits on start, not on the helper inserted above it by @willemkokke
+- Work started inside a worktree lands beside the rest, and an abandon says where the checkout is by @willemkokke
+- A rebase or merge whose only conflicts are the render's receipts merges them key by key and goes on by @willemkokke
+- A dev build's changelog excerpt asks the forge for no author, and a refused lookup tells a spent API budget from a refused token by @willemkokke
+- A sync that installs an extension the workspace lists continues with it mounted, so one sync renders its files by @willemkokke
+- The workshop wheel's isolated release legs pass: it declares griffelib, and its tests need no extension it lacks and leave a fresh clone unsynced by @willemkokke
+- A tool's graph lock writes what the resolution decides and no path of the run, so re-locking an unchanged version changes nothing by @willemkokke
+- Fm sync mounts every listed extension before it renders or locks, and the re-run guard counts each cause once, so a sync onto commits listing new extensions converges and removes nothing by @willemkokke
+- The root .gitignore ignores a native member's coverage lines file again, beside the other coverage data, and still tracks .coveragerc by @willemkokke
+- Fm sync installs a newly listed extension's distribution when uv sync cannot, then mounts it in a fresh process, instead of refusing it by @willemkokke
+- A flag on by default is named in help by its own spelling beside its own text, and says it is on by default and how to turn it off by @willemkokke
+- The abort reconcile spawns the runner by its real module, two footman invariant tests scan the real tree again, the push guard tests the branch a push names, and the review's smaller faults go by @willemkokke
+
+### Changed
+
+- Footman's internal modules are private, every public module under a root is its api or declared there, and other packages' sources reach footman through its api by @willemkokke
+- The reconcile spawn's test brings its own workspace, so the workshop wheel's isolated release leg runs it outside any checkout by @willemkokke
+
 ## [0.5.0] - 2026-10-04
 
 ### Added
