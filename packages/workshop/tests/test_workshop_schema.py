@@ -60,7 +60,7 @@ def test_a_key_the_author_names_is_no_fixed_property() -> None:
     schema = compose("extension", None)
     options = schema["properties"]["options"]
     assert "properties" not in options
-    assert options["additionalProperties"] == {"type": "string"}
+    assert options["additionalProperties"]["type"] == "string"
     assert problems(schema, {"options": {"deep": "judges deeper"}}) == []
     assert problems(schema, {"options": {"deep": 3}}) == [
         "options.deep is an integer (3); it takes a string"

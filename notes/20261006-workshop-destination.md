@@ -1325,6 +1325,17 @@ the stack, which this design neither needs nor rules out).
   dot, and `plugin-is-an-entry-point` holds an `extension.toml`'s
   plugin to an installed `footman.tasks` entry point. The clauses that
   read a declaration share one reader and one walk over its tables.
+- 2026-10-07, the verification (#1278), fourth part: every key the
+  base declares carries a doc, which the composed schema gives the
+  editor as the key's hover text, and the kit's
+  `contract-keys-documented` clause asks the same of an extension's
+  `[contract]` tables. One key holds none: an option's own table
+  declares a child named `doc`, and TOML gives one value per name, so
+  `checks.*.*.options.*` cannot carry a string `doc` beside it. A job's
+  `inputs` loses `per-file`, which a job, running its entries or
+  skipping them, never reads; `registries.python.prerelease` takes uv's
+  five values. The research behind the docs found #1273, #1275, #1276
+  and #1277.
 - Willem, 2026-10-07: keep the composed `.taplo.toml` that points the
   editor at each contract's schema (#1256).
 - Willem, 2026-10-07: a CI job an extension contributes takes the run's

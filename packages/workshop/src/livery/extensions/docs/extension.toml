@@ -29,6 +29,7 @@ doc = "the verbs that write the package's pages: a verb's name, or a table with 
 
 [contract.package.docs."generators[]"]
 types = ["str", "table"]
+doc = "one generator: a verb's name, or a table with the verb and the system packages it needs"
 verb = { types = ["str"], doc = "the verb, a task the package ships" }
 requires = { types = ["strs"], doc = "the system packages the verb needs on a docs machine" }
 
@@ -39,6 +40,7 @@ doc = "the static coverage reports the package's own tooling writes"
 
 [contract.package.docs."coverage[]"]
 types = ["table"]
+doc = "one report: its name on the page and its directory"
 label = { types = ["str"], doc = "the report's name on the page" }
 path = { types = ["str"], doc = "the report's directory, relative to the package" }
 
@@ -52,6 +54,7 @@ doc = "scripts for the package's pages: a path, or a table with its attributes"
 
 [contract.package.docs."extra-javascript[]"]
 types = ["str", "table"]
+doc = "one script: a path, or a table with its path and the script element's attributes"
 path = { types = ["str"], doc = "the script, relative to the package's docs/" }
 type = { types = ["str"], doc = "the script element's type" }
 defer = { types = ["bool"], doc = "whether the script runs after the page parses" }

@@ -17,101 +17,132 @@
 
 [contract.root.ci]
 types = ["table"]
+doc = "how the CI runs: its runners, its Pythons, its scheduled tasks, its traces and its merge policy"
 
 [contract.root.ci.affected-legs]
 types = ["bool"]
+doc = "whether a pull request's check legs run only the packages its change can reach, the others' results read from the coverage store; false when absent"
 
 [contract.root.ci.automerge]
 types = ["bool"]
+doc = "whether fm submit arms auto-merge when neither --armed nor WORKSHOP_AUTOMERGE decides; false when absent"
 
 [contract.root.ci.profile]
 types = ["bool"]
+doc = "whether every CI job keeps a trace of what it ran; true when absent"
 
 [contract.root.ci.profile-into]
 types = ["str"]
+doc = "where an assembled trace lands, relative to the root unless absolute; .workshop/profiles when absent"
 
 [contract.root.ci.profile-keep]
 types = ["int"]
+doc = "how many assembled traces stay where they land, 0 keeping every one; 50 when absent"
 
 [contract.root.ci.profile-window]
 types = ["int"]
+doc = "how many runs' traces the trace refs keep, 0 keeping none; 100 when absent"
 
 [contract.root.ci.python-versions]
 types = ["strs"]
+doc = "the Pythons the CI runs, such as 3.14, or 3.14t for a free-threaded build; the root project's floor and the newest supported minor when absent, the gate running the newest alone"
 
 [contract.root.ci.required-context]
 types = ["str"]
+doc = "the check branch protection requires before a merge; gate when absent, which is the verdict job's name"
 
 [contract.root.ci.runners]
 types = ["strs"]
+doc = "the runner labels the check legs fan out to, the first one running every single-runner job; ubuntu-latest when absent"
 
 # A scheduled entry; `every` takes the cadences
 # livery.workshop._points.CADENCES names, which a test holds equal.
 [contract.root.ci.schedule]
 types = ["list"]
+doc = "the tasks the workspace adds to its points' jobs, after the builtin ones; none when absent"
 
 [contract.root.ci."schedule[]"]
 types = ["table"]
+doc = "one scheduled task: the point and job it runs in, its arguments and its cadence"
 
 [contract.root.ci."schedule[]".args]
 types = ["strs"]
+doc = "the task's arguments, each formatted with the run's facts: {display}, {label}, {os}, {python}, and a dispatch input such as {ref}; none when absent"
 
 [contract.root.ci."schedule[]".every]
 types = ["str"]
+doc = "how often the task runs: 1w on Mondays, 2w on the Mondays of even ISO weeks; every run of the point when absent"
 values = ["1w", "2w"]
 
 [contract.root.ci."schedule[]".job]
 types = ["str"]
+doc = "the job of the point the task runs in; the job named after the point when absent"
 
 [contract.root.ci."schedule[]".point]
 types = ["str"]
+doc = "the point the task runs at: gate, merge, nightly, release, or a point a package contributes"
 
 [contract.root.ci."schedule[]".task]
 types = ["str"]
+doc = "the task to run, by the dotted name the workspace mounts it under"
 
 [contract.root.ci.speed-marks]
 types = ["bool"]
+doc = "whether the gate judges each leg's test time against its recorded mark, a second slow run in a row going red; false when absent"
 
 [contract.root.ci.windows-temp]
 types = ["str"]
+doc = "where a Windows check leg keeps its temporary files: runner on the runner's working drive, system on the system's; runner on GitHub and system elsewhere when absent"
 values = ["runner", "system"]
 
 [contract.root.docs]
 types = ["table"]
+doc = "the documentation site: its address, its title, its description and where it publishes"
 
 [contract.root.docs.site-url]
 types = ["str"]
+doc = "the site's public address, ending in a slash, for its canonical links, its llms.txt and the task links in --help; no task links when absent"
 
 [contract.root.forge]
 types = ["table"]
+doc = "where the repository lives: the forge's kind, its owner and its server"
 
 [contract.root.forge.kind]
 types = ["str"]
+doc = "the forge that hosts the repository: github, gitea or gitlab"
 values = ["github", "gitea", "gitlab"]
 
 [contract.root.forge.owner]
 types = ["str"]
+doc = "the user or organisation that owns the repository on the forge"
 
 [contract.root.forge.url]
 types = ["str"]
+doc = "the forge server's web address; github.com on GitHub, and GITEA_URL or GITLAB_URL from the environment otherwise, when absent"
 
 [contract.root.issues]
 types = ["table"]
+doc = "the issue verbs' policy"
 
 [contract.root.issues.assignees]
 types = ["int"]
+doc = "how many people one issue may have assigned at once; 1 when absent"
 
 [contract.root.owners]
 types = ["table"]
+doc = "who owns the workspace's governance: the root contract and the code owners file"
 
 [contract.root.owners.approvals]
 types = ["int"]
+doc = "how many of the owners' approvals a merge needs; 0 when absent, so review goes to them without being required"
 
 [contract.root.owners.teams]
 types = ["strs"]
+doc = "the forge teams, under the forge's owner, that own the root contract and the code owners file"
 
 [contract.root.owners.users]
 types = ["strs"]
+doc = "the forge users who own the root contract and the code owners file"
 
 # The package registries: an address per kind, or a table naming the
 # read and publish addresses; an index with an ecosystem default may
@@ -119,134 +150,177 @@ types = ["strs"]
 # livery.workshop._registries, and a test holds them equal.
 [contract.root.registries]
 types = ["table"]
+doc = "where each kind of artifact is read and published: conan, container, python; an environment variable for a kind wins over its entry here"
 
 [contract.root.registries.conan]
 types = ["str", "table"]
+doc = "the conan remote: its address, or a table naming it; the forge's conan registry, else its releases, when absent"
 
 [contract.root.registries.conan.publish]
 types = ["str"]
+doc = "the conan remote's address when url is absent; conan reads and uploads at one address"
 
 [contract.root.registries.conan.url]
 types = ["str"]
+doc = "the conan remote's address: a URL or a local folder"
 
 [contract.root.registries.container]
 types = ["str", "table"]
+doc = "the container registry the site's image pushes to: its reference prefix, or a table naming it; ghcr.io/<owner> on GitHub and the forge's own on Gitea when absent"
 
 [contract.root.registries.container.publish]
 types = ["str"]
+doc = "the registry's reference prefix when url is absent; a container registry reads and pushes at one address"
 
 [contract.root.registries.container.url]
 types = ["str"]
+doc = "the registry's reference prefix, such as ghcr.io/<owner>"
 
 [contract.root.registries.python]
 types = ["str", "table"]
+doc = "the python index: its read address, or a table with its read and upload addresses; the forge's own on Gitea, else pypi.org, when absent"
 
 [contract.root.registries.python.prerelease]
 types = ["str"]
+values = ["disallow", "allow", "if-necessary", "explicit", "if-necessary-or-explicit"]
+doc = "uv's prerelease policy for the workspace's resolution; uv's own when absent"
 
 [contract.root.registries.python.publish]
 types = ["str"]
+doc = "where the release uploads its wheels; required for a declared index, or the release refuses"
 
 [contract.root.registries.python.url]
 types = ["str"]
+doc = "the index the workspace resolves from first, which the release also probes; the publish address when absent"
 
 [contract.root.release]
 types = ["table"]
+doc = "the release train's defaults for every member"
 
 [contract.root.release.prove-floors]
 types = ["bool"]
+doc = "whether a release tests each member against the lowest versions its requirements allow, a member's own setting winning; true when absent"
 
 # The tools the workspace pins. The modes are toolroom's
 # (livery.toolroom.store.MODES), which a test holds equal.
 [contract.root.tools]
 types = ["table"]
+doc = "the tools the workspace pins: the catalogue, the requirements, the host allowances, the modes and the mirrors"
 
 [contract.root.tools.host-allowed]
 types = ["strs"]
+doc = "the tools whose copy already installed on a machine is used instead of the store's; the kinds' allowances alone when absent"
 
 [contract.root.tools.index]
 types = ["str"]
+doc = "where the tool catalogue is read from: the published index's URL, or a directory of records relative to the root"
 
 [contract.root.tools.modes]
 types = ["table"]
+doc = "how named tools reach PATH, over their records' and kinds' modes"
 
 [contract.root.tools.modes."*"]
 types = ["str"]
+doc = "how the tool reaches PATH: link for its entry points in the checkout's bin, path for its own directories, none for neither; its record's or kind's mode when absent"
 values = ["link", "path", "none"]
 
 [contract.root.tools.requires]
 types = ["strs"]
+doc = "the tools the repository needs beyond its kinds', extensions' and members', each a name with an optional floor and host scope: git>=2.40, dotnet_coverage@windows"
 
 [contract.root.tools.sources]
 types = ["strs"]
+doc = "the mirrors the store tries before a tool's origin: folders relative to the root, or URLs"
 
 [contract.root.workspace]
 types = ["table"]
+doc = "the workspace's identity and stack: its name, description, namespace, authors, extensions and hosts"
 
 [contract.root.workspace.authors]
 types = ["list"]
+doc = "the project's authors; the first is the one its project file and licences name"
 
 [contract.root.workspace."authors[]"]
 types = ["table"]
+doc = "one author: a name and an email"
 
 [contract.root.workspace."authors[]".email]
 types = ["str"]
+doc = "the author's email; without it the root project file lists no authors"
 
 [contract.root.workspace."authors[]".name]
 types = ["str"]
+doc = "the author's name; '<project> authors' when absent"
 
 [contract.root.workspace.copyright-year]
 types = ["str"]
+doc = "the year the licences' copyright lines name"
 
 [contract.root.workspace.description]
 types = ["str"]
+doc = "the project's one-line description, for its project file and README; 'The <name> monorepo (virtual root).' when absent"
 
 [contract.root.workspace.extensions]
 types = ["list"]
+doc = "the extensions the workspace mounts, in precedence order"
 
 [contract.root.workspace."extensions[]"]
 types = ["str", "table"]
+doc = "one extension: its name with any options in brackets, or a table with its name and targets"
 
 [contract.root.workspace."extensions[]".for]
 types = ["strs"]
+doc = "the listed extensions this one contributes to; every listed one it declares a contribution for when absent"
 
 [contract.root.workspace."extensions[]".name]
 types = ["str"]
+doc = "the extension's name, with any options in brackets"
 
 [contract.root.workspace.hosts]
 types = ["strs"]
+doc = "the hosts the workspace supports and locks tools for: platforms or host keys, ! before one removing it; every host when absent"
 
 [contract.root.workspace.lfs]
 types = ["bool"]
+doc = "whether Git LFS is on: its tool, its hooks, the CI checkout and the extensions' LFS attributes; false when absent"
 
 [contract.root.workspace.name]
 types = ["str"]
+doc = "the project's name, for its project file, README and links; the workspace is unborn without it"
 
 [contract.root.workspace.namespace]
 types = ["str"]
+doc = "the dotted Python namespace the members import under, which starts each new member's name; the project's name in lower case, with underscores, when absent"
 
 # workshop.toml in a package's directory.
 
 [contract.package.categories]
 types = ["table"]
+doc = "categories the package gives its own paths, which win over its kind's rules"
 
 [contract.package.categories."*"]
 types = ["strs"]
+doc = "a category, by its name, to the paths it takes, as patterns relative to the package"
 
 [contract.package.checks]
 types = ["table"]
+doc = "options the package sets on its checks, by tool"
 
 [contract.package.checks."*"]
 types = ["table"]
+doc = "a tool's options: a value for all its checks, or a table per role"
 
 [contract.package.checks."*"."*"]
 types = ["any"]
+doc = "an option for every check of the tool, or a table of options for its check in that role"
 
 [contract.package.checks."*"."*"."*"]
 types = ["any"]
+doc = "an option of the tool's check in that role; the option's default when absent"
 
 [contract.package.ci]
 types = ["table"]
+doc = "the package's own CI: the points it adds and the runners that build its wheels"
 
 # A point a package contributes. It declares no grant, secret or
 # environment: a scheduled workflow with one on a public repository is
@@ -254,380 +328,498 @@ types = ["table"]
 # the root contract's decision.
 [contract.package.ci.point]
 types = ["list"]
+doc = "the scheduled points the package adds, each a workflow of its own"
 
 [contract.package.ci."point[]"]
 types = ["table"]
+doc = "one point: a workflow that runs one task on the clock and by dispatch"
 
 [contract.package.ci."point[]".args]
 types = ["strs"]
+doc = "the task's arguments, formatted with the run's facts: {display}, {label}, {os} and {python}; none when absent"
 
 [contract.package.ci."point[]".every]
 types = ["str"]
+doc = "how often the task runs: 1w on Mondays, 2w on the Mondays of even ISO weeks; every run when absent"
 values = ["1w", "2w"]
 
 [contract.package.ci."point[]".name]
 types = ["str"]
+doc = "the point's name, which its workflow file and its job take: lower-case letters, digits and dashes"
 
 [contract.package.ci."point[]".pythons]
 types = ["strs"]
+doc = "the Pythons the job runs on, one leg each; the newest Python the gate runs when absent"
 
 [contract.package.ci."point[]".runners]
 types = ["strs"]
+doc = "the runner labels the job runs on, one leg each; the root's [ci] runners when absent"
 
 [contract.package.ci."point[]".task]
 types = ["str"]
+doc = "the task the job runs, by its dotted name"
 
 [contract.package.ci.wheel-platforms]
 types = ["strs"]
+doc = "the runner labels that build the package's platform wheels, one leg each"
 
 [contract.package.depends]
 types = ["list"]
+doc = "the package's edges on other members of the workspace"
 
 [contract.package."depends[]"]
 types = ["table"]
+doc = "one edge: the member, what the edge is for, and the lowest version taken"
 
 [contract.package."depends[]".floor]
 types = ["str"]
+doc = "the lowest released version of the member the package takes, which its manifest must require"
 
 [contract.package."depends[]".kind]
 types = ["str"]
+doc = "what the edge is for, build or runtime, each matched against the package's manifest; build when absent"
 values = ["build", "runtime", "test", "tool"]
 
 [contract.package."depends[]".path]
 types = ["str"]
+doc = "the member depended on, by its directory from the workspace's root"
 
 [contract.package.description]
 types = ["str"]
+doc = "the package's one-line description; one naming the package and the project when absent"
 
 [contract.package.dev-extras]
 types = ["strs"]
+doc = "the extras the package's entry in the root's dev group installs"
 
 [contract.package.docs]
 types = ["table"]
+doc = "how the site documents the package"
 
 [contract.package.docs.api]
 types = ["bool"]
+doc = "whether the package's modules get API reference pages; true when absent"
 
 [contract.package.docs.python-paths]
 types = ["strs"]
+doc = "directories the API reference also reads modules from, relative to the package"
 
 [contract.package.extensions]
 types = ["strs"]
+doc = "the package-level extensions the package lists, by name"
 
 [contract.package.kind]
 types = ["str"]
+doc = "the package's kind, which decides how it builds, tests and releases: python, python-nanobind, cpp-conan, or one an extension registers"
 
 [contract.package.name]
 types = ["str"]
+doc = "the package's distribution name"
 
 [contract.package.owners]
 types = ["table"]
+doc = "who reviews the package, written into the forge's code owners file"
 
 [contract.package.owners.approvals]
 types = ["int"]
+doc = "how many of the owners' approvals a change to the package needs; 0 when absent"
 
 [contract.package.owners.teams]
 types = ["strs"]
+doc = "the forge teams that own the package, each under the root's [forge] owner"
 
 [contract.package.owners.users]
 types = ["strs"]
+doc = "the forge users who own the package"
 
 [contract.package.qa]
 types = ["table"]
+doc = "the package's coverage policy"
 
 [contract.package.qa.coverage-epsilon]
 types = ["number"]
+doc = "how far, in percentage points, coverage may fall below the floor; 0.5 when absent"
 
 [contract.package.qa.coverage-floor]
 types = ["number", "str"]
+doc = "the coverage the package keeps: a percentage, or auto-ratchet for the mark its CI runs record; nothing judged when absent"
 
 [contract.package.release]
 types = ["table"]
+doc = "how the release train releases the package"
 
 [contract.package.release.baseline]
 types = ["str"]
+doc = "the version the package's line continues from, for a package released elsewhere before; 0.0.0 when absent"
 
 [contract.package.release.prove-floors]
 types = ["bool"]
+doc = "whether a release tests the package against the lowest versions its requirements allow; the root's setting when absent"
 
 [contract.package.release.publish]
 types = ["bool"]
+doc = "whether the release uploads the package to its registry; true when absent, and a package that does not is still versioned, built and tagged"
 
 [contract.package.roles]
 types = ["table"]
+doc = "options the package sets on its checks, by role"
 
 [contract.package.roles."*"]
 types = ["table"]
+doc = "a role's options, for every check of the role, which the tool's tables override"
 
 [contract.package.roles."*"."*"]
 types = ["any"]
+doc = "an option for every check of the role; the option's default when absent"
 
 [contract.package.template]
 types = ["str"]
+doc = "the seed the package was born from"
 
 [contract.package.tools]
 types = ["table"]
+doc = "the tools the package needs beyond its kind's and its checks'"
 
 [contract.package.tools.requires]
 types = ["strs"]
+doc = "the tools the package requires, each a name with an optional floor and host scope"
 
 # extension.toml beside an extension's package.
 
 [contract.extension.checks]
 types = ["table"]
+doc = "the checks the extension registers while it is listed, by tool and role"
 
 [contract.extension.checks."*"]
 types = ["table"]
+doc = "a tool, by the one-word name its checks' verbs give it: pytest in fm test.pytest"
 
 [contract.extension.checks."*"."*"]
 types = ["table"]
+doc = "a check of that tool, by the one-word role it fills; it answers to <role>.<tool>"
 
 [contract.extension.checks."*"."*".after]
 types = ["strs"]
+doc = "the checks this one runs after in a gate, by name; none when absent"
 
 [contract.extension.checks."*"."*".arguments]
 types = ["bool"]
+doc = "whether the check's own verb hands its tool the words after --; false when absent, and the verb refuses them"
 
 [contract.extension.checks."*"."*".claims]
 types = ["list"]
+doc = "the categories the check judges, each with the rules it leaves out there and the suffixes it reads; when absent, the check's own code decides what it reads"
 
 [contract.extension.checks."*"."*"."claims[]"]
 types = ["table"]
+doc = "one category the check judges, with the rules it leaves out and the suffixes it reads there"
 
 [contract.extension.checks."*"."*"."claims[]".category]
 types = ["str"]
+doc = "the category the check judges: source, test, test-support, configuration, example, or one an extension registers"
 
 [contract.extension.checks."*"."*"."claims[]".ignore]
 types = ["strs"]
+doc = "the rule codes the check does not apply in the category, written into the tool's per-file ignores; none when absent"
 
 [contract.extension.checks."*"."*"."claims[]".suffixes]
 types = ["strs"]
+doc = "the file suffixes the check reads in the category, each starting with a dot; every file when absent"
 
 [contract.extension.checks."*"."*".editor-extension]
 types = ["str"]
+doc = "the marketplace id of the editor extension the composed .vscode/extensions.json recommends for the check; none when absent"
 
 [contract.extension.checks."*"."*".fix]
 types = ["str"]
+doc = "the function that rewrites what the check judges, module:function, run before any judge under --fix; the check only judges when absent"
 
 [contract.extension.checks."*"."*".flags]
 types = ["strs"]
+doc = "the command-line flags the check reads: point, to select a CI point's tests; none when absent"
 
 [contract.extension.checks."*"."*".fragments]
 types = ["table"]
+doc = "the configuration the composed files carry for the check, by file; none when absent"
 
 [contract.extension.checks."*"."*".fragments."*"]
 types = ["str", "table"]
+doc = "a file, by its name, to its text for a project file, or a table of its text and kinds for a file in each package"
 
 [contract.extension.checks."*"."*".fragments."*".kinds]
 types = ["strs"]
+doc = "the kinds whose packages carry the file, each kind's children included"
 
 [contract.extension.checks."*"."*".fragments."*".text]
 types = ["str"]
+doc = "the fragment's Jinja text, rendered with each package's data"
 
 [contract.extension.checks."*"."*".inputs]
 types = ["table"]
+doc = "the files a workspace check reads, so a run that knows its changes judges it only when one of them changed; when absent, the check narrows by packages alone"
 
 [contract.extension.checks."*"."*".inputs.ignores]
 types = ["strs"]
+doc = "files whose change never counts, though a pattern of reads or widens names them; none when absent"
 
 [contract.extension.checks."*"."*".inputs.on-removal]
 types = ["bool"]
+doc = "whether a deleted or moved file anywhere runs the check over everything it reads; false when absent"
 
 [contract.extension.checks."*"."*".inputs.per-file]
 types = ["bool"]
+doc = "whether the check judges each changed file it reads on its own, rather than everything when one changes; true when absent"
 
 [contract.extension.checks."*"."*".inputs.reads]
 types = ["strs"]
+doc = "the files the check judges, as patterns relative to the root where ** spans directories"
 
 [contract.extension.checks."*"."*".inputs.widen]
 types = ["str"]
+doc = "the check's own further reason to run over everything, a function module:function given the changes; none when absent"
 
 [contract.extension.checks."*"."*".inputs.widens]
 types = ["strs"]
+doc = "files the check does not judge whose change runs it over everything it reads; none when absent"
 
 [contract.extension.checks."*"."*".kinds]
 types = ["strs"]
+doc = "the package kinds the check judges, each kind's children included; every kind when absent"
 
 [contract.extension.checks."*"."*".listed-with]
 types = ["str"]
+doc = "the option of [options] a workspace's listing turns on for the check to register; the check registers whenever the extension is listed when absent"
 
 [contract.extension.checks."*"."*".narrowing]
 types = ["str"]
+doc = "how the check's own code narrows a package-scoped gate: paths for the subset's directories, packages for its members, none for the whole each time; none when absent"
 values = ["paths", "packages", "none"]
 
 [contract.extension.checks."*"."*".options]
 types = ["table"]
+doc = "the options a package may set on the check in its [checks.<tool>.<role>] table; enabled alone when absent"
 
 [contract.extension.checks."*"."*".options."*"]
 types = ["table"]
 
 [contract.extension.checks."*"."*".options."*".default]
 types = ["any"]
+doc = "the value the check reads when no package sets the option; none when absent"
 
 [contract.extension.checks."*"."*".options."*".doc]
 types = ["str"]
+doc = "one line saying what the option changes"
 
 [contract.extension.checks."*"."*".options."*".type]
 types = ["str"]
+doc = "the option's type, which a package's value must have: bool, str or int"
 values = ["bool", "str", "int"]
 
 [contract.extension.checks."*"."*".roles]
 types = ["strs"]
+doc = "further roles the check fills, each answering to <role>.<tool>; none when absent"
 
 [contract.extension.checks."*"."*".run]
 types = ["str"]
+doc = "the function that judges, module:function in the extension's own package"
 
 [contract.extension.checks."*"."*".scope]
 types = ["str"]
+doc = "what one run of the check judges: workspace for the whole workspace at once, package for one package at a time; workspace when absent"
 values = ["workspace", "package"]
 
 [contract.extension.checks."*"."*".tests-only]
 types = ["bool"]
+doc = "whether a package check also runs when a package's change is confined to its tests; false when absent"
 
 [contract.extension.checks."*"."*".threshold]
 types = ["number"]
+doc = "the share of affected units, above 0 and at most 1, from which a check narrowing by paths runs over its whole; 1 when absent"
 
 [contract.extension.checks."*"."*".tools]
 types = ["strs"]
+doc = "the tools the check runs, as the tool profile names them, each added to the profile of every kind the check judges; none when absent"
 
 [contract.extension.checks."*"."*".transport]
 types = ["str"]
+doc = "how a list of paths reaches the tool: argv, on its command line, the only one taken; argv when absent"
 values = ["argv", "file", "config"]
 
 [contract.extension.ci]
 types = ["table"]
+doc = "the CI the extension adds to the builtin points"
 
 [contract.extension.ci.jobs]
 types = ["table"]
+doc = "the jobs the extension adds to the builtin points, by point"
 
 [contract.extension.ci.jobs."*"]
 types = ["table"]
+doc = "a builtin point, by its name: gate, merge, nightly or release"
 
 [contract.extension.ci.jobs."*"."*"]
 types = ["table"]
+doc = "a job the extension adds to the point, by a name the point does not declare"
 
 [contract.extension.ci.jobs."*"."*".deploy]
 types = ["str"]
+doc = "the function naming the seam the job publishes a site through, module:function given the workspace's root; none when absent"
 
 [contract.extension.ci.jobs."*"."*".entries]
 types = ["strs"]
+doc = "the tasks the job runs, in order, each by its dotted name and each one the extension defines"
 
 [contract.extension.ci.jobs."*"."*".fetch]
 types = ["str"]
+doc = "how deep the job's checkout is: full for every commit, tags for the tags as well, 2 for the commit and its parent; the commit alone when absent"
 values = ["full", "tags", "2"]
 
 [contract.extension.ci.jobs."*"."*".gates]
 types = ["bool"]
+doc = "whether the gate point's verdict waits for the job; false when absent"
 
 [contract.extension.ci.jobs."*"."*".inputs]
 types = ["table"]
+doc = "the files the job's entries read: on a pull request under [ci] affected-legs, a change that touches none of them skips the entries; the job always runs when absent"
 
 [contract.extension.ci.jobs."*"."*".inputs.ignores]
 types = ["strs"]
+doc = "files whose change never counts, though a pattern of reads or widens names them; none when absent"
 
 [contract.extension.ci.jobs."*"."*".inputs.on-removal]
 types = ["bool"]
-
-[contract.extension.ci.jobs."*"."*".inputs.per-file]
-types = ["bool"]
+doc = "whether a deleted or moved file anywhere runs the job's entries; false when absent"
 
 [contract.extension.ci.jobs."*"."*".inputs.reads]
 types = ["strs"]
+doc = "the files the job's entries read, as patterns relative to the root where ** spans directories"
 
 [contract.extension.ci.jobs."*"."*".inputs.widen]
 types = ["str"]
+doc = "the job's own further reason to run, a function module:function given the changes; none when absent"
 
 [contract.extension.ci.jobs."*"."*".inputs.widens]
 types = ["strs"]
+doc = "files the entries do not read whose change runs the job all the same; none when absent"
 
 [contract.extension.ci.jobs."*"."*".installs]
 types = ["str"]
+doc = "the function naming the system packages the job installs before it enters, module:function given the workspace's root; none when absent"
 
 [contract.extension.ci.jobs."*"."*".needs]
 types = ["strs"]
+doc = "the jobs of the point this one waits for; none when absent"
 
 [contract.extension.ci.jobs."*"."*".note]
 types = ["str"]
+doc = "the comment the rendered CI file carries above the job"
 
 [contract.extension.ci.jobs."*"."*".token]
 types = ["str"]
+doc = "the credential the job's tasks see as FORGE_TOKEN: job, the run's own token, the only one an extension's job takes; none when absent"
 values = ["job"]
 
 [contract.extension.contract]
 types = ["table"]
+doc = "the contract keys the extension owns, by contract"
 
 [contract.extension.contract."*"]
 types = ["table"]
+doc = "a contract the extension declares keys in: root for the workspace's workshop.toml, package for a package's"
 
 [contract.extension.contract."*"."*"]
 types = ["any"]
+doc = "a key of that contract: a table with its types, and its values and doc where it has them, and the keys beneath it"
 
 [contract.extension.contributions]
 types = ["table"]
+doc = "the values the extension puts into slots while it is listed, by slot"
 
 [contract.extension.contributions."*"]
 types = ["strs"]
+doc = "a slot, by its name, to the values the extension puts into it"
 
 [contract.extension.deletes]
 types = ["table"]
+doc = "the shipped files of earlier extensions this one deletes"
 
 [contract.extension.deletes."*"]
 types = ["str"]
+doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one deletes it"
 
 [contract.extension.extension]
 types = ["table"]
+doc = "the extension's identity: its workshop API version, its levels, its plugin and the extensions it requires"
 
 [contract.extension.extension.api-version]
 types = ["int"]
+doc = "the workshop API version the extension is written for, which the mount refuses unless it is this workshop's; 1 when absent"
 
 [contract.extension.extension.levels]
 types = ["list"]
+doc = "the levels the extension may be listed at; the workspace alone when absent"
 
 [contract.extension.extension."levels[]"]
 types = ["str"]
+doc = "a level: workspace for the root's [workspace] extensions, package for a package's own"
 values = ["workspace", "package"]
 
 [contract.extension.extension.plugin]
 types = ["str"]
+doc = "the footman plugin that carries the extension's verbs; when absent, the extension registers what it declares and mounts no verbs"
 
 [contract.extension.extension.requires]
 types = ["strs"]
+doc = "the extensions this one cannot work without, each listed before it; none when absent"
 
 [contract.extension.for]
 types = ["table"]
+doc = "what the extension adds to other listed extensions, by target"
 
 [contract.extension.for."*"]
 types = ["table"]
+doc = "a target extension, by its listed name, to the checks, CI jobs and contributions this one adds while both are listed"
 
 [contract.extension.options]
 types = ["table"]
+doc = "the options a workspace may turn on when it lists the extension as <name>[<option>]"
 
 [contract.extension.options."*"]
 types = ["str"]
+doc = "an option, by its name in the listing's brackets, to a line saying what it turns on"
 
 [contract.extension.replaces]
 types = ["table"]
+doc = "the shipped files of earlier extensions that this one's own files replace"
 
 [contract.extension.replaces."*"]
 types = ["str"]
+doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one's file of that name replaces it"
 
 [contract.extension.slots]
 types = ["table"]
+doc = "the slots the extension declares, which extensions and checks put values into"
 
 [contract.extension.slots."*"]
 types = ["table"]
+doc = "a slot, by its dotted name: docs.theme"
 
 [contract.extension.slots."*".compose]
 types = ["str"]
+doc = "how the slot's values compose: union for a list, nearest for the last contribution, or a function module:function; union when absent"
 
 [contract.extension.slots."*".default]
 types = ["any"]
+doc = "the value a nearest slot takes while nothing is contributed; none when absent"
 
 [contract.extension.slots."*".values]
 types = ["list"]
+doc = "the only values a contribution may carry; any value when absent"
 
 [contract.extension.toolroom]
 types = ["table"]
+doc = "the tools the extension's own verbs need"
 
 [contract.extension.toolroom.requires]
 types = ["strs"]
+doc = "the tools the extension's verbs need, as requirement strings: docker>=27"

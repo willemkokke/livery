@@ -232,7 +232,7 @@ def test_an_unknown_key_or_a_grant_in_a_job_table_refuses_naming_the_file(
 
 def test_a_jobs_inputs_name_their_reads(package: Path) -> None:
     where = package / "extension.toml"
-    assert _refusal(package, JOB + "inputs = { per-file = false }\n") == (
+    assert _refusal(package, JOB + "inputs = { on-removal = true }\n") == (
         f"{where}: ci.jobs.gate.prose.inputs names no reads: inputs name the"
         " files it reads"
     )

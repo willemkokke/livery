@@ -103,6 +103,7 @@ REFERENCES_REGISTER_NOTHING = "references-register-nothing"
 ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
 CLAIMS_NAME_CATEGORIES = "claims-name-categories"
 PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
+CONTRACT_KEYS_DOCUMENTED = "contract-keys-documented"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -636,6 +637,31 @@ def _plugin_is_an_entry_point(subject: Subject) -> list[Violation]:
     ]
 
 
+def _contract_keys_documented(subject: Subject) -> list[Violation]:
+    from livery.workshop._declaration import (
+        DeclarationError,
+        contract_keys,
+        declaration_file,
+    )
+
+    if declaration_file(subject.extension) is None:
+        return []
+    try:
+        keys = contract_keys(subject.extension)
+    except DeclarationError:
+        return []  # declaration-validates names the file
+    return [
+        Violation(
+            CONTRACT_KEYS_DOCUMENTED,
+            f"extension {subject.extension}",
+            f"declares the {item.contract} contract key {item.path} with no doc;"
+            " the editor shows a key by its doc, and so will the reference pages",
+        )
+        for item in keys
+        if not item.doc
+    ]
+
+
 # An extension's configuration files, through the workshop's own render.
 
 
@@ -1041,6 +1067,11 @@ CLAUSES: tuple[Clause, ...] = (
         "The plugin an extension.toml names is a footman.tasks entry point an"
         " installed distribution declares.",
         _plugin_is_an_entry_point,
+    ),
+    Clause(
+        CONTRACT_KEYS_DOCUMENTED,
+        "Every contract key an extension declares carries a doc.",
+        _contract_keys_documented,
     ),
     Clause(
         FRAGMENT_DRIFT,

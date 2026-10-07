@@ -116,3 +116,18 @@ def test_for_a_target_takes_the_checks_jobs_and_contributions_again() -> None:
             keys[path].values,
             keys[path].doc,
         ), path
+
+
+def test_every_base_key_carries_a_doc() -> None:
+    # A key whose table declares a child named doc, an option's own,
+    # holds no string doc of its own: TOML has one value per name.
+    allowed = {
+        ("extension", "checks.*.*.options.*"),
+        ("extension", "for.*.checks.*.*.options.*"),
+    }
+    missing = [
+        (item.contract, item.path)
+        for item in base_keys()
+        if not item.doc and (item.contract, item.path) not in allowed
+    ]
+    assert missing == []
