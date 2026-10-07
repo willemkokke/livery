@@ -94,10 +94,6 @@ dev = [
 # handoff enters the environment as it is, so a member deleted from
 # packages/ never fails the command that removes it from here.
 uv-handoff = "enter"
-# Task names in --list/--tree/--help (and --json rows) link into the
-# published task reference; the alias tree there redirects each task
-# to its page in the owning package's section.
-docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 
 [tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or

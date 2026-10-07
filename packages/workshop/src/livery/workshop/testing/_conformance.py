@@ -685,7 +685,6 @@ def _probe_answers(kind: str = "") -> dict[str, Any]:
         "namespace_package": "acme",
         "runner_prog": "fm",
         "project_name": "acme",
-        "docs_site_url": "",
         "kind": kind,
     }
 

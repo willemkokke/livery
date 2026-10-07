@@ -120,15 +120,17 @@ def link(text: str, url: str | None, on: bool) -> str:
 _DOCS_PLACEHOLDERS = ("path", "slug")
 
 
-def docs_url_error(template: object) -> str | None:
+def docs_url_error(template: object, *, where: str | None = None) -> str | None:
     """The refusal a broken `docs-url` template earns, or None for a sound
     one — a link scheme that silently pointed nowhere would be worse than
-    no links at all."""
+    no links at all. *where* names the setting the template came from; the
+    configuration key when absent."""
     from livery.footman import _paths
 
     if not isinstance(template, str) or not template.strip():
+        named = where or f"the [tool.{_paths.config_table()}] docs-url key"
         return (
-            f"the [tool.{_paths.config_table()}] docs-url key is a URL "
+            f"{named} is a URL "
             "template, e.g. "
             '"https://docs.example.dev/tasks/{path}/" — {path} is the '
             "slash-joined task address, {slug} the dash-joined one"

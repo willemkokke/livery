@@ -44,6 +44,11 @@ a `TaskView`:
 `t.fn` is the underlying function if you need to reach past the view, which
 deliberately keeps footman's private task attributes out of your hooks.
 
+The invocation also carries `inv.docs_url`, the URL template task names link
+to. A plugin that writes the task pages sets it here, as
+[Link the terminal back to the pages](taskdocs.md#link-the-terminal-back-to-the-pages)
+shows.
+
 Provenance lets a hook decide by *where* a task came from. To gate every
 task defined under an `infra/` directory, regardless of its name:
 

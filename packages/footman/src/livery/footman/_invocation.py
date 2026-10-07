@@ -39,6 +39,7 @@ class Invocation:
     """
 
     __slots__ = (
+        "_docs_url",
         "_frozen",
         "cli",
         "config",
@@ -50,6 +51,7 @@ class Invocation:
         "total_ms",
     )
 
+    _docs_url: str | None
     _frozen: bool
     cli: dict[str, Any]
     config: dict[str, Any]
@@ -65,8 +67,10 @@ class Invocation:
         root: str = "",
         cwd: str = "",
         tasks: Tasks | None = None,
+        docs_url: str | None = None,
     ) -> None:
         object.__setattr__(self, "_frozen", False)
+        self.docs_url = docs_url
         self.cli = dict(cli or {})
         """The global options this line carried. Empty in the manifest refresh
         child, which has no command line — so a tree edit that reads this would
@@ -92,6 +96,35 @@ class Invocation:
         self.total_ms: float = 0.0
         """Wall-clock for the whole run, the envelope's `total_ms` — filled
         for `post_tasks`."""
+
+    @property
+    def docs_url(self) -> str | None:
+        """The URL template task names link to, or None for no links.
+
+        Task names in `--list`, `--tree` and `--help` link to it, and each
+        `--json` row carries the URL as `docs_url`: `{path}` is the task's
+        address joined by slashes, `{slug}` joined by dashes. It starts as
+        the configured `docs-url`. A `pre_tasks` hook may set it, for a
+        plugin that knows where its task pages are; one that sets it only
+        while it is None keeps a configured `docs-url` first. A hook runs
+        on every invocation, so a template set there holds for each one,
+        where a value set while a module imports would not, since a
+        provider module imports once per process.
+
+        Raises:
+            ValueError: on a write, a template footman cannot fill.
+        """
+        return self._docs_url
+
+    @docs_url.setter
+    def docs_url(self, template: str | None) -> None:
+        from livery.footman import _describe
+
+        if template is not None and (
+            error := _describe.docs_url_error(template, where="inv.docs_url")
+        ):
+            raise ValueError(error)
+        object.__setattr__(self, "_docs_url", template)
 
     def freeze(self) -> None:
         """Close the invocation for writes — called once, before tasks run."""

@@ -83,7 +83,6 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         if isinstance(entry, dict)
     }
     from livery.workshop._checks import editor_extensions
-    from livery.workshop._docs_contract import docs_table
     from livery.workshop._slots import all_composed
 
     injected: dict[str, Any] = {
@@ -92,7 +91,6 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # The workspace's own tests directory, which the checkers and
         # the test runner read only while it exists: a newborn has none.
         "root_tests": ["tests"] if (root / "tests").is_dir() else [],
-        "docs_site_url": str(docs_table(root).get("site-url", "")),
         # The slots the check records fill: the dev group's tool lines,
         # pytest's addopts. An extension's contribution lands here, and a
         # withdrawn check takes its line with it.
@@ -165,12 +163,10 @@ def package_injections(root: Path) -> dict[str, Any]:
     """
     contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
-    from livery.workshop._docs_contract import docs_table
 
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
-        "docs_site_url": str(docs_table(root).get("site-url", "")),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
         "forge_url": str(forge_table.get("url", "")),

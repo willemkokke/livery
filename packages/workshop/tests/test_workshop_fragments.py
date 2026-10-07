@@ -46,7 +46,6 @@ def _data() -> dict[str, object]:
         "native": [],
         "python_floor": "3.14",
         "namespace_package": "livery",
-        "docs_site_url": "",
         "runner_prog": "fm",
         "project_name": "x",
         "kind": "",

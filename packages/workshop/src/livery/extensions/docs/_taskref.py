@@ -14,9 +14,10 @@ nav block is emitted beside them as ``nav.tasks.toml``; the owner's
 tree changes. A providing package whose ``nav.toml`` lacks the pair
 refuses, since the section would have no home.
 
-The runner's ``docs_url`` is one URL template, so a generated alias
-tree at the uniform ``tasks/<slug>/`` address redirects
-each task to its page in the owning package's section.
+Footman links every task name through one URL template, so a generated
+alias tree at the uniform ``tasks/<slug>/`` address redirects each task
+to its page in the owning package's section; `task_links` is that
+template under the site's address.
 """
 
 from __future__ import annotations
@@ -35,6 +36,19 @@ from livery.workshop._packages import Package, discover_packages
 #: The nav marker block the reference generator owns in a providing
 #: package's ``nav.toml``.
 NAV_BLOCK = "tasks"
+
+#: The site directory of the alias tree: one redirect page per task,
+#: named by its dash-joined address.
+ALIASES = "tasks"
+
+
+def task_links(site_url: str) -> str:
+    """The URL template that links a task's name to its page under *site_url*.
+
+    Each task's alias page redirects to its page in the owning package's
+    section, so the one template serves every package.
+    """
+    return f"{site_url.rstrip('/')}/{ALIASES}/{{slug}}/"
 
 
 def advertised_providers(package: Package) -> list[str]:
@@ -216,7 +230,7 @@ def generate_task_reference(root: Path) -> list[str]:
         advertised_providers(package) for package in discover_packages(root)
     ):
         return []
-    aliases = root / "docs" / "tasks"
+    aliases = root / "docs" / ALIASES
     shutil.rmtree(aliases, ignore_errors=True)
     aliases.mkdir(parents=True)
     rendered: list[str] = []

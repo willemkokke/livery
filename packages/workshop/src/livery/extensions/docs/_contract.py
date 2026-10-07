@@ -1,7 +1,8 @@
-"""What the docs extension reads from a workspace's contracts for its CI jobs.
+"""What the docs extension reads from a workspace's contracts.
 
-The generators a package declares under ``[docs] generators``, with the
-system packages each needs on a docs machine, and the seam the site
+The root contract's ``[docs]`` table, which the extension owns; the
+generators a package declares under ``[docs] generators``, with the
+system packages each needs on a docs machine; and the seam the site
 publishes through. The extension's declaration file names
 `docs_requirements` as both jobs' ``installs`` and `publish_seam` as
 the deploy's ``deploy``, so the CI render asks them and reads no
@@ -22,6 +23,13 @@ SEAMS = ("pages", "container", "ssh", "none")
 
 #: The publish seam each forge kind defaults to.
 DEFAULT_SEAMS = {"github": "pages", "gitlab": "pages", "gitea": "container"}
+
+
+def docs_table(root: Path) -> dict[str, object]:
+    """The root contract's ``[docs]`` table; empty when undeclared."""
+    contract = load_contract(root / "workshop.toml")
+    table = contract.get("docs") or {}
+    return dict(table) if isinstance(table, dict) else {}
 
 
 def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:

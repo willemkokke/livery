@@ -8,7 +8,17 @@ levels = ["workspace"]
 # The footman plugin that carries the site's verbs.
 plugin = "livery.extensions.docs"
 
-# The site's title, its description, and where it publishes.
+# The site's address, its title, its description, and where it publishes.
+[contract.root.docs]
+types = ["table"]
+doc = "the documentation site: its address, its title, its description and where it publishes"
+
+# Task names link to the site's redirect page for each task, through
+# the extension's pre_tasks hook, unless [workspace] docs-url is set.
+[contract.root.docs.site-url]
+types = ["str"]
+doc = "the site's public address, ending in a slash, for its canonical links, its llms.txt and the task links in --help, --list and --json rows; no task links when absent"
+
 [contract.root.docs.title]
 types = ["str"]
 doc = "the site's title; the project's name when absent"

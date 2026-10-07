@@ -95,14 +95,6 @@ types = ["str"]
 doc = "where a Windows check leg keeps its temporary files: runner on the runner's working drive, system on the system's; runner on GitHub and system elsewhere when absent"
 values = ["runner", "system"]
 
-[contract.root.docs]
-types = ["table"]
-doc = "the documentation site: its address, its title, its description and where it publishes"
-
-[contract.root.docs.site-url]
-types = ["str"]
-doc = "the site's public address, ending in a slash, for its canonical links, its llms.txt and the task links in --help; no task links when absent"
-
 [contract.root.forge]
 types = ["table"]
 doc = "where the repository lives: the forge's kind, its owner and its server"
@@ -259,6 +251,12 @@ doc = "the year the licences' copyright lines name"
 [contract.root.workspace.description]
 types = ["str"]
 doc = "the project's one-line description, for its project file and README; 'The <name> monorepo (virtual root).' when absent"
+
+# Read raw by a pre_tasks hook on every command, so an edit links the
+# next one; a listed extension's hook leaves a template it finds in place.
+[contract.root.workspace.docs-url]
+types = ["str"]
+doc = "the URL template task names in --help, --list and --json rows link to, for pages kept outside the docs extension: {path} is the task's address joined by slashes, {slug} joined by dashes; when absent, the docs extension's task pages if it is listed with a site-url, and no links otherwise"
 
 [contract.root.workspace.extensions]
 types = ["list"]

@@ -3,8 +3,10 @@
 Status: ruled by Willem on 2026-10-07; every design question is closed
 but open item 3, and the extensions plan takes phases 10 to 16 from here. Written
 2026-10-06 against
-`origin/main` at `4f2a5e53`. 10a is built (issue #1218); nothing
-else here is. The extensions plan
+`origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
+reach scan, the declaration file, the docs extension's registrations,
+the schema and the verification are built, and the public names are
+next. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -283,7 +285,7 @@ every kind the check judges"). What changes:
 | the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `[contract.<contract>.<table>]`, `api` among them; a generator's own settings are its `options`, set at `[generators.<name>]` in a package's contract as a check's are at `[checks.<tool>.<role>]` |
 | the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `installs` (system packages the job installs before entering) and `deploy` (the seam's value), set by the contributing extension on its `[ci.jobs.<point>.<name>]` entry |
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `[setup.<name>]`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
-| the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | the `project.urls` slot, merged by key; the docs extension contributes `Documentation` |
+| the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `[generators.<name>]` entry of the coverage extension's `[for.docs]` table, one renderer for every kind, reading the line format |
@@ -791,8 +793,9 @@ new path once. Acceptance: `fm check` exits 0;
   `release_notes`, `forge_repository`, `registry`, `RegistryTarget`,
   `contributions_for`; the records that become tables leave.
 - `installs`, `deploy` and `inputs` on a job; `_ci_generate`,
-  `_workflow_tasks` and `_provenance` stop reading the `[docs]` table;
-  the `project.urls` slot.
+  `_workflow_tasks`, `_provenance` and `_templates` stop reading the
+  `[docs]` table; task names link through footman's `inv.docs_url`,
+  set by the docs extension's hook or from `[workspace] docs-url`.
 - `rewrite_nav_block` leaves for `livery.extensions.docs`;
   `mount_extensions` leaves the public surface; `api-version` stays 1; the
   eight tool extensions and this repository move; the wave releases
@@ -1347,6 +1350,34 @@ the stack, which this design neither needs nor rules out).
   and the opt-out is `[coverage] required = false`.
 - Willem, 2026-10-07, on Open item 4: to review in detail; as
   proposed, it is too complex for what it brings.
+- Willem, 2026-10-07, on Open item 4: the base knows nothing of the
+  docs site's address. Only the docs extension specifies it, and the
+  extension hands footman the task-link template; a footman parameter
+  that overrides the configured `docs-url` is an accepted cost of
+  keeping the docs configuration in one place. Added the same evening:
+  a workspace without the docs extension may still set a `docs-url` in
+  `workshop.toml`, for pages it maintains another way. Open item 4
+  closes without new grammar: no `project.urls` slot, and no
+  contribution computed from the contract.
+- 2026-10-07, the task links (#1252), the last part: footman's
+  `Invocation` gains `docs_url`, the run's link template. It starts as
+  the configured `docs-url`, a `pre_tasks` hook may set it, and footman
+  refuses by name a template it cannot fill. The parameter is a field
+  a hook sets, not a call at import: footman imports a provider module
+  once per process and resets the template on each invocation, so a
+  value set at import would hold for the first invocation alone.
+  `[docs] site-url` moves to the docs extension's keys, and its hook
+  links each task to its alias page under the site. The base's hook
+  reads `[workspace] docs-url`. Decided here, against the ruling's
+  word: footman's configured `docs-url` comes before a hook's, then
+  `[workspace] docs-url`, then the site's, whichever hook runs first,
+  so a template a person wrote is never dropped without a word. In a
+  workspace the order changes nothing, since the composed
+  `[tool.footman]` writes no `docs-url` and the repository cannot add
+  one to a table the render owns. A template footman cannot fill is
+  named on stderr and links nothing, as the mount names what it
+  skips. `docs_table` moves into the extension; a package's
+  `[docs] api` stays the base's until the API extractor moves.
 
 ## Open
 
@@ -1371,31 +1402,3 @@ recommendation. Owner: Willem, unless named.
      floors judge, only what the page shows.
 
    Recommendation: (b).
-4. **A slot contribution's value from the contract** (#1252's last
-   part). The composed root `pyproject.toml` writes `[tool.footman]
-   docs-url` from the root contract's `[docs] site-url`, which
-   `_templates` reads today. The ruled replacement is a `project.urls`
-   slot the docs extension contributes `Documentation` to, and a
-   `[contributions]` value is a constant, while the URL is the
-   workspace's.
-   - (a) A contribution may name a function instead of values,
-     `[contributions."project.urls"] from = "<module>:<function>"`,
-     called with the root when the mount registers it, as a job's
-     `installs` is. The base declares the slot with a third rule,
-     `merge`, by key, and the root template writes `[project.urls]`
-     from it and `docs-url` from its `Documentation`. A running
-     command keeps the value its mount read; the next command reads
-     an edited contract.
-   - (b) The docs extension writes the `docs-url` line through a
-     rendered fragment of the root `pyproject.toml`, phase 12's
-     `[fragments."<target>"] render`. No slot: `project.urls` stays
-     unwritten until another extension needs it, and the base reads
-     `[docs] site-url` until phase 12.
-   - (c) The site URL becomes a base key that the base composes into
-     `project.urls` itself, and the docs extension reads it. No new
-     grammar, but it reverses the ruled row: the base keeps knowing
-     that a site exists.
-
-   Recommendation: (a). A function called with the root is how
-   `installs` and `deploy` already work, and `merge` serves any slot
-   whose value is a table.

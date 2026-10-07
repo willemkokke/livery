@@ -52,7 +52,7 @@ from livery.footman._executor import EX_USAGE
 # stream's tty-ness, --no-color, NO_COLOR, and TERM.
 _brand: Brand = DEFAULT_BRAND
 _color_out: bool = False
-_docs_url: str | None = None  # the run's docs-url template, config-set
+_docs_url: str | None = None  # the run's docs-url template: config, or a hook's
 
 
 def _builtin() -> tuple[str, ...]:
@@ -2390,9 +2390,13 @@ def _execute(
         # is global mode: footman invents no root where there is no project.
         root=found.root,
         cwd=os.getcwd(),
+        docs_url=_docs_url,
     )
     try:
         reg = _discover.load_tree(files, base=base, inv=inv)
+        # A pre_tasks hook may have set the template, for a plugin that
+        # knows where its task pages are; the hooks ran inside the load.
+        _docs_url = inv.docs_url
     except _discover.HookError as exc:
         # A hook that raised is a refusal, named — nothing has run yet.
         return _refuse(json_mode, str(exc))

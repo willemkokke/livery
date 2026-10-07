@@ -195,6 +195,26 @@ the colour switch — piped output stays plain, and a terminal without
 hyperlink support simply ignores them — and each `--help` page also prints
 the URL as visible text, so there is always something to copy.
 
+A plugin that writes the task pages knows their address, so it can set the
+template itself from a [`pre_tasks`](hooks.md) hook, through the invocation's
+`docs_url`:
+
+```python
+from livery.footman import Invocation, pre_tasks
+
+
+@pre_tasks
+def link_task_pages(inv: Invocation) -> None:
+    if inv.docs_url is None:
+        inv.docs_url = "https://docs.example.dev/tasks/{slug}/"
+```
+
+The invocation starts with the configured `docs-url`, so a hook that sets the
+template only while it is `None` keeps the project's own setting first. Set it
+in the hook, not while the module imports: the hook runs on every invocation,
+and a provider module imports once per process. A template footman cannot fill
+is refused by name, as the configuration key's is.
+
 ## The live sample
 
 Everything below this line is `fm docs.page --target=docs --all

@@ -44,14 +44,23 @@ _WORDS = {
 
 def test_an_unlisted_extensions_key_is_refused_naming_its_owner() -> None:
     alone = compose("root", frozenset({BASE}))
+    # A table the extension owns whole refuses at the table.
     assert problems(alone, {"docs": {"title": "Site"}}) == [
-        "docs.title is a key of docs, which [workspace] extensions does not list;"
+        "docs is a key of docs, which [workspace] extensions does not list;"
         " list the extension, or remove the key"
     ]
     # The editor refuses it too, and its hover names the extension.
-    title = alone["properties"]["docs"]["properties"]["title"]
-    assert title["not"] == {} and title[OWNER] == "docs"
-    assert "docs" in title["description"]
+    docs = alone["properties"]["docs"]
+    assert docs["not"] == {} and docs[OWNER] == "docs"
+    assert "docs" in docs["description"]
+    # The extension's key in a table the base owns refuses at the key.
+    package = compose("package", frozenset({BASE}))
+    assert problems(package, {"docs": {"extra-css": []}}) == [
+        "docs.extra-css is a key of docs, which [workspace] extensions does not"
+        " list; list the extension, or remove the key"
+    ]
+    extra_css = package["properties"]["docs"]["properties"]["extra-css"]
+    assert extra_css["not"] == {} and extra_css[OWNER] == "docs"
     listed = compose("root", frozenset({BASE, "docs"}))
     assert problems(listed, {"docs": {"title": "Site"}}) == []
 

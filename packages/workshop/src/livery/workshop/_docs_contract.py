@@ -1,9 +1,10 @@
-"""What the base knows of a package's docs: its table and its layout.
+"""What the base knows of a package's docs: its API switch and its layout.
 
-The site's assembly is an extension's (``livery.extensions.docs``);
-these are the facts the base reads for its own reasons: the contract's
-``[docs]`` table, and the layout of a package's ``docs/`` tree the
-mount and the wheel build copy.
+The site's assembly is an extension's (``livery.extensions.docs``), and
+so is the root contract's ``[docs]`` table. These are the facts the base
+reads for its own reasons: a package contract's ``[docs] api``, which
+the API extractor reads, and the layout of a package's ``docs/`` tree
+the mount and the wheel build copy.
 """
 
 from __future__ import annotations
@@ -28,13 +29,6 @@ GENERATED_DIR = "_generated"
 
 
 GENERATED = GENERATED_DIR + "/"
-
-
-def docs_table(root: Path) -> dict[str, object]:
-    """The contract's ``[docs]`` table; empty when undeclared."""
-    contract = load_contract(root / "workshop.toml")
-    table = contract.get("docs") or {}
-    return dict(table) if isinstance(table, dict) else {}
 
 
 #: The package-owned nav file inside ``docs/``.
