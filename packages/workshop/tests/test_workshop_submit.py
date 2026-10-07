@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -2078,6 +2079,47 @@ def test_abandon_of_a_named_branch_refuses_a_dirty_worktree_then_removes_it(
     assert "back on" not in out
 
 
+def test_a_refused_arm_on_a_running_pull_request_follows_ci_and_merges_when_green(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import ForgeError
+
+    fake, git = rig
+    repo = _repo(fake)
+
+    def refuse(number: int, *, title: str, message: str = "") -> None:
+        raise ForgeError("Commit title is too long (maximum is 80 characters)")
+
+    monkeypatch.setattr(repo.pr, "arm", refuse)
+    monkeypatch.setattr("livery.workshop._submit._HOLD_POLL", 0.0)
+    real = repo.checks.status
+    verdicts = iter(["pending", "pending"])
+
+    def running(sha: str) -> object:
+        found = real(sha)
+        state = next(verdicts, found.state)
+        return found if state == found.state else replace(found, state=state)
+
+    monkeypatch.setattr(repo.checks, "status", running)
+    # Red after the wait: refused, naming the refusal and the state.
+    git.outcome = "failure"
+    with pytest.raises(_FAILURES, match=r"arming was refused \(Commit title is too"):
+        submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    # Green after the wait: followed and merged. A new head, since the
+    # fake keeps the red verdict of the old one.
+    verdicts = iter(["pending", "pending"])
+    git.outcome = "success"
+    (git.root / "more.txt").write_text("m\n")
+    git.commit_all("feat: more work")
+    number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    out = capsys.readouterr().out
+    assert "CI is still running, so the submit follows it" in out
+    pr = repo.pr.get(number)
+    assert pr is not None and pr.merged
+
+
 def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
     rig: tuple[FakeForge, SubmitGit],
     capsys: pytest.CaptureFixture[str],
@@ -2093,9 +2135,9 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
 
     monkeypatch.setattr(repo.checks, "status", repo.checks.status)
     monkeypatch.setattr(repo.pr, "arm", refuse)
-    # Red: the refusal surfaces as the forge's own error.
+    # Red: refused, naming the forge's own error.
     git.outcome = "failure"
-    with pytest.raises(ForgeError, match="clean status"):
+    with pytest.raises(_FAILURES, match="clean status"):
         submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
     # Green: merged when green was the intent, and it is green. A new
     # head, since the fake keeps the red verdict of the old one.
