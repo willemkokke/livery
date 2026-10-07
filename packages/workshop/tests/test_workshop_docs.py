@@ -258,6 +258,26 @@ def test_api_modules_sort_public_first_and_skip_the_machinery(
     assert ("sub/_inner.md", "acme.core.sub._inner") in modules
 
 
+def test_a_package_shipping_two_roots_documents_both(tmp_path: Path) -> None:
+    from livery.extensions.docs._site import api_modules
+
+    root = _workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    # A second root on its own branch: acme/extras carries no __init__.py.
+    second = core.directory / "src" / "acme" / "extras" / "site"
+    second.mkdir(parents=True)
+    (second / "__init__.py").write_text('"""The second root."""\n')
+    (second / "_inner.py").write_text('"""Inner."""\n')
+    modules = api_modules(core)
+    # The shallowest root keeps the reference's top; the further one sits
+    # under its dotted path, after it.
+    assert modules[0] == ("index.md", "acme.core")
+    assert modules[-2:] == [
+        ("acme.extras.site/index.md", "acme.extras.site"),
+        ("acme.extras.site/_inner.md", "acme.extras.site._inner"),
+    ]
+
+
 def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
     from livery.extensions.docs._site import API_DIR, generate_api_pages
     from livery.workshop._docs_contract import GENERATED_DIR
