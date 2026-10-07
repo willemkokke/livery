@@ -306,8 +306,7 @@ public under the names in the next section.
 Ruling 5 puts every root's public names in its `__init__.py`. So a
 name below lives in `livery.workshop`, `livery.extensions.docs`,
 `livery.footman` or `livery.toolroom.tools`, or in a public module the
-entry module declares. `livery.workshop.api` is the path today; phase
-10a retires it.
+entry module declares.
 
 ### The declaration file
 
