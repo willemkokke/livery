@@ -124,6 +124,13 @@ def _matched(patterns: tuple[str, ...], paths: tuple[str, ...]) -> tuple[str, ..
     )
 
 
+def reads(inputs: Inputs, root: Path, path: str) -> bool:
+    """Whether *inputs* read *path*: a pattern of its reads names it, and no ignore."""
+    if _matched(inputs.ignores, (path,)):
+        return False
+    return bool(_matched(_patterns(inputs.reads, root), (path,)))
+
+
 def provider_of(extension: str, packages: tuple[Package, ...]) -> str:
     """The member package whose sources ship *extension*, by its path; empty if none.
 

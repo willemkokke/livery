@@ -1237,6 +1237,20 @@ the stack, which this design neither needs nor rules out).
   as a builtin registers its declaration, and a GitLab deploy is the
   `pages` job only for the `pages` seam. The `project.urls` slot and
   the job's `inputs` are the third part.
+- 2026-10-07, the docs extension's registrations (#1252), the job's
+  `inputs`: a job declares the files its entries read in the table a
+  check declares, and `fm ci.run` skips the job's entries on a pull
+  request that changed none of them, nor the sources of the extension
+  that contributed it, on the terms the check legs narrow on. The docs
+  job's reads are the globs the site's categories named; a
+  `packages/**/docs/` glob also matches a `docs/` directory deeper in a
+  package, which only builds the site when it could have skipped. The
+  site build drops its own skip, and `site_reads` leaves the base:
+  `fm explain` names the job, `claimed by: gate/docs`. Fixed in the same
+  change: the affected gate finds a declared check's member through the
+  package its listed name's entry point names, so a change to an
+  extension's sources judges its checks whole again. The
+  `project.urls` slot waits on Open item 4.
 
 ## Open
 
@@ -1261,3 +1275,31 @@ recommendation. Owner: Willem, unless named.
      floors judge, only what the page shows.
 
    Recommendation: (b).
+4. **A slot contribution's value from the contract** (#1252's last
+   part). The composed root `pyproject.toml` writes `[tool.footman]
+   docs-url` from the root contract's `[docs] site-url`, which
+   `_templates` reads today. The ruled replacement is a `project.urls`
+   slot the docs extension contributes `Documentation` to, and a
+   `[contributions]` value is a constant, while the URL is the
+   workspace's.
+   - (a) A contribution may name a function instead of values,
+     `[contributions."project.urls"] from = "<module>:<function>"`,
+     called with the root when the mount registers it, as a job's
+     `installs` is. The base declares the slot with a third rule,
+     `merge`, by key, and the root template writes `[project.urls]`
+     from it and `docs-url` from its `Documentation`. A running
+     command keeps the value its mount read; the next command reads
+     an edited contract.
+   - (b) The docs extension writes the `docs-url` line through a
+     rendered fragment of the root `pyproject.toml`, phase 12's
+     `[fragments."<target>"] render`. No slot: `project.urls` stays
+     unwritten until another extension needs it, and the base reads
+     `[docs] site-url` until phase 12.
+   - (c) The site URL becomes a base key that the base composes into
+     `project.urls` itself, and the docs extension reads it. No new
+     grammar, but it reverses the ruled row: the base keeps knowing
+     that a site exists.
+
+   Recommendation: (a). A function called with the root is how
+   `installs` and `deploy` already work, and `merge` serves any slot
+   whose value is a table.

@@ -39,6 +39,40 @@ def test_a_change_to_the_checks_own_code_judges_everything(tmp_path: Path) -> No
     assert not select(PAGES, tests, provider="packages/workshop").runs
 
 
+def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A declared check registers under its extension's listed name, which
+    # is no module: "docs" finds the root's docs directory and "pytest" the
+    # index's pytest. The member that ships it is found through the
+    # package its entry point names, so a change to its sources still
+    # judges everything.
+    from importlib.metadata import EntryPoint
+
+    from livery.workshop import _extensions
+    from livery.workshop._checks import CheckRecord, GateContext, selected
+    from livery.workshop._packages import discover_packages
+
+    member = tmp_path / "packages" / "site"
+    (member / "src" / "acme_site").mkdir(parents=True)
+    (member / "src" / "acme_site" / "__init__.py").write_text("")
+    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-site"\n')
+    (member / "pyproject.toml").write_text('[project]\nname = "acme-site"\n')
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.syspath_prepend(str(member / "src"))
+    entry = EntryPoint("site", "acme_site", _extensions.GROUP)
+    monkeypatch.setattr(_extensions, "_declared", lambda: {"site": entry})
+    packages = discover_packages(tmp_path)
+    assert _extensions.extension_provider("site", packages) == "packages/site"
+    assert _extensions.extension_provider("absent", packages) == ""
+    record = CheckRecord(
+        "site", "lint", lambda ctx: None, inputs=PAGES, extension="site"
+    )
+    changes = _changes(tmp_path, "packages/site/src/acme_site/rule.py")
+    ctx = GateContext(root=tmp_path, packages=packages, changes=changes)
+    assert selected(record, ctx) == WHOLE
+
+
 def test_an_installed_check_reads_everything_when_the_lock_moves(
     tmp_path: Path,
 ) -> None:

@@ -482,9 +482,13 @@ def explain(
 
 
 def describe(root: Path, relative: Path) -> list[str]:
-    """The lines ``fm explain`` prints for *relative*: category, channel, claims."""
-    from livery.workshop._docs_contract import site_reads
+    """The lines ``fm explain`` prints for *relative*: category, channel, claims.
+
+    A file is claimed by each check that reads it and each CI job whose
+    declared inputs read it, the job as ``<point>/<job>``.
+    """
     from livery.workshop._packages import discover_packages
+    from livery.workshop._points import jobs_reading
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     unit, inside = unit_of(root, packages, relative.as_posix())
@@ -501,8 +505,7 @@ def describe(root: Path, relative: Path) -> list[str]:
     from livery.workshop._checks import claimants
 
     claims = list(claimants(unit, inside)) if unit is not None else []
-    if site_reads(root, packages, relative.as_posix()):
-        claims.append("site")
+    claims.extend(jobs_reading(root, relative.as_posix()))
     if claims:
         lines.append(f"    claimed by: {', '.join(claims)}")
     lines.extend(f"    {line}" for line in owned_lines(root, relative))

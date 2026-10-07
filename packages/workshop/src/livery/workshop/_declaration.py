@@ -382,6 +382,9 @@ class _Reader:
             deploy=self.reference(entry["deploy"], (*where, "deploy"))
             if "deploy" in entry
             else None,
+            inputs=self.inputs(entry["inputs"], (*where, "inputs"))
+            if "inputs" in entry
+            else None,
             note=str(entry.get("note", "")),
         )
         return JobContribution(
@@ -529,13 +532,11 @@ class _Reader:
         )
 
     def inputs(self, table: dict[str, Any], where: tuple[str, ...]) -> Inputs:
-        """The files a workspace check reads, from its ``inputs`` table."""
+        """The files a workspace check or a job reads, from its ``inputs`` table."""
         from livery.workshop._influence import Inputs
 
         if "reads" not in table:
-            raise self.refuse(
-                where, "names no reads: inputs name the files the check reads"
-            )
+            raise self.refuse(where, "names no reads: inputs name the files it reads")
         return Inputs(
             reads=tuple(table["reads"]),
             per_file=bool(table.get("per-file", True)),

@@ -151,7 +151,7 @@ def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
     where = package / "extension.toml"
     assert _refusal(package, CHECK + "inputs = { on-removal = true }\n") == (
         f"{where}: checks.acme.lint.inputs names no reads: inputs name the files"
-        " the check reads"
+        " it reads"
     )
     assert "names gone, which acme_declared._checks does not define" in _refusal(
         package,
@@ -228,6 +228,18 @@ def test_an_unknown_key_or_a_grant_in_a_job_table_refuses_naming_the_file(
     secret = _refusal(package, JOB + 'token = "secret"\n')
     assert secret.startswith(where)
     assert "ci.jobs.gate.prose.token is 'secret'; it takes one of job" in secret
+
+
+def test_a_jobs_inputs_name_their_reads(package: Path) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, JOB + "inputs = { per-file = false }\n") == (
+        f"{where}: ci.jobs.gate.prose.inputs names no reads: inputs name the"
+        " files it reads"
+    )
+    found = _declare(package, JOB + 'inputs = { reads = ["docs/**"] }\n')
+    (prose,) = found.additions.jobs
+    assert prose.job.inputs is not None
+    assert prose.job.inputs.reads == ("docs/**",)
 
 
 def test_a_jobs_functions_resolve_against_the_extensions_sources(

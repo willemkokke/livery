@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
     from livery.toolroom.store import Spec
+    from livery.workshop._packages import Package
     from livery.workshop._points import JobContribution
 
 #: The base. Never listed and never mounted by name: importing its
@@ -271,6 +272,18 @@ def extension_package(extension: str) -> str:
     if entry is None:
         return extension
     return entry.value.partition(":")[0]
+
+
+def extension_provider(extension: str, packages: tuple[Package, ...]) -> str:
+    """The member package whose sources ship *extension*, by its path; empty if none.
+
+    *extension* is the name it is listed by, which is no module: the
+    package its entry point names is looked up instead. An extension
+    installed from an index has no member.
+    """
+    from livery.workshop._influence import provider_of
+
+    return provider_of(extension_package(extension), packages)
 
 
 def extension_names(start: Path | None = None) -> tuple[str, ...]:

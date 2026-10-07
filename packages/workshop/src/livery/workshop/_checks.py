@@ -1292,14 +1292,11 @@ def _drift_widens(root: Path) -> tuple[str, ...]:
     A listed extension whose sources live in a member package composes
     from them, so a change under them may move any output.
     """
-    from livery.workshop._extensions import extension_names, extension_package
-    from livery.workshop._influence import provider_of
+    from livery.workshop._extensions import extension_names, extension_provider
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root)
-    providers = {
-        provider_of(extension_package(name), packages) for name in extension_names(root)
-    }
+    providers = {extension_provider(name, packages) for name in extension_names(root)}
     return (
         "workshop.toml",
         *package_files(root),
@@ -1316,7 +1313,8 @@ def selected(record: CheckRecord, ctx: GateContext) -> Selection:
     select, or the named files of `fm check <paths>` when there are no
     changes; a run with neither judges everything.
     """
-    from livery.workshop._influence import WHOLE, Changes, provider_of, select
+    from livery.workshop._extensions import extension_provider
+    from livery.workshop._influence import WHOLE, Changes, select
 
     if record.inputs is None:
         return WHOLE
@@ -1324,7 +1322,9 @@ def selected(record: CheckRecord, ctx: GateContext) -> Selection:
     if changes is None and ctx.files:
         changes = Changes(ctx.root, ctx.files)
     return select(
-        record.inputs, changes, provider=provider_of(record.extension, ctx.packages)
+        record.inputs,
+        changes,
+        provider=extension_provider(record.extension, ctx.packages),
     )
 
 
