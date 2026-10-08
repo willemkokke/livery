@@ -5,6 +5,17 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.11.0] - 2026-10-08
+
+### Added
+
+- No package reaches another's privates: footman exports host, CommandView, styled and its brand's names, toolroom its colour and stub tables by @willemkokke
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+- The tool store's table, lock and verbs take toolroom's name, and the store ships the table's schema and its own reader by @willemkokke
+
 ## [0.10.0] - 2026-10-07
 
 ### Added
