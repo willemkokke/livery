@@ -6,7 +6,9 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
 reach scan, the declaration file, the docs extension's registrations,
 the schema, the verification and the public names are built, and the
-release wave that ships the slice's break is next. The extensions plan
+release wave that ships the slice's break runs on 2026-10-08 after
+15:00 UTC, once PyPI accepts new projects again (see "First
+publishes, four a day"). The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -762,6 +764,29 @@ its own change. Exceptional paths are tested before happy paths. The
 extensions plan's phases 10 to 15 are replaced by phases 10 to 16
 here; the mapping is in the decision record.
 
+### First publishes, four a day
+
+PyPI accepts at most four new projects a day, so a wave's new
+distributions, its members with no receipt yet, number four at most.
+A phase with more publishes them over consecutive days in dependency
+order. Existing distributions release whenever they are ready.
+
+| When | New distributions | Phase |
+| --- | --- | --- |
+| 2026-10-08, after 15:00 UTC | basedpyright, clang-format, mypy, ty: the four projects the 2026-10-07 wave could not create, by `fm workflow.release.dispatch` | 10b |
+| the release of 10e and 10f | changelog, claude | 10e, 10f |
+| 11b's first release day | python, cmake, conan, cpp; python first, since pytest's 11b release requires it | 11b |
+| the day after | nanobind, unreal | 11b |
+| as 11c and phase 12 land | mkdocstrings, docs, housekeeping, doxygen, coverage | 11c, 12a to 12e |
+
+On 2026-10-08 the dispatch runs first: a bare dispatch reads the
+release manifest on `main`, and the next release replaces it. The 10b
+wave follows: footman 0.59.0, forge 0.7.0, workshop 0.7.0 and
+toolroom-bench 0.3.0, rehearsed with `--local` before the armed run;
+naming footman and the workshop together raises the workshop's footman
+floor (#1291). 10b's last acceptance, `fm ci.e2e --extension=ruff
+--fresh`, runs on the released wheels.
+
 ### Phase 10: the API as a contract, and its first consumers
 
 **10a, the entry module: built (issue #1218).** Every root's `api.py`
@@ -1477,6 +1502,15 @@ the stack, which this design neither needs nor rules out).
   strongroom, toolroom, toolroom-store and toolroom-bench state the
   description their `pyproject.toml` already gives, which the landing
   page shows.
+- Willem, 2026-10-08: PyPI accepts at most four new projects a day.
+  The four the 2026-10-07 wave could not create go first, after
+  15:00 UTC, and later phases plan their first publishes against the
+  limit.
+- 2026-10-08, first publishes: a wave names at most four new
+  distributions, and a phase with more spreads them over consecutive
+  days in dependency order, python first in 11b. The schedule is under
+  "First publishes, four a day". Both rehearsals of the 10b wave
+  (`--local`, on `3a3e4c5d` and on `413b9940`) passed every leg.
 
 ## Open
 
