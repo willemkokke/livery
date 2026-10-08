@@ -57,25 +57,32 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
 
 
 def _package_entries(nav: Any) -> list[Any]:
-    """Every entry under the nav's one Packages entry, at any depth."""
+    """Every entry under the nav's one Packages entry, shallowest first."""
     (packages,) = [e for e in nav if isinstance(e, dict) and "Packages" in e]
     found: list[Any] = []
-
-    def walk(entries: object) -> None:
-        for entry in entries if isinstance(entries, list) else []:
+    level: list[Any] = list(packages["Packages"])
+    while level:
+        nested: list[Any] = []
+        for entry in level:
             if isinstance(entry, dict):
                 found.append(entry)
-                for value in entry.values():
-                    walk(value)
-
-    walk(packages["Packages"])
+                nested += [
+                    v
+                    for value in entry.values()
+                    if isinstance(value, list)
+                    for v in value
+                ]
+        level = nested
     return found
 
 
 def _package_entry(nav: Any, name: str) -> Any:
-    """The section labelled *name* anywhere under the nav's Packages entry."""
-    (entry,) = [e for e in _package_entries(nav) if name in e]
-    return entry
+    """The shallowest section labelled *name* under the nav's Packages entry.
+
+    A package's place sits above anything inside its section, a task
+    group of the same name included.
+    """
+    return next(entry for entry in _package_entries(nav) if name in entry)
 
 
 # The fallbacks first: an undeclared table, a package without docs.
