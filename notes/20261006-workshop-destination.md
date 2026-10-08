@@ -1556,6 +1556,13 @@ the stack, which this design neither needs nor rules out).
   between waiting for the toolchain to answer it as a query and a
   temporary base placeholder; until then the acceptance's `find` finds
   `packages/extensions/clang-tidy/src/livery/extensions/clang/tidy/_checks.py`.
+- 2026-10-08, open in 10c: `fm ci.e2e --extension=mypy --fresh` stays
+  red at its members scenario, at the coverage leg, which #1225 ruled
+  lands with 12e. The pass's check leg ran the branch's dev wheel of
+  the mypy extension and its gate printed `ok typecheck-mypy`, the
+  three calls of the matrix green on the loop's runner, before the
+  coverage leg refused a workspace with no test extension. The
+  acceptance line stays open until 12e lets the pass end green.
 
 ## Open
 
