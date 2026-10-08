@@ -1,25 +1,12 @@
 """``fm sync``: deliver every mounted extension's content to the repository.
 
-Three channels, walked in extension order so a later extension's same-named
-file wins and the instance always wins last:
-
-- prose fragments into ``.workshop/fragments/`` (gitignored): the
-  agent's set from every extension's ``content/fragments/*`` and the
-  registries' renders, in section order, each through the
-  materialiser so an edited copy is kept and named; the registry is
-  [livery.workshop._prose][]. Their own directory, so the sweep that
-  clears a withdrawn fragment owns everything it walks;
-  ``.workshop/`` itself holds this checkout's state, in directories
-  beside it.
-- skills and hooks into ``.claude/skills`` and ``.claude/hooks``
-  through the materialiser: links where possible, copies where not,
-  local overrides kept and named. An extension's ``settings.json`` lands
-  at ``.claude/settings.json`` the same way, always as a copy:
-  settings editors write the file in place.
-- the managed ``CLAUDE.md`` stub itself: one import line per
-  delivered fragment in section order, the repository's own
-  ``fragments/`` after them, then ``CLAUDE.project.md``, the
-  repository's own file that nobody else writes.
+Walked in extension order, so a later extension's same-named file wins
+and the instance always wins last: the files each extension ships under
+``content/``, composed by the fragment engine, and the files each
+extension's code writes from its ``[fragments]`` renders
+([livery.workshop._shipped_files][]). A file that belongs to this
+checkout alone goes through the materialiser: a link where it can, a
+copy where not, and an edited copy kept and named.
 
 Idempotent: a second run changes nothing and says nothing.
 """
@@ -38,7 +25,6 @@ if TYPE_CHECKING:
 from livery.workshop._extensions import (
     workspace_root,
 )
-from livery.workshop._materialise import write_lf
 
 
 def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
@@ -46,7 +32,7 @@ def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
 
     The engine behind ``fm sync``, separated so tests drive it against
     temporary trees. *local_only* writes no file a commit holds: the
-    local outputs alone, and no seed.
+    local outputs alone.
     """
     from livery.workshop._lfs import install_hooks, lfs_enabled
     from livery.workshop._shipped_files import deliver
@@ -54,14 +40,6 @@ def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
     lines: list[str] = deliver(root, local_only=local_only)
     if lfs_enabled(root):
         lines += install_hooks(root)
-    project = root / "CLAUDE.project.md"
-    if not local_only and not project.is_file():
-        write_lf(
-            project,
-            "# This repository\n\nThe repository's own facts: nobody else"
-            " writes here.\n",
-        )
-        lines.append("  CLAUDE.project.md: seeded; put the repository's facts here")
     return lines
 
 

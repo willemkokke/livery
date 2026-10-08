@@ -184,7 +184,8 @@ def test_the_builtin_ladder_answers_as_before(tmp_path: Path) -> None:
         == "yours"
     )
     assert classify(tmp_path, Path("elsewhere.txt"), emitted=nothing).channel == "yours"
-    assert classify(tmp_path, Path("CLAUDE.md"), emitted=nothing).channel == "sync stub"
+    # No listed extension writes CLAUDE.md here: a file there is yours.
+    assert classify(tmp_path, Path("CLAUDE.md"), emitted=nothing).channel == "yours"
 
 
 def test_explain_prints_category_channel_supplier_and_claims(

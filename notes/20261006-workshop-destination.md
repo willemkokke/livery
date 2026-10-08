@@ -11,7 +11,9 @@ acceptance `find` stays open for clang-tidy, whose words wait on a
 ruling, and the extension passes of 10b and 10c stop at the coverage
 leg until 12e (#1225). 10e is built (issue #1307); it
 merges after the 2026-10-08 wave, and the workshop's next release
-carries `livery-extensions-changelog`'s first publish. The extensions
+carries `livery-extensions-changelog`'s first publish. 10f is built
+(issue #1313) on 10e's branch and merges with it; that release
+carries `livery-extensions-claude`'s first publish too. The extensions
 plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1641,6 +1643,41 @@ the stack, which this design neither needs nor rules out).
   PR is never armed; #1320, the loop run from `main` opened a real
   release PR for strongroom, PR #1319, which `fm workflow.abort
   --force` closed before anything published.
+- 2026-10-08, 10f (#1313): `livery-extensions-claude` writes what
+  Claude Code reads. An extension declares a file its code writes with
+  `[fragments."<target>"]`: `render = "module:name"`, called with the
+  workspace root, and `local = true` for a file this checkout keeps
+  alone. A target ending in `/` is a directory whose render answers
+  each file under it, text to write or a shipped path to link to; a
+  path two writers claim refuses naming both
+  (`livery.workshop._shipped_files.computed_outputs`). The extension
+  declares three: `CLAUDE.md`, committed; `.workshop/fragments/`, the
+  agent's guidance over `guidance(root, AGENT)`; and `.claude/`, each
+  listed extension's skills and hooks linked and the one
+  `settings.json` copied. Its plugin carries `fm hooks.*`, and its
+  content the skills, the hook shim and the settings; `_agent_outputs`,
+  `_hooks`, `_tree` and the agent-only helpers of `_prose` left the
+  base. Decided here: the workshop exports `shipped_content(start)`,
+  each stack extension with its `content/`, and `fix_files`, which the
+  post-edit hook runs; a computed file's provenance is its own rule
+  ("computed", or "materialised" for a local one), replacing the
+  base's names for `CLAUDE.md` and `.claude/`; the extension seeds
+  `CLAUDE.project.md` at a project's birth, and `fm sync` no longer
+  writes it when it is missing; `fm new.project`'s stock list names
+  `claude` after `changelog`. Kept in the base: the `.claude/**`
+  pattern among the paths no package's checks read, the
+  `.claude/worktrees/` ignore line, and the rules fragment's sentences
+  naming `fm hooks.pre-bash` and `.claude/worktrees/`, since moving
+  the sentences would add an import to every `CLAUDE.md`.
+- 2026-10-08, 10f's acceptance: after `fm sync` on this repository,
+  `git diff --exit-code CLAUDE.md` exits 0. Under `.claude/` and
+  `.workshop/fragments/`, every file hashes as on 10e's tree but five:
+  the hook shim and the three skills, whose content header names
+  their new owner, a one-line difference each, and `kinds.present.md`,
+  which names the new package. Found on the way and fixed here: a
+  content header's refresh removed the whole comment block it opened
+  (the shim's own documentation) and the blank line after an HTML
+  header; `strip_header` now removes the header's own lines alone.
 
 ## Open
 

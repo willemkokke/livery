@@ -311,6 +311,21 @@ def extension_content(extension: str) -> Path | None:
     return content if content.is_dir() else None
 
 
+def shipped_content(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
+    """Each extension of the workspace's stack with its ``content/`` directory.
+
+    The base first, then the listed extensions in list order, each with
+    the directory its shipped files live in; an extension that ships no
+    content, or that no installed distribution declares, is left out.
+    """
+    found: list[tuple[str, Path]] = []
+    for extension in stack_names(start):
+        content = extension_content(extension)
+        if content is not None:
+            found.append((extension, content))
+    return tuple(found)
+
+
 def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
     """Each listed extension's ``for`` list from its contract entry; None without one.
 

@@ -538,3 +538,31 @@ def test_the_tasks_an_extension_defines_are_read_from_its_sources(
         "acme.serve",
     }
     assert defined_tasks(tmp_path / "acme_tasks" / "_none_here") == frozenset()
+
+
+# A file the extension's code writes: the refusals first.
+
+
+def test_a_fragment_without_its_render_refuses_naming_it(package: Path) -> None:
+    refused = _refusal(package, '[fragments."NOTES.md"]\nlocal = true\n')
+    assert "NOTES.md" in refused and "names no render" in refused
+    refused = _refusal(package, '[fragments."NOTES.md"]\nrender = "elsewhere:judge"\n')
+    assert "outside the extension's package acme_declared" in refused
+
+
+def test_a_fragment_declares_its_target_its_render_and_whether_it_is_local(
+    package: Path,
+) -> None:
+    from livery.workshop._declaration import DeclaredOutput, Reference
+
+    found = _declare(
+        package,
+        '[fragments."NOTES.md"]\nrender = "acme_declared._checks:judge"\n\n'
+        '[fragments.".acme/"]\nrender = "acme_declared._checks:mend"\nlocal = true\n',
+    )
+    assert found.fragments == (
+        DeclaredOutput("NOTES.md", Reference("acme_declared._checks", "judge")),
+        DeclaredOutput(
+            ".acme/", Reference("acme_declared._checks", "mend"), local=True
+        ),
+    )

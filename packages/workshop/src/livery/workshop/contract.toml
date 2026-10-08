@@ -763,6 +763,22 @@ doc = "what the extension adds to other listed extensions, by target"
 types = ["table"]
 doc = "a target extension, by its listed name, to the checks, CI jobs and contributions this one adds while both are listed"
 
+[contract.extension.fragments]
+types = ["table"]
+doc = "the files the extension's code writes, by their path from the root; a path ending in / is a directory whose files the render names"
+
+[contract.extension.fragments."*"]
+types = ["table"]
+doc = "one file the extension's code writes, or a directory of them: its render, and whether it is the checkout's alone"
+
+[contract.extension.fragments."*".render]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the workspace root: for a file, its text, or nothing for no file; for a directory, each file's path under it to its text, or to the shipped file it links to"
+
+[contract.extension.fragments."*".local]
+types = ["bool"]
+doc = "whether the files belong to this checkout alone and are never committed; false when absent"
+
 [contract.extension.options]
 types = ["table"]
 doc = "the options a workspace may turn on when it lists the extension as <name>[<option>]"

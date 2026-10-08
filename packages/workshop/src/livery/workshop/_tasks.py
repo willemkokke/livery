@@ -3,9 +3,9 @@
 The plugin entry ([livery.workshop._mount][]) imports this module, then
 mounts the extensions the contract lists, each through ``plugin()``
 under its own name. Importing this module registers the base's tree
-alone (the quality family, the content sync, the agent hooks): mounting
-the further extensions from inside this import would deliver their
-tasks under the base's identity.
+alone (the quality family, the content sync): mounting the further
+extensions from inside this import would deliver their tasks under the
+base's identity.
 
 Tasks assume the working directory is the workspace root; ``fm`` is
 invoked there.
@@ -25,7 +25,6 @@ from livery.workshop import (  # noqa: F401
     _e2e,
     _env_tasks,
     _graph,
-    _hooks,
     _issue_tasks,
     _new_project,
     _provenance,

@@ -498,6 +498,10 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         for slot in declared.slots
     ]
     found.append(("release-notes", declared.release_notes))
+    found += [
+        (f"{shown(('fragments', output.target))}.render", output.render)
+        for output in declared.fragments
+    ]
     return [(key, value) for key, value in found if isinstance(value, Reference)]
 
 

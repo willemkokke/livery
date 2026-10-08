@@ -613,22 +613,6 @@ def test_the_shell_and_completion_lines_run_the_brand() -> None:
     assert "{" in pwsh and "}" in pwsh  # the braces survived the format
 
 
-def test_the_pipe_guard_recognises_the_brand(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import livery.footman as footman
-    from livery.workshop._hooks import _runs_runner
-
-    monkeypatch.setattr(footman, "prog", lambda: "hse")
-    pattern = _runs_runner()
-    assert pattern.search("hse check") is not None
-    assert pattern.search("uv run hse check") is not None
-    # The stock spellings stay guarded under any brand.
-    assert pattern.search("fm check") is not None
-    assert pattern.search("footman check") is not None
-    assert pattern.search("shse check") is None
-
-
 def test_the_gitignore_header_speaks_the_brand() -> None:
     from livery.workshop._fragment_engine import (
         _IGNORE_HEADER,  # pyright: ignore[reportPrivateUsage]

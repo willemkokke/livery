@@ -2,7 +2,7 @@
 name: execute-plan
 description: Execute one phase of a plan note - worktree, gate-green, plan updated in the same change, acceptance proven by command.
 ---
-<!-- Shipped as livery.workshop extension content, delivered to the workspace
+<!-- Shipped as livery.extensions.claude extension content, delivered to the workspace
      by the sync verb. Edit this copy in the extension and release it;
      an edited delivered copy is a local override, kept and named.
 -->
