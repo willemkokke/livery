@@ -822,14 +822,38 @@ class ReleaseDriver:
             print(f"  {line}")
 
 
+def fresh_receipts(root: Path) -> None:
+    """Fetch origin's tags, so a derivation reads every receipt a wave cut.
+
+    A release wave tags its receipts on the remote, and this checkout
+    holds them only after a fetch: a derivation from stale tags names
+    versions the index already has. A checkout with no origin has only
+    its own tags to read; one that cannot reach origin derives from its
+    own and says so.
+    """
+    git = GitOps(root)
+    if not git.has_remote("origin"):
+        return
+    try:
+        git.fetch_tags()
+    except GitError as error:
+        print(
+            "  origin could not be fetched, so the versions come from this"
+            f" checkout's own tags: {error}"
+        )
+
+
 def local_release(root: Path, members: tuple[Package, ...]) -> None:
     """Everything that stays on this machine, then the stamps roll back.
 
     Derive, stamp (so the built wheels carry the would-be versions),
     build, validate both legs, print the would-be release, restore
     the tree; ``dist/`` and the report remain. Publishing consent is
-    never asked because nothing leaves the machine.
+    never asked because nothing leaves the machine. The derivation
+    reads origin's receipts, fetched first, so it names the versions
+    the armed act would ([livery.workshop._release_driver.fresh_receipts][]).
     """
+    fresh_receipts(root)
     plans = derive_plans(root, members)
     print("  act: local; nothing leaves this machine")
     try:
