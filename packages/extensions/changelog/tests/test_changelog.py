@@ -153,6 +153,17 @@ def test_a_workspace_on_no_named_forge_has_no_credential(tmp_path: Path) -> None
     assert _cliff._credential(tmp_path) == ("", "")
 
 
+def test_a_per_kind_variable_already_set_wins_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.changelog import _cliff
+
+    root, _package = _cliff_workspace(tmp_path, "gitea")
+    monkeypatch.setenv("FORGE_TOKEN", "the-workshop-s")
+    monkeypatch.setenv("GITEA_TOKEN", "git-cliff-s-own")
+    assert _cliff._credential(root) == ("GITEA_TOKEN", "git-cliff-s-own")
+
+
 def test_the_changelog_credits_with_the_token_the_lane_connects_with(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -261,6 +272,7 @@ def test_a_refused_author_lookup_says_what_to_check(
     from livery.toolroom.tools.testing import answers
 
     root, package = _cliff_workspace(tmp_path, "gitea")
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
     # A failure that is not the lookup carries git-cliff's words alone.
     broken = Result(1, stderr="unknown field `bump`")
