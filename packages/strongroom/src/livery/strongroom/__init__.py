@@ -215,7 +215,7 @@ __all__ = [
     "testing",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 # The module and attribute each lazily served name comes from.

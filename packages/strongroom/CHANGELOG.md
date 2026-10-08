@@ -9,6 +9,12 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.4.1] - 2026-10-08
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+
 ## [0.4.0] - 2026-10-07
 
 ### Added

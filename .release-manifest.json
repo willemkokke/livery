@@ -1,66 +1,11 @@
 {
  "schema": 1,
- "mined-at": "96dd4826889bc55cc6c3a0cc0c076c6ef8025282",
+ "mined-at": "8986e2a455e5f3b092256a5795d569e2229d648f",
  "members": [
   {
-   "dir": "footman",
-   "name": "livery-footman",
-   "version": "0.59.0"
-  },
-  {
-   "dir": "forge",
-   "name": "livery-forge",
-   "version": "0.7.0"
-  },
-  {
-   "dir": "toolroom",
-   "name": "livery-toolroom",
-   "version": "0.11.0"
-  },
-  {
-   "dir": "toolroom-store",
-   "name": "livery-toolroom-store",
-   "version": "0.3.0"
-  },
-  {
-   "dir": "workshop",
-   "name": "livery-workshop",
-   "version": "0.7.0"
-  },
-  {
-   "dir": "toolroom-bench",
-   "name": "livery-toolroom-bench",
-   "version": "0.3.0"
-  },
-  {
-   "dir": "extensions/basedpyright",
-   "name": "livery-extensions-basedpyright",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "extensions/pyrefly",
-   "name": "livery-extensions-pyrefly",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "extensions/ty",
-   "name": "livery-extensions-ty",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "extensions/ruff",
-   "name": "livery-extensions-ruff",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "extensions/mypy",
-   "name": "livery-extensions-mypy",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "extensions/clang-format",
-   "name": "livery-extensions-clang-format",
-   "version": "0.1.0"
+   "dir": "strongroom",
+   "name": "livery-strongroom",
+   "version": "0.4.1"
   }
  ]
 }
