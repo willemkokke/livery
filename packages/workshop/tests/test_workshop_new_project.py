@@ -213,7 +213,9 @@ def test_birth_end_to_end_and_the_second_run_resumes(
     assert (root / "README.md").is_file() and (root / "LICENSE").is_file()
     assert (root / "docs" / "index.md").is_file()  # the docs seed, at birth
     assert (root / ".gitea" / "workflows" / "ci.yml").is_file()
-    assert (root / "CLAUDE.project.md").is_file()
+    # CLAUDE.project.md is the claude extension's seed, and the release
+    # legs run the workshop's wheel without that extension: its own
+    # suite pins the seed.
     out = capsys.readouterr().out
     assert "setup PR: opened" in out
     _birth(resume=True)
