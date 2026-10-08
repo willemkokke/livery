@@ -9,6 +9,22 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.3.0] - 2026-10-08
+
+### Added
+
+- The docs extension's own public API serves the nav block helpers and the generated tree's name, rewrite_nav_block leaves the workshop, and toolroom-bench writes its block through the extension by @willemkokke
+- No package reaches another's privates: footman exports host, CommandView, styled and its brand's names, toolroom its colour and stub tables by @willemkokke
+
+### Fixed
+
+- Nobody imports an extension but the workshop's mount: toolroom-bench writes its tools nav block as data, the docs extension's public names go, and a test holds the rule by @willemkokke
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+- The tool store's table, lock and verbs take toolroom's name, and the store ships the table's schema and its own reader by @willemkokke
+
 ## [0.2.0] - 2026-10-07
 
 ### Added

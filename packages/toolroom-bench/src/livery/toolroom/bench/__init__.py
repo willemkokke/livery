@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Refreshed", "__version__", "submit_refresh", "tasks"]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # The module each lazily served name lives in. The group comes from
 # _docsgen, which adds `toolroom.docs` to the group it imports, so the
