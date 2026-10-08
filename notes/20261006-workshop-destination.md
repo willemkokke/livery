@@ -1614,11 +1614,17 @@ the stack, which this design neither needs nor rules out).
   the workshop's derivation are tested in the extension. Not moved:
   the release driver's rollback, the docs site and the conan release
   body still read `CHANGELOG.md` by name.
-- 2026-10-08, open in 10e: the acceptance's `fm workflow.release
-  --local` on this repository runs on `main` after the merge. Before
-  it, every package's entry was written offline on `main` at
-  `f4614c00` by the base's git-cliff code and by the extension's: the
-  fifteen entries are byte-identical.
+- 2026-10-08, 10e's acceptance: `fm workflow.release workshop
+  extensions/changelog extensions/claude --local` on `main` at
+  `b90e6ae9` passed all six legs in 16m40s, the extensions' at the
+  set's workshop 0.8.0, and would release the workshop 0.8.0 with both
+  extensions at 0.0.0. Its first runs found two test faults, fixed by
+  #1321 (a birth test asserting the claude extension's seed on the
+  workshop's wheel alone) and #1322 (a test pinning minijinja's
+  wording, which its newest release extended). Before it, every
+  package's entry was written offline on `main` at `f4614c00` by the
+  base's git-cliff code and by the extension's: the fifteen entries
+  are byte-identical.
 - 2026-10-08, open in 10e: the `cliff.toml` template's comments still
   say each file is composed from the base's template. Rewording them
   renders every package's `cliff.toml` again, which puts the change
