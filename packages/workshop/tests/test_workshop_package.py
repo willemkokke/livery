@@ -74,15 +74,12 @@ def test_the_surface_is_declared() -> None:
     ]
 
 
-def test_the_nav_block_helpers_are_the_docs_extensions_and_not_the_workshops() -> None:
-    # The break first: the workshop serves no nav block helper.
+def test_the_workshop_serves_no_nav_block_helper() -> None:
+    # A generator writes its nav block as data, the file the docs
+    # extension reads; neither the workshop nor the extension serves code
+    # for it.
     with pytest.raises(AttributeError, match="rewrite_nav_block"):
         workshop_module.rewrite_nav_block  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
-    import livery.extensions.docs as docs
-
-    assert docs.nav_block_markers("tools") == ("# nav:begin tools", "# nav:end tools")
-    assert docs.GENERATED == "_generated/"
-    assert callable(docs.write_nav_block)
 
 
 def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name() -> (

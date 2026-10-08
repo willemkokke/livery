@@ -5,9 +5,7 @@ The task surface arrives through the footman plugin
 walk (livery.workshop.extension_names, livery.workshop.workspace_root),
 the package contracts
 (livery.workshop.discover_packages, livery.workshop.verify_workspace
-over livery.workshop.Package and livery.workshop.Edge). A package's
-docs generator writes its nav block through the docs extension's
-own names, [livery.extensions.docs.write_nav_block][]. The forge
+over livery.workshop.Package and livery.workshop.Edge). The forge
 lane belongs to
 livery.forge.Forge; the workshop orchestrates local, git, and forge
 steps and never hands a raw forge verb to a user.

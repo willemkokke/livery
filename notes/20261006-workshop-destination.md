@@ -290,7 +290,7 @@ every kind the check judges"). What changes:
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
 | coverage pages on a kind | `KindRecord.coverage_pages` | a `[generators.<name>]` entry of the coverage extension's `[for.docs]` table, one renderer for every kind, reading the line format |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | `[qa] coverage-floor` and `coverage-epsilon`, `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
-| the nav block format | `_navblocks`, `rewrite_nav_block` in the api | `livery.extensions.docs.write_nav_block`, `nav_block_markers` |
+| the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the wheels job: which members build platform wheels and on which runner labels | `_ci_generate` reads `member_roster`, `wheel_runners`; `Job.only = "wheels"` in the base | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
@@ -541,12 +541,14 @@ need none of these once they are words).
 | `registry`, `RegistryTarget` | the resolved registry target of a kind | docs (the container registry) | `livery.workshop` |
 
 **The docs extension's own public API**, `livery.extensions.docs`,
-for generator extensions and for generators in any package:
+for generator extensions alone, since nobody imports an extension but
+the workshop that mounts it and an extension that requires it. A
+package's generator writes data the extension reads. Each name
+arrives when an extension that requires docs needs it; none has yet:
 
 | Name | Purpose | Users |
 | --- | --- | --- |
 | `Page` | one generated page: path, title, nav position; what a generator's `run` returns | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
-| `write_nav_block`, `nav_block_markers` | emit a nav block beside generated pages, and place it | toolroom-bench, the task reference |
 | `GENERATED` | the generated tree's name under a package's `docs/` | generators |
 | `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | mkdocstrings |
 
@@ -554,7 +556,7 @@ for generator extensions and for generators in any package:
 
 | Name | Goes to | Who breaks | Phase |
 | --- | --- | --- | --- |
-| `rewrite_nav_block` | `livery.extensions.docs.write_nav_block` | toolroom-bench (ours); any third-party generator | 10 |
+| `rewrite_nav_block` | nothing: a generator writes `nav.<name>.toml` as data | any third-party generator | 10 |
 | `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
 | `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
@@ -656,7 +658,7 @@ reaching package; "exception" means an allowance entry with its reason.
 | toolroom-bench into footman's `_globals.active` | the same `host()` seam | |
 | toolroom-bench into toolroom's `_colordata` | public read of the probed colour table | `livery.toolroom.tools.colour_controls()` |
 | toolroom-bench into toolroom-store's `_engine.download` | footman's public `fetch` does the job; the store's own download stays private | `livery.footman.fetch` |
-| toolroom-bench into workshop's `_navblocks` | the docs extension's public name | `livery.extensions.docs.write_nav_block` |
+| toolroom-bench into workshop's `_navblocks` | data: the bench writes `nav.tools.toml`, the file the docs extension reads | |
 | workshop into footman's `_paths` and `_config` | public, named for the question each asks | `livery.footman.builtins()` (the App's mounted builtin set), `project_builtins(root)`, `directory_variable("DATA_DIR")`, `tasks_file_name()` |
 | workshop's `_e2e` into forge's `_registry` | the forge's admin protocol, phase 15, makes deleting a published version public; `_e2e` leaves the base in the same phase | the admin protocol in `livery.forge` |
 
@@ -1438,6 +1440,20 @@ the stack, which this design neither needs nor rules out).
   path, so the docs extension's modules publish under
   `packages/workshop/api/livery.extensions.docs/` until phase 12
   ships the extension apart.
+- Willem, 2026-10-08: nobody imports an extension but the workshop,
+  which mounts it, and an extension imports another only when it
+  cannot work without it. The docs extension's public names go with
+  its entry module until an extension needs one.
+- 2026-10-08, the rule (#1294): toolroom-bench writes its tools nav
+  block as data, `nav.tools.toml` beside its pages, and imports
+  nothing of the docs extension. `livery.extensions.docs` loses
+  `write_nav_block`, `nav_block_markers`, `GENERATED` and its entry
+  module, and the workshop's wheel takes `namespace = true` back for
+  it; its modules leave the API site with it, while the reference
+  keeps documenting every root a package ships. A test holds the rule
+  over every member's sources: an import of an extension's module from
+  outside it refuses, naming the file and the line, unless the
+  importing extension's `extension.toml` requires the imported one.
 
 ## Open
 

@@ -1824,17 +1824,16 @@ def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
 
 
 def test_pages_emits_the_tools_nav_block_beside_the_pages(tmp_path):
-    # The block is written through the docs extension's emitter, which
-    # a release leg does not install (the bench declares no dependency
-    # on the workshop's wheel, which ships it); the proof runs where
-    # the extension is.
-    pytest.importorskip("livery.extensions.docs")
+    import tomllib
+
     from livery.toolroom.bench import _tasks as tools_tasks
 
     generated = tmp_path / "_generated"
     tools_tasks.pages(generated / "tools", nav=generated)
     block = generated / "nav.tools.toml"
-    assert block.is_file()
+    # Data the docs site reads: a `nav` list of label-to-page tables.
+    nav = tomllib.loads(block.read_text(encoding="utf-8"))["nav"]
+    assert {"ruff": "_generated/tools/ruff.md"} in nav
     keys = tools_tasks.nav_keys(block)
     assert keys == sorted(keys)  # alphabetical
     assert {"bash", "python", "ruff"} <= set(keys)  # the real drivers, sorted in

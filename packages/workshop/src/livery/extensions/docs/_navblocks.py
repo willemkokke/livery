@@ -1,11 +1,14 @@
 """The nav blocks generators write, and the markers that place them in a package's nav.
 
 A generator emits a block's entries into the package's generated tree,
-and the authored ``docs/nav.toml`` places the block with a marker pair;
-the site assembly renders the block where the markers sit. A generator
-in any package writes one through the extension's public names,
-[livery.extensions.docs.write_nav_block][] and
-[livery.extensions.docs.nav_block_markers][].
+and the authored ``docs/nav.toml`` places the block with a marker pair,
+``# nav:begin <name>`` then ``# nav:end <name>``; the site assembly
+renders the block where the markers sit. The block is data: a file
+``docs/_generated/nav.<name>.toml`` holding a ``nav`` list of one-key
+tables, each a label to a page path inside the package's ``docs/``. A
+generator in any package writes that file itself and imports nothing
+of this extension, since nobody imports an extension but the
+workshop that mounts it.
 """
 
 from __future__ import annotations
