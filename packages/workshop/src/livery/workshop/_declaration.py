@@ -10,10 +10,13 @@ while that one is listed, and the earlier extensions' shipped files it
 replaces or deletes. The file is a contract, read as ``workshop.toml`` is: kebab-case
 keys, every key judged, every refusal naming the file.
 
-Behaviour is a reference, ``"module:function"``, imported when it runs.
-The read imports nothing. A reference whose module is not in the
-extension's package, or whose module does not define the name at its
-top level, refuses here, read from the module's source.
+A check whose verdict is its tool's exit code is its tool's words
+(``judge``, ``fix``, ``safe-fix``, ``env``, ``matrix``), which the engine
+runs ([livery.workshop._words.Command][]). Other behaviour is a
+reference, ``"module:function"``, imported when it runs. The read
+imports nothing. A reference whose module is not in the extension's
+package, or whose module does not define the name at its top level,
+refuses here, read from the module's source.
 """
 
 from __future__ import annotations
@@ -29,10 +32,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from livery.workshop._checks import CheckRecord
+    from collections.abc import Callable
+
+    from livery.workshop._checks import CheckRecord, GateContext
     from livery.workshop._contract_keys import ContractKind, Declared, Type
     from livery.workshop._influence import Inputs
     from livery.workshop._points import JobContribution
+    from livery.workshop._words import Words
 
 #: The declaration file's name, beside the package an entry point names.
 FILE = "extension.toml"
@@ -200,10 +206,13 @@ def declaration_file(package: str) -> Path | None:
 
 
 #: The tables whose keys the author names, a file or a slot or a shipped
-#: file's reference: their keys are data, never judged kebab-case.
+#: file's reference or an environment variable: their keys are data,
+#: never judged kebab-case.
 _NAMED = (
     ("checks", "*", "*", "fragments"),
     ("for", "*", "checks", "*", "*", "fragments"),
+    ("checks", "*", "*", "env"),
+    ("for", "*", "checks", "*", "*", "env"),
     ("contributions",),
     ("for", "*", "contributions"),
     ("replaces",),
@@ -423,8 +432,7 @@ class _Reader:
         from livery.workshop._fragments import verify
 
         where = (*prefix, tool, role)
-        if "run" not in entry:
-            raise self.refuse(where, "names no run: a check runs a reference")
+        run, fix, words = self.bodies(entry, where)
         listed_with = str(entry.get("listed-with", ""))
         if listed_with and listed_with not in options:
             raise self.refuse(
@@ -453,14 +461,13 @@ class _Reader:
         record = CheckRecord(
             tool,
             role,
-            self.reference(entry["run"], (*where, "run")),
+            run,
             scope=str(entry.get("scope", "workspace")),
             narrowing=str(entry.get("narrowing", "none")),
             transport=str(entry.get("transport", "argv")),
             threshold=float(entry.get("threshold", 1.0)),
-            fix=self.reference(entry["fix"], (*where, "fix"))
-            if "fix" in entry
-            else None,
+            fix=fix,
+            words=words,
             kinds=tuple(entry.get("kinds", ())),
             tests_only=bool(entry.get("tests-only", False)),
             after=tuple(entry.get("after", ())),
@@ -495,6 +502,100 @@ class _Reader:
         except ValueError as error:
             raise self.refuse((*where, "fragments"), f"refuses: {error}") from error
         return record
+
+    def bodies(
+        self, entry: dict[str, Any], where: tuple[str, ...]
+    ) -> tuple[
+        Callable[[GateContext], None],
+        Callable[[GateContext], None] | None,
+        Words | None,
+    ]:
+        """A check's judge and fix, from its words or from references to its code.
+
+        A check is its tool's words, ``judge``, or a reference to code,
+        ``run``, never both. Words fix in words and code in code, and
+        ``safe-fix``, ``env`` and ``matrix`` are words alone.
+        """
+        from livery.workshop._words import Command
+
+        if "judge" in entry and "run" in entry:
+            raise self.refuse(
+                where,
+                "declares both judge and run: a check is its tool's words or a"
+                " reference to its code, never both",
+            )
+        if "judge" in entry:
+            words = self.words(entry, where)
+            name = f"{where[-1]}.{where[-2]}"
+            fixing = Command(words, name, fixing=True) if words.fix else None
+            return Command(words, name), fixing, words
+        if "run" not in entry:
+            raise self.refuse(
+                where,
+                "names neither judge nor run: a check is its tool's words, judge,"
+                " or a reference to its code, run",
+            )
+        for key in ("safe-fix", "env", "matrix"):
+            if key in entry:
+                raise self.refuse(
+                    (*where, key),
+                    "belongs to a check in words, and this one runs code; declare"
+                    " judge instead of run, or drop the key",
+                )
+        if "fix" in entry and not isinstance(entry["fix"], str):
+            raise self.refuse(
+                (*where, "fix"),
+                "is words, and run is a reference to code: a check that runs code"
+                " fixes with code, module:function",
+            )
+        coded = (
+            self.reference(entry["fix"], (*where, "fix")) if "fix" in entry else None
+        )
+        return self.reference(entry["run"], (*where, "run")), coded, None
+
+    def words(self, entry: dict[str, Any], where: tuple[str, ...]) -> Words:
+        """The words *entry* declares: judge, fix, safe-fix, env and matrix."""
+        from livery.workshop._words import Words
+
+        def argv(key: str) -> tuple[str, ...]:
+            value = entry.get(key, [])
+            if isinstance(value, str):
+                raise self.refuse(
+                    (*where, key),
+                    f"is {value!r}, a reference to code; in a check in words,"
+                    f" {key} is words: the tool's name, then its arguments",
+                )
+            return tuple(str(word) for word in value)
+
+        judge, fix, safe_fix = argv("judge"), argv("fix"), argv("safe-fix")
+        if not judge:
+            raise self.refuse(
+                (*where, "judge"), "is empty: the tool's name comes first"
+            )
+        if safe_fix and not fix:
+            raise self.refuse(
+                (*where, "safe-fix"),
+                "is declared without fix: a check that fixes safely fixes too",
+            )
+        for key, value in (("fix", fix), ("safe-fix", safe_fix)):
+            if value and value[0] != judge[0]:
+                raise self.refuse(
+                    (*where, key),
+                    f"runs {value[0]}, and judge runs {judge[0]}: a check runs"
+                    " one tool",
+                )
+        matrix: list[tuple[str, tuple[str, ...]]] = []
+        for key, values in entry.get("matrix", {}).items():
+            if not values:
+                raise self.refuse(
+                    (*where, "matrix", key),
+                    "has no values: a matrix key runs one call per value",
+                )
+            matrix.append((str(key), tuple(str(value) for value in values)))
+        env = tuple(
+            (str(name), str(value)) for name, value in entry.get("env", {}).items()
+        )
+        return Words(judge, fix, safe_fix, env, tuple(matrix))
 
     def fragments(
         self, table: dict[str, Any], where: tuple[str, ...]

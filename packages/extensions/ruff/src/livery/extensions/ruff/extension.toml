@@ -1,6 +1,9 @@
 # The ruff extension: the formatter, then the linter, over the python
-# files they claim. Read at every mount; a check's code is imported when
-# the check runs.
+# files they claim. Both checks are ruff's words: the workshop selects
+# the paths a run reaches, appends the words after -- on the check's
+# verb and then the paths, and ruff's exit code is the verdict. A file
+# named to ruff follows the configured excludes under --force-exclude,
+# as a file ruff finds itself does.
 
 [extension]
 api-version = 1
@@ -10,8 +13,9 @@ levels = ["workspace"]
 # The kinds whose python files ruff judges are a python package's, and a
 # native package's conanfile.py beside clang-format over its sources.
 [checks.ruff.format]
-run = "livery.extensions.ruff._checks:judge_format"
-fix = "livery.extensions.ruff._checks:fix_format"
+judge = ["ruff", "format", "--check", "--force-exclude"]
+# Formatting removes no code, so --safe-fix rewrites as --fix does.
+fix = ["ruff", "format", "--force-exclude"]
 narrowing = "paths"
 kinds = ["python", "cpp-conan"]
 tools = ["ruff"]
@@ -34,8 +38,11 @@ claims = [
 # rules stop at the tests. An example keeps the layout its page shows:
 # ruff judges its names, and nothing of its style.
 [checks.ruff.lint]
-run = "livery.extensions.ruff._checks:judge_lint"
-fix = "livery.extensions.ruff._checks:fix_lint"
+judge = ["ruff", "check", "--force-exclude"]
+fix = ["ruff", "check", "--fix", "--force-exclude"]
+# --safe-fix withholds the rule that deletes code an edit in flight has
+# not finished writing: an import added before the code that uses it.
+safe-fix = ["ruff", "check", "--fix", "--unfixable=F401", "--force-exclude"]
 narrowing = "paths"
 kinds = ["python", "cpp-conan"]
 tools = ["ruff"]

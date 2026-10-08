@@ -28,6 +28,8 @@ PYTHON_JUDGES = (
 def _package(tmp_path: Path) -> Package:
     member = tmp_path / "packages" / "one"
     (member / "tests").mkdir(parents=True)
+    # A file to judge: a check never names a directory with none.
+    (member / "tests" / "test_one.py").write_text("")
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-one"\nversion = "0.1.0"\n'
     )
@@ -120,6 +122,7 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
 
     ran, calls = _record(monkeypatch, tmp_path)
     (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_root.py").write_text("")
     unit = workspace_suite(tmp_path)
     assert unit is not None
     _quality._scoped_check((unit,))

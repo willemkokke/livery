@@ -84,6 +84,9 @@ def _members(root: Path, count: int) -> tuple[Package, ...]:
         directory = root / "packages" / f"m{index:03d}"
         (directory / "src").mkdir(parents=True)
         (directory / "tests").mkdir()
+        # A file in each: a check never names a directory with none to judge.
+        (directory / "src" / "module.py").write_text("")
+        (directory / "tests" / "test_module.py").write_text("")
         packages.append(
             Package(
                 directory=directory,

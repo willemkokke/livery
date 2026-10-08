@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.mypy import _checks
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
 
@@ -49,6 +48,9 @@ def _member(root: Path, name: str) -> Package:
     directory = root / "packages" / name
     (directory / "src").mkdir(parents=True)
     (directory / "tests").mkdir()
+    # A file in each: a check never names a directory with none to judge.
+    (directory / "src" / f"{name}.py").write_text("")
+    (directory / "tests" / f"test_{name}.py").write_text("")
     return Package(
         directory=directory,
         path=f"packages/{name}",
@@ -114,75 +116,80 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
 
 
 def test_a_platform_that_fails_fails_the_call_and_the_others_still_run(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     from livery.footman import fail
 
     ran: list[str] = []
 
-    def mypy(*paths: str, platform: str, cache_dir: str) -> None:
-        del paths, cache_dir
+    def mypy(*argv: str) -> None:
+        platform = argv[0].removeprefix("--platform=")
         ran.append(platform)
         if platform == "win32":
             fail("mypy --platform win32 exited with code 1")
 
     monkeypatch.setattr(tools, "mypy", mypy)
+    one = _member(tmp_path, "one")
+    record = registry.check_for("typecheck.mypy")
     with pytest.raises(BaseException, match="win32"):
-        _checks.run_typecheck()
+        record.run(GateContext(root=tmp_path, packages=(one,)))
     assert sorted(ran) == ["darwin", "linux", "win32"]
 
 
-# The check: the workshop names the paths, and every call checks each platform.
+# The check: mypy's words, a call per platform over the paths a run reaches.
+
+
+def _calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, ...]]:
+    """Mypy's handle, standing in: each call's words, in the order they came."""
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(tools, "mypy", lambda *argv: calls.append(argv))
+    return calls
+
+
+def _platforms(*tail: str) -> list[tuple[str, ...]]:
+    """Each platform's call, sorted as the calls are compared."""
+    return sorted(
+        (f"--platform={p}", f"--cache-dir=.workshop/.cache/mypy/{p}", *tail)
+        for p in ("linux", "darwin", "win32")
+    )
 
 
 def test_every_call_checks_each_platform_with_a_cache_of_its_own(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
-    monkeypatch.setattr(tools, "mypy", lambda *paths, **kw: calls.append((paths, kw)))
-    _checks.run_typecheck(("packages/one/src",))
-    assert sorted(calls, key=lambda call: call[1]["platform"]) == [
-        (("packages/one/src",), {"platform": p, "cache_dir": f"{_checks.CACHE}/{p}"})
-        for p in ("darwin", "linux", "win32")
-    ]
+    calls = _calls(monkeypatch)
+    one = _member(tmp_path, "one")
+    two = _member(tmp_path, "two")
+    record = registry.check_for("typecheck.mypy")
+    record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
+    assert sorted(calls) == _platforms("packages/one/src", "packages/one/tests")
     # The words after -- on the check's own verb reach every platform's call.
     calls.clear()
-    _checks.run_typecheck(("packages/one/src",), ("--strict",))
-    assert sorted(calls, key=lambda call: call[1]["platform"]) == [
-        (
-            ("--strict", "packages/one/src"),
-            {"platform": p, "cache_dir": f"{_checks.CACHE}/{p}"},
+    record.run(
+        GateContext(
+            root=tmp_path, packages=(one, two), subset=(one,), arguments=("--strict",)
         )
-        for p in ("darwin", "linux", "win32")
-    ]
+    )
+    assert sorted(calls) == _platforms(
+        "--strict", "packages/one/src", "packages/one/tests"
+    )
 
 
 def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
-    monkeypatch.setattr(
-        _checks,
-        "run_typecheck",
-        lambda paths=(), arguments=(): calls.append((paths, arguments)),
-    )
+    calls = _calls(monkeypatch)
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.mypy")
     # Every member reached: mypy reads the files mypy.ini names.
     record.run(GateContext(root=tmp_path, packages=(one, two)))
-    assert calls == [((), ())]
+    assert sorted(calls) == _platforms()
     calls.clear()
     record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
-    assert calls == [(("packages/one/src", "packages/one/tests"), ())]
-    # The words after -- on the check's own verb reach both calls.
-    calls.clear()
-    words = ("--strict",)
-    record.run(GateContext(root=tmp_path, packages=(one, two), arguments=words))
-    record.run(
-        GateContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
-    )
-    assert calls == [((), words), (("packages/one/src", "packages/one/tests"), words)]
+    assert sorted(calls) == _platforms("packages/one/src", "packages/one/tests")
 
 
 # The file: the workshop writes it, and a bare mypy reads what the gate reads.

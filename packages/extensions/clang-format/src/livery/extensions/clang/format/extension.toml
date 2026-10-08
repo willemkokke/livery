@@ -1,6 +1,7 @@
 # The clang-format extension: one style for every native member, judged
-# per package. Read at every mount; a check's code is imported when the
-# check runs.
+# per package. The check is clang-format's words, called from the
+# package's directory on the package's files a run reaches, so each
+# package's own .clang-format sets the style.
 
 [extension]
 api-version = 1
@@ -9,8 +10,8 @@ levels = ["workspace"]
 
 # The kinds whose members carry C or C++.
 [checks.clang-format.format]
-run = "livery.extensions.clang.format._checks:judge_format"
-fix = "livery.extensions.clang.format._checks:fix_format"
+judge = ["clang_format", "--dry-run", "--Werror"]
+fix = ["clang_format", "-i"]
 scope = "package"
 kinds = ["cpp-conan", "python-nanobind"]
 tools = ["clang_format"]

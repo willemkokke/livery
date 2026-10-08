@@ -49,6 +49,7 @@ from livery.workshop._fragments import Fragment
 if TYPE_CHECKING:
     from livery.workshop._influence import Changes, Inputs, Selection
     from livery.workshop._packages import Package
+    from livery.workshop._words import Words
 
 #: A check's scope: the whole workspace in one run, or one package at a time.
 WORKSPACE = "workspace"
@@ -197,7 +198,8 @@ class CheckRecord:
             ``drift``, ``provenance`` or ``layering``, a string a
             verb is generated from. The roles that exist are those
             of the registered checks.
-        run: The judging callable; a refusal is its verdict.
+        run: The judging callable, the engine running the check's words
+            or a reference to its code; a refusal is its verdict.
         scope: ``workspace`` for a check that judges the whole in one
             run, ``package`` for one that judges one package at a
             time.
@@ -273,6 +275,9 @@ class CheckRecord:
             which it reads from [livery.workshop.GateContext][]'s
             ``arguments``. A check that wraps no tool leaves it off, and
             its verb refuses them.
+        words: The check's words when it is declared in words, which
+            ``fm explain`` prints and the conformance kit judges; None
+            for a check whose ``run`` is code.
 
     """
 
@@ -299,6 +304,7 @@ class CheckRecord:
     flags: tuple[str, ...] = ()
     listed_with: str = ""
     arguments: bool = False
+    words: Words | None = None
 
     @property
     def name(self) -> str:
@@ -1591,16 +1597,38 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     pythons = tuple(p for p in members if is_python_kind(p.kind))
     natives = tuple(p for p in members if not is_python_kind(p.kind))
     unit = _workspace_unit(ctx)
+
+    def holding(packages: tuple[Package, ...]) -> tuple[str, ...]:
+        # A directory with no file the claims reach has nothing to
+        # judge, and a tool such as mypy refuses one it is handed.
+        return tuple(
+            path
+            for path in package_paths(packages)
+            if _holds_claimed(record, ctx.root / path)
+        )
+
     if ctx.subset is None:
         if len(members) == len(gated_members):
             return WHOLE
-        chosen = package_paths(pythons + unit) + _claimed(name, natives)
+        chosen = holding(pythons + unit) + _claimed(name, natives)
         return chosen or WHOLE
     judged = tuple(p for p in ctx.subset if p in pythons or p in unit)
     present = tuple(p for p in natives if p in ctx.subset)
     if whole_reached(ctx, name, len(judged) + len(present)):
         return WHOLE
-    return package_paths(judged) + _claimed(name, present)
+    return holding(judged) + _claimed(name, present)
+
+
+def _holds_claimed(record: CheckRecord, directory: Path) -> bool:
+    """Whether *directory* holds a file with a suffix *record*'s claims read.
+
+    A check with no claim, or a claim that names no suffix, reads every
+    file, so any directory holds one.
+    """
+    if not record.claims or any(not claim.suffixes for claim in record.claims):
+        return True
+    suffixes = sorted({suffix for claim in record.claims for suffix in claim.suffixes})
+    return any(next(directory.rglob(f"*{suffix}"), None) for suffix in suffixes)
 
 
 def scoped_files(

@@ -1,6 +1,9 @@
 # The basedpyright extension: the type checker, and type completeness as
-# its option. Read at every mount; a check's code is imported when the
-# check runs.
+# its option. The type checker is basedpyright's words, warnings as
+# errors; a run that reaches the whole calls it with no path, so it reads
+# the files pyrightconfig.json names. Type completeness runs one call per
+# public module and reads its report, so it is code, imported when it
+# runs.
 
 [extension]
 api-version = 1
@@ -12,7 +15,7 @@ levels = ["workspace"]
 typecomplete = "verifies that every package's public API is type-complete"
 
 [checks.basedpyright.typecheck]
-run = "livery.extensions.basedpyright._checks:judge_typecheck"
+judge = ["basedpyright", "--warnings"]
 narrowing = "paths"
 kinds = ["python"]
 tools = ["basedpyright"]
