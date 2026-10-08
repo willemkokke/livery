@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-ruff"
-version = "0.0.0"
+version = "0.1.0"
 description = "Ruff as a check of the livery workshop: the formatter and the linter, configured by the root ruff.toml."
 readme = "README.md"
 license = "MIT"

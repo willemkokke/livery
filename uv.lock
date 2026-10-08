@@ -887,7 +887,7 @@ requires-dist = [{ name = "livery-workshop", editable = "packages/workshop" }]
 
 [[package]]
 name = "livery-extensions-ruff"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/ruff" }
 dependencies = [
     { name = "livery-toolroom" },
