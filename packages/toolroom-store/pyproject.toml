@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom-store"
-version = "0.2.0"
+version = "0.3.0"
 description = "The pinned tool store over strongroom: specs, a machine-wide home, verified installs."
 readme = "README.md"
 license = "MIT"
