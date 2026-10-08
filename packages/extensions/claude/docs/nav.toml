@@ -9,4 +9,6 @@
 # api last.
 nav = [
     { "Index" = "index.md" },
+    # nav:begin tasks
+    # nav:end tasks
 ]
