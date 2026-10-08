@@ -861,7 +861,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-pyrefly"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/pyrefly" }
 dependencies = [
     { name = "livery-toolroom" },

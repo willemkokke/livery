@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-pyrefly"
-version = "0.0.0"
+version = "0.1.0"
 description = "pyrefly as a check of the livery workshop: the type checker over every platform at once, configured by the root pyrefly.toml."
 readme = "README.md"
 license = "MIT"
