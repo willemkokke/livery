@@ -6,11 +6,11 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 `origin/main` at `4f2a5e53`. 10a is built (issue #1218). 10b, 10g
 (issue #1301), 10c (issue #1303) and 10d (issue #1306) shipped on
 2026-10-08 in the wave of PR #1317, after a dispatch published the
-four tool extensions the 2026-10-07 wave could not create. 10c's
-acceptance `find` stays open for clang-tidy, whose words wait on a
-ruling, and the extension passes of 10b and 10c stop at the coverage
-leg until 12e (#1225). 10e (issue #1307) merged as PR #1312 after
-that wave, and 10f (issue #1313) is built on it; the workshop's next
+four tool extensions the 2026-10-07 wave could not create;
+clang-tidy keeps its check code, and the extension passes of 10b and
+10c stop at the coverage leg until 12e (#1225). 10e (issue #1307) and
+10f (issue #1313) merged after that wave, as PRs #1312 and #1315; the
+workshop's next
 release carries the first publishes of `livery-extensions-changelog`
 and `livery-extensions-claude`, two of a day's four new projects. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
@@ -853,9 +853,9 @@ their Python bodies go; `fm explain <check>` prints the command; the
 kit's `words-are-answerable` clause. Acceptance, refusals first:
 `test_a_check_with_both_judge_and_run_refuses_naming_the_check`,
 `test_an_unanswered_placeholder_fails_the_kit`,
-`test_a_matrix_key_absent_from_the_words_fails_the_kit`; the six
+`test_a_matrix_key_absent_from_the_words_fails_the_kit`; the five
 extensions whose checks are all words ship no Python beyond their
-packaging (`find packages/extensions/{ruff,mypy,ty,pyrefly,clang-format,clang-tidy}/src -name '*.py'`
+packaging (`find packages/extensions/{ruff,mypy,ty,pyrefly,clang-format}/src -name '*.py'`
 finds nothing); `fm check` exits 0 with the same gate members, proven
 by the gate's pinning tests; `fm ci.e2e --extension=mypy --fresh` is
 green, the matrix's proof.
@@ -1547,12 +1547,14 @@ the stack, which this design neither needs nor rules out).
   and the tool's output, and every batch and matrix call still runs;
   `env` keys are names, exempt from kebab-case; `fm explain` takes a
   check's name as well as a file.
-- 2026-10-08, open in 10c: clang-tidy asks the host's compiler where
-  its builtin headers are, and skips with a reason when none answers,
-  which no placeholder says. It keeps its code until Willem rules
-  between waiting for the toolchain to answer it as a query and a
-  temporary base placeholder; until then the acceptance's `find` finds
-  `packages/extensions/clang-tidy/src/livery/extensions/clang/tidy/_checks.py`.
+- 2026-10-08, 10c and clang-tidy: a check is its tool's words or a
+  reference to its code, and code is a first-class form; Willem
+  confirmed no rule bars a check from having code. Words fit a check
+  whose verdict is its tool's exit code. clang-tidy's is more: it asks
+  the host's compiler where its builtin headers are, and skips with a
+  reason when none answers. So it keeps its `run`, and the acceptance's
+  `find` names the five extensions whose checks are words; on `main`
+  at `ecfbb09c` it finds nothing.
 - 2026-10-08, open in 10c: `fm ci.e2e --extension=mypy --fresh` stays
   red at its members scenario, at the coverage leg, which #1225 ruled
   lands with 12e. The pass's check leg ran the branch's dev wheel of
