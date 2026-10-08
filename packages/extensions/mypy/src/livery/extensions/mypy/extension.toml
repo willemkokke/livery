@@ -1,6 +1,9 @@
 # The mypy extension: the type checker, once per platform, over the python
-# files it claims. Read at every mount; a check's code is imported when
-# the check runs.
+# files it claims. The check is mypy's words: mypy has no all-platforms
+# mode, so the matrix calls it for linux, darwin and win32 in parallel,
+# each with a cache of its own, since mypy's SQLite cache takes one
+# writer. A run that reaches the whole calls mypy with no path, so it
+# reads the files mypy.ini names.
 
 [extension]
 api-version = 1
@@ -8,7 +11,8 @@ api-version = 1
 levels = ["workspace"]
 
 [checks.mypy.typecheck]
-run = "livery.extensions.mypy._checks:judge_typecheck"
+judge = ["mypy", "--platform={platform}", "--cache-dir={cache}/{platform}"]
+matrix = { platform = ["linux", "darwin", "win32"] }
 narrowing = "paths"
 kinds = ["python"]
 tools = ["mypy"]

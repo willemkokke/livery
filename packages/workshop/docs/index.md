@@ -81,13 +81,13 @@ spelling. Every key is optional:
   `"<owner>:<name>"`, that its own file of that name replaces or that it
   deletes, to the reason.
 
-A check names the functions that run it as `"module:function"`, in the
-extension's own package, and each is imported when the check runs:
+A check whose verdict is its tool's exit code is the tool's words, and
+needs no code:
 
 ```toml
 [checks.ruff.format]
-run = "livery.extensions.ruff._checks:judge_format"
-fix = "livery.extensions.ruff._checks:fix_format"
+judge = ["ruff", "format", "--check", "--force-exclude"]
+fix = ["ruff", "format", "--force-exclude"]
 narrowing = "paths"
 kinds = ["python"]
 tools = ["ruff"]
@@ -95,9 +95,42 @@ arguments = true
 claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
 ```
 
-The mount reads each reference from its module's source. A module
-outside the package, or a name the module does not define at its top
-level, refuses naming the file and the key before anything runs.
+`judge` is the tool's name, as `tools` names it, and the arguments that
+judge; `fix` and `safe-fix` are the words that rewrite under `--fix` and
+`--safe-fix`, `safe-fix` falling back to `fix`. The workshop appends the
+words after `--` on the check's verb, then the paths the run reaches, or
+nothing when the run is whole, so the tool reads its own configuration;
+it splits a long list into the fewest calls under the command-line
+limit, runs the tool through its toolroom handle, and a non-zero exit
+refuses, every call's reason in one refusal. A package check is called
+from the package's directory with the package's files. `env` gives each
+call variables over the run's own, and a word may name a placeholder the
+workshop answers: `{cache}`, the check's directory under
+`.workshop/.cache/`; `{package}`, the package a call judges; and
+`{compile-commands}`, that package's compilation database, without which
+the call is skipped. `matrix` names a placeholder of its own and its
+values, one call per value in parallel, each its own verdict:
+
+```toml
+[checks.mypy.typecheck]
+judge = ["mypy", "--platform={platform}", "--cache-dir={cache}/{platform}"]
+matrix = { platform = ["linux", "darwin", "win32"] }
+```
+
+`fm explain typecheck.mypy` prints the command a check runs and what the
+workshop appends to it. The conformance kit's `words-are-answerable`
+clause refuses a placeholder nothing answers, a matrix key no word
+names, a tool the check does not require, and a package's placeholder
+in a check that judges the workspace whole.
+
+A check the words cannot say, one whose verdict is not its tool's exit
+code or whose paths need reshaping first, names the functions that run
+it instead, `run` and `fix` as `"module:function"` in the extension's
+own package, each imported when the check runs. A check declares
+`judge` or `run`, never both. The mount reads each reference from its
+module's source. A module outside the package, or a name the module
+does not define at its top level, refuses naming the file and the key
+before anything runs.
 
 An entry names its extension, and the options it turns on in brackets:
 `"basedpyright[typecomplete]"`, either as the string or as a table

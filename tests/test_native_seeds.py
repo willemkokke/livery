@@ -14,9 +14,8 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.clang.format import _checks as clang_format
 from livery.extensions.clang.tidy import _checks as clang_tidy
-from livery.workshop import Package
+from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
 
 # The workshop's test helper: pytest's pythonpath carries every tests
@@ -95,7 +94,19 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
         for path in sorted(destination.rglob(f"*{suffix}"))
     )
     assert sources  # the seeds carry C or C++ to judge
-    clang_format.run_format(package, sources, fix=False)
+    # The gate's own run over the files a run names, as `fm check <paths>`
+    # hands them: clang-format's words from the package's directory, so
+    # its own .clang-format sets the style.
+    named = tuple(path.relative_to(destination).as_posix() for path in sources)
+    registry.check_for("format.clang-format").run(
+        GateContext(
+            root=tmp_path,
+            packages=(package,),
+            package=package,
+            files=tuple(f"{package.path}/{path}" for path in named),
+            catalogue={package.path: tuple((path, "source") for path in named)},
+        )
+    )
 
 
 @pytest.mark.skipif(

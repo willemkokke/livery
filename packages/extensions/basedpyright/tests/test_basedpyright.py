@@ -52,6 +52,7 @@ def _member(root: Path, name: str, *, checks: str = "") -> Package:
     source = directory / "src" / "acme" / name
     source.mkdir(parents=True)
     (directory / "tests").mkdir()
+    (directory / "tests" / f"test_{name}.py").write_text("")
     (source / "__init__.py").write_text('__all__ = ["VALUE"]\nVALUE = 1\n')
     (source / "py.typed").write_text("")
     turned_off = (("enabled", False),) if checks else ()
@@ -127,29 +128,27 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         registry.restore(state)
 
 
-# The checks: the workshop names the paths and the members, a body calls the tool.
+# The checks: the type checker is basedpyright's words over the paths a run
+# reaches; type completeness is code over the members it reaches.
 
 
 def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
-    monkeypatch.setattr(
-        _checks,
-        "run_typecheck",
-        lambda paths=(), arguments=(): calls.append((paths, arguments)),
-    )
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(tools, "basedpyright", lambda *argv: calls.append(argv))
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.basedpyright")
     # Every member reached: basedpyright reads its configured include,
-    # which a `.` would replace with every file under the root.
+    # which a `.` would replace with every file under the root. Its
+    # warnings gate as errors in every call.
     record.run(GateContext(root=tmp_path, packages=(one, two)))
-    assert calls == [((), ())]
+    assert calls == [("--warnings",)]
     # One member of two: its own directories, in one call.
     calls.clear()
     record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
-    assert calls == [(("packages/one/src", "packages/one/tests"), ())]
+    assert calls == [("--warnings", "packages/one/src", "packages/one/tests")]
     # The words after -- on the check's own verb reach both calls.
     calls.clear()
     words = ("--level", "error")
@@ -157,7 +156,10 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     record.run(
         GateContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
     )
-    assert calls == [((), words), (("packages/one/src", "packages/one/tests"), words)]
+    assert calls == [
+        ("--warnings", *words),
+        ("--warnings", *words, "packages/one/src", "packages/one/tests"),
+    ]
 
 
 def test_type_completeness_verifies_each_judged_member_s_public_modules(
@@ -212,21 +214,6 @@ def test_each_public_module_is_verified_with_its_dependencies_external(
     _checks.run_typecomplete(("acme.one",), ("--outputjson",))
     assert calls == [
         (("--outputjson",), {"verifytypes": "acme.one", "ignoreexternal": True})
-    ]
-
-
-def test_warnings_gate_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
-    monkeypatch.setattr(
-        tools, "basedpyright", lambda *paths, **kw: calls.append((paths, kw))
-    )
-    _checks.run_typecheck()
-    _checks.run_typecheck(("packages/one/src",))
-    _checks.run_typecheck(("packages/one/src",), ("--level", "error"))
-    assert calls == [
-        ((), {"warnings": True}),
-        (("packages/one/src",), {"warnings": True}),
-        (("--level", "error", "packages/one/src"), {"warnings": True}),
     ]
 
 

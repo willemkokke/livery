@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.ty import _checks
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
 
@@ -92,7 +91,7 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(_checks, "run_typecheck", calls.append)
+    monkeypatch.setattr(tools, "ty", lambda *argv: calls.append(argv))
     member = Package(
         directory=tmp_path / "packages" / "one",
         path="packages/one",
@@ -103,23 +102,10 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
     record = registry.check_for("typecheck.ty")
     record.run(GateContext(root=tmp_path, packages=(member,)))
     record.run(GateContext(root=tmp_path, packages=(member,), subset=(member,)))
-    # The words after -- on the check's own verb reach ty.
+    # The words after -- on the check's own verb reach ty's check.
     words = ("--output-format", "concise")
     record.run(GateContext(root=tmp_path, packages=(member,), arguments=words))
-    assert calls == [(), (), words]
-
-
-def test_the_check_calls_ty_s_own_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    called: list[tuple[str, ...]] = []
-
-    class _Ty:
-        def check(self, *words: str) -> None:
-            called.append(words)
-
-    monkeypatch.setattr(tools, "ty", _Ty())
-    _checks.run_typecheck()
-    _checks.run_typecheck(("--output-format", "concise"))
-    assert called == [(), ("--output-format", "concise")]
+    assert calls == [("check",), ("check",), ("check", *words)]
 
 
 # The file: the workshop writes it, and a bare ty reads what the gate reads.

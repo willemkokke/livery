@@ -133,12 +133,77 @@ def test_a_reference_that_does_not_import_refuses_at_mount(package: Path) -> Non
     assert "acme_declared._checks" not in sys.modules
 
 
+def test_a_check_with_both_judge_and_run_refuses_naming_the_check(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    assert _refusal(package, CHECK + 'judge = ["acme", "--check"]\n') == (
+        f"{where}: checks.acme.lint declares both judge and run: a check is its"
+        " tool's words or a reference to its code, never both"
+    )
+
+
+def test_words_and_code_do_not_mix_and_words_name_one_tool(package: Path) -> None:
+    where = package / "extension.toml"
+    words = '[checks.acme.lint]\ntools = ["acme"]\njudge = ["acme", "--check"]\n'
+    # A check in words fixes in words; one that runs code takes no words.
+    assert _refusal(package, words + 'fix = "acme_declared._checks:mend"\n') == (
+        f"{where}: checks.acme.lint.fix is 'acme_declared._checks:mend', a"
+        " reference to code; in a check in words, fix is words: the tool's name,"
+        " then its arguments"
+    )
+    assert _refusal(package, CHECK + 'fix = ["acme", "--fix"]\n') == (
+        f"{where}: checks.acme.lint.fix is words, and run is a reference to code:"
+        " a check that runs code fixes with code, module:function"
+    )
+    assert _refusal(package, CHECK + 'matrix = { platform = ["linux"] }\n') == (
+        f"{where}: checks.acme.lint.matrix belongs to a check in words, and this"
+        " one runs code; declare judge instead of run, or drop the key"
+    )
+    # Words name their tool first, every mode the same one.
+    assert _refusal(package, "[checks.acme.lint]\njudge = []\n") == (
+        f"{where}: checks.acme.lint.judge is empty: the tool's name comes first"
+    )
+    assert _refusal(package, words + 'fix = ["other", "--fix"]\n') == (
+        f"{where}: checks.acme.lint.fix runs other, and judge runs acme: a check"
+        " runs one tool"
+    )
+    assert _refusal(package, words + 'safe-fix = ["acme", "--safe"]\n') == (
+        f"{where}: checks.acme.lint.safe-fix is declared without fix: a check that"
+        " fixes safely fixes too"
+    )
+    assert _refusal(package, words + "matrix = { platform = [] }\n") == (
+        f"{where}: checks.acme.lint.matrix.platform has no values: a matrix key"
+        " runs one call per value"
+    )
+
+
+def test_a_check_in_words_reads_its_words_and_imports_nothing(package: Path) -> None:
+    found = _declare(
+        package,
+        '[checks.acme.typecheck]\ntools = ["acme"]\narguments = true\n'
+        'judge = ["acme", "--platform={platform}"]\n'
+        'fix = ["acme", "--fix"]\nsafe-fix = ["acme", "--fix", "--safe"]\n'
+        'env = { ACME_COLOR = "never" }\n'
+        'matrix = { platform = ["linux", "win32"] }\n',
+    )
+    (record,) = found.additions.checks
+    assert record.words is not None
+    assert record.words.judge == ("acme", "--platform={platform}")
+    assert record.words.env == (("ACME_COLOR", "never"),)
+    assert record.words.matrix == (("platform", ("linux", "win32")),)
+    assert str(record.run) == "acme --platform={platform}"
+    assert record.fix is not None and str(record.fix) == "acme --fix"
+    assert "acme_declared._checks" not in sys.modules
+
+
 def test_a_check_without_run_or_with_an_undeclared_option_refuses(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
     assert _refusal(package, "[checks.acme.lint]\narguments = true\n") == (
-        f"{where}: checks.acme.lint names no run: a check runs a reference"
+        f"{where}: checks.acme.lint names neither judge nor run: a check is its"
+        " tool's words, judge, or a reference to its code, run"
     )
     assert _refusal(package, CHECK + 'listed-with = "deep"\n') == (
         f"{where}: checks.acme.lint.listed-with is 'deep', which [options] does not"

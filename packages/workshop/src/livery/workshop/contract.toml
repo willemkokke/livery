@@ -489,9 +489,17 @@ doc = "the file suffixes the check reads in the category, each starting with a d
 types = ["str"]
 doc = "the marketplace id of the editor extension the composed .vscode/extensions.json recommends for the check; none when absent"
 
-[contract.extension.checks."*"."*".fix]
+[contract.extension.checks."*"."*".env]
+types = ["table"]
+doc = "the variables every call of a check in words gets, over the run's own"
+
+[contract.extension.checks."*"."*".env."*"]
 types = ["str"]
-doc = "the function that rewrites what the check judges, module:function, run before any judge under --fix; the check only judges when absent"
+doc = "the variable's value; a placeholder in it is answered as in the words"
+
+[contract.extension.checks."*"."*".fix]
+types = ["str", "strs"]
+doc = "what rewrites what the check judges, run before any judge under --fix: the words of a check in words, or the function, module:function, of a check that runs code; the check only judges when absent"
 
 [contract.extension.checks."*"."*".flags]
 types = ["strs"]
@@ -541,6 +549,10 @@ doc = "the check's own further reason to run over everything, a function module:
 types = ["strs"]
 doc = "files the check does not judge whose change runs it over everything it reads; none when absent"
 
+[contract.extension.checks."*"."*".judge]
+types = ["strs"]
+doc = "the words that judge: the tool's name as the check's tools name it, then its arguments; the engine appends the words after -- and the paths the run reaches, and the exit code is the verdict. Exclusive with run"
+
 [contract.extension.checks."*"."*".kinds]
 types = ["strs"]
 doc = "the package kinds the check judges, each kind's children included; every kind when absent"
@@ -548,6 +560,14 @@ doc = "the package kinds the check judges, each kind's children included; every 
 [contract.extension.checks."*"."*".listed-with]
 types = ["str"]
 doc = "the option of [options] a workspace's listing turns on for the check to register; the check registers whenever the extension is listed when absent"
+
+[contract.extension.checks."*"."*".matrix]
+types = ["table"]
+doc = "the placeholders the calls of a check in words vary: one call per combination of values, in parallel, each its own verdict"
+
+[contract.extension.checks."*"."*".matrix."*"]
+types = ["strs"]
+doc = "the values the placeholder takes, one call each"
 
 [contract.extension.checks."*"."*".narrowing]
 types = ["str"]
@@ -580,7 +600,11 @@ doc = "further roles the check fills, each answering to <role>.<tool>; none when
 
 [contract.extension.checks."*"."*".run]
 types = ["str"]
-doc = "the function that judges, module:function in the extension's own package"
+doc = "the function that judges, module:function in the extension's own package, for a check its tool's words cannot say. Exclusive with judge"
+
+[contract.extension.checks."*"."*".safe-fix]
+types = ["strs"]
+doc = "the words that rewrite under --safe-fix, removing no code; the fix words when absent"
 
 [contract.extension.checks."*"."*".scope]
 types = ["str"]

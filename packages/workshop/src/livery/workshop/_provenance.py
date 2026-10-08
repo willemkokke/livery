@@ -464,19 +464,30 @@ def explain(
         Arg[str],
         ask(),
         suggest(_tracked_paths, strict=False),
-        doc("the file to explain, relative to the workspace root"),
+        doc("the file to explain, relative to the workspace root, or a check's name"),
     ] = "",
 ) -> None:
-    """Name the channel that owns a file, its source, and the edit path.
+    """Name a file's owning channel, its source and its edit path; or what a check runs.
 
-    Every answer has the same three lines; a file no channel claims is
-    yours, which is the honest default, not an error.
+    Every answer for a file has the same three lines; a file no channel
+    claims is yours, which is the honest default, not an error. A
+    check's name, ``typecheck.mypy``, prints the command the check runs
+    and what the engine appends to it.
     """
     if not path:
         fail(f"name a file: `{footman.prog()} explain pyproject.toml`")
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    from livery.workshop._checks import checks_by_name
+
+    record = checks_by_name().get(path)
+    if record is not None:
+        from livery.workshop._words import explained
+
+        for line in explained(record):
+            print(line)
+        return
     raw = Path(path)
     if raw.is_absolute():
         try:

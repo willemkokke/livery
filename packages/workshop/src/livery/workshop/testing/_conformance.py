@@ -102,6 +102,7 @@ DECLARATION_VALIDATES = "declaration-validates"
 REFERENCES_REGISTER_NOTHING = "references-register-nothing"
 ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
 CLAIMS_NAME_CATEGORIES = "claims-name-categories"
+WORDS_ARE_ANSWERABLE = "words-are-answerable"
 PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
 CONTRACT_KEYS_DOCUMENTED = "contract-keys-documented"
 FRAGMENT_DRIFT = "fragment-drift"
@@ -575,6 +576,51 @@ def _entries_name_defined_tasks(subject: Subject) -> list[Violation]:
                     f"names {entry.task}, which the extension does not define{hint}"
                 )
             violations.append(Violation(ENTRIES_NAME_DEFINED_TASKS, where, reason))
+    return violations
+
+
+def _words_are_answerable(subject: Subject) -> list[Violation]:
+    from livery.workshop._checks import PACKAGE, PACKAGES
+    from livery.workshop._contract_keys import shown
+    from livery.workshop._words import PACKAGE_PLACEHOLDERS, PLACEHOLDERS
+
+    found = _declared_of(subject)
+    if found is None:
+        return []
+    violations: list[Violation] = []
+    for prefix, additions in _additions_of(found[1]):
+        for record in additions.checks:
+            words = record.words
+            if words is None:
+                continue
+            where = shown((*prefix, "checks", record.tool, record.role))
+            reasons: list[str] = []
+            if words.tool not in record.tools:
+                reasons.append(
+                    f"runs {words.tool}, which its tools do not name"
+                    f" ({', '.join(record.tools) or 'none'}); a check runs a tool"
+                    " it requires"
+                )
+            reasons += [
+                f"names {{{name}}}, which neither the engine nor its matrix"
+                f" answers; the engine answers {', '.join(PLACEHOLDERS)}"
+                for name in words.unanswered()
+            ]
+            reasons += [
+                f"varies {key} in its matrix, which no word names; every call"
+                " would run the same words"
+                for key in words.unvaried()
+            ]
+            if record.scope != PACKAGE and record.narrowing != PACKAGES:
+                reasons += [
+                    f"names {{{name}}}, which only a call that judges one package"
+                    " answers, and the check judges the workspace whole"
+                    for name in PACKAGE_PLACEHOLDERS
+                    if name in words.placeholders()
+                ]
+            violations += [
+                Violation(WORDS_ARE_ANSWERABLE, where, reason) for reason in reasons
+            ]
     return violations
 
 
@@ -1060,6 +1106,14 @@ CLAUSES: tuple[Clause, ...] = (
         "Every category a check's claims name is one an extension registers,"
         " and every suffix starts with a dot.",
         _claims_name_categories,
+    ),
+    Clause(
+        WORDS_ARE_ANSWERABLE,
+        "A check in words runs a tool it requires, every placeholder its words"
+        " name is one the engine or its matrix answers, every matrix key is"
+        " named in its words, and a package's placeholder sits in a check that"
+        " judges one package at a time.",
+        _words_are_answerable,
     ),
     Clause(
         PLUGIN_IS_AN_ENTRY_POINT,

@@ -1,5 +1,6 @@
-# The ty extension: the type checker over every platform at once. Read at
-# every mount; a check's code is imported when the check runs.
+# The ty extension: the type checker over every platform at once. The
+# check is ty's words over what ty.toml includes, whatever a run reaches:
+# a run costs seconds, and the file pins every platform at once.
 
 [extension]
 api-version = 1
@@ -7,7 +8,7 @@ api-version = 1
 levels = ["workspace"]
 
 [checks.ty.typecheck]
-run = "livery.extensions.ty._checks:judge_typecheck"
+judge = ["ty", "check"]
 kinds = ["python"]
 tools = ["ty"]
 arguments = true

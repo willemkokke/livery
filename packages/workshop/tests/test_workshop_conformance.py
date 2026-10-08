@@ -295,6 +295,77 @@ def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
     assert _names(Subject("acme_kit_claims"), clause) == []
 
 
+def _words_subject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str
+) -> Subject:
+    package = tmp_path / "acme_kit_words"
+    package.mkdir(exist_ok=True)
+    (package / "extension.toml").write_text(text)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    return Subject("acme_kit_words")
+
+
+def test_an_unanswered_placeholder_fails_the_kit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clause = "words-are-answerable"
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.lint]\ntools = ["acme"]\n'
+        'judge = ["acme", "--cache={cache}", "--into={output}"]\n',
+    )
+    assert _names(subject, clause) == [
+        "words-are-answerable: checks.acme.lint: names {output}, which neither the"
+        " engine nor its matrix answers; the engine answers cache, package,"
+        " compile-commands"
+    ]
+    # A tool the check does not require, and a package's placeholder in a
+    # check that judges the workspace whole, fail it as well.
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.lint]\ntools = ["other"]\njudge = ["acme", "{package}"]\n',
+    )
+    assert _names(subject, clause) == [
+        "words-are-answerable: checks.acme.lint: runs acme, which its tools do not"
+        " name (other); a check runs a tool it requires",
+        "words-are-answerable: checks.acme.lint: names {package}, which only a call"
+        " that judges one package answers, and the check judges the workspace"
+        " whole",
+    ]
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.lint]\ntools = ["acme"]\nscope = "package"\n'
+        'judge = ["acme", "--cache={cache}", "{package}"]\n',
+    )
+    assert _names(subject, clause) == []
+
+
+def test_a_matrix_key_absent_from_the_words_fails_the_kit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clause = "words-are-answerable"
+    matrix = 'matrix = { platform = ["linux", "win32"] }\n'
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.typecheck]\ntools = ["acme"]\njudge = ["acme"]\n' + matrix,
+    )
+    assert _names(subject, clause) == [
+        "words-are-answerable: checks.acme.typecheck: varies platform in its"
+        " matrix, which no word names; every call would run the same words"
+    ]
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.typecheck]\ntools = ["acme"]\n'
+        'judge = ["acme", "--platform={platform}"]\n' + matrix,
+    )
+    assert _names(subject, clause) == []
+
+
 def test_a_plugin_no_distribution_declares_breaks_the_clause(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -347,6 +418,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         "references-register-nothing",
         "entries-name-defined-tasks",
         "claims-name-categories",
+        "words-are-answerable",
         "plugin-is-an-entry-point",
         "contract-keys-documented",
     }
@@ -652,6 +724,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "references-register-nothing",
         "entries-name-defined-tasks",
         "claims-name-categories",
+        "words-are-answerable",
         "plugin-is-an-entry-point",
         "contract-keys-documented",
         "fragment-drift",

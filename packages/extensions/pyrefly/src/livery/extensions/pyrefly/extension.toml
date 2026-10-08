@@ -1,5 +1,6 @@
-# The pyrefly extension: the type checker over every platform at once. Read at
-# every mount; a check's code is imported when the check runs.
+# The pyrefly extension: the type checker over every platform at once. The
+# check is pyrefly's words over what pyrefly.toml includes, whatever a run
+# reaches: a run costs seconds, and the file pins every platform at once.
 
 [extension]
 api-version = 1
@@ -7,7 +8,7 @@ api-version = 1
 levels = ["workspace"]
 
 [checks.pyrefly.typecheck]
-run = "livery.extensions.pyrefly._checks:judge_typecheck"
+judge = ["pyrefly", "check"]
 kinds = ["python"]
 tools = ["pyrefly"]
 arguments = true

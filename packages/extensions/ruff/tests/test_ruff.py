@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.ruff import _checks
+from livery.footman import Failed
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
 
@@ -86,17 +86,42 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         registry.restore(state)
 
 
-# The checks: the workshop names the paths, and a body hands them to ruff.
+# The checks: ruff's words, which the workshop runs over the paths a run reaches.
 
 
-def test_each_check_hands_ruff_the_paths_of_the_run_in_its_mode(
+class _Ruff:
+    """ruff's toolroom handle, standing in: each call's words recorded."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, ...]] = []
+
+    def __call__(self, *argv: str) -> None:
+        self.calls.append(argv)
+
+
+def _run(
+    name: str,
+    root: Path,
+    paths: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fix: bool = False,
+    safe: bool = False,
+    arguments: tuple[str, ...] = (),
+) -> None:
+    """Run the check *name* over *paths* through the workshop, judging or fixing."""
+    monkeypatch.setattr(registry, "scoped_paths", lambda ctx, check: paths)
+    record = registry.check_for(name)
+    body = record.fix if fix else record.run
+    assert body is not None
+    body(GateContext(root=root, packages=(), safe=safe, arguments=arguments))
+
+
+def test_each_check_hands_ruff_its_words_in_each_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    calls: list[tuple[str, dict[str, object]]] = []
-    monkeypatch.setattr(
-        _checks, "run_format", lambda **kw: calls.append(("format", kw))
-    )
-    monkeypatch.setattr(_checks, "run_lint", lambda **kw: calls.append(("lint", kw)))
+    ruff = _Ruff()
+    monkeypatch.setattr(tools, "ruff", ruff)
     member = Package(
         directory=tmp_path / "packages" / "one",
         path="packages/one",
@@ -112,30 +137,28 @@ def test_each_check_hands_ruff_the_paths_of_the_run_in_its_mode(
         assert record.fix is not None
         record.fix(ctx)
         record.fix(GateContext(root=tmp_path, packages=(member,), safe=True))
-    # Every member reached: the whole tree, in one call each.
-    whole = {"paths": (".",), "arguments": ()}
-    assert calls == [
-        ("format", {"check": True, **whole}),
-        ("format", {"check": False, "safe_fix": False, **whole}),
-        ("format", {"check": False, "safe_fix": True, **whole}),
-        ("lint", {"fix": False, **whole}),
-        ("lint", {"fix": True, "safe_fix": False, **whole}),
-        ("lint", {"fix": False, "safe_fix": True, **whole}),
+    # Every member reached: the whole, a call with no path, ruff's own walk.
+    assert ruff.calls == [
+        ("format", "--check", "--force-exclude"),
+        ("format", "--force-exclude"),
+        ("format", "--force-exclude"),
+        ("check", "--force-exclude"),
+        ("check", "--fix", "--force-exclude"),
+        ("check", "--fix", "--unfixable=F401", "--force-exclude"),
     ]
     # The words after -- on a check's own verb reach its call, in each mode.
-    calls.clear()
-    words = ("--statistics",)
-    ctx = GateContext(root=tmp_path, packages=(member,), arguments=words)
+    ruff.calls.clear()
+    ctx = GateContext(root=tmp_path, packages=(member,), arguments=("--statistics",))
     for name in ("format.ruff", "lint.ruff"):
         record = registry.check_for(name)
         record.run(ctx)
         assert record.fix is not None
         record.fix(ctx)
-    assert [kw["arguments"] for _, kw in calls] == [words] * 4
+    assert [call[-1] for call in ruff.calls] == ["--statistics"] * 4
 
 
 def test_the_words_after_the_dashes_reach_ruff_before_the_paths(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     # The file selects F alone, so the long line passes until the words
     # select E501 too; the formatter wraps the list only at the narrower
@@ -143,41 +166,53 @@ def test_the_words_after_the_dashes_reach_ruff_before_the_paths(
     (tmp_path / "ruff.toml").write_text('[lint]\nselect = ["F"]\n')
     wide = tmp_path / "wide.py"
     wide.write_text(f"value = {'x' * 100!r}\n")
-    _checks.run_lint(fix=False, paths=(str(wide),))
-    with pytest.raises(Exception, match="exited"):
-        _checks.run_lint(
-            fix=False, paths=(str(wide),), arguments=("--extend-select", "E501")
+    _run("lint.ruff", tmp_path, (str(wide),), monkeypatch)
+    with pytest.raises(Failed, match="exited"):
+        _run(
+            "lint.ruff",
+            tmp_path,
+            (str(wide),),
+            monkeypatch,
+            arguments=("--extend-select", "E501"),
         )
     listed = tmp_path / "listed.py"
     listed.write_text("x = [1, 2, 3, 4, 5, 6]\n")
-    _checks.run_format(check=True, paths=(str(listed),))
-    with pytest.raises(Exception, match="exited"):
-        _checks.run_format(
-            check=True, paths=(str(listed),), arguments=("--line-length", "10")
+    _run("format.ruff", tmp_path, (str(listed),), monkeypatch)
+    with pytest.raises(Failed, match="exited"):
+        _run(
+            "format.ruff",
+            tmp_path,
+            (str(listed),),
+            monkeypatch,
+            arguments=("--line-length", "10"),
         )
 
 
-def test_a_foreign_file_a_run_names_passes_through_untouched(tmp_path: Path) -> None:
+def test_a_foreign_file_a_run_names_reaches_no_call(
+    tmp_path: Path, registered: None
+) -> None:
+    # The run names a markdown file and a python file; the check's claims
+    # take the python file alone, so ruff never reads the markdown one.
     notes = tmp_path / "notes.md"
     notes.write_text("#Heading\n")
     module = tmp_path / "mod.py"
-    module.write_text("x = 1\n")
-    stub = tmp_path / "mod.pyi"
-    stub.write_text("x: int\n")
-    named = (str(tmp_path), str(notes), str(module), str(stub), str(tmp_path / "gone"))
-    assert _checks.python_paths(named) == (
-        str(tmp_path),
-        str(module),
-        str(stub),
-        str(tmp_path / "gone"),
+    module.write_text("x=1\n")
+    ctx = GateContext(
+        root=tmp_path,
+        packages=(),
+        files=("notes.md", "mod.py"),
+        catalogue={".": (("notes.md", "documentation"), ("mod.py", "source"))},
     )
-    # Nothing of ruff's among the names: no call at all.
-    _checks.run_format(check=False, paths=(str(notes),))
-    _checks.run_lint(fix=True, paths=(str(notes),))
+    record = registry.check_for("format.ruff")
+    assert record.fix is not None
+    record.fix(ctx)
+    assert module.read_text() == "x = 1\n"
     assert notes.read_text() == "#Heading\n"
 
 
-def test_a_named_file_follows_the_excludes_a_found_one_does(tmp_path: Path) -> None:
+def test_a_named_file_follows_the_excludes_a_found_one_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
     # The gate names each file of a run handed paths; ruff would format
     # a named example and lint a named vendored file without the flag.
     (tmp_path / "ruff.toml").write_text(
@@ -189,13 +224,15 @@ def test_a_named_file_follows_the_excludes_a_found_one_does(tmp_path: Path) -> N
     (tmp_path / "vendor").mkdir()
     vendored = tmp_path / "vendor" / "kept.py"
     vendored.write_text("import os\n")
-    _checks.run_format(check=False, paths=(str(shown),))
-    _checks.run_lint(fix=True, paths=(str(vendored),))
+    _run("format.ruff", tmp_path, (str(shown),), monkeypatch, fix=True)
+    _run("lint.ruff", tmp_path, (str(vendored),), monkeypatch, fix=True)
     assert shown.read_text() == "x=1\n"
     assert vendored.read_text() == "import os\n"
 
 
-def test_safe_fix_keeps_an_import_an_edit_in_flight_added(tmp_path: Path) -> None:
+def test_safe_fix_keeps_an_import_an_edit_in_flight_added(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
     # The unused import survives, the sortable one still heals, and a
     # plain fix, the stronger one, removes it. The rules are the test's
     # own: a file with no configuration above it reads the one where
@@ -205,25 +242,25 @@ def test_safe_fix_keeps_an_import_an_edit_in_flight_added(tmp_path: Path) -> Non
     victim.write_text("import sys\nimport os\n\nprint(sys.path)\n")
     # Lint still reports the withheld import by exiting non-zero; the
     # pin is the healed bytes, not the exit.
-    with contextlib.suppress(Exception):
-        _checks.run_lint(fix=False, safe_fix=True, paths=(str(victim),))
+    with contextlib.suppress(Failed):
+        _run("lint.ruff", tmp_path, (str(victim),), monkeypatch, fix=True, safe=True)
     healed = victim.read_text()
     assert "import os" in healed
     assert healed.index("import os") < healed.index("import sys")
-    with contextlib.suppress(Exception):
-        _checks.run_lint(fix=True, paths=(str(victim),))
+    with contextlib.suppress(Failed):
+        _run("lint.ruff", tmp_path, (str(victim),), monkeypatch, fix=True)
     assert "import os" not in victim.read_text()
     # A file safe-fix heals completely passes.
     sortable = tmp_path / "sortable.py"
     sortable.write_text("import sys\nimport os\n\nprint(os.sep, sys.path)\n")
-    _checks.run_lint(fix=False, safe_fix=True, paths=(str(sortable),))
+    _run("lint.ruff", tmp_path, (str(sortable),), monkeypatch, fix=True, safe=True)
     assert sortable.read_text().startswith("import os\nimport sys\n")
     # The formatter rewrites, and in check mode reports instead.
     messy = tmp_path / "messy.py"
     messy.write_text("x=1\n")
-    with pytest.raises(Exception, match="exited"):
-        _checks.run_format(check=True, paths=(str(messy),))
-    _checks.run_format(check=False, paths=(str(messy),))
+    with pytest.raises(Failed, match="exited"):
+        _run("format.ruff", tmp_path, (str(messy),), monkeypatch)
+    _run("format.ruff", tmp_path, (str(messy),), monkeypatch, fix=True)
     assert messy.read_text() == "x = 1\n"
 
 
