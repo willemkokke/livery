@@ -199,7 +199,7 @@ def test_the_bench_declares_the_six_host_point_fortnightly():
     contract = Path(__file__).resolve().parents[1] / "workshop.toml"
     points = tomllib.loads(contract.read_text(encoding="utf-8"))["ci"]["point"]
     (point,) = points
-    assert point["name"] == "tool-hosts" and point["task"] == "tools.verify-host"
+    assert point["name"] == "tool-hosts" and point["task"] == "toolroom.verify-host"
     assert point["every"] == "2w"
     assert point["runners"] == [
         "ubuntu-latest",

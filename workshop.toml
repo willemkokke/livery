@@ -49,7 +49,7 @@ description = "The livery ecosystem: one forge interface and the workshop that r
 kind = "github"
 owner = "willemkokke"
 
-[tools]
+[toolroom]
 # The catalogue the lock and the stubs resolve against. This
 # repository is the authoring site, so it reads its own records; a
 # consumer names the published index's URL. The lock covers every
@@ -115,6 +115,6 @@ profile = true
 # surface.
 [[ci.schedule]]
 point = "nightly"
-task = "tools.refresh"
+task = "toolroom.refresh"
 args = ["--submit"]
 every = "2w"

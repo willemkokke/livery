@@ -11,7 +11,7 @@ include = ["packages/extensions/basedpyright/src", "packages/extensions/clang-fo
 # Every platform at once (ty checks the union), 3.11 floor.
 python-platform = "all"
 python-version = "3.11"
-# The tool stubs `fm tools.restub` writes.
+# The tool stubs `fm toolroom.restub` writes.
 extra-paths = ["typings"]
 
 # The repository's own tables.

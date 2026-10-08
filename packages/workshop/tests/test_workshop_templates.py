@@ -985,8 +985,8 @@ def test_a_github_job_restores_the_tool_store_and_caches_nothing_of_uv(
     assert ci.count("uses: actions/cache@") == ci.count("- name: Enter the workspace")
     assert "path: ${{ runner.temp }}/footman/toolroom" in ci
     assert (
-        "key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}"
-        in ci
+        "key: tools-${{ runner.os }}-${{ runner.arch }}-"
+        "${{ hashFiles('toolroom.lock') }}" in ci
     )
     assert "restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-" in ci
     store = ci.index("path: ${{ runner.temp }}/footman/toolroom")

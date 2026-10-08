@@ -24,7 +24,7 @@ Two kinds of assertion, and the second is the load-bearing one:
   polices `# type: ignore` too) and via mypy's `warn_unused_ignores`.
 
 So: to assert that a flag exists, pass it something wrong. Only a tool
-this repository locks has a stub (`[tools] requires` in the root
+this repository locks has a stub (`[toolroom] requires` in the root
 contract and the python kind), so the negative calls name those tools
 alone; a handle with no stub is a bare `Tool` that accepts every call.
 """

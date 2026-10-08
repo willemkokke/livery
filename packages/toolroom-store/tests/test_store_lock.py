@@ -162,7 +162,7 @@ def test_an_optional_tool_absent_is_named_and_never_refused(tmp_path):
         "tea: optional, 1.0.0 has no artifact for windows-x64; left out there",
     )
     # Written and read back, the entry keeps the word.
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     lock.save(path)
     assert json.loads(path.read_text())["tools"]["tea"]["optional"] is True
     assert Lock.load(path).tools["tea"].optional
@@ -260,7 +260,7 @@ def test_a_scoped_entry_round_trips_and_a_scope_outside_the_lock_is_refused(
             "ruff": Locked("0.16.4"),
         },
     )
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     lock.save(path)
     assert Lock.load(path) == lock
     written = json.loads(path.read_text())
@@ -332,9 +332,9 @@ def test_a_host_no_eligible_version_has_refuses_naming_the_first_that_has_it(
 
 
 def test_a_lock_file_off_the_shape_is_refused_naming_the_file(tmp_path):
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     path.write_text("{not json")
-    with pytest.raises(LockError, match=r"tools\.lock: not a lock \("):
+    with pytest.raises(LockError, match=r"toolroom\.lock: not a lock \("):
         Lock.load(path)
     path.write_text('{"schema": 9}')
     with pytest.raises(LockError, match=r"not a lock of schema 1"):
@@ -348,7 +348,7 @@ def test_a_lock_file_off_the_shape_is_refused_naming_the_file(tmp_path):
     path.write_text(
         '{"schema": 1, "hosts": [], "tools": {"ruff": {"version": "1", "hosts": {"linux-x64": "x"}}}}'
     )
-    with pytest.raises(LockError, match=r"tools\.lock: ruff:"):
+    with pytest.raises(LockError, match=r"toolroom\.lock: ruff:"):
         Lock.load(path)
 
 
@@ -444,11 +444,11 @@ def test_a_graph_off_its_shape_is_refused_naming_the_tool(tmp_path):
     # file, and one whose digest is not a digest.
     for broken in ({}, {"file": "", "digest": f"sha256:{SHA}"}, "no"):
         with pytest.raises(LockError, match="the graph is not one"):
-            Graph.from_json(broken, where="tools.lock: mypy")
+            Graph.from_json(broken, where="toolroom.lock: mypy")
     with pytest.raises(LockError, match="not a full lowercase sha256 digest"):
         Graph.from_json({"file": "mypy.txt", "digest": "sha256:xyz"}, where="w")
     # And through the file, where the tool is named.
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     path.write_text(
         json.dumps(
             {
@@ -474,7 +474,7 @@ def test_the_lock_round_trips_through_its_file(tmp_path):
             "mypy": Locked("2.3.1", graph=graph),
         },
     )
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     lock.save(path)
     assert Lock.load(path) == lock
     written = json.loads(path.read_text())
@@ -1028,7 +1028,7 @@ def test_the_host_allowance_rides_the_entry_and_a_lock_without_it_reads_unchange
             "ruff": Locked("0.16.4"),
         },
     )
-    path = tmp_path / "tools.lock"
+    path = tmp_path / "toolroom.lock"
     lock.save(path)
     assert Lock.load(path) == lock
     written = json.loads(path.read_text())

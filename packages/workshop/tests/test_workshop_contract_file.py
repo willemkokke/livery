@@ -74,7 +74,6 @@ def test_a_key_named_like_a_declarations_own_is_a_key_when_it_is_a_table(
 
 
 def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
-    from livery.toolroom.store import MODES
     from livery.workshop._lfs import KEY
     from livery.workshop._points import CADENCES
     from livery.workshop._registries import (
@@ -83,7 +82,6 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
     )
 
     keys = {(item.contract, item.path): item for item in base_keys()}
-    assert keys[("root", "tools.modes.*")].values == tuple(MODES)
     assert keys[("root", "ci.schedule[].every")].values == tuple(CADENCES)
     assert keys[("package", "ci.point[].every")].values == tuple(CADENCES)
     registries = {

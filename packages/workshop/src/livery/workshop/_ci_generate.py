@@ -182,7 +182,7 @@ def _store_cache_step() -> str:
         "        with:\n"
         f"          path: {STORE_HOME}\n"
         "          key: tools-${{ runner.os }}-${{ runner.arch }}"
-        "-${{ hashFiles('tools.lock') }}\n"
+        "-${{ hashFiles('toolroom.lock') }}\n"
         "          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-\n"
     )
 

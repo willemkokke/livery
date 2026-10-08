@@ -206,9 +206,9 @@ def _name_the_tool_index(workspace: Path, index: Path) -> None:
     """
     contract = workspace / "workshop.toml"
     text = contract.read_text()
-    if "[tools]" in text:
+    if "[toolroom]" in text:
         return
-    contract.write_text(f'{text}\n[tools]\nindex = "{index}"\n')
+    contract.write_text(f'{text}\n[toolroom]\nindex = "{index}"\n')
 
 
 def _entered(fm: Path, workspace: Path, env: dict[str, str]) -> dict[str, str]:
@@ -638,7 +638,7 @@ def _chain(
     # The lock is the newborn's first: the sync materialises what a
     # lock names, and a workspace that has never locked has nothing
     # to materialise (livery#765).
-    _run([str(child_fm), "tools.lock"], child, child_env)
+    _run([str(child_fm), "toolroom.lock"], child, child_env)
     # The sync materialises the native tools the two members grew into
     # the profile, registers the library editable, and builds the
     # extension against it: conan resolves fmt from Conan Center and

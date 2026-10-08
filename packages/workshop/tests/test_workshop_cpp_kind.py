@@ -954,8 +954,8 @@ def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="dotnet-coverage is not on PATH") as caught:
         _cpp_conan.test(package, tmp_path)
-    assert '"dotnet_coverage" to [tools] requires' in str(caught.value)
-    assert "tools.lock" in str(caught.value)
+    assert '"dotnet_coverage" to [toolroom] requires' in str(caught.value)
+    assert "toolroom.lock" in str(caught.value)
     assert exe.read_bytes() == b"MZ original"
     assert lines_.read_parts(tmp_path) == {}
 

@@ -1232,7 +1232,7 @@ def validate(record: Record) -> None:
             raise RecordError(
                 f"{where}: the tool's {host} layout names a host the record"
                 f" lacks; it has {', '.join(record.hosts) or 'none'}. List {host}"
-                " in the record's `hosts` first, and `tools.artifacts` records"
+                " in the record's `hosts` first, and `toolroom.artifacts` records"
                 " its artifact"
             )
     seen: set[str] = set()

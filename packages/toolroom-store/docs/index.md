@@ -125,12 +125,36 @@ with no scope: a downloaded kind resolves on a host when it has that
 host's artifact, a delegated kind everywhere its installer does. A
 requirement that cannot be met refuses naming the tool, each floor
 with the site that declared it, and for a host no eligible version
-has, the first version that has it. The lock is `tools.lock` at the
+has, the first version that has it. The lock is `toolroom.lock` at the
 repository root, one version per tool with the deployment digest per
 host it is locked on; an entry locked on fewer hosts than the lock's
 names them in `on`, a scope no locked host matches locks nothing, and
 an entry stands while it still satisfies and resolves, moving only
-when asked.
+when asked. The graphs of the delegated tools, one resolved graph per
+tool, sit beside it in `toolroom.graphs/`.
+
+## The `[toolroom]` table
+
+A directory's tool configuration is one table, `[toolroom]`: the
+catalogue (`index`), the requirements (`requires`), the mirrors
+(`sources`), the modes and the host allowances. A workspace the
+workshop manages keeps it in `workshop.toml`; a directory without one
+keeps it in `toolroom.toml`, under the same name, and
+[livery.toolroom.store.read_table][] reads it from whichever the
+directory has, `workshop.toml` first:
+
+```toml
+[toolroom]
+index = "https://example.org/tools/index"
+requires = ["ruff>=0.16", "git"]
+```
+
+The table's schema ships with the store,
+[livery.toolroom.store.SCHEMA_FRAGMENT][], as the keys it declares in
+a workspace's root contract, a package's contract and an extension's
+`extension.toml`; the workshop composes it into every workspace's
+schema, so the editor completes the table and the workshop's judge
+refuses a key it does not declare.
 
 ## What a load refuses
 

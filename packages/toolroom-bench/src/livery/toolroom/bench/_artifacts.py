@@ -13,7 +13,7 @@ A host the release publishes no asset for is absent from the version:
 not a hole, not a refusal. A tool on a package tier (PyPI, npm) has no
 artifacts to record, since its installer supplies it.
 
-`fm tools.artifacts <tool>` records a version already read; the
+`fm toolroom.artifacts <tool>` records a version already read; the
 assembler calls the same function for every fresh version of a
 forge-tier tool.
 """

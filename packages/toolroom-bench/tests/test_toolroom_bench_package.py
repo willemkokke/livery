@@ -18,7 +18,7 @@ def test_importing_the_bench_mounts_its_verbs() -> None:
         "submit_refresh",
         "tasks",
     }
-    assert package.tasks.name == "tools"
+    assert package.tasks.name == "toolroom"
     assert "docs" in package.tasks.tasks
 
 

@@ -1,0 +1,49 @@
+# The [toolroom] table's schema: the keys toolroom reads in each
+# contract, in the grammar a workshop extension declares its own keys
+# in. The workshop composes it into every workspace's schema, beside
+# its own. The modes are MODES, which a test holds equal.
+
+[contract.root.toolroom]
+types = ["table"]
+doc = "the tools the workspace pins: the catalogue, the requirements, the host allowances, the modes and the mirrors"
+
+[contract.root.toolroom.host-allowed]
+types = ["strs"]
+doc = "the tools whose copy already installed on a machine is used instead of the store's; the kinds' allowances alone when absent"
+
+[contract.root.toolroom.index]
+types = ["str"]
+doc = "where the tool catalogue is read from: the published index's URL, or a directory of records relative to the root"
+
+[contract.root.toolroom.modes]
+types = ["table"]
+doc = "how named tools reach PATH, over their records' and kinds' modes"
+
+[contract.root.toolroom.modes."*"]
+types = ["str"]
+doc = "how the tool reaches PATH: link for its entry points in the checkout's bin, path for its own directories, none for neither; its record's or kind's mode when absent"
+values = ["link", "path", "none"]
+
+[contract.root.toolroom.requires]
+types = ["strs"]
+doc = "the tools the repository needs beyond its kinds', extensions' and members', each a name with an optional floor and host scope: git>=2.40, dotnet_coverage@windows"
+
+[contract.root.toolroom.sources]
+types = ["strs"]
+doc = "the mirrors the store tries before a tool's origin: folders relative to the root, or URLs"
+
+[contract.package.toolroom]
+types = ["table"]
+doc = "the tools the package needs beyond its kind's and its checks'"
+
+[contract.package.toolroom.requires]
+types = ["strs"]
+doc = "the tools the package requires, each a name with an optional floor and host scope"
+
+[contract.extension.toolroom]
+types = ["table"]
+doc = "the tools the extension's own verbs need"
+
+[contract.extension.toolroom.requires]
+types = ["strs"]
+doc = "the tools the extension's verbs need, as requirement strings: docker>=27"

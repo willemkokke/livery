@@ -4,19 +4,19 @@ A tool requirement is a name with a floor, `git` or `git>=2.40`, and
 four sites declare them: a package kind, in its record, for the tools
 its checks run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
-`workshop.toml` under `[tools] requires`, for what its kind cannot
-know; and the project, in the root contract's `[tools] requires`, for
-what belongs to the repository. The sites' requirements union, and `tools.lock` at the
-root holds one version per tool for the whole repository, the newest
-the catalogue lists that satisfies every floor and resolves on every
-supported host. The root contract's `[workspace] hosts` names those
-hosts, every host key when it is absent, and `[tools] index`
-names where the
-catalogue is read from: the published index by URL, a directory
-holding one, or the records that build one.
+`workshop.toml` under `[toolroom] requires`, for what its kind cannot
+know; and the project, in the root contract's `[toolroom] requires`,
+for what belongs to the repository. The sites' requirements union, and
+`toolroom.lock` at the root holds one version per tool for the whole
+repository, the newest the catalogue lists that satisfies every floor
+and resolves on every supported host. The root contract's
+`[workspace] hosts` names those hosts, every host key when it is
+absent, and `[toolroom] index` names where the catalogue is read from:
+the published index by URL, a directory holding one, or the records
+that build one.
 
 Entering the environment materialises the bundle the sites require, on
-`fm sync` and on `fm tools.add`: each locked tool is supplied through
+`fm sync` and on `fm toolroom.add`: each locked tool is supplied through
 the machine's store in one of three modes, its entry points linked
 into the checkout's bin directory, its own directories on PATH, or no
 PATH at all, and a receipt under `.workshop/receipts/` records the
@@ -37,7 +37,7 @@ and never inside its directory: a tree inside it would shadow the
 package for a checker run on explicit paths. The store renders each
 stub from the locked version's own surface, from the records or from
 the index, so no source holds a stub. A tool the workspace does not
-deploy gets no stub. `fm tools.restub` writes them, and so do `fm sync`
+deploy gets no stub. `fm toolroom.restub` writes them, and so do `fm sync`
 and every lock verb.
 """
 
@@ -74,9 +74,6 @@ from livery.workshop._contract import load_contract
 from livery.workshop._kinds import kind_chain
 from livery.workshop._packages import discover_packages
 
-TOOLS = "tools"
-"""The contract table the requirements, the hosts and the index live under."""
-
 WORKSPACE = "workspace"
 """The contract table the supported hosts live under."""
 
@@ -107,10 +104,12 @@ TYPINGS_PACKAGE = ("livery", "toolroom")
 
 
 def tools_table(path: Path) -> dict[str, object]:
-    """The `[tools]` table of the contract at *path*; empty when absent."""
+    """The `[toolroom]` table of the contract at *path*, judged; empty when absent."""
+    from livery.toolroom.store import TABLE
+
     if not path.is_file():
         return {}
-    return dict(load_contract(path).get(TOOLS) or {})
+    return dict(load_contract(path).get(TABLE) or {})
 
 
 def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
@@ -256,7 +255,7 @@ def host_allowed(root: Path) -> tuple[str, ...]:
             if check_for(check).role in VERDICT_ROLES:
                 verdicts.setdefault(tool, set()).add(check)
     for name in names:
-        where = f"workshop.toml: [tools] host-allowed names {name}"
+        where = f"workshop.toml: [toolroom] host-allowed names {name}"
         if name in PINNED_TOOLS:
             reason = (
                 "the entry pins uv"
@@ -361,7 +360,7 @@ def supported_hosts(root: Path) -> tuple[str, ...]:
 
 
 def index_source(root: Path) -> str:
-    """Where the catalogue is read from, as `[tools] index` names it.
+    """Where the catalogue is read from, as `[toolroom] index` names it.
 
     A URL is read as the published index; a path, relative to the root,
     is a directory holding an index or the records that build one.
@@ -369,7 +368,7 @@ def index_source(root: Path) -> str:
     declared = tools_table(root / "workshop.toml").get("index")
     if not isinstance(declared, str) or not declared:
         fail(
-            "workshop.toml: [tools] index names no source; set it to the published"
+            "workshop.toml: [toolroom] index names no source; set it to the published"
             " index's URL, or to a directory holding an index or the records"
         )
     if "://" in declared:
@@ -464,12 +463,12 @@ def store_cannot_supply(root: Path) -> str:
             "",
             "Name the catalogue to resolve against in workshop.toml:",
             "",
-            "  [tools]",
+            "  [toolroom]",
             '  index = "<the published index\'s URL, or a directory of records>"',
         ]
     lines += [
         "",
-        f"Then `{prog()} tools.lock` writes the lock and"
+        f"Then `{prog()} toolroom.lock` writes the lock and"
         f" `{prog()} sync` supplies what it names.",
     ]
     return "\n".join(lines)
@@ -486,7 +485,7 @@ def _is_records(source: str) -> bool:
 
 
 def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
-    """The catalogue the repository resolves against, from `[tools] index`.
+    """The catalogue the repository resolves against, from `[toolroom] index`.
 
     A directory of records is read as the authoring site reads it; an
     index, by URL or directory, through the machine's store, which
@@ -520,7 +519,7 @@ def store_home() -> Home:
 
 
 def lock_path(root: Path) -> Path:
-    """The lock's file, `tools.lock` at the root."""
+    """The lock's file, `toolroom.lock` at the root."""
     from livery.toolroom.store import LOCK_FILE
 
     return root / LOCK_FILE
@@ -540,7 +539,7 @@ def current_lock(root: Path) -> Lock | None:
 
 
 def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
-    """Whether `tools.lock` is what the sites resolve to now; and what moved.
+    """Whether `toolroom.lock` is what the sites resolve to now; and what moved.
 
     The question `--locked` and `--check` ask, and nothing is written to
     answer it. An entry that still satisfies every floor stands, so a
@@ -632,7 +631,7 @@ def write_lock(
             continue
         for host in lock.tools[name].on or lock.hosts:
             if gap := _host_probe_gap(listing, name, lock.tools[name].version, host):
-                fail(f"workshop.toml: [tools] host-allowed: {gap}")
+                fail(f"workshop.toml: [toolroom] host-allowed: {gap}")
     lock, notes = with_graphs(root, lock, listing, kept=kept, relock=relock)
     lock.save(lock_path(root))
     for note in notes:
@@ -966,13 +965,13 @@ def with_runtimes(
 
 
 def declare(root: Path, text: str) -> bool:
-    """Add *text* to the project's `[tools] requires`; whether the contract changed.
+    """Add *text* to the project's `[toolroom] requires`; whether the contract changed.
 
     A requirement already declared at the project site, in the same
     spelling, is left as it is. The contract is edited in place: the
-    `[tools]` table gains the entry, or is added at the end with it.
+    `[toolroom]` table gains the entry, or is added at the end with it.
     """
-    from livery.toolroom.store import LockError, Requirement
+    from livery.toolroom.store import TABLE, LockError, Requirement
 
     try:
         Requirement.parse(text, site="workshop.toml")
@@ -985,13 +984,13 @@ def declare(root: Path, text: str) -> bool:
     source = path.read_text(encoding="utf-8") if path.is_file() else ""
     lines = source.split("\n")
     header = next(
-        (n for n, line in enumerate(lines) if line.strip() == f"[{TOOLS}]"), None
+        (n for n, line in enumerate(lines) if line.strip() == f"[{TABLE}]"), None
     )
     if header is None:
         trimmed = source.rstrip("\n")
         path.write_text(
             (trimmed + "\n\n" if trimmed else "")
-            + f'[{TOOLS}]\nrequires = ["{text}"]\n',
+            + f'[{TABLE}]\nrequires = ["{text}"]\n',
             encoding="utf-8",
         )
         return True
@@ -1190,14 +1189,14 @@ def mode_of(
     chosen = overrides.get(name, declared) or default_mode(kind, paths)
     if chosen not in MODES:
         fail(
-            f"workshop.toml: [tools] modes names {chosen!r} for {name}; the modes"
+            f"workshop.toml: [toolroom] modes names {chosen!r} for {name}; the modes"
             f" are {', '.join(MODES)}"
         )
     return str(chosen)
 
 
 def sources(root: Path) -> tuple[Source, ...]:
-    """The tiers consulted before an origin, `[tools] sources`: folders or URLs."""
+    """The tiers consulted before an origin, `[toolroom] sources`: folders or URLs."""
     from livery.strongroom import FolderSource, HttpSource
 
     declared = cast("list[str]", tools_table(root / "workshop.toml").get("sources", []))
@@ -1330,7 +1329,7 @@ def materialise(
 
     lock = current_lock(root)
     if lock is None:
-        fail(f"no {LOCK_FILE}: lock the tools first with `{prog()} tools.lock`")
+        fail(f"no {LOCK_FILE}: lock the tools first with `{prog()} toolroom.lock`")
     listing = catalogue(root, offline=offline)
     store = Store(_home(), sources=sources(root), offline=offline)
     host = store.host
@@ -1547,7 +1546,7 @@ def _no_command(listing: Catalogue, name: str, version: str) -> bool:
 def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     """Write the stubs of the locked tools into the typings directory.
 
-    One stub per tool `tools.lock` holds, rendered by the store from the
+    One stub per tool `toolroom.lock` holds, rendered by the store from the
     locked version's own surface, from the records or from the index:
     a tool the workspace does not deploy gets no stub, and its handle
     types as a bare `Tool`. The `handles` module beside the stubs
@@ -1707,7 +1706,7 @@ def handles_index(names: list[str]) -> str:
     from livery.toolroom.store import class_name
 
     lines = [
-        f"# Rendered by `{prog()} tools.restub`: the handles this workspace",
+        f"# Rendered by `{prog()} toolroom.restub`: the handles this workspace",
         "# locks. Do not edit by hand.",
         "from livery.toolroom.tools import Result",
     ]
@@ -1784,7 +1783,7 @@ def drift(root: Path) -> dict[str, str]:
     found: dict[str, str] = {}
     for name in tool_names(root, this_host()):
         if lock is None or name not in lock.tools:
-            found[name] = f"not locked; run `{prog()} tools.lock`"
+            found[name] = f"not locked; run `{prog()} toolroom.lock`"
             continue
         locked = lock.tools[name]
         receipt = held.get(name)

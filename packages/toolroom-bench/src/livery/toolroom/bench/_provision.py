@@ -1,7 +1,7 @@
 """Fetch the latest curated tools into a throwaway prefix — the engine behind
-`fm tools.provision`.
+`fm toolroom.provision`.
 
-The stubs are read from the *installed* binaries (`fm tools.read`), so
+The stubs are read from the *installed* binaries (`fm toolroom.read`), so
 telling an editor what the newest release accepts means having the newest
 release on `PATH` — across five ecosystems (PyPI, npm, bun, Go, C++), none of
 which should be allowed to touch the machine's own environment.
@@ -145,7 +145,7 @@ def _man_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
 
     Nothing is installed and nothing is run: for a tool read from its
     manual the pages *are* the tool, so provisioning fetches the newest
-    set and `tools.sync` reads those rather than the machine's own git.
+    set and `toolroom.sync` reads those rather than the machine's own git.
     """
     from livery.toolroom.bench import _toolfetch
 

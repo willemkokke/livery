@@ -201,7 +201,7 @@ def test_a_record_that_does_not_load_is_refused_with_its_fix(
         tools.tools_artifacts("tool")
     assert str(refused.value).startswith(f"{path}: ")
     assert str(refused.value).endswith(
-        "List windows-x64 in the record's `hosts` first, and `tools.artifacts`"
+        "List windows-x64 in the record's `hosts` first, and `toolroom.artifacts`"
         " records its artifact"
     )
 

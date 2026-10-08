@@ -10,7 +10,7 @@ description = "Typed surfaces for command-line tools, generated from the tools t
 dev-extras = ["test"]
 
 [docs]
-generators = ["tools.docs"]
+generators = ["toolroom.docs"]
 # The stubs the tool pages point at, rendered by the generator.
 python-paths = ["docs/_generated/stubs"]
 

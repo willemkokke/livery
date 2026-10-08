@@ -535,7 +535,7 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
         ),
     )
     agent = render_tools(root, AGENT)
-    assert "pinned by `tools.lock` for macos-arm, linux-x64, windows-x64" in agent
+    assert "pinned by `toolroom.lock` for macos-arm, linux-x64, windows-x64" in agent
     assert "- ruff 0.6.0: check format, check lint\n- uv 0.4.0\n" in agent
     # A tool locked for some hosts alone says so.
     assert "- dotnet_coverage 18.11.2 (windows-x64 only)\n" in agent

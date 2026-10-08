@@ -193,37 +193,6 @@ doc = "the release train's defaults for every member"
 types = ["bool"]
 doc = "whether a release tests each member against the lowest versions its requirements allow, a member's own setting winning; true when absent"
 
-# The tools the workspace pins. The modes are toolroom's
-# (livery.toolroom.store.MODES), which a test holds equal.
-[contract.root.tools]
-types = ["table"]
-doc = "the tools the workspace pins: the catalogue, the requirements, the host allowances, the modes and the mirrors"
-
-[contract.root.tools.host-allowed]
-types = ["strs"]
-doc = "the tools whose copy already installed on a machine is used instead of the store's; the kinds' allowances alone when absent"
-
-[contract.root.tools.index]
-types = ["str"]
-doc = "where the tool catalogue is read from: the published index's URL, or a directory of records relative to the root"
-
-[contract.root.tools.modes]
-types = ["table"]
-doc = "how named tools reach PATH, over their records' and kinds' modes"
-
-[contract.root.tools.modes."*"]
-types = ["str"]
-doc = "how the tool reaches PATH: link for its entry points in the checkout's bin, path for its own directories, none for neither; its record's or kind's mode when absent"
-values = ["link", "path", "none"]
-
-[contract.root.tools.requires]
-types = ["strs"]
-doc = "the tools the repository needs beyond its kinds', extensions' and members', each a name with an optional floor and host scope: git>=2.40, dotnet_coverage@windows"
-
-[contract.root.tools.sources]
-types = ["strs"]
-doc = "the mirrors the store tries before a tool's origin: folders relative to the root, or URLs"
-
 [contract.root.workspace]
 types = ["table"]
 doc = "the workspace's identity and stack: its name, description, namespace, authors, extensions and hosts"
@@ -473,14 +442,6 @@ doc = "an option for every check of the role; the option's default when absent"
 [contract.package.template]
 types = ["str"]
 doc = "the seed the package was born from"
-
-[contract.package.tools]
-types = ["table"]
-doc = "the tools the package needs beyond its kind's and its checks'"
-
-[contract.package.tools.requires]
-types = ["strs"]
-doc = "the tools the package requires, each a name with an optional floor and host scope"
 
 # extension.toml beside an extension's package.
 
@@ -813,11 +774,3 @@ doc = "the value a nearest slot takes while nothing is contributed; none when ab
 [contract.extension.slots."*".values]
 types = ["list"]
 doc = "the only values a contribution may carry; any value when absent"
-
-[contract.extension.toolroom]
-types = ["table"]
-doc = "the tools the extension's own verbs need"
-
-[contract.extension.toolroom.requires]
-types = ["strs"]
-doc = "the tools the extension's verbs need, as requirement strings: docker>=27"

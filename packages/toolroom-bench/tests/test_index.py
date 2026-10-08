@@ -326,7 +326,9 @@ def test_the_checked_in_records_build_and_the_bench_declares_the_generator():
     if not records.is_dir():
         pytest.skip("the checked-in records are a checkout fact")
     contract = records.parent / "packages" / "toolroom-bench" / "workshop.toml"
-    assert 'generators = ["tools.index.build"]' in contract.read_text(encoding="utf-8")
+    assert 'generators = ["toolroom.index.build"]' in contract.read_text(
+        encoding="utf-8"
+    )
     with tempfile.TemporaryDirectory() as scratch:
         built = _index.build(records, pathlib.Path(scratch) / "index")
     assert len(built.rebuilt) >= 31

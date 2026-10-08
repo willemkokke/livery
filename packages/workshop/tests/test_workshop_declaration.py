@@ -73,6 +73,14 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
     assert "did you mean 'narrowing'?" in refused
 
 
+def test_the_old_tools_table_in_extension_toml_refuses_naming_toolroom(
+    package: Path,
+) -> None:
+    refused = _refusal(package, '[tools]\nrequires = ["docker>=27"]\n')
+    assert "the top level has no key 'tools'" in refused
+    assert "did you mean 'toolroom'?" in refused
+
+
 def test_a_value_of_the_wrong_type_or_outside_its_set_refuses(package: Path) -> None:
     assert "extension.api-version is a string ('1'); it takes an integer" in _refusal(
         package, '[extension]\napi-version = "1"\n'

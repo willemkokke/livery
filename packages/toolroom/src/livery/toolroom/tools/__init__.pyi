@@ -13,7 +13,7 @@
 #   runtime accepts is a type error.
 # The per-tool classes are not in the wheel. They are rendered from the
 # tool records into a workspace's `typings/livery/toolroom/stubs/` by
-# `fm tools.restub`, the stub path every checker reads first, beside this
+# `fm toolroom.restub`, the stub path every checker reads first, beside this
 # package and never inside its directory, and the import of `handles`
 # below resolves there. Without it every handle is what `__getattr__`
 # answers, a `Tool[Result]`, so a stub missing degrades a hint, never a
@@ -36,7 +36,7 @@ from typing import Any, Generic, Literal, NamedTuple, Self, TypeAlias
 from typing import cast as _cast  # noqa: F401
 
 # The handles, one per tool the workspace locks: `ruff: Ruff[Result]`
-# and its class, declared by the `handles` module that `fm tools.restub`
+# and its class, declared by the `handles` module that `fm toolroom.restub`
 # renders into the workspace's `typings/` beside the stubs. A tool not
 # locked has no name there and answers through `__getattr__`.
 from livery.toolroom.handles import *  # noqa: F403

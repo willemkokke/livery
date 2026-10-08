@@ -512,7 +512,7 @@ def lock(
     ] = None,
     check: Forward[bool] = False,
 ) -> None:
-    """Write both locks: `tools.lock` for the tools, `uv.lock` for the venv.
+    """Write both locks: `toolroom.lock` for the tools, `uv.lock` for the venv.
 
     The pair to `sync`, in uv's shape: this decides what a checkout
     installs and nothing on the machine changes, and `sync` installs
@@ -558,7 +558,7 @@ def sync(
     what a removed package left under ``packages/``, fetch origin's
     state store into the checkout's mirror for the gate to read, then
     every extension's fragments, skills, and hooks, then the two locks.
-    Both halves match their lock the way uv does: `tools.sync` for the
+    Both halves match their lock the way uv does: `toolroom.sync` for the
     tools, ``uv sync`` for the environment, each writing its lock when
     there is none or the declarations have moved past it. Last, the
     composed and generated files are written again, since both read the
@@ -631,7 +631,7 @@ def sync(
     # runs cmake, conan and the provider the store supplies, and resolves
     # a sibling library at HEAD through the conan workspace file the
     # delivery above wrote.
-    # The engine, not the `tools.sync` task: this task owns the console,
+    # The engine, not the `toolroom.sync` task: this task owns the console,
     # and a task called from inside it waits for the console to free,
     # which it never does while its caller runs.
     sync_tools(root, frozen=frozen, locked=locked, offline=offline)
@@ -658,7 +658,7 @@ def stale_locks(root: Path) -> list[str]:
     """What is not current about *root*'s locks; empty when both are.
 
     The two locks `sync --locked` refuses on: `uv.lock` against the
-    project's declarations (``uv lock --check``) and `tools.lock`
+    project's declarations (``uv lock --check``) and `toolroom.lock`
     against its sites. A workspace without a lock has nothing here to
     judge. The installed plugins are read again first, since a sync in
     another process may have moved them under this one.
@@ -787,19 +787,50 @@ def fetch_store_lines(root: Path) -> list[str]:
     return [f"  store: {count} ref(s) of origin's state store fetched"]
 
 
+#: Lock files the store never reads, which a workspace may still hold
+#: beside or instead of its lock: sync names each one it finds, with
+#: the verb that writes the lock the store reads, and leaves it.
+UNREAD_LOCKS = ("tools.lock", "tools.graphs")
+
+
+def unread_locks(root: Path) -> list[str]:
+    """The lock files in *root* the store never reads, in one line; empty for none."""
+    from livery.toolroom.store import LOCK_FILE
+
+    found = [
+        f"{name}/" if (root / name).is_dir() else name
+        for name in UNREAD_LOCKS
+        if (root / name).exists()
+    ]
+    if not found:
+        return []
+    names = " and ".join(found)
+    return [
+        f"  tools: the store reads {LOCK_FILE}, not {names};"
+        f" `{footman.prog()} toolroom.lock` writes it, and {names} can be deleted"
+    ]
+
+
 def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
     """Supply every locked tool through the store and write the receipts; the lines.
 
     The bundle the sites require, materialised as `fm sync` and
-    `fm tools.materialise` enter the environment, and the stubs the
-    checkers read written after it: a checkout with no `tools.lock`
-    yet has nothing to materialise and says so. *offline* supplies
-    from the machine's store and its sources alone.
+    `fm toolroom.sync` enter the environment, and the stubs the
+    checkers read written after it: a checkout with no `toolroom.lock`
+    yet has nothing to materialise and says so. A lock file the store
+    never reads is named first, with the verb that writes the one it
+    does. *offline* supplies from the machine's store and its sources
+    alone.
     """
+    from livery.toolroom.store import LOCK_FILE
     from livery.workshop._tools import current_lock, materialise, stub_lines
 
+    unread = unread_locks(root)
     if current_lock(root) is None:
-        return [f"  tools: no tools.lock; `{footman.prog()} tools.lock` writes one"]
+        return [
+            *unread,
+            f"  tools: no {LOCK_FILE}; `{footman.prog()} toolroom.lock` writes one",
+        ]
     done = materialise(root, strict=False, offline=offline)
     supplied = [m for m in done if m.receipt is not None]
     installed = [m.receipt.tool for m in supplied if m.installed and m.receipt]
@@ -809,9 +840,10 @@ def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
         if m.receipt is not None and m.receipt.source == "host"
     ]
     lines = [
+        *unread,
         f"  tools: {len(supplied)} receipt(s)"
         + (f", installed {', '.join(installed)}" if installed else ", all present")
-        + (f", from the host: {', '.join(hosted)}" if hosted else "")
+        + (f", from the host: {', '.join(hosted)}" if hosted else ""),
     ]
     lines += [f"  tools: {m.note}" for m in done if m.note]
     lines += [f"  tools: could not materialise: {m.failure}" for m in done if m.failure]

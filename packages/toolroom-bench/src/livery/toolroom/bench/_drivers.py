@@ -66,7 +66,7 @@ class Manual:
 
 @dataclass(frozen=True)
 class Provision:
-    """How `fm tools.provision` fetches this tool's *latest* binary.
+    """How `fm toolroom.provision` fetches this tool's *latest* binary.
 
     Data, like everything else a driver carries. The extractor reads the
     installed tool; this says how to *get* the latest one into a throwaway
