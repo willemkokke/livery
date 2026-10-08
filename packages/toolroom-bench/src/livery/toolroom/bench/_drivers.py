@@ -932,7 +932,7 @@ def in_process_capable(name: str) -> bool:
     """
     import livery.toolroom.tools as tools
 
-    return tools._console_entrypoint(name) is not None
+    return tools.console_script(name) is not None
 
 
 def extract(driver: Driver, home: Path | None = None) -> ToolSpec:
@@ -1101,7 +1101,7 @@ def _from_click(driver: Driver) -> ToolSpec | None:
     """
     import livery.toolroom.tools as tools
 
-    entry = tools._console_entrypoint(driver.name)
+    entry = tools.console_script(driver.name)
     if entry is None:
         return None
     packaged = getattr(getattr(entry, "dist", None), "version", "") or ""

@@ -137,14 +137,14 @@ if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null; fi
 
 def entry_script(root: Path) -> str:
     """The emitted ``setup.sh`` body for *root*, header not included."""
-    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import directory_variable
 
     pin = locked_uv_version(root)
     skipped = " ".join(f"--no-install-package {name}" for name in native_members(root))
     return (
         _SCRIPT.replace("__PROG__", footman.prog())
         .replace("__INSTALLER__", installer_url(pin))
-        .replace("__DATA_DIR_VAR__", _paths.env_var("DATA_DIR"))
+        .replace("__DATA_DIR_VAR__", directory_variable("DATA_DIR"))
         .replace("__NATIVE_SKIP__", skipped)
     )
 

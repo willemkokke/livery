@@ -177,9 +177,10 @@ def hosted() -> bool:
     # the old `footman` shim name has no host to route through.
     if "livery.footman" not in sys.modules:
         return False
-    from livery.footman._context import _current
+    from livery.footman import host
 
-    return _current.get() is not None
+    found = host()
+    return found is not None and found.in_task
 
 
 def container_error(value: Any, where: str, *, example: str = "") -> str:
@@ -383,8 +384,8 @@ def run(
     in-process lane too.
     """
     if hosted():
+        from livery.footman import CommandView
         from livery.footman import run as fm_run
-        from livery.footman._context import Invocation
 
         painted: dict[str, Any] = {}
         if _run_takes_colour(fm_run):
@@ -410,7 +411,7 @@ def run(
             cwd=cwd,
             rel=rel,
             **painted,
-            _show=Invocation(parts, exact),
+            view=CommandView(parts, exact),
         )
     if not isinstance(target, list):
         raise TypeError(

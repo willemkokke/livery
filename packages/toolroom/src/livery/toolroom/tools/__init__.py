@@ -545,6 +545,50 @@ def _console_entrypoint(name: str) -> Any | None:
     return None
 
 
+def console_script(name: str) -> Any | None:
+    """The `[console_scripts]` entry point named *name*, unloaded, or None.
+
+    An installed distribution that declares a console script of that name
+    answers; its tool runs in footman's own process from that entry point.
+    The entry point is not loaded, so asking imports none of the tool's
+    code.
+    """
+    return _console_entrypoint(name)
+
+
+def negations() -> dict[str, dict[str, str]]:
+    """Each tool's keywords whose off spelling is not `--no-<flag>`, by tool.
+
+    `fix=False` on such a keyword spells the tool's own off flag, `mkdocs`'s
+    `clean=False` as `--dirty`; the stub generator reads the same table.
+    """
+    return {tool: dict(table) for tool, table in _NEGATIONS.items()}
+
+
+def wrappers() -> dict[str, frozenset[str]]:
+    """Each tool's verbs that wrap another command, by tool.
+
+    A wrapper takes its own options before the command it runs, so a call
+    to one spells its flags first: `uv run`, `docker exec`, `python` itself.
+    """
+    return dict(_WRAPPERS)
+
+
+def colour_controls() -> dict[
+    str, tuple[str, str, str, tuple[str, ...], tuple[str, ...], bool]
+]:
+    """Each curated tool's probed colour control, by tool: how footman forces it.
+
+    A row is `(argv0, on, off, flag_on, flag_off, pre_verb)`: the tool obeys
+    `env` (FORCE_COLOR and NO_COLOR), needs its own `flag`, or can force
+    neither way (`none`); `unprobed` had no trigger. `fm toolroom.color`
+    writes the table, toolroom forces colour from it, and the docs show it.
+    """
+    from livery.toolroom.tools import _colordata
+
+    return dict(_colordata.COLOUR)
+
+
 def _accepts_args(entry: Any) -> bool:
     """Can *entry* take the argument list directly (no sys.argv patching)?
 
@@ -1023,12 +1067,17 @@ class Tool:
                 )
             return _spawn()
         if wanted:
-            from livery.footman import _globals as _pg
-            from livery.footman import current as _current
-            from livery.footman._context import _target_cwd as _target_cwd_of
+            from livery.footman import host
 
-            target = _target_cwd_of(_current(), cwd_opt, rel_opt)
-            if target is not None and target.resolve() != _Path(_pg.real_getcwd()):
+            running = host()
+            target = (
+                running.target_cwd(cwd_opt, rel_opt) if running is not None else None
+            )
+            if (
+                running is not None
+                and target is not None
+                and target.resolve() != _Path(running.real_cwd())
+            ):
                 # In-process can't apply a foreign cwd (footman never chdirs
                 # in a parallel task): demote to the subprocess twin — same
                 # command, same semantics, still fully parallel; the
@@ -1053,10 +1102,10 @@ class Tool:
                 # so a dry-run of this call imports nothing.
                 if _accepts_args(entry):
                     return entry(tail)  # click / main(argv): lock-free, parallel
-                if _pg.active():
+                if running is not None and running.active:
                     # The argv router: this call gets its own sys.argv view —
                     # lock-free, so even a legacy zero-arg main() parallelises.
-                    with _pg.argv_override(argv):
+                    with running.argv_override(argv):
                         return entry()
                 with _argv_lock:  # bare calls outside a run: classic patch
                     saved = _sys.argv

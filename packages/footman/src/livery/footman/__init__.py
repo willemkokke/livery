@@ -32,8 +32,10 @@ if TYPE_CHECKING:
     from livery.footman._application import Brand as Brand
     from livery.footman._compose import include as include
     from livery.footman._compose import plugin as plugin
+    from livery.footman._config import project_builtins as project_builtins
     from livery.footman._context import Argv as Argv
     from livery.footman._context import AuditEntry as AuditEntry
+    from livery.footman._context import CommandView as CommandView
     from livery.footman._context import Context as Context
     from livery.footman._context import Failed as Failed
     from livery.footman._context import Result as Result
@@ -73,6 +75,8 @@ if TYPE_CHECKING:
     from livery.footman._context import tty as tty
     from livery.footman._context import use_context as use_context
     from livery.footman._context import user_tasks_file as user_tasks_file
+    from livery.footman._describe import styled as styled
+    from livery.footman._describe import wants_color as wants_color
     from livery.footman._entries import installed_entry_points as installed_entry_points
     from livery.footman._entries import rescan_entry_points as rescan_entry_points
     from livery.footman._executor import handing_off as handing_off
@@ -82,6 +86,8 @@ if TYPE_CHECKING:
     from livery.footman._globals import console_lane as console_lane
     from livery.footman._globals import cwd_lane as cwd_lane
     from livery.footman._globals import make_lane as lane
+    from livery.footman._host import Host as Host
+    from livery.footman._host import host as host
     from livery.footman._invocation import Invocation as Invocation
     from livery.footman._params import Arg as Arg
     from livery.footman._params import Exists as Exists
@@ -110,6 +116,9 @@ if TYPE_CHECKING:
     from livery.footman._params import stdin as stdin
     from livery.footman._params import stdout as stdout
     from livery.footman._params import suggest as suggest
+    from livery.footman._paths import builtins as builtins
+    from livery.footman._paths import directory_variable as directory_variable
+    from livery.footman._paths import tasks_file_name as tasks_file_name
     from livery.footman._registry import GlobalOption as GlobalOption
     from livery.footman._registry import Group as Group
     from livery.footman._registry import Tasks as Tasks
@@ -153,6 +162,7 @@ __all__ = [
     "Argv",
     "AuditEntry",
     "Brand",
+    "CommandView",
     "Context",
     "Exists",
     "Failed",
@@ -161,6 +171,7 @@ __all__ = [
     "GlobalOption",
     "Group",
     "Hidden",
+    "Host",
     "Invocation",
     "IsDir",
     "IsFile",
@@ -184,6 +195,7 @@ __all__ = [
     "ask",
     "attended",
     "between",
+    "builtins",
     "cache_dir",
     "capture",
     "chdir",
@@ -199,6 +211,7 @@ __all__ = [
     "cwd_lane",
     "data_dir",
     "default",
+    "directory_variable",
     "dist",
     "doc",
     "docs",
@@ -213,6 +226,7 @@ __all__ = [
     "group",
     "handing_off",
     "hidden",
+    "host",
     "include",
     "inherited",
     "installed_entry_points",
@@ -237,6 +251,7 @@ __all__ = [
     "profile",
     "prog",
     "progress",
+    "project_builtins",
     "project_root",
     "prompt",
     "real_stderr",
@@ -254,13 +269,16 @@ __all__ = [
     "stdout",
     "step",
     "stream",
+    "styled",
     "suggest",
     "task",
+    "tasks_file_name",
     "testing",
     "track",
     "tty",
     "use_context",
     "user_tasks_file",
+    "wants_color",
     "wrap_bind",
     "wrap_task",
 ]
@@ -500,6 +518,26 @@ def __getattr__(name: str) -> object:
         from livery.footman import _application as app
 
         return getattr(app, name)
+    if name == "CommandView":
+        from livery.footman import _context as context
+
+        return context.CommandView
+    if name in ("Host", "host"):
+        from livery.footman import _host
+
+        return getattr(_host, name)
+    if name in ("builtins", "directory_variable", "tasks_file_name"):
+        from livery.footman import _paths
+
+        return getattr(_paths, name)
+    if name == "project_builtins":
+        from livery.footman import _config
+
+        return _config.project_builtins
+    if name in ("styled", "wants_color"):
+        from livery.footman import _describe
+
+        return getattr(_describe, name)
     if name == "Invocation":
         from livery.footman import _invocation as invocation
 

@@ -48,8 +48,16 @@ if TYPE_CHECKING:
     from livery.toolroom.store import Ensured, Record, Store, ToolSpec
 
 import livery.toolroom.tools as _tools
-from livery.footman import Group, current, data_dir, doc, fail, project_root
-from livery.footman._describe import bold, cyan, wants_color
+from livery.footman import (
+    Group,
+    current,
+    data_dir,
+    doc,
+    fail,
+    project_root,
+    styled,
+    wants_color,
+)
 from livery.toolroom.tools import version_tuple as _version_tuple
 
 tasks: Group = Group("toolroom", help="Keep the tool records honest")
@@ -274,9 +282,10 @@ def _overlay(**values: str) -> Generator[None]:
     """
     import os
 
-    from livery.footman import _globals
+    from livery.footman import host
 
-    target = current().env if _globals.active() else os.environ
+    running = host()
+    target = current().env if running is not None and running.active else os.environ
     saved = {key: target.get(key) for key in values}
     target.update(values)
     try:
@@ -512,7 +521,9 @@ def list_(
         blank = f"unreadable ({why})" if here else "not installed"
         rows.append((driver.key, version or blank, mode, record))
     width = max((len(r[0]) for r in rows), default=4)
-    print(bold(f"{'tool'.ljust(width)}  version      in-process  record", on))
+    print(
+        styled(f"{'tool'.ljust(width)}  version      in-process  record", "bold", on=on)
+    )
     for key, version, mode, record in rows:
         print(f"{key.ljust(width)}  {version:<12} {mode:<11} {record}")
 
@@ -530,12 +541,14 @@ def spec(
         raise SystemExit(f"{driver.name} is not installed")
     on = wants_color(sys.stdout)
     extracted = _extract(driver)
-    print(bold(f"{extracted.name} {extracted.version}", on), extracted.help)
+    print(
+        styled(f"{extracted.name} {extracted.version}", "bold", on=on), extracted.help
+    )
     for one in extracted.verbs:
         if verb and one.name != verb:
             continue
         label = one.name or "(the tool itself)"
-        print(cyan(f"\n  {label}", on), f"— {len(one.options)} options")
+        print(styled(f"\n  {label}", "cyan", on=on), f"— {len(one.options)} options")
         for option in one.options:
             negation = f"  off → {option.negation}" if option.negation else ""
             print(f"    {option.name:<28} {option.type_name:<10}{negation}")
@@ -725,10 +738,10 @@ def _audit(
         if driver.base:
             continue
         found = spec.negations()
-        if found != _bridge._NEGATIONS.get(driver.name, {}):
+        if found != _bridge.negations().get(driver.name, {}):
             wrong.append(f"_NEGATIONS[{driver.name!r}] should be {found}")
         wraps = spec.wrappers()
-        if wraps != _bridge._WRAPPERS.get(driver.name, frozenset()):
+        if wraps != _bridge.wrappers().get(driver.name, frozenset()):
             wrong.append(f"_WRAPPERS[{driver.name!r}] should be {set(wraps)}")
     if skipped:
         print(f"left alone: {', '.join(skipped)}")
@@ -824,7 +837,9 @@ def _color_probe_and_write(
 
     results = _colorprobe.probe_all(installed)
     width = max((len(k) for k in results), default=4)
-    print(bold(f"{'tool'.ljust(width)}  {'on':<8}  {'off':<8}  switch", on))
+    print(
+        styled(f"{'tool'.ljust(width)}  {'on':<8}  {'off':<8}  switch", "bold", on=on)
+    )
     for key in sorted(results):
         _argv0, verdict = results[key]
         switch = " ".join(verdict.flag.on) if verdict.flag else ""
@@ -840,10 +855,8 @@ def _color_probe_and_write(
     # importable package. The docs table is rendered from this file
     # on every docs build, so it follows the data without needing
     # the tools on PATH.
-    from livery.toolroom.tools import _colordata
-
     data = Path(_tools.__file__).resolve().parent / "_colordata.py"
-    folded = _colorprobe.merged(_colordata.COLOUR, results)
+    folded = _colorprobe.merged(_tools.colour_controls(), results)
     data.write_text(_ruff_formatted(_colorprobe.render(folded)), encoding="utf-8")
     print(f"\nwrote {data.name} ({len(folded)} tools, {len(results)} probed here)")
 
@@ -1128,19 +1141,19 @@ bytes, because it cannot tell a stray escape from a deliberate one).
 def colour_page() -> str:
     """The colour support page, rendered from the checked-in colour data.
 
-    Reads `livery.toolroom.tools._colordata`, not a live probe, so a docs build needs
-    nothing on PATH and the page says exactly what ships — the same rule
-    the per-tool pages follow. `fm toolroom.color` refreshes the data; the
-    page follows on the next build.
+    Reads toolroom's probed table ([livery.toolroom.tools.colour_controls][]),
+    not a live probe, so a docs build needs nothing on PATH and the page
+    says exactly what ships — the same rule the per-tool pages follow.
+    `fm toolroom.color` refreshes the data; the page follows on the next
+    build.
     """
-    from livery.toolroom.tools import _colordata
-
+    controls = _tools.colour_controls()
     lines = [
         "| Tool | Colour on | Colour off |",
         "| ---- | --------- | ---------- |",
     ]
-    for key in sorted(_colordata.COLOUR):
-        _argv0, on, off, flag_on, flag_off, _pre = _colordata.COLOUR[key]
+    for key in sorted(controls):
+        _argv0, on, off, flag_on, flag_off, _pre = controls[key]
         if on == "n/a" and off == "n/a":
             lines.append(f"| `{key}` | *(pass-through wrapper)* | |")
             continue
@@ -1980,10 +1993,11 @@ def _spawn_context() -> tuple[Path, dict[str, str]]:
     """
     import os
 
-    from livery.footman import _globals
+    from livery.footman import host
 
     ctx = current()
-    if _globals.active():
+    running = host()
+    if running is not None and running.active:
         return Path(ctx.cwd or Path.cwd()), dict(ctx.env)
     return Path.cwd(), dict(os.environ)
 
@@ -2181,12 +2195,13 @@ def _bounce_bare_call(task: str) -> None:
     is exactly the cross-contamination this engine exists to remove. One
     implementation, and a bouncer — never a degraded twin.
     """
-    from livery.footman import _globals, fail
+    from livery.footman import fail, host
 
-    if not _globals.active():
+    running = host()
+    if running is None or not running.active:
         fail(
-            f"tools.{task} gathers releases in parallel and needs a run — "
-            f"invoke `fm tools.{task}`, or drive it with "
+            f"toolroom.{task} gathers releases in parallel and needs a run — "
+            f"invoke `fm toolroom.{task}`, or drive it with "
             "livery.footman.testing.Runner in tests"
         )
 

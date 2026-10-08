@@ -320,11 +320,11 @@ def sweep_leftovers(data_dir: Path, *, dry_run: bool) -> list[str]:
 
 def report_config(config_dir: Path) -> list[str]:
     """Name what sits in the config directory beside the user's own files."""
-    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import tasks_file_name
 
     if not config_dir.is_dir():
         return []
-    own = {*CONFIG_OWN, _paths.tasks_file_name()}
+    own = {*CONFIG_OWN, tasks_file_name()}
     foreign = sorted(p.name for p in config_dir.iterdir() if p.name not in own)
     if not foreign:
         return []

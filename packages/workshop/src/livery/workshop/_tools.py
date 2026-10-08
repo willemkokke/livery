@@ -198,14 +198,11 @@ def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
         Failed: when a declaration is not a tuple or list of strings,
             naming the plugin.
     """
-    from livery.footman import (
-        _config,  # pyright: ignore[reportPrivateUsage]
-        installed_entry_points,
-    )
+    from livery.footman import installed_entry_points, project_builtins
 
     declared = {entry.name: entry for entry in installed_entry_points("workshop.tools")}
     found: dict[str, tuple[str, ...]] = {}
-    for name in _config.project_builtin(root):
+    for name in project_builtins(root):
         entry = declared.get(name)
         if entry is None:
             continue

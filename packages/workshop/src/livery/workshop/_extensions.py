@@ -366,7 +366,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """
     # footman does not expose the brand's builtin set publicly; this
     # private read is one of the reaches issue #1204 closes with a seam.
-    from livery.footman import _paths, plugin
+    from livery.footman import builtins, plugin
 
     global MOUNTED, UNDECLARED, STALE
     MOUNTED = True
@@ -374,7 +374,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     root = workspace_root(start)
     if root is not None and (why := missing_list(root)):
         _note(why)
-    builtin = set(_paths.builtin())
+    builtin = set(builtins())
     mounted = []
     stale: list[str] = []
     declared = declared_targets(start)
