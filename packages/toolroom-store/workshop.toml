@@ -11,7 +11,7 @@ description = "The pinned tool store over strongroom: specs, a machine-wide home
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 [[depends]]
 path = "packages/strongroom"

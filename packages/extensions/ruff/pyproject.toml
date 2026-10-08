@@ -21,8 +21,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "livery-toolroom>=0.10.0",
-    "livery-workshop>=0.6.0",
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.7.0",
 ]
 
 [project.urls]

@@ -5,6 +5,17 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.59.0] - 2026-10-08
+
+### Added
+
+- Task names link to their pages through footman's Invocation.docs_url, set by a pre_tasks hook: the docs extension's from [docs] site-url, now its own key, and the base's from [workspace] docs-url by @willemkokke
+- No package reaches another's privates: footman exports host, CommandView, styled and its brand's names, toolroom its colour and stub tables by @willemkokke
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+
 ## [0.58.0] - 2026-10-07
 
 ### Added

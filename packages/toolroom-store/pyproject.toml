@@ -26,12 +26,12 @@ classifiers = [
 # and the plugin entry that a later phase adds.
 dependencies = [
     "livery-strongroom>=0.4.0",
-    "livery-toolroom>=0.10.0",
+    "livery-toolroom>=0.11.0",
 ]
 
 [project.optional-dependencies]
 test = [
-    "livery-footman>=0.58.0",
+    "livery-footman>=0.59.0",
 ]
 
 [project.urls]
