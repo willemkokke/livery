@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] - 2026-10-08
+
+### Added
+
+- Forge lookups ask each backend's narrowest query and stop reading once they have what they need: pull requests by branch and commit, runs by workflow and limit, tags by prefix by @willemkokke
+
 ## [0.6.0] - 2026-10-07
 
 ### Added

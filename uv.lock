@@ -951,7 +951,7 @@ provides-extras = ["uv", "test"]
 
 [[package]]
 name = "livery-forge"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "packages/forge" }
 
 [package.optional-dependencies]
