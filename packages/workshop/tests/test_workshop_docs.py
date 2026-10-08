@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -53,6 +54,35 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
             for page in pages:
                 (member / "docs" / page).write_text(f"# {page}\n")
     return root
+
+
+def _package_entries(nav: Any) -> list[Any]:
+    """Every entry under the nav's one Packages entry, shallowest first."""
+    (packages,) = [e for e in nav if isinstance(e, dict) and "Packages" in e]
+    found: list[Any] = []
+    level: list[Any] = list(packages["Packages"])
+    while level:
+        nested: list[Any] = []
+        for entry in level:
+            if isinstance(entry, dict):
+                found.append(entry)
+                nested += [
+                    v
+                    for value in entry.values()
+                    if isinstance(value, list)
+                    for v in value
+                ]
+        level = nested
+    return found
+
+
+def _package_entry(nav: Any, name: str) -> Any:
+    """The shallowest section labelled *name* under the nav's Packages entry.
+
+    A package's place sits above anything inside its section, a task
+    group of the same name included.
+    """
+    return next(entry for entry in _package_entries(nav) if name in entry)
 
 
 # The fallbacks first: an undeclared table, a package without docs.
@@ -159,7 +189,7 @@ def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
     assert NAV_BEGIN in config and NAV_END in config
     nav = parsed["project"]["nav"]
     assert nav[0] == {"Home": "index.md"}
-    core = next(entry for entry in nav if "core" in entry)
+    core = _package_entry(nav, "core")
     # Index first, then the rest sorted, all at the mount path.
     assert core["core"][0] == {"Index": "packages/core/index.md"}
     assert core["core"][1] == {"guide": "packages/core/guide.md"}
@@ -306,7 +336,7 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     assert list(handler["inventories"]) == list(INVENTORIES)
     assert handler["options"]["docstring_style"] == "google"
     assert handler["options"]["show_if_no_docstring"] is True
-    core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
+    core = _package_entry(parsed["project"]["nav"], "core")
     api = next(part for part in core["core"] if "API" in part)
     assert api["API"][0] == {"acme.core": "packages/core/api/index.md"}
 
@@ -497,7 +527,7 @@ def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
     # One nav entry from committed state; the landing links the
     # year archives itself, so a tagless checkout renders the same.
     assert releases["Releases"] == "releases/index.md"
-    core = next(entry for entry in nav if "core" in entry)
+    core = _package_entry(nav, "core")
     assert {"Changelog": "packages/core/changelog.md"} in core["core"]
 
 
@@ -718,7 +748,7 @@ def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
         "]\n",
     )
     parsed = toml.loads(zensical_config(root))
-    core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
+    core = _package_entry(parsed["project"]["nav"], "core")["core"]
     # Authored order wins (no index-first re-sort), nesting survives,
     # and every path lands under the package's mount.
     assert core[0] == {"Guide": "packages/core/guide.md"}
@@ -733,7 +763,7 @@ def test_a_navless_package_keeps_the_enumerated_fallback(tmp_path: Path) -> None
 
     root = _workspace(tmp_path)
     parsed = toml.loads(zensical_config(root))
-    core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
+    core = _package_entry(parsed["project"]["nav"], "core")["core"]
     assert core[0] == {"Index": "packages/core/index.md"}
     assert core[1] == {"guide": "packages/core/guide.md"}
 
@@ -1685,7 +1715,7 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
         for entry in parsed["project"].get("extra_css", [])
         if "_generated" in str(entry)
     ]
-    core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
+    core = _package_entry(parsed["project"]["nav"], "core")
     api = next(part for part in core["core"] if "API" in part)
     assert api["API"][0]["acme.core"].startswith("packages/core/api/")
     assert RELEASES == "docs/releases"
@@ -1700,7 +1730,7 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
 
 def _nav_labels(config: str, name: str) -> list[str]:
     parsed = tomllib.loads(config)
-    section = next(entry for entry in parsed["project"]["nav"] if name in entry)
+    section = _package_entry(parsed["project"]["nav"], name)
     return [next(iter(part)) for part in section[name]]
 
 
@@ -1985,7 +2015,7 @@ def test_a_kind_without_an_extractor_names_the_absence_never_an_empty_page(
         "# API reference\n\nNo API reference: the `stone` kind declares no extractor.\n"
     )
     config = tomllib.loads(zensical_config(root))
-    section = next(entry for entry in config["project"]["nav"] if "bare" in entry)
+    section = _package_entry(config["project"]["nav"], "bare")
     assert {"API": "packages/bare/api/index.md"} in section["bare"]
     # Only the python kind's handler is configured, over the python package.
     handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
@@ -1998,7 +2028,7 @@ def test_a_kind_without_an_extractor_names_the_absence_never_an_empty_page(
     assert generate_api_pages(root) == ["core"]
     assert not page.exists()
     config = tomllib.loads(zensical_config(root))
-    assert not any("bare" in entry for entry in config["project"]["nav"])
+    assert not any("bare" in e for e in _package_entries(config["project"]["nav"]))
 
 
 def test_a_second_extractor_reaches_the_config_through_the_kind_record(
@@ -2035,7 +2065,7 @@ def test_a_second_extractor_reaches_the_config_through_the_kind_record(
         "strict": True,
     }
     assert handlers["python"]["paths"] == ["packages/core/src"]
-    section = next(entry for entry in config["project"]["nav"] if "bare" in entry)
+    section = _package_entry(config["project"]["nav"], "bare")
     api = next(part for part in section["bare"] if "API" in part)
     assert api["API"] == [{"acme.bare": "packages/bare/api/index.md"}]
     # A child kind takes the nearest ancestor's extractor.
@@ -2113,3 +2143,108 @@ def test_the_development_section_renders_one_page_per_section(
     assert generate_development_pages(root) == ["index.md", "rules.md"]
     assert not (root / "docs" / "development" / "voice.md").exists()
     assert not any("Voice" in line for line in development_nav_lines(root))
+
+
+# The Packages section: the refusals first, then the tree, the nav and
+# the landing page.
+
+
+def _name(root: Path, member: str, name: str) -> None:
+    contract = root / "packages" / member / "workshop.toml"
+    contract.write_text(contract.read_text() + f'\n[docs]\nname = "{name}"\n')
+
+
+def test_a_docs_name_that_is_no_dotted_path_refuses_naming_the_file(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.docs._packages_page import package_tree
+
+    root = _workspace(tmp_path)
+    _name(root, "core", "not a path!")
+    with pytest.raises(
+        _FAILURES,
+        # The file in the platform's own spelling: a backslash on Windows.
+        match=(
+            r"core[/\\]workshop\.toml: \[docs\] name 'not a path!'"
+            r" is not a dotted path"
+        ),
+    ):
+        package_tree(discover_packages(root))
+
+
+def test_two_packages_at_one_place_refuse_naming_both(tmp_path: Path) -> None:
+    from livery.extensions.docs._packages_page import package_tree
+
+    root = _workspace(tmp_path)
+    _name(root, "core", "bare")
+    with pytest.raises(
+        _FAILURES, match=r"packages/bare and packages/core both sit at bare"
+    ):
+        package_tree(discover_packages(root))
+
+
+def test_the_tree_places_packages_and_orders_them_by_their_dependencies(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.docs._packages_page import package_tree
+
+    root = _workspace(tmp_path)
+    # A package with no import path sits at its folder under packages/.
+    group = root / "packages" / "native" / "engine"
+    group.mkdir(parents=True)
+    (group / "workshop.toml").write_text('kind = "python"\nname = "acme-engine"\n')
+    (group / "pyproject.toml").write_text('[project]\nname = "acme-engine"\n')
+    # bare depends on core, so core comes first though bare sorts first.
+    contract = root / "packages" / "bare" / "workshop.toml"
+    contract.write_text(
+        contract.read_text()
+        + '\n[[depends]]\npath = "packages/core"\nkind = "runtime"\nfloor = "0"\n'
+    )
+    tree = package_tree(discover_packages(root))
+    # The namespace every import path shares, acme, is left out.
+    assert [node.label for node in tree.ordered()] == ["core", "bare", "native"]
+    (engine,) = tree.children["native"].ordered()
+    assert engine.label == "engine" and engine.package is not None
+    assert tree.children["native"].package is None
+    # A [docs] name places a package inside another one's entry.
+    _name(root, "bare", "core.extras.bare")
+    tree = package_tree(discover_packages(root))
+    core = tree.children["core"]
+    assert core.package is not None and core.package.member == "core"
+    bare = core.children["extras"].children["bare"]
+    assert bare.package is not None and bare.package.member == "bare"
+
+
+def test_the_nav_has_one_packages_entry_with_its_landing_page(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _name(root, "bare", "core.extras.bare")
+    nav = tomllib.loads(zensical_config(root))["project"]["nav"]
+    (packages,) = [entry for entry in nav if "Packages" in entry]
+    assert packages["Packages"][0] == {"Index": "packages/index.md"}
+    assert not any("core" in entry or "bare" in entry for entry in nav)
+    core = _package_entry(nav, "core")["core"]
+    # The package's own pages first, then the places below it, whose
+    # pages keep their URLs.
+    assert core[0] == {"Index": "packages/core/index.md"}
+    extras = next(entry for entry in core if "extras" in entry)["extras"]
+    assert next(iter(extras[0])) == "bare"
+    assert "packages/bare/" in str(extras[0]["bare"])
+
+
+def test_the_landing_page_lists_the_tree_with_each_description(tmp_path: Path) -> None:
+    from livery.extensions.docs._packages_page import write_packages_page
+
+    root = _workspace(tmp_path)
+    contract = root / "packages" / "core" / "workshop.toml"
+    contract.write_text(contract.read_text() + 'description = "The core."\n')
+    _name(root, "bare", "core.extras.bare")
+    mount_package_docs(root)
+    page = write_packages_page(root)
+    assert page is not None and page == root / "docs" / "packages" / "index.md"
+    text = page.read_text(encoding="utf-8")
+    assert text.startswith("# Packages\n")
+    assert "- [core](core/index.md): The core.\n" in text
+    assert "    - extras\n        - bare\n" in text
+    # A later mount keeps the landing page: it is no stale mount.
+    mount_package_docs(root)
+    assert page.is_file()

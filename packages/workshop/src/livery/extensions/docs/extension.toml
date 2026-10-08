@@ -43,6 +43,11 @@ doc = "one generator: a verb's name, or a table with the verb and the system pac
 verb = { types = ["str"], doc = "the verb, a task the package ships" }
 requires = { types = ["strs"], doc = "the system packages the verb needs on a docs machine" }
 
+# Where the package sits in the site's Packages tree.
+[contract.package.docs.name]
+types = ["str"]
+doc = "the package's place in the site's Packages tree, a dotted path whose last part is its label: workshop.extensions.ruff; its import path less the namespace every package shares, or its folder under packages/, when absent"
+
 # A package's pages beyond the generated ones.
 [contract.package.docs.coverage]
 types = ["list"]

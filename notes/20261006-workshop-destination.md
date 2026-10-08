@@ -1454,6 +1454,23 @@ the stack, which this design neither needs nor rules out).
   over every member's sources: an import of an extension's module from
   outside it refuses, naming the file and the line, unless the
   importing extension's `extension.toml` requires the imported one.
+- Willem, 2026-10-08: the site's packages move under one Packages
+  entry with a generated landing page, as hse's are. A package's place
+  comes from its import path, the shared namespace hidden, or its
+  folder; `[docs] name` overrides it, and no new construct is added for
+  it. The extensions sit inside the workshop's entry, or at least below
+  it.
+- 2026-10-08, the Packages section (#1296): `_packages_page` places
+  each package (`[docs] name`, else the import path less the namespace
+  every python package shares, else the folder under `packages/`),
+  orders siblings by `order_topologically`, the order a release wave
+  publishes in, and writes `packages/index.md` after the mount.
+  Decided here: the landing page shows each package's contract
+  `description`; replacing the tree by hand, a root `docs/nav.toml`,
+  waits for a workspace that needs it. The contracts that place the
+  tool extensions and state the missing descriptions land apart, as
+  documentation, so no package other than the workshop gets this
+  feature in its changelog.
 
 ## Open
 
