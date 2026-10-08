@@ -9,12 +9,11 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 four tool extensions the 2026-10-07 wave could not create. 10c's
 acceptance `find` stays open for clang-tidy, whose words wait on a
 ruling, and the extension passes of 10b and 10c stop at the coverage
-leg until 12e (#1225). 10e is built (issue #1307); it
-merges after the 2026-10-08 wave, and the workshop's next release
-carries `livery-extensions-changelog`'s first publish. 10f is built
-(issue #1313) on 10e's branch and merges with it; that release
-carries `livery-extensions-claude`'s first publish too. The extensions
-plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
+leg until 12e (#1225). 10e (issue #1307) merged as PR #1312 after
+that wave, and 10f (issue #1313) is built on it; the workshop's next
+release carries the first publishes of `livery-extensions-changelog`
+and `livery-extensions-claude`, two of a day's four new projects. The
+extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
 ## The rulings this design satisfies
