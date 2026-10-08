@@ -105,6 +105,30 @@ def roster(root: Path) -> list[dict[str, str]]:
     return entries
 
 
+def python_dirs(root: Path) -> list[str]:
+    """Each python member's ``src`` and ``tests`` that hold a python file.
+
+    Root-relative posix paths, in path order. An extension's ``src`` may
+    hold data alone, and a checker such as mypy refuses a named
+    directory with no ``.py`` or ``.pyi`` file in it.
+    """
+    from livery.workshop._packages import discover_packages
+
+    if not (root / "packages").is_dir():
+        return []
+    found: list[str] = []
+    for package in discover_packages(root):
+        if not _python_based(package.kind):
+            continue
+        for name in ("src", "tests"):
+            directory = package.directory / name
+            if directory.is_dir() and any(
+                next(directory.rglob(f"*{suffix}"), None) for suffix in (".py", ".pyi")
+            ):
+                found.append(f"packages/{package.member}/{name}")
+    return found
+
+
 def template_of(directory: Path) -> str:
     """The template a package renders from: its `template`, or its kind's own."""
     from livery.workshop._kinds import kind_for

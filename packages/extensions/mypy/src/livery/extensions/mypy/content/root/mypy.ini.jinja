@@ -10,9 +10,10 @@
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
 [mypy]
+# The members' directories that hold a python file: mypy refuses a
+# named directory with none, and an extension's src may hold data alone.
 files =
-{% for package in py %}    packages/{{ package.dir }}/src,
-    packages/{{ package.dir }}/tests,
+{% for path in python_dirs %}    {{ path }},
 {% endfor %}{% for path in root_tests %}    {{ path }},
 {% endfor %}    tasks.py
 # A PEP 420 namespace in a src layout: mypy derives a module's name
