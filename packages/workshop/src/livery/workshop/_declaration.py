@@ -118,6 +118,26 @@ class DeclaredSlot:
 
 
 @dataclass(frozen=True)
+class DeclaredOutput:
+    """A file an extension's code writes: a ``[fragments."<target>"]`` table.
+
+    Attributes:
+        target: The file's path from the workspace root; a path ending
+            in ``/`` is a directory whose files the render names.
+        render: The function the workshop calls with the workspace root.
+            For a file it answers the text, or nothing for no file; for
+            a directory, each file's path under it to its text, or to
+            the shipped file or directory the file links to.
+        local: Whether the files belong to this checkout alone and are
+            never committed.
+    """
+
+    target: str
+    render: Reference
+    local: bool = False
+
+
+@dataclass(frozen=True)
 class Declaration:
     """An extension's declaration file, read and judged.
 
@@ -143,6 +163,7 @@ class Declaration:
         slots: The slots it declares.
         release_notes: The release-notes provider it names, which the
             mount registers; None for an extension that writes no notes.
+        fragments: The files its code writes, by target.
     """
 
     extension: str
@@ -164,6 +185,7 @@ class Declaration:
     deletes: dict[str, str] = field(default_factory=dict[str, str])
     slots: tuple[DeclaredSlot, ...] = ()
     release_notes: Reference | None = None
+    fragments: tuple[DeclaredOutput, ...] = ()
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -221,6 +243,7 @@ _NAMED = (
     ("replaces",),
     ("deletes",),
     ("slots", "*", "default"),
+    ("fragments",),
 )
 
 
@@ -347,6 +370,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         release_notes=reader.reference(data["release-notes"], ("release-notes",))
         if "release-notes" in data
         else None,
+        fragments=tuple(
+            reader.output(str(target), table)
+            for target, table in data.get("fragments", {}).items()
+        ),
     )
 
 
@@ -626,6 +653,19 @@ class _Reader:
                 for kind in entry["kinds"]
             )
         return tuple(found)
+
+    def output(self, target: str, table: dict[str, Any]) -> DeclaredOutput:
+        """The file *target* names, written by the render its table references."""
+        if "render" not in table:
+            raise self.refuse(
+                ("fragments", target),
+                "names no render; a fragment's code is render = 'module:function'",
+            )
+        return DeclaredOutput(
+            target,
+            self.reference(table["render"], ("fragments", target, "render")),
+            local=bool(table.get("local", False)),
+        )
 
     def slot(self, name: str, table: dict[str, Any]) -> DeclaredSlot:
         """The slot *name* declares, its compose a rule or a reference."""

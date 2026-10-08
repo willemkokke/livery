@@ -27,13 +27,14 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/claude", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
 livery-extensions-changelog = { workspace = true }
 livery-extensions-clang-format = { workspace = true }
 livery-extensions-clang-tidy = { workspace = true }
+livery-extensions-claude = { workspace = true }
 livery-extensions-mypy = { workspace = true }
 livery-extensions-pyrefly = { workspace = true }
 livery-extensions-pytest = { workspace = true }
@@ -65,6 +66,7 @@ dev = [
     "livery-extensions-changelog",
     "livery-extensions-clang-format",
     "livery-extensions-clang-tidy",
+    "livery-extensions-claude",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",

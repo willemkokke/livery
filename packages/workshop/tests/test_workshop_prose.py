@@ -14,8 +14,8 @@ from livery.workshop._prose import (
     AGENT,
     HUMAN,
     ProseError,
-    agent_set,
     fragments,
+    guidance,
     parse_name,
     register_fragment,
     register_section,
@@ -23,13 +23,11 @@ from livery.workshop._prose import (
     render_kinds,
     render_tools,
     render_verbs,
-    repository_fragments,
     sections,
     shipped,
     unregister_fragment,
     unregister_section,
 )
-from livery.workshop._sync import sync_workspace
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
@@ -137,15 +135,15 @@ def test_two_fragments_of_one_name_refuse_naming_both_files(tmp_path: Path) -> N
     assert "extensions/acme.house/content/fragments/rules.house.md (acme.house)" in str(
         caught.value
     )
-    # The repository's own fragment collides the same way, at sync.
+    # The repository's own fragment collides the same way, in the set.
     own = root / "fragments" / "rules.workshop.md"
     own.parent.mkdir()
     own.write_text("# Mine\n")
     with pytest.raises(ProseError, match=r"rules\.workshop\.md: .*\(this repository\)"):
-        sync_workspace(root)
+        guidance(root, AGENT)
 
 
-def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
+def test_a_fragment_for_both_readers_beside_its_twin_refuses_for_that_reader(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path)
@@ -156,8 +154,8 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
         ),
     )
     with pytest.raises(ProseError, match=r"two fragments deliver as rules\.house\.md"):
-        agent_set(root, both_and_agent)
-    # The reader's set is validated at the same delivery.
+        fragments(root, both_and_agent, AGENT)
+    # The other reader's twin refuses for that reader.
     both_and_human = shipped(
         "acme.brand",
         _extension(
@@ -165,7 +163,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
         ),
     )
     with pytest.raises(ProseError, match=r"two fragments deliver as rules\.house\.md"):
-        agent_set(root, both_and_human)
+        fragments(root, both_and_human, HUMAN)
     # One file per reader is the pair the convention exists for.
     pair = shipped(
         "acme.brand",
@@ -176,7 +174,7 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_at_delivery(
             rules__house__human="# human\n",
         ),
     )
-    chosen, _own = agent_set(root, pair)
+    chosen = fragments(root, pair, AGENT)
     shipped_names = [prose.name for prose in chosen if prose.source is not None]
     assert shipped_names == ["rules.house.md"]
     assert "gate.checks.md" in [prose.name for prose in chosen]
@@ -409,65 +407,6 @@ def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_read
     assert "| format.fake | fake | python, cpp-conan | yes |" in human
 
 
-def test_a_shipped_fragment_lands_byte_for_byte_and_an_edit_is_kept_and_named(
-    tmp_path: Path,
-) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    delivered = root / ".workshop" / "fragments" / "voice.interaction.md"
-    source = WORKSHOP_CONTENT / "fragments" / "voice.interaction.md"
-    assert delivered.read_bytes() == source.read_bytes()
-    assert sync_workspace(root) == []
-    delivered.write_text("# My voice\n")
-    lines = sync_workspace(root)
-    assert any(
-        "kept .workshop/fragments/voice.interaction.md: edited here" in line
-        for line in lines
-    )
-    assert delivered.read_text() == "# My voice\n"
-    # Deleting the override takes the shipped copy again.
-    delivered.unlink()
-    lines = sync_workspace(root)
-    assert "  wrote .workshop/fragments/voice.interaction.md" in lines
-    assert delivered.read_bytes() == source.read_bytes()
-
-
-def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
-    tmp_path: Path, restored
-) -> None:
-    root = _workspace(tmp_path)
-    register_fragment(
-        "rules",
-        "acme",
-        lambda root, audience: f"# Acme\n\nfor {audience}\n",
-        extension="acme.brand",
-    )
-    register_fragment(
-        "rules", "quiet", lambda root, audience: "", extension="acme.brand"
-    )
-    sync_workspace(root)
-    delivered = root / ".workshop" / "fragments" / "rules.acme.md"
-    text = delivered.read_text()
-    assert text.startswith(
-        "<!-- Rendered by `fm sync` from the registries acme.brand fills;"
-    )
-    assert text.endswith("# Acme\n\nfor agent\n")
-    # An empty render is left out, not delivered empty.
-    assert not (root / ".workshop" / "fragments" / "rules.quiet.md").exists()
-    assert sync_workspace(root) == []
-    unregister_fragment("rules.acme.md", by="acme.brand")
-    unregister_fragment("rules.quiet.md", by="acme.brand")
-    lines = sync_workspace(root)
-    assert (
-        "  removed .workshop/fragments/rules.acme.md: no listed extension ships it"
-        in lines
-    )
-    assert not delivered.exists()
-    from livery.workshop._fragment_engine import local_receipts
-
-    assert ".workshop/fragments/rules.acme.md" not in local_receipts(root)
-
-
 def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -540,34 +479,3 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     # A tool locked for some hosts alone says so.
     assert "- dotnet_coverage 18.11.2 (windows-x64 only)\n" in agent
     assert render_tools(root, HUMAN) != agent
-
-
-def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
-    tmp_path: Path, restored
-) -> None:
-    root = _workspace(tmp_path)
-    own = root / "fragments"
-    own.mkdir()
-    (own / "identity.acme.md").write_text("# Acme\n")
-    register_fragment(
-        "workflow", "acme", lambda root, audience: "# W\n", extension="acme.brand"
-    )
-    sync_workspace(root)
-    imports = [
-        line
-        for line in (root / "CLAUDE.md").read_text().splitlines()
-        if line.startswith("@")
-    ]
-    assert imports == [
-        "@.workshop/fragments/voice.interaction.md",
-        "@.workshop/fragments/standards.documentation.md",
-        "@.workshop/fragments/rules.workshop.md",
-        "@.workshop/fragments/workflow.acme.md",
-        "@.workshop/fragments/gate.checks.md",
-        "@.workshop/fragments/verbs.extensions.md",
-        "@fragments/identity.acme.md",
-        "@CLAUDE.project.md",
-    ]
-    # The repository's own fragment is read where it is, never copied.
-    assert not (root / ".workshop" / "fragments" / "identity.acme.md").exists()
-    assert [p.name for p in repository_fragments(root)] == ["identity.acme.md"]

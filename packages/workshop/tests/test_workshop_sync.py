@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
-import livery.footman as footman
 from livery.workshop._sync import sync_workspace
 from workshop_links import link_entries as materialise
 
@@ -113,60 +111,6 @@ def test_a_moved_checkout_hands_the_sync_to_a_fresh_process(
     assert ran == [(tmp_path, _reconcile.MOVED)]
 
 
-def test_the_stub_imports_the_sections_in_order_then_the_instance(
-    tmp_path: Path,
-) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    lines = (root / "CLAUDE.md").read_text().splitlines()
-    imports = [line for line in lines if line.startswith("@")]
-    # The voice and the standards before any rules, the gate's render
-    # after them, then the verbs the composed tasks.py mounts; a
-    # workspace with no package and no lock has no kinds or tools to say.
-    assert imports == [
-        "@.workshop/fragments/voice.interaction.md",
-        "@.workshop/fragments/standards.documentation.md",
-        "@.workshop/fragments/rules.workshop.md",
-        "@.workshop/fragments/gate.checks.md",
-        "@.workshop/fragments/verbs.extensions.md",
-        "@CLAUDE.project.md",
-    ]
-    for line in imports[:-1]:
-        assert (root / line[1:]).is_file()
-
-
-def test_the_stub_header_names_the_running_brand(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(footman, "prog", lambda: "hse")
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    assert "`hse sync`" in (root / "CLAUDE.md").read_text()
-
-
-def test_skills_and_hooks_are_materialised(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    assert (root / ".claude" / "skills" / "create-plan" / "SKILL.md").is_file()
-    assert (root / ".claude" / "hooks" / "fm-hook.sh").is_file()
-    ignore = (root / ".claude" / "skills" / ".gitignore").read_text()
-    assert "/create-plan\n" in ignore
-
-
-def test_a_local_override_is_kept_and_named(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    override = root / ".claude" / "skills" / "create-plan"
-    os.unlink(override)  # replace the link with a differing real dir
-    override.mkdir()
-    (override / "SKILL.md").write_text("my own version\n")
-    lines = sync_workspace(root)
-    assert any("kept" in line and "edited here" in line for line in lines)
-    assert (override / "SKILL.md").read_text() == "my own version\n"
-    ignore = (root / ".claude" / "skills" / ".gitignore").read_text()
-    assert "/create-plan\n" not in ignore  # the override commits normally
-
-
 def test_an_identical_committed_copy_is_reclaimed(tmp_path: Path) -> None:
     source = tmp_path / "content" / "skills"
     (source / "thing").mkdir(parents=True)
@@ -255,102 +199,6 @@ def test_the_monorepo_is_in_sync() -> None:
     assert after == before, f"{first}\n{moved}"
 
 
-_SHIPPED_SETTINGS = ROOT / "packages/workshop/src/livery/workshop/content/settings.json"
-
-
-def test_the_shipped_settings_are_json_a_strict_reader_accepts() -> None:
-    """The agent runner reads `.claude/settings.json` as JSON, not JSONC.
-
-    A comment there costs every permission rule and hook in the file,
-    and the runner says only that the file did not parse. The editor's
-    own `.vscode/settings.json` is the JSON the render may comment;
-    this one carries no header, which is why `comment_style` exempts
-    it, and the source it is copied from must hold to that too.
-    """
-    import json
-
-    json.loads(_SHIPPED_SETTINGS.read_text(encoding="utf-8"))
-    assert not _SHIPPED_SETTINGS.read_text(encoding="utf-8").startswith("//")
-
-
-def test_settings_json_is_a_copy_even_where_links_work(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    target = root / ".claude" / "settings.json"
-    assert target.is_file() and not target.is_symlink()
-    assert target.read_bytes() == _SHIPPED_SETTINGS.read_bytes()
-    from livery.workshop._fragment_engine import local_receipts
-
-    assert ".claude/settings.json" in local_receipts(root)
-    ignore = (root / ".claude" / ".gitignore").read_text()
-    assert "/settings.json\n" in ignore
-    assert sync_workspace(root) == []  # idempotent and quiet
-
-
-def test_an_edited_settings_json_is_kept_and_named(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    target = root / ".claude" / "settings.json"
-    target.write_text('{"hooks": {}}\n')
-    lines = sync_workspace(root)
-    assert any("kept" in line and "edited here" in line for line in lines)
-    assert target.read_text() == '{"hooks": {}}\n'
-    # The override commits normally: the self-scoped ignore drops it, and
-    # with nothing else of the engine's there, the ignore file goes.
-    ignore = root / ".claude" / ".gitignore"
-    assert not ignore.exists() or "/settings.json\n" not in ignore.read_text()
-
-
-def test_a_stale_settings_copy_refreshes(tmp_path: Path) -> None:
-    import hashlib
-
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    target = root / ".claude" / "settings.json"
-    # An older ship: the copy and its record agree with each other and
-    # disagree with what the extension ships now.
-    stale = b'{"hooks": {"old": true}}\n'
-    target.write_bytes(stale)
-    import json
-
-    from livery.workshop._fragment_engine import LOCAL_RECEIPT
-
-    digest = hashlib.sha256(stale).hexdigest()
-    receipt = root / LOCAL_RECEIPT
-    receipts = json.loads(receipt.read_text())
-    receipts[".claude/settings.json"] = digest
-    receipt.write_text(json.dumps(receipts))
-    lines = sync_workspace(root)
-    assert "  updated .claude/settings.json" in lines
-    assert target.read_bytes() == _SHIPPED_SETTINGS.read_bytes()
-
-
-def test_a_committed_identical_settings_copy_is_adopted(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    claude = root / ".claude"
-    claude.mkdir()
-    (claude / "settings.json").write_bytes(_SHIPPED_SETTINGS.read_bytes())
-    lines = sync_workspace(root)
-    # Equal to what ships, it is the engine's from now on: quiet, receipted.
-    assert not any(".claude/settings.json" in line for line in lines)
-    from livery.workshop._fragment_engine import local_receipts
-
-    assert ".claude/settings.json" in local_receipts(root)
-    assert sync_workspace(root) == []
-
-
-def test_a_settings_link_is_replaced_by_a_copy(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    claude = root / ".claude"
-    claude.mkdir()
-    # A link would take a settings editor's write into the wheel.
-    os.symlink(_SHIPPED_SETTINGS, claude / "settings.json")
-    lines = sync_workspace(root)
-    assert any("in place of a link" in line for line in lines)
-    target = claude / "settings.json"
-    assert target.is_file() and not target.is_symlink()
-
-
 def test_the_sweep_reaches_no_further_than_the_fragments(tmp_path: Path) -> None:
     """The refusal first: the sweep walks its own directory and no other.
 
@@ -372,37 +220,6 @@ def test_the_sweep_reaches_no_further_than_the_fragments(tmp_path: Path) -> None
     assert receipt.is_file(), "the sweep reached into state/"
     assert stranger.is_file(), "the sweep reached the top level"
     assert lines == []
-
-
-def test_a_fragment_a_extension_stopped_shipping_is_removed(tmp_path: Path) -> None:
-    """And inside its own directory the sweep still does its job."""
-    root = _workspace(tmp_path)
-    sync_workspace(root)
-    import hashlib
-    import json
-
-    from livery.workshop._fragment_engine import LOCAL_RECEIPT
-
-    # A fragment an earlier sync delivered: on disk, and in the receipt.
-    withdrawn = root / ".workshop" / "fragments" / "old-guidance.md"
-    withdrawn.write_bytes(b"shipped once\n")
-    receipt = root / LOCAL_RECEIPT
-    receipts = json.loads(receipt.read_text())
-    receipts[".workshop/fragments/old-guidance.md"] = hashlib.sha256(
-        b"shipped once\n"
-    ).hexdigest()
-    receipt.write_text(json.dumps(receipts))
-    lines = sync_workspace(root)
-    assert not withdrawn.exists()
-    assert (
-        "  removed .workshop/fragments/old-guidance.md: no listed extension ships it"
-        in lines
-    )
-    # A file the engine never delivered there is someone's own, and stays.
-    stray = root / ".workshop" / "fragments" / "mine.md"
-    stray.write_text("my note\n")
-    sync_workspace(root)
-    assert stray.exists()
 
 
 def test_the_workshop_directory_holds_only_directories(tmp_path: Path) -> None:

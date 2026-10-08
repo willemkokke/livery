@@ -59,8 +59,11 @@ against the base it measures from is [livery.workshop.ci_changes][].
 The guidance for one reader, [livery.workshop.AGENT][] or
 [livery.workshop.HUMAN][], is the composed set of
 [livery.workshop.Prose][] fragments [livery.workshop.guidance][]
-answers; and what the listed extensions declare for an extension
-is [livery.workshop.contributions_for][].
+answers; each listed extension's shipped files live where
+[livery.workshop.shipped_content][] says; the gate's fixers run over
+named files through [livery.workshop.fix_files][]; and what the listed
+extensions declare for an extension is
+[livery.workshop.contributions_for][].
 """
 
 from __future__ import annotations
@@ -87,6 +90,7 @@ if TYPE_CHECKING:
     from livery.workshop._coverage_store import workspace_suite as workspace_suite
     from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
+    from livery.workshop._extensions import shipped_content as shipped_content
     from livery.workshop._extensions import workspace_root as workspace_root
     from livery.workshop._forge_lane import forge_repository as forge_repository
     from livery.workshop._forge_lane import this_forge as this_forge
@@ -107,6 +111,7 @@ if TYPE_CHECKING:
     from livery.workshop._prose import guidance as guidance
     from livery.workshop._provenance import generated_header as generated_header
     from livery.workshop._quality import ci_changes as ci_changes
+    from livery.workshop._quality import fix_files as fix_files
     from livery.workshop._registries import RegistryTarget as RegistryTarget
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
@@ -142,6 +147,7 @@ __all__ = [
     "contributions_for",
     "discover_packages",
     "extension_names",
+    "fix_files",
     "forge_repository",
     "forge_token",
     "generated_header",
@@ -157,6 +163,7 @@ __all__ = [
     "scoped_packages",
     "scoped_paths",
     "selected_files",
+    "shipped_content",
     "slot",
     "testing",
     "this_forge",
@@ -194,6 +201,8 @@ _EXPORTS: dict[str, str] = {
     "this_forge": "livery.workshop._forge_lane",
     "this_repository": "livery.workshop._forge_lane",
     "forge_token": "livery.workshop._tokens",
+    "fix_files": "livery.workshop._quality",
+    "shipped_content": "livery.workshop._extensions",
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
     "kind_examples": "livery.workshop._kinds",

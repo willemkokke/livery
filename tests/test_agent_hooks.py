@@ -98,7 +98,7 @@ def test_the_branch_a_push_names_is_tested_rather_than_head(tmp_path: Path) -> N
 
 
 def test_a_branch_named_like_main_is_not_exempt() -> None:
-    from livery.workshop._hooks import _PUSH_EXEMPT
+    from livery.extensions.claude._tasks import _PUSH_EXEMPT
 
     assert _PUSH_EXEMPT.search("git push origin main") is not None
     assert _PUSH_EXEMPT.search("git -C /w push origin main") is not None

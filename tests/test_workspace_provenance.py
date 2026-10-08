@@ -48,7 +48,7 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
         "packages/forge/cliff.toml": "composed",
         "packages/forge/README.md": "yours",
         "uv.lock": "toolchain",
-        "CLAUDE.md": "sync stub",
+        "CLAUDE.md": "computed",
         "CLAUDE.project.md": "yours",
         "notes/20260830-development-workflows.md": "yours",
         "LICENSE": "seed",

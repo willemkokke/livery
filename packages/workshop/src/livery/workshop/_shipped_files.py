@@ -15,15 +15,18 @@ declaring it in its `extension.toml`: `[replaces] "<owner>:<name>" =
 `[deletes]` with the same shape to remove it. The same declarations
 govern seeds ([livery.workshop._seeds.create][]).
 
-The prose fragments, skills and hooks under the same `content/`
-directory are delivered by `livery.workshop._prose` and
-`livery.workshop._materialise` instead.
+An extension also writes files from its own code: each
+`[fragments."<target>"]` table in its `extension.toml` names a render
+the engine calls with the workspace root, for one file or, with a
+target ending in `/`, a directory of them
+([livery.workshop._shipped_files.computed_outputs][]).
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import replace
+from operator import itemgetter
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
@@ -294,12 +297,9 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         kept.append(output)
     # Every output beside the composed ones, whatever the LFS setting:
     # an output the list leaves out is one the delivery withdraws.
-    return (
-        *kept,
-        *_agent_outputs(root, order),
-        *_kind_root_outputs(root),
-        *_schema_outputs(root),
-    ), notes
+    rest = (*_kind_root_outputs(root), *_schema_outputs(root))
+    taken = {output.path: output.owners[0] for output in (*kept, *rest)}
+    return (*kept, *computed_outputs(root, order, taken), *rest), notes
 
 
 def _schema_outputs(root: Path) -> list[Output]:
@@ -511,87 +511,48 @@ def judge_package(member: Path, kind: str) -> list[str]:
     return [line.strip() for line in drift(member, _package_outputs(member, kind))]
 
 
-STUB_HEADER = (
-    "<!-- Managed by `{prog} sync`: one import per fragment, in section\n"
-    "     order, the repository's own fragments/ after them, then its\n"
-    "     CLAUDE.project.md, which always wins. Edit CLAUDE.project.md,\n"
-    "     never this file. -->\n"
-)
-"""The `CLAUDE.md` stub's header, formatted with the runner's name at write time."""
+def computed_outputs(
+    root: Path, order: list[str], taken: dict[str, str] | None = None
+) -> list[Output]:
+    """The files the listed extensions' code writes, in *order*.
 
+    Each ``[fragments."<target>"]`` table names a render the engine
+    calls with *root*. For a file target the render answers the text,
+    or nothing for no file; for a target ending in ``/`` it answers each
+    file's path under the target, to its text or to the shipped file or
+    directory the file links to. Every file is owned
+    ``<extension>:<target>``, and a ``local`` table's files belong to
+    this checkout alone.
 
-def _agent_outputs(root: Path, order: list[str]) -> list[Output]:
-    """What the listed extensions give the agent, and the stub that imports it.
-
-    Each extension's skills and hooks are links into its shipped content,
-    and its `settings.json` a copy; the prose fragments are copies in
-    section order under `.workshop/fragments/`. All of them belong to this
-    checkout alone. The `CLAUDE.md` stub that imports the fragments, then
-    the repository's own, then `CLAUDE.project.md`, is committed.
+    Raises:
+        Failed: for a path two writers claim: another extension's
+            render, or a file *taken* names by its owner.
     """
-    from livery.workshop import _prose
-
+    held = dict(taken or {})
     outputs: list[Output] = []
-    settings: Output | None = None
     for extension in order:
-        content = extension_content(extension)
-        if content is None:
-            continue
-        for kind in ("skills", "hooks"):
-            shipped = content / kind
-            if not shipped.is_dir():
-                continue
-            for entry in sorted(shipped.iterdir()):
-                if entry.name.startswith(".") or entry.name == "__pycache__":
-                    continue
-                outputs.append(
-                    Output(
-                        f".claude/{kind}/{entry.name}",
-                        b"",
-                        (f"{extension}:{kind}/{entry.name}",),
-                        link=entry,
-                        local=True,
+        found = None if extension == SELF else declaration(extension)
+        for fragment in found.fragments if found is not None else ():
+            owner = f"{extension}:{fragment.target}"
+            answer = fragment.render(root)
+            written: list[tuple[str, object]]
+            if fragment.target.endswith("/"):
+                files = cast("dict[str, object]", dict(answer or {}))
+                written = [(fragment.target + name, files[name]) for name in files]
+            else:
+                written = [(fragment.target, answer)] if answer else []
+            for path, value in sorted(written, key=itemgetter(0)):
+                if path in held:
+                    fail(
+                        f"{path} has one writer, and {held[path]} and {owner}"
+                        " both write it"
                     )
-                )
-        source = content / "settings.json"
-        if source.is_file():
-            if settings is not None:
-                fail(
-                    f".claude/settings.json has one owner, and {settings.owners[0]}"
-                    f" and {extension} both ship it"
-                )
-            settings = Output(
-                ".claude/settings.json",
-                source.read_bytes().replace(b"\r\n", b"\n"),
-                (f"{extension}:settings.json",),
-                local=True,
-            )
-    if settings is not None:
-        outputs.append(settings)
-    chosen, own = _prose.agent_set(root, _prose.in_play(root, order))
-    delivered: list[str] = []
-    for prose in chosen:
-        if prose.render is not None:
-            text = prose.render(root, _prose.AGENT)
-            if not text:
-                continue
-            body = (_prose.rendered_header(prose) + text).encode("utf-8")
-        elif prose.source is not None:
-            body = prose.source.read_bytes().replace(b"\r\n", b"\n")
-        else:
-            continue
-        outputs.append(
-            Output(
-                f"{_prose.DELIVERED}/{prose.name}",
-                body,
-                (f"{prose.extension}:{prose.name}",),
-                local=True,
-            )
-        )
-        delivered.append(prose.name)
-    stub = STUB_HEADER.format(prog=footman.prog())
-    stub += "".join(f"@{_prose.DELIVERED}/{name}\n" for name in delivered)
-    stub += "".join(f"@{_prose.OWN}/{name}\n" for name in own)
-    stub += "@CLAUDE.project.md\n"
-    outputs.append(Output("CLAUDE.md", stub.encode(), ("livery.workshop:CLAUDE.md",)))
+                held[path] = owner
+                if isinstance(value, Path):
+                    outputs.append(
+                        Output(path, b"", (owner,), link=value, local=fragment.local)
+                    )
+                else:
+                    body = str(value).encode("utf-8")
+                    outputs.append(Output(path, body, (owner,), local=fragment.local))
     return outputs

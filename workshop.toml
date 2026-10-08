@@ -18,6 +18,8 @@ copyright-year = "2026"
 extensions = [
     # Each package's CHANGELOG.md, written by git-cliff at release.
     "changelog",
+    # CLAUDE.md, the agent's guidance, .claude/ and the hook verbs.
+    "claude",
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
     # The python formatter and linter, configured by the root ruff.toml.

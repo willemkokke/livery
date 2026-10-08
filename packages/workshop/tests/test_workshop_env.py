@@ -1,4 +1,4 @@
-"""The env cascade, its emissions, clean's protections, and the hooks."""
+"""The env cascade, its emissions, clean's protections, and the file fixers."""
 
 from __future__ import annotations
 
@@ -32,7 +32,6 @@ from livery.workshop._envfile import (
     quote_value,
     set_value,
 )
-from livery.workshop._hooks import HookEvent, ToolInput, post_edit, stop
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -293,7 +292,6 @@ def test_a_windows_leg_moves_temp_under_the_runners_temp_and_says_when_not(
 def test_the_github_emission_persists_the_moved_temp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import sys
 
     from livery.workshop import _env_tasks
 
@@ -404,19 +402,16 @@ def test_render_plan_lists_all_three_kinds() -> None:
 # --- the hooks: the guard that cannot fire, then the ones that do ---
 
 
-def _event(**kwargs: object) -> HookEvent:
-    return HookEvent(**kwargs)  # type: ignore[arg-type]
-
-
-def test_post_edit_is_best_effort_and_asks_only_the_fixers_that_claim_the_file(
+def test_fix_files_asks_only_the_fixers_that_claim_the_file_in_the_safe_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     from typing import cast
 
     import workshop_python_checks as fake_checks
+    from livery.workshop import fix_files
 
-    # The hook walks the workspace's registry from the project root,
-    # where a real hook runs.
+    # The walk reads the workspace's registry from the project root,
+    # where an agent's post-edit hook runs it.
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     monkeypatch.chdir(tmp_path)
     # A desk's edit: the gate's own test run sets the runner's
@@ -430,17 +425,16 @@ def test_post_edit_is_best_effort_and_asks_only_the_fixers_that_claim_the_file(
     monkeypatch.setattr(
         fake_checks, "run_lint", lambda **kw: calls.append(("lint", kw))
     )
-    # A missing file and a non-python file are silent no-ops.
-    post_edit(_event(tool_input=ToolInput(file_path=str(tmp_path / "gone.py"))))
+    # A file no claim reaches asks no fixer.
     other = tmp_path / "notes.md"
     other.write_text("#Heading\n")
-    post_edit(_event(tool_input=ToolInput(file_path=str(other))))
+    fix_files((str(other),), safe=True)
     assert calls == []
     # An edit in flight adds the import before the code that uses it,
-    # so the fixers run in the mode that removes no code.
+    # so the safe mode runs the fixers in the mode that removes no code.
     victim = tmp_path / "messy.py"
     victim.write_text("x=1\n")
-    post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
+    fix_files((str(victim),), safe=True)
     assert [
         (name, {k: v for k, v in kw.items() if k != "paths"}) for name, kw in calls
     ] == [
@@ -450,48 +444,6 @@ def test_post_edit_is_best_effort_and_asks_only_the_fixers_that_claim_the_file(
     for _name, kw in calls:
         paths = cast("tuple[str, ...]", kw["paths"])
         assert [Path(path).resolve() for path in paths] == [victim.resolve()]
-
-
-def _transcript(tmp_path: Path, result_text: str) -> Path:
-    import json
-
-    transcript = tmp_path / "t.jsonl"
-    lines = [
-        {"message": {"content": [{"type": "tool_use", "name": "Bash", "id": "b1"}]}},
-        {
-            "message": {
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "b1",
-                        "content": result_text,
-                    }
-                ]
-            }
-        },
-    ]
-    transcript.write_text("\n".join(json.dumps(line) for line in lines))
-    return transcript
-
-
-def test_stop_blocks_a_red_verdict_and_passes_everything_else(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # The real shape: footman pads the verdict word, so FAIL is
-    # followed by a single space.
-    red = _transcript(tmp_path, "FAIL check   (0.1s)\ngate exit: 1")
-    assert stop(_event(transcript_path=str(red))) == 2
-    assert "stop again to proceed" in capsys.readouterr().err
-    # The retry marker always passes: one nudge, never a loop.
-    assert stop(_event(transcript_path=str(red), stop_hook_active=True)) == 0
-    green = _transcript(tmp_path, "ok   check  (0.1s)\nall green")
-    assert stop(_event(transcript_path=str(green))) == 0
-    # A missing or unreadable transcript passes: the guard that
-    # cannot run must not deny.
-    assert stop(_event(transcript_path=str(tmp_path / "absent.jsonl"))) == 0
-    mangled = tmp_path / "m.jsonl"
-    mangled.write_text("not json at all\n")
-    assert stop(_event(transcript_path=str(mangled))) == 0
 
 
 def test_env_check_red_prints_the_breakdown_and_the_remedy(
@@ -723,108 +675,6 @@ def test_a_non_ascii_untracked_path_is_planned_and_removed(
     assert "café.txt" in plan.untracked
     clean_tree(root, assume_yes=True)
     assert not (root / "café.txt").exists()
-
-
-def _shipped_shim() -> Path:
-    """The hook shim as the workshop ships it, beside its hooks module.
-
-    The `.claude/hooks/` copy is what a sync delivers, so a checkout
-    that never synced, the release train's fresh clone among them, has
-    none; the shipped one is there wherever the workshop is installed.
-    """
-    from livery.workshop import _hooks
-
-    return Path(_hooks.__file__).parent / "content" / "hooks" / "fm-hook.sh"
-
-
-_SHIM = _shipped_shim()
-
-
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="the hook shim is a POSIX shell script"
-)
-def test_the_shim_turns_infrastructure_failure_into_a_pass(
-    tmp_path: Path,
-) -> None:
-    # A guard that cannot run must not deny: with neither fm nor uv
-    # resolvable, the shim answers 0 and the session lives.
-    result = subprocess.run(
-        ["/bin/bash", str(_SHIM), "pre-bash"],
-        env={"PATH": str(tmp_path)},
-        input="",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
-
-
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="the hook shim is a POSIX shell script"
-)
-def test_the_shim_propagates_only_the_hooks_own_refusal(tmp_path: Path) -> None:
-    for code, expected in ((2, 2), (1, 0), (3, 0)):
-        fake = tmp_path / "fm"
-        fake.write_text(f"#!/bin/sh\nexit {code}\n")
-        fake.chmod(0o755)
-        result = subprocess.run(
-            ["/bin/bash", str(_SHIM), "stop"],
-            env={"PATH": f"{tmp_path}:/usr/bin:/bin"},
-            input="",
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == expected, (code, result.returncode)
-
-
-# --- the audit-close forcing tests ---
-
-
-def test_pre_bash_blocks_pipes_and_only_pipes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from livery.workshop._hooks import pre_bash
-
-    def _blocked(command: str) -> bool:
-        try:
-            pre_bash(_event(tool_input=ToolInput(command=command)))
-        except _FAILURES as caught:
-            assert "piping" in str(caught)
-            return True
-        return False
-
-    assert _blocked("uv run fm check | tail -4")
-    assert _blocked("fm check |& head")  # bash's pipe-with-stderr
-    assert not _blocked("fm check && echo done | tail")
-    assert not _blocked('rg "fm check" | head')
-    assert not _blocked("ls | head")
-
-
-def test_pre_bash_push_guard_blocks_conflicts_and_exempts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from livery.workshop import _hooks
-
-    probes: list[str] = []
-
-    def _conflicts(_repo: object, _ref: str = "HEAD") -> bool:
-        probes.append("probed")
-        return True
-
-    monkeypatch.setattr(_hooks, "_push_conflicts", _conflicts)
-    with pytest.raises(_FAILURES) as caught:
-        _hooks.pre_bash(_event(tool_input=ToolInput(command="git push origin feat/x")))
-    assert "conflicts with origin/main" in str(caught.value)
-    # Deletions, tags, and main itself pass without probing.
-    probes.clear()
-    for exempt in (
-        "git push origin --delete feat/x",
-        "git push --tags",
-        "git push origin main",
-    ):
-        _hooks.pre_bash(_event(tool_input=ToolInput(command=exempt)))
-    assert probes == []
 
 
 def test_env_set_shadow_warnings_are_honest(

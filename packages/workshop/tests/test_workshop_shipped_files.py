@@ -158,9 +158,9 @@ def test_lfs_rules_are_left_out_and_named_until_the_workspace_turns_lfs_on(
         "*.png filter=lfs diff=lfs merge=lfs -text"
         in (root / ".gitattributes").read_text()
     )
-    # The agent's own files stay with LFS on, as with it off: a file the
-    # outputs leave out is one the delivery withdraws.
-    assert (root / "CLAUDE.md").is_file()
+    # The checkout's own files stay with LFS on, as with it off: a file
+    # the outputs leave out is one the delivery withdraws.
+    assert any((root / ".workshop" / "schema").iterdir())
     assert shipped_drift(root) == []
 
 
@@ -281,3 +281,63 @@ def test_a_toml_region_and_its_comment_come_after_every_extensions_tables(
         "# -- workshop: region tables, yours to edit; the render keeps it --\n"
         "# -- workshop: end tables --\n"
     )
+
+
+# A file an extension's code writes: the refusal first.
+
+
+def test_computed_outputs_refuse_a_second_writer_and_write_what_renders_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typing import cast
+
+    from livery.workshop import _shipped_files
+    from livery.workshop._declaration import Declaration, DeclaredOutput, Reference
+
+    linked = tmp_path / "shipped"
+    linked.mkdir()
+
+    def render(answer: object) -> Reference:
+        def answering(root: Path) -> object:
+            del root
+            return answer
+
+        return cast("Reference", answering)
+
+    declared = Declaration(
+        "acme.agent",
+        "acme.agent",
+        tmp_path / "extension.toml",
+        fragments=(
+            DeclaredOutput("NOTES.md", render("# Notes\n")),
+            DeclaredOutput("EMPTY.md", render("")),
+            DeclaredOutput(
+                ".acme/", render({"a.txt": "A", "linked": linked}), local=True
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        _shipped_files,
+        "declaration",
+        lambda extension: declared if extension == "acme.agent" else None,
+    )
+    with pytest.raises(
+        Failed,
+        match=(
+            r"NOTES\.md has one writer, and livery\.workshop:NOTES\.md and"
+            r" acme\.agent:NOTES\.md both write it"
+        ),
+    ):
+        _shipped_files.computed_outputs(
+            tmp_path, ["acme.agent"], {"NOTES.md": "livery.workshop:NOTES.md"}
+        )
+    # A file's text, nothing for an empty answer, and a directory's
+    # files: text written, a shipped path linked.
+    outputs = _shipped_files.computed_outputs(
+        tmp_path, ["livery.workshop", "acme.agent"]
+    )
+    assert [(o.path, o.body, o.owners, o.link, o.local) for o in outputs] == [
+        ("NOTES.md", b"# Notes\n", ("acme.agent:NOTES.md",), None, False),
+        (".acme/a.txt", b"A", ("acme.agent:.acme/",), None, True),
+        (".acme/linked", b"", ("acme.agent:.acme/",), linked, True),
+    ]

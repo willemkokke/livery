@@ -54,12 +54,6 @@ BASE_SECTIONS = (
     "tools",
 )
 
-#: Where the agent's set lands, under the workspace root: its own
-#: directory, so the sweep for a withdrawn fragment owns every file it
-#: walks, while ``.workshop/`` itself holds this checkout's state in
-#: directories beside it.
-DELIVERED = ".workshop/fragments"
-
 #: The fragments directory: an extension's under its content, the repository's
 #: own at the root.
 OWN = "fragments"
@@ -401,34 +395,6 @@ def fragments(
                 f" {prose.origin}; a topic is unique across everything delivered"
             )
     return chosen
-
-
-def agent_set(root: Path, shipped: Iterable[Prose]) -> tuple[list[Prose], list[str]]:
-    """The fragments the agent gets from *shipped*, and the repository's own names.
-
-    Both readers' sets are validated, so a collision a human reader would
-    meet refuses here as well. The repository's own fragments are named,
-    never copied: they live in ``fragments/`` already.
-
-    Raises:
-        ProseError: for two fragments that deliver as one file.
-    """
-    listed = list(shipped)
-    chosen = fragments(root, listed, AGENT)
-    fragments(root, listed, HUMAN)
-    delivered = [prose for prose in chosen if prose.extension != REPOSITORY]
-    own = [prose.name for prose in chosen if prose.extension == REPOSITORY]
-    return delivered, own
-
-
-def rendered_header(prose: Prose) -> str:
-    """The header a rendered fragment's copy opens with."""
-    return (
-        f"<!-- Rendered by `{footman.prog()} sync` from the registries"
-        f" {prose.extension} fills;\n"
-        "     the source is the code. An edited copy is a local override,\n"
-        "     kept and named until it is deleted. -->\n"
-    )
 
 
 def render_gate(root: Path, audience: str | None) -> str:

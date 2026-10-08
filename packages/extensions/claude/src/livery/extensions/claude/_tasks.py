@@ -1,5 +1,6 @@
-"""Agent lifecycle hooks: the guards a session's tooling runs.
+"""The hook verbs, ``fm hooks.*``: the guards an agent session's tooling runs.
 
+The extension's plugin, mounted while a workspace lists the extension.
 Wired from ``.claude/settings.json`` through one shim
 (``.claude/hooks/fm-hook.sh``); each event arrives on stdin and the
 verdict is the exit code: 0 is quiet, 2 blocks the gated action with
@@ -18,8 +19,9 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery.footman import RunFailed, fail, run, stdin
-from livery.workshop._tree import agent_hooks
+from livery.footman import RunFailed, fail, group, run, stdin
+
+hooks = group("hooks", hidden=True, help="Agent lifecycle hooks (stdin-driven)")
 
 
 @dataclass
@@ -116,7 +118,7 @@ def _push_conflicts(repo: str | None, ref: str = "HEAD") -> bool:
     return False
 
 
-@agent_hooks.task(name="pre-bash")
+@hooks.task(name="pre-bash")
 def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
     """Refuse the Bash commands that succeed while silently breaking state.
 
@@ -174,7 +176,7 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
             )
 
 
-@agent_hooks.task(name="post-edit")
+@hooks.task(name="post-edit")
 def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     """Run the fixers over the edited file; never block an edit.
 
@@ -191,7 +193,7 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     import contextlib
     import io
 
-    from livery.workshop._quality import fix_files
+    from livery.workshop import fix_files
 
     path = event.tool_input.file_path
     if not path or not Path(path).is_file():
@@ -261,7 +263,7 @@ def _last_bash_result(transcript: Path) -> str:
     return last_result
 
 
-@agent_hooks.task(name="stop")
+@hooks.task(name="stop")
 def stop(event: Annotated[HookEvent, stdin]) -> int:
     """Block ending a turn whose last Bash result is a red fm verdict.
 

@@ -1,0 +1,46 @@
+# Seeded from the package-python seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-claude"
+version = "0.0.0"
+description = "Claude Code for the livery workshop: CLAUDE.md, the delivered guidance, .claude/ and the hook verbs the agent's tooling runs."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "livery-footman>=0.58.0",
+    "livery-workshop>=0.6.0",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The hook verbs (`fm hooks.*`), which the extension's plugin mounts
+# while a workspace lists it.
+[project.entry-points."footman.tasks"]
+"livery.extensions.claude" = "livery.extensions.claude._tasks"
+
+# The name a workspace lists in [workspace] extensions, and the package
+# whose extension.toml the workshop mounts it from.
+[project.entry-points."workshop.extensions"]
+claude = "livery.extensions.claude"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.extensions.claude and
+# there is no livery/__init__.py anywhere in this repository.
+module-name = "livery.extensions.claude"
+namespace = true

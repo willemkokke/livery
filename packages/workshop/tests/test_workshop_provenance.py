@@ -49,6 +49,32 @@ def test_a_stale_header_is_replaced_not_stacked(tmp_path: Path) -> None:
     assert text.endswith("echo hi\n")
 
 
+def test_a_new_owner_s_header_keeps_the_comments_and_the_blank_line_below_it(
+    tmp_path: Path,
+) -> None:
+    # A refresh replaces the header's own lines and nothing after them:
+    # a shim's documentation in the same comment block, or the blank
+    # line a skill keeps under its header, belongs to the file.
+    script = tmp_path / "hook.sh"
+    script.write_text("#!/usr/bin/env bash\n# What this shim is for.\necho hi\n")
+    inject(script, content_header("old.extension", "#"))
+    inject(script, content_header("new.extension", "#"))
+    assert script.read_text() == (
+        "#!/usr/bin/env bash\n"
+        + content_header("new.extension", "#")
+        + "# What this shim is for.\necho hi\n"
+    )
+    skill = tmp_path / "SKILL.md"
+    skill.write_text("---\nname: thing\n---\n\n# Thing\n")
+    inject(skill, content_header("old.extension", "html"))
+    inject(skill, content_header("new.extension", "html"))
+    assert skill.read_text() == (
+        "---\nname: thing\n---\n"
+        + content_header("new.extension", "html")
+        + "\n# Thing\n"
+    )
+
+
 def test_a_human_comment_is_never_stripped(tmp_path: Path) -> None:
     target = tmp_path / "config.toml"
     target.write_text("# my own note\nkey = 1\n")

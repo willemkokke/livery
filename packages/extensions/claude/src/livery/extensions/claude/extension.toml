@@ -1,0 +1,28 @@
+# The claude extension: what Claude Code reads in a workspace. While a
+# workspace lists it, the workshop writes CLAUDE.md, the guidance under
+# .workshop/fragments/ and .claude/ from this extension's renders, and
+# its plugin carries the hook verbs .claude/settings.json wires in.
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one agent setup per checkout.
+levels = ["workspace"]
+# The footman plugin that carries the `fm hooks.*` verbs.
+plugin = "livery.extensions.claude"
+
+# The entry file Claude Code reads, committed: one import per delivered
+# fragment, the repository's own fragments after them, then
+# CLAUDE.project.md.
+[fragments."CLAUDE.md"]
+render = "livery.extensions.claude._agent:entry_file"
+
+# The guidance the agent reads, written for this checkout alone.
+[fragments.".workshop/fragments/"]
+render = "livery.extensions.claude._agent:guidance_files"
+local = true
+
+# Every listed extension's skills and hooks, linked, and the one
+# settings.json, copied; this checkout's alone.
+[fragments.".claude/"]
+render = "livery.extensions.claude._agent:claude_files"
+local = true

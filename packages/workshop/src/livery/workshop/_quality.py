@@ -492,7 +492,13 @@ def run_checks(
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
-    """Run the fixers over the named files, judging nothing: the post-edit hook."""
+    """Run the gate's fixers over *paths*, judging nothing.
+
+    Every check whose claims reach a file fixes it, and a file no claim
+    reaches is left alone. *safe* keeps to the fixes a check marks
+    safe, which never remove code an edit in flight still needs; an
+    agent's post-edit hook runs it after each edit.
+    """
     _check_files(paths, fix=True, safe=safe, point="", judge=False)
 
 

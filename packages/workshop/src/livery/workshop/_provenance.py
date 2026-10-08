@@ -25,7 +25,7 @@ from livery.workshop._categories import (
     channel_of,
     register_channels,
 )
-from livery.workshop._extensions import stack_names, workspace_root
+from livery.workshop._extensions import SELF, stack_names, workspace_root
 from livery.workshop._packages import Package
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
@@ -116,7 +116,7 @@ def _insertion_point(text: str, path: Path) -> int:
 def inject(path: Path, header: str) -> None:
     """Open *path* with *header*, replacing a stale machine header."""
     text = path.read_text(encoding="utf-8")
-    text = strip_header(text, path)
+    text = strip_header(text, path, size=len(header.splitlines()))
     at = _insertion_point(text, path)
     path.write_text(text[:at] + header + text[at:], encoding="utf-8", newline="\n")
 
@@ -128,8 +128,14 @@ def has_header(path: Path, header: str) -> bool:
     return text[at:].startswith(header)
 
 
-def strip_header(text: str, path: Path) -> str:
-    """*text* with a machine-written header removed, others kept."""
+def strip_header(text: str, path: Path, *, size: int = 3) -> str:
+    """*text* with a machine-written header removed, everything after it kept.
+
+    An HTML header is its ``<!-- -->`` block. A line-comment header is
+    its first *size* lines, the length every machine header is written
+    at, when the first carries a marker: the comment lines below it are
+    the file's own and stay, and so does a blank line after either.
+    """
     at = _insertion_point(text, path)
     head, tail = text[:at], text[at:]
     style = comment_style(path)
@@ -137,29 +143,24 @@ def strip_header(text: str, path: Path) -> str:
         if tail.startswith("<!--") and "-->" in tail:
             block, _, rest = tail.partition("-->\n")
             if any(marker in block for marker in _MARKERS):
-                return head + rest.lstrip("\n")
+                return head + rest
         return text
     lines = tail.splitlines(keepends=True)
-    block_end = 0
-    for line in lines:
-        if line.startswith("#") and not line.startswith("#!"):
-            block_end += 1
-        else:
-            break
-    block = "".join(lines[:block_end])
-    if any(marker in block for marker in _MARKERS):
-        rest = "".join(lines[block_end:]).lstrip("\n")
-        return head + rest
+    first = lines[:size]
+    leader = style or "#"
+    if (
+        len(first) == size
+        and all(line.startswith(leader) for line in first)
+        and any(marker in first[0] for marker in _MARKERS)
+    ):
+        return head + "".join(lines[size:])
     return text
 
 
 def _materialised(root: Path, relative: Path) -> Provenance | None:
-    """The answer for a path the sync verb delivers, or None."""
-    from livery.workshop._fragment_engine import local_receipts
-    from livery.workshop._materialise import _is_link
-
+    """The answer for a path under ``.workshop/``, this checkout's state, or None."""
+    del root
     prog = footman.prog()
-    receipted = local_receipts(root)
     parts = relative.parts
     if parts[0] == ".workshop":
         if parts[1:2] == ("fragments",):
@@ -180,56 +181,54 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
             f"written by `{prog} sync` for this checkout alone",
             "nothing to edit here; delete it and the next sync writes it again",
         )
-    if parts[0] == "CLAUDE.md" and len(parts) == 1:
-        return Provenance(
-            "sync stub",
-            f"written by `{prog} sync` from the mounted extensions' fragments",
-            "edit CLAUDE.project.md, never this file",
-        )
-    if parts[0] != ".claude" or len(parts) < 2:
-        return None
-    if parts[1] in ("skills", "hooks") and len(parts) >= 3:
-        entry = root / ".claude" / parts[1] / parts[2]
-        if _is_link(entry) or f".claude/{parts[1]}/{parts[2]}" in receipted:
-            return Provenance(
-                "materialised",
-                f"a mounted extension's content/{parts[1]}/{parts[2]}",
-                "edit the extension's copy; an edit here becomes a local"
-                " override on the next sync",
-            )
-        return Provenance(
-            "local override" if _shipped(parts[1], parts[2]) else "yours",
-            "this repository",
-            "edit directly; it commits like any repo file",
-        )
-    if parts[1] == "settings.json":
-        if ".claude/settings.json" in receipted:
-            return Provenance(
-                "materialised",
-                "a mounted extension's content/settings.json",
-                "edit the extension's copy; an edit here becomes a local"
-                " override on the next sync",
-            )
-        return Provenance(
-            "local override" if _shipped("", "settings.json") else "yours",
-            "this repository",
-            "edit directly; it commits like any repo file",
-        )
     return None
 
 
-def _shipped(subdir: str, name: str) -> bool:
-    """Whether any mounted extension ships this content entry."""
-    from livery.workshop._extensions import extension_content
+def _computed(root: Path, relative: Path) -> Provenance | None:
+    """The answer for a file a listed extension's code writes, or None.
 
-    for extension in stack_names():
-        content = extension_content(extension)
-        if content is None:
-            continue
-        candidate = content / subdir / name if subdir else content / name
-        if candidate.exists():
-            return True
-    return False
+    A path under a directory such a render writes, which the render did
+    not write, is the repository's own: the agent's own skill beside the
+    delivered ones, say.
+    """
+    from livery.workshop._extensions import declaration
+    from livery.workshop._fragment_engine import local_receipts
+
+    prog = footman.prog()
+    path = relative.as_posix()
+    for extension in stack_names(root):
+        found = None if extension == SELF else declaration(extension)
+        for fragment in found.fragments if found is not None else ():
+            target = fragment.target
+            if path != target and not (
+                target.endswith("/") and path.startswith(target)
+            ):
+                continue
+            where = f"`{prog} sync`, from {extension}'s [fragments] render for {target}"
+            if not fragment.local:
+                return Provenance(
+                    "computed",
+                    where,
+                    f"change what it is computed from and run `{prog} sync`;"
+                    " an edit here is drift",
+                )
+            # A linked directory's files are the link's: the receipt
+            # names the link, the nearest written ancestor.
+            receipts = local_receipts(root)
+            ancestors = [path, *(parent.as_posix() for parent in relative.parents)]
+            if any(candidate in receipts for candidate in ancestors):
+                return Provenance(
+                    "materialised",
+                    where,
+                    "edit what it is computed from; an edit here is a local"
+                    f" override `{prog} sync` keeps and names",
+                )
+            return Provenance(
+                "yours",
+                "this repository",
+                "edit directly; it commits like any repo file",
+            )
+    return None
 
 
 def emitted_paths(root: Path) -> frozenset[str]:
@@ -275,6 +274,13 @@ def _rule_materialised(
 ) -> Provenance | None:
     del emitted
     return _materialised(root, relative)
+
+
+def _rule_computed(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del emitted
+    return _computed(root, relative)
 
 
 def _rule_generated(
@@ -435,6 +441,7 @@ def _rule_member(
 register_channels(
     [
         ChannelRule("materialised", _rule_materialised, 100, "livery.workshop"),
+        ChannelRule("computed", _rule_computed, 95, "livery.workshop"),
         ChannelRule("generated", _rule_generated, 90, "livery.workshop"),
         ChannelRule("composed", _rule_composed, 85, "livery.workshop"),
         ChannelRule("seed", _rule_seed, 70, "livery.workshop"),
