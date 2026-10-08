@@ -3052,11 +3052,22 @@ _NAV_ENTRY = _re.compile(r'\{\s*"(?P<key>[^"]+)"\s*=\s*"_generated/tools/')
 
 
 def write_tools_nav(generated: Path, keys: list[str]) -> Path:
-    """Emit the Tools nav block's entries from *keys* into *generated*; the path."""
-    from livery.extensions.docs import write_nav_block
+    """Emit the Tools nav block's entries from *keys* into *generated*; the path.
 
-    entries = [f'{{ "{k}" = "_generated/tools/{k}.md" }},' for k in keys]
-    return write_nav_block(generated, "tools", entries)
+    The block is data the docs site reads: `nav.tools.toml` beside the
+    pages, a `nav` list of one-key tables, each a label to its page. The
+    bench writes the file itself, since nobody imports an extension but
+    the workshop that mounts it.
+    """
+    entries = "".join(f'{{ "{k}" = "_generated/tools/{k}.md" }},\n' for k in keys)
+    generated.mkdir(parents=True, exist_ok=True)
+    path = generated / "nav.tools.toml"
+    path.write_text(
+        "# The 'tools' nav block, emitted by tools.pages; the authored"
+        f" nav.toml places it.\nnav = [\n{entries}]\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def nav_keys(block: Path) -> list[str]:
