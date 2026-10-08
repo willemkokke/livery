@@ -1,11 +1,10 @@
-"""The next version, derived from the commits, agrees with git-cliff.
+"""The next version, derived from the commits.
 
 Each scenario builds a throwaway repository with one member, its
-receipt tags and its commits, then asks both git-cliff (through the
-member's rendered ``cliff.toml``) and the base's derivation. The two
-must agree on every scenario: the derivation replaces git-cliff's
-answer in the release train, so git-cliff's behaviour is the
-contract it is pinned to.
+receipt tags and its commits, then asks the base's derivation. The
+scenarios are the version rules: footman's practice, before 1.0 a
+feature bumps the minor and a break rides along, after 1.0 a break
+bumps the major.
 """
 
 from __future__ import annotations
@@ -15,10 +14,8 @@ from pathlib import Path
 
 import pytest
 
-import livery.toolroom.tools as tools
 from livery.workshop._packages import discover_packages
 from livery.workshop._versions import bump, derive_version
-from workshop_seeds import cliff_config
 
 #: (name, baseline, [(tag before this commit or "", subject, body, path)], expected)
 Step = tuple[str, str, str, str]
@@ -136,11 +133,6 @@ def _repository(tmp_path: Path, baseline: str, steps: list[Step]) -> Path:
     (member / "workshop.toml").write_text(
         f'kind = "python"\nname = "livery-member"\n{release}', encoding="utf-8"
     )
-    config = cliff_config("member").replace(
-        'initial_tag = "packages/member/v0.0.0"',
-        f'initial_tag = "packages/member/v{baseline or "0.0.0"}"',
-    )
-    (member / "cliff.toml").write_text(config, encoding="utf-8")
     _git(root, "init", "-q", "-b", "main")
     _git(root, "config", "user.email", "t@example.com")
     _git(root, "config", "user.name", "t")
@@ -157,25 +149,16 @@ def _repository(tmp_path: Path, baseline: str, steps: list[Step]) -> Path:
     return root
 
 
-def _git_cliff(root: Path) -> str:
-    result = tools.git_cliff.opts(cwd=root, nofail=True, recorded=False)(
-        "--config", "packages/member/cliff.toml", "--bumped-version", "--offline"
-    )
-    assert result.code == 0, result.stderr
-    return result.stdout.strip().rsplit("/", 1)[-1].removeprefix("v")
-
-
 @pytest.mark.parametrize(
     ("baseline", "steps", "expected"),
     [pytest.param(b, s, e, id=name) for name, b, s, e in SCENARIOS],
 )
-def test_the_derivation_agrees_with_git_cliff(
+def test_the_derivation_follows_the_version_rules(
     tmp_path: Path, baseline: str, steps: list[Step], expected: str
 ) -> None:
     root = _repository(tmp_path, baseline, steps)
     (package,) = (p for p in discover_packages(root) if p.directory.name == "member")
     assert derive_version(root, package) == expected
-    assert _git_cliff(root) == expected
 
 
 def test_a_version_that_is_not_semver_refuses() -> None:

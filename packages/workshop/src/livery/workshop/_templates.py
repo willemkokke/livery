@@ -237,8 +237,9 @@ def _release_baseline(directory: Path) -> str:
     """The [release] baseline a package's contract declares, or empty.
 
     A migrated distribution's version line predates this workspace;
-    the baseline names the version it continues from, and the cliff
-    render anchors the first release's derivation on it.
+    the baseline names the version it continues from, and a package
+    template reads it as ``release_baseline`` to anchor the first
+    release on it.
     """
     contract = directory / "workshop.toml"
     if not contract.is_file():

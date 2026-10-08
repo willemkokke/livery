@@ -5,7 +5,7 @@
 # The scope is the packages themselves; the tests are read as consumer
 # code by the type checkers that narrow by paths.
 [src]
-include = ["packages/extensions/basedpyright/src", "packages/extensions/clang-format/src", "packages/extensions/clang-tidy/src", "packages/extensions/mypy/src", "packages/extensions/pyrefly/src", "packages/extensions/pytest/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+include = ["packages/extensions/basedpyright/src", "packages/extensions/changelog/src", "packages/extensions/clang-format/src", "packages/extensions/clang-tidy/src", "packages/extensions/mypy/src", "packages/extensions/pyrefly/src", "packages/extensions/pytest/src", "packages/extensions/ruff/src", "packages/extensions/ty/src", "packages/footman/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 
 [environment]
 # Every platform at once (ty checks the union), 3.11 floor.

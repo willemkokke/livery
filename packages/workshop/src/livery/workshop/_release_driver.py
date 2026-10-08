@@ -1,14 +1,14 @@
 """``workflow.release``: the release train's driver on the engine.
 
 One release shape for a set of N >= 1 packages: derive each member's
-version and entry through its ``cliff.toml``, bump floors within the
-set only, stamp, commit per member in dependency order, and hand the
-branch to the shared engine. The branch decides the act: main-family
-(``main`` and the engine's ``workflow/`` namespace) runs the real
-train, any other branch is the dev act, a wheel straight from the
-branch. ``--local`` is everything that stays on this machine:
-derive, build, validate, report, then roll the stamps back like a
-failed prepare, leaving ``dist/`` and the report.
+version from its commits and its entry through the release notes'
+provider, bump floors within the set only, stamp, commit per member in
+dependency order, and hand the branch to the shared engine. The branch
+decides the act: main-family (``main`` and the engine's ``workflow/``
+namespace) runs the real train, any other branch is the dev act, a wheel
+straight from the branch. ``--local`` is everything that stays on this
+machine: derive, build, validate, report, then roll the stamps back like
+a failed prepare, leaving ``dist/`` and the report.
 """
 
 from __future__ import annotations

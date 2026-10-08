@@ -22,6 +22,7 @@ from livery.workshop._declaration import (
     Declaration,
     DeclarationError,
     DeclaredSlot,
+    Reference,
     declaration_file,
     read,
 )
@@ -394,8 +395,12 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             if found is not None:
                 check_api_version(extension, found)
                 declare_slots(extension, found.slots)
-                if register_declared(
-                    extension, found.additions, options.get(extension, ())
+                notes = declare_release_notes(extension, found.release_notes)
+                if (
+                    register_declared(
+                        extension, found.additions, options.get(extension, ())
+                    )
+                    or notes
                 ):
                     mounted.append(extension)
             present.append(extension)
@@ -436,7 +441,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         if why := _undeclared(extension, listed):
             _note(f"{why}; the mount leaves it off")
         declare_slots(extension, found.slots)
-        if register_declared(extension, found.additions, listed):
+        notes = declare_release_notes(extension, found.release_notes)
+        if register_declared(extension, found.additions, listed) or notes:
             mounted.append(extension)
         name = found.plugin
         if name and name not in builtin:
@@ -584,6 +590,23 @@ def register_jobs(extension: str, jobs: tuple[JobContribution, ...]) -> None:
         )
 
 
+def declare_release_notes(extension: str, reference: Reference | None) -> bool:
+    """Make the provider *reference* names the release notes' writer, for *extension*.
+
+    The provider is imported when the release train first asks it, so a
+    mount imports none of the extension's code.
+
+    Returns:
+        Whether a provider was registered: False when *reference* is None.
+    """
+    if reference is None:
+        return False
+    from livery.workshop._release_notes import DeclaredNotes, register_release_notes
+
+    register_release_notes(DeclaredNotes(reference), extension=extension)
+    return True
+
+
 def declare_slots(extension: str, slots: tuple[DeclaredSlot, ...]) -> None:
     """Declare *slots* for *extension*, before anything contributes to them."""
     from livery.workshop import _slots
@@ -639,6 +662,21 @@ def extension_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     for extension in extension_names(start):
         declared = _readable(extension)
         found[extension] = declared.tools if declared is not None else ()
+    return found
+
+
+def notes_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each listed extension that writes release notes, to its ``[toolroom] requires``.
+
+    A release's entries must not depend on the machine that wrote
+    them, so no host allowance reaches these tools
+    ([livery.workshop._tools.host_allowed][]).
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for extension in extension_names(start):
+        declared = _readable(extension)
+        if declared is not None and declared.release_notes is not None:
+            found[extension] = declared.tools
     return found
 
 

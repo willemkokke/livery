@@ -142,11 +142,11 @@ def test_a_concrete_kind_without_a_backend_refuses(restored_registry) -> None:
 
 
 def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None:
-    """Every kind releases, so the changelog engine is declared once, on the base."""
+    """Every chain starts at the base, which builds nothing and requires no tool."""
     assert "base" not in kind_names()
     for name in ("python", "python-nanobind", "cpp-conan"):
         assert kind_chain(name)[0].name == "base", name
-        assert "git_cliff" in kind_tools({name}), name
+    assert kind_chain("python")[0].tools == ()
     with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
         backend_for(_package(tmp_path, "base"))
 
@@ -232,10 +232,7 @@ def test_tools_union_along_the_chain_only_when_present(
     )
     # The kinds carry what operates them; the checkers, the formatter
     # and the test runner ride their check records.
-    assert kind_tools({"python"}) == (
-        "git_cliff",  # the base kind's, through the chain
-        "uv",
-    )
+    assert kind_tools({"python"}) == ("uv",)
     from livery.workshop._checks import tools_for_kind
 
     assert {tool for tool, _ in tools_for_kind("python")} == {"fake"}

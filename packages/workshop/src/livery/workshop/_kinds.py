@@ -15,10 +15,10 @@ naming the vocabulary: a typo that silently builds the wrong kind
 is worse than a stop.
 
 ``base`` is abstract: the record behind the ``package-base`` template
-every package template renders first. It heads every kind's chain
-and carries what every kind needs because every kind releases, the
-changelog engine and the ``cliff.toml`` it reads, so a leaf kind
-never restates them. A package's ``kind`` never names it: the
+every package template renders first. It heads every kind's chain,
+so what it carries reaches every kind without a leaf restating it.
+It requires no tool: what a release writes beside its version is
+an extension's. A package's ``kind`` never names it: the
 vocabulary a contract may use is the concrete kinds.
 """
 
@@ -597,16 +597,13 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan, _python, _python_nanobind
 
     # The base every kind derives from: abstract, the record behind the
-    # package-base template. Every kind releases, so the changelog
-    # engine and the cliff.toml it reads are declared once, here, and
-    # a kind an extension adds gets them by naming its parent. A tool is
-    # named as its record and its handle are (`git_cliff`), which is
-    # how the catalogue lists it.
+    # package-base template. It requires no tool: the release notes'
+    # writer and its configuration are an extension's.
     register_kind(
         KindRecord(
             name="base",
             template=BASE_TEMPLATE,
-            tools=("git_cliff",),
+            tools=(),
             artifact="",
             wheel_identity="",
             abstract=True,

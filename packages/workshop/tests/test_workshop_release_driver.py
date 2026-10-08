@@ -32,7 +32,14 @@ from livery.workshop._release_driver import (
     rollback_prepare,
 )
 from livery.workshop._workflow_engine import run_workflow
-from workshop_seeds import Seeds, _seed_home, member, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    FakeNotes,
+    Seeds,
+    _seed_home,
+    fake_notes,
+    member,
+    seed_copier,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 _FAILURES = (SystemExit, Failed)
@@ -64,7 +71,12 @@ def _seed(base: Path) -> None:
 
 
 @pytest.fixture
-def workspace(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, GitOps, Path]:
+def workspace(
+    seeds: Seeds, tmp_path: Path, notes: FakeNotes
+) -> tuple[FakeForge, GitOps, Path]:
+    # The stand-in provider writes each member's entry, as a listed
+    # release-notes extension would.
+    del notes
     root = seeds("release-driver", _seed) / "ws"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
@@ -551,7 +563,8 @@ def test_recovery_survives_a_rider_and_a_hand_edited_entry(
     first = driver.prepare()
     assert first is not None
     changelog = root / "packages" / "core" / "CHANGELOG.md"
-    edited = changelog.read_text().replace("- Core grows", "- The 0.3.0 story, told")
+    edited = changelog.read_text().replace("- what changed", "- The 0.3.0 story, told")
+    assert edited != changelog.read_text()
     changelog.write_text(edited)
     (root / "uv.lock.marker").write_text("a rider\n")
     _git(root, "add", "-A")

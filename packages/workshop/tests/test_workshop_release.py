@@ -19,7 +19,13 @@ from livery.workshop._release import (
     verify_release,
 )
 from livery.workshop._update import bump_floors, latest_released
-from workshop_seeds import Seeds, _seed_home, cliff_config, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    FakeNotes,
+    Seeds,
+    _seed_home,
+    fake_notes,
+    seed_copier,
+)
 
 _FAILURES = (SystemExit, Failed)
 
@@ -58,7 +64,6 @@ def _build(base: Path) -> None:
         (directory / "src" / "livery" / name / "__init__.py").write_text(
             '__version__ = "0.2.0"\n'
         )
-        (directory / "cliff.toml").write_text(cliff_config(name))
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "tag", "packages/core/v0.1.0")
@@ -75,7 +80,7 @@ def test_verify_passes_a_release_shaped_tree(seeds: Seeds) -> None:
     assert plan.package.name == "livery-tool" and plan.version == "0.2.0"
 
 
-def test_verify_lists_every_disagreement(seeds: Seeds) -> None:
+def test_verify_lists_every_disagreement(seeds: Seeds, notes: FakeNotes) -> None:
     root = _workspace(seeds)
     changelog = root / "packages" / "tool" / "CHANGELOG.md"
     changelog.write_text("# Changelog\n\n## 0.1.9\n\n- old\n")
@@ -113,7 +118,7 @@ def test_verify_refuses_an_unreleased_floor(seeds: Seeds) -> None:
     assert "floors must name released versions" in str(caught.value)
 
 
-def test_prepare_stamps_idempotently(seeds: Seeds) -> None:
+def test_prepare_stamps_idempotently(seeds: Seeds, notes: FakeNotes) -> None:
     root = _workspace(seeds)
     changed = prepare_release(root, "packages/tool", "0.3.0")
     assert "pyproject.toml" in changed
@@ -132,15 +137,7 @@ def test_prepare_refuses_a_package_with_nothing_unreleased(seeds: Seeds) -> None
     assert prepare_release(root, "packages/tool") == []
 
 
-def test_prepare_names_the_missing_changelog_contract(seeds: Seeds) -> None:
-    root = _workspace(seeds)
-    (root / "packages" / "tool" / "cliff.toml").unlink()
-    with pytest.raises(_FAILURES) as caught:
-        prepare_release(root, "packages/tool")
-    assert "cliff.toml" in str(caught.value)
-
-
-def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, tmp_path: Path) -> None:
+def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, notes: FakeNotes) -> None:
     root = _workspace(seeds)
     _git(root, "tag", "packages/tool/v0.2.0")
     new_file = root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py"
@@ -157,8 +154,7 @@ def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, tmp_path: Path) ->
     assert version == "0.3.0"  # feat bumps minor pre-1.0, footman's practice
     text = (root / "packages" / "tool" / "CHANGELOG.md").read_text()
     assert "## [0.3.0]" in text
-    assert "### Added" in text
-    assert "The tool grows a verb (#41)" in text
+    assert notes.recorded == [("0.3.0", "## [0.3.0]\n\n- what changed")]
     assert "\n\n## 0.2.0" in text  # the previous entry keeps its own block
     verify_release(root, "packages/tool/v0.3.0")
     # The tag closes the release; only then is a re-derivation a no-op.
@@ -196,43 +192,35 @@ def test_a_scoped_floor_bump_moves_only_the_named_sibling(seeds: Seeds) -> None:
 
 
 def test_a_stamped_but_unreleased_version_still_releases(
-    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, notes: FakeNotes
 ) -> None:
     # The tag is the receipt: a pyproject stamped ahead of its release
     # must not read as released, or that release strands forever. The
     # fixture's packages carry version 0.2.0 with no tag at all, the
-    # stranded shape exactly.
+    # stranded shape exactly. The provider is handed the entry for the
+    # version again, so it can regenerate the stranded one.
     root = _workspace(seeds)
     monkeypatch.setattr(
         "livery.workshop._release.derive_version", lambda root, package: "0.2.0"
     )
-    monkeypatch.setattr(
-        "livery.workshop._cliff.unreleased_entry",
-        lambda root, package, version="": "## [0.2.0]\n\n- Added things.",
-    )
+    notes.line = "- Added things."
     changed = prepare_release(root, "packages/core")
     assert changed, "the stamped-ahead release must proceed"
-    text = (root / "packages" / "core" / "CHANGELOG.md").read_text()
-    # The stranded entry regenerated to cover everything the receipt
-    # will actually name.
-    assert "- Added things." in text
+    assert notes.recorded == [("0.2.0", "## [0.2.0]\n\n- Added things.")]
 
 
-def test_an_explicit_version_regenerates_a_stranded_entry(
-    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
+def test_an_explicit_version_hands_the_provider_its_entry(
+    seeds: Seeds, notes: FakeNotes
 ) -> None:
-    # The driver hands prepare the derived version explicitly; a
-    # stranded heading must still regenerate on that path, or the
-    # member's release commit is empty and the train derails.
+    # The driver hands prepare the derived version explicitly; the
+    # provider must still be handed the entry on that path, so it can
+    # regenerate a stranded heading, or the member's release commit is
+    # empty and the train derails.
     root = _workspace(seeds)
-    monkeypatch.setattr(
-        "livery.workshop._cliff.unreleased_entry",
-        lambda root, package, version="": "## [0.2.0]\n\n- Everything since.",
-    )
+    notes.line = "- Everything since."
     changed = prepare_release(root, "packages/core", "0.2.0")
     assert changed
-    text = (root / "packages" / "core" / "CHANGELOG.md").read_text()
-    assert "- Everything since." in text
+    assert notes.recorded == [("0.2.0", "## [0.2.0]\n\n- Everything since.")]
 
 
 def _lockable(root: Path) -> None:
@@ -269,7 +257,7 @@ def test_prepare_leaves_a_lockless_workspace_alone(seeds: Seeds) -> None:
     assert "uv.lock" not in changed
 
 
-def test_without_a_notes_provider_prepare_stamps_and_writes_no_notes(
+def test_a_release_without_the_changelog_extension_writes_no_notes(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The fallback first: a workspace mounting no release notes extension
@@ -287,19 +275,59 @@ def test_without_a_notes_provider_prepare_stamps_and_writes_no_notes(
     assert _release_notes.NO_PROVIDER in capsys.readouterr().out
 
 
-def test_the_notes_provider_is_one_registration_withdrawn_by_its_extension() -> None:
+def test_the_notes_provider_is_one_registration_withdrawn_by_its_extension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from livery.workshop import _release_notes
-    from livery.workshop._cliff import CliffChangelog
 
-    saved = list(_release_notes._PROVIDER)
-    try:
-        assert isinstance(_release_notes.release_notes(), CliffChangelog)
-        other = CliffChangelog()
-        _release_notes.register_release_notes(other, extension="acme.notes")
-        assert _release_notes.release_notes() is other
-        _release_notes.unregister_release_notes(extension="livery.workshop")
-        assert _release_notes.release_notes() is other
-        _release_notes.unregister_release_notes(extension="acme.notes")
-        assert _release_notes.release_notes() is None
-    finally:
-        _release_notes._PROVIDER[:] = saved
+    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
+    assert _release_notes.release_notes() is None
+    first, second = FakeNotes(), FakeNotes()
+    _release_notes.register_release_notes(first, extension="acme.notes")
+    assert _release_notes.release_notes() is first
+    _release_notes.register_release_notes(second, extension="acme.other")
+    assert _release_notes.release_notes() is second
+    _release_notes.unregister_release_notes(extension="acme.notes")
+    assert _release_notes.release_notes() is second
+    _release_notes.unregister_release_notes(extension="acme.other")
+    assert _release_notes.release_notes() is None
+
+
+def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import workshop_seeds
+    from livery.workshop import _release_notes
+    from livery.workshop._declaration import Reference
+    from livery.workshop._extensions import declare_release_notes
+    from livery.workshop._packages import Package
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="acme-thing",
+        kind="python",
+        depends=(),
+    )
+    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
+    # The fallbacks first: a declaration naming no provider registers
+    # none, and one naming a module nobody installed costs nothing
+    # until the train asks it, which then names the module.
+    assert not declare_release_notes("acme.notes", None)
+    assert _release_notes.release_notes() is None
+    assert declare_release_notes("acme.notes", Reference("acme_absent_notes", "NOTES"))
+    absent = _release_notes.release_notes()
+    assert isinstance(absent, _release_notes.DeclaredNotes)
+    with pytest.raises(ModuleNotFoundError, match="acme_absent_notes"):
+        absent.verify(package, "1.0.0")
+    # A provider the declaration names answers through the registration.
+    provider = FakeNotes("- Born.")
+    monkeypatch.setattr(workshop_seeds, "DECLARED_NOTES", provider, raising=False)
+    declare_release_notes("acme.notes", Reference("workshop_seeds", "DECLARED_NOTES"))
+    declared = _release_notes.release_notes()
+    assert declared is not None
+    entry = declared.entry(tmp_path, package, "1.0.0")
+    assert entry == "## [1.0.0]\n\n- Born."
+    assert declared.record(package, "1.0.0", entry) == ["CHANGELOG.md"]
+    assert declared.verify(package, "1.0.0") == []
+    assert provider.recorded == [("1.0.0", entry)]

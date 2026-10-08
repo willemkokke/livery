@@ -141,6 +141,8 @@ class Declaration:
         deletes: Each earlier extension's shipped file it deletes, to the
             reason.
         slots: The slots it declares.
+        release_notes: The release-notes provider it names, which the
+            mount registers; None for an extension that writes no notes.
     """
 
     extension: str
@@ -161,6 +163,7 @@ class Declaration:
     replaces: dict[str, str] = field(default_factory=dict[str, str])
     deletes: dict[str, str] = field(default_factory=dict[str, str])
     slots: tuple[DeclaredSlot, ...] = ()
+    release_notes: Reference | None = None
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -341,6 +344,9 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             reader.slot(str(name), table)
             for name, table in data.get("slots", {}).items()
         ),
+        release_notes=reader.reference(data["release-notes"], ("release-notes",))
+        if "release-notes" in data
+        else None,
     )
 
 

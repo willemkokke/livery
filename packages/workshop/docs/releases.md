@@ -3,18 +3,19 @@
 The train: push a tag shaped `packages/<pkg>/v<semver>` and only
 that package releases. Tags are immutable and pushed alone.
 
-`fm release.prepare <path>` without a version asks
-[git-cliff](https://git-cliff.org/) what the unreleased commits earn
-and writes the entry they make: sections grouped, pull requests
-linked, authors credited. A package with nothing unreleased is
-refused rather than given a new number. Each package states its own
-answer in its `cliff.toml`, rendered from the template with the
-package's tag line, its paths, and the forge its links point at, so
-the shape of an entry is changed by changing the template rather
-than by editing every package. The version rules there are
-footman's: after 1.0 a break bumps major, a feature minor,
-everything else patch; before 1.0 a feature bumps minor with breaks
-riding along.
+`fm release.prepare <path>` without a version derives the next one
+from the conventional commits under the package's paths since its
+last release tag. The version rules are footman's: after 1.0 a break
+bumps major, a feature minor, everything else patch; before 1.0 a
+feature bumps minor with breaks riding along. A package with nothing
+unreleased is refused rather than given a new number.
+
+The entry the commits earn is written by the release notes'
+provider, which an extension registers: the changelog extension,
+`livery-extensions-changelog`, writes each package's `CHANGELOG.md`
+with [git-cliff](https://git-cliff.org/). A workspace that lists no
+such extension releases without notes, and the train says so where
+it would have written them.
 
 `fm release.prepare` stamps the version into the three places that
 must agree, and `fm release.verify` refuses the tag when they do

@@ -164,16 +164,16 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
 def build_dev(root: Path, plan: DevPlan) -> Path:
     """Build the dev wheel; the tree is byte-identical afterwards.
 
-    The version is stamped and git-cliff's unreleased excerpt is
-    spliced into ``README.md`` under ``## What's New`` for the build
-    only; every touched file is restored from an in-memory snapshot,
-    never from git, because a dirty tree is legal here and a
-    checkout would discard its edits. The index page is the only
-    place the excerpt exists. Timestamps are restored with the
+    The version is stamped and the release notes' unreleased entry, when
+    an extension writes notes, is spliced into ``README.md`` under
+    ``## What's New`` for the build only; every touched file is restored
+    from an in-memory snapshot, never from git, because a dirty tree is
+    legal here and a checkout would discard its edits. The index page is the
+    only place the excerpt exists. Timestamps are restored with the
     bytes: uv judges an editable install fresh by its
-    ``pyproject.toml``'s modification time, and a touched file
-    would make the next sync re-install the package while other
-    processes read its metadata.
+    ``pyproject.toml``'s modification time, and a touched file would
+    make the next sync re-install the package while other processes read
+    its metadata.
     """
     package = plan.package
     stamper = backend_for(package).stamp_version(package)

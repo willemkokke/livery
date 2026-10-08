@@ -45,7 +45,10 @@ it by: a contract's judged keys, [livery.workshop.read_contract][];
 a slot's composed value, [livery.workshop.slot][]; the CI run it
 belongs to, [livery.workshop.ci_run][], a
 [livery.workshop.RunContext][] or None at a desk; the workspace's
-repository on its forge, [livery.workshop.forge_repository][]; the
+repository on its forge, [livery.workshop.forge_repository][], and,
+connected, [livery.workshop.this_repository][] on
+[livery.workshop.this_forge][], whose everyday token
+[livery.workshop.forge_token][] resolves; the
 registry an artifact kind goes to, [livery.workshop.registry][], a
 [livery.workshop.RegistryTarget][]; and the mounted release-notes
 provider, [livery.workshop.release_notes][], which answers the
@@ -86,6 +89,8 @@ if TYPE_CHECKING:
     from livery.workshop._extensions import extension_names as extension_names
     from livery.workshop._extensions import workspace_root as workspace_root
     from livery.workshop._forge_lane import forge_repository as forge_repository
+    from livery.workshop._forge_lane import this_forge as this_forge
+    from livery.workshop._forge_lane import this_repository as this_repository
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
     from livery.workshop._kinds import compile_commands as compile_commands
@@ -109,6 +114,7 @@ if TYPE_CHECKING:
     from livery.workshop._slots import slot as slot
     from livery.workshop._state import RunContext as RunContext
     from livery.workshop._state import ci_run as ci_run
+    from livery.workshop._tokens import forge_token as forge_token
 
 __version__ = "0.7.0"
 
@@ -137,6 +143,7 @@ __all__ = [
     "discover_packages",
     "extension_names",
     "forge_repository",
+    "forge_token",
     "generated_header",
     "guidance",
     "kind_examples",
@@ -152,6 +159,8 @@ __all__ = [
     "selected_files",
     "slot",
     "testing",
+    "this_forge",
+    "this_repository",
     "verify_workspace",
     "workspace_root",
     "workspace_suite",
@@ -182,6 +191,9 @@ _EXPORTS: dict[str, str] = {
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
     "forge_repository": "livery.workshop._forge_lane",
+    "this_forge": "livery.workshop._forge_lane",
+    "this_repository": "livery.workshop._forge_lane",
+    "forge_token": "livery.workshop._tokens",
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
     "kind_examples": "livery.workshop._kinds",

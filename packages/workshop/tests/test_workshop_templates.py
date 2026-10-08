@@ -83,73 +83,14 @@ def test_a_members_seeds_are_never_judged(tmp_path: Path) -> None:
     (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
     from livery.workshop._shipped_files import deliver, shipped_drift
 
-    # Nothing composed yet: the base's file is named as missing.
-    assert "packages/thing/cliff.toml: missing; `fm sync` writes it" in shipped_drift(
-        root
-    )
-    assert "  wrote packages/thing/cliff.toml" in deliver(root)
+    deliver(root)
     assert shipped_drift(root) == []
     assert deliver(root) == []  # idempotent
-    # A README the package's authors wrote is not the base's to keep.
+    # A README and a history the package's authors wrote are not the
+    # base's to keep.
     (package / "README.md").write_text("# thing\n\nWritten by its authors.\n")
+    (package / "CHANGELOG.md").write_text("# Changelog\n\n## [0.1.0]\n\n- Born.\n")
     assert shipped_drift(root) == []
-    (package / "cliff.toml").write_text("# edited by hand\n")
-    assert shipped_drift(root) == [
-        "packages/thing/cliff.toml: differs from what livery.workshop:cliff.toml render"
-    ]
-
-
-def test_a_members_files_carry_its_own_path(
-    tmp_path: Path,
-) -> None:
-    # The re-render happens in a temp directory, and package_dir comes
-    # from the member's own directory: the managed files carry the
-    # member's path, never the temp name.
-    root = _template_instance(tmp_path)
-    apply_project(root)
-    package = root / "packages" / "thing"
-    package.mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
-    (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
-    from livery.workshop._shipped_files import deliver, shipped_drift
-
-    assert "  wrote packages/thing/cliff.toml" in deliver(root)
-    body = (package / "cliff.toml").read_text()
-    assert 'include_paths = ["packages/thing/**"]' in body
-    assert shipped_drift(root) == []
-
-
-@pytest.mark.parametrize(
-    ("kind", "url", "api_url"),
-    [
-        ("gitlab", "http://gitlab:8929", "http://gitlab:8929/api/v4"),
-        ("gitea", "http://gitea:3000", "http://gitea:3000"),
-    ],
-)
-def test_the_cliff_remote_carries_the_api_prefix_gitlab_alone_needs(
-    tmp_path: Path, kind: str, url: str, api_url: str
-) -> None:
-    # git-cliff completes a Gitea root with /api/v1 itself and a
-    # GitLab address with nothing, so the render spells the prefix
-    # for GitLab alone; a doubled prefix on Gitea answers 404.
-    root = _template_instance(tmp_path)
-    contract = root / "workshop.toml"
-    contract.write_text(
-        contract.read_text().replace(
-            '[forge]\nkind = "github"\n', f'[forge]\nkind = "{kind}"\nurl = "{url}"\n'
-        )
-    )
-    apply_project(root)
-    package = root / "packages" / "thing"
-    package.mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
-    (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
-    from livery.workshop._shipped_files import deliver
-
-    assert "  wrote packages/thing/cliff.toml" in deliver(root)
-    body = (package / "cliff.toml").read_text()
-    assert f"[remote.{kind}]" in body
-    assert f'api_url = "{api_url}"' in body
 
 
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
@@ -818,7 +759,7 @@ def test_new_package_writes_the_installed_seeds(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
     new_package("thing")
-    assert (root / "packages" / "thing" / "cliff.toml").is_file()
+    assert (root / "packages" / "thing" / "README.md").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
     assert (root / "packages" / "thing" / "docs" / "index.md").is_file()
     assert synced == ["lock", "sync"]
@@ -842,7 +783,8 @@ def test_a_tree_no_listed_extension_seeds_refuses_naming_it(
 
 def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
     # The fallbacks first: no contract, then a contract without the
-    # table, both answer empty and the cliff render keeps v0.0.0.
+    # table, both answer empty and a template reading it keeps its own
+    # default.
     from livery.workshop._templates import _release_baseline
 
     package = tmp_path / "packages" / "thing"

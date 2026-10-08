@@ -3,16 +3,16 @@
 Status: ruled by Willem on 2026-10-07; every design question is closed
 but open item 3, and the extensions plan takes phases 10 to 16 from here. Written
 2026-10-06 against
-`origin/main` at `4f2a5e53`. 10a is built (issue #1218). Of 10b, the
-reach scan, the declaration file, the docs extension's registrations,
-the schema, the verification and the public names are built, and the
-release wave that ships the slice's break runs on 2026-10-08 after
-15:00 UTC, once PyPI accepts new projects again (see "First
-publishes, four a day"). 10g is built (issue #1301) and rides that
-wave. 10c is built (issue #1303) but for clang-tidy, whose words wait
-on a ruling, so its acceptance's `find` stays open. 10d is built
-(issue #1306). The extensions plan
-(`notes/20261002-extensions-plan.md`) stays the one plan; this note
+`origin/main` at `4f2a5e53`. 10a is built (issue #1218). 10b, 10g
+(issue #1301), 10c (issue #1303) and 10d (issue #1306) shipped on
+2026-10-08 in the wave of PR #1317, after a dispatch published the
+four tool extensions the 2026-10-07 wave could not create. 10c's
+acceptance `find` stays open for clang-tidy, whose words wait on a
+ruling, and the extension passes of 10b and 10c stop at the coverage
+leg until 12e (#1225). 10e is built (issue #1307); it
+merges after the 2026-10-08 wave, and the workshop's next release
+carries `livery-extensions-changelog`'s first publish. The extensions
+plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
 ## The rulings this design satisfies
@@ -782,13 +782,8 @@ order. Existing distributions release whenever they are ready.
 | the day after | nanobind, unreal | 11b |
 | as 11c and phase 12 land | mkdocstrings, docs, housekeeping, doxygen, coverage | 11c, 12a to 12e |
 
-On 2026-10-08 the dispatch runs first: a bare dispatch reads the
-release manifest on `main`, and the next release replaces it. The 10b
-wave follows: footman 0.59.0, forge 0.7.0, workshop 0.7.0 and
-toolroom-bench 0.3.0, rehearsed with `--local` before the armed run;
-naming footman and the workshop together raises the workshop's footman
-floor (#1291). 10b's last acceptance, `fm ci.e2e --extension=ruff
---fresh`, runs on the released wheels.
+The 2026-10-08 row shipped: the dispatch published the four, and the
+10b wave released twelve members; the decision record has the runs.
 
 ### Phase 10: the API as a contract, and its first consumers
 
@@ -1588,6 +1583,64 @@ the stack, which this design neither needs nor rules out).
   the entry point, not yes or no, since the bench reads its version and
   loads it. The bench's `toolroom.{task}` message, which 10g's rename
   missed, names the verb it has.
+- 2026-10-08, 10d's acceptance: `fm workflow.release --local` on `main`
+  at `f4614c00`, the wave's twelve members (footman, forge, the
+  workshop, toolroom, the store, the bench and six tool extensions),
+  passed all 24 legs in 26m12s and restored the tree.
+- 2026-10-08, a whole mypy run (#1310): `mypy.ini` named every python
+  member's `src`, and the five tool extensions whose `src` holds data
+  alone made mypy refuse any run that reaches the whole. The render
+  data carries `python_dirs`, the members' directories that hold a
+  python file, and `files` lists them; the wave carries the fix.
+- 2026-10-08, 10e (#1307): `livery-extensions-changelog` writes the
+  release notes. Its `extension.toml` names its provider with a new
+  top-level key, `release-notes = "module:name"`, which the mount
+  registers and the release train imports when it first asks for an
+  entry. Each package's `cliff.toml` is the extension's per-package
+  content, rendered into every member whatever its kind, and
+  `git_cliff` is its `[toolroom]` requirement; `_cliff` and the
+  template left the base, and the base kind requires no tool. Decided
+  here: the extension seeds a `CHANGELOG.md` into every member born
+  while it is listed (`content/seeds/package-base`), the base's three
+  copies of that seed go, and the first record creates the file for a
+  member born without it; a tool an extension that declares
+  `release-notes` requires takes no host allowance, naming the
+  extension, which replaces the base's `git_cliff` by name; the
+  workshop's release tests run the train against a stand-in provider,
+  and git-cliff's entries, its history and its bump's agreement with
+  the workshop's derivation are tested in the extension. Not moved:
+  the release driver's rollback, the docs site and the conan release
+  body still read `CHANGELOG.md` by name.
+- 2026-10-08, open in 10e: the acceptance's `fm workflow.release
+  --local` on this repository runs on `main` after the merge. Before
+  it, every package's entry was written offline on `main` at
+  `f4614c00` by the base's git-cliff code and by the extension's: the
+  fifteen entries are byte-identical.
+- 2026-10-08, open in 10e: the `cliff.toml` template's comments still
+  say each file is composed from the base's template. Rewording them
+  renders every package's `cliff.toml` again, which puts the change
+  into every package's next release entry and moves each version, so
+  the wording changes in a wave that releases every package anyway.
+- 2026-10-08, the wave shipped. `fm workflow.release.dispatch`
+  re-ran the wave of `a7686a2f` for its four uncut members: run
+  37798177199 published `livery-extensions-mypy` 0.0.0 and met an
+  HTTP 500 from PyPI's upload at basedpyright, and one more dispatch,
+  run 37798612073, published ty, clang-format and basedpyright 0.0.0.
+  The union set's `--local` on `main` at `96dd4826` passed all 24 legs
+  in 27m32s; its armed run, PR #1317 and run 37811203813, released
+  footman 0.59.0, forge 0.7.0, toolroom 0.11.0, toolroom-store 0.3.0,
+  the workshop 0.7.0, toolroom-bench 0.3.0, and basedpyright, pyrefly,
+  ty, ruff, mypy and clang-format 0.1.0. The workshop's footman floor
+  rose to 0.59.0, which closed #1291. 10b's last acceptance,
+  `fm ci.e2e --extension=ruff --fresh` from a branch at `8986e2a4` with
+  the released members pinned (pass `20261008T165448Z`), passed birth;
+  its members scenario's check leg ran the gate with `ok format-ruff`
+  and `ok lint-ruff`, then stopped at `coverage.leg`, #1225's, which
+  12e lands. Found on the way and filed: #1316, a `--local` rehearsal
+  derives from the checkout's own tags; #1318, a large set's release
+  PR is never armed; #1320, the loop run from `main` opened a real
+  release PR for strongroom, PR #1319, which `fm workflow.abort
+  --force` closed before anything published.
 
 ## Open
 

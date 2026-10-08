@@ -442,8 +442,8 @@ and a removed marker is drift too. The root
 `pyproject.toml` carries a `tables` region for your own tables, as
 does the root `ruff.toml`; the root `.gitignore` carries a `rules`
 region, `.vscode/settings.json` a `settings` region, `tasks.py` a
-`tasks` region below the mount, and a package's `cliff.toml` an `own`
-region. `fm explain <file>` names a
+`tasks` region below the mount, and the changelog extension's
+`cliff.toml` in each package an `own` region. `fm explain <file>` names a
 file's regions and their lines. A managed file whose format has no
 comments keeps your lines as a tail after the lines the render owns.
 
@@ -519,9 +519,10 @@ floor (the requirement's, else the record's minimum, else any
 version) serves with nothing installed, while one that is absent or
 below the floor is passed over with a note and the locked version
 serves. A tool a check reads its verdict from (format, lint,
-typecheck, typecomplete, test), `uv` and `git_cliff` take no
-allowance, and the lock refuses one by name: a linter that varies by
-machine makes the gate disagree with CI. The lock's entry carries
+typecheck, typecomplete, test), `uv`, and a tool an extension writes
+the release notes with take no allowance, and the lock refuses one
+by name: a linter that varies by machine makes the gate disagree with
+CI, and a release's entries must not depend on the machine. The lock's entry carries
 `allow-host`, so every checkout agrees on which tools may vary. Each
 tool leaves a receipt under `.workshop/receipts/`, this checkout's
 statement of what it installed: the exact version, the host, the

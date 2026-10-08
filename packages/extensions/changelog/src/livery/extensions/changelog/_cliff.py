@@ -1,12 +1,12 @@
-"""The changelog engine: git-cliff, driven per package.
+"""The changelog extension's engine: git-cliff, driven per package.
 
-Each package carries a ``cliff.toml`` rendered from the template,
-which states its tag line, its paths, and the entry's shape. This
-module runs git-cliff against that config for the entry the commits
-since the last release earn, and registers the provider that writes
-it into ``CHANGELOG.md`` (livery.workshop._release_notes). The next
-version is not git-cliff's: livery.workshop._versions derives it from
-the same commits.
+Each package carries a ``cliff.toml``, the extension's per-package
+content, which states its tag line, its paths, and the entry's shape.
+This module runs git-cliff against that config for the entry the
+commits since the last release earn, and `NOTES`, which the
+extension's ``extension.toml`` names as its ``release-notes``, writes
+it into the package's ``CHANGELOG.md``. The next version is not
+git-cliff's: the workshop derives it from the same commits.
 """
 
 from __future__ import annotations
@@ -17,8 +17,7 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop._packages import Package
-from livery.workshop._release_notes import register_release_notes
+from livery.workshop import Package, forge_token
 
 #: Where a package's changelog contract lives.
 CONFIG_NAME = "cliff.toml"
@@ -36,29 +35,22 @@ TOKEN_VARIABLE = {
 
 def _forge_facts(root: Path) -> tuple[str, str]:
     """The contract's forge kind and url, empty when unstated."""
-    from livery.workshop._contract import load_contract
+    from livery.workshop import read_contract
 
-    forge = load_contract(root / "workshop.toml").get("forge") or {}
+    forge = read_contract(root).get("forge") or {}
     return str(forge.get("kind", "")), str(forge.get("url", ""))
-
-
-def _forge_kind(root: Path) -> str:
-    """The workspace contract's forge kind, or empty when unstated."""
-    return _forge_facts(root)[0]
 
 
 def _credential(root: Path) -> tuple[str, str]:
     """(git-cliff variable, value) for this forge, or two empties.
 
-    A per-kind variable already set wins untouched; otherwise
-    ``FORGE_TOKEN`` resolves through livery.workshop._tokens, and
-    failing that the token the forge lane itself connects with (the
-    GitHub backend's ``gh auth token``, say), so the changelog
-    credits authors wherever the lane can ask for them. The value is
-    handed to git-cliff under the name its own contract reads.
+    A per-kind variable already set wins untouched; otherwise the token
+    the workshop's forge connects with: ``FORGE_TOKEN``, host-qualified
+    first, and failing that the backend's own (the GitHub backend's
+    ``gh auth token``, say), so the changelog credits authors wherever
+    the workspace can ask for them. The value is handed to git-cliff
+    under the name its own contract reads.
     """
-    from livery.workshop._tokens import forge_token
-
     kind, url = _forge_facts(root)
     variable = TOKEN_VARIABLE.get(kind, "")
     if not variable:
@@ -68,22 +60,22 @@ def _credential(root: Path) -> tuple[str, str]:
         return variable, ambient
     token, _ = forge_token(kind, url)
     if not token:
-        token = _lane_token(kind, url)
+        token = _lane_token(root)
     return (variable, token) if token else ("", "")
 
 
-def _lane_token(kind: str, url: str) -> str:
-    """The token the forge lane would connect with, or empty when it has none.
+def _lane_token(root: Path) -> str:
+    """The token the workshop's forge connects with, or empty when it has none.
 
     A backend whose own fallback finds a token answers it; one that
     refuses to connect without a token, as Gitea and GitLab do, means
-    the lane has none either.
+    the workspace has none either.
     """
     from livery.forge import ForgeError
-    from livery.workshop._forge_lane import _connect
+    from livery.workshop import this_forge
 
     try:
-        return _connect(kind, url, None).token
+        return this_forge(root).token
     except ForgeError:
         return ""
 
@@ -105,8 +97,8 @@ def config_path(package: Package) -> Path:
     if not path.is_file():
         fail(
             f"{package.path} has no {CONFIG_NAME}:"
-            f" run `{footman.prog()} sync`, which composes it from the base's"
-            " fragment"
+            f" run `{footman.prog()} sync`, which composes it from the changelog"
+            " extension's fragment"
         )
     return path
 
@@ -164,7 +156,7 @@ def _refused_lookup(root: Path) -> str:
     import time
 
     from livery.forge import ForgeError, RateLimited
-    from livery.workshop._forge_lane import this_repository
+    from livery.workshop import this_repository
 
     try:
         this_repository(root).pr.get(1)
@@ -204,10 +196,10 @@ def unreleased_entry(root: Path, package: Package, version: str = "") -> str:
 class CliffChangelog:
     """Release notes as git-cliff entries in each package's ``CHANGELOG.md``.
 
-    The provider [livery.workshop._release_notes.ReleaseNotes][] the
-    base registers until the changelog extension ships it: the entry is
-    git-cliff's, through the package's ``cliff.toml``; the history is
-    the package's ``CHANGELOG.md``, newest entry first.
+    The extension's [livery.workshop.ReleaseNotes][] provider: the entry
+    is git-cliff's, through the package's ``cliff.toml``; the history is
+    the package's ``CHANGELOG.md``, created at the first record, newest
+    entry first.
     """
 
     def entry(self, root: Path, package: Package, version: str = "") -> str:
@@ -263,5 +255,6 @@ def _replace_entry(text: str, version: str, entry_body: str) -> str:
     return rewritten if count else text
 
 
-# The base's provider until the changelog extension registers its own.
-register_release_notes(CliffChangelog(), extension="livery.workshop")
+#: The provider the extension's ``extension.toml`` names as its
+#: ``release-notes``, which the workshop registers at mount.
+NOTES = CliffChangelog()

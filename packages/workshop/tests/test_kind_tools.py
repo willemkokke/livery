@@ -139,7 +139,6 @@ def _python_tools(*versions: str) -> list[Record]:
     return [
         Record(name, kind="pypi", deltas=_read(*versions))
         for name in (
-            "git_cliff",
             "uv",
             "ruff",
             "pytest",
@@ -300,15 +299,10 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     declared = _tools.requirements(root)
-    assert {r.name for r in declared} == {
-        "git_cliff",
-        "uv",
-        "pytest",
-    }
-    # The base kind heads the chain: its tool is declared first, by it;
+    assert {r.name for r in declared} == {"uv", "pytest"}
     # uv is the python kind's own, and every checker names its check.
     sites = {(r.name, r.site) for r in declared}
-    assert ("git_cliff", "kind base") in sites and ("uv", "kind python") in sites
+    assert ("uv", "kind python") in sites
     assert {
         ("pytest", "check test.pytest"),
     } <= sites
@@ -356,13 +350,12 @@ def test_the_three_sites_union_and_each_names_itself(
     assert lock.tools["bun"].version == "1.3.0" and set(lock.tools["bun"].hosts) == set(
         THREE
     )
-    # The kinds first, as declared: the base's tool, then python's.
-    assert _tools.tool_names(root)[:2] == ("git_cliff", "uv")
+    # The kinds first, as declared: python's own, then its checks'.
+    assert _tools.tool_names(root)[:2] == ("uv", "pytest")
 
 
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
-        "git_cliff",  # the base kind's, first in the chain
         "uv",  # the python kind's own
         "pytest",  # then the checks' tools, in their registration order
     )
@@ -409,8 +402,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [toolroom] requires git-cliff>=2.0" in out
-    # Two of the python kind, the base kind's git_cliff, and this one.
-    assert "git-cliff 2.1.0" in out and "toolroom.lock: 4 tool(s)" in out
+    # The python kind's two, and this one.
+    assert "git-cliff 2.1.0" in out and "toolroom.lock: 3 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
@@ -1033,7 +1026,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told
-    for name in ("git_cliff", "pytest"):
+    for name in ("uv", "pytest"):
         assert name in told
     # The declaration, then the two verbs, in the order a reader runs them.
     assert "[toolroom]" in told and "index =" in told
@@ -1252,10 +1245,14 @@ def _contract(root: Path, tools: str) -> None:
     )
 
 
-def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_name(
+def test_the_allowance_refuses_a_verdict_tool_a_pinned_one_and_an_unrequired_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The allowance is refused where a version is a verdict, an entry, or a typo."""
+    """The allowance is refused where a version is a verdict, an entry, or a typo.
+
+    A tool the release notes are written with is refused too, naming
+    the extension that writes them.
+    """
     root = _workspace(tmp_path, monkeypatch, tools='host-allowed = ["pytest"]\n')
     with pytest.raises(
         Failed,
@@ -1270,9 +1267,17 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
         Failed, match=r"names uv, which takes no allowance: the entry pins uv"
     ):
         _tools.write_lock(root)
+    monkeypatch.setattr(
+        "livery.workshop._extensions.notes_tools",
+        lambda start=None: {"changelog": ("git_cliff>=2.0",)},
+    )
     _contract(root, 'host-allowed = ["git_cliff"]\n')
     with pytest.raises(
-        Failed, match=r"names git_cliff, which takes no allowance: the release train"
+        Failed,
+        match=(
+            r"names git_cliff, which takes no allowance:"
+            r" extension changelog writes the release notes with it"
+        ),
     ):
         _tools.write_lock(root)
     _contract(root, 'host-allowed = "tea"\n')
