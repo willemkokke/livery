@@ -13,7 +13,7 @@ required on some of the locked hosts alone is locked on those, and
 the entry says which; one whose scope names no locked host is not
 locked at all.
 
-The lock is a file in the repository, `tools.lock`, so every checkout
+The lock is a file in the repository, `toolroom.lock`, so every checkout
 and every runner installs the same version; it moves only through a
 lock or an upgrade, never on its own.
 
@@ -35,13 +35,13 @@ from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, version_key
 from livery.toolroom.store._requirement import Scope, Spec, SpecError
 from livery.toolroom.tools import version_tuple
 
-LOCK_FILE = "tools.lock"
+LOCK_FILE = "toolroom.lock"
 """The lock's name at the repository root."""
 
 LOCK_SCHEMA = 1
 """The lock's shape. Bumped when a reader must know."""
 
-GRAPHS = "tools.graphs"
+GRAPHS = "toolroom.graphs"
 """The directory beside the lock holding one resolved graph per delegated tool."""
 
 

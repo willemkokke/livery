@@ -11,8 +11,9 @@ executables, and a delta says what to put on PATH.
 Reach for [livery.toolroom.store.Record][] to read a record,
 [livery.toolroom.store.resolve][] for one host's deployment,
 [livery.toolroom.store.surface_at][] for one version's command line,
-[livery.toolroom.store.Catalogue][] for what a consumer resolves against
-and [livery.toolroom.store.resolve_lock][] for the repository's lock,
+[livery.toolroom.store.Catalogue][] for what a consumer resolves against,
+[livery.toolroom.store.resolve_lock][] for the repository's lock,
+[livery.toolroom.store.read_table][] for a directory's `[toolroom]` table,
 [livery.toolroom.store.Home][] for the store's directories, and
 [livery.toolroom.store.Store][] to install, link, emit and fetch.
 """
@@ -108,11 +109,17 @@ if TYPE_CHECKING:
     from livery.toolroom.store._stub import render as render
     from livery.toolroom.store._stub import render_observation as render_observation
     from livery.toolroom.store._stub import spec_from as spec_from
+    from livery.toolroom.store._table import CONFIG_FILES as CONFIG_FILES
+    from livery.toolroom.store._table import SCHEMA_FRAGMENT as SCHEMA_FRAGMENT
+    from livery.toolroom.store._table import TABLE as TABLE
+    from livery.toolroom.store._table import TableError as TableError
+    from livery.toolroom.store._table import read_table as read_table
 
 __all__ = [
     "ARCHES",
     "ARCHIVE_SUFFIXES",
     "BUILD_FILE",
+    "CONFIG_FILES",
     "DOWNLOAD_KINDS",
     "FORMATS",
     "GRAPHS",
@@ -128,7 +135,9 @@ __all__ = [
     "POINTER",
     "RECORD_SUFFIX",
     "RUNTIMES",
+    "SCHEMA_FRAGMENT",
     "SURFACE_PLATFORMS",
+    "TABLE",
     "TOOLS",
     "URLS",
     "VERB_KEYS",
@@ -163,6 +172,7 @@ __all__ = [
     "Store",
     "StoreError",
     "Surface",
+    "TableError",
     "ToolSpec",
     "UnpackError",
     "Verb",
@@ -181,6 +191,7 @@ __all__ = [
     "npm_cli",
     "observations",
     "read_pointer",
+    "read_table",
     "records_in",
     "render",
     "render_observation",
@@ -205,6 +216,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ARCHIVE_SUFFIXES": ("livery.toolroom.store._record", "ARCHIVE_SUFFIXES"),
     "Artifact": ("livery.toolroom.store._record", "Artifact"),
     "BUILD_FILE": ("livery.toolroom.store._catalogue", "BUILD_FILE"),
+    "CONFIG_FILES": ("livery.toolroom.store._table", "CONFIG_FILES"),
     "Catalogue": ("livery.toolroom.store._catalogue", "Catalogue"),
     "CatalogueError": ("livery.toolroom.store._catalogue", "CatalogueError"),
     "DOWNLOAD_KINDS": ("livery.toolroom.store._record", "DOWNLOAD_KINDS"),
@@ -246,10 +258,13 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "Scope": ("livery.toolroom.store._requirement", "Scope"),
     "Spec": ("livery.toolroom.store._requirement", "Spec"),
     "SpecError": ("livery.toolroom.store._requirement", "SpecError"),
+    "SCHEMA_FRAGMENT": ("livery.toolroom.store._table", "SCHEMA_FRAGMENT"),
     "SURFACE_PLATFORMS": ("livery.toolroom.store._record", "SURFACE_PLATFORMS"),
     "Store": ("livery.toolroom.store._engine", "Store"),
     "StoreError": ("livery.toolroom.store._engine", "StoreError"),
     "Surface": ("livery.toolroom.store._record", "Surface"),
+    "TABLE": ("livery.toolroom.store._table", "TABLE"),
+    "TableError": ("livery.toolroom.store._table", "TableError"),
     "TOOLS": ("livery.toolroom.store._home", "TOOLS"),
     "ToolSpec": ("livery.toolroom.store._spec", "ToolSpec"),
     "URLS": ("livery.toolroom.store._home", "URLS"),
@@ -271,6 +286,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "npm_cli": ("livery.toolroom.store._engine", "npm_cli"),
     "observations": ("livery.toolroom.store._record", "observations"),
     "read_pointer": ("livery.toolroom.store._catalogue", "read_pointer"),
+    "read_table": ("livery.toolroom.store._table", "read_table"),
     "records_in": ("livery.toolroom.store._record", "records_in"),
     "render": ("livery.toolroom.store._stub", "render"),
     "render_observation": ("livery.toolroom.store._stub", "render_observation"),

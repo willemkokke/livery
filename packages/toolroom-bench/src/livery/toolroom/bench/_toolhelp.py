@@ -27,7 +27,7 @@ differs between the families is only how they spell a *default* and a
 `(default true)`, "Use `--no-fix` to disable").
 
 Nothing here runs at task time. The extractor runs when a maintainer
-regenerates the stubs, and `fm tools.audit` compares what it finds
+regenerates the stubs, and `fm toolroom.audit` compares what it finds
 against what is checked in.
 """
 

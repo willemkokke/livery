@@ -1,7 +1,7 @@
 """The ``tools`` group: declare a tool, lock the versions, upgrade one, write the stubs.
 
-Every verb resolves against the catalogue `[tools] index` names and
-writes `tools.lock` at the root; a lock that cannot be met refuses
+Every verb resolves against the catalogue `[toolroom] index` names and
+writes `toolroom.lock` at the root; a lock that cannot be met refuses
 naming the tool, each floor with the site that declared it, and the
 host no eligible version has. Each lock verb then writes the stubs
 under `typings/`, and `restub` writes them alone.
@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from livery.toolroom.store import Lock
 
 tools = group(
-    "tools", help="The tools the workspace requires: declare, lock, upgrade, restub"
+    "toolroom",
+    help="The tools the workspace requires: declare, lock, upgrade, restub",
 )
 
 
@@ -58,7 +59,7 @@ def tools_lock(
         list[str] | None, doc("delegated tools whose graph is resolved again")
     ] = None,
 ) -> None:
-    """Resolve every site's requirements and write `tools.lock`.
+    """Resolve every site's requirements and write `toolroom.lock`.
 
     An entry the lock already holds stands while it still satisfies
     every floor and resolves on every locked host; a tool no site
@@ -93,7 +94,7 @@ def tools_lock(
             fail("--check writes nothing, so it cannot be asked to upgrade or relock")
         current, why = lock_is_current(root)
         if not current:
-            fail(f"the lock is not current: {why}; run `{prog()} tools.lock`")
+            fail(f"the lock is not current: {why}; run `{prog()} toolroom.lock`")
         print(f"  {LOCK_FILE}: current")
         return
     before = current_lock(root)
@@ -125,7 +126,7 @@ def tools_add(
 ) -> None:
     """Declare a tool at the project site, lock it, and materialise it.
 
-    The requirement joins `[tools] requires` in the root `workshop.toml`
+    The requirement joins `[toolroom] requires` in the root `workshop.toml`
     unless it is already there, the lock is resolved with it, and the
     tool is supplied through the store on this machine with its receipt
     written. A spelling that is not a requirement refuses before
@@ -136,7 +137,7 @@ def tools_add(
 
     root = _root()
     if declare(root, requirement):
-        print(f"  workshop.toml: [tools] requires {requirement}")
+        print(f"  workshop.toml: [toolroom] requires {requirement}")
     else:
         print(f"  workshop.toml: {requirement} was declared already")
     lock = write_lock(root)
@@ -159,7 +160,7 @@ def tools_sync(
         bool, doc("supply from the machine's store and its sources only")
     ] = False,
 ) -> None:
-    """Match this machine to `tools.lock`, writing the lock first if it must.
+    """Match this machine to `toolroom.lock`, writing the lock first if it must.
 
     What `sync` does for the tools alone, in uv's shape. By default the
     lock is written when there is none or when the sites' requirements
@@ -187,9 +188,9 @@ def tools_sync(
 def sync_tools(
     root: Path, *, frozen: bool = False, locked: bool = False, offline: bool = False
 ) -> None:
-    """Match this machine to *root*'s `tools.lock`, writing the lock first if it must.
+    """Match this machine to *root*'s `toolroom.lock`, writing it first if it must.
 
-    The engine behind ``tools.sync``, taking the workspace root as an
+    The engine behind ``toolroom.sync``, taking the workspace root as an
     argument: a birth runs it for the newborn from inside its own
     task, and a task may not change the process directory, so the
     root travels as a value. The flags mean what the task's do.
@@ -203,7 +204,7 @@ def sync_tools(
         if not current:
             if locked:
                 fail(
-                    f"--locked: {why}. Run `{prog()} tools.lock` and"
+                    f"--locked: {why}. Run `{prog()} toolroom.lock` and"
                     " commit what it writes."
                 )
             print(f"  {LOCK_FILE}: {why}; writing it")

@@ -42,6 +42,27 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
     )
 
 
+def test_the_old_tools_table_refuses_naming_toolroom(tmp_path: Path) -> None:
+    # The table is toolroom's and carries its name; no reader takes
+    # [tools], and the refusal's nearest match names the table to use.
+    path = _workspace(tmp_path, '\n[tools]\nindex = "records"\n')
+    message = _refusal(lambda: _contract.load_contract(path))
+    assert "the top level has no key 'tools'" in message
+    assert "; did you mean 'toolroom'?" in message
+    # A package's requirements refuse the same way.
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n[tools]\nrequires = ["ruff"]\n'
+    )
+    assert "; did you mean 'toolroom'?" in _refusal(
+        lambda: _contract.load_contract(member)
+    )
+    # Under its owner's name, with no extension listed, the table loads.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = []\n\n[toolroom]\nindex = "records"\n'
+    )
+    assert _contract.load_contract(path)["toolroom"] == {"index": "records"}
+
+
 def test_read_contract_judges_the_contract_in_a_directory(tmp_path: Path) -> None:
     from livery.workshop import read_contract
 
@@ -97,8 +118,8 @@ def test_a_wrong_type_refuses_naming_the_allowed_values(tmp_path: Path) -> None:
 
 
 def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> None:
-    path = _workspace(tmp_path, '\n[tools.modes]\nruff = "link"\nmypy = "copy"\n')
-    assert "tools.modes.mypy is 'copy'; it takes one of link, path, none" in (
+    path = _workspace(tmp_path, '\n[toolroom.modes]\nruff = "link"\nmypy = "copy"\n')
+    assert "toolroom.modes.mypy is 'copy'; it takes one of link, path, none" in (
         _refusal(lambda: _contract.load_contract(path))
     )
 

@@ -15,7 +15,7 @@
   // looks there whatever interpreter the editor has selected.
   "venvPath": ".",
   "venv": ".venv",
-  // The tool stubs `fm tools.restub` writes; the default
+  // The tool stubs `fm toolroom.restub` writes; the default
   // stub path, named so every type checker visibly reads one directory.
   "stubPath": "typings",
   "pythonVersion": "3.11",

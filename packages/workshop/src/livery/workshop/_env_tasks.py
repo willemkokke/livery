@@ -867,7 +867,7 @@ def env_check() -> int:
             print(f"  stubs: {held} in {TYPINGS}/")
         else:
             problems.append(
-                f"stubs: MISSING; run `{footman.prog()} tools.restub` to write"
+                f"stubs: MISSING; run `{footman.prog()} toolroom.restub` to write"
                 f" them into {TYPINGS}/"
             )
     if not problems:

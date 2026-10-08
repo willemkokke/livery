@@ -1,11 +1,13 @@
 """Which keys a contract may hold, who owns each, and the judge that refuses the rest.
 
 Every key of a ``workshop.toml`` is declared by its owner: the base
-declares its own in ``contract.toml`` beside this module, and an
-extension declares the keys it reads under
-``[contract.<contract>.<table>]`` in its ``extension.toml``, read
-without importing the extension. The base's file declares the keys of
-``extension.toml`` itself as well, the ``extension`` contract.
+declares its own in ``contract.toml`` beside this module, the tool
+store declares the ``[toolroom]`` table in the fragment it ships
+([livery.toolroom.store.SCHEMA_FRAGMENT][]), and an extension declares
+the keys it reads under ``[contract.<contract>.<table>]`` in its
+``extension.toml``, read without importing the extension. The base's
+file declares the keys of ``extension.toml`` itself as well, the
+``extension`` contract.
 
 [livery.workshop._contract.load_contract][] judges every contract it
 reads against the JSON Schema the declarations compose
@@ -15,7 +17,7 @@ of the wrong type and a value outside its allowed set each refuse,
 naming the file, the key, what the table takes, and the nearest match.
 
 A path is dotted. ``*`` stands for any one name in a table whose
-keys are the user's (``tools.modes.*``); ``[]`` stands for the
+keys are the user's (``toolroom.modes.*``); ``[]`` stands for the
 entries of a list (``ci.schedule[].every``). A key the user names may
 hold a dot itself (``".vscode/settings.json"``): the judge walks a
 contract's keys one table at a time, so such a key is one name.
@@ -45,6 +47,14 @@ TYPES: tuple[str, ...] = get_args(Type)
 
 #: The base extension's name, always mounted.
 BASE = "livery.workshop"
+
+#: The owner of the ``[toolroom]`` table: the tool store, a dependency
+#: of the base whose schema fragment every workspace composes with the
+#: base's own keys, whatever its root lists.
+TOOLROOM = "livery.toolroom.store"
+
+#: The owners every workspace composes, whatever its root lists.
+ALWAYS: tuple[str, ...] = (BASE, TOOLROOM)
 
 
 @dataclass(frozen=True)
@@ -105,9 +115,33 @@ def base_keys() -> tuple[Declared, ...]:
 
 
 @functools.cache
+def toolroom_keys() -> tuple[Declared, ...]:
+    """The ``[toolroom]`` keys the tool store's fragment declares, in every contract.
+
+    Raises:
+        DeclarationError: when the fragment declares a key off the shape
+            an extension's ``[contract]`` table has.
+    """
+    import tomllib
+
+    from livery.toolroom.store import SCHEMA_FRAGMENT
+    from livery.workshop._declaration import contract_keys_of
+
+    return contract_keys_of(
+        tomllib.loads(SCHEMA_FRAGMENT.read_text("utf-8")),
+        SCHEMA_FRAGMENT,
+        contracts=("root", "package", "extension"),
+    )
+
+
+@functools.cache
 def extension_keys() -> tuple[Declared, ...]:
-    """The keys of ``extension.toml``, which the base alone declares."""
-    return tuple(item for item in base_keys() if item.contract == "extension")
+    """The keys of ``extension.toml``: the base's and the tool store's alone."""
+    return tuple(
+        item
+        for item in (*base_keys(), *toolroom_keys())
+        if item.contract == "extension"
+    )
 
 
 @dataclass(frozen=True)
@@ -120,7 +154,8 @@ class _Owned:
 def declarations() -> dict[tuple[ContractKind, str], _Owned]:
     """Every installed owner's declarations, by contract and path.
 
-    The base's come from this module and the readers it names; every
+    The base's come from this module and the readers it names, the
+    tool store's from its fragment; every
     extension's from the ``[contract]`` tables of its declaration file,
     installed or not listed alike, so a key of an unlisted extension is
     named as that extension's. Two owners declaring one path refuse,
@@ -142,6 +177,7 @@ def declarations() -> dict[tuple[ContractKind, str], _Owned]:
             found[key] = _Owned(item, owner)
 
     take(BASE, base_keys())
+    take(TOOLROOM, toolroom_keys())
     for entry in installed_entry_points("workshop.extensions"):
         take(entry.name, contract_keys(entry.value))
     return found

@@ -19,7 +19,7 @@ from livery.workshop import _points
 
 _FAILURES = (BaseException,)
 
-MOUNTED = ("extensions", "doctor", "tools.refresh")
+MOUNTED = ("extensions", "doctor", "toolroom.refresh")
 
 
 def _mounted(task: str) -> bool:

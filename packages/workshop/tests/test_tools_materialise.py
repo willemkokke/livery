@@ -71,7 +71,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "ws"
     (root / "packages" / "member").mkdir(parents=True)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nsources = ["mirror"]\n'
         'requires = ["tea", "ruff"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
@@ -134,18 +134,44 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # --- the refusals ---------------------------------------------------------------
 
 
+def test_an_old_lock_name_is_named_with_the_verb_that_writes_the_new_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lock file the store never reads is named, never read, moved or deleted."""
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "tools.lock").write_text("{}\n")
+    (root / "tools.graphs").mkdir()
+    named = (
+        "  tools: the store reads toolroom.lock, not tools.lock and tools.graphs/;"
+        " `fm toolroom.lock` writes it, and tools.lock and tools.graphs/ can be"
+        " deleted"
+    )
+    assert _sync.materialise_tools(root) == [
+        named,
+        "  tools: no toolroom.lock; `fm toolroom.lock` writes one",
+    ]
+    assert (root / "tools.lock").read_text() == "{}\n"
+    # Beside a lock the store reads, the leftover is still named first.
+    (root / "tools.graphs").rmdir()
+    _tools.write_lock(root)
+    assert _sync.materialise_tools(root)[0] == (
+        "  tools: the store reads toolroom.lock, not tools.lock;"
+        " `fm toolroom.lock` writes it, and tools.lock can be deleted"
+    )
+
+
 def test_materialising_without_a_lock_or_an_unlocked_tool_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    with pytest.raises(Failed, match=r"no tools\.lock: lock the tools first"):
+    with pytest.raises(Failed, match=r"no toolroom\.lock: lock the tools first"):
         _tools.materialise(root)
     assert _sync.materialise_tools(root) == [
-        "  tools: no tools.lock; `fm tools.lock` writes one"
+        "  tools: no toolroom.lock; `fm toolroom.lock` writes one"
     ]
     _tools.write_lock(root)
     with pytest.raises(
-        Failed, match=r"black is not in tools\.lock; the lock holds ruff, tea"
+        Failed, match=r"black is not in toolroom\.lock; the lock holds ruff, tea"
     ):
         _tools.materialise(root, ("black",))
 
@@ -155,22 +181,22 @@ def test_a_mode_outside_the_three_and_a_receipt_off_its_shape_refuse(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["tea"]\n'
         'modes = { tea = "float" }\n'
     )
     with pytest.raises(
-        Failed, match=r"tools.modes.tea is 'float'; it takes one of link, path, none"
+        Failed, match=r"toolroom.modes.tea is 'float'; it takes one of link, path, none"
     ):
         _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nmodes = 1\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nmodes = 1\n'
     )
-    with pytest.raises(Failed, match=r"tools.modes is an integer \(1\)"):
+    with pytest.raises(Failed, match=r"toolroom.modes is an integer \(1\)"):
         _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = "x"\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nsources = "x"\n'
     )
-    with pytest.raises(Failed, match=r"tools.sources is a string"):
+    with pytest.raises(Failed, match=r"toolroom.sources is a string"):
         _tools.sources(root)
     receipts = _tools.receipts_dir(root)
     receipts.mkdir(parents=True)
@@ -294,7 +320,7 @@ def test_a_tool_that_left_the_lock_takes_its_receipt_with_it(
     _tools.materialise(root)
     assert set(_tools.receipts(root)) == {"ruff", "tea"}
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["tea"]\n'
     )
     _tools.write_lock(root)
     _tools.materialise(root, ("tea",))
@@ -314,7 +340,10 @@ def test_the_frozen_sync_supplies_the_bundle_and_writes_the_stubs(
     """
     root = _workspace(tmp_path, monkeypatch)
     _tool_tasks.tools_sync(frozen=True)
-    assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
+    assert (
+        "tools: no toolroom.lock; `fm toolroom.lock` writes one"
+        in capsys.readouterr().out
+    )
     _tools.write_lock(root)
     _tool_tasks.tools_sync(frozen=True)
     out = capsys.readouterr().out
@@ -329,7 +358,8 @@ def test_an_npm_install_is_supplied_after_node_through_its_executable(
     """Node is the tool's locked dependency, materialised first, its path handed on."""
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+        'sources = ["mirror", "mirror2"]\n'
         'requires = ["tea", "ruff", "basedpyright"]\n'
     )
     # One archive serves the three hosts: node under bin with npm's
@@ -416,7 +446,8 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     """Bun is the tool's locked dependency, materialised first, its path handed on."""
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+        'sources = ["mirror", "mirror2"]\n'
         'requires = ["tea", "ruff", "cspell"]\n'
     )
     # Both spellings, since one archive serves the three hosts and the
@@ -523,7 +554,7 @@ def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nsources = ["mirror"]\n'
         'requires = ["tea", "ruff"]\nmodes = { tea = "link", ruff = "none" }\n'
     )
     _tools.write_lock(root)
@@ -558,13 +589,13 @@ def test_add_declares_locks_and_writes_a_receipt_with_no_network(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nsources = ["mirror"]\n'
     )
     _tool_tasks.tools_add("tea")
     out = capsys.readouterr().out
     assert "tea 1.0.0: installed at" in out and "receipt written" in out
     assert list(_tools.receipts(root)) == ["tea"]
-    lock = json.loads((root / "tools.lock").read_text())
+    lock = json.loads((root / "toolroom.lock").read_text())
     assert list(lock["tools"]) == ["tea"]
 
 
@@ -580,11 +611,11 @@ def test_a_tool_required_on_other_hosts_alone_is_no_requirement_here(
     root = _workspace(tmp_path, monkeypatch)
     elsewhere = "linux" if HERE.startswith("windows") else "windows"
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nsources = ["mirror"]\n'
         f'requires = ["tea", "ruff@{elsewhere}"]\n'
     )
     _tools.write_lock(root)
-    assert "ruff" in json.loads((root / "tools.lock").read_text())["tools"]
+    assert "ruff" in json.loads((root / "toolroom.lock").read_text())["tools"]
     _tools.materialise(root)
     assert set(_tools.receipts(root)) == {"tea"}
     assert _tools.drift(root) == {"tea": ""}
@@ -597,7 +628,8 @@ def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
     """`git_cliff` puts `git-cliff` on PATH: the lock name is no binary."""
     root = _workspace(tmp_path, monkeypatch)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+        'sources = ["mirror", "mirror2"]\n'
         'requires = ["tea", "ruff", "cliff_tool"]\n'
     )
     payload = _zip({"cliff-tool": b"#!/bin/sh\necho cliff\n"})
@@ -649,11 +681,11 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
     assert "tea: MISSING (no receipt" in out
-    assert "not locked; run `fm tools.lock`" in out
+    assert "not locked; run `fm toolroom.lock`" in out
     _tools.write_lock(root)
     # A lock expects stubs; without them the check names the remedy too.
     assert _env_tasks.env_check() == 1
-    assert "stubs: MISSING; run `fm tools.restub`" in capsys.readouterr().out
+    assert "stubs: MISSING; run `fm toolroom.restub`" in capsys.readouterr().out
     _tools.write_stubs(root)
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out

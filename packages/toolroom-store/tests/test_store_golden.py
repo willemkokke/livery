@@ -5,7 +5,7 @@ verb gained and one withdrawn across versions, an option added and one
 dropped, a platform that read a version and lacked an option, a nested
 verb, a choice, a negation and a default. Each version's stub is
 checked in beside the records, rendered exactly as a consumer renders
-the version it locks, and `fm tools.goldens` is the one way the goldens
+the version it locks, and `fm toolroom.goldens` is the one way the goldens
 move.
 """
 
@@ -55,10 +55,10 @@ def test_the_goldens_cover_what_the_renderer_must_keep_deliberate():
 @pytest.mark.parametrize(("name", "version"), _cases())
 def test_a_golden_record_renders_to_its_checked_in_stub(name: str, version: str):
     path = golden_path(name, version)
-    assert path.is_file(), f"{path} is missing; run `fm tools.goldens` and commit it"
+    assert path.is_file(), f"{path} is missing; run `fm toolroom.goldens` and commit it"
     rendered = Catalogue.of_records(GOLDENS / "records").stub(name, version)
     assert rendered == path.read_text(encoding="utf-8"), (
-        f"the renderer moved for {name} {version}: run `fm tools.goldens` and"
+        f"the renderer moved for {name} {version}: run `fm toolroom.goldens` and"
         " commit the goldens in the same change"
     )
 

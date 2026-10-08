@@ -69,7 +69,7 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
     def _locked(root: Path, **_flags: object) -> None:
         # A lock of the schema with nothing in it: the sync's renders read
         # it, and a file that is not a lock would refuse there.
-        (root / "tools.lock").write_text('{"schema": 1, "hosts": [], "tools": {}}\n')
+        (root / "toolroom.lock").write_text('{"schema": 1, "hosts": [], "tools": {}}\n')
 
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _locked)
 
@@ -386,8 +386,8 @@ def test_a_newborn_names_the_index_and_holds_a_lock(
     assert f'index = "{PUBLISHED_INDEX}"' in contract
     # The index is named before the lock is asked for, since the lock
     # resolves against it.
-    assert contract.index("[tools]") < contract.index("[ci]")
-    assert (tmp_path / "acme-tools" / "tools.lock").is_file()
+    assert contract.index("[toolroom]") < contract.index("[ci]")
+    assert (tmp_path / "acme-tools" / "toolroom.lock").is_file()
 
 
 def test_the_birth_finishes_with_the_runner_its_environment_holds(

@@ -5,14 +5,14 @@ The bridge never goes stale, because it transcribes nothing. A tool's
 move. These tasks close that gap by reading the installed tools into
 the records and by failing a check when a tool and its record disagree.
 A stub is a rendering of a record, written by the index build and
-materialised into a workspace by `fm tools.restub`; nothing here writes
+materialised into a workspace by `fm toolroom.restub`; nothing here writes
 one into a package.
 
-    fm tools.list                  what footman curates, and what's installed
-    fm tools.spec ruff             what one tool says about itself, right now
-    fm tools.read                  read the installed tools into their records
-    fm tools.audit                 which tools have moved past their record
-    fm tools.color                 how footman forces colour, per tool
+    fm toolroom.list                  what footman curates, and what's installed
+    fm toolroom.spec ruff             what one tool says about itself, right now
+    fm toolroom.read                  read the installed tools into their records
+    fm toolroom.audit                 which tools have moved past their record
+    fm toolroom.color                 how footman forces colour, per tool
 
 A reading is a snapshot, not a contract: `sync` takes one, `audit` says
 which tools have released a newer version since. Being behind is news
@@ -52,7 +52,7 @@ from livery.footman import Group, current, data_dir, doc, fail, project_root
 from livery.footman._describe import bold, cyan, wants_color
 from livery.toolroom.tools import version_tuple as _version_tuple
 
-tasks: Group = Group("tools", help="Keep the tool records honest")
+tasks: Group = Group("toolroom", help="Keep the tool records honest")
 
 # The records live at the repository root, `records/<tool>/`, the
 # authoring site the store reads. The bench writes them from a checkout
@@ -121,7 +121,7 @@ def _resolve_prefix(prefix: str | Path) -> Path | None:
 @contextmanager
 def _on_path(prefix: str | Path) -> Generator[None]:
     """Read binaries from *prefix*`/bin` for the duration — a
-    `fm tools.provision` directory, so a task reads the provisioned set
+    `fm toolroom.provision` directory, so a task reads the provisioned set
     instead of whatever this machine happens to have.
 
     Empty *prefix* falls back to `default_prefix()` when that directory has
@@ -525,7 +525,7 @@ def spec(
     """Print what a tool says about itself, as footman reads it."""
     driver = _drivers.find(name)
     if driver is None:
-        raise SystemExit(f"no driver for {name!r}; try `{_prog()} tools.list`")
+        raise SystemExit(f"no driver for {name!r}; try `{_prog()} toolroom.list`")
     if not _drivers.installed(driver):
         raise SystemExit(f"{driver.name} is not installed")
     on = wants_color(sys.stdout)
@@ -620,7 +620,7 @@ def read(
     """Read the tools installed on this machine into their records.
 
     A reading is a *snapshot*: what one tool accepted at one version, on
-    one machine. Point `--prefix` at a `fm tools.provision` directory to
+    one machine. Point `--prefix` at a `fm toolroom.provision` directory to
     take that snapshot from the isolated latest set instead of whatever
     this machine has — a dev environment's pytest carries its plugins'
     flags too, and those do not belong in a record whose driver never
@@ -755,7 +755,7 @@ def _audit(
         f"{len(stale)} tool(s) have released a newer version than the stub "
         f"snapshot: {', '.join(stale)}\n"
         f"nothing is broken — the bridge speaks flags the stub hasn't heard "
-        f"of. Take a fresh snapshot with `fm tools.read` when you want one."
+        f"of. Take a fresh snapshot with `fm toolroom.read` when you want one."
     )
     if strict:
         raise SystemExit(2)
@@ -780,7 +780,7 @@ def color(
 
     Writes toolroom's `_colordata.py`, which the bridge reads for its forcing
     table and the docs read for the support table — and only ever from a
-    `--prefix`, a `fm tools.provision` directory. A verdict is a claim about a
+    `--prefix`, a `fm toolroom.provision` directory. A verdict is a claim about a
     *release*, so it has to come from a release someone fetched on purpose:
     without a prefix this machine's own binaries answer, at whatever versions
     it happens to carry and missing whatever it never installed. That reads
@@ -1130,7 +1130,7 @@ def colour_page() -> str:
 
     Reads `livery.toolroom.tools._colordata`, not a live probe, so a docs build needs
     nothing on PATH and the page says exactly what ships — the same rule
-    the per-tool pages follow. `fm tools.color` refreshes the data; the
+    the per-tool pages follow. `fm toolroom.color` refreshes the data; the
     page follows on the next build.
     """
     from livery.toolroom.tools import _colordata
@@ -1173,7 +1173,7 @@ def prime(
     itself, is a **hole**: named in the report, filled by a later run, and
     never the end of the tool's walk.
 
-    `--prefix` points at a `fm tools.provision` directory, and the tiers are
+    `--prefix` points at a `fm toolroom.provision` directory, and the tiers are
     driven from *its* binaries. That is not the same nicety it is on `sync`:
     uv carries CPython's download index inside itself, so a stale uv reports
     a stale newest python and the walk silently starts too low.
@@ -1240,8 +1240,8 @@ class Gathered:
     """What one platform saw, as data — the document a matrix leg hands on.
 
     Deliberately portable rather than a CI internal: written by
-    `fm tools.gather --out=…`, copied off a Windows box by hand if that is
-    how the week goes, and folded by `fm tools.assemble` wherever the store
+    `fm toolroom.gather --out=…`, copied off a Windows box by hand if that is
+    how the week goes, and folded by `fm toolroom.assemble` wherever the store
     lives. Self-describing, because the machine that reads it is not the
     machine that wrote it.
     """
@@ -1708,7 +1708,7 @@ def _record_artifacts(
 
     A version whose artifacts cannot be recorded is reported and left
     without them: the reading stands, and the version's hosts arrive
-    with a later run or `tools.artifacts`, the way a hole is filled.
+    with a later run or `toolroom.artifacts`, the way a hole is filled.
     """
     lines: list[str] = []
     for version in fresh:
@@ -1775,7 +1775,7 @@ def _fold_into(
 class Refreshed:
     """What a refresh found — the release decision, as data.
 
-    Returned rather than printed, so `fm --json tools.refresh` hands a
+    Returned rather than printed, so `fm --json toolroom.refresh` hands a
     scheduled job the same answer a person reads.
     """
 
@@ -1805,7 +1805,7 @@ class Refreshed:
     """Whether any tool's surface moved — decision 4, in one line. A field
     rather than a property, and recomputed from `events` on construction:
     `dataclasses.asdict` serialises fields only, and this is the one value
-    the scheduled job reads out of `fm --json tools.refresh`."""
+    the scheduled job reads out of `fm --json toolroom.refresh`."""
 
     additions_only: bool = False
     """Whether every surface change across every announced event only ADDED
@@ -2729,7 +2729,7 @@ def index_build(
 
 # The golden records and the stubs they render to, checked in beside the
 # store's tests, since the store renders. A render change fails the gate
-# until `fm tools.goldens` moves them in the same change.
+# until `fm toolroom.goldens` moves them in the same change.
 _GOLDENS = Path(__file__).resolve().parents[5] / "toolroom-store" / "tests" / "goldens"
 
 
@@ -2900,10 +2900,10 @@ your PATH already works. These pages document the **stubs**: what each
 curated tool accepted at the versions its record was read from, with that
 tool's own help text per flag.
 
-Nothing here is a wrapper. The records are read by `fm tools.read`, which
-asks the installed binaries what they take, and `fm tools.audit` reports
+Nothing here is a wrapper. The records are read by `fm toolroom.read`, which
+asks the installed binaries what they take, and `fm toolroom.audit` reports
 which tools have released a newer version since; a workspace materialises
-the stubs the records render to with `fm tools.restub`. A flag missing
+the stubs the records render to with `fm toolroom.restub`. A flag missing
 from a stub still runs — every verb ends in `**flags: Any`, so a stub can
 suggest but never forbid.
 
@@ -3063,7 +3063,7 @@ def write_tools_nav(generated: Path, keys: list[str]) -> Path:
     generated.mkdir(parents=True, exist_ok=True)
     path = generated / "nav.tools.toml"
     path.write_text(
-        "# The 'tools' nav block, emitted by tools.pages; the authored"
+        "# The 'tools' nav block, emitted by toolroom.pages; the authored"
         f" nav.toml places it.\nnav = [\n{entries}]\n",
         encoding="utf-8",
     )

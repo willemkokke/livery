@@ -136,7 +136,7 @@ def test_a_root_file_no_package_reads_affects_no_package(path: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "path", ["pyproject.toml", "tasks.py", "workshop.toml", "uv.lock", "tools.lock"]
+    "path", ["pyproject.toml", "tasks.py", "workshop.toml", "uv.lock", "toolroom.lock"]
 )
 def test_a_root_file_every_gate_reads_still_reaches_them(path: str) -> None:
     assert not reaches_no_package(path)

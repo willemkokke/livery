@@ -90,7 +90,7 @@ def test_a_lock_that_is_not_current_is_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "uv.lock").write_text("version = 1\n")
-    (tmp_path / "tools.lock").write_text("{}\n")
+    (tmp_path / "toolroom.lock").write_text("{}\n")
     refused = SimpleNamespace(
         code=1,
         stdout="",
@@ -109,7 +109,7 @@ def test_a_lock_that_is_not_current_is_named(
     )
     assert stale_locks(tmp_path) == [
         "uv.lock is not current: the declarations moved past it",
-        "tools.lock is not current (pytest's entry would move)",
+        "toolroom.lock is not current (pytest's entry would move)",
     ]
 
 

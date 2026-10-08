@@ -162,7 +162,7 @@ def _workspace(
     root = tmp_path / "ws"
     (root / "packages" / "member").mkdir(parents=True)
     (root / "workshop.toml").write_text(
-        f'[workspace]\n{workspace}\n[tools]\nindex = "records"\n{tools}'
+        f'[workspace]\n{workspace}\n[toolroom]\nindex = "records"\n{tools}'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
         'kind = "python"\nname = "acme-member"\n'
@@ -185,7 +185,8 @@ def test_two_floors_that_cannot_both_be_met_refuse_naming_each_and_its_site(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["ruff>=1.1"]\n')
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["ruff>=9.0"]\n'
+        'kind = "python"\nname = "acme-member"\n\n'
+        '[toolroom]\nrequires = ["ruff>=9.0"]\n'
     )
     with pytest.raises(Failed) as refused:
         _tools.write_lock(root)
@@ -194,7 +195,7 @@ def test_two_floors_that_cannot_both_be_met_refuse_naming_each_and_its_site(
         in str(refused.value)
     )
     assert "the newest version listed is 1.1.0" in str(refused.value)
-    assert not (root / "tools.lock").exists()
+    assert not (root / "toolroom.lock").exists()
 
 
 def test_a_requirement_with_no_record_refuses_naming_the_site(
@@ -243,7 +244,7 @@ def test_a_version_on_fewer_hosts_than_the_lock_covers_refuses_naming_the_host(
     # Locking for the two hosts that have it resolves.
     (root / "workshop.toml").write_text(
         '[workspace]\nhosts = ["linux-x64", "macos-arm"]\n\n'
-        '[tools]\nindex = "records"\n'
+        '[toolroom]\nindex = "records"\n'
         'requires = ["tea>=1.1"]\n'
     )
     assert _tools.write_lock(root).tools["tea"].version == "1.1.0"
@@ -254,34 +255,38 @@ def test_a_contract_off_the_shape_refuses_naming_the_key(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = "ruff"\n')
     with pytest.raises(
-        Failed, match=r"tools.requires is a string \('ruff'\); it takes a list of"
+        Failed, match=r"toolroom.requires is a string \('ruff'\); it takes a list of"
     ):
         _tools.requirements(root)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["ruff<1"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["ruff<1"]\n'
     )
     with pytest.raises(Failed, match=r"workshop.toml: 'ruff<1' is not a requirement"):
         _tools.requirements(root)
     (root / "workshop.toml").write_text(
-        '[workspace]\nhosts = "linux-x64"\n\n[tools]\nindex = "records"\n'
+        '[workspace]\nhosts = "linux-x64"\n\n[toolroom]\nindex = "records"\n'
     )
     with pytest.raises(Failed, match=r"workspace.hosts is a string"):
         _tools.supported_hosts(root)
     # The old home of the key is no key at all.
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nhosts = ["linux-x64"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nhosts = ["linux-x64"]\n'
     )
-    with pytest.raises(Failed, match=r"\[tools\] has no key 'hosts'"):
+    with pytest.raises(Failed, match=r"\[toolroom\] has no key 'hosts'"):
         _tools.supported_hosts(root)
     (root / "workshop.toml").write_text("[workspace]\n")
-    with pytest.raises(Failed, match=r"\[tools\] index names no source"):
+    with pytest.raises(Failed, match=r"\[toolroom\] index names no source"):
         _tools.index_source(root)
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "elsewhere"\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "elsewhere"\n'
+    )
     with pytest.raises(Failed, match=r"no pointer can be read"):
         _tools.catalogue(root)
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
-    (root / "tools.lock").write_text("{not a lock")
-    with pytest.raises(Failed, match=r"tools\.lock: not a lock"):
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+    )
+    (root / "toolroom.lock").write_text("{not a lock")
+    with pytest.raises(Failed, match=r"toolroom\.lock: not a lock"):
         _tools.current_lock(root)
     with pytest.raises(Failed, match=r"is not a requirement"):
         _tools.declare(root, "ruff<1")
@@ -313,7 +318,7 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         {r.name for r in declared}, "1.1.0"
     )
     assert lock.hosts == _tools.DEFAULT_HOSTS
-    assert Lock.load(root / "tools.lock") == lock
+    assert Lock.load(root / "toolroom.lock") == lock
     # The profile is the sites' names, and nothing in code lists them.
     from livery.workshop._env_tasks import tool_profile
 
@@ -331,7 +336,8 @@ def test_the_three_sites_union_and_each_names_itself(
         tmp_path, monkeypatch, tools='requires = ["git-cliff", "ruff>=1.1"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["cspell>=1.0"]\n'
+        'kind = "python"\nname = "acme-member"\n\n'
+        '[toolroom]\nrequires = ["cspell>=1.0"]\n'
     )
     _records(
         root,
@@ -402,14 +408,14 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
-    assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
+    assert "workshop.toml: [toolroom] requires git-cliff>=2.0" in out
     # Two of the python kind, the base kind's git_cliff, and this one.
-    assert "git-cliff 2.1.0" in out and "tools.lock: 4 tool(s)" in out
+    assert "git-cliff 2.1.0" in out and "toolroom.lock: 4 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
     assert 'requires = ["git-cliff>=2.0"]' in contract
-    lock = json.loads((root / "tools.lock").read_text(encoding="utf-8"))
+    lock = json.loads((root / "toolroom.lock").read_text(encoding="utf-8"))
     assert lock["tools"]["git-cliff"] == {"version": "2.1.0", "hosts": {}}
 
     # Declared again: the contract stands, and says so.
@@ -428,19 +434,22 @@ def test_declare_edits_every_shape_of_the_requires_list(tmp_path: Path) -> None:
     path = tmp_path / "workshop.toml"
     path.write_text("[workspace]\n")
     assert _tools.declare(tmp_path, "ruff")
-    assert path.read_text() == '[workspace]\n\n[tools]\nrequires = ["ruff"]\n'
-    path.write_text('[tools]\nindex = "records"\n\n[forge]\nkind = "github"\n')
+    assert path.read_text() == '[workspace]\n\n[toolroom]\nrequires = ["ruff"]\n'
+    path.write_text('[toolroom]\nindex = "records"\n\n[forge]\nkind = "github"\n')
     assert _tools.declare(tmp_path, "ruff")
     expected = (
-        '[tools]\nrequires = ["ruff"]\nindex = "records"\n\n[forge]\nkind = "github"\n'
+        '[toolroom]\nrequires = ["ruff"]\nindex = "records"\n\n'
+        '[forge]\nkind = "github"\n'
     )
     assert path.read_text() == expected
-    path.write_text('[tools]\nrequires = [\n    "ruff",\n]\n')
+    path.write_text('[toolroom]\nrequires = [\n    "ruff",\n]\n')
     assert _tools.declare(tmp_path, "ty>=1")
-    assert path.read_text() == '[tools]\nrequires = [\n    "ruff",\n    "ty>=1",\n]\n'
-    path.write_text("[tools]\nrequires = []\n")
+    assert (
+        path.read_text() == '[toolroom]\nrequires = [\n    "ruff",\n    "ty>=1",\n]\n'
+    )
+    path.write_text("[toolroom]\nrequires = []\n")
     assert _tools.declare(tmp_path, "ruff")
-    assert path.read_text() == '[tools]\nrequires = ["ruff"]\n'
+    assert path.read_text() == '[toolroom]\nrequires = ["ruff"]\n'
     assert not _tools.declare(tmp_path, "ruff")
 
 
@@ -449,19 +458,19 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     _tool_tasks.tools_lock()
-    before = Lock.load(root / "tools.lock")
+    before = Lock.load(root / "toolroom.lock")
     assert before.tools["pytest"].version == "1.1.0"
     # A newer pytest arrives; the lock stands until asked.
     _records(
         root, Record("pytest", kind="pypi", deltas=_read("1.0.0", "1.1.0", "1.2.0"))
     )
     _tool_tasks.tools_lock()
-    assert Lock.load(root / "tools.lock").tools["pytest"].version == "1.1.0"
+    assert Lock.load(root / "toolroom.lock").tools["pytest"].version == "1.1.0"
     capsys.readouterr()
     _tool_tasks.tools_lock(upgrade_tool=["pytest"])
     out = capsys.readouterr().out
     assert "pytest 1.2.0  moved" in out
-    after = Lock.load(root / "tools.lock")
+    after = Lock.load(root / "toolroom.lock")
     assert after.tools["pytest"].version == "1.2.0"
     assert {n: e for n, e in after.tools.items() if n != "pytest"} == {
         n: e for n, e in before.tools.items() if n != "pytest"
@@ -491,7 +500,9 @@ def test_a_tool_no_site_requires_any_more_leaves_the_lock(
     )
     locked = _tools.write_lock(root).tools
     assert "cspell" in locked and "bun" in locked
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+    )
     locked = _tools.write_lock(root).tools
     # bun leaves with the tool it was locked for.
     assert "cspell" not in locked and "bun" not in locked
@@ -537,7 +548,9 @@ def test_a_graph_is_written_once_and_kept_until_its_version_moves(
     assert _tools.write_lock(root).tools["cspell"].graph == locked.graph
     assert [c for c in calls if c[0] == "cspell"] == mine * 2
     # The tool leaves the lock, and its graph file goes with it.
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+    )
     assert "cspell" not in _tools.write_lock(root).tools
     assert not (_tools.graphs_dir(root) / "cspell.json").exists()
 
@@ -646,7 +659,7 @@ def test_each_runtime_is_locked_once_for_the_tools_that_run_on_it(
     # Both runtimes, each once: node serves two tools, bun one.
     assert {"cspell", "basedpyright", "eslint", "bun", "node"} <= set(locked)
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["eslint"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["eslint"]\n'
     )
     locked = _tools.write_lock(root).tools
     # bun leaves with the tool it was locked for; node stays, since
@@ -732,7 +745,7 @@ def test_a_scope_no_locked_host_matches_locks_nothing_and_says_so(
     # and the lock says which requirement went unmet.
     (root / "workshop.toml").write_text(
         '[workspace]\nhosts = ["linux-x64", "macos-arm"]\n\n'
-        '[tools]\nindex = "records"\n'
+        '[toolroom]\nindex = "records"\n'
         'requires = ["tea@windows"]\n'
     )
     lock = _tools.write_lock(root)
@@ -757,7 +770,7 @@ def test_a_scoped_requirement_locks_its_tool_on_the_named_hosts_alone(
     assert _tools.lock_is_current(root) == (True, "")
     # Widening the scope moves the lock: the check says so.
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea"]\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["tea"]\n'
     )
     assert _tools.lock_is_current(root) == (False, "the lock would move: tea")
 
@@ -834,7 +847,7 @@ def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
     )
     assert [str(r) for r in everywhere] == ["dotnet_coverage@windows", "dotnet"]
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "records"\n'
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
         'requires = ["dotnet_coverage@windows", "dotnet"]\n'
     )
     assert _tools.write_lock(root).tools["dotnet"].on == ()
@@ -945,7 +958,7 @@ def test_the_supported_hosts_read_the_scope_tokens_and_refuse_a_bad_list(
 
     def declare(hosts: str) -> None:
         (root / "workshop.toml").write_text(
-            f'[workspace]\nhosts = {hosts}\n\n[tools]\nindex = "records"\n'
+            f'[workspace]\nhosts = {hosts}\n\n[toolroom]\nindex = "records"\n'
         )
 
     # The refusals first: a token that is no host, an empty list, and
@@ -960,7 +973,9 @@ def test_the_supported_hosts_read_the_scope_tokens_and_refuse_a_bad_list(
     with pytest.raises(Failed, match=r"leaves no host"):
         _tools.supported_hosts(root)
     # Undeclared, every host key, in the store's order.
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+    )
     assert _tools.supported_hosts(root) == HOSTS
     # A platform reaches both its hosts; a removal alone starts from all.
     declare('["macos", "linux-x64"]')
@@ -995,7 +1010,7 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
         data = Tree.of(entries).encode()
         pointer[record.name] = {"tree": str(store.put(data)), "record": "x"}
     (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": pointer}))
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "index"\n')
+    (root / "workshop.toml").write_text('[workspace]\n\n[toolroom]\nindex = "index"\n')
     monkeypatch.setattr("livery.footman._context.data_dir", lambda: tmp_path / "data")
     assert _tools.write_lock(root) == _tools.write_lock(root)
     assert _tools.write_lock(root).tools["pytest"].version == "1.1.0"
@@ -1021,27 +1036,29 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     for name in ("git_cliff", "pytest"):
         assert name in told
     # The declaration, then the two verbs, in the order a reader runs them.
-    assert "[tools]" in told and "index =" in told
-    assert told.index("tools.lock") < told.index("sync")
+    assert "[toolroom]" in told and "index =" in told
+    assert told.index("toolroom.lock") < told.index("sync")
     # A contract that already names a catalogue is told only what is left.
     (root / "workshop.toml").write_text(
-        '[workspace]\n\n[tools]\nindex = "https://example.test/index"\n'
+        '[workspace]\n\n[toolroom]\nindex = "https://example.test/index"\n'
     )
     named = _tools.store_cannot_supply(root)
     assert "index =" not in named
-    assert "tools.lock" in named
+    assert "toolroom.lock" in named
     # A lock answers the question, so nothing is said.
     _records(root, *_python_tools("1.0.0"))
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[toolroom]\nindex = "records"\n'
+    )
     _tool_tasks.tools_lock()
     assert _tools.current_lock(root) is not None
     assert _tools.store_cannot_supply(root) == ""
     # And a workspace that requires nothing at all has nothing to say.
     monkeypatch.setattr(_tools, "tool_names", lambda _root: ())
-    (root / "tools.lock").unlink()
+    (root / "toolroom.lock").unlink()
     assert _tools.store_cannot_supply(root) == ""
 
 
@@ -1141,7 +1158,7 @@ def test_the_sync_modes_refuse_before_anything_is_installed(
     with pytest.raises(Failed, match="two answers to one question"):
         _tool_tasks.tools_sync(frozen=True, locked=True)
     # Nothing is locked yet, so --locked refuses and names what is missing.
-    with pytest.raises(Failed, match=re.escape("there is no tools.lock")):
+    with pytest.raises(Failed, match=re.escape("there is no toolroom.lock")):
         _tool_tasks.tools_sync(locked=True)
     assert installs == []  # neither refusal reached the store
     # Frozen installs what the lock says and never resolves, so with no
@@ -1163,9 +1180,9 @@ def test_the_default_sync_writes_the_lock_it_needs_then_installs(
     assert "writing it" in capsys.readouterr().out
     assert installs == [False]
     # A second run finds the lock current, writes nothing, installs again.
-    held = (root / "tools.lock").read_bytes()
+    held = (root / "toolroom.lock").read_bytes()
     _tool_tasks.tools_sync()
-    assert (root / "tools.lock").read_bytes() == held
+    assert (root / "toolroom.lock").read_bytes() == held
     assert "writing it" not in capsys.readouterr().out
     assert installs == [False, False]
     # --locked passes now, and --offline reaches the store's own copy.
@@ -1179,7 +1196,7 @@ def test_the_lock_check_answers_without_writing(
     """`--check` is uv's: the answer, and nothing written whichever way it goes."""
     root = _workspace(tmp_path, monkeypatch)
     # The refusals first: no lock at all, and a contradiction.
-    with pytest.raises(Failed, match=re.escape("there is no tools.lock")):
+    with pytest.raises(Failed, match=re.escape("there is no toolroom.lock")):
         _tool_tasks.tools_lock(check=True)
     with pytest.raises(Failed, match="cannot be asked to upgrade"):
         _tool_tasks.tools_lock(check=True, upgrade=True)
@@ -1191,7 +1208,7 @@ def test_the_lock_check_answers_without_writing(
     # A delegated entry's graph is written when its version enters the
     # lock and kept after, and a fresh resolution carries none: that is
     # no move, so the check stays current and writes nothing.
-    lock_file = root / "tools.lock"
+    lock_file = root / "toolroom.lock"
     data = json.loads(lock_file.read_text())
     delegated = next(
         name for name, entry in data["tools"].items() if not entry["hosts"]
@@ -1212,18 +1229,18 @@ def test_the_lock_check_answers_without_writing(
     # A tool the sites require and the lock does not hold: the check names
     # what would move and writes nothing, so the file stands until
     # someone locks deliberately.
-    held = (root / "tools.lock").read_bytes()
+    held = (root / "toolroom.lock").read_bytes()
     _records(root, Record("tea", kind="pypi", deltas=_read("1.0.0")))
     _tools.declare(root, "tea")
     with pytest.raises(Failed, match="the lock would move: tea"):
         _tool_tasks.tools_lock(check=True)
-    assert (root / "tools.lock").read_bytes() == held
+    assert (root / "toolroom.lock").read_bytes() == held
     # A requirement the catalogue cannot satisfy at all is the other
     # reason, and it is reported as the resolver put it.
     _tools.declare(root, "coffee")
     with pytest.raises(Failed, match="no record of coffee"):
         _tool_tasks.tools_lock(check=True)
-    assert (root / "tools.lock").read_bytes() == held
+    assert (root / "toolroom.lock").read_bytes() == held
 
 
 # --- the host allowance --------------------------------------------------------
@@ -1231,7 +1248,7 @@ def test_the_lock_check_answers_without_writing(
 
 def _contract(root: Path, tools: str) -> None:
     (root / "workshop.toml").write_text(
-        f'[workspace]\n\n[tools]\nindex = "records"\n{tools}'
+        f'[workspace]\n\n[toolroom]\nindex = "records"\n{tools}'
     )
 
 
@@ -1259,7 +1276,7 @@ def test_the_allowance_refuses_a_verdict_tool_the_pinned_two_and_an_unrequired_n
     ):
         _tools.write_lock(root)
     _contract(root, 'host-allowed = "tea"\n')
-    with pytest.raises(Failed, match=r"tools.host-allowed is a string"):
+    with pytest.raises(Failed, match=r"toolroom.host-allowed is a string"):
         _tools.write_lock(root)
 
 
@@ -1371,7 +1388,9 @@ def test_the_allowance_rides_the_lock_and_moves_it_when_withdrawn(
     root = _allowing_tea(tmp_path, monkeypatch)
     lock = _tools.current_lock(root)
     assert lock is not None and lock.tools["tea"].allow_host
-    assert json.loads((root / "tools.lock").read_text())["tools"]["tea"]["allow-host"]
+    assert json.loads((root / "toolroom.lock").read_text())["tools"]["tea"][
+        "allow-host"
+    ]
     assert _tools.lock_is_current(root) == (True, "")
     _contract(root, 'requires = ["tea"]\n')
     assert _tools.lock_is_current(root) == (False, "the lock would move: tea")

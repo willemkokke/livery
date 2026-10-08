@@ -26,7 +26,7 @@ floor = "0.2.0"
 [docs]
 # The index of the tool records, built into docs/_generated/index and
 # served by the site's deploy as static files.
-generators = ["tools.index.build"]
+generators = ["toolroom.index.build"]
 
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
@@ -39,7 +39,7 @@ coverage-floor = 85
 # runner per host key; the gate keeps its three.
 [[ci.point]]
 name = "tool-hosts"
-task = "tools.verify-host"
+task = "toolroom.verify-host"
 every = "2w"
 runners = [
     "ubuntu-latest",

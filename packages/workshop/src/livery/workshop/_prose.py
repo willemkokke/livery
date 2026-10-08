@@ -643,12 +643,12 @@ def render_tools(root: Path, audience: str | None) -> str:
     lines = ["# The locked tools", ""]
     if audience == HUMAN:
         lines.append(
-            f"`tools.lock` pins these for {hosts}; `{prog} tools.sync` installs"
+            f"`toolroom.lock` pins these for {hosts}; `{prog} toolroom.sync` installs"
             f" them into the tool store, and `{prog} sync` runs it."
         )
     else:
         lines.append(
-            f"The tool store holds these versions, pinned by `tools.lock` for"
+            f"The tool store holds these versions, pinned by `toolroom.lock` for"
             f" {hosts}; `{prog} sync` installs them, never a hand install:"
         )
     lines.append("")

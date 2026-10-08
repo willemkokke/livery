@@ -86,7 +86,8 @@ def _drive_locally(root: Path) -> None:
     pyproject.write_text(text.replace(_END_TABLES, _LOCAL_SOURCES + _END_TABLES, 1))
     contract = root / "workshop.toml"
     contract.write_text(
-        contract.read_text() + f'\n[tools]\nindex = "{(ROOT / "records").as_posix()}"\n'
+        contract.read_text()
+        + f'\n[toolroom]\nindex = "{(ROOT / "records").as_posix()}"\n'
     )
 
 

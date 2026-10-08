@@ -11,7 +11,7 @@ include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% 
 # Every platform at once (ty checks the union), {{ python_floor }} floor.
 python-platform = "all"
 python-version = "{{ python_floor }}"
-# The tool stubs `{{ runner_prog }} tools.restub` writes.
+# The tool stubs `{{ runner_prog }} toolroom.restub` writes.
 extra-paths = ["typings"]
 
 # The repository's own tables.

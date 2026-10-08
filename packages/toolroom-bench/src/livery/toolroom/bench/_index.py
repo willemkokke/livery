@@ -54,7 +54,7 @@ POINTER = "pointer.json"
 SCHEMA = 1
 """The pointer document's shape. Bumped when a reader must know."""
 
-BY = Subject("call", "tools.index.build")
+BY = Subject("call", "toolroom.index.build")
 """Who moves the index refs: the build, named by its verb."""
 
 

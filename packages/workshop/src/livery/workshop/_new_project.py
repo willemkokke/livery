@@ -44,7 +44,7 @@ PUBLISHED_INDEX = "https://docs.willem.net/livery/tools/"
 
 
 def _sync_tools(root: Path) -> None:
-    """Write the newborn's first `tools.lock` and install what it names.
+    """Write the newborn's first `toolroom.lock` and install what it names.
 
     Without this a newborn's own gate reaches for checkers the store
     never installed: the lock says what to install and nothing writes
@@ -335,7 +335,7 @@ def new_project(
         lines.append(f'url = "{url}"')
     lines += [
         "",
-        "[tools]",
+        "[toolroom]",
         f'index = "{PUBLISHED_INDEX}"',
         "",
         "[ci]",

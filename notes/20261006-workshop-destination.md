@@ -8,7 +8,8 @@ reach scan, the declaration file, the docs extension's registrations,
 the schema, the verification and the public names are built, and the
 release wave that ships the slice's break runs on 2026-10-08 after
 15:00 UTC, once PyPI accepts new projects again (see "First
-publishes, four a day"). The extensions plan
+publishes, four a day"). 10g is built (issue #1301) and rides that
+wave. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1511,6 +1512,23 @@ the stack, which this design neither needs nor rules out).
   days in dependency order, python first in 11b. The schedule is under
   "First publishes, four a day". Both rehearsals of the 10b wave
   (`--local`, on `3a3e4c5d` and on `413b9940`) passed every leg.
+- 2026-10-08, 10g (#1301): `[tools]` is `[toolroom]` in the root and
+  package contracts (`extension.toml` already declared `[toolroom]`),
+  `tools.lock` is `toolroom.lock`, and the workshop's and the bench's
+  `fm tools.*` verbs are `fm toolroom.*`. The store declares the table
+  in its own fragment, `livery.toolroom.store.SCHEMA_FRAGMENT`, and
+  reads it without the workshop, `read_table(directory)`, from
+  `workshop.toml` and else `toolroom.toml`. Decided here:
+  `tools.graphs/` becomes `toolroom.graphs/` with the lock, since a
+  lock and its graphs name one owner; the fragment composes under its
+  own owner, `livery.toolroom.store`, which every workspace composes
+  with the base whatever its root lists (`ALWAYS`), and `fm explain`
+  names it; `[tools]` refuses through the judge's nearest match, "did
+  you mean 'toolroom'?", with no code of its own; `fm sync` names a
+  `tools.lock` or `tools.graphs/` it finds, with `fm toolroom.lock`,
+  and leaves it. The checker configs' comments and toolroom's stub
+  comments name `fm toolroom.restub`, so basedpyright, pyrefly, ty and
+  toolroom release with the store, the bench and the workshop.
 
 ## Open
 

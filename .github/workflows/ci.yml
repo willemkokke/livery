@@ -40,7 +40,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         env:
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         run: bash setup.sh github
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         run: bash setup.sh github
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         run: bash setup.sh github
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         run: bash setup.sh github
@@ -183,7 +183,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/footman/toolroom
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('toolroom.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-
       - name: Enter the workspace
         run: bash setup.sh github

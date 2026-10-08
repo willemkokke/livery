@@ -1,4 +1,4 @@
-"""The provisioning engine and task — `fm tools.provision`.
+"""The provisioning engine and task — `fm toolroom.provision`.
 
 The tiers are driven with the real driver metadata but mocked at their one
 outward edge (subprocess, HTTP), so the grouping, dedup, asset matching and

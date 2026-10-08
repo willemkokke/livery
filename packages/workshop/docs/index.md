@@ -423,7 +423,7 @@ platforms (every locked host of one) or host keys, each excluded with a
 leading `!`, so `tea@!windows-arm` is every locked host but one. `?`
 marks a tool optional: the lock takes it where the catalogue can serve
 it and never refuses it, its entry says `optional`, and what it left
-out is printed when the lock is written; `fm tools.sync` names an
+out is printed when the lock is written; `fm toolroom.sync` names an
 optional tool its host lacks. The sites: a package kind, in its record,
 for what operates it, uv for the python kind; the checks that judge a
 kind, each naming its tools, which is how ruff, pytest and the checkers
@@ -433,9 +433,9 @@ through its direct dependencies, as a tuple in a data module its
 `workshop.tools` entry point names under the plugin's own name, loaded
 without the plugin's tasks, which is how forge's dev verbs bring
 `docker?`; a package instance, in its
-`workshop.toml` under `[tools] requires`, for what its kind cannot
-know; and the project, in the root contract's `[tools] requires`, for
-what belongs to the repository. The root contract's `[tools] index` names where the
+`workshop.toml` under `[toolroom] requires`, for what its kind cannot
+know; and the project, in the root contract's `[toolroom] requires`, for
+what belongs to the repository. The root contract's `[toolroom] index` names where the
 catalogue is read from, the published index's URL or a directory
 holding the index or the records that build one. The repository that
 authors the records reads them directly.
@@ -445,7 +445,7 @@ scope tokens a requirement takes after `@`: a platform (`macos`), a
 host key (`linux-arm`), and either with `!` to remove it. Without the
 key every host key is supported. The lock covers every supported host,
 so a requirement without a scope must resolve on all of them. `fm
-sync` on another host says so once; in CI, and from `fm tools.add`, it
+sync` on another host says so once; in CI, and from `fm toolroom.add`, it
 refuses, naming the host and the supported set.
 
 ```toml
@@ -453,15 +453,15 @@ refuses, naming the host and the supported set.
 hosts = ["macos", "linux-x64", "windows-x64"]
 ```
 
-`fm tools.lock` resolves every site's requirements against the
-catalogue and writes `tools.lock` at the root: one version per tool for
+`fm toolroom.lock` resolves every site's requirements against the
+catalogue and writes `toolroom.lock` at the root: one version per tool for
 the whole repository, the newest that satisfies every floor and
 resolves on every host the tool is required on, refusing by name
 otherwise. A tool required on some of the locked hosts alone is
 locked on those, its entry names them, and a scope no locked host
 matches locks nothing, which the lock says per requirement. `fm
-tools.add <requirement>` declares a tool at the project site, locks it
-and materialises it; `fm tools.lock --upgrade-tool=<tool>` moves one entry to the
+toolroom.add <requirement>` declares a tool at the project site, locks it
+and materialises it; `fm toolroom.lock --upgrade-tool=<tool>` moves one entry to the
 newest eligible version, and every package with it, since no package
 runs a version of its own.
 
@@ -469,17 +469,17 @@ Entering the environment materialises the bundle the sites require:
 `fm sync` supplies every tool locked for this host through the
 machine's store, skipping one locked for other hosts alone, the
 downloaded kinds from the catalogue's deployment for this host through
-`[tools] sources` (folders or URLs in the store's layout, consulted
+`[toolroom] sources` (folders or URLs in the store's layout, consulted
 before the origin) and the delegated kinds through their installer, in
 one of three modes per tool: `link` puts its entry points in the
 checkout's `.workshop/bin`, `path` its own directories on PATH, `none`
 neither, for a tool reached only through a typed handle or its env.
 A download with paths takes `path`, one with none and a system tool
-take `none`, unless the record or the root contract's `[tools] modes`
+take `none`, unless the record or the root contract's `[toolroom] modes`
 says otherwise; every installer's kind takes `path`. A system tool is the machine's own: the store installs
 nothing for it and holds the copy on PATH to the highest of the
 record's floor and the sites' floors, naming the site whose floor it
-is under. A tool named in the root contract's `[tools] host-allowed`,
+is under. A tool named in the root contract's `[toolroom] host-allowed`,
 or in a kind's own allowance, may be served by a copy already on the
 machine: `fm sync` looks on PATH first, and a copy that satisfies the
 floor (the requirement's, else the record's minimum, else any
@@ -510,7 +510,7 @@ are the old code; a re-run that cannot start is named and the sync
 continues on the loaded code.
 
 The stubs the four type checkers read are materialised too. `fm
-tools.restub` writes them into `typings/` at the root, pyright's
+toolroom.restub` writes them into `typings/` at the root, pyright's
 default stub path and a search path the rendered configuration hands
 mypy, ty and pyrefly: one stub per tool the lock holds, at the locked
 version, as `livery.toolroom.stubs` modules with `livery.toolroom.handles`
@@ -645,7 +645,7 @@ absence.
   before it enters, under the runner's temp, the working drive, where
   the checkout and the venv are and where the store's links into the
   checkout stay links: the data directory the entry places there,
-  keyed by `tools.lock` with the OS and architecture, falling back to
+  keyed by `toolroom.lock` with the OS and architecture, falling back to
   the nearest archive under its prefix, so a moved lock restores what
   is unchanged and saves a fresh archive at the end. A restored store
   is a tier the store verifies on access, and `fm ci.run` sweeps it

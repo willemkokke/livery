@@ -56,7 +56,7 @@ def test_a_process_the_repair_starts_repairs_nothing(
     # A delivery lists the workspace's tasks through the runner; that
     # child's own repair finds the files still missing, and would
     # deliver again, and so on without end.
-    (tmp_path / "tools.lock").write_text("{}\n")
+    (tmp_path / "toolroom.lock").write_text("{}\n")
     called = _calls(monkeypatch)
     children: list[list[str]] = []
 
@@ -77,7 +77,7 @@ def test_a_process_the_repair_starts_repairs_nothing(
 def test_a_checkout_that_never_synced_gets_its_tools_and_its_own_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tools.lock").write_text("{}\n")
+    (tmp_path / "toolroom.lock").write_text("{}\n")
     called = _calls(monkeypatch)
     assert _reconcile.repair(tmp_path)
     # From what the machine holds, and touching nothing a commit holds.
@@ -87,7 +87,7 @@ def test_a_checkout_that_never_synced_gets_its_tools_and_its_own_files(
 def test_a_checkout_holding_both_is_left_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tools.lock").write_text("{}\n")
+    (tmp_path / "toolroom.lock").write_text("{}\n")
     receipts = tmp_path / ".workshop" / "receipts"
     receipts.mkdir(parents=True)
     (receipts / "ruff.json").write_text("{}\n")

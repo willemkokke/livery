@@ -1193,10 +1193,10 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
         # ninja on PATH serves them from the host, one without takes
         # the store's, and the sync says which. The loop's container
         # runner has neither, so the pass proves the store's path.
-        marker = "\n[tools]\n"
+        marker = "\n[toolroom]\n"
         if marker not in contract_text:
             fail(
-                "the loop's contract has no [tools] table to allow host"
+                "the loop's contract has no [toolroom] table to allow host"
                 " tools in; birth seeds one, so this workspace was not"
                 " born by the loop"
             )

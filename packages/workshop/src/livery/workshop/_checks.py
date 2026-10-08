@@ -1331,7 +1331,7 @@ def _drift_widens(root: Path) -> tuple[str, ...]:
         "workshop.toml",
         *package_files(root),
         "uv.lock",
-        "tools.lock",
+        "toolroom.lock",
         *(f"{provider}/src/**" for provider in sorted(providers) if provider),
     )
 

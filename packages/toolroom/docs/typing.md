@@ -27,7 +27,7 @@ answers every tool name with a `Tool[Result]`. The per-tool classes are
 rendered by `livery-toolroom-store` from the tool records, or from the
 published index, into a workspace's `typings/` directory,
 pyright's default stub path and a search path the workspace's rendered
-configuration hands mypy, ty and pyrefly: `fm tools.restub` writes one
+configuration hands mypy, ty and pyrefly: `fm toolroom.restub` writes one
 stub per tool the workspace locks, at the locked version, as
 `livery.toolroom.stubs` modules, and `livery.toolroom.handles` beside
 them declaring each handle, which the wheel's index imports. Both sit

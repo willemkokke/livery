@@ -14,7 +14,7 @@ project-includes = ["packages/extensions/basedpyright/src", "packages/extensions
 # changes anything.
 use-ignore-files = false
 disable-project-excludes-heuristics = true
-# The tool stubs `fm tools.restub` writes.
+# The tool stubs `fm toolroom.restub` writes.
 search-path = ["typings"]
 # Every platform at once, 3.11 floor.
 python-platform = "all"

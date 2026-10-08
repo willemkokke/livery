@@ -209,7 +209,7 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
 
     root = _root(
         tmp_path,
-        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "tools.refresh"\n'
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "toolroom.refresh"\n'
         'args = ["--submit"]\nevery = "2w"\n',
     )
     seen: list[list[str]] = []
@@ -222,7 +222,7 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
     _points.run_point(root, "nightly", "nightly", spawn=green)
     out = capsys.readouterr().out
     assert (
-        "tools.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
+        "toolroom.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
         in out
     )
     assert [argv[-1] for argv in seen] == ["check"]

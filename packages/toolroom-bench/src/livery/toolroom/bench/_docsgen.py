@@ -1,6 +1,6 @@
 """The package's docs generators: the tool pages and the colour table.
 
-`fm tools.docs`, on the bench's one group, mounted when a workspace
+`fm toolroom.docs`, on the bench's one group, mounted when a workspace
 names the bench as an extension; the pages are toolroom's, written into
 its docs tree from the records and the colour data, so a docs build
 needs nothing on PATH and says exactly what the records hold. toolroom

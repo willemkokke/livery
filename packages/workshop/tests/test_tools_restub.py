@@ -138,7 +138,7 @@ def test_a_records_source_renders_and_a_version_never_read_is_named(
     root = _workspace(
         tmp_path,
         monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["ruff"]\n',
+        '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["ruff"]\n',
     )
     Record("ruff", kind="pypi", deltas=_read("1.0.0")).save(root / "records")
     _tools.write_lock(root)
@@ -164,7 +164,7 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     root = _workspace(
         tmp_path,
         monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "index"\nrequires = ["ruff", "bare"]\n',
+        '[workspace]\n\n[toolroom]\nindex = "index"\nrequires = ["ruff", "bare"]\n',
     )
     _index(
         root,
@@ -193,7 +193,7 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     assert not (stubs / "ty.pyi").exists()  # listed, not locked: no stub
     assert (stubs / "__init__.pyi").read_text() == ""
     assert _tools.handles_path(root).read_text() == (
-        "# Rendered by `fm tools.restub`: the handles this workspace\n"
+        "# Rendered by `fm toolroom.restub`: the handles this workspace\n"
         "# locks. Do not edit by hand.\n"
         "from livery.toolroom.tools import Result\n"
         "from livery.toolroom.stubs.ruff import Ruff as Ruff\n"
@@ -241,7 +241,7 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     root = _workspace(
         tmp_path,
         monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "index"\nrequires = ["ruff"]\n',
+        '[workspace]\n\n[toolroom]\nindex = "index"\nrequires = ["ruff"]\n',
     )
     _index(root, {"ruff": ("1.0.0",)}, {"ruff": ("1.0.0",)})
     monkeypatch.setattr(
@@ -255,7 +255,7 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
     assert "ruff: MISSING (no receipt" in out
-    assert "not locked; run `fm tools.lock`" in out
+    assert "not locked; run `fm toolroom.lock`" in out
     assert "stubs:" not in out
     _tool_tasks.tools_lock()
     assert "  stubs: 1 in typings/, wrote 1" in capsys.readouterr().out
@@ -330,7 +330,7 @@ def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
     # A workspace that requires a tool and has locked nothing, which is
     # what a newborn is.
     _workspace(
-        tmp_path, monkeypatch, '[workspace]\n\n[tools]\nrequires = ["ruff>=0.1"]\n'
+        tmp_path, monkeypatch, '[workspace]\n\n[toolroom]\nrequires = ["ruff>=0.1"]\n'
     )
     # Nothing was ever materialised here, so the required tool has no
     # receipt and the shell cannot answer for it.
@@ -338,5 +338,5 @@ def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
     assert _env_tasks.env_check() == 1
     said = capsys.readouterr().out
     assert "are not locked" in said
-    assert said.index("tools.lock") < said.index("sync` supplies")
-    assert "[tools]" in said and "index =" in said
+    assert said.index("toolroom.lock") < said.index("sync` supplies")
+    assert "[toolroom]" in said and "index =" in said

@@ -18,7 +18,7 @@ the previous version had is gone, every exclusion pattern matches
 something, and no executable sits in a path directory without an
 annotation. The paths each host gained and lost are the pull request's
 summary, and the refresh arms its pull request only when every change
-is an addition and every check passed; `fm tools.verify <tool>` runs
+is an addition and every check passed; `fm toolroom.verify <tool>` runs
 the same checks by hand. A tool read from a forge tier, node from
 its own release index at nodejs.org, and the .NET SDK from
 Microsoft's release metadata, gets its artifacts from
@@ -27,11 +27,11 @@ host is downloaded once, hashed, landed in the store the checks stage
 from, and written on the version line; a host the release has no
 asset for is left absent. A package from npm has no artifacts: its
 record names the runtime it runs on, node unless it says bun, and
-the store installs it through that runtime. `fm tools.artifacts <tool>`
+the store installs it through that runtime. `fm toolroom.artifacts <tool>`
 records a version already read, which is how a tool moves from a
 package index to its own release. The executable checks need a matching host:
 the bench declares a point, `tool-hosts`, that runs fortnightly on the
-six runners the host keys map to, and its task, `fm tools.verify-host`,
+six runners the host keys map to, and its task, `fm toolroom.verify-host`,
 installs every downloaded tool at its newest version with a build for
 the host, runs its entry point, and extracts its surface, which must
 describe the tool. The gate keeps its three runners.
@@ -50,28 +50,28 @@ A consumer of the handles installs `livery-toolroom` alone. A
 workspace that keeps the handles current names the bench as an extension,
 and its verbs mount under `fm tools.*`:
 
-- `fm tools.refresh` observes what is new on this platform and folds
+- `fm toolroom.refresh` observes what is new on this platform and folds
   it into the records; with `--submit` it commits what moved on a
   branch and opens the pull request, armed when every change only
   added to a surface.
-- `fm tools.gather`, `fm tools.assemble` and `fm tools.observe` are
+- `fm toolroom.gather`, `fm toolroom.assemble` and `fm toolroom.observe` are
   the refresh's halves, for a matrix that observes on several
   machines and assembles once.
-- `fm tools.prime` reads older releases below a record's floor.
-- `fm tools.audit`, `fm tools.list` and `fm tools.spec` read the
+- `fm toolroom.prime` reads older releases below a record's floor.
+- `fm toolroom.audit`, `fm toolroom.list` and `fm toolroom.spec` read the
   tools and the records back.
-- `fm tools.index.build` materialises every record into the index, a
+- `fm toolroom.index.build` materialises every record into the index, a
   strongroom store served as static files with a pointer document
   naming each tool's current tree, each version's surface one blob; the bench declares it as a docs
   generator, so the site's build writes it under
   `docs/tools` and the site's deploy serves it at `tools/`.
-- `fm tools.docs` writes the per-tool pages into toolroom's docs
+- `fm toolroom.docs` writes the per-tool pages into toolroom's docs
   tree, with the stubs they point at rendered beside them; toolroom
   declares it as its docs generator.
 
 A stub is a rendering of a record, and the store renders it from a
 version's own surface: a workspace renders the versions it locks with
-the workshop's `fm tools.restub`, the docs pages render the union of
+the workshop's `fm toolroom.restub`, the docs pages render the union of
 every version read, and nothing, the index included, holds a stub.
 
 The bench depends on `livery-toolroom`, `livery-toolroom-store` and

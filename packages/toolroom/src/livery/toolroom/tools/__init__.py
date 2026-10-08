@@ -183,7 +183,7 @@ valid command; the tool prints its placeholder attached to the flag,
 # How a tool spells "off" when it is *not* `--no-<name>`. Only the
 # exceptions live here, extracted from the tools themselves (click states
 # it as `secondary_opts`) rather than assumed: `mkdocs build --no-clean`
-# is rejected outright — the flag is `--dirty`. `fm tools.audit` reports the
+# is rejected outright — the flag is `--dirty`. `fm toolroom.audit` reports the
 # table this should hold, read from the installed tool.
 _NEGATIONS: dict[str, dict[str, str]] = {
     "mkdocs": {
@@ -215,7 +215,7 @@ def _negation(tool: str, key: str, *, single_dash: bool = False) -> str:
 # child's argv, or they leak past the tool into the child — `uv run
 # --frozen pytest`, not `uv run pytest --frozen` (which hands `--frozen`
 # to pytest). Dotted for nesting; extracted from each verb's usage line
-# and checked by `fm tools.audit`.
+# and checked by `fm toolroom.audit`.
 _WRAPPERS: dict[str, frozenset[str]] = {
     "uv": frozenset({"run", "tool.run"}),
     "coverage": frozenset({"run"}),
@@ -240,7 +240,7 @@ def _is_wrapper(argv0: str, base: list[str]) -> bool:
 # `_host.child_env` already writes the force set into every child, which covers
 # the modern tools. This table is only for the ones that ignore the environment
 # and take a flag instead (git). It is *probed*, not hand-written: `fm
-# tools.color` runs each tool with colour forced on and off and records the
+# toolroom.color` runs each tool with colour forced on and off and records the
 # verdict in `_colordata.py`, which is loaded below.
 
 

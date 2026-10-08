@@ -1318,8 +1318,8 @@ def _dotnet_coverage(package: Package, env: dict[str, str], *args: str) -> Resul
     except OSError:
         fail(
             "dotnet-coverage is not on PATH: a cpp-conan package built with MSVC"
-            ' is measured by it, so add "dotnet_coverage" to [tools] requires'
-            f" in workshop.toml, run `{footman.prog()} tools.lock`, then"
+            ' is measured by it, so add "dotnet_coverage" to [toolroom] requires'
+            f" in workshop.toml, run `{footman.prog()} toolroom.lock`, then"
             f" `{footman.prog()} sync` and the printed env.emit line"
         )
 

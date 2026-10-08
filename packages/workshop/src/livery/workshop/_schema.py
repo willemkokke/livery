@@ -156,12 +156,15 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
 
     *listed* holds the names the root contract lists the extensions by,
     the base among them; None takes every installed owner as listed.
-    The ``extension`` contract is the base's alone, since an extension
-    declares keys in a workspace's contracts and never in another
-    extension's file: composing it reads no other owner's declarations,
-    which a mount would otherwise read for every installed extension.
+    The owners in [livery.workshop._contract_keys.ALWAYS][], the base
+    and the tool store, count as listed in every workspace. The
+    ``extension`` contract is the base's and the tool store's alone,
+    since an extension declares keys in a workspace's contracts and
+    never in another extension's file: composing it reads no other
+    owner's declarations, which a mount would otherwise read for every
+    installed extension.
     """
-    from livery.workshop._contract_keys import BASE, declarations, extension_keys
+    from livery.workshop._contract_keys import ALWAYS, declarations, extension_keys
 
     if contract == "extension":
         keys = [(declared, "") for declared in extension_keys()]
@@ -170,7 +173,7 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
             (
                 owned.declared,
                 ""
-                if listed is None or owned.owner == BASE or owned.owner in listed
+                if listed is None or owned.owner in ALWAYS or owned.owner in listed
                 else owned.owner,
             )
             for (kind, _path), owned in sorted(declarations().items())
@@ -179,9 +182,9 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
     return {
         "$schema": DRAFT,
         "$comment": (
-            "Composed by the workshop's sync from the keys the base and the"
-            " listed extensions declare; written again by every sync, never"
-            " edited."
+            "Composed by the workshop's sync from the keys the base, the tool"
+            " store and the listed extensions declare; written again by every"
+            " sync, never edited."
         ),
         "title": _TITLES[contract],
         **_object(_tree(keys)),
@@ -229,15 +232,16 @@ def judged_by(root: Path, relative: Path) -> str:
     """The line naming the schema the file at *relative* is judged by; empty for none.
 
     The file under ``.workshop/schema/``, and the owners whose keys it
-    holds: the base, then the extensions the root lists, in list order.
-    An ``extension.toml`` is judged by the base's keys alone.
+    holds: the base and the tool store, then the extensions the root
+    lists, in list order. An ``extension.toml`` is judged by the base's
+    and the tool store's keys alone.
     """
-    from livery.workshop._contract_keys import BASE
+    from livery.workshop._contract_keys import ALWAYS
 
     contract = contract_of(root, relative)
     if contract is None:
         return ""
-    owners = [BASE]
+    owners = list(ALWAYS)
     if contract != "extension":
         from livery.workshop._extensions import extension_names
 

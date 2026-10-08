@@ -266,7 +266,7 @@ class KindRecord:
             machine may serve when it satisfies the floor, so a
             workspace of this kind installs them only where the
             machine has none; the union along the chain joins the
-            root contract's `[tools] host-allowed`.
+            root contract's `[toolroom] host-allowed`.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.

@@ -224,18 +224,23 @@ def test_explain_names_the_schema_a_contract_is_judged_by(
     assert schema("notes/musings.md") == []
     assert schema("packages/x/pyproject.toml") == []
     assert schema("workshop.toml") == [
-        "    schema: .workshop/schema/workshop.json (livery.workshop, docs)"
+        "    schema: .workshop/schema/workshop.json"
+        " (livery.workshop, livery.toolroom.store, docs)"
     ]
     assert schema("packages/x/workshop.toml") == [
-        "    schema: .workshop/schema/package.json (livery.workshop, docs)"
+        "    schema: .workshop/schema/package.json"
+        " (livery.workshop, livery.toolroom.store, docs)"
     ]
-    # An extension's file holds the base's keys alone, whatever the root lists.
+    # An extension's file holds the base's and the store's keys alone, whatever
+    # the root lists.
     assert schema("packages/x/src/livery/x/extension.toml") == [
-        "    schema: .workshop/schema/extension.json (livery.workshop)"
+        "    schema: .workshop/schema/extension.json"
+        " (livery.workshop, livery.toolroom.store)"
     ]
     (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     assert schema("workshop.toml") == [
-        "    schema: .workshop/schema/workshop.json (livery.workshop)"
+        "    schema: .workshop/schema/workshop.json"
+        " (livery.workshop, livery.toolroom.store)"
     ]
 
 

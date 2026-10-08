@@ -134,7 +134,7 @@ class ToolSpec:
         ignored `NO_COLOR`). Both directions fall out of the one `choices` list,
         so detecting the *off* form costs nothing. Empty when the tool has no
         such switch, in which case it is assumed to obey `FORCE_COLOR`/`NO_COLOR`.
-        This informs the curated `_COLOR` table (via `fm tools.color`);
+        This informs the curated `_COLOR` table (via `fm toolroom.color`);
         it is not applied automatically: a flag is only added for a tool proven
         to ignore the environment.
         """
