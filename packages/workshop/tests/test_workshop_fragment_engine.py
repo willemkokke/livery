@@ -99,7 +99,9 @@ def test_a_template_that_does_not_render_refuses_naming_the_fragment(
 ) -> None:
     with pytest.raises(Failed) as refused:
         _plan(tmp_path, Fragment("docs", "t", "a.txt", "{{ missing.value }}\n"))
-    assert str(refused.value) == "fragment docs:t, line 1: undefined value"
+    # The engine names the fragment and the line; what follows is
+    # minijinja's own words, which newer releases spell out further.
+    assert str(refused.value).startswith("fragment docs:t, line 1: undefined value")
     with pytest.raises(Failed, match=r"fragment docs:u, line 1: syntax error"):
         _plan(tmp_path, Fragment("docs", "u", "b.txt", "{% if %}\n"))
 
