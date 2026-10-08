@@ -53,6 +53,7 @@ def test_the_surface_is_declared() -> None:
         "discover_packages",
         "extension_names",
         "forge_repository",
+        "forge_token",
         "generated_header",
         "guidance",
         "kind_examples",

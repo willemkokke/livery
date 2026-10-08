@@ -434,6 +434,7 @@ EXPORTS: dict[str, list[str]] = {
         "discover_packages",
         "extension_names",
         "forge_repository",
+        "forge_token",
         "generated_header",
         "guidance",
         "kind_examples",

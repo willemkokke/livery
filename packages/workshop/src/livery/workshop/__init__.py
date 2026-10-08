@@ -47,7 +47,8 @@ belongs to, [livery.workshop.ci_run][], a
 [livery.workshop.RunContext][] or None at a desk; the workspace's
 repository on its forge, [livery.workshop.forge_repository][], and,
 connected, [livery.workshop.this_repository][] on
-[livery.workshop.this_forge][]; the
+[livery.workshop.this_forge][], whose everyday token
+[livery.workshop.forge_token][] resolves; the
 registry an artifact kind goes to, [livery.workshop.registry][], a
 [livery.workshop.RegistryTarget][]; and the mounted release-notes
 provider, [livery.workshop.release_notes][], which answers the
@@ -113,6 +114,7 @@ if TYPE_CHECKING:
     from livery.workshop._slots import slot as slot
     from livery.workshop._state import RunContext as RunContext
     from livery.workshop._state import ci_run as ci_run
+    from livery.workshop._tokens import forge_token as forge_token
 
 __version__ = "0.7.0"
 
@@ -141,6 +143,7 @@ __all__ = [
     "discover_packages",
     "extension_names",
     "forge_repository",
+    "forge_token",
     "generated_header",
     "guidance",
     "kind_examples",
@@ -190,6 +193,7 @@ _EXPORTS: dict[str, str] = {
     "forge_repository": "livery.workshop._forge_lane",
     "this_forge": "livery.workshop._forge_lane",
     "this_repository": "livery.workshop._forge_lane",
+    "forge_token": "livery.workshop._tokens",
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
     "kind_examples": "livery.workshop._kinds",

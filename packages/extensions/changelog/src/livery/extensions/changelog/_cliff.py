@@ -17,7 +17,7 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop import Package
+from livery.workshop import Package, forge_token
 
 #: Where a package's changelog contract lives.
 CONFIG_NAME = "cliff.toml"
@@ -51,14 +51,16 @@ def _credential(root: Path) -> tuple[str, str]:
     the workspace can ask for them. The value is handed to git-cliff
     under the name its own contract reads.
     """
-    kind, _url = _forge_facts(root)
+    kind, url = _forge_facts(root)
     variable = TOKEN_VARIABLE.get(kind, "")
     if not variable:
         return "", ""
     ambient = os.environ.get(variable, "")
     if ambient:
         return variable, ambient
-    token = _lane_token(root)
+    token, _ = forge_token(kind, url)
+    if not token:
+        token = _lane_token(root)
     return (variable, token) if token else ("", "")
 
 
