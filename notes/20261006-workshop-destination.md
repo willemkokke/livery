@@ -1471,6 +1471,12 @@ the stack, which this design neither needs nor rules out).
   tool extensions and state the missing descriptions land apart, as
   documentation, so no package other than the workshop gets this
   feature in its changelog.
+- 2026-10-08, the Packages section's contracts (#1296): the eight tool
+  extensions set `[docs] name = "workshop.extensions.<name>"`, so they
+  sit inside the workshop's entry after its own pages, and footman,
+  strongroom, toolroom, toolroom-store and toolroom-bench state the
+  description their `pyproject.toml` already gives, which the landing
+  page shows.
 
 ## Open
 
