@@ -11,17 +11,17 @@ description = "The bench where toolroom's typed tool handles are made and refres
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.58.0"
+floor = "0.59.0"
 
 [[depends]]
 path = "packages/toolroom-store"
 kind = "runtime"
-floor = "0.2.0"
+floor = "0.3.0"
 
 [docs]
 # The index of the tool records, built into docs/_generated/index and

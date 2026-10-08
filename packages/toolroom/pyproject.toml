@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom"
-version = "0.10.0"
+version = "0.11.0"
 description = "Typed surfaces for command-line tools, generated from the tools themselves."
 readme = "README.md"
 license = "MIT"
@@ -32,7 +32,7 @@ dependencies = []
 # a consumer never sees it unasked.
 [project.optional-dependencies]
 test = [
-    "livery-footman>=0.58.0",
+    "livery-footman>=0.59.0",
 ]
 
 [project.urls]

@@ -9,6 +9,17 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.1.0] - 2026-10-08
+
+### Added
+
+- A check whose verdict is its tool's exit code is its tool's words, run by the workshop, and six checks become words by @willemkokke
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+- The ruff extension's fixer test calls the workshop's fixers directly, the call an agent's post-edit hook makes, so it needs no hook module by @willemkokke
+
 ## [0.0.0] - 2026-10-07
 
 ### Added

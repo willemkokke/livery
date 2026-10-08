@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-basedpyright"
-version = "0.0.0"
+version = "0.1.0"
 description = "basedpyright as a check of the livery workshop: the type checker, and type completeness as its option."
 readme = "README.md"
 license = "MIT"
@@ -22,8 +22,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "livery-toolroom>=0.10.0",
-    "livery-workshop>=0.6.0",
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.7.0",
 ]
 
 [project.urls]

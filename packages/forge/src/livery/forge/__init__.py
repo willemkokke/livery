@@ -86,7 +86,7 @@ if TYPE_CHECKING:
     from livery.forge._types import StateFilter as StateFilter
     from livery.forge._types import Step as Step
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "Asset",

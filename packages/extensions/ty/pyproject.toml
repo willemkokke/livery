@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-ty"
-version = "0.0.0"
+version = "0.1.0"
 description = "ty as a check of the livery workshop: the type checker over every platform at once, configured by the root ty.toml."
 readme = "README.md"
 license = "MIT"
@@ -22,8 +22,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "livery-toolroom>=0.10.0",
-    "livery-workshop>=0.6.0",
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.7.0",
 ]
 
 [project.urls]

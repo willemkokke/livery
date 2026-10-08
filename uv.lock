@@ -795,7 +795,7 @@ docs = [
 
 [[package]]
 name = "livery-extensions-basedpyright"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/basedpyright" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -810,7 +810,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-clang-format"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/clang-format" }
 dependencies = [
     { name = "livery-footman" },
@@ -844,7 +844,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-mypy"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/mypy" }
 dependencies = [
     { name = "livery-footman" },
@@ -861,7 +861,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-pyrefly"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/pyrefly" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -887,7 +887,7 @@ requires-dist = [{ name = "livery-workshop", editable = "packages/workshop" }]
 
 [[package]]
 name = "livery-extensions-ruff"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/ruff" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -902,7 +902,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-ty"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/ty" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -917,7 +917,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-footman"
-version = "0.58.0"
+version = "0.59.0"
 source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
@@ -951,7 +951,7 @@ provides-extras = ["uv", "test"]
 
 [[package]]
 name = "livery-forge"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "packages/forge" }
 
 [package.optional-dependencies]
@@ -978,7 +978,7 @@ source = { editable = "packages/strongroom" }
 
 [[package]]
 name = "livery-toolroom"
-version = "0.10.0"
+version = "0.11.0"
 source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]
@@ -992,7 +992,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-bench"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/toolroom-bench" }
 dependencies = [
     { name = "livery-footman" },
@@ -1018,7 +1018,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-store"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/toolroom-store" }
 dependencies = [
     { name = "livery-strongroom" },
@@ -1040,7 +1040,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "packages/workshop" }
 dependencies = [
     { name = "griffelib" },

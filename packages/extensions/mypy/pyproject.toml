@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-mypy"
-version = "0.0.0"
+version = "0.1.0"
 description = "mypy as a check of the livery workshop: the type checker, on every platform, configured by the root mypy.ini."
 readme = "README.md"
 license = "MIT"
@@ -22,9 +22,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "livery-footman>=0.58.0",
-    "livery-toolroom>=0.10.0",
-    "livery-workshop>=0.6.0",
+    "livery-footman>=0.59.0",
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.7.0",
 ]
 
 [project.urls]

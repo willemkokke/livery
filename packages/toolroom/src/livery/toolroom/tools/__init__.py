@@ -61,7 +61,7 @@ from livery.toolroom.tools._host import Argv as Argv
 from livery.toolroom.tools._host import Result as Result
 from livery.toolroom.tools._host import ToolError as ToolError
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 _version_cache: dict[str, tuple[int, ...]] = {}
 

@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-workshop"
-version = "0.6.0"
+version = "0.7.0"
 description = "The livery ecosystem's devkit: the task surface, extensions, templates, and content."
 readme = "README.md"
 license = "MIT"
@@ -18,21 +18,21 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "livery-forge>=0.6.0",
+    "livery-forge>=0.7.0",
     # The floors on deps the dev toolchain also carries align with
     # the lock: the release train's floor leg shares one venv with
     # the locked toolchain, so a floor below the toolchain's pin is
     # a claim the leg cannot test (its movement guard refuses the
     # silent un-starving). 0.52.2 is the first livery-footman: the
     # workshop imports livery.footman directly, never the shim.
-    "livery-footman>=0.58.0",
+    "livery-footman>=0.59.0",
     # 0.7.0 is the first livery-toolroom with the livery.toolroom
     # namespace, whose tools module the workshop imports; the release
     # act's lowest-direct leg installs the floor and proves it.
-    "livery-toolroom>=0.10.0",
+    "livery-toolroom>=0.11.0",
     # The tool records, the catalogue and the lock: what `fm tools.*`
     # resolves against.
-    "livery-toolroom-store>=0.2.0",
+    "livery-toolroom-store>=0.3.0",
     # The digest grammar and the registry of algorithms that may name
     # bytes. Already installed through the tool store's own edge; the
     # floor is the one that edge carries, since raising one is a
