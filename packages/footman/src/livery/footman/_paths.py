@@ -343,6 +343,24 @@ def env_var(suffix: str) -> str:
     return f"{_prefix}_{suffix}"
 
 
+def builtins() -> tuple[str, ...]:
+    """The plugin families this footman mounts in every project, by entry point name.
+
+    A branded app declares them (`App(builtin=…)`); stock footman declares
+    none.
+    """
+    return builtin()
+
+
+def directory_variable(name: str) -> str:
+    """The environment variable a footman directory is read from.
+
+    `directory_variable("DATA_DIR")` is `FOOTMAN_DATA_DIR` for stock footman
+    and `ACME_DATA_DIR` for a brand whose prefix is `ACME`.
+    """
+    return env_var(name)
+
+
 def data_home() -> Path:
     """Base data directory, honouring `XDG_DATA_HOME`.
 

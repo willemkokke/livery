@@ -25,52 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 #: Today's reaches, by the reaching distribution and the private it
 #: names, each with the public seam that replaces it.
 ALLOWED: dict[tuple[str, str], str] = {
-    ("livery-toolroom", "livery.footman._context.Invocation"): (
-        "the hosted lane asks its host for the run: footman's host(), phase 10d"
-    ),
-    ("livery-toolroom", "livery.footman._context._current"): (
-        "the hosted lane asks whether a task runs: footman's host(), phase 10d"
-    ),
-    ("livery-toolroom", "livery.footman._context._target_cwd"): (
-        "the hosted lane asks for a call's directory: footman's host(), phase 10d"
-    ),
-    ("livery-toolroom", "livery.footman._globals"): (
-        "the hosted lane reads the run's cwd and argv: footman's host(), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.footman._describe.bold"): (
-        "styled output: footman's colored(text, style=...), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.footman._describe.cyan"): (
-        "styled output: footman's colored(text, style=...), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.footman._describe.wants_color"): (
-        "whether to colour: footman's public wants_color(), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.footman._globals"): (
-        "whether a task runs: footman's host(), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.toolroom.tools._colordata"): (
-        "the probed colour table: toolroom's colour_controls(), phase 10d"
-    ),
-    ("livery-toolroom-bench", "livery.toolroom.tools._NEGATIONS"): (
-        "the stub generator reads the handles' negation table; no seam designed yet"
-    ),
-    ("livery-toolroom-bench", "livery.toolroom.tools._WRAPPERS"): (
-        "the stub generator reads the handles' wrapper table; no seam designed yet"
-    ),
-    ("livery-toolroom-bench", "livery.toolroom.tools._console_entrypoint"): (
-        "a driver asks whether a tool is a console script; no seam designed yet"
-    ),
-    ("livery-toolroom-bench", "livery.toolroom.store._engine.download"): (
-        "a plain download: footman's public fetch, phase 10d"
-    ),
-    ("livery-workshop", "livery.footman._config"): (
-        "the project's builtin families: footman's project_builtins(root), phase 10d"
-    ),
-    ("livery-workshop", "livery.footman._paths"): (
-        "the brand's variables and file names: footman's builtins(),"
-        " directory_variable() and tasks_file_name(), phase 10d"
-    ),
     ("livery-workshop", "livery.forge._registry.purge_gitlab_packages"): (
         "the loop deletes published versions: the forge's admin protocol, phase 15"
     ),

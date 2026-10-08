@@ -304,11 +304,11 @@ def new_project(
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
     # runtime accessor is footman#536's family).
-    from livery.footman import _paths
+    from livery.footman import builtins
 
     # A comma inside an entry's brackets separates its options.
     listed = [e.strip() for e in re.split(r",(?![^\[]*\])", stack) if e.strip()]
-    stack_list = listed or birth_extensions(_paths.builtin())
+    stack_list = listed or birth_extensions(builtins())
     contract = root / "workshop.toml"
     spelled = ", ".join(f'"{entry}"' for entry in stack_list)
     year = str(datetime.datetime.now(tz=datetime.UTC).year)

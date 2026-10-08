@@ -10,7 +10,8 @@ release wave that ships the slice's break runs on 2026-10-08 after
 15:00 UTC, once PyPI accepts new projects again (see "First
 publishes, four a day"). 10g is built (issue #1301) and rides that
 wave. 10c is built (issue #1303) but for clang-tidy, whose words wait
-on a ruling, so its acceptance's `find` stays open. The extensions plan
+on a ruling, so its acceptance's `find` stays open. 10d is built
+(issue #1306). The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1563,6 +1564,30 @@ the stack, which this design neither needs nor rules out).
   three calls of the matrix green on the loop's runner, before the
   coverage leg refused a workspace with no test extension. The
   acceptance line stays open until 12e lets the pass end green.
+- 2026-10-08, 10d (#1306): the reach test's allowance holds the
+  forge's two entries alone. footman exports `host()`, a `Host` whose
+  `active`, `in_task`, `real_cwd()`, `target_cwd(cwd, relative)` and
+  `argv_override(args)` answer what toolroom's bridge and the bench ask
+  of a run; `run(view=...)` with a `CommandView`; `styled(text, style,
+  on=...)` and `wants_color(stream)`; and `builtins()`,
+  `project_builtins(root)`, `directory_variable(name)` and
+  `tasks_file_name()`. toolroom exports `colour_controls()`,
+  `negations()`, `wrappers()` and `console_script(name)`. Decided here:
+  the painter is `styled`, since footman's public `colored()` already
+  answers whether a task's output dresses for colour; the display
+  record is `CommandView` on `run(view=...)` rather than a member of
+  `host()`, since footman's `Invocation` already names a plugin's
+  invocation; `host()` answers while footman's routers are installed or
+  a task's context is current, `active` and `in_task` telling the two
+  apart, since the bench asked the one and the bridge the other; the
+  bench downloads with the store's public `fetch_bytes`, which the
+  store's private download wraps, rather than footman's `fetch`, which
+  caches into footman's directory and answers a path; the stub tables'
+  names, which this note did not design, follow its rule that a
+  function another package calls is public; `console_script` answers
+  the entry point, not yes or no, since the bench reads its version and
+  loads it. The bench's `toolroom.{task}` message, which 10g's rename
+  missed, names the verb it has.
 
 ## Open
 

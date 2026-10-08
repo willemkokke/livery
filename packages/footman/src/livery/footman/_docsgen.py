@@ -201,6 +201,13 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         ["prompt", "confirm", "select", "attended", "tty", "colored"],
     ),
     (
+        "Painting output",
+        "`wants_color(stream)` answers whether to paint text for a stream, "
+        "following `--color`, `NO_COLOR` and the stream's own tty-ness, and "
+        "`styled(text, style, on=…)` paints it.",
+        ["wants_color", "styled"],
+    ),
+    (
         "The process boundary",
         "stdin binds to typed parameters, and a `Stdout[T]` return owns "
         "stdout. The full contract lives on [Pipelines](../pipelines.md) and "
@@ -242,7 +249,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "that ships it (`None` when the brand never declared one). Inside a "
         "task body `ctx.prog` says the same and is the better reach: it is "
         "the invocation's own answer rather than process state.",
-        ["prog", "dist"],
+        ["prog", "dist", "builtins", "directory_variable", "tasks_file_name"],
     ),
     ("Fetching", "", ["fetch", "FetchError"]),
     (
@@ -257,7 +264,16 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "Installed entry points",
         "One scan of every installed distribution per process, shared by "
         "footman's plugin loader and anything built on footman.",
-        ["installed_entry_points", "rescan_entry_points"],
+        ["installed_entry_points", "rescan_entry_points", "project_builtins"],
+    ),
+    (
+        "Libraries that run tools",
+        "A library that runs tools, toolroom among them, asks `host()` for "
+        "the run it is called in, and gets `None` outside one, so it keeps "
+        "its standalone behaviour there. It hands `run(view=…)` a "
+        "`CommandView`, so the command line a run shows is the readable "
+        "one while the call runs whatever the tool needs.",
+        ["host", "Host", "CommandView"],
     ),
     (
         "The invocation, and editing the discovered tree",

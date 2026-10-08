@@ -681,6 +681,17 @@ def _requirement_name(text: str) -> str:
     return re.sub(r"[-_.]+", "-", found.group(1)).lower() if found else ""
 
 
+def project_builtins(root: Path) -> tuple[str, ...]:
+    """The plugin families *root*'s own dependencies offer, by entry point name.
+
+    The ``footman.builtin`` names of the distributions *root*'s
+    ``pyproject.toml`` depends on directly, in its ``[project]
+    dependencies`` and its ``[dependency-groups]``; a dependency of a
+    dependency offers nothing.
+    """
+    return project_builtin(root)
+
+
 def project_builtin(root: Path) -> tuple[str, ...]:
     """The ``footman.builtin`` names *root*'s direct dependencies offer.
 

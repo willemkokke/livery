@@ -14,8 +14,8 @@ import pytest
 import livery.toolroom.tools as tools
 from livery.footman import _manifest
 from livery.footman._context import (
+    CommandView,
     Context,
-    Invocation,
     RunFailed,
     parallel,
     passthrough,
@@ -355,8 +355,8 @@ def test_run_color_reaches_the_in_process_lane(monkeypatch):
         seen["nc"] = os.environ.get("NO_COLOR")
         return 0
 
-    inv = Invocation(parts=(("prog", "probe"),), exact=("probe",))
-    run(probe, _show=inv, color="always")
+    inv = CommandView(parts=(("prog", "probe"),), exact=("probe",))
+    run(probe, view=inv, color="always")
     assert seen == {"fc": "1", "nc": None}
 
 
@@ -2433,7 +2433,7 @@ def test_the_exact_spelling_redacts_like_the_readable_one():
     present to act on, and it went out unredacted: a toolroom call under `-v`
     printed the token while its own receipt, built from `parts`, said `***`.
     Asking for the paste-able spelling is not asking to be shown a secret."""
-    inv = Invocation(
+    inv = CommandView(
         parts=(("prog", "git"), ("opt", "--author"), ("value", "***")),
         exact=("git", Secret("hunter2")),
     )
@@ -2799,14 +2799,14 @@ def test_run_without_input_leaves_stdin_alone():
 def test_run_input_on_an_in_process_tool_is_a_taught_error():
     # Reached only through the tools bridge's in-process lane: a subprocess
     # has a stdin to feed, a Python call does not.
-    from livery.footman._context import Context, Invocation, use_context
+    from livery.footman._context import CommandView, Context, use_context
 
-    show = Invocation(parts=(("prog", "demo"),), exact=("demo",))
+    show = CommandView(parts=(("prog", "demo"),), exact=("demo",))
     with (
         use_context(Context()),
         pytest.raises(TypeError, match=r"in-process tool has none"),
     ):
-        run(lambda: 0, input="payload", _show=show)
+        run(lambda: 0, input="payload", view=show)
 
 
 def test_a_timed_out_call_is_still_a_step_unless_it_says_otherwise():

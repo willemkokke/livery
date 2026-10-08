@@ -219,7 +219,7 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     already sets is left as it is, which is how a runner with a
     persistent cache keeps it.
     """
-    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import directory_variable
 
     runner_temp = environ.get("RUNNER_TEMP", "")
     if not runner_temp:
@@ -230,7 +230,7 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     wanted = {
         "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
         "CONAN_HOME": f"{runner_temp}/conan",
-        _paths.env_var("DATA_DIR"): f"{runner_temp}/footman",
+        directory_variable("DATA_DIR"): f"{runner_temp}/footman",
     }
     return {key: value for key, value in wanted.items() if not environ.get(key)}
 

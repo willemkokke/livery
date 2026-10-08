@@ -2433,16 +2433,22 @@ def _is_code(value: Any) -> bool:
 
 
 @dataclass(frozen=True)
-class Invocation:
+class CommandView:
     """What a `run()` call *is*, apart from how it's spelled to execute.
 
-    toolroom's bridge builds one of these so `run()` can show a readable,
-    syntax-highlighted command line — options in separated form, tagged by
-    role — while executing whatever the tool actually needs (attached flags,
-    or an in-process callable). `parts` is the normalised, human form;
-    `exact` is the literal argv, shown under `--verbose` and always
-    copy-pasteable. Passing it is how the two are kept from drifting: both
-    come from one translation of one call.
+    A tool wrapper, toolroom's bridge among them, hands one to `run(view=…)`
+    so the run shows a readable, syntax-highlighted command line — options
+    in separated form, tagged by role — while executing whatever the tool
+    actually needs (attached flags, or an in-process callable). `parts` is
+    the normalised, human form, each a role and its text; `exact` is the
+    literal argv, shown under `--verbose` and always copy-pasteable.
+    Passing it is how the two are kept from drifting: both come from one
+    translation of one call.
+
+    Attributes:
+        parts: The command line's normalised form, each part a role and
+            its text.
+        exact: The literal argv the call runs.
     """
 
     parts: tuple[tuple[str, str], ...]
@@ -3518,7 +3524,7 @@ def run(
     shell: bool | str = False,
     strict: bool = False,
     clean: bool = False,
-    _show: Invocation | None = None,
+    view: CommandView | None = None,
 ) -> Result:
     """Run a command or a Python callable in the current task's context.
 
@@ -3587,13 +3593,14 @@ def run(
     In-process work is a **step** now: `run()` runs commands. Lift a
     callable instead — `@step` / `step(fn, title=…)` builds an item that
     earns a receipt, and `with step("…"):` records a block where it
-    stands. (toolroom keeps its in-process lane through its own
-    private channel.)
+    stands. A tool wrapper's in-process lane is the one exception: a
+    callable with a `view` runs in-process, as the wrapper's own spelling
+    of a command.
 
-    `_show` is an internal channel from toolroom's bridge: a structured
-    view of the call, so the shown command line can be normalised and
-    role-coloured while execution runs whatever the tool needs. An explicit
-    `title` still wins; a direct `run([...])` is unaffected.
+    `view` is a tool wrapper's structured view of the call (`CommandView`),
+    so the shown command line can be normalised and role-coloured while
+    execution runs whatever the tool needs. An explicit `title` still wins;
+    a direct `run([...])` is unaffected.
     """
     ctx = current()
     if args and not callable(cmd):
@@ -3634,7 +3641,7 @@ def run(
             f"run({which}=True) only applies with a shell — it hardens a shell "
             f"run. Pass shell=True (or a shell name), or drop {which}."
         )
-    if callable(cmd) and _show is None:
+    if callable(cmd) and view is None:
         raise TypeError(
             "run() runs commands; in-process work is a step. Lift the "
             "callable — @step on a def, step(fn, title='…') around one you "
@@ -3651,21 +3658,21 @@ def run(
         )
     out = sys.stdout
     paint = _colored(ctx)
-    if _show is not None and title is None:
+    if view is not None and title is None:
         # `label` (recorded as .command, and the step-line receipt) is always
         # the normalised form, so a recording() assertion never depends on
         # --verbose. Only the live "about to / now running" line switches to
         # the exact spelling under --verbose; .raw always carries it.
-        label = _show.text(exact=False)
-        raw = _show.text(exact=True)
+        label = view.text(exact=False)
+        raw = view.text(exact=True)
         # A bridged call arrives already rendered to strings, so no `Secret`
         # survives the crossing for `_shown` to find — the tool library owns
         # that half of the redaction.
         show_label, show_title = label, None
-        shown = _show.painted(color=paint, exact=ctx.verbose)
-        shown_plain = _show.text(exact=ctx.verbose)
+        shown = view.painted(color=paint, exact=ctx.verbose)
+        shown_plain = view.text(exact=ctx.verbose)
         # The bridge already separated the argv; keep it for `to_argv()`.
-        tokens = tuple(_show.exact)
+        tokens = tuple(view.exact)
     else:
         label = title or _label(cmd, args)
         raw = _exact(cmd, args)

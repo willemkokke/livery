@@ -181,6 +181,25 @@ def red(text: str, on: bool) -> str:
     return f"\033[31m{text}\033[0m" if on else text
 
 
+#: The styles `styled` paints, by name.
+STYLES = {"bold": bold, "dim": dim, "cyan": cyan, "bold-cyan": bold_cyan, "red": red}
+
+
+def styled(text: str, style: str = "bold", *, on: bool = True) -> str:
+    """*text* in *style* when *on*, else as it is: bold, dim, cyan, bold-cyan or red.
+
+    Pass `on=wants_color(stream)` so a pipe or `NO_COLOR` gets plain text;
+    inside a task, `colored()` answers the same question for its output.
+
+    Raises:
+        ValueError: for a style `STYLES` does not name.
+    """
+    paint = STYLES.get(style)
+    if paint is None:
+        raise ValueError(f"no style {style!r}: the styles are {', '.join(STYLES)}")
+    return paint(text, on)
+
+
 # --- columns ------------------------------------------------------------------
 # Every aligned surface asks the same question — how wide is this on screen? —
 # and `len()` answers a different one, in three ways at once: an escape

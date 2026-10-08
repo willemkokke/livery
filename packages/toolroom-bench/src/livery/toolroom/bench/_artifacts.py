@@ -79,10 +79,10 @@ def lists_assets(driver: Driver) -> bool:
 
 
 def _fetch(url: str) -> bytes:
-    """The bytes at *url*; the seam a test replaces."""
-    from livery.toolroom.store._engine import download
+    """The bytes at *url*, retried on a transient failure; the seam a test replaces."""
+    from livery.toolroom.store import fetch_bytes
 
-    return download(url)
+    return fetch_bytes(url, connect_timeout=10.0, transfer_timeout=600.0)
 
 
 def record_version(

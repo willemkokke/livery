@@ -48,10 +48,10 @@ _BASELINE = pytest.StashKey[tuple[frozenset[str], frozenset[str]]]()
 
 def variables() -> tuple[str, ...]:
     """The variables to point away: stock footman's spelling and the brand's."""
-    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import directory_variable
 
     names = {f"FOOTMAN_{suffix}" for suffix in DIRECTORIES}
-    names.update(_paths.env_var(suffix) for suffix in DIRECTORIES)
+    names.update(directory_variable(suffix) for suffix in DIRECTORIES)
     return tuple(sorted(names))
 
 

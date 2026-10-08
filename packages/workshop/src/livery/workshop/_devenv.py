@@ -430,7 +430,7 @@ def app_ini(env: Environment, port: int) -> str:
 
 def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
     """The runner's configuration: the rig's caches in its jobs' environment."""
-    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import directory_variable
 
     caches = cache_dir()
     return (
@@ -440,7 +440,7 @@ def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
         "  file: .runner\n"
         f"  capacity: {capacity}\n"
         "  envs:\n"
-        f"    {_paths.env_var('DATA_DIR')}: {caches / 'footman'}\n"
+        f"    {directory_variable('DATA_DIR')}: {caches / 'footman'}\n"
         f"    UV_CACHE_DIR: {caches / 'uv'}\n"
         f"    CONAN_HOME: {caches / 'conan'}\n"
         "  timeout: 3h\n"
