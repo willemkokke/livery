@@ -2163,7 +2163,11 @@ def test_a_docs_name_that_is_no_dotted_path_refuses_naming_the_file(
     _name(root, "core", "not a path!")
     with pytest.raises(
         _FAILURES,
-        match=r"core/workshop\.toml: \[docs\] name 'not a path!' is not a dotted path",
+        # The file in the platform's own spelling: a backslash on Windows.
+        match=(
+            r"core[/\\]workshop\.toml: \[docs\] name 'not a path!'"
+            r" is not a dotted path"
+        ),
     ):
         package_tree(discover_packages(root))
 
