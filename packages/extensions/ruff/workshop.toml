@@ -27,3 +27,7 @@ coverage-floor = 100
 path = "packages/footman"
 kind = "test"
 floor = "0.58.0"
+
+[docs]
+# Inside the workshop's entry of the site's Packages tree.
+name = "workshop.extensions.ruff"

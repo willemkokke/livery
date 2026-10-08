@@ -49,6 +49,12 @@ from livery.extensions.docs._navblocks import (
     NAV_END,
     nav_block_file,
 )
+from livery.extensions.docs._packages_page import (
+    LANDING,
+    Node,
+    package_tree,
+    write_packages_page,
+)
 from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import doc, fail, group
 from livery.workshop import HUMAN, _extensions, guidance, read_contract, slot
@@ -903,12 +909,13 @@ def zensical_config(root: Path) -> str:
     lines += development_nav_lines(root)
     from livery.workshop._kinds import kind_extractor
 
+    packages = discover_packages(root)
+    lines += packages_nav_lines(packages)
     handlers: dict[str, tuple[Extractor, list[str]]] = {}
-    for package in discover_packages(root):
+    for package in packages:
         section, _extracts = _package_section(package)
         if not section:
             continue
-        lines += section
         extractor = kind_extractor(package.kind)
         if extractor is None:
             continue
@@ -928,14 +935,22 @@ def zensical_config(root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _package_section(package: Package, indent: str = "    ") -> tuple[list[str], bool]:
+def _package_section(
+    package: Package,
+    indent: str = "    ",
+    *,
+    label: str = "",
+    children: tuple[str, ...] = (),
+) -> tuple[list[str], bool]:
     """One package's nav section lines, and whether it has API modules.
 
     The authored ``nav.toml`` tree when the package ships one
     (checked both ways first), the enumerated authored pages
     otherwise; then the changelog and API entries, which are machine
-    territory in either shape. Empty for a package with nothing to
-    show.
+    territory in either shape; then *children*, the lines of the
+    places below it in the Packages tree. Labelled *label*, the
+    member's path when empty. Empty for a package with nothing to
+    show and nothing below it.
     """
     from livery.workshop._kinds import kind_extractor
 
@@ -947,7 +962,14 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     absent = kind_extractor(package.kind) is None and not declines_api(package)
     changelog = (package.directory / "CHANGELOG.md").is_file()
     authored = authored_nav(package)
-    if authored is None and not pages and not modules and not changelog and not absent:
+    if (
+        authored is None
+        and not pages
+        and not modules
+        and not changelog
+        and not absent
+        and not children
+    ):
         return ([], False)
     name = package.member
     prefix = f"packages/{name}/"
@@ -991,7 +1013,7 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
                     lead += section(early, at)
         return lead + section(block, at)
 
-    lines = [f'{indent}{{ "{name}" = [']
+    lines = [f'{indent}{{ "{label or name}" = [']
     if authored is not None:
         check_package_nav(package, tree)
         lines += _authored_nav_lines(tree, prefix, inner, fill)
@@ -1002,8 +1024,44 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
             lines.append(f'{inner}{{ "{_label(page)}" = "{prefix}{page}" }},')
     for block in unplaced:
         lines += section(block, inner)
+    lines += children
     lines.append(f"{indent}] }},")
     return (lines, bool(modules))
+
+
+def _place_lines(node: Node, indent: str) -> list[str]:
+    """One place of the Packages tree as nav lines: its section, then below it."""
+    inner = indent + "    "
+    children = tuple(
+        line for child in node.ordered() for line in _place_lines(child, inner)
+    )
+    if node.package is not None:
+        lines, _modules = _package_section(
+            node.package, indent, label=node.label, children=children
+        )
+        return lines
+    if not children:
+        return []
+    return [f'{indent}{{ "{node.label}" = [', *children, f"{indent}] }},"]
+
+
+def packages_nav_lines(packages: tuple[Package, ...]) -> list[str]:
+    """The nav's one Packages entry: the landing page, then the tree.
+
+    Empty for a workspace without packages.
+    """
+    if not packages:
+        return []
+    tree = package_tree(packages)
+    entries = [
+        line for child in tree.ordered() for line in _place_lines(child, "        ")
+    ]
+    return [
+        '    { "Packages" = [',
+        f'        {{ "Index" = "packages/{LANDING}" }},',
+        *entries,
+        "    ] },",
+    ]
 
 
 RELEASES = "docs/releases"
@@ -1289,7 +1347,7 @@ def _stale_mounts(base: Path, present: set[str]) -> list[str]:
     groups = {member.partition("/")[0] for member in present if "/" in member}
     stale: list[str] = []
     for entry in sorted(base.iterdir()):
-        if entry.name in present:
+        if entry.name in present or entry.name == LANDING:
             continue
         if entry.name not in groups:
             stale.append(entry.name)
@@ -1731,6 +1789,8 @@ def _generate_all(root: Path, *, full: bool = False) -> None:
         print(f"  mounted docs for {', '.join(mounted)}")
     else:
         print("  mounts current: no package's docs moved")
+    if write_packages_page(root) is not None:
+        print("  wrote the Packages landing page")
     staged = stage_extension_assets(root)
     if staged:
         print(f"  extension assets for {', '.join(staged)}")
