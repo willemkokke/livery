@@ -264,10 +264,13 @@ def test_safe_fix_keeps_an_import_an_edit_in_flight_added(
     assert messy.read_text() == "x = 1\n"
 
 
-def test_an_edit_the_hook_sees_is_formatted_and_keeps_its_new_import(
+def test_an_edit_the_fixers_see_is_formatted_and_keeps_its_new_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    from livery.workshop._hooks import HookEvent, ToolInput, post_edit
+    # What an agent's post-edit hook runs after each edit: the safe
+    # fixes alone, since an edit in flight adds an import before the
+    # code that uses it.
+    from livery.workshop._quality import fix_files
 
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     monkeypatch.chdir(tmp_path)
@@ -276,7 +279,10 @@ def test_an_edit_the_hook_sees_is_formatted_and_keeps_its_new_import(
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     victim = tmp_path / "wip.py"
     victim.write_text("import os\nx=1\n")
-    post_edit(HookEvent(tool_input=ToolInput(file_path=str(victim))))
+    # The unused import stays a finding, which the hook leaves for the
+    # gate to report.
+    with pytest.raises(Failed, match="ruff check"):
+        fix_files((str(victim),), safe=True)
     healed = victim.read_text()
     assert "import os" in healed  # the not-yet-used import survives
     assert "x = 1" in healed  # everything else heals
