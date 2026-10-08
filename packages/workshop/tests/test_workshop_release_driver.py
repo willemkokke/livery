@@ -298,6 +298,48 @@ def test_local_release_reports_builds_and_restores(
     assert git.is_clean()  # the stamps rolled back
 
 
+def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
+    workspace: tuple[FakeForge, GitOps, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The fallback first: an origin this checkout cannot reach leaves
+    # the derivation to its own tags, and says so.
+    _fake, git, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    monkeypatch.setattr(
+        "livery.workshop._release_driver._python.build",
+        lambda package, root, **kw: None,
+    )
+    origin = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    _git(root, "remote", "set-url", "origin", str(root.parent / "gone.git"))
+    local_release(root, resolve_set(root, ("core",)))
+    out = capsys.readouterr().out
+    assert "origin could not be fetched" in out
+    assert "would release: livery-core v0.3.0" in out
+    # A wave elsewhere cuts core's receipt at that commit; this checkout
+    # has not fetched it, and the rehearsal reads it all the same.
+    _git(root, "remote", "set-url", "origin", origin)
+    other = root.parent / "other"
+    _git(root.parent, "clone", origin, "other")
+    _git(other, "tag", "packages/core/v0.3.0")
+    _git(other, "push", "origin", "packages/core/v0.3.0")
+    with pytest.raises(_FAILURES, match=r"nothing unreleased touches: core\."):
+        local_release(root, resolve_set(root, ("core",)))
+    assert git.is_clean()
+
+
 def test_a_failing_member_rolls_the_whole_prepare_back(
     workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

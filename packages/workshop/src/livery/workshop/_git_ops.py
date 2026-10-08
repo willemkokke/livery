@@ -191,6 +191,15 @@ class GitOps:
         """Freshen ``origin/*``."""
         self._run("fetch", "origin")
 
+    def fetch_tags(self) -> None:
+        """Freshen ``origin/*`` and take every tag origin holds.
+
+        A tag cut on the remote at a commit this clone already has is
+        fetched here too, which a plain fetch's tag following does not
+        promise.
+        """
+        self._run("fetch", "--tags", "origin")
+
     def has_remote(self, name: str = "origin") -> bool:
         """Whether this clone has a remote called *name*; any other failure raises."""
         result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
