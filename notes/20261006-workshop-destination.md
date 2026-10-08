@@ -1678,6 +1678,17 @@ the stack, which this design neither needs nor rules out).
   content header's refresh removed the whole comment block it opened
   (the shim's own documentation) and the blank line after an HTML
   header; `strip_header` now removes the header's own lines alone.
+- 2026-10-08, the loop on 10f's branch, 10e under it: `fm ci.e2e
+  --fresh` passed birth, verified-skip, members, ratchet and the
+  scoped leg in 19m51s (pass `20261008T134358Z`). The newborn lists
+  `changelog` and `claude`, and its birth wrote `CLAUDE.md`,
+  `CLAUDE.project.md`, `.claude/` and each member's seeded
+  `CHANGELOG.md` from the dev wheels. `--scenario=release` (pass
+  `20261008T135910Z`) merged the newborn's release pull request, each
+  member's `## [0.1.0]` entry written by the changelog extension with
+  its authors credited through the local forge; the wave then stopped
+  at the cpp member's `conan create` on a profile with no compiler,
+  #1113's fault and not this change's.
 
 ## Open
 
