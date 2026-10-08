@@ -18,10 +18,6 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery.footman import Context, doc, fail, group
-
-# Registers the base's release notes provider, git-cliff into
-# CHANGELOG.md, until the changelog extension ships it.
-from livery.workshop import _cliff as _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps

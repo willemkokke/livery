@@ -1,0 +1,17 @@
+# The changelog extension: each package's CHANGELOG.md, written by
+# git-cliff from the commits since the package's last release. The
+# workshop registers NOTES as the release notes' writer at mount and
+# imports it when the release train first asks for an entry; each
+# package's cliff.toml is this extension's per-package content.
+release-notes = "livery.extensions.changelog._cliff:NOTES"
+
+[extension]
+api-version = 1
+# Listed in the workspace's list alone: one history format for every
+# member.
+levels = ["workspace"]
+
+[toolroom]
+# git-cliff writes every entry, so the lock pins it and the entries a
+# release writes do not depend on the machine.
+requires = ["git_cliff"]

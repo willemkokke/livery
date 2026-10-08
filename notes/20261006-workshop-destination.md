@@ -11,8 +11,10 @@ release wave that ships the slice's break runs on 2026-10-08 after
 publishes, four a day"). 10g is built (issue #1301) and rides that
 wave. 10c is built (issue #1303) but for clang-tidy, whose words wait
 on a ruling, so its acceptance's `find` stays open. 10d is built
-(issue #1306). The extensions plan
-(`notes/20261002-extensions-plan.md`) stays the one plan; this note
+(issue #1306) and rides that wave. 10e is built (issue #1307); it
+merges after the 2026-10-08 wave, and the workshop's next release
+carries `livery-extensions-changelog`'s first publish. The extensions
+plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
 ## The rulings this design satisfies
@@ -1588,6 +1590,44 @@ the stack, which this design neither needs nor rules out).
   the entry point, not yes or no, since the bench reads its version and
   loads it. The bench's `toolroom.{task}` message, which 10g's rename
   missed, names the verb it has.
+- 2026-10-08, 10d's acceptance: `fm workflow.release --local` on `main`
+  at `f4614c00`, the wave's twelve members (footman, forge, the
+  workshop, toolroom, the store, the bench and six tool extensions),
+  passed all 24 legs in 26m12s and restored the tree.
+- 2026-10-08, a whole mypy run (#1310): `mypy.ini` named every python
+  member's `src`, and the five tool extensions whose `src` holds data
+  alone made mypy refuse any run that reaches the whole. The render
+  data carries `python_dirs`, the members' directories that hold a
+  python file, and `files` lists them; the wave carries the fix.
+- 2026-10-08, 10e (#1307): `livery-extensions-changelog` writes the
+  release notes. Its `extension.toml` names its provider with a new
+  top-level key, `release-notes = "module:name"`, which the mount
+  registers and the release train imports when it first asks for an
+  entry. Each package's `cliff.toml` is the extension's per-package
+  content, rendered into every member whatever its kind, and
+  `git_cliff` is its `[toolroom]` requirement; `_cliff` and the
+  template left the base, and the base kind requires no tool. Decided
+  here: the extension seeds a `CHANGELOG.md` into every member born
+  while it is listed (`content/seeds/package-base`), the base's three
+  copies of that seed go, and the first record creates the file for a
+  member born without it; a tool an extension that declares
+  `release-notes` requires takes no host allowance, naming the
+  extension, which replaces the base's `git_cliff` by name; the
+  workshop's release tests run the train against a stand-in provider,
+  and git-cliff's entries, its history and its bump's agreement with
+  the workshop's derivation are tested in the extension. Not moved:
+  the release driver's rollback, the docs site and the conan release
+  body still read `CHANGELOG.md` by name.
+- 2026-10-08, open in 10e: the acceptance's `fm workflow.release
+  --local` on this repository runs on `main` after the merge. Before
+  it, every package's entry was written offline on `main` at
+  `f4614c00` by the base's git-cliff code and by the extension's: the
+  fifteen entries are byte-identical.
+- 2026-10-08, open in 10e: the `cliff.toml` template's comments still
+  say each file is composed from the base's template. Rewording them
+  renders every package's `cliff.toml` again, which puts the change
+  into every package's next release entry and moves each version, so
+  the wording changes in a wave that releases every package anyway.
 
 ## Open
 

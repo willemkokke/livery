@@ -16,6 +16,8 @@ copyright-year = "2026"
 # and a plugin (forge's dev verbs, the bench's tools verbs) mounts
 # because this project depends on it directly.
 extensions = [
+    # Each package's CHANGELOG.md, written by git-cliff at release.
+    "changelog",
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
     # The python formatter and linter, configured by the root ruff.toml.

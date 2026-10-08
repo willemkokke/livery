@@ -68,6 +68,8 @@ def test_the_surface_is_declared() -> None:
         "selected_files",
         "slot",
         "testing",
+        "this_forge",
+        "this_repository",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",

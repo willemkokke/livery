@@ -85,8 +85,8 @@ every host key, which the store names and which is read only then."""
 VERDICT_ROLES = ("format", "lint", "typecheck", "typecomplete", "test")
 """The check roles whose tools take no host allowance: the version is the verdict."""
 
-PINNED_TOOLS = ("uv", "git_cliff")
-"""The tools no allowance reaches: the entry pins uv, the train reads git-cliff."""
+PINNED_TOOLS = ("uv",)
+"""The tools no allowance reaches by name: the entry pins uv."""
 
 ROOT_KIND = "python"
 """The kind of the workspace's own files, whatever its members are.
@@ -229,13 +229,16 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     C++ package arrives, and the lock's line is where a misspelling
     shows. A tool a check reads its verdict
     from refuses, naming the checks that read it: a linter that varies
-    by machine makes the gate disagree with CI. `uv` and `git_cliff`
-    refuse by name: the entry pins uv, and the release train reads
-    git-cliff's output. A download whose executable is not named like
-    the tool, or that has none, refuses too: the allowance finds the
-    tool on PATH by its name.
+    by machine makes the gate disagree with CI. `uv` refuses by name,
+    since the entry pins it. A tool an extension that writes release
+    notes requires refuses, naming the extension: a release's entries
+    must not depend on the machine. A download whose executable is
+    not named like the tool, or that has none, refuses too: the
+    allowance finds the tool on PATH by its name.
     """
+    from livery.toolroom.store import LockError, Requirement
     from livery.workshop._checks import check_for, tools_for_kind
+    from livery.workshop._extensions import notes_tools
     from livery.workshop._kinds import kind_host_allowed
 
     declared = cast(
@@ -251,15 +254,23 @@ def host_allowed(root: Path) -> tuple[str, ...]:
         for tool, check in tools_for_kind(kind_name):
             if check_for(check).role in VERDICT_ROLES:
                 verdicts.setdefault(tool, set()).add(check)
+    writers: dict[str, str] = {}
+    for extension, requires in notes_tools(root).items():
+        for line in requires:
+            try:
+                parsed = Requirement.parse(line, site=f"extension {extension}")
+            except LockError as error:
+                fail(str(error))
+            writers[parsed.name] = extension
     for name in names:
         where = f"workshop.toml: [toolroom] host-allowed names {name}"
         if name in PINNED_TOOLS:
-            reason = (
-                "the entry pins uv"
-                if name == "uv"
-                else "the release train reads its output"
+            fail(f"{where}, which takes no allowance: the entry pins {name}")
+        if name in writers:
+            fail(
+                f"{where}, which takes no allowance: extension {writers[name]}"
+                " writes the release notes with it"
             )
-            fail(f"{where}, which takes no allowance: {reason}")
         if name in verdicts:
             readers = sorted(verdicts[name])
             fail(

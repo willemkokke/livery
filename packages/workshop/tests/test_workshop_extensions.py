@@ -82,6 +82,7 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
     assert extension_names(ROOT) == (
+        "changelog",
         "docs",
         "ruff",
         "basedpyright",

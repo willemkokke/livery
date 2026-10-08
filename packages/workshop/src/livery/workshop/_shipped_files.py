@@ -234,10 +234,13 @@ def _packaged(
     from livery.workshop._identity import package_facts
     from livery.workshop._templates import _release_baseline, package_injections
 
-    # Every package lists the base implicitly, so the base's
-    # `content/package/` files (the changelog's configuration) reach each
-    # one, rendered with the member's own facts.
-    paths: dict[str, tuple[str, ...]] = {package.path: (SELF,) for package in packages}
+    # Every package takes the base and every extension the workspace
+    # lists, so each one's `content/package/` files (the changelog
+    # extension's cliff.toml) reach every member, rendered with the
+    # member's own facts.
+    paths: dict[str, tuple[str, ...]] = {
+        package.path: tuple(order) for package in packages
+    }
     injected = package_injections(root) if packages else {}
     data: dict[str, dict[str, Any]] = {
         package.path: {

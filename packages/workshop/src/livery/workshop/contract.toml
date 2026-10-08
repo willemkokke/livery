@@ -771,6 +771,10 @@ doc = "the options a workspace may turn on when it lists the extension as <name>
 types = ["str"]
 doc = "an option, by its name in the listing's brackets, to a line saying what it turns on"
 
+[contract.extension.release-notes]
+types = ["str"]
+doc = "the release notes' writer, module:name in the extension's own package: the provider the release train asks for each release's entry, registered at mount"
+
 [contract.extension.replaces]
 types = ["table"]
 doc = "the shipped files of earlier extensions that this one's own files replace"

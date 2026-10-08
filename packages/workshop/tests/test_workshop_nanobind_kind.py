@@ -20,7 +20,7 @@ from livery.workshop._kinds import (
     template_chain,
 )
 from livery.workshop._packages import Package
-from workshop_composed import IDENTITY, seed_into
+from workshop_composed import seed_into
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -157,16 +157,15 @@ def test_the_kind_chains_from_python(python_checks: object) -> None:
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     # The native configs are rendered from the check records, so the kind
-    # manages them; the changelog config is the base's, for every package.
-    # The chain's union of what operates the kinds: the base's and
-    # python's beneath the kind's own build tools; the checkers, the
+    # manages them.
+    # The chain's union of what operates the kinds: python's beneath
+    # the kind's own build tools; the checkers, the
     # formatter, the test runner and the two clang tools ride their
     # check records, which the chain reaches the same way.
     assert kind_tools({"python-nanobind"}) == (
         "cmake",
         "cmake_conan",
         "conan",
-        "git_cliff",
         "ninja",
         "uv",
     )
@@ -206,32 +205,6 @@ def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
     # The leaf's __init__ re-exports the compiled surface.
     init = (directory / "src" / "acme" / "ext" / "__init__.py").read_text()
     assert "native_hello" in init
-
-
-def test_a_chained_member_gets_the_base_files(tmp_path: Path) -> None:
-    from livery.workshop._templates import apply_project
-
-    (tmp_path / "workshop.toml").write_text(
-        "[workspace]\n" + IDENTITY + "extensions = []\n"
-        "\n"
-        "[forge]\n"
-        'kind = "github"\n'
-        'owner = "owner"\n'
-    )
-    apply_project(tmp_path)
-    package = tmp_path / "packages" / "ext"
-    package.mkdir(parents=True)
-    (package / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "livery-ext"\n'
-    )
-    (package / "pyproject.toml").write_text('[project]\nname = "livery-ext"\n')
-    # cliff.toml is the base's, for every package of any kind: the engine
-    # writes it for the leaf as for any member.
-    from livery.workshop._shipped_files import deliver
-
-    assert "  wrote packages/ext/cliff.toml" in deliver(tmp_path)
-    body = (package / "cliff.toml").read_text()
-    assert 'include_paths = ["packages/ext/**"]' in body
 
 
 # The armed leg: cibuildwheel builds, the tag is native, the

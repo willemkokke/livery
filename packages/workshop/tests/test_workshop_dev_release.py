@@ -20,7 +20,7 @@ from livery.workshop._dev_release import (
 )
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
-from workshop_seeds import member
+from workshop_seeds import FakeNotes, fake_notes, member  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -394,8 +394,11 @@ def test_the_release_task_owns_the_terminal() -> None:
 
 
 def test_the_real_build_splices_the_readme_and_restores_the_tree(
-    tmp_path: Path,
+    tmp_path: Path, notes: FakeNotes
 ) -> None:
+    # The excerpt is the release notes' unreleased entry, which the
+    # stand-in provider answers as a listed extension would.
+    notes.line = "- Widget"
     root = _workspace(tmp_path)
     member = root / "packages" / "core"
     (member / "pyproject.toml").write_text(

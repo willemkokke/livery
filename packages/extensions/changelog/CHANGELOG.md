@@ -4,7 +4,7 @@
 -->
 # Changelog
 
-All notable changes to {{ package_name }} are documented here. The
+All notable changes to livery-extensions-changelog are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.

@@ -6,10 +6,9 @@ a ``BREAKING CHANGE:`` footer marking a break. The submit verb
 enforces it here.
 
 Two readers take the convention back. livery.workshop._versions
-derives a package's next version from it. git-cliff, per package
-through the ``cliff.toml`` the template renders, writes the changelog
-entry: it groups the commits, links the pull requests and credits the
-authors.
+derives a package's next version from it, and the release notes'
+provider, when an extension registers one, writes the entry the
+commits earn from it.
 """
 
 from __future__ import annotations

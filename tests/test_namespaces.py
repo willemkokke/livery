@@ -449,6 +449,8 @@ EXPORTS: dict[str, list[str]] = {
         "selected_files",
         "slot",
         "testing",
+        "this_forge",
+        "this_repository",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",

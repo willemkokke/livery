@@ -235,16 +235,22 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 
 
 def _extension_tools() -> set[str]:
-    """The tools the installed extensions' checks name."""
+    """The tools the installed extensions' checks name and their tables require."""
     from importlib.metadata import entry_points
 
+    from livery.toolroom.store import Requirement
     from livery.workshop._declaration import read
 
     tools: set[str] = set()
     for entry in entry_points(group="workshop.extensions"):
         found = read(entry.name, entry.value)
-        for record in found.additions.checks if found is not None else ():
+        if found is None:
+            continue
+        for record in found.additions.checks:
             tools.update((record.tool, *record.tools))
+        tools.update(
+            Requirement.parse(text, site=entry.name).name for text in found.tools
+        )
     return tools
 
 
@@ -285,7 +291,8 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
         # to say which tools it brings.
         pytest.skip("the scan reads the extensions this checkout installs")
     tools = _extension_tools()
-    assert "ruff" in tools  # the scan has something to look for
+    # The scan has something to look for, a check's tool and a table's.
+    assert {"ruff", "git_cliff"} <= tools
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
     assert dict(found) == allowed

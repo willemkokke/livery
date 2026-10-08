@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from livery.workshop._declaration import Reference
     from livery.workshop._packages import Package
 
 
@@ -63,6 +64,34 @@ def unregister_release_notes(*, extension: str) -> None:
 def release_notes() -> ReleaseNotes | None:
     """The registered provider, or None when no extension records release notes."""
     return _PROVIDER[0][0] if _PROVIDER else None
+
+
+class DeclaredNotes:
+    """The provider a declaration names, imported when the train first asks it.
+
+    Attributes:
+        reference: The ``module:name`` reference to the provider, in the
+            declaring extension's own package.
+    """
+
+    def __init__(self, reference: Reference) -> None:
+        self.reference = reference
+
+    def _provider(self) -> ReleaseNotes:
+        found: ReleaseNotes = self.reference.resolve()
+        return found
+
+    def entry(self, root: Path, package: Package, version: str = "") -> str:
+        """The provider's entry for what is unreleased in *package*."""
+        return self._provider().entry(root, package, version)
+
+    def record(self, package: Package, version: str, entry: str) -> list[str]:
+        """The provider's record of *version*'s *entry* in *package*'s history."""
+        return self._provider().record(package, version, entry)
+
+    def verify(self, package: Package, version: str) -> list[str]:
+        """The provider's problems with *version*'s recorded notes."""
+        return self._provider().verify(package, version)
 
 
 #: What the train prints where it would have written notes and has no provider.

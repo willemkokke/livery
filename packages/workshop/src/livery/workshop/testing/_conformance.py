@@ -497,6 +497,7 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         (f"{shown(('slots', slot.name))}.compose", slot.compose)
         for slot in declared.slots
     ]
+    found.append(("release-notes", declared.release_notes))
     return [(key, value) for key, value in found if isinstance(value, Reference)]
 
 

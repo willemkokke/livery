@@ -7,7 +7,8 @@ worker) and copies it into the test's own directory, with every
 clone's remote re-pointed at the copy, so a test still owns a
 repository nobody else touches and a push from one test never
 reaches another test's origin. A test module imports `seed_copier` and
-`_seed_home` to register them; this is not a conftest, since
+`_seed_home` to register them, and `fake_notes` for a stand-in
+release-notes provider; this is not a conftest, since
 footman's suite already has one of that name and the type checkers
 read the workspace as one program.
 """
@@ -15,6 +16,7 @@ read the workspace as one program.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -22,6 +24,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+
+from livery.workshop import Package
 
 #: A seed builder: makes the repositories under the directory it is given;
 #: whatever it returns is ignored, so a helper that returns a path serves.
@@ -198,49 +202,60 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
 
 
-def cliff_config(name: str) -> str:
-    """A member's `cliff.toml`, as the package template renders it.
+class FakeNotes:
+    """A release-notes provider standing in for an extension's.
 
-    Reduced to what runs offline: no `[remote]` section, so nothing
-    reaches for a forge while the suite runs, and no pull request
-    preprocessor, which needs the forge's web root. Every rule that
-    decides a version or a changelog entry is the template's own.
+    Each entry is headed by its version and says `line`. The history is
+    the package's ``CHANGELOG.md``, newest entry first, created at the
+    first record; an entry already under its version is replaced by a
+    different one, as a provider regenerates a stranded entry.
+    `recorded` keeps every entry the train handed it.
     """
-    body = (
-        'body = """\n'
-        '{% if version %}## [{{ version | split(pat="/") | last'
-        ' | trim_start_matches(pat="v") }}] - '
-        '{{ timestamp | date(format="%Y-%m-%d") }}'
-        "{% else %}## [Unreleased]{% endif %}\n"
-        '{% for group, commits in commits | group_by(attribute="group") %}\n'
-        "### {{ group | striptags | trim }}\n"
-        "{% for commit in commits %}\n"
-        "- {{ commit.message | upper_first }}\n"
-        "{%- endfor %}\n"
-        "{% endfor %}\n"
-        '"""\n'
-    )
-    return (
-        "[bump]\n"
-        "features_always_bump_minor = true\n"
-        "breaking_always_bump_major = false\n"
-        f'initial_tag = "packages/{name}/v0.0.0"\n'
-        "\n[git]\n"
-        f'tag_pattern = "^packages/{name}/v?(.+)$"\n'
-        f'include_paths = ["packages/{name}/**"]\n'
-        "conventional_commits = true\n"
-        "filter_unconventional = false\n"
-        "protect_breaking_commits = true\n"
-        'sort_commits = "oldest"\n'
-        "commit_parsers = [\n"
-        '  { message = "^chore\\\\(release\\\\)", skip = true },\n'
-        '  { message = "^feat", group = "<!-- 0 -->Added" },\n'
-        '  { message = "^fix", group = "<!-- 1 -->Fixed" },\n'
-        '  { message = ".*", group = "<!-- 2 -->Changed" },\n'
-        "]\n"
-        "\n[changelog]\n"
-        'header = "# Changelog\\n"\n' + body + "trim = true\n"
-    )
+
+    def __init__(self, line: str = "- what changed") -> None:
+        self.line = line
+        self.recorded: list[tuple[str, str]] = []
+
+    def entry(self, root: Path, package: Package, version: str = "") -> str:
+        """The entry for *version*, or for what is unreleased."""
+        del root, package
+        return f"## [{version or 'Unreleased'}]\n\n{self.line}"
+
+    def record(self, package: Package, version: str, entry: str) -> list[str]:
+        """Write *entry* under *version*'s heading; what changed."""
+        self.recorded.append((version, entry))
+        changelog = package.directory / "CHANGELOG.md"
+        text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
+        head, *blocks = re.split(r"\n(?=## )", text)
+        block = (entry or f"## [{version}]\n\n-").strip() + "\n"
+        heading = re.compile(rf"## \[?{re.escape(version)}\]?(\s|$)")
+        mine = [index for index, found in enumerate(blocks) if heading.match(found)]
+        if not mine:
+            blocks.insert(0, block)
+        elif entry and blocks[mine[0]].strip() != entry.strip():
+            blocks[mine[0]] = block
+        else:
+            return []
+        changelog.write_text("\n".join([head, *blocks]), encoding="utf-8")
+        return ["CHANGELOG.md"]
+
+    def verify(self, package: Package, version: str) -> list[str]:
+        """A missing ``## <version>`` entry, or nothing."""
+        changelog = package.directory / "CHANGELOG.md"
+        body = changelog.read_text("utf-8") if changelog.is_file() else ""
+        if f"## {version}" in body or f"## [{version}]" in body:
+            return []
+        return [f"CHANGELOG.md has no '## {version}' entry"]
+
+
+@pytest.fixture(name="notes")
+def fake_notes(monkeypatch: pytest.MonkeyPatch) -> FakeNotes:
+    """A stand-in provider, registered as a listed extension registers its own."""
+    from livery.workshop import _release_notes
+
+    provider = FakeNotes()
+    monkeypatch.setattr(_release_notes, "_PROVIDER", [(provider, "acme.notes")])
+    return provider
 
 
 def member(root: Path, name: str, *, floor_on: str = "") -> None:
@@ -264,4 +279,3 @@ def member(root: Path, name: str, *, floor_on: str = "") -> None:
     (directory / "src" / "livery" / name / "__init__.py").write_text(
         '__version__ = "0.2.0"\n'
     )
-    (directory / "cliff.toml").write_text(cliff_config(name))
