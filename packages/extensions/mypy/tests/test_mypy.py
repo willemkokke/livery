@@ -211,6 +211,39 @@ def test_the_file_names_the_root_tests_only_while_they_exist(tmp_path: Path) -> 
     assert written["mypy-acme.*"]["disallow_untyped_defs"] == "True"
 
 
+def test_the_file_names_a_member_s_directory_only_while_it_holds_python(
+    tmp_path: Path,
+) -> None:
+    # A whole run hands mypy no path, so it reads `files`, and mypy
+    # refuses a named directory with no python file in it: an
+    # extension's src may hold data alone.
+    from livery.workshop._shipped_files import deliver
+
+    root = _workspace(tmp_path / "ws", '["mypy"]')
+    for name, source in (("data", ""), ("thing", "thing.py")):
+        directory = root / "packages" / name
+        (directory / "src" / "acme" / name).mkdir(parents=True)
+        (directory / "tests").mkdir()
+        (directory / "workshop.toml").write_text(
+            f'kind = "python"\nname = "acme-{name}"\n'
+        )
+        (directory / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
+        (directory / "src" / "acme" / name / (source or "extension.toml")).write_text(
+            ""
+        )
+        (directory / "tests" / f"test_{name}.py").write_text("")
+    deliver(root)
+    written = _read(root / "mypy.ini")
+    assert written["mypy"]["files"].split() == [
+        "packages/data/tests,",
+        "packages/thing/src,",
+        "packages/thing/tests,",
+        "tasks.py",
+    ]
+    # A base with nothing in it costs mypy nothing, so the bases stay.
+    assert "packages/data/src," in written["mypy"]["mypy_path"].split()
+
+
 def test_this_repository_s_configuration_is_what_a_bare_mypy_reads() -> None:
     written = _read(ROOT / "mypy.ini")
     assert "packages/extensions/mypy/src," in written["mypy"]["mypy_path"].split()

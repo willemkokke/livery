@@ -22,7 +22,7 @@ from livery.workshop._extensions import (
     stack_entries,
     workspace_root,
 )
-from livery.workshop._identity import identity
+from livery.workshop._identity import identity, python_dirs
 from livery.workshop._pythons import python_floor
 
 new = group("new", help="Create a project or a package from the extensions' seeds")
@@ -91,6 +91,10 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # The workspace's own tests directory, which the checkers and
         # the test runner read only while it exists: a newborn has none.
         "root_tests": ["tests"] if (root / "tests").is_dir() else [],
+        # Each python member's src and tests that hold a python file: a
+        # checker such as mypy refuses a named directory with none, and
+        # an extension's src may hold data alone.
+        "python_dirs": python_dirs(root),
         # The slots the check records fill: the dev group's tool lines,
         # pytest's addopts. An extension's contribution lands here, and a
         # withdrawn check takes its line with it.
