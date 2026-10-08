@@ -27,7 +27,3 @@ floor = "0.58.0"
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
 coverage-floor = 100
-
-[docs]
-# Inside the workshop's entry of the site's Packages tree.
-name = "workshop.extensions.mypy"

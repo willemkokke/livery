@@ -1464,12 +1464,13 @@ the stack, which this design neither needs nor rules out).
   each package (`[docs] name`, else the import path less the namespace
   every python package shares, else the folder under `packages/`),
   orders siblings by `order_topologically`, the order a release wave
-  publishes in, and writes `packages/index.md` after the mount. The
-  eight tool extensions set `name = "workshop.extensions.<name>"`.
+  publishes in, and writes `packages/index.md` after the mount.
   Decided here: the landing page shows each package's contract
-  `description`, and the five contracts without one took their
-  `pyproject.toml` description; replacing the tree by hand, a root
-  `docs/nav.toml`, waits for a workspace that needs it.
+  `description`; replacing the tree by hand, a root `docs/nav.toml`,
+  waits for a workspace that needs it. The contracts that place the
+  tool extensions and state the missing descriptions land apart, as
+  documentation, so no package other than the workshop gets this
+  feature in its changelog.
 
 ## Open
 
