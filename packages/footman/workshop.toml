@@ -6,6 +6,7 @@
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
 name = "livery-footman"
+description = "A task runner with typed commands, nested groups, and instant shell completion."
 dev-extras = ["test"]
 
 [docs]
