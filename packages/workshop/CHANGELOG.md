@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.7.0] - 2026-10-08
+
+### Added
+
+- Forge lookups ask each backend's narrowest query and stop reading once they have what they need: pull requests by branch and commit, runs by workflow and limit, tags by prefix by @willemkokke
+- The docs extension declares its checks and slots in extension.toml by @willemkokke
+- The docs extension declares its CI jobs in extension.toml, and the CI render asks each job what it installs and where it deploys instead of reading the [docs] table by @willemkokke
+- A CI job declares the files its entries read, and fm ci.run skips them on a pull request that changed none, so the base no longer decides what the site reads by @willemkokke
+- Fm sync composes each contract's JSON Schema under .workshop/schema from the base's and the listed extensions' keys, and a composed .taplo.toml points the editor at them by @willemkokke
+- Fm explain names the schema a contract is judged by, with the owners whose keys it holds by @willemkokke
+- The conformance kit imports every reference a declaration names in a process of its own, and a module that registers at import fails it by @willemkokke
+- The conformance kit holds every task a CI job's entries name to the tasks the extension defines, read from its sources by AST by @willemkokke
+- The conformance kit checks that a check's claims name known categories and an extension's plugin is an installed entry point by @willemkokke
+- Task names link to their pages through footman's Invocation.docs_url, set by a pre_tasks hook: the docs extension's from [docs] site-url, now its own key, and the base's from [workspace] docs-url by @willemkokke
+- The workshop exports the names an extension reads the workspace by, and the docs extension reads it through them by @willemkokke
+- The workshop exports guidance, its readers and Prose, ci_changes and contributions_for, and the docs extension reads its prose through guidance by @willemkokke
+- The docs extension's own public API serves the nav block helpers and the generated tree's name, rewrite_nav_block leaves the workshop, and toolroom-bench writes its block through the extension by @willemkokke
+- The site's packages sit under one Packages entry, placed by import path, folder or [docs] name and ordered by their dependencies, with a generated landing page by @willemkokke
+- A check whose verdict is its tool's exit code is its tool's words, run by the workshop, and six checks become words by @willemkokke
+- No package reaches another's privates: footman exports host, CommandView, styled and its brand's names, toolroom its colour and stub tables by @willemkokke
+
+### Fixed
+
+- A bare wave dispatch reads the release record on the base, so a checkout behind it never sends the wave to a squash a later release took over by @willemkokke
+- The release wave uploads new projects one at a time, and a registry's new-project limit stops it with the projects still to create and the re-dispatch by @willemkokke
+- The release train retries an unreadable poll while it waits for the wave, and a spent budget names the forge and the command that follows the wave by @willemkokke
+- Fm submit names a push the forge rejected for its own reason in git's words, and keeps the add-a-commit advice for a branch behind origin by @willemkokke
+- A git revision reaches git whole on Windows: the workshop spells none with a caret, which cmd.exe drops on the way through the store's .cmd launcher by @willemkokke
+- A check under [for.<target>] registers under the options its owner's listing turns on, so one with listed-with registers at all by @willemkokke
+- Fm start names the tree that holds a started branch, drops a branch no tree holds whose pull request merged and took its tip and starts fresh, and re-enters any other such branch on its own tip by @willemkokke
+- Fm sync removes what an older delivery left in .workshop/fragments, the materialiser's digest list and its managed ignore file, and names each by @willemkokke
+- Nobody imports an extension but the workshop's mount: toolroom-bench writes its tools nav block as data, the docs extension's public names go, and a test holds the rule by @willemkokke
+- A whole mypy run checks what a narrowed one does: mypy.ini names only the member directories that hold a python file by @willemkokke
+
+### Changed
+
+- The contract judge validates against the composed JSON Schema, in its own words, and an unlisted extension's key stays in the schema naming its owner by @willemkokke
+- The base declares its own contract keys in contract.toml, in the grammar an extension declares its own by @willemkokke
+- Every contract key the base or an extension declares carries a doc, which the composed schema shows on hover, and the conformance kit keeps it so by @willemkokke
+- The tool store's table, lock and verbs take toolroom's name, and the store ships the table's schema and its own reader by @willemkokke
+
 ## [0.6.0] - 2026-10-07
 
 ### Added

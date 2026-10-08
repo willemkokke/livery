@@ -110,7 +110,7 @@ if TYPE_CHECKING:
     from livery.workshop._state import RunContext as RunContext
     from livery.workshop._state import ci_run as ci_run
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "AGENT",
