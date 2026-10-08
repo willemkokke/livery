@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-clang-format"
-version = "0.0.0"
+version = "0.1.0"
 description = "clang-format as a check of the livery workshop: each native package's C and C++ sources, formatted by its own .clang-format."
 readme = "README.md"
 license = "MIT"

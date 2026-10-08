@@ -810,7 +810,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-clang-format"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/clang-format" }
 dependencies = [
     { name = "livery-footman" },
