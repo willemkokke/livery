@@ -9,7 +9,8 @@ the schema, the verification and the public names are built, and the
 release wave that ships the slice's break runs on 2026-10-08 after
 15:00 UTC, once PyPI accepts new projects again (see "First
 publishes, four a day"). 10g is built (issue #1301) and rides that
-wave. The extensions plan
+wave. 10c is built (issue #1303) but for clang-tidy, whose words wait
+on a ruling, so its acceptance's `find` stays open. The extensions plan
 (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1529,6 +1530,32 @@ the stack, which this design neither needs nor rules out).
   and leaves it. The checker configs' comments and toolroom's stub
   comments name `fm toolroom.restub`, so basedpyright, pyrefly, ty and
   toolroom release with the store, the bench and the workshop.
+- 2026-10-08, 10c (#1303): a check is its tool's words, `judge`, `fix`,
+  `safe-fix`, `env` and `matrix`, or a reference to its code, `run`,
+  never both. The declaration reader turns words into a command the
+  engine runs (`livery.workshop._words`), and the record keeps the
+  words for `fm explain <check>` and the kit's `words-are-answerable`
+  clause. ruff's two checks, mypy's (a matrix over linux, darwin and
+  win32), ty's, pyrefly's, clang-format's and basedpyright's type check
+  are words, their check code is gone, and this repository's gate ran
+  them through the engine. Decided here: the first word is the tool's
+  name as the check's `tools` name it, and the engine calls its
+  toolroom handle with the rest; a run that reaches the whole calls the
+  tool with no path, so it reads its own configuration, ruff included,
+  which was handed `.` before; a run that reaches nothing the check
+  reads calls nothing; a selected directory with no file the claims
+  reach is never named, since mypy refuses one and an extension's `src`
+  can now hold data alone; `{cache}` is answered relative to the
+  call's directory; a non-zero exit refuses with the handle's reason
+  and the tool's output, and every batch and matrix call still runs;
+  `env` keys are names, exempt from kebab-case; `fm explain` takes a
+  check's name as well as a file.
+- 2026-10-08, open in 10c: clang-tidy asks the host's compiler where
+  its builtin headers are, and skips with a reason when none answers,
+  which no placeholder says. It keeps its code until Willem rules
+  between waiting for the toolchain to answer it as a query and a
+  temporary base placeholder; until then the acceptance's `find` finds
+  `packages/extensions/clang-tidy/src/livery/extensions/clang/tidy/_checks.py`.
 
 ## Open
 
