@@ -808,7 +808,7 @@ Debt from the claim, an out-of-band one (the workshop's rules):
   placeholder. `livery-extensions-changelog` and
   `livery-extensions-claude` have released, so theirs can go now.
 - [ ] Each project's trusted publisher for `livery-name-claims` is
-  removed, and the repository is deleted.
+  removed; the repository is deleted already (2026-10-09).
 
 ### Phase 10: the API as a contract, and its first consumers
 
@@ -969,6 +969,42 @@ this repository's root test from 10b retires, and
 `test_a_new_private_reach_refuses_naming_the_file_and_line` move into
 the extension's suite.
 
+11b also takes the first half of phase 13 (ruled 2026-10-09, option
+(a)): as each backend moves, the release train's calls to it become
+phase steps and queries (`stamp`, `build`, `prove`, `publish`,
+`replay`; `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`,
+`MODULE_ROOTS`), so no temporary key reaches a backend. 11b lands in
+slices, each mergeable alone:
+
+1. **The train's pins and the engine's inputs.** Tests pin the release
+   train's observable properties at its seams before any of its calls
+   change (contract 8). A phase's steps read the engine's inputs (the
+   version, the registry target, the build's epoch) as context keys
+   the base provides, which the phase judge counts as provided.
+2. **python.** `livery.extensions.python` ships in the workshop wheel
+   the way docs does, so the workshop's suite and its release leg keep
+   it: the python kind's backend, queries and phases, its categories,
+   its tool (`uv`) and seeds, `run_suites`, `kind_examples` and
+   `workspace_suite`, and the reach rule. This repository's packages
+   list it. Until slice 5 the release train asks a package's
+   extensions where they answer, and the kind's backend for a package
+   still of a kind: the one bridge of the transition.
+3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
+   test checks, its root files as `[root-files."<path>"]`, and checks
+   naming `extensions` instead of `kinds`.
+4. **nanobind and unreal**: nanobind's wheels job under
+   `[ci.jobs.<point>.<name>]`, so `_ci_generate` stops reading the
+   roster; unreal's declaration.
+5. **11c, the generators**, before the registry goes, since the docs
+   extension reads the extractor and the coverage pages from the kinds
+   until then.
+6. **The kinds go**: the registry, `KindRecord`, `Backend`, the
+   `kind` key, a check's `kinds` and the bridge; `fm new.package` takes
+   a combination, completed from `fm extensions --combinations`.
+7. **Each extension leaves the workshop wheel** for its own
+   distribution, its tests with it, released under the names claimed
+   on 2026-10-09.
+
 **11c, the generators.** `[generators.<name>]` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
 `zensical.toml` becomes a composed file of the fragment engine, the
@@ -1075,11 +1111,12 @@ repository judges every package's floor as before.
 
 ### Phase 13: the release train through phases
 
-The plan's 11c and 11e, unchanged: `stamp`, `build`, `prove`,
-`publish`, `replay`; `[publish]` and several artifacts; ecosystems as
-registrations with their defaults, which retires `_registries`'
-tables; the forge's `package_admin`; the graph from the `REQUIREMENTS`
-query. Acceptance: the plan's.
+The plan's 11c and 11e, less what 11b takes (the phases replacing
+the backend calls, ruled 2026-10-09): `[publish]` and several
+artifacts; ecosystems as registrations with their defaults, which
+retires `_registries`' tables; `livery.forge.RegistryKind` an open
+name; the forge's `package_admin`; `[release] publish` goes; the graph
+from the `REQUIREMENTS` query. Acceptance: the plan's.
 
 ### Phase 14: toolchains
 
@@ -1831,6 +1868,16 @@ the stack, which this design neither needs nor rules out).
   `livery-extensions-claude` 0.0.0. PyPI's project JSON served its
   cached placeholder-only copy after the upload; the version endpoint
   and the simple index listed 0.0.0 at once.
+
+- Willem, 2026-10-09: 11b moves the release train's backend calls onto
+  phase steps and queries as each backend moves (option (a)), rather
+  than a temporary `backend` key in `extension.toml` until phase 13
+  (option (b)). (a) writes no code to delete later and reaches one way
+  sooner; it makes 11b larger and touches the release train there, so
+  the train's properties are pinned first and every slice rehearses
+  with `fm workflow.release --local` and runs the loop's release
+  scenario before it merges. 11b's slices, 11c among them before the
+  registry goes, are under 11b.
 
 ## Open
 
