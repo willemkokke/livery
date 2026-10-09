@@ -9,10 +9,10 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 four tool extensions the 2026-10-07 wave could not create;
 clang-tidy keeps its check code, and the extension passes of 10b and
 10c stop at the coverage leg until 12e (#1225). 10e (issue #1307) and
-10f (issue #1313) merged after that wave, as PRs #1312 and #1315; the
-workshop's next
-release carries the first releases of `livery-extensions-changelog`
-and `livery-extensions-claude`. On 2026-10-09 every PyPI name the
+10f (issue #1313) merged after that wave, as PRs #1312 and #1315, and
+shipped on 2026-10-09 in release PR #1340: `livery-workshop` 0.8.0 and
+the first releases of `livery-extensions-changelog` and
+`livery-extensions-claude`, 0.0.0. The same day every PyPI name the
 remaining phases release was claimed with a placeholder, which leaves
 debt to clear (see "First publishes").
 Phase 11 started on 2026-10-09, and 11a is built: package composition
@@ -791,7 +791,7 @@ names first, the same way.
 
 | Name | First release |
 | --- | --- |
-| `livery-extensions-changelog`, `livery-extensions-claude` | the release of 10e and 10f |
+| `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
 | `livery-extensions-python`, `-cmake`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | 11b |
 | `livery-extensions-mkdocstrings` | 11c |
 | `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
@@ -805,7 +805,8 @@ Debt from the claim, an out-of-band one (the workshop's rules):
 
 - [ ] Each placeholder `0.0.0.dev0` is yanked once its package's first
   release lands; a name that never releases keeps its yanked
-  placeholder.
+  placeholder. `livery-extensions-changelog` and
+  `livery-extensions-claude` have released, so theirs can go now.
 - [ ] Each project's trusted publisher for `livery-name-claims` is
   removed, and the repository is deleted.
 
@@ -1817,6 +1818,19 @@ the stack, which this design neither needs nor rules out).
   time, since a token's first upload still creates up to four a day;
   such a release claims its names first. "First publishes" lists the
   names and the debt.
+
+- 2026-10-09, the release of 10e and 10f shipped. The local rehearsal
+  (`fm workflow.release packages/workshop packages/extensions/changelog
+  packages/extensions/claude --local`) passed the floor and latest legs
+  of all three members in 15 minutes. The armed act raised
+  `changelog`'s and `claude`'s floors on the workshop within the set,
+  opened release PR #1340 as "chore(release): released 3 packages"
+  (#1318's short title, which arming accepted), and merged it after
+  13 minutes of CI; the wave, run 37981710154, published
+  `livery-workshop` 0.8.0, `livery-extensions-changelog` 0.0.0 and
+  `livery-extensions-claude` 0.0.0. PyPI's project JSON served its
+  cached placeholder-only copy after the upload; the version endpoint
+  and the simple index listed 0.0.0 at once.
 
 ## Open
 
