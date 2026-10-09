@@ -784,7 +784,10 @@ A project created that way is not held to the four new projects a day
 that a token's first upload meets: fourteen were created that day. So
 a phase's distributions release on its first release day, and the
 existing token uploads them like any existing project. The train's
-first release of each is 0.0.0, above the placeholder.
+first release of each is 0.0.0, above the placeholder. The limit still
+holds for a token's first upload, so it matters only to a release that
+brings more than four new projects in one day: that release claims its
+names first, the same way.
 
 | Name | First release |
 | --- | --- |
@@ -1809,8 +1812,11 @@ the stack, which this design neither needs nor rules out).
   per name. Fourteen projects were created that day, each by its own
   run (`livery-extensions-changelog` by run 37966784377 first, as the
   proof), against the four a day a token's first upload met on
-  2026-10-08. The four-a-day schedule is retired; "First publishes"
-  lists the names and the debt.
+  2026-10-08. The four-a-day schedule is retired. Willem, the same
+  day: the limit is an issue only for more than four new projects at a
+  time, since a token's first upload still creates up to four a day;
+  such a release claims its names first. "First publishes" lists the
+  names and the debt.
 
 ## Open
 
