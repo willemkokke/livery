@@ -159,8 +159,19 @@ def test_a_current_instance_updates_to_nothing(
         driver, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
     )
     out = capsys.readouterr().out
-    assert "nothing to submit" in out
+    assert "nothing to submit" in out, _committed(root, out)
     assert git.current_branch() == "main"  # the empty branch was tidied
+
+
+def _committed(root: Path, out: str) -> str:
+    """What an update that should have been empty committed: its output and diff."""
+    diff = subprocess.run(
+        ["git", "diff", "main", "origin/workflow/update/dependencies"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    return f"{out}\n{diff.stdout}{diff.stderr}"
 
 
 def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
