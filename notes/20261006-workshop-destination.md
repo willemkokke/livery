@@ -18,7 +18,8 @@ debt to clear (see "First publishes").
 Phase 11 started on 2026-10-09, and 11a is built: package composition
 (issue #1330), the lifecycle phases (issue #1332), the queries (issue
 #1333) and `fm run` (issue #1335). 11a's C++ acceptance waits for 11b's
-cpp extension. The
+cpp extension. 11b's first slice, one seam for a package's lifecycle,
+is issue #1343. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -976,11 +977,14 @@ phase steps and queries (`stamp`, `build`, `prove`, `publish`,
 `MODULE_ROOTS`), so no temporary key reaches a backend. 11b lands in
 slices, each mergeable alone:
 
-1. **The train's pins and the engine's inputs.** Tests pin the release
-   train's observable properties at its seams before any of its calls
-   change (contract 8). A phase's steps read the engine's inputs (the
-   version, the registry target, the build's epoch) as context keys
-   the base provides, which the phase judge counts as provided.
+1. **One seam, and the train's pins** (issue #1343).
+   `livery.workshop._lifecycle` is the one place the release train,
+   the layering check, the docs and the loop reach a package's build,
+   version, version files, stamp, publish, requirements, module roots,
+   plugin modules and sibling references. It answers from the kind's
+   backend. The train's tests stand in for a build or an upload at the
+   seam, so they keep pinning the train's behaviour while the later
+   slices change only the seam's inside.
 2. **python.** `livery.extensions.python` ships in the workshop wheel
    the way docs does, so the workshop's suite and its release leg keep
    it: the python kind's backend, queries and phases, its categories,
@@ -988,7 +992,10 @@ slices, each mergeable alone:
    `workspace_suite`, and the reach rule. This repository's packages
    list it. Until slice 5 the release train asks a package's
    extensions where they answer, and the kind's backend for a package
-   still of a kind: the one bridge of the transition.
+   still of a kind: the one bridge of the transition. A phase's steps
+   read the engine's inputs (the version, the registry target, the
+   build's epoch) as context keys the base provides, which the phase
+   judge counts as provided.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
    test checks, its root files as `[root-files."<path>"]`, and checks
    naming `extensions` instead of `kinds`.
@@ -1156,6 +1163,7 @@ the stack, which this design neither needs nor rules out).
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
 | `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 3) |
+| `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 
 ## Decision record
 
@@ -1886,6 +1894,10 @@ the stack, which this design neither needs nor rules out).
   `fm sync` runs no lifecycle phase yet, so the check rides a new
   `KindRecord.before_install` until slice 3 moves it to the conan
   extension's `sync` step.
+- 2026-10-09, decided while building slice 1 (issue #1343): the slice
+  is the seam alone, and the engine's inputs to a phase's steps move to
+  slice 2. No step reads them before the python extension's steps do,
+  so a key the base provides in slice 1 would have no reader.
 
 ## Open
 
