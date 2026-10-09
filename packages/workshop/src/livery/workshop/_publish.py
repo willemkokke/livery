@@ -353,6 +353,9 @@ def cut_tag(git: GitOps, tag: str, ref: str) -> None:
 
 #: The words PyPI answers a new project's first upload with once one
 #: account has created as many projects as its limit allows for now.
+#: uv relays the server's message as text, and neither its exit code nor
+#: any structured output tells this refusal apart, so this match is the
+#: one place it is read; checked with uv 0.12.5.
 NEW_PROJECT_LIMIT = "Too many new projects created"
 
 

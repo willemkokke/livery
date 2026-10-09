@@ -94,16 +94,31 @@ def test_a_replace_of_a_missing_fragment_refuses(tmp_path: Path) -> None:
         )
 
 
+def test_an_error_kind_with_no_words_of_its_own_is_named_by_its_kind() -> None:
+    from types import SimpleNamespace
+
+    error = SimpleNamespace(kind="BadEscape", detail=None, line=3)
+    fragment = Fragment("docs", "v", "c.txt", "")
+    assert (
+        engine._template_error(fragment, error) == "fragment docs:v, line 3: BadEscape"
+    )
+
+
 def test_a_template_that_does_not_render_refuses_naming_the_fragment(
     tmp_path: Path,
 ) -> None:
+    # The engine's words come from the error's kind; minijinja's own
+    # detail, which its releases reword, follows them where it has one.
     with pytest.raises(Failed) as refused:
         _plan(tmp_path, Fragment("docs", "t", "a.txt", "{{ missing.value }}\n"))
-    # The engine names the fragment and the line; what follows is
-    # minijinja's own words, which newer releases spell out further.
-    assert str(refused.value).startswith("fragment docs:t, line 1: undefined value")
-    with pytest.raises(Failed, match=r"fragment docs:u, line 1: syntax error"):
+    assert str(refused.value).startswith(
+        "fragment docs:t, line 1: the template uses a value its data does not have"
+    )
+    with pytest.raises(Failed) as refused:
         _plan(tmp_path, Fragment("docs", "u", "b.txt", "{% if %}\n"))
+    assert str(refused.value).startswith(
+        "fragment docs:u, line 1: the template does not parse"
+    )
 
 
 def test_a_withdrawn_extensions_edited_file_is_kept_and_named(tmp_path: Path) -> None:

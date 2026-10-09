@@ -221,12 +221,32 @@ _COMPILED: set[str] = set()
 _CACHE: dict[tuple[str, str], str] = {}
 
 
+#: What a template error's kind means, in a refusal's words. A kind not
+#: named here is printed by its own name.
+_TEMPLATE_ERRORS = {
+    "SyntaxError": "the template does not parse",
+    "UndefinedError": "the template uses a value its data does not have",
+    "UnknownFilter": "the template uses a filter that does not exist",
+    "UnknownTest": "the template uses a test that does not exist",
+    "UnknownFunction": "the template calls a function that does not exist",
+    "UnknownMethod": "the template calls a method that does not exist",
+    "InvalidOperation": "the template does an operation its values do not allow",
+}
+
+
 def _template_error(fragment: Fragment, error: Any) -> str:
-    """The refusal for a template that does not compile or render."""
+    """The refusal for a template that does not compile or render.
+
+    Built from the error's ``kind`` and ``line``, the fields minijinja
+    keeps stable; its message text changes between releases. Its
+    ``detail``, where it gives one, follows in parentheses.
+    """
     # The template is registered under its digest, which says nothing
     # to a reader; the fragment's name and the line do.
-    message = str(error.message).split(" (in ")[0]
-    return f"fragment {fragment.ref}, line {error.line}: {message}"
+    kind = str(error.kind)
+    said = _TEMPLATE_ERRORS.get(kind, kind)
+    detail = f" ({error.detail})" if error.detail else ""
+    return f"fragment {fragment.ref}, line {error.line}: {said}{detail}"
 
 
 def _render(fragment: Fragment, data: Mapping[str, Any]) -> str:
