@@ -81,6 +81,8 @@ spelling. Every key is optional:
   package's lifecycle phase: `pre`, `main` and `post`, each
   `"module:function"` in its own package, and the context keys the
   steps `provides`, each with its type, and `reads`;
+- `[queries]`, the questions about a package a package-level extension
+  answers, each query's name to the `"module:function"` that answers it;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -220,6 +222,33 @@ puts a reader after the provider of each key it reads, then follows
 within a phase. Two extensions providing one key, a key nobody
 provides, and an order with no start refuse before any step runs, and
 the layering check names them for each package.
+
+A package-level extension also answers questions about a package:
+
+```toml
+[queries]
+public-modules = "acme.native._answers:public_modules"
+executables = "acme.native._answers:executables"
+```
+
+The workshop defines each query, typed by its answer, and the rule
+that combines the answers of a package's extensions; `answer(package,
+query)` asks each extension of the package's set that answers, in
+composition order, and combines them:
+
+| Query | Answer | Combined |
+| --- | --- | --- |
+| `public-modules` | the modules that declare the public API | the union |
+| `module-roots` | the names other packages reference the code by | the union |
+| `version-files` | the files `stamp` may write a version into | the union |
+| `current-version` | the version the manifests declare | one value every answer agrees on |
+| `requirements` | each required distribution to its constraint | the union; a name valued twice refuses |
+| `distributions` | each released distribution's ecosystem and name | the union |
+| `compile-commands` | the build's compilation database | the answer of the extension no other answering one requires |
+| `executables` | the executables `fm run` starts | the union; a name two extensions answer refuses |
+
+A name the workshop does not define refuses with the nearest one, and
+an extension listed at the workspace alone answers none.
 
 An extension's wheel carries its relations. Each `requires` target is
 a dependency of the wheel, and each `compatible` or `[for.<target>]`

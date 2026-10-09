@@ -4,8 +4,9 @@ An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, how it composes on a package, the steps it
-adds to a package's lifecycle phases, the tools its verbs need, the
-options a listing may turn on, its checks, its CI jobs,
+adds to a package's lifecycle phases, the questions about a package it
+answers, the tools its verbs need, the options a listing may turn on,
+its checks, its CI jobs,
 the values it puts into slots, the contract keys it owns, what it adds
 to another extension while that one is listed, and the earlier
 extensions' shipped files it replaces or deletes. The file is a
@@ -194,6 +195,8 @@ class Declaration:
         fragments: The files its code writes, by target.
         phases: The steps it adds to a package's lifecycle phases, by
             phase.
+        queries: The questions about a package it answers, each query's
+            name to the function that answers it.
     """
 
     extension: str
@@ -220,6 +223,7 @@ class Declaration:
     release_notes: Reference | None = None
     fragments: tuple[DeclaredOutput, ...] = ()
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
+    queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -423,6 +427,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         phases={
             str(name): reader.phase(str(name), table, identity)
             for name, table in data.get("phases", {}).items()
+        },
+        queries={
+            str(name): reader.query(str(name), value, identity)
+            for name, value in data.get("queries", {}).items()
         },
     )
 
@@ -817,6 +825,31 @@ class _Reader:
             provides=provides,
             reads=reads,
         )
+
+    def query(self, name: str, value: object, identity: dict[str, Any]) -> Reference:
+        """The function that answers the query *name*, resolved.
+
+        The name is one the workshop defines, and a package-level
+        extension answers questions about a package, so one listed at
+        the workspace alone answers none.
+        """
+        from livery.workshop._queries import QUERIES
+
+        where = ("queries", name)
+        if name not in QUERIES:
+            near = difflib.get_close_matches(name, sorted(QUERIES), n=1)
+            hint = f"; did you mean {near[0]!r}?" if near else ""
+            raise self.refuse(
+                where,
+                f"names no query; the queries are {', '.join(QUERIES)}{hint}",
+            )
+        if "package" not in identity.get("levels", ("workspace",)):
+            raise self.refuse(
+                where,
+                "answers a question about a package, and this extension's levels are"
+                " workspace; add 'package' to levels, or drop the answer",
+            )
+        return self.reference(value, where)
 
     def slot(self, name: str, table: dict[str, Any]) -> DeclaredSlot:
         """The slot *name* declares, its compose a rule or a reference."""

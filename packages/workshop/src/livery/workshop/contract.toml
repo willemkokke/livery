@@ -832,6 +832,14 @@ values = ["str", "int", "bool", "path", "strs", "paths", "table"]
 types = ["strs"]
 doc = "the context keys the steps read, each one another extension of the package provides, which runs first"
 
+[contract.extension.queries]
+types = ["table"]
+doc = "the questions about a package a package-level extension answers, by the query's name, each to the function that answers it"
+
+[contract.extension.queries."*"]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the package; the workshop combines the answers of a package's extensions by the query's rule"
+
 [contract.extension.release-notes]
 types = ["str"]
 doc = "the release notes' writer, module:name in the extension's own package: the provider the release train asks for each release's entry, registered at mount"

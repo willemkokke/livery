@@ -13,9 +13,9 @@ clang-tidy keeps its check code, and the extension passes of 10b and
 workshop's next
 release carries the first publishes of `livery-extensions-changelog`
 and `livery-extensions-claude`, two of a day's four new projects.
-Phase 11 started on 2026-10-09: 11a's first two parts, package
-composition (issue #1330) and the lifecycle phases (issue #1332), are
-built. The
+Phase 11 started on 2026-10-09: 11a's first three parts, package
+composition (issue #1330), the lifecycle phases (issue #1332) and the
+queries (issue #1333), are built. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -919,7 +919,9 @@ built: the three keys, the validity rule, the canonical list and its
 fix, the combinations, contract 28's mount, compatibility through
 extras); the phases and their context (#1332, built: `[phases.<phase>]`,
 the walk, `PhaseContext`, the refusals and their layering check); the
-queries; `fm run`. Until 11b the tests compose fixture extensions.
+queries (#1333, built: `[queries]`, `Query`, `answer` and eight of the
+eleven queries); `fm run`. Until 11b the tests compose fixture
+extensions.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
@@ -1741,6 +1743,21 @@ the stack, which this design neither needs nor rules out).
     and the phase raises the first failure.
   - The layering check judges every phase of every package's set, so
     a declaration that cannot run is named before a verb walks it.
+- 2026-10-09, 11a's third part (#1333), taken without a ruling as cheap
+  to reverse:
+  - Eight queries arrive now: `PUBLIC_MODULES`, `COMPILE_COMMANDS`,
+    `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`,
+    `DISTRIBUTIONS` and `EXECUTABLES`, typed as the kinds' backends
+    answer today. `BUILD_PLAN` arrives with the release train's phases
+    (13), `TOOLCHAINS` with the toolchains (14), and `REFERENCES` with
+    the python extension's reach rule (11b), each when its first
+    reader fixes its type.
+  - "Must agree" ignores an empty answer; "the nearest by requires" is
+    the answer of the one answering extension no other answering one
+    requires, and two such refuse; `REQUIREMENTS` refuses a name two
+    answers value differently.
+  - `public_modules` and `compile_commands` keep answering from the
+    kinds until 11b, whose extensions then answer the two queries.
 
 ## Open
 
