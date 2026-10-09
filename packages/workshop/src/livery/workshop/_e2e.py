@@ -528,13 +528,29 @@ def _member_dist(name: str) -> str:
     return f"ci-e2e-loop-{name}"
 
 
+def _served_name(root: Path, member: str) -> str:
+    """The name a registry serves the loop member *member* under.
+
+    The python index normalises a name, so the distribution name finds
+    a python member there. A conan registry matches the name exactly,
+    so a conan member is asked for by the name its contract declares.
+    """
+    if dict(LOOP_MEMBERS).get(member) != "package-cpp-conan":
+        return _member_dist(member)
+    import tomllib
+
+    contract = root / "packages" / member / "workshop.toml"
+    return str(tomllib.loads(contract.read_text("utf-8"))["name"])
+
+
 def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
     """What the loop's registries serve of a member, by name: its versions.
 
     A python member is probed on the lane's simple index, a conan
     member through the conan target the loop's workspace resolves,
-    the forge's own conan registry; each registry is built once and
-    polled through the wave's wait.
+    the forge's own conan registry, each by the name it is served under
+    ([livery.workshop._e2e._served_name][]); each registry is built
+    once and polled through the wave's wait.
     """
     from livery.forge import SimpleRegistry
     from livery.workshop._backends import _cpp_conan
@@ -546,13 +562,13 @@ def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
 
     def versions(name: str) -> tuple[str, ...]:
         if kinds.get(name) != "package-cpp-conan":
-            return python.versions(_member_dist(name))
+            return python.versions(_served_name(root, name))
         if "conan" not in conan:
             from livery.workshop._registries import resolve_registry
 
             target = resolve_registry(root, "conan")
             conan["conan"] = _cpp_conan.ConanRegistry(target, root=root)
-        return conan["conan"].versions(_member_dist(name))
+        return conan["conan"].versions(_served_name(root, name))
 
     return versions
 
@@ -2563,7 +2579,7 @@ def _release_act(root: Path, kind: str) -> None:
             if time.monotonic() >= deadline:
                 fail(
                     f"the wave is green but the registry never served"
-                    f" {_member_dist(name)} 0.1.0"
+                    f" {_served_name(root, name)} 0.1.0"
                 )
             time.sleep(5)
     # The receipt push follows the publish inside the wave, so the
@@ -2580,7 +2596,7 @@ def _release_act(root: Path, kind: str) -> None:
                 fail(f"served, but the receipt tag {tag} is not on the loop")
             time.sleep(5)
         _require_receipt_protected(root, tag, kind)
-    served = ", ".join(f"{_member_dist(name)} 0.1.0" for name in names)
+    served = ", ".join(f"{_served_name(root, name)} 0.1.0" for name in names)
     print(f"  release: {served} served, receipts {', '.join(tags.values())} cut")
 
 
