@@ -3,12 +3,13 @@
 An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
-the extensions it requires, the tools its verbs need, the options a
-listing may turn on, its checks, its CI jobs, the values it puts into
-slots, the contract keys it owns, what it adds to another extension
-while that one is listed, and the earlier extensions' shipped files it
-replaces or deletes. The file is a contract, read as ``workshop.toml`` is: kebab-case
-keys, every key judged, every refusal naming the file.
+the extensions it requires, how it composes on a package, the tools its
+verbs need, the options a listing may turn on, its checks, its CI jobs,
+the values it puts into slots, the contract keys it owns, what it adds
+to another extension while that one is listed, and the earlier
+extensions' shipped files it replaces or deletes. The file is a
+contract, read as ``workshop.toml`` is: kebab-case keys, every key
+judged, every refusal naming the file.
 
 A check whose verdict is its tool's exit code is its tool's words
 (``judge``, ``fix``, ``safe-fix``, ``env``, ``matrix``), which the engine
@@ -149,6 +150,11 @@ class Declaration:
         levels: The levels it may be listed at.
         plugin: The footman plugin carrying its verbs; empty for none.
         requires: The extensions it cannot work without.
+        compatible: The package-level extensions it combines with on one
+            package, where neither requires the other nor contributes
+            to it.
+        before: The extensions it runs before in every phase of a package.
+        after: The extensions it runs after in every phase of a package.
         tools: The tools its verbs need, as requirement strings.
         options: Each option a listing may turn on, to what it turns on.
         additions: What it adds whenever it is mounted.
@@ -173,6 +179,9 @@ class Declaration:
     levels: tuple[str, ...] = ("workspace",)
     plugin: str = ""
     requires: tuple[str, ...] = ()
+    compatible: tuple[str, ...] = ()
+    before: tuple[str, ...] = ()
+    after: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()
     options: dict[str, str] = field(default_factory=dict[str, str])
     additions: Additions = Additions()
@@ -336,6 +345,15 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         )
     reader = _Reader(extension, package, path)
     identity = data.get("extension", {})
+    reader.composition(identity, data.get("for", {}))
+    if data.get("options") and "workspace" not in identity.get(
+        "levels", ("workspace",)
+    ):
+        raise reader.refuse(
+            ("options",),
+            "is turned on by a [workspace] extensions entry, and this extension's"
+            " levels are package; a package's entry is the extension's name alone",
+        )
     options = {str(name): str(text) for name, text in data.get("options", {}).items()}
     additions = reader.additions(data, (), options)
     targets = {
@@ -351,6 +369,9 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         levels=tuple(str(level) for level in identity.get("levels", ("workspace",))),
         plugin=str(identity.get("plugin", "")),
         requires=tuple(str(name) for name in identity.get("requires", ())),
+        compatible=tuple(str(name) for name in identity.get("compatible", ())),
+        before=tuple(str(name) for name in identity.get("before", ())),
+        after=tuple(str(name) for name in identity.get("after", ())),
         tools=tuple(str(text) for text in data.get("toolroom", {}).get("requires", ())),
         options=options,
         additions=additions,
@@ -389,6 +410,54 @@ class _Reader:
         from livery.workshop._contract_keys import shown
 
         return DeclarationError(f"{self.path}: {shown(where)} {text}")
+
+    def composition(self, identity: dict[str, Any], targets: dict[str, Any]) -> None:
+        """Refuse a composition the file alone shows is wrong.
+
+        ``compatible``, ``before`` and ``after`` compose package-level
+        extensions on one package, so an extension listed at the
+        workspace alone declares none. ``before`` and ``after`` name
+        extensions this one knows: one it requires, declares compatible,
+        or contributes to; one extension is never both, and never this
+        one.
+        """
+        keys = [key for key in ("compatible", "before", "after") if identity.get(key)]
+        levels = tuple(identity.get("levels", ("workspace",)))
+        if keys and "package" not in levels:
+            raise self.refuse(
+                ("extension", keys[0]),
+                "composes package-level extensions on one package, and this"
+                f" extension's levels are {', '.join(levels)}; add 'package' to"
+                f" levels, or drop {keys[0]}",
+            )
+        known = {
+            *identity.get("requires", ()),
+            *identity.get("compatible", ()),
+            *targets,
+        }
+        for key in ("compatible", "before", "after"):
+            if self.extension in identity.get(key, ()):
+                raise self.refuse(
+                    ("extension", key),
+                    f"names {self.extension}, this extension itself; it names the"
+                    " others",
+                )
+        for key in ("before", "after"):
+            for name in identity.get(key, ()):
+                if name not in known:
+                    raise self.refuse(
+                        ("extension", key),
+                        f"names {name}, which this extension neither requires,"
+                        " declares compatible, nor contributes to; it orders"
+                        " itself only against extensions it knows",
+                    )
+        both = set(identity.get("before", ())) & set(identity.get("after", ()))
+        if both:
+            raise self.refuse(
+                ("extension", "after"),
+                f"names {', '.join(sorted(both))}, which before names too; an"
+                " extension runs either before another or after it",
+            )
 
     def additions(
         self, data: dict[str, Any], prefix: tuple[str, ...], options: dict[str, str]

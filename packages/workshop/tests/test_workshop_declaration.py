@@ -65,8 +65,8 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
     refused = _refusal(package, '[extension]\nlevel = ["workspace"]\n')
     assert refused == (
         f"{package / 'extension.toml'}:\n"
-        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
-        " requires; did you mean 'levels'?"
+        "  [extension] has no key 'level': it takes after, api-version, before,"
+        " compatible, levels, plugin, requires; did you mean 'levels'?"
     )
     refused = _refusal(package, CHECK + 'narowing = "paths"\n')
     assert "[checks.acme.lint] has no key 'narowing'" in refused

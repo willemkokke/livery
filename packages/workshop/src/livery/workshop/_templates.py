@@ -101,17 +101,35 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         "slots": all_composed(),
         "extension_imports": [import_path for import_path, _ in entries],
         # One line per distribution: a wheel may ship several extensions.
-        "extension_requirements": list(
-            dict.fromkeys(
-                dist for _, dist in entries if _requirement_name(dist) not in members
-            )
-        ),
+        "extension_requirements": _extension_requirements(entries, members),
         # The editor extension ids the registered checks carry.
         "extensions": list(editor_extensions()),
         **registry_injections(root),
     }
     injected["fragments"] = compose_fragments({**answers, **injected})
     return injected
+
+
+def _extension_requirements(
+    entries: tuple[tuple[str, str], ...], members: set[str]
+) -> list[str]:
+    """The dev group's line for each stack distribution that is not a member.
+
+    One line per distribution, since a wheel may ship several
+    extensions, carrying the extras every extension it ships puts in
+    use ([livery.workshop._extensions.extension_extras][]).
+    """
+    from livery.workshop._extensions import extension_extras
+
+    present = tuple(name for name, _ in entries)
+    extras: dict[str, set[str]] = {}
+    for name, dist in entries:
+        if _requirement_name(dist) not in members:
+            extras.setdefault(dist, set()).update(extension_extras(name, present))
+    return [
+        f"{dist}[{','.join(sorted(used))}]" if used else dist
+        for dist, used in extras.items()
+    ]
 
 
 def compose_fragments(data: dict[str, Any]) -> dict[str, str]:

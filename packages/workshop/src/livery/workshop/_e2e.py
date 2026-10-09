@@ -2809,13 +2809,13 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
 def _listed_extensions(root: Path) -> tuple[str, ...]:
     """The entries *root*'s contract lists, options spelled; empty with no contract."""
     from livery.toolroom.store import Spec
-    from livery.workshop._extensions import extension_names, extension_options
+    from livery.workshop._extensions import extension_options, workspace_names
 
     if not (root / "workshop.toml").is_file():
         return ()
     options = extension_options(root)
     return tuple(
-        str(Spec(name, options.get(name, ()))) for name in extension_names(root)
+        str(Spec(name, options.get(name, ()))) for name in workspace_names(root)
     )
 
 

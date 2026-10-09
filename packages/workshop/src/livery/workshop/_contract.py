@@ -92,8 +92,15 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
 
     Returns:
         The parsed tables.
+
+    Raises:
+        Failed: when *text* is not TOML, or a key is spelled with an
+            underscore, naming *where*.
     """
-    data = tomllib.loads(text)
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        fail(f"{where}: not valid TOML: {error}")
     wrong = underscore_keys(data)
     if wrong:
         listed = ", ".join(
@@ -110,24 +117,29 @@ def load_contract(path: Path) -> dict[str, Any]:
     """Parse the contract at *path* and judge its keys; a refusal names the file.
 
     A contract under ``packages/<name>/`` or ``packages/<group>/<name>/``
-    is a package's, judged
-    against the extensions its workspace's root contract lists; any other
-    is a root contract, judged against the extensions it lists itself.
-    Every problem is listed in one refusal
+    is a package's, judged against the extensions its workspace's root
+    contract lists and its own set of package-level extensions; any
+    other is a root contract, judged against the extensions it lists
+    itself and the package-level ones its packages' sets hold. Every
+    problem is listed in one refusal
     ([livery.workshop._contract_keys.judge][]).
     """
     from livery.workshop._contract_keys import judge, listed_extensions
+    from livery.workshop._extensions import composed_set, package_extensions
 
     data = parse_contract(path.read_text("utf-8"), where=str(path))
     workspace = _package_workspace(path)
     if workspace is not None:
         root = workspace / CONTRACT
-        listed = listed_extensions(_root_tables(root)) if root.is_file() else None
+        listed = None
+        if root.is_file():
+            own = data.get("extensions")
+            entries = [str(name) for name in own] if isinstance(own, list) else []
+            listed = listed_extensions(_root_tables(root)) | set(composed_set(entries))
         problems = judge(data, contract="package", where=str(path), listed=listed)
     else:
-        problems = judge(
-            data, contract="root", where=str(path), listed=listed_extensions(data)
-        )
+        listed = listed_extensions(data) | set(package_extensions(path.parent))
+        problems = judge(data, contract="root", where=str(path), listed=listed)
     if problems:
         fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
     return data

@@ -189,8 +189,9 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     monkeypatch.syspath_prepend(str(tmp_path))
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:\n"
-        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
-        " requires; did you mean 'levels'?; the mount refuses the extension"
+        "  [extension] has no key 'level': it takes after, api-version, before,"
+        " compatible, levels, plugin, requires; did you mean 'levels'?; the mount"
+        " refuses the extension"
     ]
     declaration.write_text(
         '[checks.acme.lint]\nrun = "acme_kit_extension._checks:judge"\n'
@@ -420,6 +421,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         "claims-name-categories",
         "words-are-answerable",
         "plugin-is-an-entry-point",
+        "requirements-in-metadata",
         "contract-keys-documented",
     }
     found = [
@@ -726,6 +728,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "claims-name-categories",
         "words-are-answerable",
         "plugin-is-an-entry-point",
+        "requirements-in-metadata",
         "contract-keys-documented",
         "fragment-drift",
         "withdrawn-file",
