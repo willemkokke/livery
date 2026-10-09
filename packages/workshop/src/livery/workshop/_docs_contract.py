@@ -55,12 +55,13 @@ def module_root(package: Package) -> Path | None:
     marks = root_marks(src)
     if marks:
         return marks[0].parent
-    from livery.workshop._kinds import kind_for, kind_names
+    from livery.workshop._kinds import kind_names
 
     if package.kind not in kind_names():
         return None
-    owned = getattr(kind_for(package.kind).backend, "module_roots", None)
-    for module in owned(package) if owned is not None else ():
+    from livery.workshop import _lifecycle
+
+    for module in _lifecycle.module_roots(package):
         directory = src.joinpath(*module.split("."))
         if directory.is_dir():
             return directory

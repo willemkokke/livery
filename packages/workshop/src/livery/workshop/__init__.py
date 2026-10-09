@@ -107,10 +107,10 @@ if TYPE_CHECKING:
     from livery.workshop._forge_lane import this_repository as this_repository
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
-    from livery.workshop._kinds import compile_commands as compile_commands
     from livery.workshop._kinds import kind_examples as kind_examples
-    from livery.workshop._kinds import public_modules as public_modules
     from livery.workshop._kinds import run_suites as run_suites
+    from livery.workshop._lifecycle import compile_commands as compile_commands
+    from livery.workshop._lifecycle import public_modules as public_modules
     from livery.workshop._packages import Edge as Edge
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
@@ -236,7 +236,7 @@ _EXPORTS: dict[str, str] = {
     "check_option": "livery.workshop._checks",
     "ci_changes": "livery.workshop._quality",
     "ci_run": "livery.workshop._state",
-    "compile_commands": "livery.workshop._kinds",
+    "compile_commands": "livery.workshop._lifecycle",
     "contributions_for": "livery.workshop._extensions",
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
@@ -249,7 +249,7 @@ _EXPORTS: dict[str, str] = {
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
     "kind_examples": "livery.workshop._kinds",
-    "public_modules": "livery.workshop._kinds",
+    "public_modules": "livery.workshop._lifecycle",
     "read_contract": "livery.workshop._contract",
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",

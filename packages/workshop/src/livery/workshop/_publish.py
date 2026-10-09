@@ -32,6 +32,7 @@ from typing import Protocol
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
+from livery.workshop import _lifecycle
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
@@ -432,7 +433,7 @@ def publish_release(
 
     def _build_member(package: Package, version: str) -> None:
         """Build the member's artifact, or trust the matrix's collection."""
-        from livery.workshop._kinds import backend_for, kind_for
+        from livery.workshop._kinds import kind_for
 
         record = kind_for(package.kind)
         if prebuilt and record.wheel_identity == "platform":
@@ -457,22 +458,18 @@ def publish_release(
                     " feed this wave"
                 )
         else:
-            backend_for(package).build(package, root, epoch=epoch)
+            _lifecycle.build(package, root, epoch=epoch)
         assert_wheel_identity(package)
 
     def _first_upload(package: Package, version: str, target: RegistryTarget) -> bool:
         """Upload a new project's first version, or name the limit that stops it."""
-        from livery.workshop._kinds import backend_for
-
         if refused_new:
             raise SystemExit(
                 f"{package.name}: not uploaded: the registry already refused a"
                 f" new project in this wave ({refused_new[0]})"
             )
         try:
-            return backend_for(package).publish_artifact(
-                package, root, version=version, target=target
-            )
+            return _lifecycle.publish(package, root, version=version, target=target)
         except BaseException as exc:
             if NEW_PROJECT_LIMIT not in str(exc):
                 raise
@@ -540,7 +537,7 @@ def publish_release(
                         package, version, tag, published=False
                     )
                 return
-            from livery.workshop._kinds import backend_for, kind_for
+            from livery.workshop._kinds import kind_for
 
             record = kind_for(package.kind)
             _build_member(package, version)
@@ -569,11 +566,8 @@ def publish_release(
                     with first_upload:
                         published = _first_upload(package, version, target)
                 else:
-                    published = backend_for(package).publish_artifact(
-                        package,
-                        root,
-                        version=version,
-                        target=target,
+                    published = _lifecycle.publish(
+                        package, root, version=version, target=target
                     )
             probe_until_served(
                 registry_for(package),

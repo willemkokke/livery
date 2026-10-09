@@ -768,9 +768,8 @@ def _stamp_content(package: Package) -> None:
     """
     import hashlib
 
-    from livery.workshop._backends import backend_for
+    from livery.workshop import _lifecycle
 
-    backend = backend_for(package)
     tree = package.directory
     digest = hashlib.sha256()
     for path in sorted(path for path in tree.rglob("*") if path.is_file()):
@@ -778,10 +777,8 @@ def _stamp_content(package: Package) -> None:
         digest.update(b"\0")
         digest.update(path.read_bytes())
         digest.update(b"\0")
-    version = backend.current_version(package)
-    backend.stamp_version(package).stamp(
-        f"{version}+checkout.{digest.hexdigest()[:12]}"
-    )
+    version = _lifecycle.current_version(package)
+    _lifecycle.stamp(package, f"{version}+checkout.{digest.hexdigest()[:12]}")
 
 
 def _dev_index(kind: str, stack: Sequence[str] = ()) -> str:
