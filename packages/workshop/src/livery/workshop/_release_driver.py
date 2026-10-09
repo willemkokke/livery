@@ -25,7 +25,8 @@ import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
-from livery.workshop._backends import _python, backend_for
+from livery.workshop import _lifecycle
+from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages, receipt_member
@@ -265,7 +266,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         with contextlib.suppress(Exception):
             paths.extend(
                 home.relative_to(root).as_posix()
-                for home in backend_for(package).stamp_version(package).homes()
+                for home in _lifecycle.version_files(package)
                 if home.is_file()
             )
     tools.git.opts(cwd=root, nofail=True, recorded=False)(
@@ -661,7 +662,7 @@ class ReleaseDriver:
             _write_manifest(self._root, plans, mined_at=mined_at)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
-                backend_for(plan.package).build(plan.package, self._root)
+                _lifecycle.build(plan.package, self._root)
                 if git.is_clean():
                     # Already stamped: a release squash-merged but never
                     # published leaves main carrying exactly these
@@ -889,7 +890,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         release_dirs = _wheel_dists(plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
-            backend_for(plan.package).build(plan.package, root)
+            _lifecycle.build(plan.package, root)
         for plan in plans:
             validate_member(root, plan, release_dirs)
         listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)

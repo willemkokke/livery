@@ -212,15 +212,14 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     (package,) = discover_packages(tmp_path)
     built: list[dict[str, str]] = []
 
-    class _Backend:
-        def build(self, package: object, root: Path, *, epoch: int = 0) -> Path:
-            built.append({"epoch": str(epoch)})
-            dist = tmp_path / "packages" / "ext" / "dist"
-            dist.mkdir(exist_ok=True)
-            (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text("")
-            return dist
+    def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+        built.append({"epoch": str(epoch)})
+        dist = tmp_path / "packages" / "ext" / "dist"
+        dist.mkdir(exist_ok=True)
+        (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text("")
+        return dist
 
-    monkeypatch.setattr("livery.workshop._backends.backend_for", lambda _p: _Backend())
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
     monkeypatch.setattr(
         "livery.workshop._publish.discover_release",
         lambda root, git, ref: ((package, "0.1.0"),),
@@ -283,20 +282,17 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
     workspace.write_text("packages:\n  - path: packages/geometry\n")
 
-    class _Backend:
-        def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-            del root, epoch
-            # Every build resolves a sibling to the package this leg
-            # created: the workspace is aside while it runs.
-            seen = "workspace" if workspace.exists() else "aside"
-            calls.append(f"build {package.name} ({seen})")
-            dist = package.directory / "dist"
-            dist.mkdir(exist_ok=True)
-            if package.kind == "python-nanobind":
-                (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text(
-                    ""
-                )
-            return dist
+    def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+        del root, epoch
+        # Every build resolves a sibling to the package this leg
+        # created: the workspace is aside while it runs.
+        seen = "workspace" if workspace.exists() else "aside"
+        calls.append(f"build {package.name} ({seen})")
+        dist = package.directory / "dist"
+        dist.mkdir(exist_ok=True)
+        if package.kind == "python-nanobind":
+            (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text("")
+        return dist
 
     def _save(package: Package, version: str, into: Path) -> Path:
         calls.append(f"save {package.name} {version}")
@@ -309,7 +305,7 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
         del root, epoch
         calls.append(f"floors {package.name} {sorted(released)}")
 
-    monkeypatch.setattr("livery.workshop._backends.backend_for", lambda _p: _Backend())
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
     monkeypatch.setattr(_cpp_conan, "save_cache", _save)
     monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
     monkeypatch.setattr(

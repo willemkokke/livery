@@ -18,7 +18,7 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery.footman import Context, doc, fail, group
-from livery.workshop._backends import backend_for
+from livery.workshop import _lifecycle
 from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages, release_tag
@@ -74,7 +74,7 @@ def verify_release(
     if package is None:
         fail(f"tag names {path}, which is not a workspace package")
     problems = []
-    declared = backend_for(package).current_version(package)
+    declared = _lifecycle.current_version(package)
     if declared != version:
         problems.append(f"tag says {version}, the package declares {declared}")
     notes = release_notes()
@@ -86,7 +86,7 @@ def verify_release(
         # no public names, carries its version in its manifest alone.
         modules = [
             home
-            for home in backend_for(package).stamp_version(package).homes()
+            for home in _lifecycle.version_files(package)
             if home.suffix == ".py" and home.is_file()
         ]
         stamp = f'__version__ = "{version}"'
@@ -186,7 +186,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         # heading without its tag under-documents what actually
         # ships either way.
         entry_body = notes.entry(root, package, version)
-    changed = backend_for(package).stamp_version(package).stamp(version)
+    changed = _lifecycle.stamp(package, version)
     if notes is not None:
         changed += notes.record(package, version, entry_body)
     else:
@@ -306,7 +306,7 @@ def release_wheels(
     A squash with no native member prints so and builds nothing, so
     the matrix job stays green on a pure release.
     """
-    from livery.workshop._backends import _cpp_conan, _python_nanobind, backend_for
+    from livery.workshop._backends import _cpp_conan, _python_nanobind
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
     from livery.workshop._pythons import python_matrix
@@ -344,12 +344,12 @@ def release_wheels(
     # tree: the conan workspace is set aside for every build.
     with _cpp_conan.workspace_aside(root):
         for package, version in conan_members:
-            backend_for(package).build(package, root, epoch=epoch)
+            _lifecycle.build(package, root, epoch=epoch)
             dist = package.directory / "dist"
             archive = _cpp_conan.save_cache(package, version, dist)
             print(f"  {package.name}: {archive.name}")
         for package in native:
-            dist = backend_for(package).build(package, root, epoch=epoch)
+            dist = _lifecycle.build(package, root, epoch=epoch)
             wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
             print(f"  {package.name}: {wheels}")
         for package in native:

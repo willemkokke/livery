@@ -160,7 +160,9 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     monkeypatch.setattr(_checks, "scoped_files", _one_file)
-    monkeypatch.setattr("livery.workshop._kinds.compile_commands", lambda package: None)
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.compile_commands", lambda package: None
+    )
     member = _member(tmp_path, "one")
     record = _check(
         Words(("acme", "-p", "{compile-commands}")), scope="package", kinds=("python",)
@@ -261,7 +263,7 @@ def test_a_package_check_calls_from_the_package_with_its_files(
     database.write_text("[]\n")
     monkeypatch.setattr(_checks, "scoped_files", _one_file)
     monkeypatch.setattr(
-        "livery.workshop._kinds.compile_commands", lambda package: database
+        "livery.workshop._lifecycle.compile_commands", lambda package: database
     )
     record = _check(
         Words(("acme", "-p", "{compile-commands}", "--root={package}")),

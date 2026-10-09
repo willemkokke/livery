@@ -462,6 +462,11 @@ def test_the_serving_probe_asks_each_member_s_own_registry(
         "_lane",
         lambda kind: SimpleNamespace(index=lambda: "http://gitea:3000/simple"),
     )
+    # New members are named by the namespace, which keeps its
+    # underscores; a conan registry matches that name exactly.
+    contract = tmp_path / "packages" / "loop-cpp" / "workshop.toml"
+    contract.parent.mkdir(parents=True)
+    contract.write_text('kind = "cpp-conan"\nname = "ci_e2e_loop-loop-cpp"\n')
     served = _e2e._serving_probe(tmp_path, "gitea")
     assert served("loop-echo") == ("0.1.0",)
     assert served("loop-native") == ("0.1.0",)
@@ -470,8 +475,8 @@ def test_the_serving_probe_asks_each_member_s_own_registry(
     assert asked == [
         ("python", "ci-e2e-loop-loop-echo"),
         ("python", "ci-e2e-loop-loop-native"),
-        ("conan", "ci-e2e-loop-loop-cpp"),
-        ("conan", "ci-e2e-loop-loop-cpp"),
+        ("conan", "ci_e2e_loop-loop-cpp"),
+        ("conan", "ci_e2e_loop-loop-cpp"),
     ]
     # The conan target resolves once, for the wave's whole wait.
     assert built == [("target:conan", tmp_path)]

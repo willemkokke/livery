@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
+from livery.workshop import _lifecycle
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (
@@ -156,14 +157,14 @@ def train(seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         (dist / f"{wheel}-0.3.0-py3-none-any.whl").touch()
         return dist
 
-    def _fake_publish(package: Package, **kwargs: object) -> bool:
+    def _fake_publish(package: Package, _root: Path, **kwargs: object) -> bool:
         name = package.directory.name
         registry.serve(package.name, "0.3.0")
         spans[name] = (starts[name], time.monotonic())
         return True
 
-    monkeypatch.setattr("livery.workshop._backends._python.build", _fake_build)
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_publish)
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _fake_build)
+    monkeypatch.setattr("livery.workshop._lifecycle.publish", _fake_publish)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     return root, git, registry, spans
 
@@ -546,7 +547,7 @@ def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
     registry.serve("livery-base", "0.2.0")
     attempted: list[str] = []
 
-    def _limited(package: Package, **kwargs: object) -> bool:
+    def _limited(package: Package, _root: Path, **kwargs: object) -> bool:
         if package.name == "livery-base":
             registry.serve(package.name, "0.3.0")
             return True
@@ -556,7 +557,7 @@ def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
             " Requests. Server says: 429 Too many new projects created"
         )
 
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _limited)
+    monkeypatch.setattr("livery.workshop._lifecycle.publish", _limited)
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
@@ -578,14 +579,14 @@ def test_new_projects_upload_one_at_a_time(
     registry.serve("livery-base", "0.2.0")
     uploads: dict[str, tuple[float, float]] = {}
 
-    def _slow(package: Package, **kwargs: object) -> bool:
+    def _slow(package: Package, _root: Path, **kwargs: object) -> bool:
         start = time.monotonic()
         time.sleep(0.1)
         registry.serve(package.name, "0.3.0")
         uploads[package.name] = (start, time.monotonic())
         return True
 
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _slow)
+    monkeypatch.setattr("livery.workshop._lifecycle.publish", _slow)
     publish_release(
         root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
     )
@@ -634,7 +635,7 @@ def test_a_failed_member_stops_only_its_dependents(
 
     real_serve = registry.serve
 
-    def _left_dies(package: Package, **kwargs: object) -> bool:
+    def _left_dies(package: Package, _root: Path, **kwargs: object) -> bool:
         name = package.directory.name
         if name == "left":
             raise SystemExit("left's upload was rejected")
@@ -642,7 +643,7 @@ def test_a_failed_member_stops_only_its_dependents(
         spans[name] = (0.0, time.monotonic())
         return True
 
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _left_dies)
+    monkeypatch.setattr("livery.workshop._lifecycle.publish", _left_dies)
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
@@ -672,8 +673,8 @@ def test_a_rerun_walks_past_the_receipts_already_cut(
     )
     republished: list[str] = []
     monkeypatch.setattr(
-        "livery.workshop._publish.publish_wheels",
-        lambda package, **kwargs: republished.append(package.name),
+        "livery.workshop._lifecycle.publish",
+        lambda package, _root, **kwargs: republished.append(package.name),
     )
     receipts = publish_release(
         root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
@@ -811,12 +812,15 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     )
     (native / "CHANGELOG.md").write_text("# Changelog\n")
     built: list[str] = []
+    python_build = _lifecycle.build
 
-    def _fake_create(package: Package, _root: Path, *, epoch: int = 0) -> Path:
+    def _fake_create(package: Package, root: Path, *, epoch: int = 0) -> Path:
+        if package.kind != "cpp-conan":
+            return python_build(package, root, epoch=epoch)
         built.append(package.name)
         return package.directory
 
-    monkeypatch.setattr("livery.workshop._backends._cpp_conan.build", _fake_create)
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _fake_create)
     sha = _squash(root, ("base", "native"))
     # No conan registry is declared anywhere: the wave resolves a conan
     # target only for members that publish, so this one asks for none.

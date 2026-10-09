@@ -19,7 +19,7 @@ from pathlib import Path
 
 import livery.footman as footman
 from livery.footman import fail
-from livery.workshop._backends import backend_for
+from livery.workshop import _lifecycle
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
@@ -176,15 +176,14 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     its metadata.
     """
     package = plan.package
-    stamper = backend_for(package).stamp_version(package)
-    touched = [path for path in stamper.homes() if path.is_file()]
+    touched = [path for path in _lifecycle.version_files(package) if path.is_file()]
     readme = package.directory / "README.md"
     if readme.is_file():
         touched.append(readme)
     snapshots = {path: path.read_bytes() for path in touched}
     stamps = {path: path.stat() for path in touched}
     try:
-        stamper.stamp(semver_to_pep440(plan.version))
+        _lifecycle.stamp(package, semver_to_pep440(plan.version))
         notes = release_notes()
         excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():
@@ -193,7 +192,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
                 f"## What's New\n\n{excerpt}\n\n---\n\n{original}",
                 encoding="utf-8",
             )
-        return backend_for(package).build(package, root)
+        return _lifecycle.build(package, root)
     finally:
         for path, content in snapshots.items():
             path.write_bytes(content)

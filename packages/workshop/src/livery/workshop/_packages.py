@@ -508,7 +508,8 @@ def import_problems(
 
 def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
     """Every violation of the graph's invariants, verbatim; empty when they hold."""
-    from livery.workshop._kinds import is_python_kind, kind_for, kind_names
+    from livery.workshop import _lifecycle
+    from livery.workshop._kinds import is_python_kind, kind_names
 
     by_path = {package.path: package for package in packages}
     names_by_path = {package.path: package.name for package in packages}
@@ -526,16 +527,14 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
                 " be checked"
             )
             continue
-        record = kind_for(package.kind)
-        extractor = getattr(record.backend, "declared_requirements", None)
-        if extractor is None:
+        native = _lifecycle.declared_requirements(package)
+        if native is None:
             problems.append(
-                f"{package.path}: kind {record.name!r} registers no"
+                f"{package.path}: kind {package.kind!r} registers no"
                 " declared_requirements extractor, so the lint cannot"
                 " compare its edges; add the callable to the backend"
             )
             continue
-        native = extractor(package)
         declared = {edge.path: edge for edge in package.depends}
         for edge in package.depends:
             if edge.path not in by_path:
@@ -623,16 +622,14 @@ class Neighbours:
 
 def neighbours(packages: tuple[Package, ...]) -> Neighbours:
     """The reference map for *packages*, each kind answering for its own."""
-    from livery.workshop._kinds import kind_for, kind_names
+    from livery.workshop import _lifecycle
+    from livery.workshop._kinds import kind_names
 
     owners: dict[str, str] = {}
     for package in packages:
         if package.kind not in kind_names():
             continue
-        roots = getattr(kind_for(package.kind).backend, "module_roots", None)
-        if roots is None:
-            continue
-        for prefix in roots(package):
+        for prefix in _lifecycle.module_roots(package):
             owners[prefix] = package.path
     return Neighbours(owners=owners, by_path={p.path: p for p in packages})
 
@@ -693,7 +690,8 @@ def undeclared_references(
     (package, dependency). *only* judges the packages at those paths
     and walks the graph over every one.
     """
-    from livery.workshop._kinds import kind_for, kind_names
+    from livery.workshop import _lifecycle
+    from livery.workshop._kinds import kind_names
 
     around = neighbours(packages)
     writable: list[tuple[Package, Package, str, str]] = []
@@ -703,14 +701,12 @@ def undeclared_references(
             continue
         if only is not None and package.path not in only:
             continue
-        referenced = getattr(
-            kind_for(package.kind).backend, "referenced_siblings", None
-        )
+        referenced = _lifecycle.referenced_siblings(package, around)
         if referenced is None:
             continue
         declared = {edge.path for edge in package.depends}
         reach = _reachable(around.by_path, package.path)
-        for dep_path, area in sorted(referenced(package, around).items()):
+        for dep_path, area in sorted(referenced.items()):
             if dep_path in declared or dep_path not in around.by_path:
                 continue
             dependency = around.by_path[dep_path]
@@ -733,7 +729,7 @@ def declare_edge(
     requirement at the same floor, so the layering check finds the
     two in agreement. The files are relative to the package.
     """
-    from livery.workshop._kinds import backend_for
+    from livery.workshop import _lifecycle
 
     contract = package.directory / "workshop.toml"
     text = contract.read_text("utf-8")
@@ -744,7 +740,7 @@ def declare_edge(
     contract.write_text(text.rstrip("\n") + "\n" + edge, encoding="utf-8")
     files = ["workshop.toml"]
     if kind in ("build", "runtime"):
-        files += backend_for(package).declare_requirement(package, dependency, floor)
+        files += _lifecycle.declare_requirement(package, dependency, floor)
     return files
 
 
@@ -911,15 +907,15 @@ def _forge_is_stdlib_only(
     """
     stdlib = sys.stdlib_module_names
     allowed = set(stdlib) | {"livery"} | _FORGE_LAZY_EXTRAS
-    from livery.workshop._kinds import kind_for, kind_names
+    from livery.workshop import _lifecycle
+    from livery.workshop._kinds import kind_names
 
     forge = next((p for p in packages if p.name == _FORGE_DIST), None)
     if forge is None or forge.kind not in kind_names():
         return []
     # The same reader the kind's own reference check uses, so one
     # answer about what a package declares serves both.
-    reader = getattr(kind_for(forge.kind).backend, "plugin_modules", None)
-    plugins: tuple[str, ...] = () if reader is None else reader(forge)
+    plugins = _lifecycle.plugin_modules(forge)
     base = forge.directory / "src"
     problems = []
     for source in sorted(base.rglob("*.py")):

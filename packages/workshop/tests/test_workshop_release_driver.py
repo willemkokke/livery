@@ -287,7 +287,7 @@ def test_local_release_reports_builds_and_restores(
         lambda _root, plan, dirs: validated.append(plan.package.name),
     )
     monkeypatch.setattr(
-        "livery.workshop._release_driver._python.build",
+        "livery.workshop._lifecycle.build",
         lambda package, root, **kw: None,
     )
     members = resolve_set(root, ("core", "tool"))
@@ -313,7 +313,7 @@ def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
         lambda _root, plan, dirs: None,
     )
     monkeypatch.setattr(
-        "livery.workshop._release_driver._python.build",
+        "livery.workshop._lifecycle.build",
         lambda package, root, **kw: None,
     )
     origin = subprocess.run(
@@ -1083,7 +1083,7 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
     fake.settle(OWNER, NAME, sha)
     events: list[str] = []
     monkeypatch.setattr(
-        "livery.workshop._release_driver._python.build",
+        "livery.workshop._lifecycle.build",
         lambda package, root, **kw: events.append(f"build:{package.name}"),
     )
 

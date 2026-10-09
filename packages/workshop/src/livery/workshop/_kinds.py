@@ -390,24 +390,6 @@ def backend_for(package: Package) -> Backend:
     return record.backend
 
 
-def public_modules(package: Package) -> tuple[str, ...]:
-    """The modules that declare *package*'s public API, as its kind reads them.
-
-    What a type-completeness check verifies, by import path. A kind
-    with no importable API answers nothing.
-    """
-    return backend_for(package).public_modules(package)
-
-
-def compile_commands(package: Package) -> Path | None:
-    """Where *package*'s gate build writes its compilation database, as its kind says.
-
-    None for a kind whose build writes none. The file exists once the
-    build is configured.
-    """
-    return backend_for(package).compile_commands(package)
-
-
 def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:
     """The render chain, parent first, ending at *kind_name*.
 

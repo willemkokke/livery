@@ -227,7 +227,7 @@ def _answers(
         Failed: when the words name a package's placeholder in a call
             that judges no package.
     """
-    from livery.workshop._kinds import compile_commands
+    from livery.workshop._lifecycle import compile_commands
 
     named = words.placeholders()
     answers = {"cache": _relative(root / ".workshop" / ".cache" / record.tool, cwd)}
