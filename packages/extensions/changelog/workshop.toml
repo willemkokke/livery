@@ -11,7 +11,7 @@ description = "Changelogs for the livery workshop: git-cliff writes each package
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.6.0"
+floor = "0.8.0"
 
 [[depends]]
 path = "packages/toolroom"
