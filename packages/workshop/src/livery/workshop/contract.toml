@@ -799,6 +799,39 @@ doc = "the options a workspace may turn on when it lists the extension as <name>
 types = ["str"]
 doc = "an option, by its name in the listing's brackets, to a line saying what it turns on"
 
+[contract.extension.phases]
+types = ["table"]
+doc = "the steps a package-level extension contributes to a package's lifecycle phases, by phase: create, sync, stamp, build, prove, publish, replay, clean or run"
+
+[contract.extension.phases."*"]
+types = ["table"]
+doc = "one phase's steps and the context keys they share"
+
+[contract.extension.phases."*".pre]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the phase's context before any main; its post then always runs"
+
+[contract.extension.phases."*".main]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the phase's context after every pre"
+
+[contract.extension.phases."*".post]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the phase's context after every main, in reverse order, once its pre ran, failure or not"
+
+[contract.extension.phases."*".provides]
+types = ["table"]
+doc = "the context keys the steps write, each to its type; one extension of a package provides a key"
+
+[contract.extension.phases."*".provides."*"]
+types = ["str"]
+doc = "a context key's type"
+values = ["str", "int", "bool", "path", "strs", "paths", "table"]
+
+[contract.extension.phases."*".reads]
+types = ["strs"]
+doc = "the context keys the steps read, each one another extension of the package provides, which runs first"
+
 [contract.extension.release-notes]
 types = ["str"]
 doc = "the release notes' writer, module:name in the extension's own package: the provider the release train asks for each release's entry, registered at mount"

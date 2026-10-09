@@ -420,6 +420,7 @@ EXPORTS: dict[str, list[str]] = {
         "PACKAGES",
         "PATHS",
         "Package",
+        "PhaseContext",
         "Prose",
         "RegistryTarget",
         "ReleaseNotes",

@@ -3,8 +3,9 @@
 An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
-the extensions it requires, how it composes on a package, the tools its
-verbs need, the options a listing may turn on, its checks, its CI jobs,
+the extensions it requires, how it composes on a package, the steps it
+adds to a package's lifecycle phases, the tools its verbs need, the
+options a listing may turn on, its checks, its CI jobs,
 the values it puts into slots, the contract keys it owns, what it adds
 to another extension while that one is listed, and the earlier
 extensions' shipped files it replaces or deletes. The file is a
@@ -139,6 +140,27 @@ class DeclaredOutput:
 
 
 @dataclass(frozen=True)
+class DeclaredPhase:
+    """The steps an extension adds to one lifecycle phase: a ``[phases.<phase>]`` table.
+
+    Attributes:
+        pre: Called with the phase's context before any main; None for
+            no step.
+        main: Called with the context after every pre; None for no step.
+        post: Called with the context after every main, in reverse
+            order, once the extension's pre ran; None for no step.
+        provides: Each context key the steps write, to its type.
+        reads: The context keys the steps read.
+    """
+
+    pre: Reference | None = None
+    main: Reference | None = None
+    post: Reference | None = None
+    provides: dict[str, str] = field(default_factory=dict[str, str])
+    reads: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Declaration:
     """An extension's declaration file, read and judged.
 
@@ -170,6 +192,8 @@ class Declaration:
         release_notes: The release-notes provider it names, which the
             mount registers; None for an extension that writes no notes.
         fragments: The files its code writes, by target.
+        phases: The steps it adds to a package's lifecycle phases, by
+            phase.
     """
 
     extension: str
@@ -195,6 +219,7 @@ class Declaration:
     slots: tuple[DeclaredSlot, ...] = ()
     release_notes: Reference | None = None
     fragments: tuple[DeclaredOutput, ...] = ()
+    phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -395,6 +420,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             reader.output(str(target), table)
             for target, table in data.get("fragments", {}).items()
         ),
+        phases={
+            str(name): reader.phase(str(name), table, identity)
+            for name, table in data.get("phases", {}).items()
+        },
     )
 
 
@@ -734,6 +763,59 @@ class _Reader:
             target,
             self.reference(table["render"], ("fragments", target, "render")),
             local=bool(table.get("local", False)),
+        )
+
+    def phase(
+        self, name: str, table: dict[str, Any], identity: dict[str, Any]
+    ) -> DeclaredPhase:
+        """The steps *table* adds to the phase *name*, its references resolved.
+
+        A package-level extension adds steps to a package's phases, so
+        one listed at the workspace alone declares none. A table names
+        at least one step, and a key its steps provide is never one
+        they read.
+        """
+        from livery.workshop._phases import PHASES
+
+        where = ("phases", name)
+        if name not in PHASES:
+            near = difflib.get_close_matches(name, PHASES, n=1)
+            hint = f"; did you mean {near[0]!r}?" if near else ""
+            raise self.refuse(
+                where, f"names no phase; the phases are {', '.join(PHASES)}{hint}"
+            )
+        if "package" not in identity.get("levels", ("workspace",)):
+            raise self.refuse(
+                where,
+                "adds steps to a package's phase, and this extension's levels are"
+                " workspace; add 'package' to levels, or drop the table",
+            )
+        steps = {
+            step: self.reference(table[step], (*where, step))
+            for step in ("pre", "main", "post")
+            if step in table
+        }
+        if not steps:
+            raise self.refuse(
+                where, "names no step: a phase's table takes pre, main or post"
+            )
+        provides = {
+            str(key): str(kind) for key, kind in table.get("provides", {}).items()
+        }
+        reads = tuple(str(key) for key in table.get("reads", ()))
+        both = sorted(set(provides) & set(reads))
+        if both:
+            raise self.refuse(
+                (*where, "reads"),
+                f"names {', '.join(both)}, which its provides names too; a step"
+                " reads what another extension provides",
+            )
+        return DeclaredPhase(
+            pre=steps.get("pre"),
+            main=steps.get("main"),
+            post=steps.get("post"),
+            provides=provides,
+            reads=reads,
         )
 
     def slot(self, name: str, table: dict[str, Any]) -> DeclaredSlot:

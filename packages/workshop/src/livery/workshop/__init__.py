@@ -64,6 +64,11 @@ answers; each listed extension's shipped files live where
 named files through [livery.workshop.fix_files][]; and what the listed
 extensions declare for an extension is
 [livery.workshop.contributions_for][].
+
+A package-level extension adds steps to a package's lifecycle phases
+under ``[phases.<phase>]``; each step receives the phase's
+[livery.workshop.PhaseContext][], which carries the context keys the
+steps provide and read, and the failure a ``post`` step reads.
 """
 
 from __future__ import annotations
@@ -105,6 +110,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import verify_workspace as verify_workspace
+    from livery.workshop._phases import PhaseContext as PhaseContext
     from livery.workshop._prose import AGENT as AGENT
     from livery.workshop._prose import HUMAN as HUMAN
     from livery.workshop._prose import Prose as Prose
@@ -135,6 +141,7 @@ __all__ = [
     "Edge",
     "GateContext",
     "Package",
+    "PhaseContext",
     "Prose",
     "RegistryTarget",
     "ReleaseNotes",
@@ -185,6 +192,7 @@ _EXPORTS: dict[str, str] = {
     "PACKAGES": "livery.workshop._checks",
     "PATHS": "livery.workshop._checks",
     "Package": "livery.workshop._packages",
+    "PhaseContext": "livery.workshop._phases",
     "Prose": "livery.workshop._prose",
     "RegistryTarget": "livery.workshop._registries",
     "ReleaseNotes": "livery.workshop._release_notes",
