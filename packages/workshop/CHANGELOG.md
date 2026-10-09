@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0] - 2026-10-09
+
+### Added
+
+- The changelog ships apart: livery-extensions-changelog writes each package's CHANGELOG.md with git-cliff, and the base keeps the release notes' protocol by @willemkokke
+- The agent's files ship apart: livery-extensions-claude writes CLAUDE.md, the agent's guidance and .claude/ from [fragments] renders, and carries the hooks verbs by @willemkokke
+- Package-level extensions mount first and compose on a package: compatible, before and after, the validity rule, canonical lists and their combinations by @willemkokke
+- Lifecycle phases: a package-level extension adds pre, main and post steps to a package's phases, ordered by the context keys they provide and read by @willemkokke
+- Queries: a package-level extension answers typed questions about a package under [queries], and answer combines them by each query's rule by @willemkokke
+- Fm run builds a package's dependency closure, skipping what is unchanged, and starts the executable its extension answers; a verb inside a package resolves the workspace's root by @willemkokke
+
+### Fixed
+
+- The workshop's birth test asserts no seed another extension ships, so it passes on the workshop's wheel alone by @willemkokke
+- The fragment engine's refusal test pins the engine's words and leaves minijinja's detail, which its newest release spells out further by @willemkokke
+- Fm workflow.release --local fetches origin's tags before it derives, so a rehearsal after a wave names the versions the armed act will release by @willemkokke
+- Fm new.project's default list names no claude extension: a project chooses its agent's files by @willemkokke
+- Fm ci.e2e refuses to start on a branch whose release verb is the train, before it builds anything that would open a real release by @willemkokke
+- A release title counts its members past 80 characters, and a package touched only by its composed files leaves a commit's scope by @willemkokke
+
 ## [0.7.0] - 2026-10-08
 
 ### Added

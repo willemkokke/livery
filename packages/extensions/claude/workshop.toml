@@ -11,7 +11,7 @@ description = "Claude Code for the livery workshop: CLAUDE.md, the delivered gui
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.6.0"
+floor = "0.8.0"
 
 [[depends]]
 path = "packages/footman"
