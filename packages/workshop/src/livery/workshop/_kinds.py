@@ -305,6 +305,9 @@ class KindRecord:
             writes them, the drift check judges them, and each goes
             with the last such package. None for a kind with no such
             files. A child kind takes the nearest ancestor's.
+        before_install: What a member of the kind needs in place
+            before ``uv sync`` installs it, given the workspace root;
+            the lines it prints. None for a kind that needs nothing.
     """
 
     name: str
@@ -325,6 +328,7 @@ class KindRecord:
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
     root_files: Callable[[tuple[Package, ...]], dict[str, str]] | None = None
+    before_install: Callable[[Path], list[str]] | None = None
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -496,6 +500,20 @@ def kind_examples(
     return None
 
 
+def prepare_install(root: Path, packages: tuple[Package, ...]) -> list[str]:
+    """Run what the kinds of *packages* need before ``uv sync``; the lines.
+
+    Each kind with a ``before_install`` runs it once, in name order. A
+    kind that is not registered is passed over here: the gate names it.
+    """
+    lines: list[str] = []
+    for name in sorted({package.kind for package in packages}):
+        record = _KINDS.get(name)
+        if record is not None and record.before_install is not None:
+            lines += record.before_install(root)
+    return lines
+
+
 def run_suites(
     kind_name: str,
     *arguments: str,
@@ -648,6 +666,11 @@ def _register_builtin() -> None:
             tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
             wheel_identity="platform",
+            # The install builds the extension through the cmake-conan
+            # provider, which writes conan's default profile itself when
+            # there is none, with no compiler in it. A profile checked
+            # first is the one the provider finds.
+            before_install=_cpp_conan.ensure_profile,
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the

@@ -149,6 +149,115 @@ def test_build_refuses_without_conan(
         _cpp_conan.build(package, tmp_path)
 
 
+class _Said:
+    """What a faked conan call answers."""
+
+    def __init__(self, code: int = 0, stdout: str = "", stderr: str = "") -> None:
+        self.code = code
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _profile_conan(
+    monkeypatch: pytest.MonkeyPatch,
+    shown: list[dict[str, str]],
+    *,
+    detect: int = 0,
+    show: int = 0,
+) -> list[tuple[str, ...]]:
+    """Fake conan's profile commands; each show answers the next settings.
+
+    *detect* and *show* are the exit codes of those commands. Returns
+    every call's arguments, in order; ``create`` succeeds.
+    """
+    calls: list[tuple[str, ...]] = []
+    answers = iter(shown)
+
+    def _fake(cwd: Path, *args: str, env: object = None) -> _Said:
+        del cwd, env
+        calls.append(args)
+        if args[:2] == ("profile", "detect"):
+            return _Said(detect, stderr="detect: no default profile written")
+        if args[:2] == ("profile", "show"):
+            if show:
+                return _Said(show, stderr="show: the profile does not parse")
+            settings = next(answers)
+            return _Said(stdout=json.dumps({"host": {"settings": settings}}))
+        assert args == ("create", ".")
+        return _Said()
+
+    monkeypatch.setattr(_cpp_conan, "_conan", _fake)
+    return calls
+
+
+_COMPILERLESS = {"arch": "armv8", "build_type": "Release", "os": "Macos"}
+_DETECTED = {**_COMPILERLESS, "compiler": "apple-clang", "compiler.version": "21"}
+_EXIST_OK = ("profile", "detect", "--exist-ok")
+_FORCE = ("profile", "detect", "--force")
+_SHOW = ("profile", "show", "--format=json")
+
+
+def test_a_machine_where_detection_finds_no_compiler_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _profile_conan(monkeypatch, [_COMPILERLESS, _COMPILERLESS])
+    with pytest.raises(_FAILURES, match="found none on this machine: install a C"):
+        _cpp_conan.ensure_profile(tmp_path)
+    assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW]
+
+
+def test_a_detection_conan_refuses_is_named_in_its_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _profile_conan(monkeypatch, [], detect=1)
+    with pytest.raises(_FAILURES) as caught:
+        _cpp_conan.ensure_profile(tmp_path)
+    assert "conan profile detect exited 1" in str(caught.value)
+    assert "no default profile written" in str(caught.value)
+
+
+def test_a_profile_conan_cannot_show_is_named_and_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A profile that does not parse is the person's to mend: nothing
+    # replaces it.
+    calls = _profile_conan(monkeypatch, [], show=1)
+    with pytest.raises(_FAILURES) as caught:
+        _cpp_conan.ensure_profile(tmp_path)
+    assert "conan profile show exited 1" in str(caught.value)
+    assert "the profile does not parse" in str(caught.value)
+    assert _FORCE not in calls
+
+
+def test_a_profile_that_names_no_compiler_is_detected_again_and_said(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _profile_conan(monkeypatch, [_COMPILERLESS, _DETECTED])
+    assert _cpp_conan.ensure_profile(tmp_path) == [
+        "  conan: the default profile named no compiler; detected again: apple-clang 21"
+    ]
+    assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW]
+
+
+def test_a_profile_that_names_a_compiler_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _profile_conan(monkeypatch, [_DETECTED])
+    assert _cpp_conan.ensure_profile(tmp_path) == []
+    assert calls == [_EXIST_OK, _SHOW]
+
+
+def test_conan_create_runs_once_the_profile_names_a_compiler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = _profile_conan(monkeypatch, [_COMPILERLESS, _DETECTED])
+    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package.directory.mkdir(parents=True)
+    assert _cpp_conan.build(package, tmp_path) == package.directory / "build"
+    assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW, ("create", ".")]
+    assert "detected again: apple-clang 21" in capsys.readouterr().out
+
+
 @pytest.mark.usefixtures("hermetic_toolchain")
 def test_a_selected_test_refuses_when_ctest_is_not_deployed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

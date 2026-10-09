@@ -1155,6 +1155,7 @@ the stack, which this design neither needs nor rules out).
 | the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
+| `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 3) |
 
 ## Decision record
 
@@ -1878,6 +1879,13 @@ the stack, which this design neither needs nor rules out).
   with `fm workflow.release --local` and runs the loop's release
   scenario before it merges. 11b's slices, 11c among them before the
   registry goes, are under 11b.
+- 2026-10-09, decided while fixing #1113, which failed the loop's
+  release scenario for every change: conan's default profile is
+  checked before `uv sync` builds a native member and before `conan
+  create`. The base reaches a kind only through its registration, and
+  `fm sync` runs no lifecycle phase yet, so the check rides a new
+  `KindRecord.before_install` until slice 3 moves it to the conan
+  extension's `sync` step.
 
 ## Open
 
