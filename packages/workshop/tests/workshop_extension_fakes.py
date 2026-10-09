@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import importlib
+import shutil
 import sys
 import textwrap
 from importlib.metadata import EntryPoint
@@ -43,9 +44,11 @@ def fake_extensions(
         )
     monkeypatch.syspath_prepend(str(site))
     importlib.invalidate_caches()
-    for name in modules:
-        monkeypatch.delitem(sys.modules, f"acme.{name}", raising=False)
-    monkeypatch.delitem(sys.modules, "acme", raising=False)
+    # An earlier test's fake of the same name left its modules behind.
+    for loaded in [
+        key for key in sys.modules if key == "acme" or key.startswith("acme.")
+    ]:
+        monkeypatch.delitem(sys.modules, loaded, raising=False)
     fakes = tuple(
         EntryPoint(f"acme.{name}", f"acme.{name}", _extensions.GROUP)
         for name in modules
@@ -61,6 +64,20 @@ def fake_extensions(
     monkeypatch.setattr(_entries, "_SCAN", None)
     owners = _contract_keys.declarations.__wrapped__
     monkeypatch.setattr(_contract_keys, "declarations", functools.cache(owners))
+
+
+def fake_steps(tmp_path: Path, name: str, source: str) -> None:
+    """Write *source* as fake extension ``acme.<name>``'s ``_steps`` module.
+
+    Written before anything reads the extension's declaration, whose
+    references the read resolves against the module's source.
+    """
+    module = tmp_path / "site" / "acme" / name / "_steps.py"
+    module.write_text(textwrap.dedent(source))
+    # A step module rewritten within a test is imported afresh.
+    sys.modules.pop(f"acme.{name}._steps", None)
+    shutil.rmtree(module.parent / "__pycache__", ignore_errors=True)
+    importlib.invalidate_caches()
 
 
 def root_contract(root: Path, extensions: str) -> None:

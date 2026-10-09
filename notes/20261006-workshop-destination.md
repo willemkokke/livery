@@ -13,8 +13,9 @@ clang-tidy keeps its check code, and the extension passes of 10b and
 workshop's next
 release carries the first publishes of `livery-extensions-changelog`
 and `livery-extensions-claude`, two of a day's four new projects.
-Phase 11 started on 2026-10-09: 11a's first part, package composition
-(issue #1330), is built. The
+Phase 11 started on 2026-10-09: 11a's first two parts, package
+composition (issue #1330) and the lifecycle phases (issue #1332), are
+built. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -916,8 +917,9 @@ after, by `git diff --exit-code` after `fm sync`.
 It lands in four parts, each mergeable alone: composition (#1330,
 built: the three keys, the validity rule, the canonical list and its
 fix, the combinations, contract 28's mount, compatibility through
-extras); the phases and their context; the queries; `fm run`. Until
-11b the tests compose fixture extensions.
+extras); the phases and their context (#1332, built: `[phases.<phase>]`,
+the walk, `PhaseContext`, the refusals and their layering check); the
+queries; `fm run`. Until 11b the tests compose fixture extensions.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
@@ -1726,6 +1728,19 @@ the stack, which this design neither needs nor rules out).
     package does; a refusal names the list that would take the key.
   - Completion of a combination's name arrives with the first verb
     that takes one, `fm new.package` in 11b; this part lists them.
+- 2026-10-09, 11a's second part (#1332), taken without a ruling as
+  cheap to reverse:
+  - A context key's type is one of `str`, `int`, `bool`, `path`,
+    `strs`, `paths` and `table`; `provide` refuses a value of another
+    type, and a step provides and reads only the keys its extension
+    declares. One extension's `provides` and `reads` never share a key.
+  - A failing `pre` counts as run, so its `post` runs and reads the
+    failure. A step's failure is an exception; an interrupt stops the
+    phase at once, posts included.
+  - A `post` that fails after another step failed is named on stderr,
+    and the phase raises the first failure.
+  - The layering check judges every phase of every package's set, so
+    a declaration that cannot run is named before a verb walks it.
 
 ## Open
 

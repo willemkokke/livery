@@ -81,6 +81,9 @@ class Package:
             artifact to its registry. ``[release] publish = false``
             keeps an internal tool versioned, tagged and built by the
             train and never uploaded; the default is true.
+        extensions: The package-level extensions the package lists, in
+            its contract's order: its canonical list, which the
+            extensions it requires complete into its set.
     """
 
     directory: Path
@@ -91,6 +94,7 @@ class Package:
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
     checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
+    extensions: tuple[str, ...] = ()
 
     @property
     def member(self) -> str:
@@ -408,6 +412,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 publish=publish,
                 categories=tuple(reassigned),
                 checks=options_by_check,
+                extensions=tuple(str(name) for name in contract.get("extensions", ())),
             )
         )
     if problems:

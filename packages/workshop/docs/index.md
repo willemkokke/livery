@@ -77,6 +77,10 @@ spelling. Every key is optional:
 - `[extension] before` and `after`, the extensions it runs before or
   after in a package's phases, each one it requires, declares
   compatible or contributes to;
+- `[phases.<phase>]`, the steps a package-level extension adds to a
+  package's lifecycle phase: `pre`, `main` and `post`, each
+  `"module:function"` in its own package, and the context keys the
+  steps `provides`, each with its type, and `reads`;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -187,6 +191,35 @@ extension's content, tools and distribution belong to the workspace
 while a package lists it. `fm extensions --combinations` prints every
 valid set of the installed package-level extensions, each named by its
 canonical list joined with `+`, such as `cmake+cpp`.
+
+A package lives through nine lifecycle phases: `create`, `sync`,
+`stamp`, `build`, `prove`, `publish`, `replay`, `clean` and `run`. Each
+extension of a package's set may add steps to a phase:
+
+```toml
+[phases.build]
+pre = "acme.native._build:configure"
+main = "acme.native._build:compile"
+post = "acme.native._build:tidy"
+provides = { wheel = "path" }
+reads = ["abi"]
+```
+
+A phase calls every `pre` in order, then every `main` in order, then
+every `post` in reverse order. A `post` runs once its extension's `pre`
+ran, whatever failed after it. A failing step stops the `pre` or `main`
+steps that follow it, and the phase raises its exception again once the
+due `post` steps ran. Each step receives a `PhaseContext`: it writes
+the keys its extension provides with `provide`, reads the ones it reads
+with `read`, and a `post` learns what failed from `failed`, `failure`
+and `failed_extension`. A value of another type than the declared one
+(`str`, `int`, `bool`, `path`, `strs`, `paths` or `table`), and a key
+the extension does not declare, refuse naming the extension. The order
+puts a reader after the provider of each key it reads, then follows
+`before` and `after`, ties alphabetical; requirements order nothing
+within a phase. Two extensions providing one key, a key nobody
+provides, and an order with no start refuse before any step runs, and
+the layering check names them for each package.
 
 An extension's wheel carries its relations. Each `requires` target is
 a dependency of the wheel, and each `compatible` or `[for.<target>]`

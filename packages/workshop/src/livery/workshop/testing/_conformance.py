@@ -504,6 +504,11 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         (f"{shown(('fragments', output.target))}.render", output.render)
         for output in declared.fragments
     ]
+    found += [
+        (f"{shown(('phases', phase))}.{step}", getattr(steps, step))
+        for phase, steps in declared.phases.items()
+        for step in ("pre", "main", "post")
+    ]
     return [(key, value) for key, value in found if isinstance(value, Reference)]
 
 

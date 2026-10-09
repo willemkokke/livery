@@ -253,8 +253,12 @@ def workspace_names(start: Path | None = None) -> tuple[str, ...]:
     return tuple(name for name, _ in workspace_entries(start))
 
 
-def _lookup(name: str) -> Declaration | None:
-    """*name*'s declaration where one is installed; None otherwise."""
+def installed_declaration(name: str) -> Declaration | None:
+    """*name*'s declaration where one is installed; None otherwise.
+
+    The lookup [livery.workshop._composition][] reads the installed
+    extensions through.
+    """
     return _readable(name)
 
 
@@ -276,9 +280,9 @@ def package_extensions(start: Path | None = None) -> tuple[str, ...]:
         for _contract, names in _package_lists(root)
         for name in names
     ]
-    members = package_set(listed, _lookup)
+    members = package_set(listed, installed_declaration)
     try:
-        return order(members, _lookup)
+        return order(members, installed_declaration)
     except OrderCycle:
         return tuple(sorted(members))
 
@@ -290,7 +294,7 @@ def composed_set(listed: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     [livery.workshop._composition.package_set][] reads them from the
     installed declarations; an entry's options are read past.
     """
-    return package_set([listing(entry).name for entry in listed], _lookup)
+    return package_set([listing(entry).name for entry in listed], installed_declaration)
 
 
 def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
@@ -906,7 +910,7 @@ def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
     for contract, listed in _package_lists(root):
         where = contract.parent.relative_to(root).as_posix()
         names = [listing(entry).name for entry in listed]
-        for name in package_set(names, _lookup):
+        for name in package_set(names, installed_declaration):
             found.setdefault(name, []).append(where)
     return {name: tuple(where) for name, where in found.items()}
 
@@ -1003,12 +1007,14 @@ def composition_problems(root: Path) -> list[str]:
 
     Judged for each package whose entries are installed package-level
     extensions: every extension its set requires is installed and
-    listed at its level, every pair in the set knows each other, the
-    set's declared order has a start, and the list is the canonical
-    one, which the gate's ``--fix`` writes
-    ([livery.workshop._composition.canonical][]).
+    listed at its level, every pair in the set knows each other, each
+    lifecycle phase can run as the set's extensions declare it
+    ([livery.workshop._phases.phase_problems][]), the set's declared
+    order has a start, and the list is the canonical one, which the
+    gate's ``--fix`` writes ([livery.workshop._composition.canonical][]).
     """
     from livery.workshop._composition import canonical, unconnected
+    from livery.workshop._phases import PHASES, phase_problems, phase_steps
 
     workspace = set(workspace_names(root))
     problems: list[str] = []
@@ -1020,11 +1026,11 @@ def composition_problems(root: Path) -> list[str]:
         where = contract.parent.relative_to(root).as_posix()
         names = list(listed)
         every += names
-        members = package_set(names, _lookup)
+        members = package_set(names, installed_declaration)
         for name in members:
-            found = _lookup(name)
+            found = installed_declaration(name)
             for needed in found.requires if found is not None else ():
-                if _lookup(needed) is None:
+                if installed_declaration(needed) is None:
                     problems.append(
                         f"{where}: {name} requires {needed}, which no installed"
                         f" distribution declares in {GROUP}; install it"
@@ -1034,15 +1040,21 @@ def composition_problems(root: Path) -> list[str]:
                         f"{where}: {name} requires {needed}, which [workspace]"
                         " extensions does not list; the gate's --fix adds it"
                     )
-        for first, second in unconnected(members, _lookup):
+        for first, second in unconnected(members, installed_declaration):
             problems.append(
                 f"{where}: `extensions` composes {first} and {second}, and neither"
                 " requires the other, contributes to it, nor declares it"
                 " compatible; list only one of them, or ask either extension to"
                 " declare the other compatible"
             )
+        for phase in PHASES:
+            steps = phase_steps(phase, members, installed_declaration)
+            problems += [
+                f"{where}: {line}"
+                for line in phase_problems(phase, steps, installed_declaration)
+            ]
         try:
-            wanted = canonical(names, _lookup)
+            wanted = canonical(names, installed_declaration)
         except OrderCycle as error:
             problems.append(f"{where}: {error}")
             cycled = True
@@ -1055,7 +1067,7 @@ def composition_problems(root: Path) -> list[str]:
             )
     if not cycled:
         try:
-            order(package_set(every, _lookup), _lookup)
+            order(package_set(every, installed_declaration), installed_declaration)
         except OrderCycle as error:
             problems.append(f"the package-level extensions the packages list: {error}")
     return problems
@@ -1241,10 +1253,10 @@ def write_extensions(root: Path) -> list[str]:
         if not _composable(listed):
             continue
         where = package_contract.parent.relative_to(root).as_posix()
-        for extension in package_set(listed, _lookup):
-            found = _lookup(extension)
+        for extension in package_set(listed, installed_declaration):
+            found = installed_declaration(extension)
             for needed in found.requires if found is not None else ():
-                if needed in names or _lookup(needed) is None:
+                if needed in names or installed_declaration(needed) is None:
                     continue
                 if PACKAGE in levels_of(needed):
                     continue
@@ -1255,7 +1267,7 @@ def write_extensions(root: Path) -> list[str]:
                     f" which {extension} in {where} requires"
                 )
         try:
-            wanted = canonical(listed, _lookup)
+            wanted = canonical(listed, installed_declaration)
         except OrderCycle:
             continue
         if wanted == listed:
@@ -1443,7 +1455,7 @@ def combination_names() -> tuple[str, ...]:
     """
     from livery.workshop._composition import combinations
 
-    return combinations(installed_extensions(), _lookup)
+    return combinations(installed_extensions(), installed_declaration)
 
 
 def available_extensions(

@@ -40,6 +40,7 @@ def test_the_surface_is_declared() -> None:
         "Edge",
         "GateContext",
         "Package",
+        "PhaseContext",
         "Prose",
         "RegistryTarget",
         "ReleaseNotes",
