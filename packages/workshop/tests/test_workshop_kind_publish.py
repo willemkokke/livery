@@ -116,6 +116,104 @@ def test_conan_publish_refuses_without_conan(
         )
 
 
+_REMOTE = "https://forge.example/api/packages/acme/conan"
+
+
+def _recorded_conan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[tuple[str, ...], dict[str, str]]]:
+    """Fake conan on the remote route; each call's arguments and added variables.
+
+    Conan's own login variables are cleared first, whatever the host has.
+    """
+    calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
+
+    class _Done:
+        code = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake(cwd: Path, *args: str, env: dict[str, str] | None = None) -> _Done:
+        del cwd
+        calls.append((args, dict(env or {})))
+        return _Done()
+
+    monkeypatch.setattr(_cpp_conan, "_conan", _fake)
+    for name in (
+        "CONAN_LOGIN_USERNAME",
+        "CONAN_PASSWORD",
+        "CONAN_LOGIN_USERNAME_WORKSHOP",
+        "CONAN_PASSWORD_WORKSHOP",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return calls
+
+
+def _upload_logins(
+    calls: list[tuple[tuple[str, ...], dict[str, str]]],
+) -> list[dict[str, str]]:
+    return [env for args, env in calls if args[0] == "upload"]
+
+
+@pytest.mark.parametrize(
+    "own", ["CONAN_PASSWORD", "CONAN_LOGIN_USERNAME", "CONAN_PASSWORD_WORKSHOP"]
+)
+def test_conans_own_login_wins_over_the_registry_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, own: str
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    monkeypatch.setenv(own, "chosen")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    assert _cpp_conan.publish(
+        package, _REMOTE, version="0.1.0", local=False, token="lane"
+    )
+    assert _upload_logins(calls) == [{}]
+
+
+def test_an_upload_without_a_token_adds_no_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    assert _cpp_conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert _upload_logins(calls) == [{}]
+
+
+def test_the_registry_token_logs_in_to_the_workshop_remote_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    assert _cpp_conan.publish(
+        package, _REMOTE, version="0.1.0", local=False, token="lane"
+    )
+    assert _upload_logins(calls) == [
+        {"CONAN_LOGIN_USERNAME_WORKSHOP": "workshop", "CONAN_PASSWORD_WORKSHOP": "lane"}
+    ]
+    # Only the upload logs in: the remote's address is set anonymously.
+    assert [env for args, env in calls if args[0] == "remote"] == [{}]
+
+
+def test_the_publish_seam_hands_the_targets_token_to_the_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+
+    def _publish(
+        package: Package, url: str, *, version: str, local: bool, token: str = ""
+    ) -> bool:
+        seen.append(token)
+        return True
+
+    monkeypatch.setattr(_cpp_conan, "publish", _publish)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
+    assert _cpp_conan.publish_artifact(
+        package, tmp_path, version="0.1.0", target=target
+    )
+    assert seen == ["lane"]
+
+
 # The wave across kinds, seams stubbed.
 
 
@@ -210,7 +308,7 @@ def test_the_cross_kind_wave_orders_and_dispatches(
         return dist
 
     def _fake_conan_publish(
-        package: Package, target_url: str, *, version: str, local: bool
+        package: Package, target_url: str, *, version: str, local: bool, token: str = ""
     ) -> bool:
         order.append(package.name)
         assert local  # CONAN_REMOTE_URL points at a bare path
@@ -357,7 +455,7 @@ def test_prebuilt_refuses_an_empty_collection(
     conan_registry = _Ledger()
 
     def _fake_conan_publish(
-        package: Package, target_url: str, *, version: str, local: bool
+        package: Package, target_url: str, *, version: str, local: bool, token: str = ""
     ) -> bool:
         conan_registry.serve(package.name, version)
         return True

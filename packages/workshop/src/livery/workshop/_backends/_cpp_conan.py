@@ -415,14 +415,16 @@ def publish_artifact(
     """The kind's publish seam: the package to the resolved target.
 
     Three routes, by what the ladder resolved: the forge's own
-    releases, a folder, or a conan remote. Conan credentials stay
-    conan-native on the remote route (``CONAN_LOGIN_USERNAME`` and
-    ``CONAN_PASSWORD``), resolved by the tool itself, so the
-    target's token is unused there.
+    releases, a folder, or a conan remote. On the remote route conan
+    logs in with the target's token, the forge lane's token for a
+    forge's own registry, unless conan's own variables are set
+    ([livery.workshop._backends._cpp_conan.publish][]).
     """
     if target.releases:
         return publish_to_releases(package, root, version=version)
-    return publish(package, target.url, version=version, local=target.local)
+    return publish(
+        package, target.url, version=version, local=target.local, token=target.token
+    )
 
 
 def changelog_entry(package: Package, version: str) -> str:
@@ -513,7 +515,9 @@ def publish_to_releases(package: Package, root: Path, *, version: str) -> bool:
     return uploaded
 
 
-def publish(package: Package, target_url: str, *, version: str, local: bool) -> bool:
+def publish(
+    package: Package, target_url: str, *, version: str, local: bool, token: str = ""
+) -> bool:
     """Upload the recipe to the resolved target; False when already there.
 
     A remote target gets ``conan upload`` through the ``workshop``
@@ -521,9 +525,12 @@ def publish(package: Package, target_url: str, *, version: str, local: bool) -> 
     drifts). A folder target gets ``conan cache save``: the saved
     tarball lands as ``<dir>/<name>-<version>.tgz``, and
     ``conan cache restore`` reads it back on any machine.
-    Credentials stay conan-native: ``CONAN_LOGIN_USERNAME`` and
-    ``CONAN_PASSWORD``, taught by the refusal when the remote wants
-    them.
+
+    The upload logs in with *token* when conan's own variables are
+    unset: ``CONAN_LOGIN_USERNAME`` and ``CONAN_PASSWORD``, or the
+    pair scoped to the ``workshop`` remote. Set, they win. With
+    neither, the upload is anonymous, and the refusal teaches the
+    variables when the remote wants a login.
     """
     ref = f"{package.name}/{version}"
     if local:
@@ -557,7 +564,15 @@ def publish(package: Package, target_url: str, *, version: str, local: bool) -> 
             f"conan remote add {CONAN_REMOTE} {target_url} exited"
             f" {added.code}:\n{added.stdout}{added.stderr}"
         )
-    result = _conan(package.directory, "upload", ref, "-r", CONAN_REMOTE, "--confirm")
+    result = _conan(
+        package.directory,
+        "upload",
+        ref,
+        "-r",
+        CONAN_REMOTE,
+        "--confirm",
+        env=_login_env(token),
+    )
     if result.code != 0:
         output = f"{result.stdout}{result.stderr}"
         if "already" in output.lower() and "exist" in output.lower():
@@ -572,6 +587,33 @@ def publish(package: Package, target_url: str, *, version: str, local: bool) -> 
             )
         fail(f"conan upload ({ref}) exited {result.code}:\n{output[-3000:]}{hint}")
     return True
+
+
+#: The user conan logs in as with a registry's token. A forge's own
+#: registry authenticates the token and ignores the name.
+TOKEN_USER = "workshop"
+
+
+def _login_env(token: str) -> dict[str, str]:
+    """Conan's login for the ``workshop`` remote from *token*; empty to add none.
+
+    Empty when there is no token, and when conan's own variables are
+    set, generic or scoped to the remote: those win. Otherwise the
+    pair scoped to the remote, so no other remote sees the token.
+    """
+    scope = CONAN_REMOTE.upper()
+    own = (
+        "CONAN_LOGIN_USERNAME",
+        "CONAN_PASSWORD",
+        f"CONAN_LOGIN_USERNAME_{scope}",
+        f"CONAN_PASSWORD_{scope}",
+    )
+    if not token or any(os.environ.get(name) for name in own):
+        return {}
+    return {
+        f"CONAN_LOGIN_USERNAME_{scope}": TOKEN_USER,
+        f"CONAN_PASSWORD_{scope}": token,
+    }
 
 
 class ConanRegistry:
