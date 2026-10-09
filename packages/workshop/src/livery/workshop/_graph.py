@@ -47,6 +47,27 @@ def dependents_closure(
     return tuple(package for package in packages if package.path in affected)
 
 
+def dependencies_closure(
+    packages: tuple[Package, ...], seeds: set[str]
+) -> tuple[Package, ...]:
+    """*seeds* (package paths) plus everything they depend on, transitively.
+
+    Follows the ``[[depends]]`` edges to a fixed point, and answers in
+    discovery order; [livery.workshop._graph.order_topologically][]
+    puts each dependency before its dependents.
+    """
+    by_path = {package.path: package for package in packages}
+    needed = set(seeds)
+    frontier = list(seeds)
+    while frontier:
+        package = by_path.get(frontier.pop())
+        for edge in package.depends if package is not None else ():
+            if edge.path not in needed:
+                needed.add(edge.path)
+                frontier.append(edge.path)
+    return tuple(package for package in packages if package.path in needed)
+
+
 #: The prose directory: nothing under it reaches a gate.
 NOTES = "notes/"
 

@@ -13,9 +13,10 @@ clang-tidy keeps its check code, and the extension passes of 10b and
 workshop's next
 release carries the first publishes of `livery-extensions-changelog`
 and `livery-extensions-claude`, two of a day's four new projects.
-Phase 11 started on 2026-10-09: 11a's first three parts, package
-composition (issue #1330), the lifecycle phases (issue #1332) and the
-queries (issue #1333), are built. The
+Phase 11 started on 2026-10-09, and 11a is built: package composition
+(issue #1330), the lifecycle phases (issue #1332), the queries (issue
+#1333) and `fm run` (issue #1335). 11a's C++ acceptance waits for 11b's
+cpp extension. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -920,8 +921,11 @@ fix, the combinations, contract 28's mount, compatibility through
 extras); the phases and their context (#1332, built: `[phases.<phase>]`,
 the walk, `PhaseContext`, the refusals and their layering check); the
 queries (#1333, built: `[queries]`, `Query`, `answer` and eight of the
-eleven queries); `fm run`. Until 11b the tests compose fixture
-extensions.
+eleven queries); `fm run` (#1335, built: the verb, the development
+build and its record, the run phase's owner main, and #1299's fix, so
+a verb inside a package resolves the workspace at its root). Until 11b
+the tests compose fixture extensions; the acceptance's C++ application
+runs on 11b's cpp extension, an open line until then.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
@@ -1758,6 +1762,27 @@ the stack, which this design neither needs nor rules out).
     answers value differently.
   - `public_modules` and `compile_commands` keep answering from the
     kinds until 11b, whose extensions then answer the two queries.
+- 2026-10-09, 11a's fourth part (#1335), taken without a ruling as
+  cheap to reverse:
+  - The development build's record is `.workshop/.cache/run/built.json`:
+    each member's fingerprint, its git subtree in the working tree and
+    its dependencies' fingerprints, written after each good build. A
+    failed build records nothing. Phase 16's affected engine replaces
+    the record.
+  - The build role runs over each member whole, its checks' claims
+    aside, since a build check without claims reads no named file; a
+    member no build check judges is never built.
+  - A target resolves a package by its directory under `packages/`, its
+    path or its distribution's name, before it names an executable of
+    the package the command runs in.
+  - The `run` phase's inputs are the context's `executable` and
+    `arguments`, and its output `exit_code`: the engine's, not keys an
+    extension declares.
+  - An extension answering `executables` declares a `main` in
+    `[phases.run]`, or its declaration refuses.
+  - #1299 is fixed here, since `fm run` inside a package needs it:
+    `workspace_root` passes over a package's own contract, and starts
+    at the running task's directory rather than the process's.
 
 ## Open
 

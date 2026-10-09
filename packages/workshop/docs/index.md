@@ -250,6 +250,26 @@ composition order, and combines them:
 A name the workshop does not define refuses with the nearest one, and
 an extension listed at the workspace alone answers none.
 
+`fm run <package>[:<executable>] -- <arguments>` starts one of the
+executables a package's extensions answer under `executables`, and
+exits with its exit code. A package with one executable needs no name,
+and inside a package's directory the package may be left out;
+completion offers each `package:executable`. First the gate's `build`
+role runs over the package's dependency closure, dependencies first,
+and passes over each package whose files and dependencies are
+unchanged since its last good build in this checkout, so a second run
+with nothing changed starts at once. Then the `run` phase walks every
+extension's `pre`, the `main` of the extension that answers the
+executable alone, which starts it with the context's `executable` and
+`arguments` and sets `exit_code`, and every `post` in reverse. An
+extension that answers `executables` declares that `main`, or its
+declaration refuses.
+
+From any directory inside a workspace, a verb resolves the workspace
+at the directory that holds the root's `workshop.toml`: a package's own
+contract below it is passed over, and nothing is written into the
+package's directory.
+
 An extension's wheel carries its relations. Each `requires` target is
 a dependency of the wheel, and each `compatible` or `[for.<target>]`
 target is an extra of it that requires the target's distribution. The

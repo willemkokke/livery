@@ -390,6 +390,21 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         for target, table in data.get("for", {}).items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
+    phases = {
+        str(name): reader.phase(str(name), table, identity)
+        for name, table in data.get("phases", {}).items()
+    }
+    queries = {
+        str(name): reader.query(str(name), value, identity)
+        for name, value in data.get("queries", {}).items()
+    }
+    run = phases.get("run")
+    if "executables" in queries and (run is None or run.main is None):
+        raise reader.refuse(
+            ("queries", "executables"),
+            "names the executables fm run starts, and [phases.run] names no main"
+            " to start them; add main to [phases.run]",
+        )
     return Declaration(
         extension,
         package,
@@ -424,14 +439,8 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             reader.output(str(target), table)
             for target, table in data.get("fragments", {}).items()
         ),
-        phases={
-            str(name): reader.phase(str(name), table, identity)
-            for name, table in data.get("phases", {}).items()
-        },
-        queries={
-            str(name): reader.query(str(name), value, identity)
-            for name, value in data.get("queries", {}).items()
-        },
+        phases=phases,
+        queries=queries,
     )
 
 

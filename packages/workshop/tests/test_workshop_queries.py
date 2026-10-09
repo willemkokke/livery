@@ -26,12 +26,21 @@ PACKAGE = '[extension]\nlevels = ["package"]\n'
 
 
 def _answering(**answers_by_query: str) -> str:
-    """The ``[queries]`` table answering each query with its function in ``_steps``."""
+    """The ``[queries]`` table answering each query with its function in ``_steps``.
+
+    An extension answering ``executables`` adds the run phase's main that
+    starts them, as its declaration must.
+    """
     lines = [
         f'{query} = "{{package}}._steps:{function}"'
         for query, function in answers_by_query.items()
     ]
-    return "\n[queries]\n" + "\n".join(lines) + "\n"
+    run = (
+        '\n[phases.run]\nmain = "{package}._steps:main"\n'
+        if "executables" in answers_by_query
+        else ""
+    )
+    return "\n[queries]\n" + "\n".join(lines) + "\n" + run
 
 
 def _package(root: Path, *extensions: str) -> Package:
@@ -61,7 +70,9 @@ def _fakes(
             PACKAGE, PACKAGE + f"compatible = [{listed}]\n", 1
         )
     fake_extensions(tmp_path, monkeypatch, **texts)
-    for name, (_declaration, source) in declared.items():
+    for name, (declaration, source) in declared.items():
+        if "[phases.run]" in declaration:
+            source += "\n\ndef main(ctx):\n    del ctx\n"
         fake_steps(tmp_path, name, source)
     return _package(tmp_path, *names)
 

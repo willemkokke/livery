@@ -17,7 +17,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.footman import prog
+from livery.footman import cwd, prog
 from livery.workshop._composition import OrderCycle, order, package_set
 from livery.workshop._declaration import (
     API_VERSION,
@@ -52,15 +52,28 @@ PACKAGE = "package"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
-    """The nearest ancestor carrying a ``workshop.toml``, or None.
+    """The nearest ancestor carrying the workspace's contract, or None.
 
     The workspace contract is the marker; a checkout without one is
-    not a workspace and gets no extensions.
+    not a workspace and gets no extensions. A package's own
+    ``workshop.toml``, under ``packages/<name>/`` or
+    ``packages/<group>/<name>/`` of a workspace whose root holds a
+    contract, is passed over, so a verb run inside a package resolves
+    the workspace it belongs to. Without *start*, the search starts at
+    the running task's directory, the process's outside a run: a task
+    never reads the process's own, which a parallel run shares.
     """
-    origin = (start or Path.cwd()).resolve()
+    from livery.workshop._contract import _package_workspace
+
+    origin = (start or cwd()).resolve()
     for candidate in (origin, *origin.parents):
-        if (candidate / "workshop.toml").is_file():
-            return candidate
+        contract = candidate / "workshop.toml"
+        if not contract.is_file():
+            continue
+        above = _package_workspace(contract)
+        if above is not None and (above / "workshop.toml").is_file():
+            continue
+        return candidate
     return None
 
 

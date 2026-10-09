@@ -81,7 +81,8 @@ class PhaseContext:
     [livery.workshop.PhaseContext.provide][] and reads the ones it
     ``reads`` with [livery.workshop.PhaseContext.read][]. A ``post``
     reads ``failed``, ``failure`` and ``failed_extension`` to learn
-    whether the steps before it went through.
+    whether the steps before it went through. The ``run`` phase's main
+    starts ``executable`` with ``arguments`` and sets ``exit_code``.
 
     Attributes:
         phase: The phase that runs: ``build``.
@@ -91,6 +92,11 @@ class PhaseContext:
         failure: The first step's exception; None while nothing failed.
         failed_extension: The extension whose step failed first; empty
             while nothing failed.
+        executable: The executable the ``run`` phase starts, as the
+            ``executables`` query names it; empty in another phase.
+        arguments: The words ``fm run`` passes the executable.
+        exit_code: The executable's exit code, which ``fm run`` exits
+            with; the ``run`` phase's main sets it.
     """
 
     phase: str
@@ -99,6 +105,9 @@ class PhaseContext:
     failed: bool = False
     failure: Exception | None = None
     failed_extension: str = ""
+    executable: str = ""
+    arguments: tuple[str, ...] = ()
+    exit_code: int = 0
     _steps: Mapping[str, DeclaredPhase] = field(
         default_factory=dict[str, "DeclaredPhase"], repr=False
     )
@@ -230,16 +239,26 @@ def phase_problems(
 
 
 def run_phase(
-    phase: str, package: Package, root: Path, *, lookup: Lookup | None = None
+    phase: str,
+    package: Package,
+    root: Path,
+    *,
+    lookup: Lookup | None = None,
+    mains: frozenset[str] | None = None,
+    executable: str = "",
+    arguments: tuple[str, ...] = (),
 ) -> PhaseContext:
     """Run *phase* over *package*: each pre, then each main, then each post reversed.
 
     The steps are those of the package's set
     ([livery.workshop._composition.package_set][]), each extension's
     declaration read through *lookup*, the installed ones when absent.
-    A failing step stops the pres or the mains; every post whose
-    extension's pre ran still runs, and reads the failure from the
-    context. A post that fails after another failure is named on
+    *mains* names the extensions whose main runs, every one when None:
+    the ``run`` phase's main is the one extension's that owns the
+    executable. *executable* and *arguments* reach the steps on the
+    context. A failing step stops the pres or the mains; every post
+    whose extension's pre ran still runs, and reads the failure from
+    the context. A post that fails after another failure is named on
     stderr.
 
     Returns:
@@ -263,7 +282,9 @@ def run_phase(
     if problems:
         raise PhaseError(f"{package.path}: " + "; ".join(problems))
     walk = phase_order(steps, lookup)
-    ctx = PhaseContext(phase, package, root, _steps=steps)
+    ctx = PhaseContext(
+        phase, package, root, executable=executable, arguments=arguments, _steps=steps
+    )
     entered: list[str] = []
     for name in walk:
         entered.append(name)
@@ -271,6 +292,8 @@ def run_phase(
             break
     if not ctx.failed:
         for name in walk:
+            if mains is not None and name not in mains:
+                continue
             if not _step(ctx, name, steps[name].main):
                 break
     for name in reversed(entered):

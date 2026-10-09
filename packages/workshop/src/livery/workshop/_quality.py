@@ -491,6 +491,16 @@ def run_checks(
     walk(context, only=only)
 
 
+def run_on_packages(names: tuple[str, ...], packages: tuple[Package, ...]) -> None:
+    """Run the checks *names* over *packages* whole; nothing recorded as proved.
+
+    Each package check judges the packages it applies to, files and
+    claims notwithstanding: the development build ``fm run`` starts
+    with ([livery.workshop._run.develop][]).
+    """
+    walk(_context(subset=packages), only=frozenset(names))
+
+
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
     """Run the gate's fixers over *paths*, judging nothing.
 
