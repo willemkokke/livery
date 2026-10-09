@@ -509,6 +509,10 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         for phase, steps in declared.phases.items()
         for step in ("pre", "main", "post")
     ]
+    found += [
+        (shown(("queries", name)), reference)
+        for name, reference in declared.queries.items()
+    ]
     return [(key, value) for key, value in found if isinstance(value, Reference)]
 
 

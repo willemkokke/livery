@@ -68,7 +68,12 @@ extensions declare for an extension is
 A package-level extension adds steps to a package's lifecycle phases
 under ``[phases.<phase>]``; each step receives the phase's
 [livery.workshop.PhaseContext][], which carries the context keys the
-steps provide and read, and the failure a ``post`` step reads.
+steps provide and read, and the failure a ``post`` step reads. It
+answers questions about a package under ``[queries]``: each a
+[livery.workshop.Query][] the workshop defines, such as
+[livery.workshop.PUBLIC_MODULES][] or [livery.workshop.EXECUTABLES][],
+which [livery.workshop.answer][] asks of a package's extensions and
+combines by the query's rule.
 """
 
 from __future__ import annotations
@@ -118,6 +123,16 @@ if TYPE_CHECKING:
     from livery.workshop._provenance import generated_header as generated_header
     from livery.workshop._quality import ci_changes as ci_changes
     from livery.workshop._quality import fix_files as fix_files
+    from livery.workshop._queries import COMPILE_COMMANDS as COMPILE_COMMANDS
+    from livery.workshop._queries import CURRENT_VERSION as CURRENT_VERSION
+    from livery.workshop._queries import DISTRIBUTIONS as DISTRIBUTIONS
+    from livery.workshop._queries import EXECUTABLES as EXECUTABLES
+    from livery.workshop._queries import MODULE_ROOTS as MODULE_ROOTS
+    from livery.workshop._queries import PUBLIC_MODULES as PUBLIC_MODULES
+    from livery.workshop._queries import REQUIREMENTS as REQUIREMENTS
+    from livery.workshop._queries import VERSION_FILES as VERSION_FILES
+    from livery.workshop._queries import Query as Query
+    from livery.workshop._queries import answer as answer
     from livery.workshop._registries import RegistryTarget as RegistryTarget
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
@@ -131,11 +146,19 @@ __version__ = "0.7.0"
 
 __all__ = [
     "AGENT",
+    "COMPILE_COMMANDS",
+    "CURRENT_VERSION",
+    "DISTRIBUTIONS",
+    "EXECUTABLES",
     "HUMAN",
+    "MODULE_ROOTS",
     "NONE",
     "PACKAGE",
     "PACKAGES",
     "PATHS",
+    "PUBLIC_MODULES",
+    "REQUIREMENTS",
+    "VERSION_FILES",
     "WHOLE",
     "Changes",
     "Edge",
@@ -143,10 +166,12 @@ __all__ = [
     "Package",
     "PhaseContext",
     "Prose",
+    "Query",
     "RegistryTarget",
     "ReleaseNotes",
     "RunContext",
     "__version__",
+    "answer",
     "check_option",
     "ci_changes",
     "ci_run",
@@ -182,6 +207,16 @@ __all__ = [
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
+    "COMPILE_COMMANDS": "livery.workshop._queries",
+    "CURRENT_VERSION": "livery.workshop._queries",
+    "DISTRIBUTIONS": "livery.workshop._queries",
+    "EXECUTABLES": "livery.workshop._queries",
+    "MODULE_ROOTS": "livery.workshop._queries",
+    "PUBLIC_MODULES": "livery.workshop._queries",
+    "REQUIREMENTS": "livery.workshop._queries",
+    "VERSION_FILES": "livery.workshop._queries",
+    "Query": "livery.workshop._queries",
+    "answer": "livery.workshop._queries",
     "AGENT": "livery.workshop._prose",
     "Changes": "livery.workshop._influence",
     "Edge": "livery.workshop._packages",
