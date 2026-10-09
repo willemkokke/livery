@@ -1220,3 +1220,20 @@ def test_a_verified_tip_tree_lets_the_release_start_without_waiting(
     )
     with pytest.raises(_FAILURES):
         require_verified_base(repo, git, "main")
+
+
+def test_a_release_title_names_its_members_until_it_would_pass_the_limit() -> None:
+    from livery.workshop._release_driver import TITLE_LIMIT, release_title
+
+    one = release_title([("livery-core", "0.3.0")])
+    assert one == "chore(release): released livery-core v0.3.0"
+    twelve = [(f"livery-extensions-member-{n}", "0.1.0") for n in range(12)]
+    counted = release_title(twelve)
+    assert counted == "chore(release): released 12 packages"
+    assert len(counted) <= TITLE_LIMIT
+    # At the limit the members are named; one character past it, counted.
+    name = "x" * (TITLE_LIMIT - len("chore(release): released  v1.0.0"))
+    assert release_title([(name, "1.0.0")]).endswith(f"{name} v1.0.0")
+    assert release_title([(name + "y", "1.0.0")]) == (
+        "chore(release): released 1 package"
+    )

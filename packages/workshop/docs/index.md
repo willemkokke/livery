@@ -715,7 +715,10 @@ absence.
   from the packages the change touches, runs the affected gate first
   in its fix mode (`--no-check` skips), validates the subject the way
   `fm submit` validates a title, and refuses on `main` and on a
-  reserved branch. `git commit` keeps working.
+  reserved branch. A package whose only changes are the files the
+  engine composes into it stays out of the scope: a template's change
+  renders into every package, and its scope is the template's owner.
+  `git commit` keeps working.
 - `fm integrate`: bring `origin/main` into the branch by merge. A
   merge rewrites nothing, so every other copy of the branch stays
   valid, and the squash erases it at landing; a conflict stops with

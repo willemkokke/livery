@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -696,8 +696,7 @@ class ReleaseDriver:
                 rollback_prepare(self._root, self._members)
                 git.switch(self.base)
                 git.delete_local_branch(self.branch)
-        listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)
-        title = f"chore(release): released {listed}"
+        title = release_title([(plan.package.name, plan.version) for plan in plans])
         body = (
             "## Release summary\n"
             + "\n".join(f"- **{plan.package.name}** v{plan.version}" for plan in plans)
@@ -740,13 +739,12 @@ class ReleaseDriver:
         git = self._git
         mined_at = git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
         pairs = member_pairs_at(git, "HEAD") or []
-        listed = ", ".join(f"{name} v{version}" for name, version in pairs)
         body = (
             "## Release summary\n"
             + "\n".join(f"- **{name}** v{version}" for name, version in pairs)
             + f"\n\nMined-At: {mined_at}"
         )
-        return Submission(title=f"chore(release): released {listed}", body=body)
+        return Submission(title=release_title(pairs), body=body)
 
     def on_merged(self) -> None:
         """The merge point dispatches the wave; follow it to its verdict.
@@ -820,6 +818,27 @@ class ReleaseDriver:
             at, _subject = newest_release_squash(git, self.base)
         if line := drop_chain(self._repo, git, commit=at):
             print(f"  {line}")
+
+
+#: The longest release title. GitHub's auto-merge refuses a squash
+#: headline it judges too long, and its refusal names 80 characters.
+TITLE_LIMIT = 80
+
+
+def release_title(pairs: Sequence[tuple[str, str]]) -> str:
+    """The release pull request's title: each member with its version, or a count.
+
+    The title is the squash commit's headline, and arming hands it to
+    GitHub's auto-merge, which refuses a long one. A set whose title
+    would pass `TITLE_LIMIT` characters is counted instead; the pull
+    request's body and the commit's body list every member.
+    """
+    listed = ", ".join(f"{name} v{version}" for name, version in pairs)
+    title = f"chore(release): released {listed}"
+    if len(title) <= TITLE_LIMIT:
+        return title
+    counted = "1 package" if len(pairs) == 1 else f"{len(pairs)} packages"
+    return f"chore(release): released {counted}"
 
 
 def fresh_receipts(root: Path) -> None:
@@ -1437,8 +1456,7 @@ def workflow_release_check_title(
     if not recorded:
         print(f"  {branch}: no release member list; nothing to check")
         return
-    pairs = [f"{name} v{version}" for name, version in recorded]
-    expected = "chore(release): released " + ", ".join(pairs)
+    expected = release_title(recorded)
     if title and title != expected:
         fail(
             f"the PR title does not match what the member list prepared:\n"
