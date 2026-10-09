@@ -805,6 +805,30 @@ def _dev_index(kind: str, stack: Sequence[str] = ()) -> str:
     return url
 
 
+def require_dev_branch(root: Path) -> None:
+    """Refuse unless *root* stands on a branch whose release verb is the dev act.
+
+    The loop builds the dev wheels it installs with `workflow.release`
+    in this checkout, and the branch decides that verb's act. On
+    ``main`` or a reserved ``workflow/`` branch it is the release train,
+    which opens a real release on this repository's forge, and a merged
+    one publishes to the real index; a detached HEAD names no act at all.
+    """
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._release_driver import runs_the_train
+
+    branch = GitOps(root).current_branch()
+    if branch and not runs_the_train(branch):
+        return
+    where = f"'{branch}'" if branch else "a detached HEAD"
+    prog = footman.prog()
+    fail(
+        f"the loop builds its dev wheels with `{prog} workflow.release`, and on"
+        f" {where} that is the release train, which opens a real release: start a"
+        f" branch at this commit (`{prog} start chore/<slug>`) and run the loop there"
+    )
+
+
 def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
     """Publish the workspace's dev wheels to the loop's registry; the pins.
 
@@ -826,6 +850,7 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    require_dev_branch(root)
     _, token = _dev_forge(kind)
     git = GitOps(root)
     packages = {package.member: package for package in discover_packages(root)}
@@ -2997,6 +3022,11 @@ if _WORKSHOP_TESTS.is_dir():
         from livery.workshop import _devenv
         from livery.workshop._extensions import workspace_root
 
+        driver = workspace_root()
+        if driver is not None:
+            # Before anything is brought up: on a branch whose release
+            # verb is the train, the first build would open a release.
+            require_dev_branch(driver)
         asked = scenario or ("extension" if extension else "develop")
         chosen = scenarios_for(asked)
         stack, kinds = extension_under_test(extension) if extension else ((), ())
