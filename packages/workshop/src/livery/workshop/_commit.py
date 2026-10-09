@@ -25,15 +25,36 @@ def scope_of(root: Path, paths: list[str]) -> str:
 
     Empty when the change touches no package (root files, notes), and
     the subject carries no scope then. Several packages join with a
-    comma, the spelling the release train reads.
+    comma, the spelling the release train reads. A package whose
+    changed paths are only the files the engine composes into it and
+    their receipt is left out: a template's change renders into every
+    package, and the change's scope is the template's owner, which the
+    same change touches. The receipt is read as it stands and as it was
+    at HEAD, so a composed file the change removes counts too.
     """
+    from livery.workshop._fragment_engine import (
+        RENDERED_MANIFEST,
+        read_rendered,
+        receipts_from,
+    )
     from livery.workshop._packages import discover_packages
 
+    git = GitOps(root)
     names: set[str] = set()
     for package in discover_packages(root):
         prefix = package.path + "/"
-        if any(path.startswith(prefix) for path in paths):
-            names.add(package.member)
+        touched = [path[len(prefix) :] for path in paths if path.startswith(prefix)]
+        if not touched:
+            continue
+        before = git.file_at("HEAD", f"{package.path}/{RENDERED_MANIFEST}")
+        composed = {
+            RENDERED_MANIFEST,
+            *read_rendered(package.directory),
+            *receipts_from(before),
+        }
+        if all(name in composed for name in touched):
+            continue
+        names.add(package.member)
     return ",".join(sorted(names))
 
 
@@ -67,11 +88,13 @@ def commit(
     TYPE is one of the conventional types the release train reads and
     SUBJECT says what the change does. The scope is the packages the
     staged change touches, by directory name, or none for a change
-    outside every package; ``--scope`` overrides it. The affected gate
-    runs first in its fix mode, so mechanical findings heal into the
-    commit and nothing unproved is committed; ``--no-check`` skips it.
-    Everything is staged unless ``--only`` names the paths. Refuses on
-    ``main``, on a reserved branch, and with nothing to commit.
+    outside every package; ``--scope`` overrides it. A package whose
+    only changes are the files the engine composes into it is left
+    out. The affected gate runs first in its fix mode, so mechanical
+    findings heal into the commit and nothing unproved is committed;
+    ``--no-check`` skips it. Everything is staged unless ``--only``
+    names the paths. Refuses on ``main``, on a reserved branch, and
+    with nothing to commit.
     """
     if type not in TYPES:
         fail(

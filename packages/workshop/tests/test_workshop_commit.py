@@ -119,6 +119,37 @@ def test_the_scope_is_the_packages_the_staged_change_touches(
     assert scope_of(root, ["packages/xylophone/a.py"]) == ""
 
 
+def test_a_package_touched_only_by_its_composed_files_leaves_the_scope(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A template's change renders into every package: the scope is the
+    # template's owner, never each package it rendered into.
+    root = _rig(seeds, monkeypatch)
+    package = root / "packages" / "x"
+    (package / ".workshop-rendered").write_text(
+        '{"old.toml": "0", "cliff.toml": "1"}\n'
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "chore: render")
+    (root / "packages" / "y").mkdir()
+    (root / "packages" / "y" / "workshop.toml").write_text(
+        'kind = "python"\nname = "livery-y"\n'
+    )
+    (root / "packages" / "y" / "pyproject.toml").write_text(
+        '[project]\nname = "livery-y"\nversion = "0.1.0"\n'
+    )
+    rendered = ["packages/x/cliff.toml", "packages/x/.workshop-rendered"]
+    # The fallback first: a change that only renders has no scope.
+    assert scope_of(root, rendered) == ""
+    # With its template's owner, the owner alone is the scope.
+    assert scope_of(root, [*rendered, "packages/y/template.jinja"]) == "y"
+    # A composed file the change removes is named by HEAD's receipt alone.
+    (package / ".workshop-rendered").write_text('{"cliff.toml": "1"}\n')
+    assert scope_of(root, ["packages/x/old.toml", *rendered]) == ""
+    # A file of the package's own beside them keeps the package in.
+    assert scope_of(root, ["packages/x/a.py", *rendered]) == "x"
+
+
 def test_a_commit_runs_the_check_stages_everything_and_names_the_scope(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
