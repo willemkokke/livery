@@ -11,8 +11,10 @@ clang-tidy keeps its check code, and the extension passes of 10b and
 10c stop at the coverage leg until 12e (#1225). 10e (issue #1307) and
 10f (issue #1313) merged after that wave, as PRs #1312 and #1315; the
 workshop's next
-release carries the first publishes of `livery-extensions-changelog`
-and `livery-extensions-claude`, two of a day's four new projects.
+release carries the first releases of `livery-extensions-changelog`
+and `livery-extensions-claude`. On 2026-10-09 every PyPI name the
+remaining phases release was claimed with a placeholder, which leaves
+debt to clear (see "First publishes").
 Phase 11 started on 2026-10-09, and 11a is built: package composition
 (issue #1330), the lifecycle phases (issue #1332), the queries (issue
 #1333) and `fm run` (issue #1335). 11a's C++ acceptance waits for 11b's
@@ -772,23 +774,37 @@ its own change. Exceptional paths are tested before happy paths. The
 extensions plan's phases 10 to 15 are replaced by phases 10 to 16
 here; the mapping is in the decision record.
 
-### First publishes, four a day
+### First publishes
 
-PyPI accepts at most four new projects a day, so a wave's new
-distributions, its members with no receipt yet, number four at most.
-A phase with more publishes them over consecutive days in dependency
-order. Existing distributions release whenever they are ready.
+PyPI holds every name the remaining phases release. On 2026-10-09 each
+project was created with a placeholder, version `0.0.0.dev0`: an empty
+wheel and an sdist, uploaded by a workflow of the temporary repository
+`willemkokke/livery-name-claims` through a pending trusted publisher.
+A project created that way is not held to the four new projects a day
+that a token's first upload meets: fourteen were created that day. So
+a phase's distributions release on its first release day, and the
+existing token uploads them like any existing project. The train's
+first release of each is 0.0.0, above the placeholder.
 
-| When | New distributions | Phase |
-| --- | --- | --- |
-| 2026-10-08, after 15:00 UTC | basedpyright, clang-format, mypy, ty: the four projects the 2026-10-07 wave could not create, by `fm workflow.release.dispatch` | 10b |
-| the release of 10e and 10f | changelog, claude | 10e, 10f |
-| 11b's first release day | python, cmake, conan, cpp; python first, since pytest's 11b release requires it | 11b |
-| the day after | nanobind, unreal | 11b |
-| as 11c and phase 12 land | mkdocstrings, docs, housekeeping, doxygen, coverage | 11c, 12a to 12e |
+| Name | First release |
+| --- | --- |
+| `livery-extensions-changelog`, `livery-extensions-claude` | the release of 10e and 10f |
+| `livery-extensions-python`, `-cmake`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | 11b |
+| `livery-extensions-mkdocstrings` | 11c |
+| `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
+| `livery-lodge` | 15 |
 
-The 2026-10-08 row shipped: the dispatch published the four, and the
-10b wave released twelve members; the decision record has the runs.
+Whether `livery-extensions-housekeeping` publishes at all is decided in
+12b; the recommendation is `[release] publish = false` until a second
+repository lists the extension, and the name is held either way.
+
+Debt from the claim, an out-of-band one (the workshop's rules):
+
+- [ ] Each placeholder `0.0.0.dev0` is yanked once its package's first
+  release lands; a name that never releases keeps its yanked
+  placeholder.
+- [ ] Each project's trusted publisher for `livery-name-claims` is
+  removed, and the repository is deleted.
 
 ### Phase 10: the API as a contract, and its first consumers
 
@@ -1783,6 +1799,18 @@ the stack, which this design neither needs nor rules out).
   - #1299 is fixed here, since `fm run` inside a package needs it:
     `workspace_root` passes over a package's own contract, and starts
     at the running task's directory rather than the process's.
+
+- 2026-10-09, Willem: the PyPI names the remaining phases release are
+  claimed in one session, through a temporary repository with a
+  placeholder project. PyPI keeps at most three pending publishers at
+  once per account and one per repository, workflow and environment
+  (Warehouse's unique constraint); a private repository on the free
+  plan has no environments, so the repository carries one workflow
+  per name. Fourteen projects were created that day, each by its own
+  run (`livery-extensions-changelog` by run 37966784377 first, as the
+  proof), against the four a day a token's first upload met on
+  2026-10-08. The four-a-day schedule is retired; "First publishes"
+  lists the names and the debt.
 
 ## Open
 
