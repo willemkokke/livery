@@ -86,6 +86,17 @@ def _fake_pair(root: Path) -> tuple[FakeForge, _UpdateGit]:
 
 
 @pytest.fixture(autouse=True)
+def _no_contributed_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The toy instance lists no extension, so its render takes no contributed job.
+
+    The process's own jobs depend on what ran before on this worker: a
+    mount adds the docs extension's jobs. A seed rendered with them and
+    an update rendered without them differ, and the update submits.
+    """
+    monkeypatch.setattr("livery.workshop._points._CONTRIBUTED_JOBS", {})
+
+
+@pytest.fixture(autouse=True)
 def _no_toolchain(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep uv and the gate out of the toy instance; tests override."""
     monkeypatch.setattr(

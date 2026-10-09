@@ -37,6 +37,22 @@ def acme_jobs() -> Iterator[None]:
             withdraw_job(point, name)
 
 
+def test_a_test_leaves_the_jobs_contributed_before_it_in_place(
+    acme_jobs: None,
+) -> None:
+    # A mount earlier in the session contributed lint-prose; a test
+    # withdraws it and adds publish-book. Afterwards the jobs are the
+    # mount's again.
+    from workshop_docs_declared import jobs_restored
+
+    contribute_job("gate", Job("lint-prose"), extension="acme.prose")
+    with jobs_restored():
+        withdraw_job("gate", "lint-prose")
+        contribute_job("nightly", Job("publish-book"), extension="acme.prose")
+    assert [item.job.name for item in contributed_jobs("gate")].count("lint-prose") == 1
+    assert "publish-book" not in [item.job.name for item in contributed_jobs("nightly")]
+
+
 def test_a_contribution_to_an_unknown_point_names_the_points(acme_jobs: None) -> None:
     with pytest.raises(
         _FAILURES, match=r"'weekly', which is not a builtin point; the points are gate"
