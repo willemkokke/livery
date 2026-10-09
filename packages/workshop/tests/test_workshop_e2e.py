@@ -806,7 +806,13 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "t"))
     monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps",
-        lambda root: SimpleNamespace(head_sha=lambda: HEAD, is_clean=lambda: clean),
+        lambda root: SimpleNamespace(
+            head_sha=lambda: HEAD,
+            is_clean=lambda: clean,
+            # The loop runs from a feature branch, where the release
+            # verb is the dev act.
+            current_branch=lambda: "chore/loop",
+        ),
     )
     monkeypatch.setattr(
         "livery.workshop._dev_release.unchanged_since_release",
@@ -1365,3 +1371,42 @@ def test_the_forge_credentials_come_from_the_environment_in_host_mode(
     _forge, token = _e2e._dev_forge("gitea")  # pyright: ignore[reportPrivateUsage]
     assert token == "token-abc"
     assert connected == [("gitea", "http://localhost:43210", "token-abc")]
+
+
+def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
+    tmp_path: Path,
+) -> None:
+    # The loop builds its dev wheels with workflow.release, and on main
+    # or a reserved workflow/ branch that verb opens a real release.
+    import subprocess
+
+    from livery.footman import Failed
+
+    root = tmp_path / "ws"
+    root.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "dev@acme.test")
+    git("config", "user.name", "Acme")
+    (root / "seed.txt").write_text("x\n")
+    git("add", "-A")
+    git("commit", "-qm", "chore: seed")
+    with pytest.raises(Failed, match=r"on 'main' that is the release train"):
+        _e2e.require_dev_branch(root)
+    git("checkout", "-q", "-b", "workflow/release/core")
+    with pytest.raises(Failed, match=r"on 'workflow/release/core' that is the release"):
+        _e2e.require_dev_branch(root)
+    git("checkout", "-q", "--detach")
+    with pytest.raises(Failed, match=r"on a detached HEAD that is the release train"):
+        _e2e.require_dev_branch(root)
+    # A feature branch's release verb is the dev act, and the loop goes on.
+    git("checkout", "-q", "-b", "chore/loop")
+    _e2e.require_dev_branch(root)

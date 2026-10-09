@@ -1696,6 +1696,9 @@ the stack, which this design neither needs nor rules out).
   its authors credited through the local forge; the wave then stopped
   at the cpp member's `conan create` on a profile with no compiler,
   #1113's fault and not this change's.
+- 2026-10-09, Willem: `fm new.project`'s default list names no
+  `claude`; a project chooses its agent's files, and a birth wizard or
+  profiles offer them before the first public release.
 
 ## Open
 

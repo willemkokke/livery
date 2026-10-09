@@ -841,6 +841,15 @@ def release_title(pairs: Sequence[tuple[str, str]]) -> str:
     return f"chore(release): released {counted}"
 
 
+def runs_the_train(branch: str) -> bool:
+    """Whether `workflow.release` on *branch* is the release train, not the dev act.
+
+    ``main`` and the engine's reserved ``workflow/`` branches release;
+    any other branch builds a dev wheel straight from its commit.
+    """
+    return branch == "main" or branch.startswith("workflow/")
+
+
 def fresh_receipts(root: Path) -> None:
     """Fetch origin's tags, so a derivation reads every receipt a wave cut.
 
@@ -1262,7 +1271,7 @@ def workflow_release(
             " branch (main for the release train, any feature branch for a"
             " dev build), then run this again."
         )
-    if branch != "main" and not branch.startswith("workflow/"):
+    if not runs_the_train(branch):
         dev_release(root, git, members, local=local)
         return
     if local:

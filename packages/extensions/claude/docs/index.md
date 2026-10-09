@@ -34,6 +34,6 @@ one shim, `.claude/hooks/fm-hook.sh`:
 - `fm hooks.stop` refuses to end a turn whose last command was a
   failed `fm` verdict, once.
 
-A project born by `fm new.project` lists the extension and starts with
-a `CLAUDE.project.md`. A workspace that does not list it has no
-`CLAUDE.md` and no `.claude/`.
+A project born while the extension is listed starts with a
+`CLAUDE.project.md`; `fm new.project` lists it only when asked. A
+workspace that does not list it has no `CLAUDE.md` and no `.claude/`.
