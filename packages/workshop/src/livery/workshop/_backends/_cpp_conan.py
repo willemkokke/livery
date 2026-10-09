@@ -18,6 +18,7 @@ the machine's own, and the store never installs it.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import platform
 import re
@@ -1455,21 +1456,78 @@ def compile_commands(package: Package) -> Path | None:
     return package.directory / GATE_BUILD_DIR / "compile_commands.json"
 
 
+def ensure_profile(cwd: Path) -> list[str]:
+    """Make conan's default profile name a compiler; a line when it was replaced.
+
+    `conan create` refuses a profile that names no compiler. The
+    cmake-conan provider writes the default profile itself when there
+    is none, from inside CMake's configure, where conan's detection
+    finds no compiler, and every later conan call keeps that profile.
+    So a missing profile is detected here before anything configures,
+    and one that names no compiler is detected again, which replaces
+    it. A profile that names a compiler is kept as it is.
+
+    Returns:
+        The line saying the profile was detected again; empty when it
+        named a compiler already, or was missing and is detected now.
+
+    Raises:
+        Failed: when conan cannot detect or show the profile, in its
+            own words, or when detection finds no compiler here.
+    """
+    _detect_profile(cwd, "--exist-ok")
+    if "compiler" in _host_settings(cwd):
+        return []
+    _detect_profile(cwd, "--force")
+    settings = _host_settings(cwd)
+    compiler = settings.get("compiler")
+    if compiler is None:
+        fail(
+            "conan's default profile names no compiler, and `conan profile"
+            " detect` found none on this machine: install a C and C++"
+            " compiler, or name one with CC and CXX, then re-run"
+        )
+    named = f"{compiler} {settings.get('compiler.version', '')}".rstrip()
+    return [f"  conan: the default profile named no compiler; detected again: {named}"]
+
+
+def _detect_profile(cwd: Path, mode: str) -> None:
+    """Run ``conan profile detect`` with *mode*, ``--exist-ok`` or ``--force``."""
+    result = _conan(cwd, "profile", "detect", mode)
+    if result.code != 0:
+        fail(
+            f"conan profile detect exited {result.code}:\n"
+            f"{result.stdout}{result.stderr}"
+        )
+
+
+def _host_settings(cwd: Path) -> dict[str, str]:
+    """The host settings of conan's default profile, read from its JSON."""
+    result = _conan(cwd, "profile", "show", "--format=json")
+    if result.code != 0:
+        fail(
+            f"conan profile show exited {result.code}:\n{result.stdout}{result.stderr}"
+        )
+    settings: dict[str, str] = json.loads(result.stdout)["host"]["settings"]
+    return settings
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Package *package* through ``conan create``; the conan cache dir.
 
     ``conan create`` exports the recipe, builds in the cache, and
     packages the result there; publishing uploads from the cache, so
-    nothing lands in a ``dist/`` directory. Returns the package's
-    ``build`` directory as the artifact location the caller can
-    inspect. *epoch* is accepted for the backend contract; conan
-    stamps its own metadata and the reproducibility guard for this
-    kind is a later phase's work.
+    nothing lands in a ``dist/`` directory. Conan's default profile is
+    made to name a compiler first
+    ([livery.workshop._backends._cpp_conan.ensure_profile][]). Returns
+    the package's ``build`` directory as the artifact location the
+    caller can inspect. *epoch* is accepted for the backend contract;
+    conan stamps its own metadata and the reproducibility guard for
+    this kind is a later phase's work.
     """
     del root, epoch
-    conan = _conan(package.directory, "profile", "detect", "--exist-ok")
-    if conan.code != 0:
-        fail(f"conan profile detect exited {conan.code}:\n{conan.stdout}{conan.stderr}")
+    for line in ensure_profile(package.directory):
+        print(line)
     result = _conan(package.directory, "create", ".")
     if result.code != 0:
         fail(

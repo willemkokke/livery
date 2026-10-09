@@ -25,15 +25,13 @@ def test_sync_is_idempotent(tmp_path: Path) -> None:
     assert sync_workspace(root) == []  # the second has nothing
 
 
-def test_sync_runs_where_git_has_no_history(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # No repository, then a repository with nothing committed: nothing
-    # to bring current, and everything else as anywhere.
+def _recorded_steps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Stand in for every step of a sync; the steps' names, in the order run.
+
+    The profile check answers the line a replaced profile prints.
+    """
     from livery.workshop import _sync
 
-    root = _workspace(tmp_path)
-    monkeypatch.chdir(root)
     steps: list[str] = []
 
     def _step(name: str, result: object = None) -> object:
@@ -52,12 +50,73 @@ def test_sync_runs_where_git_has_no_history(
     monkeypatch.setattr(_sync, "fetch_store_lines", _step("store", []))
     monkeypatch.setattr(_sync, "sync_workspace", _step("content", []))
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _step("tools"))
+    monkeypatch.setattr(
+        "livery.workshop._kinds.prepare_install",
+        _step("prepare", ["  conan: the default profile was detected again"]),
+    )
     monkeypatch.setattr("livery.workshop._uv.run_uv", _step("uv"))
     monkeypatch.setattr("livery.workshop._shipped_files.deliver", _step("deliver", []))
     monkeypatch.setattr(
         "livery.workshop._templates.apply_generated", _step("generated", [])
     )
     monkeypatch.setattr("livery.workshop._reconcile.record_receipt", _step("receipt"))
+    return steps
+
+
+def test_the_kinds_prepare_their_members_after_the_tools_and_before_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _sync
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    steps = _recorded_steps(monkeypatch)
+    _sync.sync()
+    assert steps.index("tools") < steps.index("prepare") < steps.index("uv")
+    assert "the default profile was detected again" in capsys.readouterr().out
+
+
+def test_a_kind_prepares_once_however_many_members_it_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _kinds
+    from livery.workshop._kinds import KindRecord, prepare_install
+    from livery.workshop._packages import Package
+
+    asked: list[Path] = []
+
+    def _prepare(root: Path) -> list[str]:
+        asked.append(root)
+        return [f"  prepared {len(asked)}"]
+
+    record = KindRecord(name="acme-native", before_install=_prepare, abstract=True)
+    monkeypatch.setitem(_kinds._KINDS, record.name, record)
+    members = tuple(
+        Package(
+            directory=tmp_path / name,
+            path=f"packages/{name}",
+            name=name,
+            kind=kind,
+            depends=(),
+        )
+        for name, kind in (("a", "acme-native"), ("b", "acme-native"), ("c", "acme"))
+    )
+    # A kind nothing registers passes here; a kind with no step adds none.
+    assert prepare_install(tmp_path, members) == ["  prepared 1"]
+    assert asked == [tmp_path]
+    assert prepare_install(tmp_path, ()) == []
+
+
+def test_sync_runs_where_git_has_no_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # No repository, then a repository with nothing committed: nothing
+    # to bring current, and everything else as anywhere.
+    from livery.workshop import _sync
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    steps = _recorded_steps(monkeypatch)
     _sync.sync()
     assert "no git history here: nothing to bring current" in capsys.readouterr().out
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
@@ -70,6 +129,7 @@ def test_sync_runs_where_git_has_no_history(
         "store",
         "content",
         "tools",
+        "prepare",
         "uv",
         "deliver",
         "generated",
