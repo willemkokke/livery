@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -15,49 +14,9 @@ from livery.workshop._checks import (
     register_check,
     unregister_check,
 )
+from workshop_extension_fakes import fake_extensions, root_contract
 
 _FAILURES = (BaseException,)
-
-
-def _fake_extensions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **modules: str
-) -> None:
-    """Packages ``acme.<name>``, each declaring the given ``extension.toml``.
-
-    ``{package}`` in a declaration stands for the package's import path,
-    and each package's ``_checks`` defines ``noop`` for a check to run.
-    """
-    site = tmp_path / "site"
-    (site / "acme").mkdir(parents=True, exist_ok=True)
-    for name, text in modules.items():
-        package = site / "acme" / name
-        package.mkdir(exist_ok=True)
-        (package / "__init__.py").write_text("")
-        (package / "_checks.py").write_text("def noop(ctx):\n    del ctx\n")
-        (package / "extension.toml").write_text(
-            textwrap.dedent(text).replace("{package}", f"acme.{name}")
-        )
-    monkeypatch.syspath_prepend(str(site))
-    import importlib
-
-    importlib.invalidate_caches()
-    for name in modules:
-        monkeypatch.delitem(__import__("sys").modules, f"acme.{name}", raising=False)
-    monkeypatch.delitem(__import__("sys").modules, "acme", raising=False)
-    # Each fake declares itself as the extension named by its import path.
-    from importlib.metadata import EntryPoint
-
-    real = _extensions._declared  # pyright: ignore[reportPrivateUsage]
-    fakes = {
-        f"acme.{name}": EntryPoint(f"acme.{name}", f"acme.{name}", _extensions.GROUP)
-        for name in modules
-    }
-    previous = dict(real())
-    monkeypatch.setattr(_extensions, "_declared", lambda: {**previous, **fakes})
-
-
-def _contract(root: Path, extensions: str) -> None:
-    (root / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
 
 
 @pytest.fixture
@@ -77,7 +36,7 @@ def _noop(ctx: GateContext) -> None:
 def test_an_incompatible_api_version_refuses_naming_both(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, old="[extension]\napi-version = 99\n")
+    fake_extensions(tmp_path, monkeypatch, old="[extension]\napi-version = 99\n")
     found = _extensions.declaration("acme.old")
     assert found is not None
     with pytest.raises(
@@ -86,7 +45,7 @@ def test_an_incompatible_api_version_refuses_naming_both(
     ):
         _extensions.check_api_version("acme.old", found)
     # Mount refuses it before anything registers.
-    _contract(tmp_path, '["acme.old"]')
+    root_contract(tmp_path, '["acme.old"]')
     from livery.footman import _registry as registry
 
     with registry.capture(), pytest.raises(RuntimeError, match="API version 99"):
@@ -96,19 +55,19 @@ def test_an_incompatible_api_version_refuses_naming_both(
 def test_a_missing_dependency_and_a_misordered_one_are_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         brand='[extension]\nrequires = ["acme.base"]\n',
         base="",
     )
-    _contract(tmp_path, '["acme.brand"]')
+    root_contract(tmp_path, '["acme.brand"]')
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
         "[workspace] extensions lists acme.brand, which depends on acme.base, and"
         " does not list it; the gate's --fix adds it before acme.brand"
     )
-    _contract(tmp_path, '["acme.brand", "acme.base"]')
+    root_contract(tmp_path, '["acme.brand", "acme.base"]')
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
         "[workspace] extensions lists acme.base after acme.brand, which depends on"
@@ -135,7 +94,7 @@ def test_a_root_without_a_contract_writes_nothing(tmp_path: Path) -> None:
 def test_the_fix_adds_the_missing_extension_before_its_dependent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         brand='[extension]\nrequires = ["acme.base"]\n',
@@ -154,12 +113,43 @@ def test_the_fix_adds_the_missing_extension_before_its_dependent(
     assert _extensions.write_extensions(tmp_path) == []  # idempotent
     assert _extensions.requirers(tmp_path)["acme.base"] == ("acme.brand",)
     # The inline list form takes the entry the same way.
-    _contract(tmp_path, '["acme.brand"]')
+    root_contract(tmp_path, '["acme.brand"]')
     _extensions.write_extensions(tmp_path)
     assert (
         'extensions = ["acme.base", "acme.brand"]'
         in (tmp_path / "workshop.toml").read_text()
     )
+
+
+def test_the_fix_places_a_requirement_before_its_dependents_entry_of_any_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(
+        tmp_path, monkeypatch, brand='[extension]\nrequires = ["acme.base"]\n', base=""
+    )
+    contract = tmp_path / "workshop.toml"
+    added = [
+        "  layering: [workspace] extensions gains acme.base before acme.brand,"
+        " which requires it"
+    ]
+    contract.write_text(
+        '[workspace]\nextensions = [\n    { name = "acme.brand", for = [] },\n]\n'
+    )
+    assert _extensions.write_extensions(tmp_path) == added
+    assert contract.read_text() == (
+        '[workspace]\nextensions = [\n    "acme.base",  # required by acme.brand\n'
+        '    { name = "acme.brand", for = [] },\n]\n'
+    )
+    contract.write_text('[workspace]\nextensions = [{ name = "acme.brand" }]\n')
+    assert _extensions.write_extensions(tmp_path) == added
+    assert contract.read_text() == (
+        '[workspace]\nextensions = ["acme.base", { name = "acme.brand" }]\n'
+    )
+    # A spelling the writer cannot read is a person's edit; the judge
+    # names it until then.
+    contract.write_text('[workspace]\nextensions=[{ name = "acme.brand" }]\n')
+    assert _extensions.write_extensions(tmp_path) == []
+    assert "acme.base" not in contract.read_text()
 
 
 def test_a_declaration_without_an_api_version_is_taken_at_the_current_version() -> None:
@@ -224,7 +214,7 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
 ) -> None:
     # Listed and installed by nothing: the mount names it, skips it, and
     # remembers it; nothing is declared since, so nothing is new.
-    _contract(tmp_path, '["acme.later"]')
+    root_contract(tmp_path, '["acme.later"]')
     from livery.footman import _registry as registry
 
     with registry.capture():
@@ -235,7 +225,7 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     # An install declares it: the next look finds it by its entry point,
     # and imports nothing, since a distribution installed after the
     # interpreter started may not be importable in it.
-    _fake_extensions(tmp_path, monkeypatch, later="", unloadable="")
+    fake_extensions(tmp_path, monkeypatch, later="", unloadable="")
     unloadable = tmp_path / "site" / "acme" / "unloadable" / "__init__.py"
     unloadable.write_text("raise ImportError('later')\n")
     assert _extensions.declared_now(("acme.later", "acme.unloadable")) == (
@@ -244,10 +234,10 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     )
     assert _extensions.declared_now(()) == ()
     # A contract that no longer lists it counts it no more.
-    _contract(tmp_path, "[]")
+    root_contract(tmp_path, "[]")
     assert _extensions.unmounted(tmp_path) == ()
     # A mount that finds every listed extension remembers none.
-    _contract(tmp_path, '["acme.later"]')
+    root_contract(tmp_path, '["acme.later"]')
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
     assert list(_extensions.UNDECLARED) == []
@@ -257,7 +247,7 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
 def test_an_extension_listed_at_the_wrong_level_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         native='[extension]\nlevels = ["package"]\n',
@@ -265,7 +255,7 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     )
     # A package-level extension in the workspace list: the gate refuses,
     # the mount names it and skips it.
-    _contract(tmp_path, '["acme.native"]')
+    root_contract(tmp_path, '["acme.native"]')
     from livery.footman import _registry as registry
 
     with registry.capture():
@@ -276,7 +266,7 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
         " package's `extensions` alone; move it there"
     ) in _extensions.closure_problems(tmp_path)
     # A workspace-level extension in a package's list: named the same way.
-    _contract(tmp_path, "[]")
+    root_contract(tmp_path, "[]")
     member = tmp_path / "packages" / "core"
     member.mkdir(parents=True)
     (member / "workshop.toml").write_text(
@@ -306,9 +296,9 @@ listed-with = "deep"
 def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
     for spelled in ("acme.tool>=1.0", "acme.tool?", "acme.tool[deep]@linux"):
-        _contract(tmp_path, f'["{spelled}"]')
+        root_contract(tmp_path, f'["{spelled}"]')
         assert _extensions.closure_problems(tmp_path) == [
             f"[workspace] extensions lists {spelled!r}; an entry is a name with"
             " the options it turns on, `name` or `name[option,option]`, and no"
@@ -317,7 +307,7 @@ def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
         ]
     # A spelling the grammar does not read is named the same way, and
     # read whole as a name no distribution declares.
-    _contract(tmp_path, '["acme.tool[deep"]')
+    root_contract(tmp_path, '["acme.tool[deep"]')
     problems = _extensions.closure_problems(tmp_path)
     assert any(
         problem.startswith("[workspace] extensions lists 'acme.tool[deep';")
@@ -332,8 +322,8 @@ def test_an_option_the_extension_does_not_declare_refuses_and_mounts_off(
     capsys: pytest.CaptureFixture[str],
     restored_checks: None,
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
-    _contract(tmp_path, '["acme.tool[deeper]"]')
+    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    root_contract(tmp_path, '["acme.tool[deeper]"]')
     why = (
         "[workspace] extensions lists acme.tool with 'deeper', which it does not"
         " declare; its options are deep"
@@ -354,7 +344,7 @@ def test_a_check_for_an_option_its_extension_does_not_declare_refuses(
 ) -> None:
     from livery.workshop._declaration import DeclarationError
 
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         tool=_OPTIONED.replace('[options]\ndeep = "judges deeper"\n', ""),
@@ -369,13 +359,13 @@ def test_a_check_for_an_option_its_extension_does_not_declare_refuses(
 def test_an_option_registers_its_checks_and_fm_extensions_says_which_are_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
-    _contract(tmp_path, '["acme.tool"]')
+    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
+    root_contract(tmp_path, '["acme.tool"]')
     assert _extensions.extension_options(tmp_path) == {"acme.tool": ()}
     described = _extensions.describe_extensions(tmp_path)
     assert "    option deep (off): judges deeper" in described
     # The table form spells its name the same way.
-    _contract(tmp_path, '[{ name = "acme.tool[deep]" }]')
+    root_contract(tmp_path, '[{ name = "acme.tool[deep]" }]')
     assert _extensions.extension_names(tmp_path) == ("acme.tool",)
     assert _extensions.extension_options(tmp_path) == {"acme.tool": ("deep",)}
     assert _extensions.closure_problems(tmp_path) == []
@@ -413,8 +403,8 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     from livery.footman import _paths
     from livery.workshop._points import verdict_needs, withdraw_job
 
-    _fake_extensions(tmp_path, monkeypatch, brand=_BRANDED)
-    _contract(tmp_path, '["acme.brand"]')
+    fake_extensions(tmp_path, monkeypatch, brand=_BRANDED)
+    root_contract(tmp_path, '["acme.brand"]')
     monkeypatch.setattr(_paths, "_builtin", ("acme.brand",))
     try:
         _mount(tmp_path)
@@ -428,7 +418,7 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
 def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         tool='[extension]\nrequires = ["acme.base"]\n' + _OPTIONED,
@@ -445,7 +435,7 @@ def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
     assert '    "acme.base",  # required by acme.tool\n    "acme.tool[deep]",\n' in (
         written
     )
-    _contract(tmp_path, '["acme.tool[deep]"]')
+    root_contract(tmp_path, '["acme.tool[deep]"]')
     _extensions.write_extensions(tmp_path)
     written = (tmp_path / "workshop.toml").read_text()
     assert 'extensions = ["acme.base", "acme.tool[deep]"]' in written
@@ -460,8 +450,8 @@ def test_a_extension_declaring_tools_off_the_shape_refuses_naming_it(
 ) -> None:
     from livery.workshop._declaration import DeclarationError
 
-    _fake_extensions(tmp_path, monkeypatch, odd='[toolroom]\nrequires = "docker"\n')
-    _contract(tmp_path, '["acme.odd"]')
+    fake_extensions(tmp_path, monkeypatch, odd='[toolroom]\nrequires = "docker"\n')
+    root_contract(tmp_path, '["acme.odd"]')
     with pytest.raises(DeclarationError, match=r"toolroom\.requires is a string"):
         _extensions.extension_tools(tmp_path)
     from livery.workshop._tools import requirements
@@ -475,14 +465,14 @@ def test_an_unlisted_extensions_tools_never_enter_the_profile(
 ) -> None:
     from livery.workshop._tools import requirements, tool_names
 
-    _fake_extensions(
+    fake_extensions(
         tmp_path, monkeypatch, tooled='[toolroom]\nrequires = ["docker>=27"]\n'
     )
-    _contract(tmp_path, "[]")
+    root_contract(tmp_path, "[]")
     assert "extension acme.tooled" not in {r.site for r in requirements(tmp_path)}
     assert "docker" not in tool_names(tmp_path)
     # Listed, the extension is the fourth site, named as the kinds are.
-    _contract(tmp_path, '["acme.tooled"]')
+    root_contract(tmp_path, '["acme.tooled"]')
     found = [r for r in requirements(tmp_path) if r.site == "extension acme.tooled"]
     assert [(r.name, r.floor) for r in found] == [("docker", "27")]
     assert "docker" in tool_names(tmp_path)
@@ -494,8 +484,8 @@ def test_a_extension_declaring_contributions_off_the_shape_refuses_naming_it(
 ) -> None:
     from livery.workshop._declaration import DeclarationError
 
-    _fake_extensions(tmp_path, monkeypatch, odd='for = ["acme.python"]\n')
-    _contract(tmp_path, '["acme.odd"]')
+    fake_extensions(tmp_path, monkeypatch, odd='for = ["acme.python"]\n')
+    root_contract(tmp_path, '["acme.odd"]')
     with pytest.raises(DeclarationError, match=r"for is a list"):
         _extensions.declared_targets(tmp_path)
 
@@ -509,7 +499,7 @@ run = "{package}._checks:noop"
 
 def _house(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A house contributing to a python extension, and that extension."""
-    _fake_extensions(tmp_path, monkeypatch, house=_HOUSE, python="")
+    fake_extensions(tmp_path, monkeypatch, house=_HOUSE, python="")
 
 
 def _grafted() -> bool:
@@ -522,7 +512,7 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
     from livery.workshop import contributions_for
 
     _house(tmp_path, monkeypatch)
-    _fake_extensions(
+    fake_extensions(
         tmp_path,
         monkeypatch,
         cpp="",
@@ -533,16 +523,16 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
     )
     # The empty answers first: a target the workspace does not list, and
     # a contribution whose listing points it at another target.
-    _contract(tmp_path, '["acme.house"]')
+    root_contract(tmp_path, '["acme.house"]')
     assert contributions_for("acme.python", tmp_path) == {}
-    _contract(
+    root_contract(
         tmp_path,
         '["acme.python", "acme.cpp", { name = "acme.house", for = ["acme.cpp"] }]',
     )
     assert contributions_for("acme.python", tmp_path) == {}
     # Then the table the mount grafts, as the file holds it, and the
     # top-level tables of an extension that requires the target.
-    _contract(tmp_path, '["acme.python", "acme.house", "acme.needy"]')
+    root_contract(tmp_path, '["acme.python", "acme.house", "acme.needy"]')
     assert contributions_for("acme.python", tmp_path) == {
         "acme.house": {
             "checks": {"house": {"lint": {"run": "acme.house._checks:noop"}}}
@@ -566,7 +556,7 @@ def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_
     # The mount goes on without the target, and the layering check,
     # which runs inside a working fm, names the entry.
     _house(tmp_path, monkeypatch)
-    _fake_extensions(tmp_path, monkeypatch, cpp="")
+    fake_extensions(tmp_path, monkeypatch, cpp="")
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = [\n    "acme.python",\n'
         '    "acme.cpp",\n    { name = "acme.house", for = ["acme.cpp"] },\n]\n'
@@ -584,7 +574,7 @@ def test_a_contribution_for_an_unlisted_target_never_mounts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
     _house(tmp_path, monkeypatch)
-    _contract(tmp_path, '["acme.house"]')
+    root_contract(tmp_path, '["acme.house"]')
     _mount(tmp_path)
     assert not _grafted()
     assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
@@ -601,7 +591,7 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
     ):
         if _grafted():
             _checks.unregister_check("lint.house")
-        _contract(tmp_path, listed)
+        root_contract(tmp_path, listed)
         _mount(tmp_path)
         assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
         assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
@@ -621,9 +611,9 @@ listed-with = "deep"
 def test_a_grafted_check_registers_under_the_options_its_owners_listing_turns_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    _fake_extensions(tmp_path, monkeypatch, house=_HOUSE_DEEP, python="")
+    fake_extensions(tmp_path, monkeypatch, house=_HOUSE_DEEP, python="")
     # The fallback first: listed without the option, the check stays off.
-    _contract(tmp_path, '["acme.python", "acme.house"]')
+    root_contract(tmp_path, '["acme.python", "acme.house"]')
     _mount(tmp_path)
     assert not _grafted()
     # Turned on, it registers whichever of the two the list names first.
@@ -633,7 +623,7 @@ def test_a_grafted_check_registers_under_the_options_its_owners_listing_turns_on
     ):
         if _grafted():
             _checks.unregister_check("lint.house")
-        _contract(tmp_path, listed)
+        root_contract(tmp_path, listed)
         _mount(tmp_path)
         assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
 
@@ -641,10 +631,10 @@ def test_a_grafted_check_registers_under_the_options_its_owners_listing_turns_on
 def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _fake_extensions(
+    fake_extensions(
         tmp_path, monkeypatch, house=_HOUSE.replace(":noop", ":absent"), python=""
     )
-    _contract(tmp_path, '["acme.python", "acme.house"]')
+    root_contract(tmp_path, '["acme.python", "acme.house"]')
     with pytest.raises(
         RuntimeError,
         match=r'for\."acme\.python"\.checks\.house\.lint\.run names absent',
@@ -684,7 +674,7 @@ def test_the_fix_records_for_once_and_a_deleted_name_stays_deleted(
         "[workspace] extensions: the entry for acme.house names acme.cpp in `for`,"
         " and does not list it; list it, or remove it from `for`"
     )
-    _contract(tmp_path, '["acme.python", "acme.house"]')
+    root_contract(tmp_path, '["acme.python", "acme.house"]')
     # The inline form takes the entry the same way, and a table entry
     # without `for` gains the key.
     _extensions.write_extensions(tmp_path)

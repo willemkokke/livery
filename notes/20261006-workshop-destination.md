@@ -12,7 +12,9 @@ clang-tidy keeps its check code, and the extension passes of 10b and
 10f (issue #1313) merged after that wave, as PRs #1312 and #1315; the
 workshop's next
 release carries the first publishes of `livery-extensions-changelog`
-and `livery-extensions-claude`, two of a day's four new projects. The
+and `livery-extensions-claude`, two of a day's four new projects.
+Phase 11 started on 2026-10-09: 11a's first part, package composition
+(issue #1330), is built. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -911,6 +913,11 @@ after, by `git diff --exit-code` after `fm sync`.
 `before`, `after`, the validity rule, the canonical set,
 `fm extensions --combinations`, `[phases]` with `pre` and reversed
 `post`, the declared context, `[queries]` and `answer`, `fm run`.
+It lands in four parts, each mergeable alone: composition (#1330,
+built: the three keys, the validity rule, the canonical list and its
+fix, the combinations, contract 28's mount, compatibility through
+extras); the phases and their context; the queries; `fm run`. Until
+11b the tests compose fixture extensions.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
@@ -1699,6 +1706,26 @@ the stack, which this design neither needs nor rules out).
 - 2026-10-09, Willem: `fm new.project`'s default list names no
   `claude`; a project chooses its agent's files, and a birth wizard or
   profiles offer them before the first public release.
+- 2026-10-09, 11a's first part (#1330), taken without a ruling as
+  cheap to reverse:
+  - Composition order is requires, `after` and `before`, ties
+    alphabetical. It orders the mount (contract 28), the canonical
+    list and a combination's name. A phase's order adds its context
+    keys and leaves requires out, as the plan's order states.
+  - The validity rule reads `requires` transitively: an extension
+    knows what its requirements require.
+  - A package's entry takes no options, and an extension listed at the
+    package level alone declares no `[options]`: no package-level
+    extension has one yet, and an option's scope per package is a
+    design question for its first case.
+  - A declared order with no start falls back to alphabetical in the
+    mount, so the sync that repairs it runs; the layering check names
+    the cycle.
+  - A package-level extension's contract keys are taken in a package's
+    contract while the package lists it, and in the root's while any
+    package does; a refusal names the list that would take the key.
+  - Completion of a combination's name arrives with the first verb
+    that takes one, `fm new.package` in 11b; this part lists them.
 
 ## Open
 

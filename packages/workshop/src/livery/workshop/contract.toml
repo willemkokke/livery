@@ -373,7 +373,7 @@ doc = "directories the API reference also reads modules from, relative to the pa
 
 [contract.package.extensions]
 types = ["strs"]
-doc = "the package-level extensions the package lists, by name"
+doc = "the package-level extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"
 
 [contract.package.kind]
 types = ["str"]
@@ -732,11 +732,23 @@ doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this o
 
 [contract.extension.extension]
 types = ["table"]
-doc = "the extension's identity: its workshop API version, its levels, its plugin and the extensions it requires"
+doc = "the extension's identity: its workshop API version, its levels, its plugin, the extensions it requires, and how it composes on a package"
+
+[contract.extension.extension.after]
+types = ["strs"]
+doc = "the extensions this one runs after in every phase of a package, each one it requires or is compatible with; none when absent"
 
 [contract.extension.extension.api-version]
 types = ["int"]
 doc = "the workshop API version the extension is written for, which the mount refuses unless it is this workshop's; 1 when absent"
+
+[contract.extension.extension.before]
+types = ["strs"]
+doc = "the extensions this one runs before in every phase of a package, each one it requires or is compatible with; none when absent"
+
+[contract.extension.extension.compatible]
+types = ["strs"]
+doc = "the package-level extensions this one combines with on one package, where neither requires the other nor contributes to it; a claim from either side connects the two, and each is an extra of the wheel; none when absent"
 
 [contract.extension.extension.levels]
 types = ["list"]

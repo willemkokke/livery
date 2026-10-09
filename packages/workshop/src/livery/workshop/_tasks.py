@@ -13,7 +13,9 @@ invoked there.
 
 from __future__ import annotations
 
-from livery.footman import Invocation, fail, pre_tasks, task
+from typing import Annotated
+
+from livery.footman import Invocation, doc, fail, pre_tasks, task
 
 # Importing registers each module's tasks with footman.
 from livery.workshop import _checks as _checks_module
@@ -46,19 +48,42 @@ from livery.workshop import (  # noqa: F401
 
 
 @task
-def extensions() -> None:
-    """Print the workspace's extensions in precedence order.
+def extensions(
+    combinations: Annotated[
+        bool,
+        doc(
+            "print every valid combination of the installed package-level"
+            " extensions instead, each by its name"
+        ),
+    ] = False,
+) -> None:
+    """Print the workspace's extensions in mount order.
 
-    The list is the whole of discovery: what shapes this repository
+    The lists are the whole of discovery: what shapes this repository
     is exactly what it prints, and the instance's own files always
-    win last.
+    win last. The package-level extensions come first, each with the
+    packages whose sets hold it, then ``[workspace] extensions``.
+    ``--combinations`` prints instead what a package's ``extensions``
+    may compose from what is installed: every valid combination, named
+    by its canonical list joined with ``+``.
     """
     from livery.workshop._extensions import (
+        combination_names,
         describe_extensions,
         missing_list,
         workspace_root,
     )
 
+    if combinations:
+        try:
+            names = combination_names()
+        except RuntimeError as error:
+            fail(str(error))
+        if not names:
+            print("  no installed extension declares the package level")
+        for name in names:
+            print(f"  {name}")
+        return
     root = workspace_root()
     if root is None:
         print("  no workspace: no workshop.toml above the working directory")

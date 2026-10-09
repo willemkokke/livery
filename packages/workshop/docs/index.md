@@ -8,12 +8,15 @@ below arrives through that dependency.
 ## The extension model
 
 The workspace contract (`workshop.toml` at the root) lists the
-extensions in `[workspace] extensions`, in precedence order, and that
-list is the whole of discovery: a package installed by accident never
-changes a repository. The list is required; a contract without it
+workspace's extensions in `[workspace] extensions`, in precedence
+order, and each package's contract lists the package-level extensions
+the package is composed of in its own `extensions`. Those lists are
+the whole of discovery: a package installed by accident never changes
+a repository. The root's list is required; a contract without it
 refuses at mount and prints the line to add. The base,
 `livery.workshop`, is never listed: importing its plugin registers
-its task surface and then mounts every listed extension, in order.
+its task surface and then mounts the listed extensions, the
+package-level ones first and then the root's list in its order.
 The instance always wins last: its own files (`CLAUDE.project.md`,
 anything below the plugin line in `tasks.py`) are seeded once and
 never rewritten.
@@ -22,10 +25,12 @@ Contract keys are kebab-case, at the root and in every package's
 contract: a key spelled with underscores refuses on read, naming its
 spelling and the file to rename it in. Every key is declared by the
 extension that reads it, and a contract holds nothing else: a key no
-extension declares, a key of an extension the root contract does not
-list, a value of the wrong type and a value outside its allowed set
-each refuse on read, naming the file, the key, what the table takes,
-and the nearest spelling. The base declares its own keys the way an
+extension declares, a key of an extension no list takes, a value of
+the wrong type and a value outside its allowed set each refuse on
+read, naming the file, the key, what the table takes, and the nearest
+spelling. A workspace extension's keys are taken while the root lists
+it; a package-level extension's, in a package's contract while the
+package lists it, and in the root's while any package does. The base declares its own keys the way an
 extension does, in the `contract.toml` its package ships beside its
 code, the keys of `extension.toml` among them.
 
@@ -62,9 +67,16 @@ spelling. Every key is optional:
   `extensions`; a listing at another level refuses;
 - `[extension] plugin`, the footman plugin carrying its verbs, mounted
   in list order;
-- `[extension] requires`, the extensions it needs listed before it,
-  which the layering check keeps listed and its `--fix` writes at the
-  level each declares;
+- `[extension] requires`, the extensions it cannot work without: in
+  the root's list, each one before it; for a package-level extension,
+  in the package's set, which takes them in. The layering check keeps
+  them listed, and its `--fix` writes a missing workspace entry;
+- `[extension] compatible`, the package-level extensions it combines
+  with on one package where neither requires the other nor contributes
+  to it; a claim from either side connects the two;
+- `[extension] before` and `after`, the extensions it runs before or
+  after in a package's phases, each one it requires, declares
+  compatible or contributes to;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -149,8 +161,40 @@ the truth: a name deleted from it stays deleted, which is a project's
 opt-out from that target's opinions, and a name the list does not
 carry refuses. A name the extension declares no contribution for
 mounts nothing, and the layering check names the entry.
-`fm extensions` prints the base, then each extension, who requires
-it, its tools, its targets, and each option with whether it is on.
+`fm extensions` prints the base, then each extension in mount order,
+who requires it, the packages whose sets hold a package-level one, its
+tools, its targets, and each option with whether it is on.
+
+A package's `extensions` names the package-level extensions it is
+composed of. Its set is that list and every package-level extension
+the list requires, transitively. The set is valid when every pair in
+it knows each other: one requires the other, one contributes to the
+other through `[for.<target>]`, or one declares the other
+`compatible`. The layering check refuses an unconnected pair, naming
+both, and a requirement that no list holds at its level. A package
+writes its set as its canonical list, the minimal one: no extension
+another listed one requires, in composition order. In that order an
+extension comes after what it requires and what it names in `after`,
+and before what it names in `before`; ties go alphabetically. The
+layering check names a list in any other form, and its `--fix`
+rewrites it. A package's entry is the extension's name alone: a
+package-level extension takes no options.
+
+The mount takes the package-level extensions every package's set
+holds first, in composition order, then `[workspace] extensions` in
+its order, and composition follows the same order. So a package-level
+extension's content, tools and distribution belong to the workspace
+while a package lists it. `fm extensions --combinations` prints every
+valid set of the installed package-level extensions, each named by its
+canonical list joined with `+`, such as `cmake+cpp`.
+
+An extension's wheel carries its relations. Each `requires` target is
+a dependency of the wheel, and each `compatible` or `[for.<target>]`
+target is an extra of it that requires the target's distribution. The
+composed dev group installs an extension with the extras its listed
+targets put in use, so the version ranges its wheel states hold. The
+conformance kit's `requirements-in-metadata` clause judges the wheel's
+metadata against the declaration.
 
 The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its

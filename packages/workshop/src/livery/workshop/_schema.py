@@ -49,6 +49,9 @@ DRAFT = "http://json-schema.org/draft-07/schema#"
 #: list; a validator that does not know it ignores it, as the draft says.
 OWNER = "x-owner"
 
+#: The keyword saying which list leaves that owner out, for the refusal.
+UNLISTED_BY = "x-unlisted-by"
+
 #: What each file describes, for its title.
 _TITLES: dict[ContractKind, str] = {
     "root": "workshop.toml at a workspace's root",
@@ -66,22 +69,25 @@ class _Node:
 
     Attributes:
         declared: The key's record; None for a table only its keys declare.
-        unlisted: The owner of a key the root does not list; empty for
-            a key the composed schema takes.
+        unlisted: The owner of a key the contract's lists leave out;
+            empty for a key the composed schema takes.
+        unlisted_by: Which list leaves the owner out, as the refusal says
+            it: ``[workspace] extensions does not list``.
         children: The keys declared beneath it, ``*`` for the author's.
         items: A list's entries, when the list declares them.
     """
 
     declared: Declared | None = None
     unlisted: str = ""
+    unlisted_by: str = ""
     children: dict[str, _Node] = field(default_factory=dict[str, "_Node"])
     items: _Node | None = None
 
 
-def _tree(keys: list[tuple[Declared, str]]) -> _Node:
+def _tree(keys: list[tuple[Declared, str, str]]) -> _Node:
     """The contract's keys as a tree: ``*`` a child, ``[]`` a list's entries."""
     root = _Node()
-    for declared, unlisted in keys:
+    for declared, unlisted, unlisted_by in keys:
         node = root
         for segment in declared.path.split("."):
             name = segment.removesuffix("[]")
@@ -92,6 +98,7 @@ def _tree(keys: list[tuple[Declared, str]]) -> _Node:
                 node = node.items
         node.declared = declared
         node.unlisted = unlisted
+        node.unlisted_by = unlisted_by
     return root
 
 
@@ -137,11 +144,10 @@ def _schema(node: _Node) -> dict[str, Any]:
     """A key's schema: each of its types, any one of them, and its doc."""
     if node.unlisted:
         return {
-            "description": (
-                f"a key of {node.unlisted}, which [workspace] extensions does not list"
-            ),
+            "description": f"a key of {node.unlisted}, which {node.unlisted_by}",
             "not": {},
             OWNER: node.unlisted,
+            UNLISTED_BY: node.unlisted_by,
         }
     types = node.declared.types if node.declared is not None else ("table",)
     branches = [_branch(kind, node) for kind in types]
@@ -154,8 +160,11 @@ def _schema(node: _Node) -> dict[str, Any]:
 def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, Any]:
     """The JSON Schema of *contract* for the base and the *listed* extensions.
 
-    *listed* holds the names the root contract lists the extensions by,
-    the base among them; None takes every installed owner as listed.
+    *listed* holds the names the contract's lists name the extensions by,
+    the base among them; None takes every installed owner as listed. A
+    key of an owner they leave out says which list would take it: the
+    root's for an extension a workspace lists, a package's for one only
+    a package lists.
     The owners in [livery.workshop._contract_keys.ALWAYS][], the base
     and the tool store, count as listed in every workspace. The
     ``extension`` contract is the base's and the tool store's alone,
@@ -167,18 +176,18 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
     from livery.workshop._contract_keys import ALWAYS, declarations, extension_keys
 
     if contract == "extension":
-        keys = [(declared, "") for declared in extension_keys()]
+        keys = [(declared, "", "") for declared in extension_keys()]
     else:
-        keys = [
-            (
-                owned.declared,
-                ""
-                if listed is None or owned.owner in ALWAYS or owned.owner in listed
-                else owned.owner,
-            )
-            for (kind, _path), owned in sorted(declarations().items())
-            if kind == contract
-        ]
+        keys = []
+        for (kind, _path), owned in sorted(declarations().items()):
+            if kind != contract:
+                continue
+            if listed is None or owned.owner in ALWAYS or owned.owner in listed:
+                keys.append((owned.declared, "", ""))
+            else:
+                keys.append(
+                    (owned.declared, owned.owner, _unlisted_by(owned.owner, contract))
+                )
     return {
         "$schema": DRAFT,
         "$comment": (
@@ -189,6 +198,18 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
         "title": _TITLES[contract],
         **_object(_tree(keys)),
     }
+
+
+def _unlisted_by(owner: str, contract: ContractKind) -> str:
+    """Which list leaves *owner* out, as a refusal of its key in *contract* says it."""
+    from livery.workshop._extensions import PACKAGE, WORKSPACE, levels_of
+
+    levels = levels_of(owner)
+    if PACKAGE not in levels or WORKSPACE in levels:
+        return "[workspace] extensions does not list"
+    if contract == "package":
+        return "this package's `extensions` does not list"
+    return "no package's `extensions` lists"
 
 
 _COMPOSED: dict[tuple[ContractKind, frozenset[str] | None], tuple[object, Any]] = {}
@@ -253,8 +274,11 @@ def schema_files(root: Path) -> dict[str, bytes]:
     """Each contract's composed schema for *root*, by its path under the root."""
     from livery.workshop._contract import _root_tables
     from livery.workshop._contract_keys import listed_extensions
+    from livery.workshop._extensions import package_extensions
 
-    listed = listed_extensions(_root_tables(root / "workshop.toml"))
+    listed = listed_extensions(_root_tables(root / "workshop.toml")) | set(
+        package_extensions(root)
+    )
     return {
         f"{DIRECTORY}/{name}": (
             json.dumps(composed(contract, listed), indent=2) + "\n"
@@ -270,11 +294,11 @@ def problems(schema: dict[str, Any], data: dict[str, Any]) -> list[str]:
     """Each refusal *data* earns against *schema*, in the contract's order.
 
     An unknown key names its table, the keys the table takes and the
-    nearest spelling; a key of an extension the root does not list
-    names the extension; a value of the wrong type names what the key
-    takes; a value outside its set names the set and the nearest. A key
-    that takes any value is judged by its reader, and nothing beneath it
-    here.
+    nearest spelling; a key of an extension the contract's lists leave
+    out names the extension and the list that would take it; a value of
+    the wrong type names what the key takes; a value outside its set
+    names the set and the nearest. A key that takes any value is judged
+    by its reader, and nothing beneath it here.
     """
     found: list[str] = []
     _table(schema, data, (), found)
@@ -302,8 +326,8 @@ def _table(
         owner = child.get(OWNER)
         if owner is not None:
             found.append(
-                f"{shown(path)} is a key of {owner}, which [workspace] extensions"
-                " does not list; list the extension, or remove the key"
+                f"{shown(path)} is a key of {owner}, which {child.get(UNLISTED_BY)};"
+                " list the extension, or remove the key"
             )
             continue
         _value(child, value, path, found)

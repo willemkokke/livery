@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import io
+import re
 import tempfile
 import threading
 import tomllib
@@ -104,6 +105,7 @@ ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
 CLAIMS_NAME_CATEGORIES = "claims-name-categories"
 WORDS_ARE_ANSWERABLE = "words-are-answerable"
 PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
+REQUIREMENTS_IN_METADATA = "requirements-in-metadata"
 CONTRACT_KEYS_DOCUMENTED = "contract-keys-documented"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
@@ -688,6 +690,93 @@ def _plugin_is_an_entry_point(subject: Subject) -> list[Violation]:
     ]
 
 
+#: A requirement's distribution, at the start of a ``Requires-Dist`` line.
+_REQUIRED = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+#: An extra a ``Requires-Dist`` line's marker names.
+_EXTRA = re.compile(r"""\bextra\s*==\s*["']([^"']+)["']""")
+
+
+def _required(lines: list[str]) -> list[tuple[str, frozenset[str]]]:
+    """Each ``Requires-Dist`` line as its distribution and the extras its marker names.
+
+    Both in the packaging standards' normal form. The core metadata
+    format is a published standard, so reading it pins no tool's text.
+    """
+    from livery.workshop._extensions import normal_name
+
+    found: list[tuple[str, frozenset[str]]] = []
+    for line in lines:
+        named = _REQUIRED.match(line)
+        if named is None:
+            continue
+        marker = line.partition(";")[2]
+        extras = frozenset(normal_name(extra) for extra in _EXTRA.findall(marker))
+        found.append((normal_name(named.group(1)), extras))
+    return found
+
+
+def _requirements_in_metadata(subject: Subject) -> list[Violation]:
+    from livery.workshop._extensions import (
+        distribution_of,
+        normal_name,
+        shipping_distribution,
+    )
+
+    found = _declared_of(subject)
+    if found is None:
+        return []
+    declared = found[1]
+    claims = sorted({*declared.compatible, *declared.target_tables})
+    if not declared.requires and not claims:
+        return []
+    where = f"extension {subject.extension}"
+    dist = shipping_distribution(subject.extension)
+    if dist is None:
+        return [
+            Violation(
+                REQUIREMENTS_IN_METADATA,
+                where,
+                "declares requires, compatible or [for] targets, and no installed"
+                " distribution declares it in workshop.extensions, so its wheel's"
+                " metadata cannot be read",
+            )
+        ]
+    required = _required(list(dist.requires or ()))
+    provided = {
+        normal_name(extra) for extra in dist.metadata.get_all("Provides-Extra") or ()
+    }
+    violations: list[Violation] = []
+    for target in declared.requires:
+        wanted = normal_name(distribution_of(target))
+        if (wanted, frozenset()) not in required:
+            violations.append(
+                Violation(
+                    REQUIREMENTS_IN_METADATA,
+                    where,
+                    f"requires {target}, and its wheel does not depend on"
+                    f" {distribution_of(target)}; a requires range is a dependency"
+                    " of the wheel, so the resolver holds the two to it",
+                )
+            )
+    for target in claims:
+        extra = normal_name(target)
+        wanted = normal_name(distribution_of(target))
+        if extra not in provided or not any(
+            name == wanted and extra in extras for name, extras in required
+        ):
+            violations.append(
+                Violation(
+                    REQUIREMENTS_IN_METADATA,
+                    where,
+                    f"composes with {target} or contributes to it, and its wheel has"
+                    f" no extra {extra!r} that requires {distribution_of(target)}; a"
+                    " compatibility claim is an extra of the wheel, which a"
+                    " workspace listing both installs",
+                )
+            )
+    return violations
+
+
 def _contract_keys_documented(subject: Subject) -> list[Violation]:
     from livery.workshop._declaration import (
         DeclarationError,
@@ -1125,6 +1214,13 @@ CLAUSES: tuple[Clause, ...] = (
         "The plugin an extension.toml names is a footman.tasks entry point an"
         " installed distribution declares.",
         _plugin_is_an_entry_point,
+    ),
+    Clause(
+        REQUIREMENTS_IN_METADATA,
+        "Every extension an extension.toml requires is a dependency of its"
+        " wheel, and every extension it declares compatible or contributes to"
+        " is an extra of the wheel that requires the target's distribution.",
+        _requirements_in_metadata,
     ),
     Clause(
         CONTRACT_KEYS_DOCUMENTED,
