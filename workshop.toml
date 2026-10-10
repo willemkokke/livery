@@ -100,6 +100,10 @@ approvals = 0
 # working drive (the gate measured at 486 s there against 576 s on
 # the system temp), and the timing plan carries the rest.
 runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+# A pull request's check legs run on one runner; the merge point, which
+# proves main whole, and the nightly run every runner above. A Windows
+# or macOS fault lands on main and is fixed forward (ruled 2026-10-10).
+pull-request-runners = ["ubuntu-latest"]
 # A pull request's check legs run the scoped gate against its base:
 # the packages the change can influence run, the others' suites are
 # reused from the coverage store; a push run and a change outside

@@ -20,6 +20,7 @@ member, so a tag is a receipt, never a trigger.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,7 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
         # gate reads pointer files where the binaries should be.
         "lfs": lfs_enabled(root),
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
+        "pull_request_runners": pull_request_runners(ci),
         "required_context": str(ci.get("required-context", "gate")),
         "python_versions": python_matrix(root),
         "gate_pythons": gate_pythons(root),
@@ -104,6 +106,34 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
         "packages": member_roster(root),
         "wheel_runners": wheel_runners(root),
     }
+
+
+def pull_request_runners(ci: dict[str, Any]) -> list[str]:
+    """The runners a pull request's check legs fan out to.
+
+    ``[ci] pull-request-runners`` when the contract declares it, else
+    every runner ``[ci] runners`` names. A label the runners list does
+    not name refuses naming both lists, since a pull request's legs run
+    on runners every event runs on; an empty list refuses too.
+    """
+    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+    declared: Any = ci.get("pull-request-runners")
+    if declared is None:
+        return runners
+    chosen = [str(runner) for runner in declared]
+    strangers = [runner for runner in chosen if runner not in runners]
+    if strangers:
+        footman.fail(
+            f"[ci] pull-request-runners names {', '.join(strangers)}, which [ci]"
+            f" runners does not list ({', '.join(runners)}); a pull request's"
+            " legs run on runners every event runs on"
+        )
+    if not chosen:
+        footman.fail(
+            "[ci] pull-request-runners is empty; name a runner [ci] runners"
+            " lists, or remove the key so every runner runs"
+        )
+    return chosen
 
 
 def _rung_step(answers: dict[str, Any]) -> str:
@@ -322,6 +352,24 @@ def _event_filter(point: Point) -> str:
     return " || ".join(f"github.event_name == '{event}'" for event in point.events)
 
 
+def _legs_os(answers: dict[str, Any], point: Point, runners: list[str]) -> str:
+    """The ``os`` axis of the check legs: every runner, narrowed on a pull request.
+
+    One expression with both lists literal, chosen by the event: the
+    decision is the contract's at render time, and the file carries
+    only which list applies to which event. The plain list when the
+    contract narrows nothing, or when *point* takes no pull request.
+    """
+    narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
+    if narrowed == runners or "pull_request" not in point.events:
+        return f"[{_csv(runners)}]"
+    return (
+        "${{ github.event_name == 'pull_request'"
+        f" && fromJSON('{json.dumps(narrowed)}')"
+        f" || fromJSON('{json.dumps(runners)}') }}}}"
+    )
+
+
 def _call_step(prog: str, point: Point, job: Job) -> str:
     """The one call: ``ci.run`` for the point and job, the matrix facts passed."""
     call = f"{prog} ci.run --point={point.name} --job={job.name}"
@@ -516,7 +564,8 @@ def _actions_job(
         pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
         lines.append(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
-            f"        os: [{_csv(runners)}]\n        python: [{pythons}]\n"
+            f"        os: {_legs_os(answers, point, runners)}\n"
+            f"        python: [{pythons}]\n"
             "    runs-on: ${{ matrix.os }}\n"
         )
     elif job.matrix == "pythons":

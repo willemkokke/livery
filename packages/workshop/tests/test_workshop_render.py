@@ -462,3 +462,59 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     }
     assert jobs["check"]["variables"] == {"GIT_DEPTH": "0"}
     assert "variables" not in jobs["docs"]
+
+
+def _root_narrowing(tmp_path: Path, kind: str, declared: str) -> Path:
+    root = _root(tmp_path, kind)
+    contract = root / "workshop.toml"
+    contract.write_text(contract.read_text() + f"pull-request-runners = {declared}\n")
+    return root
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_pull_request_runner_outside_runners_refuses_naming_both(
+    tmp_path: Path, kind: str
+) -> None:
+    root = _root_narrowing(tmp_path, kind, '["windows-latest"]')
+    with pytest.raises(
+        footman.Failed,
+        match=(
+            r"pull-request-runners names windows-latest, which \[ci\] runners"
+            r" does not list \(ubuntu-latest, macos-latest\)"
+        ),
+    ):
+        generate(root)
+
+
+def test_an_empty_pull_request_runners_list_refuses(tmp_path: Path) -> None:
+    root = _root_narrowing(tmp_path, "github", "[]")
+    with pytest.raises(footman.Failed, match=r"pull-request-runners is empty"):
+        generate(root)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_pull_request_runners_narrow_the_check_legs_on_a_pull_request_alone(
+    tmp_path: Path, kind: str
+) -> None:
+    root = _root_narrowing(tmp_path, kind, '["ubuntu-latest"]')
+    jobs = _doc(generate(root)[f".{kind}/workflows/ci.yml"])["jobs"]
+    # One expression, both lists literal, the event choosing: a pull
+    # request runs the narrowed list, a push or a dispatch every runner.
+    assert jobs["check"]["strategy"]["matrix"]["os"] == (
+        "${{ github.event_name == 'pull_request'"
+        " && fromJSON('[\"ubuntu-latest\"]')"
+        ' || fromJSON(\'["ubuntu-latest", "macos-latest"]\') }}'
+    )
+    assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
+    assert jobs["check"]["strategy"]["matrix"]["python"] == ["3.13", "3.14"]
+
+
+def test_pull_request_runners_equal_to_the_runners_render_the_plain_list(
+    tmp_path: Path,
+) -> None:
+    root = _root_narrowing(tmp_path, "github", '["ubuntu-latest", "macos-latest"]')
+    jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
+    assert jobs["check"]["strategy"]["matrix"]["os"] == [
+        "ubuntu-latest",
+        "macos-latest",
+    ]

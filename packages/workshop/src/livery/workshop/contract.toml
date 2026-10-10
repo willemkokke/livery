@@ -43,6 +43,10 @@ doc = "how many assembled traces stay where they land, 0 keeping every one; 50 w
 types = ["int"]
 doc = "how many runs' traces the trace refs keep, 0 keeping none; 100 when absent"
 
+[contract.root.ci.pull-request-runners]
+types = ["strs"]
+doc = "the runner labels a pull request's check legs fan out to, each one [ci] runners names; every runner when absent, and a merge or a dispatch always runs them all"
+
 [contract.root.ci.python-versions]
 types = ["strs"]
 doc = "the Pythons the CI runs, such as 3.14, or 3.14t for a free-threaded build; the root project's floor and the newest supported minor when absent, the gate running the newest alone"
