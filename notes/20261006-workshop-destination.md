@@ -1058,9 +1058,11 @@ slices, each mergeable alone:
       three extensions' code, and `livery.workshop._backends._cpp_conan`
       gathers it back for the kind's registration. Nothing behaves
       differently.
-   2. **The declarations**: `cpp`'s categories, which the kind reads
-      the way the python kind reads python's; the tools each extension
-      runs; the `cpp-conan` template lists `cmake` and `conan`.
+   2. **The declarations** (issue #1369): `cpp`'s categories, which
+      the kind reads the way the python kind reads python's, and the
+      `cpp-conan` seed lists `cmake` and `conan`. The tools wait: each
+      extension declares them under `[toolroom] requires` once no base
+      module names them.
    3. **The queries and phases** the backend answers: `current-version`,
       `version-files`, `requirements`, `module-roots` and
       `public-modules`; `stamp`, `build` and `publish`; and
@@ -2008,6 +2010,14 @@ the stack, which this design neither needs nor rules out).
   extension's own wheel. `conan` requires `cpp` and claims `cmake`,
   and all three ship in the workshop wheel, which cannot depend on
   itself; one wheel has one version, so nothing can drift.
+- 2026-10-10, decided while building slice 3's second part (issue
+  #1369): `cmake` and `conan` declare their tools once no base module
+  names them. The vocabulary test refuses a base module naming a tool
+  an extension brings, and 13 base modules name cmake, ninja or conan
+  today, about 40 strings; the kind's tool list already requires the
+  same tools for every `cpp-conan` package, so declaring them sooner
+  would add those allowance rows and change nothing else. The parts
+  and slices that move the code naming them shrink the list.
 
 ## Open
 

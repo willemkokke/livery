@@ -15,28 +15,26 @@ if TYPE_CHECKING:
 
 
 def module_roots(package: Package) -> tuple[str, ...]:
-    """Nothing: a conan package is referenced by recipe name, not import.
+    """Nothing: other packages reach C or C++ code through headers, not imports.
 
-    The name a consumer writes is the recipe's, which the conanfile
-    already declares and ``declared_requirements`` already reads.
+    A consumer names the package by its recipe or its CMake target,
+    which the package's own build files declare.
     """
     del package
     return ()
 
 
 def public_modules(package: Package) -> tuple[str, ...]:
-    """Nothing: a conan package has no importable API to verify."""
+    """Nothing: a C or C++ package has no importable API to verify."""
     del package
     return ()
 
 
 def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
-    """Nothing: reading a recipe's own sources for references is unwritten.
+    """Nothing: the layering check reads no C or C++ source for references.
 
-    The answer this kind owes is an ``#include`` of a header belonging
-    to another workspace package with no matching ``requires`` in the
-    conanfile. Until it is written the lint finds nothing here, which
-    is silence rather than a pass.
+    A header of another member, included with no requirement on that
+    member, goes unseen: the empty answer is no verdict.
     """
     del package, around
     return {}

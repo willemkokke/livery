@@ -7,3 +7,10 @@ api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
 compatible = ["cmake"]
+
+# What a C or C++ package's paths are to it: the sources and headers,
+# the test sources, and the files beside them under tests/.
+[categories]
+test = ["tests/**/*.cpp", "tests/**/*.cc", "tests/**/*.cxx", "tests/**/*.c"]
+test-support = ["tests/**"]
+source = ["src/**", "include/**"]

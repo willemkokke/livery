@@ -489,6 +489,33 @@ def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
     assert handed == [("configure", words), ("compile", words), ("ctest", words)]
 
 
+def test_a_cpp_conan_package_is_categorised_alike_listing_the_extensions_or_not(
+    tmp_path: Path,
+) -> None:
+    """One table, the cpp extension's, answers for a package listing it or not."""
+    from dataclasses import replace
+
+    from livery.workshop._categories import category_of
+
+    plain = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    listing = replace(plain, extensions=("cmake", "conan"))
+    expected = {
+        "tests/test_geometry.cpp": "test",
+        "tests/geometry_test.c": "test",
+        "tests/CMakeLists.txt": "test-support",
+        "src/geometry.cpp": "source",
+        "include/acme/geometry.h": "source",
+        "conanfile.py": "configuration",
+        "docs/index.md": "prose",
+    }
+    for package in (plain, listing):
+        found = {path: category_of(package, path).name for path in expected}
+        assert found == expected, package.extensions
+    # conan requires cpp, so a package listing cmake and conan reads cpp's.
+    assert category_of(plain, "src/geometry.cpp").supplier == "cpp"
+    assert category_of(listing, "src/geometry.cpp").supplier == "cpp"
+
+
 def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_failure(
     tmp_path: Path,
 ) -> None:
