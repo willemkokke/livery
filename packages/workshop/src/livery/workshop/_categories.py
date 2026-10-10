@@ -50,6 +50,10 @@ EXAMPLE = "example"
 #: files beside them; the base registers its category rules.
 WORKSPACE = "workspace"
 
+#: The kind every chain starts at, whose rules (the documentation's
+#: paths, and configuration for the rest) answer for every package.
+BASE_KIND = "base"
+
 #: The extension the builtin rules belong to.
 _BASE = "livery.workshop"
 
@@ -218,10 +222,11 @@ def unregister_categories(kind: str, *, extension: str) -> None:
 def category_rules(kind: str) -> tuple[CategoryRule, ...]:
     """The rules that answer for *kind*: its own, then each ancestor's.
 
-    A kind the registry does not know contributes its own table alone,
-    which is how the workspace's unit answers.
+    A kind whose table is an extension's declaration takes it from
+    there. A kind the registry does not know contributes its own table
+    alone, which is how the workspace's unit answers.
     """
-    from livery.workshop._kinds import kind_chain, kind_names
+    from livery.workshop._kinds import kind_chain, kind_for, kind_names
 
     names = [kind]
     if kind in kind_names():
@@ -229,6 +234,52 @@ def category_rules(kind: str) -> tuple[CategoryRule, ...]:
     found: list[CategoryRule] = []
     for name in names:
         found.extend(_CATEGORIES.get(name, []))
+        declared_by = kind_for(name).categories_from if name in kind_names() else ""
+        if declared_by:
+            found.extend(extension_rules(declared_by, kind=name))
+    return tuple(found)
+
+
+def extension_rules(extension: str, *, kind: str = "") -> tuple[CategoryRule, ...]:
+    """The category rules *extension* declares, as rules of *kind*.
+
+    *kind* is the extension's own name when empty; a kind that takes its
+    table from the extension names itself, so the kind chain orders it.
+    Empty for an extension nothing installed declares.
+    """
+    from livery.workshop._extensions import installed_declaration
+
+    declared = installed_declaration(extension)
+    if declared is None:
+        return ()
+    return tuple(
+        CategoryRule(kind or extension, pattern, category, extension)
+        for category, patterns in declared.categories
+        for pattern in patterns
+    )
+
+
+def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
+    """The rules that answer for *package*.
+
+    Its extensions' declared rules, the last one composed nearest, then
+    the base kind's, when any of its extensions declares categories;
+    its kind chain's otherwise.
+    """
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+
+    declaring = [
+        name
+        for name in package_set(package.extensions, installed_declaration)
+        if (declared := installed_declaration(name)) is not None and declared.categories
+    ]
+    if not declaring:
+        return category_rules(package.kind)
+    found: list[CategoryRule] = []
+    for name in reversed(declaring):
+        found.extend(extension_rules(name))
+    found.extend(category_rules(BASE_KIND))
     return tuple(found)
 
 
@@ -236,8 +287,9 @@ def category_of(package: Package, path: str) -> Category:
     """What *path*, relative to *package*, is to it.
 
     The package's own ``[categories]`` exception answers first; then
-    the most specific rule of the kind chain, the nearer kind winning
-    a tie between kinds. Nothing matching is configuration, which
+    the most specific rule of its extensions' ``[categories]`` and the
+    base kind's, or of its kind chain when no extension of its declares
+    categories, the nearer one winning a tie. Nothing matching is configuration, which
     every builtin table also says last.
 
     Raises:
@@ -249,7 +301,7 @@ def category_of(package: Package, path: str) -> Category:
         for pattern in patterns:
             if matches(pattern, path):
                 return Category(category, "the package", pattern)
-    rules = category_rules(package.kind)
+    rules = _package_rules(package)
     best: list[tuple[int, CategoryRule]] = []
     kinds_order = {
         name: index for index, name in enumerate(dict.fromkeys(r.kind for r in rules))

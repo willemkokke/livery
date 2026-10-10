@@ -226,9 +226,11 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
     assert category("src/livery/x/mod.py") == SOURCE
     assert category("pyproject.toml") == CONFIGURATION
     assert category("workshop.toml") == CONFIGURATION
-    # The registry names who answered: the base's table, by its pattern.
-    assert category_of(package, "src/livery/x/mod.py").supplier == "livery.workshop"
+    # The registry names who answered, by its pattern: the python
+    # extension's table for a source file, the base's for the rest.
+    assert category_of(package, "src/livery/x/mod.py").supplier == "python"
     assert category_of(package, "src/livery/x/mod.py").pattern == "src/**"
+    assert category_of(package, "pyproject.toml").supplier == "livery.workshop"
 
 
 def test_a_test_file_reaches_its_package_alone_and_runs_its_whole_suite(

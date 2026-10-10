@@ -82,6 +82,22 @@ def test_a_categories_value_off_the_shape_refuses_naming_it(tmp_path: Path) -> N
         discover_packages(tmp_path)
 
 
+def test_a_declared_categories_value_off_the_shape_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._declaration import DeclarationError
+    from livery.workshop._extensions import installed_declaration
+    from workshop_extension_fakes import fake_package_extensions
+
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        lua='[extension]\nlevels = ["package"]\n\n[categories]\nsource = "lua/**"\n',
+    )
+    with pytest.raises(DeclarationError, match="categories"):
+        installed_declaration("acme.lua")
+
+
 def test_a_channels_table_in_a_package_refuses(tmp_path: Path) -> None:
     _member(tmp_path, '[channels]\nrendered = ["x"]\n')
     with pytest.raises(BaseException, match="the top level has no key 'channels'"):
@@ -124,6 +140,33 @@ def test_the_package_exception_wins_over_the_kinds_rule() -> None:
     found = category_of(package, "docs/assets/vendor/codemirror.js")
     assert (found.name, found.supplier) == ("vendored", "the package")
     assert category_of(package, "docs/assets/site.css").name == "asset"
+
+
+def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_package_extensions
+
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        lua=(
+            '[extension]\nlevels = ["package"]\n\n[categories]\n'
+            'source = ["lua/**"]\ntest = ["spec/**"]\n'
+        ),
+    )
+    package = replace(_package(), extensions=("acme.lua",))
+    found = category_of(package, "lua/init.lua")
+    assert (found.name, found.supplier) == ("source", "acme.lua")
+    assert category_of(package, "spec/init_spec.lua").name == "test"
+    # The base kind's rules still answer; the python kind's no longer do.
+    assert category_of(package, "docs/index.md").name == "prose"
+    assert category_of(package, "src/acme/x.py").name == "configuration"
+    # A package's own table wins over its extensions'.
+    own = replace(package, categories=(("vendored", ("lua/vendor/**",)),))
+    assert category_of(own, "lua/vendor/json.lua").name == "vendored"
 
 
 def test_a_derived_kind_inherits_the_tables_up_its_chain() -> None:

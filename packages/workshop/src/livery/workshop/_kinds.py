@@ -308,6 +308,9 @@ class KindRecord:
         before_install: What a member of the kind needs in place
             before ``uv sync`` installs it, given the workspace root;
             the lines it prints. None for a kind that needs nothing.
+        categories_from: The extension whose ``[categories]`` is the
+            kind's own category table; empty for a kind whose table is
+            registered in code.
     """
 
     name: str
@@ -329,6 +332,7 @@ class KindRecord:
     abstract: bool = False
     root_files: Callable[[tuple[Package, ...]], dict[str, str]] | None = None
     before_install: Callable[[Path], list[str]] | None = None
+    categories_from: str = ""
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -630,6 +634,9 @@ def _register_builtin() -> None:
             examples=_python.run_examples,
             suites=_python.run_test,
             coverage_pages=_python.render_coverage_pages,
+            # The category table is the python extension's declaration,
+            # one table for a package that lists the extension or not.
+            categories_from="python",
         )
     )
     # The binary extension: a python distribution in every checker's
@@ -692,15 +699,6 @@ def _register_categories() -> None:
             ("docs/examples/**/*.py", EXAMPLE),
             ("docs/_generated/**", "generated"),
             ("**", CONFIGURATION),
-        ],
-    )
-    register_categories(
-        "python",
-        [
-            ("tests/**/test_*.py", TEST),
-            ("tests/**/*_test.py", TEST),
-            ("tests/**", TEST_SUPPORT),
-            ("src/**", SOURCE),
         ],
     )
     register_categories(

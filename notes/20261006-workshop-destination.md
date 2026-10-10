@@ -1025,9 +1025,11 @@ slices, each mergeable alone:
       site-packages) moves into the extension; the flow keeps the
       orchestration. The release driver stops importing the python
       extension, and its row leaves `BASE_EXTENSION_IMPORTS`.
-   4. **The rest**: its categories, its tool (`uv`) and seeds,
-      `run_suites`, `kind_examples` and `workspace_suite`, and the
-      reach rule.
+   4. **The rest**, one part each: 4a its categories as data, an
+      extension's `[categories]` (issue #1362), the python kind's table
+      read from the extension's declaration so one table answers either
+      way; then its tool (`uv`), its seeds, `run_suites`,
+      `kind_examples` and `workspace_suite`, and the reach rule.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
    test checks, its root files as `[root-files."<path>"]`, and checks
    naming `extensions` instead of `kinds`.

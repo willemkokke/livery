@@ -83,6 +83,10 @@ spelling. Every key is optional:
   steps `provides`, each with its type, and `reads`;
 - `[queries]`, the questions about a package a package-level extension
   answers, each query's name to the `"module:function"` that answers it;
+- `[categories]`, the categories a package-level extension gives its
+  packages' paths, each category to the patterns it takes; a package
+  whose extensions declare categories is answered by them and the base
+  kind's rules, and its own `[categories]` wins over both;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
