@@ -122,3 +122,16 @@ point = "nightly"
 task = "toolroom.refresh"
 args = ["--submit"]
 every = "2w"
+
+# The reaches into another distribution's private names the python
+# extension's private-reaches rule allows, each with the public seam
+# that will replace it. An entry no source uses any more refuses.
+[[python.private-reaches]]
+from = "livery-workshop"
+reaches = "livery.forge._registry.purge_gitlab_packages"
+reason = "the loop deletes published versions: the forge's admin protocol, phase 15"
+
+[[python.private-reaches]]
+from = "livery-workshop"
+reaches = "livery.forge._registry.purge_packages"
+reason = "the loop deletes published versions: the forge's admin protocol, phase 15"

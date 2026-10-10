@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from livery.workshop._checks import CheckRecord, GateContext
     from livery.workshop._contract_keys import ContractKind, Declared, Type
@@ -141,6 +141,21 @@ class DeclaredOutput:
 
 
 @dataclass(frozen=True)
+class DeclaredRule:
+    """A rule an extension adds to the layering check, over the parsed sources.
+
+    Attributes:
+        judge: Called with the parsed sources and the rule's context;
+            returns the problems, empty when the rule holds.
+        fix: Run inside the layering check's rewrite before the judge;
+            returns the lines it wrote. None for a rule with no fix.
+    """
+
+    judge: Reference
+    fix: Reference | None = None
+
+
+@dataclass(frozen=True)
 class DeclaredPhase:
     """The steps an extension adds to one lifecycle phase: a ``[phases.<phase>]`` table.
 
@@ -199,6 +214,7 @@ class Declaration:
             name to the function that answers it.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
+        rules: The rules it adds to the layering check, by name.
     """
 
     extension: str
@@ -227,6 +243,7 @@ class Declaration:
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
     queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    rules: dict[str, DeclaredRule] = field(default_factory=dict[str, DeclaredRule])
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -448,6 +465,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
         ),
+        rules={
+            str(name): reader.rule(str(name), table)
+            for name, table in data.get("rules", {}).items()
+        },
     )
 
 
@@ -906,6 +927,20 @@ class _Reader:
             if "widen" in table
             else None,
             ignores=tuple(table.get("ignores", ())),
+        )
+
+    def rule(self, name: str, table: Mapping[str, Any]) -> DeclaredRule:
+        """The rule ``[rules.<name>]`` declares; refuses one with no judge."""
+        if "judge" not in table:
+            raise self.refuse(
+                ("rules", name),
+                'names no judge; add judge = "module:function", the function'
+                " that returns the rule's problems",
+            )
+        fix = table.get("fix")
+        return DeclaredRule(
+            judge=self.reference(table["judge"], ("rules", name, "judge")),
+            fix=None if fix is None else self.reference(fix, ("rules", name, "fix")),
         )
 
     def reference(self, text: object, where: tuple[str, ...]) -> Reference:
