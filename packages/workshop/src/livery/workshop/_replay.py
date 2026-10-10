@@ -20,7 +20,6 @@ from __future__ import annotations
 import os
 import re
 import tempfile
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -86,20 +85,6 @@ def latest_release(registry: Registry, dist: str) -> str:
     return max(finals, key=lambda v: tuple(int(part) for part in v.split(".")))
 
 
-def import_name(src: Path) -> str:
-    """The module a member's ``src`` tree exposes: ``<namespace>.<name>`` or ``<name>``.
-
-    Refuses when no package directory is found, naming the tree.
-    """
-    for first in sorted(p for p in src.iterdir() if p.is_dir()):
-        if (first / "__init__.py").is_file():
-            return first.name
-        for second in sorted(p for p in first.iterdir() if p.is_dir()):
-            if (second / "__init__.py").is_file():
-                return f"{first.name}.{second.name}"
-    fail(f"{src} holds no package directory: nothing to import")
-
-
 def run_url() -> str:
     """The run's page from the runner's environment; empty outside CI."""
     server = os.environ.get("GITHUB_SERVER_URL", "")
@@ -138,56 +123,6 @@ def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
         return f"  the forge refused the issue: {error}"
 
 
-def install(venv: Path, python: str, requirement: str, index: str) -> int:
-    """Create the plain environment and install *requirement* into it; the exit code.
-
-    ``uv`` makes the environment and installs, but the environment is
-    a plain one outside the workspace: no lock, no editable members,
-    so the package can only come from the index.
-    """
-    import livery.toolroom.tools as toolroom
-
-    made = toolroom.uv.opts(nofail=True)("venv", str(venv), "--python", python)
-    if made.code != 0:
-        return made.code
-    args = ["pip", "install", "--python", str(venv / "bin" / "python")]
-    if index:
-        args += ["--index", index]
-    args += [requirement, "pytest", "pytest-xdist"]
-    return toolroom.uv.opts(nofail=True)(*args).code
-
-
-def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
-    """Prove the import comes from site-packages, then run the member's tests."""
-    from livery.footman import run
-
-    python = str(venv / "bin" / "python")
-    probe = run(
-        [
-            python,
-            "-c",
-            # The first portion of the package's path: a namespace root
-            # has no __file__, a regular package's path is its directory.
-            f"import {module} as m, pathlib; p = pathlib.Path(list(m.__path__)[0]);"
-            " assert 'site-packages' in str(p), p; print('testing', p)",
-        ],
-        cwd=tree,
-        nofail=True,
-        capture=False,
-    )
-    if probe.code != 0:
-        print(
-            f"  {module} does not import from site-packages; the replay proves nothing"
-        )
-        return probe.code
-    return run(
-        [python, "-m", "pytest", f"packages/{member}/tests", "-p", "no:cacheprovider"],
-        cwd=tree,
-        nofail=True,
-        capture=False,
-    ).code
-
-
 def replay_flow(
     root: Path,
     git: GitOps,
@@ -198,19 +133,18 @@ def replay_flow(
     index: str,
     extras: str = "",
     repo: Repository | None = None,
-    installer: Callable[[Path, str, str, str], int] = install,
-    tester: Callable[[Path, Path, str, str], int] = run_tests,
 ) -> None:
     """Replay *package*'s latest release on *python*; red files the issue and fails.
 
     The release is the newest final version *registry* serves; the
     tree is a temporary worktree at its receipt tag, refused when
-    the checkout lacks the tag. *installer* and *tester* are the two
-    heavy steps, injectable so the orchestration is testable without
-    an index or an interpreter. With *repo*, a red replay files or
-    extends the marker issue before failing.
+    the checkout lacks the tag. The install and the test run are the
+    package's ``replay`` phase, through
+    [livery.workshop._lifecycle.replay][]. With *repo*, a red replay
+    files or extends the marker issue before failing.
     """
     import livery.toolroom.tools as toolroom
+    from livery.workshop import _lifecycle
 
     member = package.member
     replay = Replay(
@@ -230,10 +164,15 @@ def replay_flow(
     if added.code != 0:
         fail(f"git worktree add at {replay.tag} exited {added.code}:\n{added.stderr}")
     try:
-        module = import_name(tree / "packages" / member / "src")
-        code = installer(scratch / ".replay", python, replay.requirement, index)
-        if code == 0:
-            code = tester(scratch / ".replay", tree, member, module)
+        code = _lifecycle.replay(
+            package,
+            root,
+            tree=tree,
+            version=replay.version,
+            python=python,
+            index=index,
+            extras=extras,
+        )
     finally:
         toolroom.git.opts(cwd=root, nofail=True)(
             "worktree", "remove", "--force", str(tree)

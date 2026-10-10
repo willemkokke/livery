@@ -210,3 +210,51 @@ def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
     assert _lifecycle.build(package, tmp_path, epoch=5) == Path("dist-5")
     target = RegistryTarget(kind="python", url="idx")
     assert _lifecycle.publish(package, tmp_path, version="2", target=target) is True
+
+
+def test_a_package_its_kind_proves_nothing_for_refuses_a_leg(tmp_path: Path) -> None:
+    package = Package(
+        directory=tmp_path / "packages" / "native",
+        path="packages/native",
+        name="acme-native",
+        kind="cpp-conan",
+        depends=(),
+    )
+    assert _lifecycle.proves(package) is False
+    with pytest.raises(_FAILURES, match="nothing proves its release"):
+        _lifecycle.prove(package, tmp_path, resolution="highest", release_dirs=())
+
+
+def test_a_package_whose_extensions_prove_and_replay_goes_through_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = (
+        "def prove(ctx):\n"
+        "    dirs = ctx.read('release-dirs')\n"
+        "    ctx.provide('resolved', {'acme-base': ctx.read('resolution'),"
+        " 'dirs': str(len(dirs))})\n\n\n"
+        "def replay(ctx):\n"
+        "    ctx.provide('exit-code', 0 if ctx.read('version') == '1.2.0' else 3)\n"
+    )
+    phases = (
+        '\n[phases.prove]\nmain = "{package}._steps:prove"\n'
+        'reads = ["resolution", "release-dirs"]\nprovides = { resolved = "table" }\n'
+        '\n[phases.replay]\nmain = "{package}._steps:replay"\n'
+        'reads = ["version"]\nprovides = { exit-code = "int" }\n'
+    )
+    package = _stepping(tmp_path, monkeypatch, source, phases)
+    assert _lifecycle.proves(package) is True
+    resolved = _lifecycle.prove(
+        package, tmp_path, resolution="lowest-direct", release_dirs=(tmp_path,)
+    )
+    assert resolved == {"acme-base": "lowest-direct", "dirs": "1"}
+    code = _lifecycle.replay(
+        package,
+        tmp_path,
+        tree=tmp_path,
+        version="1.2.0",
+        python="3.14",
+        index="",
+        extras="",
+    )
+    assert code == 0

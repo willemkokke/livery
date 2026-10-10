@@ -75,7 +75,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "conanfile.py"): 2,
     ("_release_driver", "pyproject.toml"): 2,
     ("_release_driver", "python"): 2,
-    ("_replay", "python"): 2,
     ("_templates", "python"): 4,
     ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
@@ -220,11 +219,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         "fm new.project writes the stock list, as ruled",
     ),
     ("_new_project", "pytest"): (1, "fm new.project writes the stock list, as ruled"),
-    ("_replay", "pytest"): (
-        2,
-        "the release replay runs a member's suite as the python kind's test"
-        " runner does, and stays in the base with it, as ruled",
-    ),
 }
 
 

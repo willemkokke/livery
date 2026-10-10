@@ -1941,6 +1941,32 @@ def _refresh_args(release_dirs: tuple[Path, ...]) -> list[str]:
     return [f"--refresh-package={name}" for name in sorted(names)]
 
 
+def prove(
+    package: Package, root: Path, *, release_dirs: tuple[Path, ...], resolution: str
+) -> dict[str, str]:
+    """One isolated leg of *package*'s release at *resolution*; the resolved versions.
+
+    [livery.extensions.python._backend.run_isolated_test][] runs it.
+    """
+    return run_isolated_test(
+        package, root, release_dirs=release_dirs, resolution=resolution
+    )
+
+
+def replay(
+    package: Package, *, tree: Path, version: str, python: str, index: str, extras: str
+) -> int:
+    """Install *package*'s released *version* alone and run its tests at *tree*.
+
+    The exit code; [livery.extensions.python._replay.replay][] runs it.
+    """
+    from livery.extensions.python import _replay
+
+    return _replay.replay(
+        package, tree=tree, version=version, python=python, index=index, extras=extras
+    )
+
+
 def run_isolated_test(
     package: Package,
     root: Path,

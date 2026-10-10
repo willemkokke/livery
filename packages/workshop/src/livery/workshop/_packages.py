@@ -1037,10 +1037,6 @@ BASE_EXTENSION_IMPORTS: dict[str, tuple[str, str]] = {
         "livery.extensions.python",
         "runs the python kind's suites and reads their coverage",
     ),
-    "livery.workshop._release_driver": (
-        "livery.extensions.python",
-        "runs a python member's isolated release leg",
-    ),
 }
 
 

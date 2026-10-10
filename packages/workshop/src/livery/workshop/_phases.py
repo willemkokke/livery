@@ -51,12 +51,23 @@ PHASES = (
 
 #: The keys the engine that runs a phase provides, with their types:
 #: ``stamp`` the version to write, ``build`` the build's source date (0
-#: takes the build tool's own), ``publish`` the version and the
-#: resolved registry target, a table of its fields.
+#: takes the build tool's own), ``prove`` the leg's resolution and the
+#: co-released set's dist directories, ``publish`` the version and the
+#: resolved registry target, a table of its fields, and ``replay`` the
+#: released version, the tree checked out at its receipt tag, the
+#: interpreter, the index to install from and the extras.
 ENGINE_KEYS: Mapping[str, Mapping[str, str]] = {
     "stamp": {"version": "str"},
     "build": {"epoch": "int"},
+    "prove": {"resolution": "str", "release-dirs": "paths"},
     "publish": {"version": "str", "registry-target": "table"},
+    "replay": {
+        "version": "str",
+        "tree": "path",
+        "interpreter": "str",
+        "index": "str",
+        "extras": "str",
+    },
 }
 
 
