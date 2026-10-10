@@ -5,6 +5,7 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
+extensions = ["python"]
 name = "livery-toolroom-bench"
 description = "The bench where toolroom's typed tool handles are made and refreshed."
 

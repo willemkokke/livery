@@ -5,6 +5,7 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
+extensions = ["python"]
 name = "livery-extensions-pytest"
 description = "pytest as a check of the livery workshop: each python package's suite and documentation examples, configured by the root pytest.toml and .coveragerc."
 

@@ -5,6 +5,7 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
+extensions = ["python"]
 name = "livery-extensions-changelog"
 description = "Changelogs for the livery workshop: git-cliff writes each package's CHANGELOG.md entry as the release train releases it."
 

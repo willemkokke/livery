@@ -5,6 +5,7 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
+extensions = ["python"]
 name = "livery-extensions-clang-tidy"
 description = "clang-tidy as a check of the livery workshop: each cpp package's sources, judged by its own .clang-tidy over its build's compilation database."
 
