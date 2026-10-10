@@ -89,8 +89,8 @@ The words this plan uses, each with one meaning:
   with the workshop beyond the tools its verbs need. It is active
   because the project depends on it directly.
 - **A step**: one piece of work an extension contributes to a phase,
-  declared at `[phases.<phase>.<step>]`, its tool's words or a
-  function. A check is a step of a phase `fm check` runs (ruled
+  declared at `[phases.<phase>.<step>]`, a command template or a
+  function under `main`. A check is a step of a phase `fm check` runs (ruled
   2026-10-10; the destination note's "One mechanism" section).
 - **A phase**: the moment a step runs at, declared by the base or an
   extension with its engine keys, its level and its placement: at the

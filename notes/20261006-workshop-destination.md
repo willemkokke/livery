@@ -342,13 +342,20 @@ An extension says three kinds of thing: what it runs, what it answers
 and what it writes. What it runs is a **step** of a **phase**; what it
 answers is a **query**; what it writes is a **fragment** or a seed.
 
-**A step** is declared at `[phases.<phase>.<step>]` with one body, its
-tool's words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or a `run`
-reference, and the keys a check carries: `scope`, `narrowing`, `claims`,
-`extensions`, `options`, `fragments`, `inputs`, `after`, `tools`,
-`arguments`, `tests-only`, `enabled`, plus `provides` and `reads`, typed
-keys from one step to another inside the phase, and the phase's engine
-keys. A check of role R by tool T is the step T of phase R:
+**A step** is declared at `[phases.<phase>.<step>]` with one body under
+`main`: a command template, a list naming the tool as the step's
+`tools` name it and then its arguments, or a function, a string
+`module:name`. `fix` and `safe-fix` take either shape for a step that
+rewrites, and `env` and `matrix` vary the calls. A template's
+placeholders are answered per call: `{paths}`, where the selection
+goes, a template without it running whole; `{arguments}`, where the
+words after `--` go; `{cache}`, `{package}`, `{configuration}`, a
+query's name and the matrix keys. The step also carries the keys a
+check carries: `scope`, `claims`, `extensions`, `options`, `fragments`,
+`inputs`, `after`, `tools`, `tests-only`, `enabled`, plus `provides`
+and `reads`, typed keys from one step to another inside the phase, and
+the phase's engine keys; `narrowing` goes, since `{paths}` says it. A
+check of role R by tool T is the step T of phase R:
 `[checks.ruff.format]` is `[phases.format.ruff]`. `pre` and `post` go: a
 named step and `after` say the same thing, and a step that needs
 cleanup on failure does it itself. A step may declare `isolated = true`
@@ -2302,6 +2309,13 @@ the stack, which this design neither needs nor rules out).
   rehearsal of the 12-member wave takes 26 to 27 minutes, the loop's
   release act 6.5 minutes inside a 26-minute pass, and a loop leg's
   entry 176 of 183 seconds.
+- 2026-10-11, Willem: a step's body is `main`, with `fix` and
+  `safe-fix` for a step that rewrites, each a command template, a
+  list, or a function, a string; `judge`, `run`, `command` and
+  `function` are not keys; `{paths}` and `{arguments}` are explicit
+  and replace `narrowing`. Why: `judge` named what a check does and
+  not what a build does, and one rule for the shape beats two names.
+  #1377, in its thread.
 
 ## Open
 
