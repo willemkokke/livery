@@ -371,8 +371,8 @@ def _chain(
     contract = (home / "workshop.toml").read_text()
     # Stock fm's births list the stock extensions; the home adds itself.
     assert (
-        'extensions = ["docs", "ruff", "basedpyright", "pytest", "dummy.brandx"]'
-        in contract
+        'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
+        ' "dummy.brandx"]' in contract
     )
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
@@ -409,7 +409,8 @@ def _chain(
         )
         # The generator seam's in-repo consumer: the member declares
         # a docs generator (a task its extension plugin already ships the
-        # group for) that writes a page and emits its nav block beside it.
+        # group for) that writes a page and emits its nav block beside it,
+        # as data: it imports nothing of the docs extension.
         with (member / "src" / "dummy" / BRAND / "_tasks.py").open("a") as handle:
             handle.write(
                 f'\n\n@{BRAND}.task(name="docsgen")\n'
@@ -417,16 +418,12 @@ def _chain(
                 '    """Generate the tools page and its nav block."""\n'
                 "    from pathlib import Path\n"
                 "\n"
-                "    from livery.extensions.docs import write_nav_block\n"
-                "\n"
                 f'    docs = Path("packages/{BRAND}/docs")\n'
                 '    out = docs / "_generated"\n'
                 "    out.mkdir(parents=True, exist_ok=True)\n"
                 '    (out / "tools.md").write_text("# Tools\\n\\nGenerated.\\n")\n'
-                "    write_nav_block(\n"
-                "        out,\n"
-                '        "tools",\n'
-                '        [\'{ "Tools" = "_generated/tools.md" },\'],\n'
+                '    (out / "nav.tools.toml").write_text(\n'
+                '        \'nav = [{ "Tools" = "_generated/tools.md" }]\\n\'\n'
                 "    )\n"
             )
         with (member / "workshop.toml").open("a") as handle:
@@ -509,7 +506,8 @@ def _chain(
     # The resumed pass finds the native extensions the first one listed.
     natives = "".join(f'"{name}", ' for name in NATIVE) if resumed else ""
     assert (
-        f'extensions = ["docs", "ruff", "basedpyright", "pytest", {natives}'
+        'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
+        f" {natives}"
         '"dummy.brandx"]' in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
