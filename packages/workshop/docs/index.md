@@ -578,11 +578,12 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
-While the workspace has a member whose kind packages with conan,
-`fm sync` also writes `conanws.yml` at the root, listing each such
-member by its path. A conan command run inside the checkout resolves
-a member from its source tree through that file, and nothing is
-registered in the conan home. So each checkout of a repository, a
+While the workspace has a member that lists the `conan` extension,
+or whose kind packages with conan, `fm sync` also writes
+`conanws.yml` at the root, the conan extension's root file, listing
+each such member by its path. A conan command run inside the checkout
+resolves a member from its source tree through that file, and nothing
+is registered in the conan home. So each checkout of a repository, a
 worktree included, resolves to its own sources, and all of them share
 one package cache. The file goes with the last such member, and the
 drift check judges it like any composed file.

@@ -248,8 +248,7 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     lines = [
         "# The conan workspace: a conan command run inside this folder",
         "# resolves each package below from its source tree. Rendered from",
-        "# the members whose kind packages with conan; the gate keeps it",
-        "# matching.",
+        "# the members packaged with conan; the gate keeps it matching.",
         "packages:",
         *(
             f"  - path: {member.path}"
