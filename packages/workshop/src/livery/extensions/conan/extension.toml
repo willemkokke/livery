@@ -1,0 +1,11 @@
+# Conan: a C or C++ package's recipe, its build into the conan cache,
+# and its release to a conan remote or the forge's releases.
+
+[extension]
+api-version = 1
+# Listed in a package's extensions.
+levels = ["package"]
+# Conan packages C and C++, so a package that lists conan is a C or C++
+# package.
+requires = ["cpp"]
+compatible = ["cmake"]

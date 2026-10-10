@@ -1020,24 +1020,43 @@ EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
 #: The base modules that import an extension while the package kinds
-#: live in the base: each module to the extension it imports, and why.
-#: The python kind's code is the python extension's, and the base takes
-#: it as the kind's backend. The list only shrinks, a test keeps it
-#: exact, and it is empty once the package kinds go.
-BASE_EXTENSION_IMPORTS: dict[str, tuple[str, str]] = {
-    "livery.workshop._kinds": (
-        "livery.extensions.python",
-        "registers the python kind with the extension's code as its backend",
+#: live in the base: each module and the extension it imports, to why.
+#: The package kinds' code is the extensions', and the base takes it as
+#: the kinds' backends. The list only shrinks, a test keeps it exact,
+#: and it is empty once the package kinds go.
+BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
+    ("livery.workshop._kinds", "livery.extensions.python"): (
+        "registers the python kind with the extension's code as its backend"
     ),
-    "livery.workshop._backends._python_nanobind": (
-        "livery.extensions.python",
-        "the nanobind kind builds on the python kind's functions",
+    ("livery.workshop._backends._python_nanobind", "livery.extensions.python"): (
+        "the nanobind kind builds on the python kind's functions"
     ),
-    "livery.workshop._quality": (
-        "livery.extensions.python",
-        "runs the python kind's suites and reads their coverage",
+    ("livery.workshop._quality", "livery.extensions.python"): (
+        "runs the python kind's suites and reads their coverage"
+    ),
+    ("livery.workshop._backends._cpp_conan", "livery.extensions.cmake"): (
+        "the cpp-conan kind's gate build and tests are cmake's code"
+    ),
+    ("livery.workshop._backends._cpp_conan", "livery.extensions.conan"): (
+        "the cpp-conan kind's recipe and release are conan's code"
+    ),
+    ("livery.workshop._backends._cpp_conan", "livery.extensions.cpp"): (
+        "the cpp-conan kind's file conventions are cpp's code"
     ),
 }
+
+
+def allowed_extension_import(module: str, imported: str) -> bool:
+    """Whether the base module *module* may import *imported*, an extension's module.
+
+    True when [livery.workshop._packages.BASE_EXTENSION_IMPORTS][] names
+    the pair: the extension itself, or a module under it.
+    """
+    return any(
+        imported == extension or imported.startswith(extension + ".")
+        for base, extension in BASE_EXTENSION_IMPORTS
+        if base == module
+    )
 
 
 def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
@@ -1048,15 +1067,15 @@ def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str
     the base's seams, and the base reaches an extension only through the
     registries the extension fills at mount. The one exception is
     [livery.workshop._packages.BASE_EXTENSION_IMPORTS][]: a module it names may
-    import the extension it names, and nothing else under the namespace.
+    import the extensions it names beside it, and nothing else under the
+    namespace.
     """
     problems: list[str] = []
     for module in modules:
         if not module.dotted.startswith(BASE_MODULE + "."):
             continue
-        allowed = BASE_EXTENSION_IMPORTS.get(module.dotted, ("", ""))[0]
         for imported in module.imports:
-            if allowed and (imported == allowed or imported.startswith(allowed + ".")):
+            if allowed_extension_import(module.dotted, imported):
                 continue
             if imported == EXTENSIONS_NAMESPACE or imported.startswith(
                 EXTENSIONS_NAMESPACE + "."

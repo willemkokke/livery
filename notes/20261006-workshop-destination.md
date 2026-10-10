@@ -20,8 +20,10 @@ Phase 11 started on 2026-10-09, and 11a is built: package composition
 #1333) and `fm run` (issue #1335). 11a's C++ acceptance waits for 11b's
 cpp extension. 11b's first slice, one seam for a package's lifecycle
 (issue #1343), is built, and the loop's release scenario passed on it
-for the first time. The second slice's first part, the python kind's
-code moving into its extension, is issue #1352. The
+for the first time. The second slice, the python extension, is built
+(issues #1352, #1353, #1357, #1359, #1362 and #1365), and the loop's
+release scenario passed on every part. The third slice, cpp, cmake and
+conan, starts with the move (issue #1367). The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -1034,9 +1036,41 @@ slices, each mergeable alone:
       this repository's root test retired (issue #1365). Its seeds,
       `run_suites`, `kind_examples` and `workspace_suite` move with
       slice 6, and `uv` moves to the base's own declaration there.
-3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
-   test checks, its root files as `[root-files."<path>"]`, and checks
-   naming `extensions` instead of `kinds`.
+3. **cpp, cmake and conan**, from the `cpp-conan` kind (ruled
+   2026-10-10). `cmake` configures, builds and tests a CMake project
+   and names no language: a C, Fortran or CUDA project, or any project
+   whose tools and libraries the host supplies, lists `cmake` alone.
+   `cpp` is what the C and C++ languages tell the workshop: which files
+   are sources, headers and tests, and that other packages reach the
+   code through headers, never a module path. A build needs it only to
+   tell a test from a source, so a package listing `cmake` alone runs
+   its whole suite on every change, which ctest's own build keeps
+   incremental. `conan` is the recipe, the conan cache and the release
+   through a conan remote or the forge's releases; it requires `cpp`
+   and is compatible with `cmake`, so `cmake` and `conan` stay the
+   shortest list, completed to the three. The toolchain environment
+   (the Visual Studio entry on Windows) and the coverage measurement by
+   compiler family stay in `cmake` until phase 14 moves them into
+   `cpp`'s compiler families. The three ship in the workshop wheel, and
+   until slice 6 the base imports them as it imports `python`, under
+   the same allowance. Slice 3 lands in five parts:
+   1. **The move** (issue #1367): the kind's backend splits into the
+      three extensions' code, and `livery.workshop._backends._cpp_conan`
+      gathers it back for the kind's registration. Nothing behaves
+      differently.
+   2. **The declarations**: `cpp`'s categories, which the kind reads
+      the way the python kind reads python's; the tools each extension
+      runs; the `cpp-conan` template lists `cmake` and `conan`.
+   3. **The queries and phases** the backend answers: `current-version`,
+      `version-files`, `requirements`, `module-roots` and
+      `public-modules`; `stamp`, `build` and `publish`; and
+      `conanws.yml` as `conan`'s `[root-files."conanws.yml"]`.
+   4. **The checks name extensions**: a check's `kinds` becomes
+      `extensions`. The build and test checks move into `cmake` and
+      claim files by category; clang-format and clang-tidy name `cpp`;
+      the python tool extensions name `python`.
+   5. **The `sync` phase**: `fm sync` runs it before `uv sync`, and
+      `conan`'s profile step there replaces `KindRecord.before_install`.
 4. **nanobind and unreal**: nanobind's wheels job under
    `[ci.jobs.<point>.<name>]`, so `_ci_generate` stops reading the
    roster; unreal's declaration.
@@ -1200,9 +1234,11 @@ the stack, which this design neither needs nor rules out).
 | the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
-| `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
+| `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 3) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
+| `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
+| the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 
 ## Decision record
 
@@ -1954,6 +1990,24 @@ the stack, which this design neither needs nor rules out).
   every base module that names it read as naming another extension's
   tool (issue #1363, closed). Slice 6 replaces what each needs: the
   combination `fm new.package` takes, and the kind registry's end.
+- Willem, 2026-10-10: slice 3 separates the build system from the
+  language. `cmake` names no language and requires nothing, since a
+  generic CMake project builds with the host's tools and libraries;
+  `cpp` is optional for a build and improves it, telling tests from
+  sources; `conan` requires `cpp` and is compatible with `cmake`. The
+  toolchain environment and the coverage measurement stay in `cmake`
+  until phase 14, then move into `cpp`'s compiler families (option A;
+  a meson extension built before then would repeat them). The
+  base-import allowance extends to the three. Willem, the same day:
+  any test or rule may be disabled or broken for a while when that
+  makes a refactor easiest, as long as each is tracked and undone at
+  the first chance.
+- 2026-10-10, decided while building slice 3's first part (issue
+  #1367): the conformance kit's `requirements-in-metadata` clause and
+  the dev group's extras pass over a target that ships in the
+  extension's own wheel. `conan` requires `cpp` and claims `cmake`,
+  and all three ship in the workshop wheel, which cannot depend on
+  itself; one wheel has one version, so nothing can drift.
 
 ## Open
 

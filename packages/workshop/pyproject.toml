@@ -67,6 +67,9 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 # lists: each maps to the package beside its extension.toml, which the
 # mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
+cmake = "livery.extensions.cmake"
+conan = "livery.extensions.conan"
+cpp = "livery.extensions.cpp"
 docs = "livery.extensions.docs"
 python = "livery.extensions.python"
 
@@ -106,12 +109,18 @@ livery-workshop-layout = "livery.workshop._pytest_layout"
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# The wheel ships three roots under the PEP 420 namespace livery: the
-# base, livery.workshop, whose entry module is its __init__.py, and two
-# extensions with no public names, livery.extensions.docs and
-# livery.extensions.python. Nothing imports an extension but the
-# workshop: its mount, and the python kind's registration, which takes
-# the extension's code as its backend until the package kinds go. The
+# The wheel ships the base, livery.workshop, whose entry module is its
+# __init__.py, and extensions with no public names under the PEP 420
+# namespace livery. Nothing imports an extension but the workshop: its
+# mount, and the package kinds' registrations, which take the
+# extensions' code as their backends until the package kinds go. The
 # flag lets uv ship a root with no __init__.py.
-module-name = ["livery.workshop", "livery.extensions.docs", "livery.extensions.python"]
+module-name = [
+    "livery.workshop",
+    "livery.extensions.cmake",
+    "livery.extensions.conan",
+    "livery.extensions.cpp",
+    "livery.extensions.docs",
+    "livery.extensions.python",
+]
 namespace = true

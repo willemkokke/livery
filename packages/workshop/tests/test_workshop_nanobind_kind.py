@@ -299,6 +299,7 @@ def test_the_wheel_is_platform_tagged_and_imports(
     test's own, so the packages it builds never reach the machine's
     cache, and nothing is registered in it.
     """
+    from livery.extensions.conan import _package as _conan
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._packages import discover_packages
 
@@ -320,7 +321,7 @@ def test_the_wheel_is_platform_tagged_and_imports(
     assert "acme-ext" in resolved
     # The workspace file alone resolved the library: the home holds no
     # registration, asked from outside the workspace.
-    listed = _cpp_conan._conan(tmp_path.parent, "editable", "list")  # pyright: ignore[reportPrivateUsage]
+    listed = _conan._conan(tmp_path.parent, "editable", "list")  # pyright: ignore[reportPrivateUsage]
     assert "acme-geometry" not in listed.stdout + listed.stderr
 
 
@@ -680,6 +681,7 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     restores 0.1.0 from its release, pins conan to it, and the
     compile says what is missing.
     """
+    from livery.extensions.conan import _package as _conan
     from livery.forge.testing import FakeForge
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._packages import Edge
@@ -709,7 +711,7 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     _cpp_conan.build(library, tmp_path)
     # The floor's package leaves this machine's cache, so the leg has
     # to fetch it back from the release to build at all.
-    _cpp_conan._conan(library.directory, "remove", "acme-geometry/0.1.0", "-c")
+    _conan._conan(library.directory, "remove", "acme-geometry/0.1.0", "-c")
 
     extension = _render_chain(tmp_path)
     _consume_the_library(extension)

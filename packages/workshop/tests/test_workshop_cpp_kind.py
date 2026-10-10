@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from livery.extensions.cmake import _build as _cmake
+from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._checks import (
     GateContext,
@@ -73,15 +75,15 @@ needs_msvc = pytest.mark.skipif(
 @pytest.fixture
 def hermetic_toolchain(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate's tools run in this process's environment, whatever the host has."""
-    monkeypatch.setattr(_cpp_conan, "toolchain_env", lambda: dict(os.environ))
+    monkeypatch.setattr(_cmake, "toolchain_env", lambda: dict(os.environ))
 
 
 @pytest.fixture
 def fresh_toolchain() -> object:
     """The toolchain environment read afresh by this test, and by the next."""
-    _cpp_conan._entered.cache_clear()
+    _cmake._entered.cache_clear()
     yield None
-    _cpp_conan._entered.cache_clear()
+    _cmake._entered.cache_clear()
 
 
 @pytest.fixture
@@ -186,7 +188,7 @@ def _profile_conan(
         assert args == ("create", ".")
         return _Said()
 
-    monkeypatch.setattr(_cpp_conan, "_conan", _fake)
+    monkeypatch.setattr(_conan, "_conan", _fake)
     return calls
 
 
@@ -755,7 +757,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
 def test_the_toolchain_environment_is_this_process_s_own_off_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: False)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: False)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setenv("WORKSHOP_PROBE", "here")
     env = _cpp_conan.toolchain_env()
@@ -770,9 +772,9 @@ def test_the_toolchain_environment_is_this_process_s_own_off_windows(
 def test_a_chosen_compiler_is_left_alone_on_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.setenv("CXX", "clang-cl")
-    monkeypatch.setattr(_cpp_conan, "_asked", _never_asked)
+    monkeypatch.setattr(_cmake, "_asked", _never_asked)
     env = _cpp_conan.toolchain_env()
     assert env["CXX"] == "clang-cl"
     assert "CC" not in env or env["CC"] != "cl"
@@ -792,11 +794,11 @@ def test_a_developer_prompt_builds_with_cl_without_asking_vswhere(
     for name in ("cl", "cl.exe"):
         (prompt / name).write_text("")
         (prompt / name).chmod(0o755)
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.setenv("PATH", str(prompt))
-    monkeypatch.setattr(_cpp_conan, "_asked", _never_asked)
+    monkeypatch.setattr(_cmake, "_asked", _never_asked)
     env = _cpp_conan.toolchain_env()
     assert (env["CC"], env["CXX"]) == ("cl", "cl")
     assert env["PATH"] == str(prompt)
@@ -806,7 +808,7 @@ def test_a_developer_prompt_builds_with_cl_without_asking_vswhere(
 def test_entering_msvc_refuses_without_the_installer_naming_the_workload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.setenv("PROGRAMFILES(X86)", str(tmp_path / "pf"))
@@ -826,7 +828,7 @@ def test_entering_msvc_refuses_when_no_installation_has_the_cpp_tools(
     vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.setattr(platform, "machine", lambda: "AMD64")
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))
@@ -837,7 +839,7 @@ def test_entering_msvc_refuses_when_no_installation_has_the_cpp_tools(
         asked.append(argv)
         return ""
 
-    monkeypatch.setattr(_cpp_conan, "_asked", _nothing)
+    monkeypatch.setattr(_cmake, "_asked", _nothing)
     with pytest.raises(_FAILURES, match="no Visual Studio installation has the"):
         _cpp_conan.toolchain_env()
     (argv,) = asked
@@ -855,19 +857,19 @@ def test_entering_msvc_refuses_a_batch_file_that_left_no_toolset(
     vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.setattr(platform, "machine", lambda: "ARM64")
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.setenv("PROGRAMFILES(X86)", str(tmp_path / "pf"))
-    monkeypatch.setattr(_cpp_conan, "_asked", lambda argv: "C:\\VS")
+    monkeypatch.setattr(_cmake, "_asked", lambda argv: "C:\\VS")
     scripts: list[str] = []
 
     def _no_toolset(script: str) -> str:
         scripts.append(script)
         return "PATH=C:\\Windows\n"
 
-    monkeypatch.setattr(_cpp_conan, "_shell_set", _no_toolset)
+    monkeypatch.setattr(_cmake, "_shell_set", _no_toolset)
     with pytest.raises(_FAILURES, match="left no VCToolsInstallDir"):
         _cpp_conan.toolchain_env()
     (script,) = scripts
@@ -885,7 +887,7 @@ def test_the_entered_environment_is_read_once_and_points_cmake_at_cl(
     vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
-    monkeypatch.setattr(_cpp_conan, "_on_windows", lambda: True)
+    monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.setattr(platform, "machine", lambda: "AMD64")
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.delenv("CC", raising=False)
@@ -897,9 +899,9 @@ def test_the_entered_environment_is_read_once_and_points_cmake_at_cl(
         asked.append(argv)
         return "C:\\VS"
 
-    monkeypatch.setattr(_cpp_conan, "_asked", _installation)
+    monkeypatch.setattr(_cmake, "_asked", _installation)
     monkeypatch.setattr(
-        _cpp_conan,
+        _cmake,
         "_shell_set",
         lambda script: (
             "=C:=C:\\work\n"
@@ -1045,8 +1047,8 @@ def _msvc_gate(
     exe.write_bytes(b"MZ original")
     monkeypatch.setattr(tools, "ctest", _fake_ctest(exe))
     monkeypatch.setattr(tools, "dotnet_coverage", engine, raising=False)
-    monkeypatch.setattr(_cpp_conan, "_ctest_program", lambda: "C:/store/ctest.exe")
-    monkeypatch.setattr(_cpp_conan, "toolchain_env", lambda: dict(os.environ))
+    monkeypatch.setattr(_cmake, "_ctest_program", lambda: "C:/store/ctest.exe")
+    monkeypatch.setattr(_cmake, "toolchain_env", lambda: dict(os.environ))
     return package, exe
 
 

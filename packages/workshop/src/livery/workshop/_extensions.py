@@ -119,13 +119,23 @@ def extension_extras(extension: str, present: tuple[str, ...]) -> tuple[str, ...
     or contributes to through ``[for.<target>]``: its wheel declares
     each such claim as an extra requiring the target's distribution,
     so installing the extra holds the two to the range the wheel
-    states. Empty for an extension nothing installed declares.
+    states. A target its own wheel ships puts no extra in use. Empty
+    for an extension nothing installed declares.
     """
     found = _readable(extension)
     if found is None:
         return ()
     claimed = (*found.compatible, *found.target_tables)
-    return tuple(sorted({normal_name(name) for name in claimed if name in present}))
+    own = distribution_of(extension)
+    return tuple(
+        sorted(
+            {
+                normal_name(name)
+                for name in claimed
+                if name in present and ships_elsewhere(name, own)
+            }
+        )
+    )
 
 
 def declaration(extension: str) -> Declaration | None:
@@ -174,6 +184,16 @@ def levels_of(extension: str) -> tuple[str, ...]:
     """The levels *extension* may be listed at; the workspace when it says none."""
     found = declaration(extension)
     return found.levels if found is not None else ()
+
+
+def ships_elsewhere(target: str, distribution: str) -> bool:
+    """Whether a wheel other than *distribution* ships the extension *target*.
+
+    A relation to an extension of the same wheel needs no dependency
+    and no extra: one wheel has one version, so the two cannot drift
+    apart.
+    """
+    return normal_name(distribution_of(target)) != normal_name(distribution)
 
 
 def distribution_of(extension: str) -> str:

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.forge import RegistryKind, Repository, Unsupported
 from livery.forge.testing import FakeForge
@@ -248,7 +249,7 @@ def test_the_restore_verifies_the_digest_and_hands_the_file_to_conan(
         seen.append((args[-1], Path(args[-1]).read_bytes()))
         return _Done()
 
-    monkeypatch.setattr(_cpp_conan, "_conan", _fake_conan)
+    monkeypatch.setattr(_conan, "_conan", _fake_conan)
     _cpp_conan.restore_from_releases(root, "acme-geometry", "0.2.0", cwd=root)
     assert [payload for _path, payload in seen] == [b"the saved cache"]
     assert Path(seen[0][0]).name == name
