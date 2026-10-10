@@ -9,7 +9,7 @@ levels = ["workspace"]
 
 [checks.pyrefly.typecheck]
 judge = ["pyrefly", "check"]
-kinds = ["python"]
+extensions = ["python"]
 tools = ["pyrefly"]
 arguments = true
 claims = [

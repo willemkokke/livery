@@ -125,9 +125,10 @@ def _render_cpp(tmp_path: Path) -> Package:
     )
     # The native configs come from the check records, as they do at a
     # birth: the template ships none.
+    from livery.workshop._kinds import kind_stands_for
     from livery.workshop._shipped_files import settle_package
 
-    settle_package(destination, "cpp-conan")
+    settle_package(destination, kind_stands_for("cpp-conan"))
     return _package(destination, "acme-native", "cpp-conan")
 
 
@@ -376,7 +377,7 @@ def test_python_checks_skip_a_native_member_by_name(
     for name in ("typecheck.fake", "test.fake"):
         assert judged_by(check_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
-        assert f"{name}: packages/native skips (cpp-conan kind)" in out
+        assert f"{name}: packages/native skips (not a python package)" in out
     # A python formatter and linter judge both: the conanfile is python.
     # ctest judges the native member alone.
     for name in ("format.fake", "lint.fake"):
@@ -397,10 +398,10 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
-    from livery.workshop._checks import checks_by_name, judged_by, judges_kind
+    from livery.workshop._checks import checks_by_name, judged_by, judges_extensions
 
     for record in checks_by_name().values():
-        if judges_kind(record, "python"):
+        if judges_extensions(record, ("python",)):
             assert judged_by(record, (py,)) == (py,)
     # No package check judges a python package: the walk schedules
     # none of the native records for a workspace of python packages.
@@ -433,7 +434,7 @@ def test_the_native_checks_run_per_package_in_order(
 
     out = run_package(GateContext(root=tmp_path, packages=(native,)))
     for name in NATIVE_CHECKS:
-        assert f"  {name}: packages/native runs (cpp-conan kind)" in out
+        assert f"  {name}: packages/native runs (a cmake package)" in out
     assert [name for name, _, _ in ran] == list(NATIVE_CHECKS)
     # A selection: the build first, since the kind's tests run on a
     # build, then the chosen ctest alone; the formatter and the linter
@@ -654,9 +655,10 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "ninja",
         "dotnet_coverage@windows",
     )
-    from livery.workshop._checks import tools_for_kind
+    from livery.workshop._checks import tools_for
+    from livery.workshop._kinds import kind_stands_for
 
-    assert {tool for tool, _ in tools_for_kind("cpp-conan")} == set()
+    assert {tool for tool, _ in tools_for(kind_stands_for("cpp-conan"))} == set()
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:

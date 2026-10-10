@@ -7,3 +7,8 @@
 api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
+
+# The questions about a package this extension answers: where the gate
+# build writes its compilation database, which clang-tidy reads.
+[queries]
+compile-commands = "livery.extensions.cmake._build:compile_commands"

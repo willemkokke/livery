@@ -91,7 +91,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for_kind
+    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
     from livery.workshop._slots import all_composed
@@ -108,7 +108,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
             assert mount_extensions(root) == ()
         assert "test.pytest" not in checks_by_name()
         assert "examples.pytest" not in checks_by_name()
-        assert "pytest" not in {tool for tool, _ in tools_for_kind("python")}
+        assert "pytest" not in {tool for tool, _ in tools_for(("python",))}
         assert "pytest>=9.0" not in _dev_group(all_composed())
         deliver(root)
         assert not (root / "pytest.toml").exists()
@@ -121,7 +121,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
             assert mount_extensions(root) == ("pytest",)
         assert checks_by_name()["test.pytest"].extension == "pytest"
         assert checks_by_name()["examples.pytest"].extension == "pytest"
-        assert "pytest" in {tool for tool, _ in tools_for_kind("python")}
+        assert "pytest" in {tool for tool, _ in tools_for(("python",))}
         assert "pytest>=9.0" in _dev_group(all_composed())
         deliver(root)
         settings = tomllib.loads((root / "pytest.toml").read_text())["pytest"]
@@ -304,7 +304,7 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     monkeypatch.setattr(_checks, "kind_examples", lambda kind: runner)
     one = _member(tmp_path, "one")
     record = registry.check_for("examples.pytest")
-    assert record.role == "examples" and record.kinds == ("python",)
+    assert record.role == "examples" and record.extensions == ("python",)
     assert [claim.category for claim in record.claims] == ["example"]
     record.run(GateContext(root=tmp_path, packages=(one,)))
     assert ran == [("packages/one", ())]

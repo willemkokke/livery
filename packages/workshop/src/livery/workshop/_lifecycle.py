@@ -255,9 +255,13 @@ def compile_commands(package: Package) -> Path | None:
     None for a package whose build writes none. The file exists once
     the build is configured.
     """
-    from livery.workshop._kinds import backend_for
+    from livery.workshop._queries import COMPILE_COMMANDS
 
-    return backend_for(package).compile_commands(package)
+    answered = _extensions_answer(package, COMPILE_COMMANDS)
+    if answered is not None:
+        return answered
+    found = _optional(package, "compile_commands")
+    return None if found is None else cast("Path | None", found(package))
 
 
 def plugin_modules(package: Package) -> tuple[str, ...]:

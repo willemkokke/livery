@@ -8,12 +8,12 @@ api-version = 1
 # Listed in the workspace's list alone: one style for every member.
 levels = ["workspace"]
 
-# The kinds whose members carry C or C++.
+# The packages that carry C or C++.
 [checks.clang-format.format]
 judge = ["clang_format", "--dry-run", "--Werror"]
 fix = ["clang_format", "-i"]
 scope = "package"
-kinds = ["cpp-conan", "python-nanobind"]
+extensions = ["cpp"]
 tools = ["clang_format"]
 arguments = true
 claims = [
@@ -22,13 +22,13 @@ claims = [
     { category = "test-support", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
 ]
 
-# The style each native package carries; a deeper file with
+# The style each C or C++ package carries; a deeper file with
 # `BasedOnStyle: InheritParentConfig` adds that directory's own lines.
 [checks.clang-format.format.fragments.".clang-format"]
-kinds = ["cpp-conan", "python-nanobind"]
+extensions = ["cpp"]
 text = '''
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A file deeper in the tree with
+# Rendered by the template channel for each C or C++ package; the gate
+# keeps it matching its render. A file deeper in the tree with
 # `BasedOnStyle: InheritParentConfig` carries this package's own lines.
 BasedOnStyle: LLVM
 IndentWidth: 4

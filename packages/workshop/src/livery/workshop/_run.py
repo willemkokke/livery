@@ -194,9 +194,10 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
     changed, no build check runs. A checkout git cannot read is built
     whole, and says so.
     """
-    from livery.workshop._checks import checks_by_name, judges_kind
+    from livery.workshop._checks import checks_by_name, judges_extensions
     from livery.workshop._git_ops import GitError, GitOps
     from livery.workshop._graph import dependencies_closure, order_topologically
+    from livery.workshop._kinds import extension_set
     from livery.workshop._quality import run_on_packages
 
     builders = [
@@ -225,7 +226,8 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
         )
         fingerprint = hashlib.sha256("\n".join((own, *needs)).encode()).hexdigest()
         prints[member.path] = fingerprint
-        names = tuple(r.name for r in builders if judges_kind(r, member.kind))
+        held = extension_set(member)
+        names = tuple(r.name for r in builders if judges_extensions(r, held))
         if not names or (own and record.get(member.path) == fingerprint):
             continue
         run_on_packages(names, (member,))

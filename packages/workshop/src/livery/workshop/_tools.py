@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         Locked,
         Requirement,
     )
+    from livery.workshop._packages import Package
 
 import hashlib
 import json
@@ -146,13 +147,12 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         for record in kind_chain(kind_name):
             for text in record.tools:
                 found.append(Requirement.parse(text, site=f"kind {record.name}"))
-    # The checks that judge each present kind bring their tools, each
+    # The checks that judge a present package bring their tools, each
     # naming its check: unregistering a check removes its tool.
-    from livery.workshop._checks import tools_for_kind
+    from livery.workshop._checks import tools_for
 
-    for kind_name in sorted(kinds):
-        for tool, check in tools_for_kind(kind_name):
-            found.append(Requirement.parse(tool, site=f"check {check}"))
+    for tool, check in tools_for(_held(packages)):
+        found.append(Requirement.parse(tool, site=f"check {check}"))
     try:
         declared_by_extension = extension_tools(root)
     except RuntimeError as error:
@@ -180,6 +180,20 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
 
     if lfs_enabled(root):
         found.append(Requirement.parse(TOOL, site="workshop.toml [workspace] lfs"))
+    return tuple(found)
+
+
+def _held(packages: tuple[Package, ...]) -> tuple[str, ...]:
+    """The extensions the *packages* hold, and those the root's own files hold.
+
+    The root's are what `ROOT_KIND` stands for: its `tasks.py` and
+    tests are judged as a package of that kind is.
+    """
+    from livery.workshop._kinds import extension_set, kind_stands_for
+
+    found = dict.fromkeys(kind_stands_for(ROOT_KIND))
+    for package in packages:
+        found.update(dict.fromkeys(extension_set(package)))
     return tuple(found)
 
 
@@ -237,7 +251,7 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     allowance finds the tool on PATH by its name.
     """
     from livery.toolroom.store import LockError, Requirement
-    from livery.workshop._checks import check_for, tools_for_kind
+    from livery.workshop._checks import check_for, tools_for
     from livery.workshop._extensions import notes_tools
     from livery.workshop._kinds import kind_host_allowed
 
@@ -250,10 +264,9 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     if not names:
         return ()
     verdicts: dict[str, set[str]] = {}
-    for kind_name in sorted(kinds):
-        for tool, check in tools_for_kind(kind_name):
-            if check_for(check).role in VERDICT_ROLES:
-                verdicts.setdefault(tool, set()).add(check)
+    for tool, check in tools_for(_held(packages)):
+        if check_for(check).role in VERDICT_ROLES:
+            verdicts.setdefault(tool, set()).add(check)
     writers: dict[str, str] = {}
     for extension, requires in notes_tools(root).items():
         for line in requires:

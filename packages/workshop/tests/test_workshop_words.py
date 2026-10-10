@@ -59,7 +59,7 @@ def _check(
     narrowing: str = "none",
     arguments: bool = False,
     extension: str = "acme",
-    kinds: tuple[str, ...] = (),
+    extensions: tuple[str, ...] = (),
 ) -> CheckRecord:
     record = CheckRecord(
         "acme",
@@ -69,7 +69,7 @@ def _check(
         narrowing=narrowing,
         fix=Command(words, "lint.acme", fixing=True) if words.fix else None,
         extension=extension,
-        kinds=kinds,
+        extensions=extensions,
         tools=("acme",),
         arguments=arguments,
         words=words,
@@ -165,7 +165,9 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
     )
     member = _member(tmp_path, "one")
     record = _check(
-        Words(("acme", "-p", "{compile-commands}")), scope="package", kinds=("python",)
+        Words(("acme", "-p", "{compile-commands}")),
+        scope="package",
+        extensions=("python",),
     )
     ctx = GateContext(root=tmp_path, packages=(member,), check=record.name)
     record.run(ctx.for_package(member))
@@ -200,7 +202,7 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
         "lint",
         Command(words, "lint.acme"),
         narrowing="paths",
-        kinds=("python",),
+        extensions=("python",),
         tools=("acme",),
         claims=(Claim("source", suffixes=(".py",)), Claim("test", suffixes=(".py",))),
         words=words,
@@ -268,7 +270,7 @@ def test_a_package_check_calls_from_the_package_with_its_files(
     record = _check(
         Words(("acme", "-p", "{compile-commands}", "--root={package}")),
         scope="package",
-        kinds=("python",),
+        extensions=("python",),
     )
     ctx = GateContext(root=tmp_path, packages=(member,), check=record.name)
     record.run(ctx.for_package(member))

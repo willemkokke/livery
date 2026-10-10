@@ -82,7 +82,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for_kind
+    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
 
@@ -95,7 +95,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         with footman_registry.capture():
             assert mount_extensions(root) == ()
         assert "typecheck.basedpyright" not in checks_by_name()
-        assert "basedpyright" not in {tool for tool, _ in tools_for_kind("python")}
+        assert "basedpyright" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "pyrightconfig.json").exists()
         # Listed without its option, it type-checks and verifies nothing.
@@ -107,7 +107,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         checks = checks_by_name()
         assert checks["typecheck.basedpyright"].extension == "basedpyright"
         assert "typecomplete.basedpyright" not in checks
-        assert "basedpyright" in {tool for tool, _ in tools_for_kind("python")}
+        assert "basedpyright" in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         written = _settings((root / "pyrightconfig.json").read_text())
         assert written["typeCheckingMode"] == "standard"

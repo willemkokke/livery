@@ -160,7 +160,7 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
             "format",
             body,
             scope=PACKAGE,
-            kinds=("python",),
+            extensions=("python",),
             claims=(Claim("source", suffixes=(".cpp",)),),
         )
     )

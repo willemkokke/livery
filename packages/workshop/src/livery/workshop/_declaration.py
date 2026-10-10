@@ -666,7 +666,7 @@ class _Reader:
             threshold=float(entry.get("threshold", 1.0)),
             fix=fix,
             words=words,
-            kinds=tuple(entry.get("kinds", ())),
+            extensions=tuple(str(name) for name in entry.get("extensions", ())),
             tests_only=bool(entry.get("tests-only", False)),
             after=tuple(entry.get("after", ())),
             extension=self.extension,
@@ -798,7 +798,7 @@ class _Reader:
     def fragments(
         self, table: dict[str, Any], where: tuple[str, ...]
     ) -> tuple[Any, ...]:
-        """A project file's fragment from its text; a package file's from each kind."""
+        """A project file's fragment from its text; a package file's, its extensions."""
         from livery.workshop._fragments import Fragment
 
         found: list[Fragment] = []
@@ -807,16 +807,14 @@ class _Reader:
                 found.append(Fragment(file, value))
                 continue
             entry = cast("dict[str, Any]", value)
-            if "text" not in entry or not entry.get("kinds"):
+            if "text" not in entry or not entry.get("extensions"):
                 raise self.refuse(
                     (*where, file),
-                    "is a package file's fragment: its text, and the kinds"
+                    "is a package file's fragment: its text, and the extensions"
                     " whose packages render it",
                 )
-            found += (
-                Fragment(file, str(entry["text"]), kind=str(kind))
-                for kind in entry["kinds"]
-            )
+            extensions = tuple(str(name) for name in entry["extensions"])
+            found.append(Fragment(file, str(entry["text"]), extensions=extensions))
         return tuple(found)
 
     def output(self, target: str, table: dict[str, Any]) -> DeclaredOutput:

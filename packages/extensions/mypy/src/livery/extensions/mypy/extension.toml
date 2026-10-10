@@ -14,7 +14,7 @@ levels = ["workspace"]
 judge = ["mypy", "--platform={platform}", "--cache-dir={cache}/{platform}"]
 matrix = { platform = ["linux", "darwin", "win32"] }
 narrowing = "paths"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["mypy"]
 arguments = true
 claims = [

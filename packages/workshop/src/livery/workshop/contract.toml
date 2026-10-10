@@ -497,6 +497,10 @@ doc = "the variables every call of a check in words gets, over the run's own"
 types = ["str"]
 doc = "the variable's value; a placeholder in it is answered as in the words"
 
+[contract.extension.checks."*"."*".extensions]
+types = ["strs"]
+doc = "the package-level extensions whose packages the check judges: each package whose set holds one; every package when absent"
+
 [contract.extension.checks."*"."*".fix]
 types = ["str", "strs"]
 doc = "what rewrites what the check judges, run before any judge under --fix: the words of a check in words, or the function, module:function, of a check that runs code; the check only judges when absent"
@@ -511,11 +515,11 @@ doc = "the configuration the composed files carry for the check, by file; none w
 
 [contract.extension.checks."*"."*".fragments."*"]
 types = ["str", "table"]
-doc = "a file, by its name, to its text for a project file, or a table of its text and kinds for a file in each package"
+doc = "a file, by its name, to its text for a project file, or a table of its text and extensions for a file in each package"
 
-[contract.extension.checks."*"."*".fragments."*".kinds]
+[contract.extension.checks."*"."*".fragments."*".extensions]
 types = ["strs"]
-doc = "the kinds whose packages carry the file, each kind's children included"
+doc = "the package-level extensions whose packages carry the file: each package whose set holds one"
 
 [contract.extension.checks."*"."*".fragments."*".text]
 types = ["str"]
@@ -552,10 +556,6 @@ doc = "files the check does not judge whose change runs it over everything it re
 [contract.extension.checks."*"."*".judge]
 types = ["strs"]
 doc = "the words that judge: the tool's name as the check's tools name it, then its arguments; the engine appends the words after -- and the paths the run reaches, and the exit code is the verdict. Exclusive with run"
-
-[contract.extension.checks."*"."*".kinds]
-types = ["strs"]
-doc = "the package kinds the check judges, each kind's children included; every kind when absent"
 
 [contract.extension.checks."*"."*".listed-with]
 types = ["str"]

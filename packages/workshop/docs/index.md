@@ -120,11 +120,18 @@ needs no code:
 judge = ["ruff", "format", "--check", "--force-exclude"]
 fix = ["ruff", "format", "--force-exclude"]
 narrowing = "paths"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["ruff"]
 arguments = true
 claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
 ```
+
+`extensions` names the package-level extensions whose packages the
+check judges: a package whose set, its list and what the list
+requires, holds one of them. A package that lists no extension holds
+what its kind stands for, `python` for the python kind and `cmake`,
+`conan` and `cpp` for `cpp-conan`, until the kinds go. A check that
+names none judges the workspace.
 
 `judge` is the tool's name, as `tools` names it, and the arguments that
 judge; `fix` and `safe-fix` are the words that rewrite under `--fix` and
@@ -342,7 +349,7 @@ contract it also names the schema the contract is judged by, and the
 owners whose keys that schema holds.
 
 A check also says what its tool needs of the workspace. Its `tools`
-reach the tool profile for every kind the check judges, each
+reach the tool profile while a package it judges exists, each
 requirement naming `check <name>` as its site, so unregistering a
 check removes its tool. An extension's `[contributions]` fill
 **slots**, the holes the base template leaves: the `dev` dependency
@@ -408,8 +415,8 @@ An extension's kinds and checks are judged by the conformance kit,
 each clause in `CLAUSES` returns the violations the subject commits,
 each naming its clause, and an extension's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
-call of the backend protocol; a per-package configuration file resolves
-to the nearest kind's fragment, one owner per kind and file; a path's
+call of the backend protocol; a per-package configuration file has one
+owner among the checks whose fragments name an extension; a path's
 category is the most specific rule's, the nearer kind winning a tie
 between kinds and two rules of one kind never tying; every check a
 check runs `after` is registered, and following them never leads back
@@ -527,8 +534,9 @@ file per project gets a file of its own instead, written by its
 extension under the name the tool looks for: ruff's `ruff.toml`,
 pytest's `pytest.toml` and coverage's `.coveragerc`. A tool that
 searches upward from each file, clang-format and clang-tidy in a
-native package, gets a managed file where it looks,
-rendered from the record's fragment for the package's kind and judged
+C or C++ package, gets a managed file where it looks,
+rendered from the fragment of the record whose `extensions` the
+package holds, the first check by name when two have one, and judged
 by the drift gate, with a `.workshop-rendered` receipt beside it so a
 withdrawn check's file goes only when nobody edited it and an edited
 one is kept as a local override. A package's own lines ride the tool's
@@ -617,8 +625,8 @@ it and never refuses it, its entry says `optional`, and what it left
 out is printed when the lock is written; `fm toolroom.sync` names an
 optional tool its host lacks. The sites: a package kind, in its record,
 for what operates it, uv for the python kind; the checks that judge a
-kind, each naming its tools, which is how ruff, pytest and the checkers
-reach a python workspace; a listed extension, as `[toolroom] requires`
+present package, each naming its tools, which is how ruff, pytest and
+the checkers reach a python workspace; a listed extension, as `[toolroom] requires`
 in its `extension.toml`, for what its own verbs need; a plugin the project mounts
 through its direct dependencies, as a tuple in a data module its
 `workshop.tools` entry point names under the plugin's own name, loaded

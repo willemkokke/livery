@@ -218,11 +218,11 @@ class CheckRecord:
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
             check that only judges.
-        kinds: The package kinds the check judges, matched against a
-            package's kind chain, so a child kind takes its parent's
-            checks. A package check runs per member of these kinds; a
-            workspace check names them so its tools and claims reach
-            those kinds, or leaves them empty.
+        extensions: The package-level extensions whose packages the
+            check judges: a package whose set holds one of them
+            ([livery.workshop._kinds.extension_set][]). A package check
+            runs per such member; a workspace check names them so its
+            tools and claims reach those packages, or leaves them empty.
         tests_only: Whether a package check still runs when the
             package's change is confined to its tests. A build and
             the tests do; a formatter does not.
@@ -289,7 +289,7 @@ class CheckRecord:
     transport: str = "argv"
     threshold: float = 1.0
     fix: Callable[[GateContext], None] | None = None
-    kinds: tuple[str, ...] = ()
+    extensions: tuple[str, ...] = ()
     tests_only: bool = False
     inputs: Inputs | None = None
     after: tuple[str, ...] = ()
@@ -388,10 +388,10 @@ def register_check(record: CheckRecord) -> None:
             f"check {record.name!r}: narrowing is {PATHS!r}, {PACKAGES!r} or"
             f" {NONE!r}, not {record.narrowing!r}"
         )
-    if record.scope == PACKAGE and not record.kinds:
+    if record.scope == PACKAGE and not record.extensions:
         fail(
-            f"check {record.name!r} judges packages and names no kind: a"
-            " package check applies to the kinds it lists"
+            f"check {record.name!r} judges packages and names no extension: a"
+            " package check judges the packages whose set holds one it names"
         )
     try:
         _fragments.verify(record.fragments, record.name)
@@ -560,21 +560,17 @@ def enabled(name: str, packages: tuple[Package, ...]) -> tuple[Package, ...]:
     return tuple(kept)
 
 
-def tools_for_kind(kind_name: str) -> tuple[tuple[str, str], ...]:
-    """The tools the checks judging *kind_name* run, as ``(tool, check)`` pairs.
+def tools_for(extensions: Iterable[str]) -> tuple[tuple[str, str], ...]:
+    """The tools the checks judging packages that hold *extensions* run.
 
-    A check judges a kind when the kind's chain meets the check's
-    ``kinds``; a workspace check names the kinds its bodies judge the
-    same way.
+    Each as a ``(tool, check)`` pair. A check judges such a package
+    when it names one of *extensions*; a workspace check names the
+    extensions its bodies judge the same way.
     """
-    from livery.workshop._kinds import kind_chain, kind_names
-
-    if kind_name not in kind_names():
-        return ()
-    chain = {record.name for record in kind_chain(kind_name)}
+    held = set(extensions)
     found: list[tuple[str, str]] = []
     for record in _CHECKS.values():
-        if any(kind in chain for kind in record.kinds):
+        if held & set(record.extensions):
             found.extend((tool, record.name) for tool in record.tools)
     return tuple(found)
 
@@ -700,7 +696,7 @@ def claimants(package: Package, path: str) -> tuple[str, ...]:
     for record in _CHECKS.values():
         if not any(c.category == category and _reaches(c, path) for c in record.claims):
             continue
-        if record.kinds and not _applies(record, package):
+        if record.extensions and not _applies(record, package):
             continue
         names.append(record.name)
     return tuple(sorted(names))
@@ -717,22 +713,18 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
     land in one entry with both sets.
     """
     from livery.workshop._categories import WORKSPACE, category_rules
-    from livery.workshop._kinds import kind_chain, kind_names
+    from livery.workshop._kinds import kind_names, kind_stands_for
 
     table: dict[str, set[str]] = {}
     units = [(kind, "packages/**/") for kind in kinds if kind in kind_names()]
     units.append((WORKSPACE, ""))
     for kind, prefix in units:
-        chain = (
-            {record.name for record in kind_chain(kind)}
-            if kind != WORKSPACE
-            else {WORKSPACE}
-        )
+        held = set(kind_stands_for(kind))
         for record in _CHECKS.values():
             if (
                 kind != WORKSPACE
-                and record.kinds
-                and not any(k in chain for k in record.kinds)
+                and record.extensions
+                and not held & set(record.extensions)
             ):
                 continue
             for claim in record.claims:
@@ -788,48 +780,42 @@ def roles() -> tuple[str, ...]:
     )
 
 
-def judges_kind(record: CheckRecord, kind: str) -> bool:
-    """Whether *record* judges a package of *kind*: its kinds meet the kind's chain.
+def judges_extensions(record: CheckRecord, extensions: Iterable[str]) -> bool:
+    """Whether *record* judges a package holding *extensions*.
 
-    A check that names no kinds judges every package; a kind no record
-    registers (the workspace's own tests unit) is judged by such a
-    check alone.
+    A check that names no extensions judges every package; one that
+    names some judges a package holding one of them.
     """
-    from livery.workshop._kinds import kind_chain, kind_names
-
-    if not record.kinds:
-        return True
-    if kind not in kind_names():
-        return False
-    return any(link.name in record.kinds for link in kind_chain(kind))
+    return not record.extensions or bool(set(record.extensions) & set(extensions))
 
 
 def judged_by(
     record: CheckRecord, packages: tuple[Package, ...], *, quiet: bool = False
 ) -> tuple[Package, ...]:
-    """The *packages* *record* judges, by its kinds; each other one skips by name.
+    """The *packages* *record* judges, by the extensions they hold; each other skips.
 
-    A package outside the check's kinds prints a skip naming the check,
-    the package and its kind, so a narrowed gate is visible in the
-    output and never passes silently. *quiet* counts without printing.
+    A package holding none of the check's extensions prints a skip
+    naming the check, the package and the extensions, so a narrowed gate
+    is visible in the output and never passes silently. *quiet* counts
+    without printing.
     """
+    from livery.workshop._kinds import extension_set
+
     kept: list[Package] = []
     for package in packages:
-        if judges_kind(record, package.kind):
+        if judges_extensions(record, extension_set(package)):
             kept.append(package)
         elif not quiet:
-            print(f"  {record.name}: {package.path} skips ({package.kind} kind)")
+            wanted = " or ".join(record.extensions)
+            print(f"  {record.name}: {package.path} skips (not a {wanted} package)")
     return tuple(kept)
 
 
 def _applies(record: CheckRecord, package: Package) -> bool:
-    """Whether a package check judges *package*, by its kind chain."""
-    from livery.workshop._kinds import kind_chain, kind_names
+    """Whether a package check judges *package*, by the extensions it holds."""
+    from livery.workshop._kinds import extension_set
 
-    if package.kind not in kind_names():
-        return False
-    chain = {kind.name for kind in kind_chain(package.kind)}
-    return any(kind in chain for kind in record.kinds)
+    return bool(set(record.extensions) & set(extension_set(package)))
 
 
 def _package_records(ctx: GateContext, package: Package) -> list[CheckRecord]:
@@ -1177,7 +1163,7 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
     already started, so a build never reads a directory its
     configure has not made.
     """
-    from livery.workshop._kinds import kind_for
+    from livery.workshop._kinds import extension_set
 
     record = check_for(name)
     body = record.fix if fix else record.run
@@ -1207,8 +1193,9 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
                     f" {package.path}/workshop.toml)"
                 )
                 continue
-            kind = kind_for(package.kind).name
-            print(f"  {record.name}: {package.path} runs ({kind} kind)")
+            held = extension_set(package)
+            matched = " and ".join(name for name in record.extensions if name in held)
+            print(f"  {record.name}: {package.path} runs (a {matched} package)")
             body(ctx.for_package(package))
 
 
@@ -1683,20 +1670,22 @@ def check_option(name: str, package: Package, option: str) -> object:
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered check of the test role runs.
 
-    A package by its kind. The workspace's own tests carry no kind;
-    they are a python suite, run when a test check judges a python
-    kind.
+    A package by the extensions it holds. The workspace's own tests
+    are the root's suite, run when a test check names an extension the
+    root's kind stands for ([livery.workshop._tools.ROOT_KIND][]).
     """
     from livery.workshop._coverage_store import WORKSPACE_TESTS
-    from livery.workshop._kinds import is_python_kind
+    from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._tools import ROOT_KIND
 
     tests = [record for record in _CHECKS.values() if record.role == "test"]
-    python = any(is_python_kind(kind) for record in tests for kind in record.kinds)
+    root = set(kind_stands_for(ROOT_KIND))
+    workspace = any(root & set(record.extensions) for record in tests)
 
     def runs(unit: Package) -> bool:
         if unit.path == WORKSPACE_TESTS:
-            return python
-        return any(judges_kind(record, unit.kind) for record in tests)
+            return workspace
+        return any(_applies(record, unit) for record in tests)
 
     return tuple(unit for unit in units if runs(unit))
 
@@ -1704,11 +1693,13 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
 def _register_builtin() -> None:
     """Register the workshop's own checks, in the order the rewriters run.
 
-    The workspace checks judge the whole tree; the native build and
-    test checks judge one package at a time. A body resolves its
-    backend function on the module when it runs, never at
-    registration, so a test that patches ``_cpp_conan.test`` sees its
-    fake run.
+    The workspace checks judge the whole tree; the cmake build and test
+    checks judge one package at a time, each package holding the cmake
+    extension. The base registers those three until the package kinds
+    go, since a package that lists no extension holds cmake through its
+    kind alone and never mounts the extension. A body resolves its
+    backend function on the module when it runs, never at registration,
+    so a test that patches ``_cpp_conan.test`` sees its fake run.
     """
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs
@@ -1807,7 +1798,6 @@ def _register_builtin() -> None:
     _slots.register_slot("python.dev-group")
     _slots.register_slot("python.test.addopts")
 
-    cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
         CheckRecord(
             "check",
@@ -1846,7 +1836,7 @@ def _register_builtin() -> None:
             "build",
             configure_run,
             scope=PACKAGE,
-            kinds=("cpp-conan",),
+            extensions=("cmake",),
             tests_only=True,
             arguments=True,
         ),
@@ -1855,20 +1845,22 @@ def _register_builtin() -> None:
             "build",
             build_run,
             scope=PACKAGE,
-            kinds=("cpp-conan",),
+            extensions=("cmake",),
             tests_only=True,
             after=("build.configure",),
             arguments=True,
         ),
+        # A change to any test or source file reaches ctest, whatever the
+        # language the project builds.
         CheckRecord(
             "ctest",
             "test",
             ctest_run,
             scope=PACKAGE,
-            kinds=("cpp-conan",),
+            extensions=("cmake",),
             tests_only=True,
             after=("build.compile",),
-            claims=(Claim("test", suffixes=cpp), Claim("source", suffixes=cpp)),
+            claims=(Claim("test"), Claim("source")),
             arguments=True,
         ),
     ):

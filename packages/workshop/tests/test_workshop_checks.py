@@ -67,8 +67,8 @@ def test_a_record_with_an_unknown_scope_or_narrowing_refuses(restored_registries
         register_check(CheckRecord("odd", "lint", _noop, narrowing="somehow"))
 
 
-def test_a_package_check_naming_no_kind_refuses(restored_registries):
-    with pytest.raises(_FAILURES, match="names no kind"):
+def test_a_package_check_naming_no_extension_refuses(restored_registries):
+    with pytest.raises(_FAILURES, match="names no extension"):
         register_check(CheckRecord("odd", "lint", _noop, scope=PACKAGE))
 
 
@@ -171,7 +171,7 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
         ran.append(ctx.package.name)
 
     register_check(
-        CheckRecord("probe", "lint", spy, scope=PACKAGE, kinds=("cpp-conan",))
+        CheckRecord("probe", "lint", spy, scope=PACKAGE, extensions=("cpp",))
     )
     py = _package(tmp_path, "member", "python")
     native = _package(tmp_path, "native", "cpp-conan")
@@ -182,13 +182,14 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     run_check("lint.probe", GateContext(root=tmp_path, packages=(py, native)))
     assert ran == ["acme-native"]
     assert (
-        "  lint.probe: packages/native runs (cpp-conan kind)" in capsys.readouterr().out
+        "  lint.probe: packages/native runs (a cpp package)" in capsys.readouterr().out
     )
-    # A check whose kinds the native member's chain does not meet skips
+    # A check naming none of the extensions the native member holds skips
     # it by name, as the gate prints it.
     assert judged_by(check_for("test.fake"), (py, native)) == (py,)
     assert (
-        "test.fake: packages/native skips (cpp-conan kind)" in capsys.readouterr().out
+        "test.fake: packages/native skips (not a python package)"
+        in capsys.readouterr().out
     )
 
 

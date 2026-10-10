@@ -222,9 +222,11 @@ def unregister_categories(kind: str, *, extension: str) -> None:
 def category_rules(kind: str) -> tuple[CategoryRule, ...]:
     """The rules that answer for *kind*: its own, then each ancestor's.
 
-    A kind whose table is an extension's declaration takes it from
-    there. A kind the registry does not know contributes its own table
-    alone, which is how the workspace's unit answers.
+    A kind takes the categories the extensions it stands for declare
+    ([livery.workshop._kinds.kind_stands_for][]), beside any table
+    registered for it in code. A kind the registry does not know
+    contributes its own table alone, which is how the workspace's unit
+    answers.
     """
     from livery.workshop._kinds import kind_chain, kind_for, kind_names
 
@@ -234,9 +236,9 @@ def category_rules(kind: str) -> tuple[CategoryRule, ...]:
     found: list[CategoryRule] = []
     for name in names:
         found.extend(_CATEGORIES.get(name, []))
-        declared_by = kind_for(name).categories_from if name in kind_names() else ""
-        if declared_by:
-            found.extend(extension_rules(declared_by, kind=name))
+        stands_for = kind_for(name).stands_for if name in kind_names() else ()
+        for extension in stands_for:
+            found.extend(extension_rules(extension, kind=name))
     return tuple(found)
 
 

@@ -339,6 +339,16 @@ def guidance(root: Path, audience: str) -> list[Prose]:
     return fragments(root, in_play(root), audience)
 
 
+def present_extensions(root: Path) -> frozenset[str]:
+    """The package-level extensions a package present in *root* holds."""
+    from livery.workshop._kinds import extension_set
+    from livery.workshop._packages import discover_packages
+
+    return frozenset(
+        name for package in discover_packages(root) for name in extension_set(package)
+    )
+
+
 def present_kinds(root: Path) -> frozenset[str]:
     """The kinds a package present in *root* is or derives from."""
     from livery.workshop._kinds import kind_chain, kind_names
@@ -398,41 +408,41 @@ def fragments(
 
 
 def render_gate(root: Path, audience: str | None) -> str:
-    """The gate's checks for the kinds present.
+    """The gate's checks for the extensions the members hold.
 
     A list for the agent, a table for a reader.
     """
     from livery.workshop._checks import checks_by_name
 
-    present = present_kinds(root)
+    present = present_extensions(root)
     records = [
         record
         for record in checks_by_name().values()
-        if not record.kinds or any(kind in present for kind in record.kinds)
+        if not record.extensions or present & set(record.extensions)
     ]
     if not records:
         return ""
-    kinds = ", ".join(sorted(present)) or "none"
+    held = ", ".join(sorted(present)) or "none"
     prog = footman.prog()
     lines = ["# The gate's checks", ""]
     if audience == HUMAN:
         lines += [
             f"`{prog} check` runs every check below, each registered by a"
-            f" extension; the package kinds present are {kinds}.",
+            f" extension; the members hold the package-level extensions {held}.",
             "",
-            "| check | tools | kinds | rewrites under `--fix` |",
+            "| check | tools | packages | rewrites under `--fix` |",
             "| --- | --- | --- | --- |",
         ]
         for record in records:
             tools = ", ".join(record.tools) or "none"
-            scope = ", ".join(record.kinds) or "every"
+            scope = " or ".join(record.extensions) or "every"
             fix = "yes" if record.fix is not None else "no"
             lines.append(f"| {record.name} | {tools} | {scope} | {fix} |")
     else:
         lines += [
             f"`{prog} check` runs these checks in parallel, the rewriters first"
-            f" and one at a time under `--fix`; the package kinds present are"
-            f" {kinds}.",
+            f" and one at a time under `--fix`; the members hold the"
+            f" package-level extensions {held}.",
             "",
         ]
         for record in records:
@@ -444,8 +454,8 @@ def render_gate(root: Path, audience: str | None) -> str:
                 else ""
             )
             where = "the workspace"
-            if record.kinds:
-                where = f"{', '.join(record.kinds)} packages"
+            if record.extensions:
+                where = f"{' or '.join(record.extensions)} packages"
             fix = "; rewrites under --fix" if record.fix is not None else ""
             lines.append(f"- {record.name}{tools}: judges {where}{fix}")
     return "\n".join(lines) + "\n"
@@ -543,15 +553,17 @@ def render_verbs(root: Path, audience: str | None) -> str:
 
 def render_kinds(root: Path, audience: str | None) -> str:
     """The kinds the present packages are, what each derives from, its gate roles."""
-    from livery.workshop._checks import checks_by_name, judges_kind
-    from livery.workshop._kinds import kind_chain, kind_names
+    from livery.workshop._checks import checks_by_name, judges_extensions
+    from livery.workshop._kinds import extension_set, kind_chain, kind_names
     from livery.workshop._packages import discover_packages
 
     names = set(kind_names())
     members: dict[str, list[str]] = {}
+    held: dict[str, set[str]] = {}
     for package in discover_packages(root):
         if package.kind in names:
             members.setdefault(package.kind, []).append(package.path)
+            held.setdefault(package.kind, set()).update(extension_set(package))
     if not members:
         return ""
     lines = ["# The kinds present", ""]
@@ -574,14 +586,15 @@ def render_kinds(root: Path, audience: str | None) -> str:
             or "nothing"
         )
         paths = ", ".join(sorted(members[kind]))
-        # A kind's roles are those of the checks that name it; a check
-        # naming no kinds judges the workspace, never one kind.
+        # A kind's roles are those of the checks that judge its members,
+        # by the extensions they hold; a check naming no extensions
+        # judges the workspace, never one kind.
         roles = ", ".join(
             sorted(
                 {
                     r.role
                     for r in checks_by_name().values()
-                    if r.kinds and judges_kind(r, kind)
+                    if r.extensions and judges_extensions(r, held[kind])
                 }
             )
         )

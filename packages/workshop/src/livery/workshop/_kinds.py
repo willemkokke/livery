@@ -299,15 +299,13 @@ class KindRecord:
             heads their chains with its tools and seed tree, builds
             nothing, and is never a package's ``kind``. A concrete
             kind needs a backend; an abstract one has none.
-        root_files_from: The extension whose ``[root-files]`` a package
-            of the kind that lists no extension joins; empty for a kind
-            that writes none. A child kind takes the nearest ancestor's.
         before_install: What a member of the kind needs in place
             before ``uv sync`` installs it, given the workspace root;
             the lines it prints. None for a kind that needs nothing.
-        categories_from: The extension whose ``[categories]`` is the
-            kind's own category table; empty for a kind whose table is
-            registered in code.
+        stands_for: The package-level extensions a package of the kind
+            that lists none is taken to hold: their categories, root
+            files and checks are its own. A child kind adds to its
+            parent's.
     """
 
     name: str
@@ -327,9 +325,8 @@ class KindRecord:
     suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
-    root_files_from: str = ""
     before_install: Callable[[Path], list[str]] | None = None
-    categories_from: str = ""
+    stands_for: tuple[str, ...] = ()
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -530,15 +527,39 @@ def run_suites(
     fail(f"kind {kind_name!r} runs no test suites")
 
 
-def kind_root_files_from(kind_name: str) -> str:
-    """The extension whose root files *kind_name*'s packages join; empty for none.
+def kind_stands_for(kind_name: str) -> tuple[str, ...]:
+    """The extensions *kind_name*'s packages are taken to hold while they list none.
 
-    The kind's own, else its nearest ancestor's.
+    The chain's, ancestors first, each once; empty for a kind the
+    registry does not know, such as the workspace's own unit.
     """
-    for record in reversed(kind_chain(kind_name)):
-        if record.root_files_from:
-            return record.root_files_from
-    return ""
+    if kind_name not in _KINDS:
+        return ()
+    found: dict[str, None] = {}
+    for record in kind_chain(kind_name):
+        found.update(dict.fromkeys(record.stands_for))
+    return tuple(found)
+
+
+def extension_set(package: Package) -> tuple[str, ...]:
+    """The package-level extensions *package* holds, which its checks match.
+
+    Its set, the extensions it lists and those they require, for a
+    package that lists any; what its kind stands for
+    ([livery.workshop._kinds.kind_stands_for][]) otherwise, until the
+    kinds go.
+    """
+    return held_extensions(package.kind, package.extensions)
+
+
+def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
+    """What a package of *kind_name* listing *listed* holds; see `extension_set`."""
+    if not listed:
+        return kind_stands_for(kind_name)
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+
+    return package_set(listed, installed_declaration)
 
 
 def kind_coverage_pages(
@@ -632,9 +653,9 @@ def _register_builtin() -> None:
             examples=_python.run_examples,
             suites=_python.run_test,
             coverage_pages=_python.render_coverage_pages,
-            # The category table is the python extension's declaration,
-            # one table for a package that lists the extension or not.
-            categories_from="python",
+            # A package that lists no extension is taken to hold the
+            # python extension: its categories and checks are the same.
+            stands_for=("python",),
         )
     )
     # The binary extension: a python distribution in every checker's
@@ -659,6 +680,8 @@ def _register_builtin() -> None:
             # there is none, with no compiler in it. A profile checked
             # first is the one the provider finds.
             before_install=_cpp_conan.ensure_profile,
+            # Beside python's, the extension module's C++ sources.
+            stands_for=("cpp",),
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the
@@ -681,12 +704,10 @@ def _register_builtin() -> None:
             artifact="conan",
             wheel_identity="",
             tests_need_build=True,
-            # The conan workspace is the conan extension's root file,
-            # one file for the members that list the extension or not.
-            root_files_from=_cpp_conan.ROOT_FILES_FROM,
-            # The category table is the cpp extension's declaration, one
-            # table for a package that lists the extensions or not.
-            categories_from="cpp",
+            # A package that lists no extension is taken to hold the
+            # three a new one lists: one category table, one conan
+            # workspace and the same checks either way.
+            stands_for=_cpp_conan.STANDS_FOR,
         )
     )
 

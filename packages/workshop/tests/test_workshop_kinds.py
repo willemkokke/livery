@@ -233,9 +233,10 @@ def test_tools_union_along_the_chain_only_when_present(
     # The kinds carry what operates them; the checkers, the formatter
     # and the test runner ride their check records.
     assert kind_tools({"python"}) == ("uv",)
-    from livery.workshop._checks import tools_for_kind
+    from livery.workshop._checks import tools_for
+    from livery.workshop._kinds import kind_stands_for
 
-    assert {tool for tool, _ in tools_for_kind("python")} == {"fake"}
+    assert {tool for tool, _ in tools_for(kind_stands_for("python"))} == {"fake"}
     # A kind registered without the base as its parent gets none of it.
     assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
 

@@ -144,6 +144,7 @@ from livery.extensions.cpp._language import (
     referenced_siblings as referenced_siblings,
 )
 
-#: The extension whose root files a ``cpp-conan`` package that lists no
-#: extension joins: the conan workspace.
-ROOT_FILES_FROM = "conan"
+#: The extensions a ``cpp-conan`` package that lists none is taken to
+#: hold: the three a new one lists, ``cmake`` and ``conan`` and the
+#: ``cpp`` conan requires.
+STANDS_FOR = ("cmake", "conan", "cpp")

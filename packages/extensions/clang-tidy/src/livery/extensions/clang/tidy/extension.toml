@@ -7,12 +7,13 @@ api-version = 1
 # Listed in the workspace's list alone: one set of checks for every member.
 levels = ["workspace"]
 
-# The kind whose members build with a compilation database to read; the
-# lint reads it after the build configures.
+# The C and C++ packages, each linted against the compilation database
+# its build writes: the lint reads it after the build configures, and
+# skips a package whose build writes none.
 [checks.clang-tidy.lint]
 run = "livery.extensions.clang.tidy._checks:judge_lint"
 scope = "package"
-kinds = ["cpp-conan"]
+extensions = ["cpp"]
 after = ["build.configure"]
 tools = ["clang_tidy"]
 arguments = true
@@ -21,13 +22,13 @@ claims = [
     { category = "test", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
 ]
 
-# The checks each native package carries, on every native kind; a deeper
-# file with `InheritParentConfig: true` adds that directory's own lines.
+# The checks each C or C++ package carries; a deeper file with
+# `InheritParentConfig: true` adds that directory's own lines.
 [checks.clang-tidy.lint.fragments.".clang-tidy"]
-kinds = ["cpp-conan", "python-nanobind"]
+extensions = ["cpp"]
 text = '''
-# Rendered by the template channel for the {{ kind }} kind; the gate keeps
-# it matching its render. A `.clang-tidy` deeper in the tree with
+# Rendered by the template channel for each C or C++ package; the gate
+# keeps it matching its render. A `.clang-tidy` deeper in the tree with
 # `InheritParentConfig: true` carries this package's own lines.
 #
 # The families a gate can hold green from the first commit: the bug
