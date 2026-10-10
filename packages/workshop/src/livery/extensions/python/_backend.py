@@ -213,8 +213,7 @@ def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None.
 
     ``None`` under auto-ratchet too, whose floor is the mark on the
-    store; [livery.extensions.python._backend.coverage_policy][] tells
-    the two apart.
+    store; ``coverage_policy`` tells the two apart.
     """
     policy = coverage_policy(package)
     return None if policy is None else policy.floor
