@@ -40,3 +40,11 @@ provides = { resolved = "table" }
 main = "livery.extensions.python._steps:replay"
 reads = ["version", "tree", "interpreter", "index", "extras"]
 provides = { exit-code = "int" }
+
+# What a python package's paths are to it: a change to a test runs that
+# test alone, and a change to anything else its suite and its
+# dependents'.
+[categories]
+test = ["tests/**/test_*.py", "tests/**/*_test.py"]
+test-support = ["tests/**"]
+source = ["src/**"]

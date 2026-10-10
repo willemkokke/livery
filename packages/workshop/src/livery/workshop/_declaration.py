@@ -197,6 +197,8 @@ class Declaration:
             phase.
         queries: The questions about a package it answers, each query's
             name to the function that answers it.
+        categories: The categories it gives its packages' paths, each
+            category to the patterns it takes, relative to the package.
     """
 
     extension: str
@@ -224,6 +226,7 @@ class Declaration:
     fragments: tuple[DeclaredOutput, ...] = ()
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
     queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
+    categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -441,6 +444,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         ),
         phases=phases,
         queries=queries,
+        categories=tuple(
+            (str(category), tuple(str(pattern) for pattern in patterns))
+            for category, patterns in data.get("categories", {}).items()
+        ),
     )
 
 

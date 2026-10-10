@@ -224,3 +224,32 @@ def test_a_red_replay_install_runs_no_test(
         (tmp_path / "scratch" / ".replay", "3.14", "acme-core[x]==1.2.0", "idx")
     ]
     assert tested == []
+
+
+def test_a_python_package_is_categorised_alike_listing_the_extension_or_not() -> None:
+    """One table, the extension's, answers both ways for every python package."""
+    from dataclasses import replace
+
+    import livery.workshop
+    from livery.workshop._categories import category_of
+    from livery.workshop._packages import discover_packages
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
+        pytest.skip("the comparison reads this checkout's packages")
+    paths = (
+        "src/livery/x/mod.py",
+        "tests/test_x.py",
+        "tests/x_test.py",
+        "tests/conftest.py",
+        "docs/index.md",
+        "docs/examples/first.py",
+        "pyproject.toml",
+    )
+    for package in discover_packages(ROOT):
+        if package.kind != "python":
+            continue
+        listing = replace(package, extensions=("python",))
+        plain = replace(package, extensions=())
+        for path in paths:
+            assert category_of(listing, path) == category_of(plain, path), path
+        assert category_of(plain, "src/livery/x/mod.py").supplier == "python"
