@@ -112,6 +112,91 @@ def publish(
     )
 
 
+def proves(package: Package) -> bool:
+    """Whether *package*'s release proves its artifacts in isolated legs.
+
+    Through its extensions' ``prove`` steps where they add them, and its
+    kind otherwise; a kind that builds no wheels proves nothing.
+    """
+    return _adds_steps(package, "prove") or _optional(package, "prove") is not None
+
+
+def prove(
+    package: Package, root: Path, *, resolution: str, release_dirs: tuple[Path, ...]
+) -> dict[str, str]:
+    """One isolated leg of *package*'s release at *resolution*; what it installed.
+
+    Each distribution the leg installed, to its version. *release_dirs*
+    are the co-released set's ``dist/`` directories, the only place the
+    leg finds a sibling's unpublished wheel. Ask
+    [livery.workshop._lifecycle.proves][] first: a package nothing
+    proves refuses here.
+    """
+    from livery.footman import fail
+
+    inputs: dict[str, object] = {
+        "resolution": resolution,
+        "release-dirs": list(release_dirs),
+    }
+    ctx = _run_steps(package, "prove", root, inputs)
+    if ctx is not None:
+        resolved = cast("dict[object, object]", _provided(ctx, "resolved", dict))
+        return {str(name): str(version) for name, version in resolved.items()}
+    reader = _optional(package, "prove")
+    if reader is None:
+        fail(
+            f"{package.path}: nothing proves its release: its extensions add no"
+            " prove step, and its kind proves nothing"
+        )
+    return dict(reader(package, root, release_dirs=release_dirs, resolution=resolution))
+
+
+def replay(
+    package: Package,
+    root: Path,
+    *,
+    tree: Path,
+    version: str,
+    python: str,
+    index: str,
+    extras: str,
+) -> int:
+    """Install *package*'s released *version* alone and run its tests; the exit code.
+
+    *tree* is checked out at the release's receipt tag, *python* is the
+    interpreter, *index* where the version installs from and *extras*
+    the extras installed with it, comma-joined.
+    """
+    from livery.footman import fail
+
+    inputs: dict[str, object] = {
+        "version": version,
+        "tree": tree,
+        "interpreter": python,
+        "index": index,
+        "extras": extras,
+    }
+    ctx = _run_steps(package, "replay", root, inputs)
+    if ctx is not None:
+        return cast("int", _provided(ctx, "exit-code", int))
+    reader = _optional(package, "replay")
+    if reader is None:
+        fail(
+            f"{package.path}: nothing replays its released version: its extensions"
+            " add no replay step, and its kind replays nothing"
+        )
+    return int(
+        reader(
+            package,
+            tree=tree,
+            version=version,
+            python=python,
+            index=index,
+            extras=extras,
+        )
+    )
+
+
 def declared_requirements(package: Package) -> dict[str, str] | None:
     """What *package*'s native manifest requires, each name to its constraint.
 
@@ -200,16 +285,23 @@ def _run_steps(
     which leaves the call to the package's kind backend: the bridge
     while package kinds remain.
     """
-    if not package.extensions:
+    if not _adds_steps(package, phase):
         return None
+    from livery.workshop._phases import run_phase
+
+    return run_phase(phase, package, root, inputs=inputs)
+
+
+def _adds_steps(package: Package, phase: str) -> bool:
+    """Whether an extension of *package*'s set adds steps to *phase*."""
+    if not package.extensions:
+        return False
     from livery.workshop._composition import package_set
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._phases import phase_steps, run_phase
+    from livery.workshop._phases import phase_steps
 
     members = package_set(package.extensions, installed_declaration)
-    if not phase_steps(phase, members, installed_declaration):
-        return None
-    return run_phase(phase, package, root, inputs=inputs)
+    return bool(phase_steps(phase, members, installed_declaration))
 
 
 def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> object:

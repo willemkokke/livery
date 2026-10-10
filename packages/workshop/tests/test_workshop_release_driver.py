@@ -1091,9 +1091,7 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
         events.append(f"leg:{package.name}")
         return {}
 
-    monkeypatch.setattr(
-        "livery.workshop._release_driver._python.run_isolated_test", _leg
-    )
+    monkeypatch.setattr("livery.workshop._lifecycle.prove", _leg)
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),

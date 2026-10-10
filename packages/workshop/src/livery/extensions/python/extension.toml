@@ -30,3 +30,13 @@ provides = { dist = "path" }
 main = "livery.extensions.python._steps:publish"
 reads = ["version", "registry-target"]
 provides = { published = "bool" }
+
+[phases.prove]
+main = "livery.extensions.python._steps:prove"
+reads = ["resolution", "release-dirs"]
+provides = { resolved = "table" }
+
+[phases.replay]
+main = "livery.extensions.python._steps:replay"
+reads = ["version", "tree", "interpreter", "index", "extras"]
+provides = { exit-code = "int" }

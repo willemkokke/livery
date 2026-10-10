@@ -85,39 +85,33 @@ def test_a_missing_receipt_tag_refuses(released: tuple[Path, GitOps, Package]) -
         )
 
 
-def test_a_tree_without_a_package_refuses(tmp_path: Path) -> None:
-    (tmp_path / "src").mkdir()
-    with pytest.raises(_FAILURES, match="holds no package directory"):
-        _replay.import_name(tmp_path / "src")
+def _replayed(
+    monkeypatch: pytest.MonkeyPatch, code: int, seen: dict[str, object] | None = None
+) -> None:
+    """Stand in for the replay phase: record what it got, answer *code*."""
+
+    def _replay(package: Package, root: Path, **given: object) -> int:
+        tree = given["tree"]
+        assert isinstance(tree, Path)
+        if seen is not None:
+            seen.update(given)
+            seen["tests"] = (tree / "packages" / "thing" / "tests").is_dir()
+        return code
+
+    monkeypatch.setattr("livery.workshop._lifecycle.replay", _replay)
 
 
-def test_a_red_install_is_red_before_any_test_runs(
-    released: tuple[Path, GitOps, Package], capsys: pytest.CaptureFixture[str]
+def test_a_red_replay_fails_and_leaves_no_worktree(
+    released: tuple[Path, GitOps, Package], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, git, package = released
-    tested: list[str] = []
-
-    def refuse(venv: Path, python: str, requirement: str, index: str) -> int:
-        return 1
-
-    def never(venv: Path, tree: Path, member: str, module: str) -> int:
-        tested.append(member)
-        return 0
-
+    _replayed(monkeypatch, 1)
     with pytest.raises(
         _FAILURES, match=r"replay of livery-thing==1.2.0 is red \(exit 1\)"
     ):
         _replay.replay_flow(
-            root,
-            git,
-            package,
-            python="3.14",
-            registry=_Index("1.2.0"),
-            index="",
-            installer=refuse,
-            tester=never,
+            root, git, package, python="3.14", registry=_Index("1.2.0"), index=""
         )
-    assert tested == []
     # The temporary worktree is gone either way.
     assert "fm-replay-" not in _git(root, "worktree", "list")
 
@@ -137,12 +131,7 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
 
     monkeypatch.setattr(repo.issue, "search", refuse)
 
-    def installed(venv: Path, python: str, requirement: str, index: str) -> int:
-        return 0
-
-    def red(venv: Path, tree: Path, member: str, module: str) -> int:
-        return 2
-
+    _replayed(monkeypatch, 2)
     with pytest.raises(_FAILURES, match="is red"):
         _replay.replay_flow(
             root,
@@ -152,8 +141,6 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
             registry=_Index("1.2.0"),
             index="",
             repo=repo,
-            installer=installed,
-            tester=red,
         )
     assert (
         "the forge refused the issue: issues are read-only here"
@@ -165,23 +152,13 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
 
 
 def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
-    released: tuple[Path, GitOps, Package], capsys: pytest.CaptureFixture[str]
+    released: tuple[Path, GitOps, Package],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     root, git, package = released
     seen: dict[str, object] = {}
-
-    def installed(venv: Path, python: str, requirement: str, index: str) -> int:
-        seen["install"] = (python, requirement, index)
-        return 0
-
-    def tested(venv: Path, tree: Path, member: str, module: str) -> int:
-        seen["test"] = (
-            member,
-            module,
-            (tree / "packages" / "thing" / "tests").is_dir(),
-        )
-        return 0
-
+    _replayed(monkeypatch, 0, seen)
     _replay.replay_flow(
         root,
         git,
@@ -190,15 +167,14 @@ def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
         registry=_Index("1.2.0", "1.1.0"),
         index="https://index.example/simple",
         extras="github-secrets",
-        installer=installed,
-        tester=tested,
     )
-    assert seen["install"] == (
-        "3.14",
-        "livery-thing[github-secrets]==1.2.0",
-        "https://index.example/simple",
-    )
-    assert seen["test"] == ("thing", "livery.thing", True)
+    assert {key: seen[key] for key in ("version", "python", "index", "extras")} == {
+        "version": "1.2.0",
+        "python": "3.14",
+        "index": "https://index.example/simple",
+        "extras": "github-secrets",
+    }
+    assert seen["tests"] is True
     out = capsys.readouterr().out
     assert (
         "replaying livery-thing[github-secrets]==1.2.0 at packages/thing/v1.2.0"
@@ -223,12 +199,7 @@ def test_a_red_replay_files_then_extends_the_marker_issue(
     monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
     monkeypatch.setenv("GITHUB_RUN_ID", "77")
 
-    def red(venv: Path, tree: Path, member: str, module: str) -> int:
-        return 1
-
-    def green(venv: Path, python: str, requirement: str, index: str) -> int:
-        return 0
-
+    _replayed(monkeypatch, 1)
     for _ in range(2):
         with pytest.raises(_FAILURES, match="is red"):
             _replay.replay_flow(
@@ -239,8 +210,6 @@ def test_a_red_replay_files_then_extends_the_marker_issue(
                 registry=_Index("1.2.0"),
                 index="",
                 repo=repo,
-                installer=green,
-                tester=red,
             )
     out = capsys.readouterr().out
     assert f"filed #1: {_replay.MARKER}" in out

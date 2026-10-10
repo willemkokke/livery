@@ -23,7 +23,6 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
-from livery.extensions.python import _backend as _python
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
 from livery.workshop import _lifecycle
@@ -351,9 +350,7 @@ def validate_member(
     isolate: its own gate already built and ran ctest, so the legs
     skip saying why.
     """
-    from livery.workshop._kinds import kind_for
-
-    if not kind_for(plan.package.kind).wheel_identity:
+    if not _lifecycle.proves(plan.package):
         print(
             f"  {plan.package.name}: isolated legs skip"
             f" ({plan.package.kind} kind publishes no wheels; its own"
@@ -368,8 +365,8 @@ def validate_member(
             f" = false` in {where}"
         )
     for leg in legs:
-        resolved = _python.run_isolated_test(
-            plan.package, root, release_dirs=release_dirs, resolution=leg
+        resolved = _lifecycle.prove(
+            plan.package, root, resolution=leg, release_dirs=release_dirs
         )
         siblings = {
             name: version

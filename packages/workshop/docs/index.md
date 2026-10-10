@@ -230,11 +230,14 @@ any other and no extension provides:
 | --- | --- | --- |
 | `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
 | `build` | `epoch` (`int`), the build's source date; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
+| `prove` | `resolution` (`str`), the leg's dependency resolution, and `release-dirs` (`paths`), the co-released set's `dist/` directories | `resolved` (`table`), each distribution the leg installed, to its version |
 | `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
+| `replay` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the replay's |
 
-The release train stamps, builds and publishes a package through these
-phases when its extensions add steps to them, and through the
-package's kind otherwise. A phase whose steps provide nothing under the
+The release train stamps, builds, proves and publishes a package, and
+`fm release.replay` replays it, through these phases when its
+extensions add steps to them, and through the package's kind
+otherwise. A phase whose steps provide nothing under the
 key the train reads back refuses, naming the phase and the key.
 
 A package-level extension also answers questions about a package:

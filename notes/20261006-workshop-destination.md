@@ -1017,10 +1017,14 @@ slices, each mergeable alone:
       key each phase's steps provide (`changed`, `dist`,
       `published`). The seam runs the phase for a package whose
       extensions add steps to it, and the kind's backend otherwise.
-   3b. **`prove` and `replay`**: the release's isolated legs, one run
-      per resolution with the sibling dists as input, and the replay
-      of a published version, behind the seam and as the extension's
-      steps.
+   3b. **`prove` and `replay`** (issue #1359): the release's isolated
+      legs, one run per resolution with the co-released set's dist
+      directories as input, and the replay of a published version,
+      behind the seam and as the extension's steps. The replay's
+      python half (the plain install and the test run from
+      site-packages) moves into the extension; the flow keeps the
+      orchestration. The release driver stops importing the python
+      extension, and its row leaves `BASE_EXTENSION_IMPORTS`.
    4. **The rest**: its categories, its tool (`uv`) and seeds,
       `run_suites`, `kind_examples` and `workspace_suite`, and the
       reach rule.
