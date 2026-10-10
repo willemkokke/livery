@@ -261,11 +261,6 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     return "\n".join(lines) + "\n"
 
 
-def root_files(members: tuple[Package, ...]) -> dict[str, str]:
-    """The files the kind writes at the root: the conan workspace over *members*."""
-    return {WORKSPACE_FILE: workspace_file(members)}
-
-
 @contextmanager
 def workspace_aside(root: Path) -> Generator[None]:
     """Hide *root*'s conan workspace for the block, so members resolve from the cache.

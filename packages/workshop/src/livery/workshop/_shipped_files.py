@@ -297,7 +297,7 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         kept.append(output)
     # Every output beside the composed ones, whatever the LFS setting:
     # an output the list leaves out is one the delivery withdraws.
-    rest = (*_kind_root_outputs(root), *_schema_outputs(root))
+    rest = (*_root_file_outputs(root), *_schema_outputs(root))
     taken = {output.path: output.owners[0] for output in (*kept, *rest)}
     return (*kept, *computed_outputs(root, order, taken), *rest), notes
 
@@ -317,31 +317,49 @@ def _schema_outputs(root: Path) -> list[Output]:
     ]
 
 
-def _kind_root_outputs(root: Path) -> list[Output]:
-    """The files the present kinds write at the root, each while a package of it exists.
+def _root_file_outputs(root: Path) -> list[Output]:
+    """The files package-level extensions write at the root while a package lists one.
 
-    A kind names its files through its record
-    ([livery.workshop._kinds.kind_root_files][]), handed its packages in
-    path order; a file is the engine's like any composed one, written by
-    the sync, judged by the drift check, and withdrawn with the last
-    package that wanted it.
+    An extension names each file under ``[root-files."<path>"]``, and
+    its render is handed the packages whose set holds the extension, in
+    path order. A package that lists no extension joins the one its
+    kind names ([livery.workshop._kinds.kind_root_files_from][]). A file
+    is the engine's like any composed one: written by the sync, judged
+    by the drift check, and withdrawn with the last package that wanted
+    it.
+
+    Raises:
+        Failed: when two extensions write one path, naming both.
     """
-    from collections.abc import Callable
-
-    from livery.workshop._kinds import kind_root_files
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._kinds import kind_root_files_from
     from livery.workshop._packages import Package, discover_packages
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    writers: dict[Callable[[tuple[Package, ...]], dict[str, str]], list[Package]] = {}
+    members: dict[str, list[Package]] = {}
     for package in sorted(packages, key=lambda p: p.path):
-        writer = kind_root_files(package.kind)
-        if writer is not None:
-            writers.setdefault(writer, []).append(package)
+        if package.extensions:
+            names = package_set(package.extensions, installed_declaration)
+        else:
+            names = (kind_root_files_from(package.kind),)
+        for name in names:
+            if name:
+                members.setdefault(name, []).append(package)
+    writers: dict[str, str] = {}
     found: list[Output] = []
-    for writer, members in writers.items():
-        for path, text in sorted(writer(tuple(members)).items()):
-            found.append(Output(path, text.encode(), (f"{SELF}:{path}",)))
-    return found
+    for name, group in sorted(members.items()):
+        declared = installed_declaration(name)
+        for item in declared.root_files if declared is not None else ():
+            if item.path in writers:
+                fail(
+                    f"{item.path}: both {writers[item.path]} and {name} write it at"
+                    " the root; a root file has one writer, so list one of the two"
+                )
+            writers[item.path] = name
+            text = str(item.render(tuple(group)))
+            found.append(Output(item.path, text.encode(), (f"{name}:{item.path}",)))
+    return sorted(found, key=lambda output: output.path)
 
 
 def deliver(root: Path, *, local_only: bool = False) -> list[str]:

@@ -111,9 +111,6 @@ from livery.extensions.conan._package import (
     restore_from_releases as restore_from_releases,
 )
 from livery.extensions.conan._package import (
-    root_files as root_files,
-)
-from livery.extensions.conan._package import (
     save_cache as save_cache,
 )
 from livery.extensions.conan._package import (
@@ -146,3 +143,7 @@ from livery.extensions.cpp._language import (
 from livery.extensions.cpp._language import (
     referenced_siblings as referenced_siblings,
 )
+
+#: The extension whose root files a ``cpp-conan`` package that lists no
+#: extension joins: the conan workspace.
+ROOT_FILES_FROM = "conan"

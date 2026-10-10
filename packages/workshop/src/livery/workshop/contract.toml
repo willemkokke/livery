@@ -840,6 +840,18 @@ doc = "the categories a package-level extension gives its packages' paths, which
 types = ["strs"]
 doc = "a category, by its name, to the paths it takes, as patterns relative to the package"
 
+[contract.extension.root-files]
+types = ["table"]
+doc = "the files a package-level extension writes at the workspace root while a package lists it, by their path from the root"
+
+[contract.extension.root-files."*"]
+types = ["table"]
+doc = "one file at the root, and the render that writes it"
+
+[contract.extension.root-files."*".render]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the packages that list the extension, in path order; it answers the file's text"
+
 [contract.extension.rules]
 types = ["table"]
 doc = "the rules an extension adds to the layering check, by name, each over the python sources the check parses once"

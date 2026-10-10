@@ -14,3 +14,10 @@ compatible = ["cmake"]
 test = ["tests/**/*.cpp", "tests/**/*.cc", "tests/**/*.cxx", "tests/**/*.c"]
 test-support = ["tests/**"]
 source = ["src/**", "include/**"]
+
+# The questions about a package this extension answers: a C or C++
+# package names no module, since other packages reach it through its
+# headers.
+[queries]
+module-roots = "livery.extensions.cpp._language:module_roots"
+public-modules = "livery.extensions.cpp._language:public_modules"
