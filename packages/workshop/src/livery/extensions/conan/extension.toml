@@ -9,3 +9,29 @@ levels = ["package"]
 # package.
 requires = ["cpp"]
 compatible = ["cmake"]
+
+# The questions about a package this extension answers, from its recipe.
+[queries]
+current-version = "livery.extensions.conan._answers:current_version"
+version-files = "livery.extensions.conan._answers:version_files"
+requirements = "livery.extensions.conan._answers:requirements"
+
+# The steps this extension adds to a package's lifecycle phases.
+[phases.stamp]
+main = "livery.extensions.conan._steps:stamp"
+reads = ["version"]
+provides = { changed = "strs" }
+
+[phases.build]
+main = "livery.extensions.conan._steps:build"
+provides = { dist = "path" }
+
+[phases.publish]
+main = "livery.extensions.conan._steps:publish"
+reads = ["version", "registry-target"]
+provides = { published = "bool" }
+
+# The conan workspace at the root: each member that lists conan resolves
+# its siblings from their sources through it.
+[root-files."conanws.yml"]
+render = "livery.extensions.conan._package:workspace_file"

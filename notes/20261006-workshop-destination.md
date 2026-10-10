@@ -1063,10 +1063,13 @@ slices, each mergeable alone:
       `cpp-conan` seed lists `cmake` and `conan`. The tools wait: each
       extension declares them under `[toolroom] requires` once no base
       module names them.
-   3. **The queries and phases** the backend answers: `current-version`,
-      `version-files`, `requirements`, `module-roots` and
-      `public-modules`; `stamp`, `build` and `publish`; and
-      `conanws.yml` as `conan`'s `[root-files."conanws.yml"]`.
+   3. **The queries and phases** (issue #1372): `conan` answers
+      `current-version`, `version-files` and `requirements` and adds
+      the `stamp`, `build` and `publish` steps; `cpp` answers
+      `module-roots` and `public-modules`. `extension.toml` takes
+      `[root-files."<path>"]`, and `conanws.yml` is `conan`'s: a package
+      that lists no extension joins the root files of the extension its
+      kind names, as it takes its categories.
    4. **The checks name extensions**: a check's `kinds` becomes
       `extensions`. The build and test checks move into `cmake` and
       claim files by category; clang-format and clang-tidy name `cpp`;
@@ -2018,6 +2021,12 @@ the stack, which this design neither needs nor rules out).
   same tools for every `cpp-conan` package, so declaring them sooner
   would add those allowance rows and change nothing else. The parts
   and slices that move the code naming them shrink the list.
+- 2026-10-10, decided while building slice 3's third part (issue
+  #1372): a `cpp-conan` package that lists no extension joins the
+  conan extension's root files, so a workspace whose members list
+  conan or nothing has one `conanws.yml`. The kind names the extension
+  through its backend module, `ROOT_FILES_FROM`, since the base may
+  spell no new kind word; both go with the kinds in slice 6.
 
 ## Open
 

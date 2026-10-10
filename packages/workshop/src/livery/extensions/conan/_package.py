@@ -248,8 +248,7 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     lines = [
         "# The conan workspace: a conan command run inside this folder",
         "# resolves each package below from its source tree. Rendered from",
-        "# the members whose kind packages with conan; the gate keeps it",
-        "# matching.",
+        "# the members packaged with conan; the gate keeps it matching.",
         "packages:",
         *(
             f"  - path: {member.path}"
@@ -259,11 +258,6 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
         ),
     ]
     return "\n".join(lines) + "\n"
-
-
-def root_files(members: tuple[Package, ...]) -> dict[str, str]:
-    """The files the kind writes at the root: the conan workspace over *members*."""
-    return {WORKSPACE_FILE: workspace_file(members)}
 
 
 @contextmanager

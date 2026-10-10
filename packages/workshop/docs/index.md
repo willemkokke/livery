@@ -87,6 +87,10 @@ spelling. Every key is optional:
   packages' paths, each category to the patterns it takes; a package
   whose extensions declare categories is answered by them and the base
   kind's rules, and its own `[categories]` wins over both;
+- `[root-files."<path>"]`, a file a package-level extension writes at
+  the workspace root while a package lists it: `render`, the
+  `"module:function"` called with those packages in path order, which
+  answers the file's text; two extensions writing one path refuse;
 - `[rules.<name>]`, a rule the extension adds to the layering check,
   over the python sources the check parses once: `judge`, the
   `"module:function"` that returns the problems, and an optional `fix`,
@@ -574,11 +578,12 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
-While the workspace has a member whose kind packages with conan,
-`fm sync` also writes `conanws.yml` at the root, listing each such
-member by its path. A conan command run inside the checkout resolves
-a member from its source tree through that file, and nothing is
-registered in the conan home. So each checkout of a repository, a
+While the workspace has a member that lists the `conan` extension,
+or whose kind packages with conan, `fm sync` also writes
+`conanws.yml` at the root, the conan extension's root file, listing
+each such member by its path. A conan command run inside the checkout
+resolves a member from its source tree through that file, and nothing
+is registered in the conan home. So each checkout of a repository, a
 worktree included, resolves to its own sources, and all of them share
 one package cache. The file goes with the last such member, and the
 drift check judges it like any composed file.

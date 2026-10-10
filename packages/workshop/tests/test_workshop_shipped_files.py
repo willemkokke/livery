@@ -113,7 +113,20 @@ def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the
     text = (root / "conanws.yml").read_text()
     assert text.endswith("packages:\n  - path: packages/geometry\n")
     assert shipped_drift(root) == []
-    # The last member leaves, and the file goes with it.
+    # A member listing conan joins the same file as one listing nothing.
+    listing = root / "packages" / "mesh"
+    listing.mkdir(parents=True)
+    (listing / "workshop.toml").write_text(
+        'kind = "cpp-conan"\nname = "acme-mesh"\nextensions = ["cmake", "conan"]\n'
+    )
+    deliver(root)
+    text = (root / "conanws.yml").read_text()
+    assert text.endswith(
+        "packages:\n  - path: packages/geometry\n  - path: packages/mesh\n"
+    )
+    assert shipped_drift(root) == []
+    # The last members leave, and the file goes with them.
+    shutil.rmtree(listing)
     shutil.rmtree(member)
     assert any(line.startswith("  removed conanws.yml") for line in deliver(root))
     assert not (root / "conanws.yml").exists()

@@ -299,12 +299,9 @@ class KindRecord:
             heads their chains with its tools and seed tree, builds
             nothing, and is never a package's ``kind``. A concrete
             kind needs a backend; an abstract one has none.
-        root_files: The files the kind writes at the workspace root
-            while a package of it exists, given those packages in path
-            order: a map from each file's path to its text. The sync
-            writes them, the drift check judges them, and each goes
-            with the last such package. None for a kind with no such
-            files. A child kind takes the nearest ancestor's.
+        root_files_from: The extension whose ``[root-files]`` a package
+            of the kind that lists no extension joins; empty for a kind
+            that writes none. A child kind takes the nearest ancestor's.
         before_install: What a member of the kind needs in place
             before ``uv sync`` installs it, given the workspace root;
             the lines it prints. None for a kind that needs nothing.
@@ -330,7 +327,7 @@ class KindRecord:
     suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
-    root_files: Callable[[tuple[Package, ...]], dict[str, str]] | None = None
+    root_files_from: str = ""
     before_install: Callable[[Path], list[str]] | None = None
     categories_from: str = ""
 
@@ -533,14 +530,15 @@ def run_suites(
     fail(f"kind {kind_name!r} runs no test suites")
 
 
-def kind_root_files(
-    kind_name: str,
-) -> Callable[[tuple[Package, ...]], dict[str, str]] | None:
-    """The root files writer of *kind_name*, else its nearest ancestor's."""
+def kind_root_files_from(kind_name: str) -> str:
+    """The extension whose root files *kind_name*'s packages join; empty for none.
+
+    The kind's own, else its nearest ancestor's.
+    """
     for record in reversed(kind_chain(kind_name)):
-        if record.root_files is not None:
-            return record.root_files
-    return None
+        if record.root_files_from:
+            return record.root_files_from
+    return ""
 
 
 def kind_coverage_pages(
@@ -683,7 +681,9 @@ def _register_builtin() -> None:
             artifact="conan",
             wheel_identity="",
             tests_need_build=True,
-            root_files=_cpp_conan.root_files,
+            # The conan workspace is the conan extension's root file,
+            # one file for the members that list the extension or not.
+            root_files_from=_cpp_conan.ROOT_FILES_FROM,
             # The category table is the cpp extension's declaration, one
             # table for a package that lists the extensions or not.
             categories_from="cpp",

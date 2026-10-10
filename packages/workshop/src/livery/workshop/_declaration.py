@@ -141,6 +141,21 @@ class DeclaredOutput:
 
 
 @dataclass(frozen=True)
+class DeclaredRootFile:
+    """A file a package-level extension writes at the root: ``[root-files."<path>"]``.
+
+    Attributes:
+        path: The file's path from the workspace root.
+        render: The function the workshop calls with the packages whose
+            set holds the extension, in path order; it answers the
+            file's text.
+    """
+
+    path: str
+    render: Reference
+
+
+@dataclass(frozen=True)
 class DeclaredRule:
     """A rule an extension adds to the layering check, over the parsed sources.
 
@@ -214,6 +229,8 @@ class Declaration:
             name to the function that answers it.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
+        root_files: The files it writes at the workspace root while a
+            package lists it.
         rules: The rules it adds to the layering check, by name.
     """
 
@@ -243,6 +260,7 @@ class Declaration:
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
     queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    root_files: tuple[DeclaredRootFile, ...] = ()
     rules: dict[str, DeclaredRule] = field(default_factory=dict[str, DeclaredRule])
 
 
@@ -464,6 +482,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         categories=tuple(
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
+        ),
+        root_files=tuple(
+            reader.root_file(str(path), table, identity)
+            for path, table in data.get("root-files", {}).items()
         ),
         rules={
             str(name): reader.rule(str(name), table)
@@ -927,6 +949,31 @@ class _Reader:
             if "widen" in table
             else None,
             ignores=tuple(table.get("ignores", ())),
+        )
+
+    def root_file(
+        self, path: str, table: dict[str, Any], identity: dict[str, Any]
+    ) -> DeclaredRootFile:
+        """The root file *path* names, written by the render its table references.
+
+        A root file is written while a package lists the extension, so
+        one listed at the workspace alone declares none.
+        """
+        where = ("root-files", path)
+        if "package" not in identity.get("levels", ("workspace",)):
+            raise self.refuse(
+                where,
+                "is written while a package lists the extension, and this"
+                " extension's levels are workspace; add 'package' to levels, or"
+                " drop the file",
+            )
+        if "render" not in table:
+            raise self.refuse(
+                where,
+                "names no render; a root file's code is render = 'module:function'",
+            )
+        return DeclaredRootFile(
+            path, self.reference(table["render"], (*where, "render"))
         )
 
     def rule(self, name: str, table: Mapping[str, Any]) -> DeclaredRule:
