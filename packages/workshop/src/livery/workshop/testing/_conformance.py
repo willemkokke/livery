@@ -729,6 +729,7 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
         distribution_of,
         normal_name,
         shipping_distribution,
+        ships_elsewhere,
     )
 
     found = _declared_of(subject)
@@ -755,7 +756,10 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
         normal_name(extra) for extra in dist.metadata.get_all("Provides-Extra") or ()
     }
     violations: list[Violation] = []
-    for target in declared.requires:
+    # A target the same wheel ships is held to it by being in it.
+    requires = [name for name in declared.requires if ships_elsewhere(name, dist.name)]
+    claims = [name for name in claims if ships_elsewhere(name, dist.name)]
+    for target in requires:
         wanted = normal_name(distribution_of(target))
         if (wanted, frozenset()) not in required:
             violations.append(

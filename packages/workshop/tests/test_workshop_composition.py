@@ -337,6 +337,13 @@ def test_a_claim_missing_from_the_wheels_metadata_fails_the_kit(
         "Provides-Extra: acme-python\n"
     )
     assert clause.judge(Subject("acme_kit_meta")) == []
+    # A target the extension's own wheel ships needs no dependency on it.
+    metadata.write_text(
+        "Metadata-Version: 2.4\nName: acme-base\nVersion: 0.1\n"
+        'Requires-Dist: acme-python>=1.0; extra == "acme-python"\n'
+        "Provides-Extra: acme-python\n"
+    )
+    assert clause.judge(Subject("acme_kit_meta")) == []
 
 
 # What a package's set is.
@@ -602,3 +609,19 @@ def test_a_listed_claim_installs_with_its_extra(
         entries[::2], {"livery-workshop"}
     )
     assert alone == ["acme-nanobind"]
+
+
+def test_a_claim_on_an_extension_of_the_same_wheel_puts_no_extra_in_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        python=PACKAGE,
+        nanobind=PACKAGE + 'compatible = ["acme.python"]\n',
+    )
+    present = ("acme.python", "acme.nanobind")
+    assert _extensions.extension_extras("acme.nanobind", present) == ("acme-python",)
+    # One wheel shipping both holds the two to its one version.
+    monkeypatch.setattr(_extensions, "distribution_of", lambda _name: "acme-kit")
+    assert _extensions.extension_extras("acme.nanobind", present) == ()

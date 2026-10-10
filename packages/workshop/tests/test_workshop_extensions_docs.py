@@ -68,7 +68,7 @@ def test_the_base_extension_import_allowance_is_exact() -> None:
 
     src = ROOT / "packages" / "workshop" / "src"
     stale: list[str] = []
-    for dotted, (extension, _reason) in BASE_EXTENSION_IMPORTS.items():
+    for dotted, extension in BASE_EXTENSION_IMPORTS:
         tree = ast.parse((src / f"{dotted.replace('.', '/')}.py").read_text("utf-8"))
         imported = {
             node.module or ""

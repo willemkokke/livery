@@ -67,7 +67,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
@@ -1817,3 +1817,19 @@ def drift(root: Path) -> dict[str, str]:
             continue
         found[name] = ""
     return found
+
+
+def undeployed(name: str) -> NoReturn:
+    """Refuse: *name* is a tool of the store this machine has not deployed.
+
+    A toolroom handle spawns its tool by name, which the entered
+    environment puts on PATH. A machine that never deployed
+    the tool raises ``OSError`` from the spawn instead, and a
+    traceback names nothing a person can do, so each call turns one
+    into this sentence.
+    """
+    fail(
+        f"{name} is not on PATH: it is a tool of the store, so enter the"
+        f" environment (`{prog()} sync`, then the printed"
+        " env.emit line) and re-run"
+    )

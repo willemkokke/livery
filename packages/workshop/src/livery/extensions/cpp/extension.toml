@@ -1,0 +1,9 @@
+# C and C++: what the languages tell the workshop about a package's
+# files. Optional for a build; it sharpens what a change runs and what
+# the formatter and the linter judge.
+
+[extension]
+api-version = 1
+# Listed in a package's extensions.
+levels = ["package"]
+compatible = ["cmake"]

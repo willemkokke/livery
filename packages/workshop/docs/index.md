@@ -298,11 +298,12 @@ package's directory.
 
 An extension's wheel carries its relations. Each `requires` target is
 a dependency of the wheel, and each `compatible` or `[for.<target>]`
-target is an extra of it that requires the target's distribution. The
-composed dev group installs an extension with the extras its listed
-targets put in use, so the version ranges its wheel states hold. The
-conformance kit's `requirements-in-metadata` clause judges the wheel's
-metadata against the declaration.
+target is an extra of it that requires the target's distribution. A
+target that ships in the same wheel needs neither, since one wheel has
+one version. The composed dev group installs an extension with the
+extras its listed targets put in use, so the version ranges its wheel
+states hold. The conformance kit's `requirements-in-metadata` clause
+judges the wheel's metadata against the declaration.
 
 The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its

@@ -1,0 +1,9 @@
+# CMake: a CMake project's gate build, configured, compiled and tested
+# through ctest, in whatever language the project builds. Requires no
+# language: a project lists cmake alone and builds with the tools and
+# libraries the host provides.
+
+[extension]
+api-version = 1
+# Listed in a package's extensions.
+levels = ["package"]

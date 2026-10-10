@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.workshop import _publish
 from livery.workshop._backends import _cpp_conan
@@ -138,7 +139,7 @@ def _recorded_conan(
         calls.append((args, dict(env or {})))
         return _Done()
 
-    monkeypatch.setattr(_cpp_conan, "_conan", _fake)
+    monkeypatch.setattr(_conan, "_conan", _fake)
     for name in (
         "CONAN_LOGIN_USERNAME",
         "CONAN_PASSWORD",
@@ -205,7 +206,7 @@ def test_the_publish_seam_hands_the_targets_token_to_the_upload(
         seen.append(token)
         return True
 
-    monkeypatch.setattr(_cpp_conan, "publish", _publish)
+    monkeypatch.setattr(_conan, "publish", _publish)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
     target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
     assert _cpp_conan.publish_artifact(
@@ -325,7 +326,7 @@ def test_the_cross_kind_wave_orders_and_dispatches(
 
     monkeypatch.setattr(cpp, "build", _fake_build)
     monkeypatch.setattr(nb, "build", _fake_build)
-    monkeypatch.setattr(cpp, "publish", _fake_conan_publish)
+    monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
@@ -463,7 +464,7 @@ def test_prebuilt_refuses_an_empty_collection(
     from livery.workshop._backends import _cpp_conan as cpp
 
     monkeypatch.setattr(cpp, "build", lambda p, r, epoch=0: p.directory / "dist")
-    monkeypatch.setattr(cpp, "publish", _fake_conan_publish)
+    monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
 
     def registry_for(package: Package) -> _Ledger:
         return conan_registry if package.kind == "cpp-conan" else registry
