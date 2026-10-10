@@ -92,10 +92,14 @@ extensible gate plan's open item 17 and the plan it names).
 6. **One answer for conan, CMake and the measurer.** The conan
    profile is rendered from the receipt, never detected a second
    time; the measurer follows the receipt's family.
-7. **The unreal kind reads the engine.** Its declaration derives from
+7. **The unreal extension judges against the engine.** It reads
    `Engine/Config/<Platform>/<Platform>_SDK.json` of the engine the
-   project names, never from a table typed by hand; the Linux cross
-   toolchain stays UnrealBuildTool's own download.
+   project names and refuses a resolved toolchain the file bans or
+   leaves below its minimum, quoting the engine's own comment; the
+   declaration stays typed, a floor or an exact version per family.
+   The Linux cross toolchain stays UnrealBuildTool's own download.
+   Amended 2026-10-10; before that the declaration derived from the
+   file.
 8. **The lock schema stays additive.** New fields; nothing existing
    changes meaning. A lock written before this plan reads unchanged.
 9. **Everything through `fm`.** `fm sync` resolves, `fm doctor`
@@ -427,16 +431,18 @@ Deliverables:
 
 Deliverables:
 
-- The kind reads the engine's three json files and derives the
-  declaration; a missing engine path refuses naming it.
+- The extension reads the engine's three json files and judges the
+  resolved toolchain against them in its sync step; a missing engine
+  path refuses naming it.
 - `fm doctor` on an unreal project says which of Visual Studio, Xcode
   or the cross toolchain the host lacks and the version window.
 
 **Acceptance**
 
-- A test engine config tree of the json shape yields the declaration
-  the table in this note states for 5.7; the derived spec for a
-  banned MSVC range refuses with the engine's own comment quoted.
+- A test engine config tree of the json shape and a receipt naming a
+  banned MSVC version refuse with the engine's own comment quoted,
+  naming a version that would pass; a receipt inside the preferred
+  range passes.
 
 ## Temporary, replaced by
 
@@ -516,6 +522,14 @@ Deliverables:
   goes and `slim` and `full` exclude both tools. This replaces the
   ruling above and open item 4; the extensions plan's decision record
   has the reasons.
+
+- 2026-10-10, Willem: the unreal extension judges the resolved
+  toolchain against the engine's file instead of deriving a
+  declaration from it; the person pins an exact version where the
+  host's newest is banned. Why: the engine's file holds preferred and
+  banned ranges and a clang-per-MSVC table, which a floor or an exact
+  version cannot hold, and the workshop need only check against it.
+  Contract 7 and phase 4 amended.
 
 ## Open
 

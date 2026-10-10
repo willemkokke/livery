@@ -25,6 +25,14 @@ for the first time. The second slice, the python extension, is built
 release scenario passed on every part. The third slice, cpp, cmake and
 conan, is built in four parts (issues #1367, #1369, #1372 and #1374);
 the workshop and the eight tool extensions it changes release together.
+On 2026-10-10 Willem ruled, from a review of the native direction,
+one mechanism for everything a package goes through: phases with
+named steps, declared by the base and by extensions alike, replacing
+checks, roles, the phase steps' `pre` and `post`, `compatible`, the
+generators and five smaller registries. The section "One mechanism"
+states it, issue #1377 builds it after 11b's slice 4 and before 11c,
+and the same evening's rulings on development speed are under "The
+sprint" (issues #1378, #1379 and #1380).
 The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
@@ -323,6 +331,149 @@ every kind the check judges"). What changes:
 
 Everything else the docs extension reaches is generic and becomes
 public under the names in the next section.
+
+## One mechanism (ruled 2026-10-10)
+
+Where this section and the sections before it differ, this section
+rules. They describe the design as it stood on 2026-10-07 and the code
+as built through 11b's slice 3; issue #1377 moves the code.
+
+An extension says three kinds of thing: what it runs, what it answers
+and what it writes. What it runs is a **step** of a **phase**; what it
+answers is a **query**; what it writes is a **fragment** or a seed.
+
+**A step** is declared at `[phases.<phase>.<step>]` with one body, its
+tool's words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or a `run`
+reference, and the keys a check carries: `scope`, `narrowing`, `claims`,
+`extensions`, `options`, `fragments`, `inputs`, `after`, `tools`,
+`arguments`, `tests-only`, `enabled`, plus `provides` and `reads`, typed
+keys from one step to another inside the phase, and the phase's engine
+keys. A check of role R by tool T is the step T of phase R:
+`[checks.ruff.format]` is `[phases.format.ruff]`. `pre` and `post` go: a
+named step and `after` say the same thing, and a step that needs
+cleanup on failure does it itself. A step may declare `isolated = true`
+or `false` to serve one side of a phase alone. Two extensions declaring
+one `<phase>.<step>` refuse at mount, unless one declares `replaces` or
+`deletes` by `<owner>:<phase>.<step>` with a reason. Alone, a step is a
+footman task, `fm format.ruff`; inside a phase walk it is a footman
+step, built and handed to `parallel()`, so the concurrency, the record,
+capture, timeout and cancellation are footman's.
+
+**A phase** is declared, by the base in its `contract.toml` and by an
+extension in `extension.toml` in the same grammar: its engine keys,
+typed; its level, package or workspace; its placement, whether
+`fm check` includes it and where it sits in the train's order, by
+`after`; and whether its verb is generated. A phase no mounted
+extension declares refuses naming the declared ones. The base declares:
+
+| Phase | Run by | Engine keys |
+| --- | --- | --- |
+| sync, clean | their verbs | |
+| build | `fm check`, `fm build`, `fm run`, the train | `isolated`, `configuration`, `epoch` |
+| format, lint, typecheck, typecomplete, examples | `fm check`, their verbs | |
+| drift, provenance, layering | `fm check`, their verbs | |
+| test | `fm check`, `fm test`, the train | `isolated`, `resolution`, `release-dirs` |
+| stamp, publish, verify | the train | as 11b's slice 2 declares them; verify was replay |
+| configure | `fm workflow.configure` | |
+| run | `fm run`, the owner's step alone | `executable`, `arguments` |
+
+The docs extension declares the docs phase, and its generators are
+that phase's steps.
+
+**Isolated and configuration.** `isolated` means from a copy of the
+sources in a fresh environment against released siblings: `uv build`,
+`conan create`, cibuildwheel, a fresh venv at a resolution. The same
+word covers a build and a test. A configuration names a preset in the
+package's composed `CMakePresets.json`: `instrumented` for `fm check`,
+`debug` for `fm run` and a bare `fm build`, `release` for the train and
+for `--configuration=release`, later a platform's name. A configuration
+is one more preset, never a mechanism. prove folds into test: the train
+runs the test phase isolated once per resolution `[release] prove`
+lists, `floor` (lowest-direct), `latest` (a fresh resolution at the
+newest versions) or `head` (the lock as it stands, from the built
+wheel), with the co-released set's dist directories as `release-dirs`;
+`prove-floors` refuses naming the list. This repository lists `head`.
+
+**One walk.** `run_phase` as built, with a step running at its
+extension's level and independent steps running concurrently.
+`fm check` runs the gate's phases through it with its engine unchanged:
+what changed, the claims, the batching under the command-line limit,
+fixers before judges under `--fix`, the proved tree. `fm run` runs build
+over the dependency closure, tree and debug, then run. The train runs
+stamp, build isolated in release, test isolated per listed resolution,
+publish, verify.
+
+**Composition is requires alone.** A package lists its extensions,
+requires pulls in the rest, and the canonical list names the
+combination. `compatible`, `before` and `after` on `[extension]`, the
+every-pair check and `fm extensions --combinations` go. Two steps that
+cannot share a package are refused by the phase's own rules, two
+providers of one key or two owners of one executable; a `conflicts` key
+is the shape if a pair ever needs refusing by name, and none does.
+
+**Folded into the three.** Slots and contributions become queries an
+extension declares with a combine rule, `docs.members` with `nearest`,
+which others answer. Root files become fragments, since a fragment
+lives exactly while its owner is listed and a package-level extension
+is listed while a package lists it. `[setup]` becomes the configure
+phase. `[rules]` become steps of the layering phase over one parse per
+language. `release-notes` becomes a query with one answer. Options and
+`listed-with` become `enabled` on the step, declared false by the
+extension and set true at the step's address in the root contract, so
+`basedpyright[typecomplete]` is one line under
+`[phases.typecomplete.basedpyright]`. `transport`, `threshold` and
+`roles` leave the record, and `editor-extension` is a contribution.
+`[for.<target>]` carries every table the top level does.
+
+**The native extensions under it.** cmake declares the build step,
+which configures and builds the preset the configuration names, the
+ctest step, the compile-commands query per configuration, clean, and
+the run step for the executables it answers; it seeds the three presets
+and composes the presets file from fragments, and the command line in
+code and `build/gate` go. conan's provider line and coverage's
+instrumentation line are fragments of that file. conan declares the
+isolated build, stamp, publish and verify steps, its queries,
+`conanws.yml` as a fragment, the build-environment query, and the sync
+step rendering its profile from the toolchain receipt. python declares
+the isolated build, stamp, publish and verify; pytest the test step,
+tree in the venv and isolated in a fresh one, and examples; the isolated
+test is the one key between two extensions, python providing the
+environment and pytest reading it. nanobind requires python, cmake and
+cpp: its tree build makes the module importable in the venv in cmake's
+build directory, its isolated build is cibuildwheel per host through
+the wheels job it declares, and it reads conan's build environment when
+conan is listed and an empty table otherwise. unreal judges the
+resolved toolchain against the engine's SDK file and refuses with the
+engine's own comment; the declaration stays typed.
+
+Two designs follow, each its own, after #1377: `claims` and `inputs` as
+one way to say what a step reads, and CI jobs as a phase's placement
+with its plumbing, `installs`, `deploy`, `token`, `fetch`.
+
+## The sprint (ruled 2026-10-10)
+
+Development speed first, while this repository is its own only
+consumer. Each rule is set now and set back at alpha.
+
+- Releases happen on demand, when something outside this repository
+  needs a version, and release the whole set. Between releases main
+  carries breaks. The train is proven by the loop's release scenario
+  on a cadence, publishing nothing, and by `fm workflow.release
+  --local` only in a slice that touches the train (#1380). The rule
+  that a phase's go covers its releases, and the schedule under "First
+  publishes", are retired.
+- A pull request's check legs run on one runner; the merge and nightly
+  points run every runner. A Windows or macOS fault lands on main and
+  is fixed forward (#1379).
+- The loop's runner enters the workspace once per pass: 176 s of a
+  183 s leg is the entry today (#1378).
+- A mechanism lands with its first consumer, never on fixtures alone,
+  tests for the real case first.
+- Inside a refactor slice a package's coverage floor follows the
+  measured value, tracked in the temporary table, and the ratchet
+  restores it after.
+- A decision record entry is what, why, what it replaced and the
+  issue; the detail is the issue's.
 
 ## The public API, as a contract
 
@@ -783,6 +934,11 @@ here; the mapping is in the decision record.
 
 ### First publishes
 
+Retired on 2026-10-10: releases happen on demand (#1380), so a phase's
+distributions release with the next wave something outside this
+repository needs, not on the phase's release day. The names and the
+debt below stand.
+
 PyPI holds every name the remaining phases release. On 2026-10-09 each
 project was created with a placeholder, version `0.0.0.dev0`: an empty
 wheel and an sdist, uploaded by a workflow of the temporary repository
@@ -952,7 +1108,11 @@ eleven queries); `fm run` (#1335, built: the verb, the development
 build and its record, the run phase's owner main, and #1299's fix, so
 a verb inside a package resolves the workspace at its root). Until 11b
 the tests compose fixture extensions; the acceptance's C++ application
-runs on 11b's cpp extension, an open line until then.
+runs on 11b's cpp extension, an open line until then. Of these,
+`compatible`, `before`, `after`, the pair check, the combinations,
+`pre`, reversed `post` and the context's failure fields go with #1377
+(ruled 2026-10-10); the canonical list, the queries, `answer` and
+`fm run` stay.
 
 **11b, the package extensions** (the plan's 11b, with two changes):
 `python`, `cpp`, `cmake`, `conan`, `nanobind`, `unreal`; the backends
@@ -1097,18 +1257,28 @@ slices, each mergeable alone:
    profile before `uv sync` builds it, and which of conan's roles it
    takes, a recipe's requirements or a member of `conanws.yml`, is
    this slice's to decide.
-5. **11c, the generators**, before the registry goes, since the docs
+5. **One mechanism** (issue #1377): phases with named steps replace
+   checks, roles and the phase steps' `pre` and `post`; composition is
+   requires alone; the folds the section "One mechanism" lists. The
+   phase declarations of slices 2 to 4 are re-spelled here, a rename
+   of tables and nothing else.
+6. **11c, the docs phase**, before the registry goes, since the docs
    extension reads the extractor and the coverage pages from the kinds
-   until then.
-6. **The kinds go**: the registry, `KindRecord`, `Backend`, the
+   until then: the generators become steps of the docs phase the docs
+   extension declares.
+7. **The kinds go**: the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
    the python extension; `fm new.package` takes a combination,
-   completed from `fm extensions --combinations`.
-7. **Each extension leaves the workshop wheel** for its own
+   completed from the installed package-level extensions, since the
+   combinations listing goes with #1377.
+8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09.
 
-**11c, the generators.** `[generators.<name>]` and the members policy in
+**11c, the docs phase.** Ruled 2026-10-10: the generators below are
+steps of the docs phase the docs extension declares, and
+`[generators.<name>]` goes with #1377; read the paragraph with that
+substitution. `[generators.<name>]` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
 `zensical.toml` becomes a composed file of the fragment engine, the
 docs extension's dynamic fragment with contributed tables; `Extractor`
@@ -1131,11 +1301,11 @@ check, python's extension answering it. This repository and
 
 Acceptance, refusals first:
 
-- the plan's 11 refusals: `test_an_unconnected_pair_refuses_naming_both`,
+- the plan's 11 refusals, as #1377 leaves them:
   `test_two_providers_of_one_key_refuse`,
-  `test_a_post_runs_after_a_failed_main_and_sees_the_failure`,
-  `test_two_extensions_naming_one_executable_refuse`;
-- `test_a_generator_for_an_unlisted_extension_is_never_asked`,
+  `test_two_extensions_naming_one_executable_refuse`; the pair and the
+  post refusals go with the pair check and `post`;
+- `test_a_docs_step_for_an_unlisted_extension_is_never_asked`,
   `test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_block`;
 - `fm run` of a C++ application rebuilds only what changed (a counting
   seam);
@@ -1262,8 +1432,13 @@ the stack, which this design neither needs nor rules out).
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
-| the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's `[checks]`, once a package holds cmake only by listing it (phase 11b, slice 6) |
+| the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
+| `[checks.<tool>.<role>]`, `[phases.<phase>]` with `pre`, `main` and `post`, `PHASES`, `ENGINE_KEYS`, the context's failure fields | `[phases.<phase>.<step>]` and declared phases (#1377) |
+| `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
+| `[generators]`, `[slots]` and `[contributions]`, `[root-files]`, `[setup]`, `[rules]`, `release-notes`, `[options]` and `listed-with`, `transport`, `threshold`, `roles`, `editor-extension` | the docs phase's steps, declared queries, fragments, the configure phase, layering steps, a query, `enabled`, nothing, a contribution (#1377) |
+| the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
+| `[release] prove-floors`, and the prove and replay phases | `[release] prove = [...]` on the test phase, and verify (#1377) |
 
 ## Decision record
 
@@ -2073,6 +2248,61 @@ the stack, which this design neither needs nor rules out).
   root `conanws.yml`, where only a package conan packages belongs.
   Which of conan's roles a nanobind package takes is slice 4's design.
 
+- 2026-10-10, Willem, from the review of the native direction: one
+  mechanism. Phases with named steps replace checks, roles and the
+  phase steps' `pre` and `post`; the base declares its phases in
+  `contract.toml` and an extension in `extension.toml`; `fm check` is
+  the walk over the gate's phases; a step is a footman task alone and a
+  footman step inside a walk. Why: two mechanisms shared the words
+  build and test, and an extension that builds declared both. Replaces
+  11a's phases and the ruling of 2026-10-02 on `pre`, `main` and
+  `post`. #1377.
+- 2026-10-10, Willem: build and test take `isolated`, and build a
+  `configuration`; prove folds into test under `[release] prove`;
+  replay is verify. Why: a release build and a release working build
+  are one compile with a different subject, and the three resolutions
+  are inputs, not phases. #1377.
+- 2026-10-10, Willem: composition is requires alone; `compatible`, the
+  every-pair check and the combinations listing go. Why: the pair check
+  judged every pair of a package's closed set, so a nanobind package
+  refused on python beside cmake, and the declarations would have
+  grown with every extension. Replaces 11a's first part. #1377.
+- 2026-10-10, Willem: cmake's build and test steps run the preset the
+  configuration names, the gate's being `instrumented`; the command
+  line in code goes. Why: the seeded presets were read by nothing, and
+  a sanitizer or platform build is then one more preset. #1377.
+- 2026-10-10, Willem: unreal judges the resolved toolchain against the
+  engine's SDK file and refuses with the engine's comment; the
+  declaration stays typed and the grammar a floor or an exact version.
+  Why: the workshop need not express what the engine's file says, only
+  check against it. Amends the toolchain plan's contract 7.
+- 2026-10-10, Willem: the generators, slots, root files, setup, rules,
+  release notes, options, transport, threshold, roles and
+  editor-extension fold into steps, queries and fragments as "One
+  mechanism" lists. Why: docs being different was proof the model was
+  not general enough, and fewer constructs. #1377.
+- 2026-10-10, Willem: the rules under "The sprint": releases on demand
+  with the loop's release scenario on a cadence (#1380), one runner for
+  a pull request (#1379), the loop entering once (#1378), a mechanism
+  with its first consumer, floors following the code in a refactor
+  slice, short decision records. Why: this repository is its own only
+  consumer, and the waves and legs proved releases nobody installed.
+- 2026-10-10, taken without a ruling as cheap to reverse: `fm build`
+  and `fm run` default to `debug` and take `--configuration`; cmake
+  declares one build step, `cmake`, so `fm build.configure` and
+  `fm build.compile` become `fm build.cmake`; `[for.<target>]` carries
+  every top-level table; the instrumented preset's build type is 11b's
+  to settle.
+- 2026-10-10, the review's record: read against `af759dd3`, 21 commits
+  behind, while 11b's slices 1 to 3 landed. The direction was judged
+  right; of its findings the configuration axis became the presets
+  ruling and the validity rule the composition ruling, and the rest
+  were withdrawn: optional reads, phases under `[for]`, query
+  provenance, a version-set grammar. Measured on the way: the local
+  rehearsal of the 12-member wave takes 26 to 27 minutes, the loop's
+  release act 6.5 minutes inside a 26-minute pass, and a loop leg's
+  entry 176 of 183 seconds.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
@@ -2096,3 +2326,11 @@ recommendation. Owner: Willem, unless named.
      floors judge, only what the page shows.
 
    Recommendation: (b).
+4. **Claims against inputs**: two ways to say what a step reads,
+   categories with suffixes for a tool over package files, globs with
+   influence rules for a workspace step. One way. Owner: Willem, after
+   #1377.
+5. **CI jobs as a phase's placement**: `installs`, `deploy`, `token`
+   and `fetch` as the plumbing of a phase at a point on a runner set,
+   which would retire `[ci.jobs.<point>.<name>]`. Owner: Willem, after
+   #1377.
