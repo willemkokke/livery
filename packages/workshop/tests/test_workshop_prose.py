@@ -371,40 +371,42 @@ def test_guidance_is_one_readers_set_of_every_fragment_in_play(
     assert human == fragments(root, _prose.in_play(root), HUMAN)
 
 
-def test_the_gate_fragment_renders_the_checks_for_the_kinds_present_and_the_reader(
+def test_the_gate_fragment_renders_the_checks_for_the_extensions_held_and_the_reader(
     tmp_path: Path, restored, python_checks: object
 ) -> None:
     root = _workspace(tmp_path)
     register_check(
         CheckRecord(
-            "acme-native", "lint", _noop, kinds=("cpp-conan",), extension="acme.test"
+            "acme-native", "lint", _noop, extensions=("cpp",), extension="acme.test"
         )
     )
     # Without a package only the workspace's own checks are in the gate:
     # neither the test extension's nor the python formatter, which judges
-    # no kind present.
+    # no package present.
     agent = render_gate(root, AGENT)
     assert "acme-native" not in agent and "format" not in agent
     assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
-    assert "the package kinds present are none." in agent
+    assert "the members hold the package-level extensions none." in agent
     _member(root, "cpp", "cpp-conan")
     agent = render_gate(root, AGENT)
-    assert "- lint.acme-native: judges cpp-conan packages" in agent
+    assert "- lint.acme-native: judges cpp packages" in agent
     assert (
-        "- format.fake: judges python, cpp-conan packages; rewrites under --fix"
-        in agent
+        "- format.fake: judges python or conan packages; rewrites under --fix" in agent
     )
     assert "typecheck" not in agent
-    assert "the package kinds present are cpp-conan." in agent
+    assert "the members hold the package-level extensions cmake, conan, cpp." in agent
     _member(root, "py", "python")
     agent = render_gate(root, AGENT)
     for tool in ("fake",):
         assert f"- typecheck.{tool}: judges python packages" in agent
-    assert "the package kinds present are cpp-conan, python." in agent
+    assert (
+        "the members hold the package-level extensions cmake, conan, cpp, python."
+        in agent
+    )
     human = render_gate(root, HUMAN)
     assert human != agent
-    assert "| lint.acme-native | none | cpp-conan | no |" in human
-    assert "| format.fake | fake | python, cpp-conan | yes |" in human
+    assert "| lint.acme-native | none | cpp | no |" in human
+    assert "| format.fake | fake | python or conan | yes |" in human
 
 
 def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(

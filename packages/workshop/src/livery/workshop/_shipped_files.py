@@ -207,12 +207,12 @@ def _packaged(
     """Each package's per-package files, with the package map and its data.
 
     A package's own files, its native tools' configuration, come from the
-    check whose fragment is the nearest one down the package's kind chain, and
-    render with the kind as data. Until packages list extensions of their
-    own, the kind chain is what picks them.
+    first check by name whose fragment names an extension the package
+    holds ([livery.workshop._kinds.extension_set][]).
     """
     from livery.workshop._checks import checks_by_name
     from livery.workshop._fragments import package_files, package_fragment
+    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
@@ -220,7 +220,7 @@ def _packaged(
     files = package_files()
     for package in packages:
         for file in files:
-            found = package_fragment(package.kind, file)
+            found = package_fragment(extension_set(package), file)
             if found is None:
                 continue
             text, check = found
@@ -322,30 +322,24 @@ def _root_file_outputs(root: Path) -> list[Output]:
 
     An extension names each file under ``[root-files."<path>"]``, and
     its render is handed the packages whose set holds the extension, in
-    path order. A package that lists no extension joins the one its
-    kind names ([livery.workshop._kinds.kind_root_files_from][]). A file
-    is the engine's like any composed one: written by the sync, judged
-    by the drift check, and withdrawn with the last package that wanted
+    path order; a package that lists no extension holds what its kind
+    stands for ([livery.workshop._kinds.extension_set][]). A file is
+    the engine's like any composed one: written by the sync, judged by
+    the drift check, and withdrawn with the last package that wanted
     it.
 
     Raises:
         Failed: when two extensions write one path, naming both.
     """
-    from livery.workshop._composition import package_set
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._kinds import kind_root_files_from
+    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import Package, discover_packages
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     members: dict[str, list[Package]] = {}
     for package in sorted(packages, key=lambda p: p.path):
-        if package.extensions:
-            names = package_set(package.extensions, installed_declaration)
-        else:
-            names = (kind_root_files_from(package.kind),)
-        for name in names:
-            if name:
-                members.setdefault(name, []).append(package)
+        for name in extension_set(package):
+            members.setdefault(name, []).append(package)
     writers: dict[str, str] = {}
     found: list[Output] = []
     for name, group in sorted(members.items()):
@@ -497,36 +491,38 @@ def _jsonc(text: str) -> dict[str, Any] | None:
     return cast("dict[str, Any]", loaded) if isinstance(loaded, dict) else None
 
 
-def _package_outputs(member: Path, kind: str) -> tuple[Output, ...]:
-    """The per-package files a package of *kind* renders, relative to *member*."""
+def _package_outputs(member: Path, extensions: tuple[str, ...]) -> tuple[Output, ...]:
+    """The per-package files a package holding *extensions* renders, under *member*."""
     from livery.workshop._checks import checks_by_name
     from livery.workshop._fragments import package_files, package_fragment
 
     fragments: list[Fragment] = []
     owners: list[str] = []
     for file in package_files():
-        found = package_fragment(kind, file)
+        found = package_fragment(extensions, file)
         if found is None:
             continue
         text, check = found
         owner = checks_by_name()[check].extension
         owners.append(owner)
         fragments.append(Fragment(owner, f"check {check}", file, text))
-    return plan(member, fragments, list(dict.fromkeys(owners)), {"kind": kind})
+    return plan(member, fragments, list(dict.fromkeys(owners)), {})
 
 
-def settle_package(member: Path, kind: str) -> list[str]:
-    """Compose the per-package files of a package of *kind* at *member* alone.
+def settle_package(member: Path, extensions: tuple[str, ...]) -> list[str]:
+    """Compose the per-package files of a package holding *extensions*, at *member*.
 
     What a sync does for one package, without a workspace around it: the
-    conformance kit and a birth's probe settle a package directory this way.
+    conformance kit and a birth's probe settle a package directory this
+    way. *extensions* is the set the package holds, its list completed.
     """
-    return apply(member, _package_outputs(member, kind))
+    return apply(member, _package_outputs(member, extensions))
 
 
-def judge_package(member: Path, kind: str) -> list[str]:
-    """The drift lines for the per-package files of a package of *kind* at *member*."""
-    return [line.strip() for line in drift(member, _package_outputs(member, kind))]
+def judge_package(member: Path, extensions: tuple[str, ...]) -> list[str]:
+    """The drift lines for the per-package files of a package holding *extensions*."""
+    outputs = _package_outputs(member, extensions)
+    return [line.strip() for line in drift(member, outputs)]
 
 
 def computed_outputs(

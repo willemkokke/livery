@@ -1070,10 +1070,23 @@ slices, each mergeable alone:
       `[root-files."<path>"]`, and `conanws.yml` is `conan`'s: a package
       that lists no extension joins the root files of the extension its
       kind names, as it takes its categories.
-   4. **The checks name extensions**: a check's `kinds` becomes
-      `extensions`. The build and test checks move into `cmake` and
-      claim files by category; clang-format and clang-tidy name `cpp`;
-      the python tool extensions name `python`.
+   4. **The checks name extensions** (issue #1374): a check's `kinds`
+      becomes `extensions`, and so does a check fragment's. A check
+      judges a package whose set holds one of its extensions, and a
+      per-package fragment renders there, the first check by name
+      winning when two carry one file. A package that lists no
+      extension holds what its kind stands for (`stands_for`: `python`;
+      `cpp` beside python's for the nanobind kind; `cmake`, `conan` and
+      `cpp` for `cpp-conan`), which also replaces `categories_from` and
+      `root_files_from`. The native build and test checks name `cmake`
+      and claim test and source files whatever their suffix, and
+      `cmake` answers `compile-commands`; the base keeps registering
+      the three until slice 6 (see the decision record). clang-format
+      and clang-tidy name `cpp`, ruff `python` and `conan`, the other
+      python tools `python`; clang-tidy says when it skips a package
+      whose build writes no compilation database. The conformance
+      kit's `nearest-fragment` clause becomes `fragment-owner`. The
+      workshop and the eight tool extensions release together.
    5. **The `sync` phase**: `fm sync` runs it before `uv sync`, and
       `conan`'s profile step there replaces `KindRecord.before_install`.
 4. **nanobind and unreal**: nanobind's wheels job under
@@ -1243,6 +1256,8 @@ the stack, which this design neither needs nor rules out).
 | `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 3) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
+| the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's `[checks]`, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 
 ## Decision record
@@ -2027,6 +2042,24 @@ the stack, which this design neither needs nor rules out).
   conan or nothing has one `conanws.yml`. The kind names the extension
   through its backend module, `ROOT_FILES_FROM`, since the base may
   spell no new kind word; both go with the kinds in slice 6.
+- 2026-10-10, decided while building slice 3's fourth part (issue
+  #1374): one field on a kind, `stands_for`, says what a package that
+  lists no extension holds, and its categories, root files, checks
+  and per-package fragments all follow from it. It replaces
+  `categories_from` and `root_files_from`, so slice 6 removes one
+  field. Matching is by the extensions a package holds, so a package
+  that lists extensions holds its set alone, never its kind's too.
+- 2026-10-10, decided while building slice 3's fourth part: the native
+  build and test checks stay registered by the base, naming `cmake`,
+  until slice 6. A package-level extension mounts only while a package
+  lists it, and no extension turns on through `kind` (ruled
+  2026-10-10), so checks declared by `cmake` would leave a `cpp-conan`
+  package that lists nothing without its build. Slice 6 moves them
+  into `cmake`'s declaration when every package lists what it holds.
+- 2026-10-10, decided while building slice 3's fourth part: the loop's
+  extension pass takes a member whose own kind stands for an extension
+  the checks name, never through a parent kind, so a pass carries the
+  members its checks were written for, as it did by kind.
 
 ## Open
 

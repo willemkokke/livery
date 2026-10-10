@@ -49,7 +49,7 @@ def _a_test_check_requires_pytest() -> Iterator[None]:
             "pytest",
             "test",
             _idle,
-            kinds=("python",),
+            extensions=("python",),
             tools=("pytest",),
             extension="pytest",
         )

@@ -17,6 +17,7 @@ import livery.toolroom.tools as tools
 from livery.extensions.clang.tidy import _checks as clang_tidy
 from livery.workshop import GateContext, Package
 from livery.workshop import _checks as registry
+from livery.workshop._kinds import kind_stands_for
 
 # The workshop's test helper: pytest's pythonpath carries every tests
 # directory, which basedpyright's search path does not.
@@ -74,7 +75,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
             "project_name": "acme",
         },
     )
-    settle_package(destination, kind)
+    settle_package(destination, kind_stands_for(kind))
     assert (destination / ".clang-format").is_file()
     package = Package(
         directory=destination,
@@ -132,7 +133,7 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
             "project_name": "acme",
         },
     )
-    settle_package(destination, "cpp-conan")
+    settle_package(destination, kind_stands_for("cpp-conan"))
     package = Package(
         directory=destination,
         path="packages/native",

@@ -582,16 +582,20 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
 
 
 def _declared(
-    *kinds: str, requires: tuple[str, ...] = (), options: dict[str, str] | None = None
+    *extensions: str,
+    requires: tuple[str, ...] = (),
+    options: dict[str, str] | None = None,
 ) -> Declaration:
-    """A declaration with one check judging *kinds*."""
+    """A declaration with one check judging the packages holding *extensions*."""
     from livery.workshop._checks import CheckRecord
     from livery.workshop._declaration import Additions
 
     def _idle(ctx: object) -> None:
         del ctx
 
-    checks = (CheckRecord("t", "lint", _idle, kinds=kinds),) if kinds else ()
+    checks = (
+        (CheckRecord("t", "lint", _idle, extensions=extensions),) if extensions else ()
+    )
     return Declaration(
         "x",
         "x",
@@ -640,9 +644,9 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
     _fake_declarations(
         monkeypatch,
         {
-            "top": _declared("cpp-conan", requires=("mid", "base")),
-            "mid": _declared("cpp-conan", requires=("base",)),
-            "base": _declared("cpp-conan"),
+            "top": _declared("cmake", requires=("mid", "base")),
+            "mid": _declared("cmake", requires=("base",)),
+            "base": _declared("cmake"),
         },
     )
     stack, kinds = _e2e.extension_under_test("top")
@@ -669,16 +673,17 @@ def test_the_extension_under_test_is_listed_with_every_option_it_declares(
     assert stack == ("base", "top[deep,wide]")
 
 
-def test_the_members_are_the_loop_s_of_the_kinds_the_checks_declare(
+def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _fake_declarations(
         monkeypatch,
-        {"typed": _declared("python"), "both": _declared("python", "cpp-conan")},
+        {"typed": _declared("python"), "both": _declared("python", "conan")},
     )
     stack, kinds = _e2e.extension_under_test("typed")
     assert stack == ("typed",)
-    # A kind the checks declare, not every kind deriving from it.
+    # A kind standing for an extension a check names, not every kind
+    # deriving from it.
     assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
     _stack, kinds = _e2e.extension_under_test("both")
     assert kinds == ("python", "cpp-conan")

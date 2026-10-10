@@ -10,14 +10,14 @@ api-version = 1
 # Listed in the workspace's list alone: one configuration for every member.
 levels = ["workspace"]
 
-# The kinds whose python files ruff judges are a python package's, and a
-# native package's conanfile.py beside clang-format over its sources.
+# Ruff judges a python package's python files, and a conan package's
+# recipe, conanfile.py, beside clang-format over its C and C++ sources.
 [checks.ruff.format]
 judge = ["ruff", "format", "--check", "--force-exclude"]
 # Formatting removes no code, so --safe-fix rewrites as --fix does.
 fix = ["ruff", "format", "--force-exclude"]
 narrowing = "paths"
-kinds = ["python", "cpp-conan"]
+extensions = ["python", "conan"]
 tools = ["ruff"]
 arguments = true
 editor-extension = "charliermarsh.ruff"
@@ -44,7 +44,7 @@ fix = ["ruff", "check", "--fix", "--force-exclude"]
 # not finished writing: an import added before the code that uses it.
 safe-fix = ["ruff", "check", "--fix", "--unfixable=F401", "--force-exclude"]
 narrowing = "paths"
-kinds = ["python", "cpp-conan"]
+extensions = ["python", "conan"]
 tools = ["ruff"]
 arguments = true
 editor-extension = "charliermarsh.ruff"

@@ -170,17 +170,19 @@ def test_the_kind_chains_from_python(python_checks: object) -> None:
         "ninja",
         "uv",
     )
-    from livery.workshop._checks import tools_for_kind
+    from livery.workshop._checks import tools_for
+    from livery.workshop._kinds import kind_stands_for
 
-    # A check of the python kind reaches its child through the chain:
+    # A check naming python reaches the child kind through its chain:
     # its tool joins the child's profile.
-    assert {"fake"} <= {tool for tool, _ in tools_for_kind("python-nanobind")}
+    held = kind_stands_for("python-nanobind")
+    assert {"fake"} <= {tool for tool, _ in tools_for(held)}
     record = kind_for("python-nanobind")
     assert record.parent == "python"
-    # Its roles are those of the checks whose kinds its chain meets.
-    from livery.workshop._checks import checks_by_name, judges_kind
+    # Its roles are those of the checks naming an extension it holds.
+    from livery.workshop._checks import checks_by_name, judges_extensions
 
-    roles = {r.role for r in checks_by_name().values() if judges_kind(r, record.name)}
+    roles = {r.role for r in checks_by_name().values() if judges_extensions(r, held)}
     assert {"test", "typecheck"} <= roles
     assert record.host_tools == ("cc", "c++")
 

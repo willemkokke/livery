@@ -81,7 +81,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for_kind
+    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
     from livery.workshop._slots import all_composed
@@ -95,7 +95,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         with footman_registry.capture():
             assert mount_extensions(root) == ()
         assert "typecheck.mypy" not in checks_by_name()
-        assert "mypy" not in {tool for tool, _ in tools_for_kind("python")}
+        assert "mypy" not in {tool for tool, _ in tools_for(("python",))}
         assert "mypy>=1.14" not in _dev_group(all_composed())
         deliver(root)
         assert not (root / "mypy.ini").exists()
@@ -106,7 +106,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         with footman_registry.capture():
             assert mount_extensions(root) == ("mypy",)
         assert checks_by_name()["typecheck.mypy"].extension == "mypy"
-        assert "mypy" in {tool for tool, _ in tools_for_kind("python")}
+        assert "mypy" in {tool for tool, _ in tools_for(("python",))}
         assert "mypy>=1.14" in _dev_group(all_composed())
         deliver(root)
         cache = _read(root / "mypy.ini")["mypy"]["cache_dir"]

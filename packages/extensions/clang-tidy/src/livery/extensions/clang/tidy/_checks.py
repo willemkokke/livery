@@ -4,8 +4,9 @@ The extension's ``extension.toml`` declares it and names the body here.
 ``lint.clang-tidy`` judges one package at a time, after the package's
 build is configured: the files its claims reach in the package, or the
 files a run names ([livery.workshop.scoped_files][]), against the
-compilation database the package's kind says its build writes
-([livery.workshop.compile_commands][]). The checks are the
+compilation database the package's build writes
+([livery.workshop.compile_commands][]); a package whose build writes
+none skips, saying so. The checks are the
 package's own ``.clang-tidy``, which the extension writes. The check
 hands clang-tidy the words after ``--`` on its own verb
 (``fm lint.clang-tidy -- --checks=-*,bugprone-*``). A body resolves its
@@ -98,5 +99,9 @@ def judge_lint(ctx: GateContext) -> None:
     assert package is not None  # the gate hands a package check its package
     database = compile_commands(package)
     if database is None or not database.is_file():
+        print(
+            f"  {package.name}: clang-tidy skips, its build writes no"
+            " compilation database"
+        )
         return
     run_lint(package, scoped_files(ctx, "lint.clang-tidy"), database, ctx.arguments)

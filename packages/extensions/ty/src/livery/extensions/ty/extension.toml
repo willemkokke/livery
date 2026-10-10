@@ -9,7 +9,7 @@ levels = ["workspace"]
 
 [checks.ty.typecheck]
 judge = ["ty", "check"]
-kinds = ["python"]
+extensions = ["python"]
 tools = ["ty"]
 arguments = true
 editor-extension = "astral-sh.ty"

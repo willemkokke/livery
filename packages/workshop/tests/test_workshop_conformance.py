@@ -113,10 +113,9 @@ def test_a_backend_missing_a_method_or_taking_the_wrong_call_breaks_the_protocol
     )
 
 
-def test_two_checks_carrying_one_file_for_one_kind_break_the_nearest_fragment(
+def test_two_checks_carrying_one_file_for_one_extension_break_the_fragment_owner(
     acme: None,
 ) -> None:
-    _parent, child = _family()
     for name in ("acme-tidy", "acme-tidy-too"):
         register_check(
             CheckRecord(
@@ -124,16 +123,18 @@ def test_two_checks_carrying_one_file_for_one_kind_break_the_nearest_fragment(
                 "lint",
                 _idle,
                 scope=PACKAGE,
-                kinds=("acme-child",),
+                extensions=("acme.cpp",),
                 extension=EXTENSION,
-                fragments=(Fragment(".clang-tidy", f"# {name}\n", kind="acme-child"),),
+                fragments=(
+                    Fragment(".clang-tidy", f"# {name}\n", extensions=("acme.cpp",)),
+                ),
             )
         )
-    found = _names(Subject(EXTENSION, kinds=(child,)), "nearest-fragment")
-    assert found == [
-        "nearest-fragment: kind acme-child .clang-tidy: lint.acme-tidy and"
-        " lint.acme-tidy-too both carry it for the kind; the render would pick one"
-        " by name, so one of them yields"
+    subject = Subject(EXTENSION, checks=(check_for("lint.acme-tidy"),))
+    assert _names(subject, "fragment-owner") == [
+        "fragment-owner: extension acme.cpp .clang-tidy: lint.acme-tidy and"
+        " lint.acme-tidy-too both carry it for the extension's packages; the render"
+        " picks one by name, so one of them yields"
     ]
 
 
@@ -434,23 +435,22 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
 
 
 def _tidy(text: str = "Checks: acme-*\n") -> Subject:
-    """An extension whose check carries a .clang-tidy for the child kind."""
-    _parent, child = _family()
+    """An extension whose check carries a .clang-tidy for its packages."""
     register_check(
         CheckRecord(
             "acme-tidy",
             "lint",
             _idle,
             scope=PACKAGE,
-            kinds=("acme-child",),
+            extensions=("acme.cpp",),
             extension=EXTENSION,
-            fragments=(Fragment(".clang-tidy", text, kind="acme-child"),),
+            fragments=(Fragment(".clang-tidy", text, extensions=("acme.cpp",)),),
         )
     )
-    return Subject(EXTENSION, kinds=(child,), checks=(check_for("lint.acme-tidy"),))
+    return Subject(EXTENSION, checks=(check_for("lint.acme-tidy"),))
 
 
-TIDY = "check lint.acme-tidy .clang-tidy for acme-child"
+TIDY = "check lint.acme-tidy .clang-tidy for acme.cpp"
 
 
 def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_drift(
@@ -515,10 +515,10 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
         # The subject's own file, which its withdrawn check no longer names.
         return [p for p in directory.iterdir() if p.name == ".clang-tidy"]
 
-    def never_again(directory: Path, kind: str) -> list[str]:
+    def never_again(directory: Path, extensions: tuple[str, ...]) -> list[str]:
         if written(directory):
             return []
-        return real(directory, kind)
+        return real(directory, extensions)
 
     monkeypatch.setattr(_shipped_files, "settle_package", never_again)
     assert _names(subject, "withdrawn-file") == [
@@ -526,11 +526,11 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
         " withdrawn; contract 11 removes it"
     ]
 
-    def always_removes(directory: Path, kind: str) -> list[str]:
+    def always_removes(directory: Path, extensions: tuple[str, ...]) -> list[str]:
         found = written(directory)
         for path in found:
             path.unlink()
-        return [f"removed {path.name}" for path in found] or real(directory, kind)
+        return [f"removed {path.name}" for path in found] or real(directory, extensions)
 
     monkeypatch.setattr(_shipped_files, "settle_package", always_removes)
     assert _names(subject, "withdrawn-file") == [
@@ -557,7 +557,7 @@ def _walkers() -> Subject:
             "lint",
             _idle,
             scope=PACKAGE,
-            kinds=("python",),
+            extensions=("python",),
             extension=EXTENSION,
             claims=(Claim("source", suffixes=(".py",)),),
         )
@@ -644,35 +644,40 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
     ]
 
 
-# The nearest kind wins, for fragments and for categories alike.
+# A package fragment goes by extension; the nearest kind wins a category tie.
 
 
-def test_the_nearest_kinds_fragment_renders(acme: None) -> None:
-    parent, child = _family()
-    for name, kind in (
-        ("acme-parent-tidy", "acme-parent"),
-        ("acme-child-tidy", "acme-child"),
-    ):
+def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
+    acme: None,
+) -> None:
+    for name, extension in (("acme-c-tidy", "acme.c"), ("acme-cpp-tidy", "acme.cpp")):
         register_check(
             CheckRecord(
                 name,
                 "lint",
                 _idle,
                 scope=PACKAGE,
-                kinds=(kind,),
+                extensions=(extension,),
                 extension=EXTENSION,
-                fragments=(Fragment(".clang-tidy", f"# {kind}\n", kind=kind),),
+                fragments=(
+                    Fragment(
+                        ".clang-tidy", f"# {extension}\n", extensions=(extension,)
+                    ),
+                ),
             )
         )
-    assert package_fragment("acme-child", ".clang-tidy") == (
-        "# acme-child\n",
-        "lint.acme-child-tidy",
+    assert package_fragment(("acme.cpp",), ".clang-tidy") == (
+        "# acme.cpp\n",
+        "lint.acme-cpp-tidy",
     )
-    assert package_fragment("acme-parent", ".clang-tidy") == (
-        "# acme-parent\n",
-        "lint.acme-parent-tidy",
+    # A package holding both takes the first check by name.
+    assert package_fragment(("acme.c", "acme.cpp"), ".clang-tidy") == (
+        "# acme.c\n",
+        "lint.acme-c-tidy",
     )
-    assert _names(Subject(EXTENSION, kinds=(parent, child)), "nearest-fragment") == []
+    assert package_fragment(("acme.rust",), ".clang-tidy") is None
+    checks = (check_for("lint.acme-c-tidy"), check_for("lint.acme-cpp-tidy"))
+    assert _names(Subject(EXTENSION, checks=checks), "fragment-owner") == []
 
 
 def test_the_nearer_kinds_rule_wins_a_tie_between_kinds(acme: None) -> None:
@@ -719,7 +724,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
     names = [clause.name for clause in CLAUSES]
     assert names == [
         "backend-protocol",
-        "nearest-fragment",
+        "fragment-owner",
         "category-table",
         "check-order",
         "declaration-validates",

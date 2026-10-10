@@ -62,7 +62,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for_kind
+    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
 
@@ -77,7 +77,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         with footman_registry.capture():
             assert mount_extensions(root) == ()
         assert "lint.clang-tidy" not in checks_by_name()
-        assert "clang_tidy" not in {t for t, _ in tools_for_kind("cpp-conan")}
+        assert "clang_tidy" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         assert not (root / "packages" / "native" / ".clang-tidy").exists()
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["clang-tidy"]\n')
@@ -86,10 +86,11 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         record = checks_by_name()["lint.clang-tidy"]
         assert record.extension == "clang-tidy"
         assert record.after == ("build.configure",)
-        assert "clang_tidy" in {t for t, _ in tools_for_kind("cpp-conan")}
+        assert "clang_tidy" in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         checks = (root / "packages" / "native" / ".clang-tidy").read_text()
-        assert "the cpp-conan kind" in checks and 'WarningsAsErrors: "*"' in checks
+        assert "each C or C++ package" in checks
+        assert 'WarningsAsErrors: "*"' in checks
     finally:
         registry.restore(state)
 

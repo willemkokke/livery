@@ -102,8 +102,8 @@ def _test_run(ctx: GateContext) -> None:
 
 
 def records() -> tuple[CheckRecord, ...]:
-    """A formatter and a linter with ruff's claims and kinds, a type checker, tests."""
-    kinds = ("python", "cpp-conan")
+    """A formatter and a linter as ruff claims and judges, a type checker, tests."""
+    extensions = ("python", "conan")
     example = ("D", "E", "I", "UP", "B", "SIM", "C4", "RUF", "F401", "F811", "F841")
     return (
         CheckRecord(
@@ -112,7 +112,7 @@ def records() -> tuple[CheckRecord, ...]:
             _format_run,
             narrowing=PATHS,
             fix=_format_fix,
-            kinds=kinds,
+            extensions=extensions,
             tools=("fake",),
             extension="fake",
             claims=tuple(
@@ -126,7 +126,7 @@ def records() -> tuple[CheckRecord, ...]:
             _lint_run,
             narrowing=PATHS,
             fix=_lint_fix,
-            kinds=kinds,
+            extensions=extensions,
             tools=("fake",),
             extension="fake",
             claims=(
@@ -142,7 +142,7 @@ def records() -> tuple[CheckRecord, ...]:
             "typecheck",
             _typecheck_run,
             narrowing=PATHS,
-            kinds=("python",),
+            extensions=("python",),
             tools=("fake",),
             extension="fake",
             claims=tuple(
@@ -156,7 +156,7 @@ def records() -> tuple[CheckRecord, ...]:
             _test_run,
             flags=("point",),
             narrowing=PACKAGES,
-            kinds=("python",),
+            extensions=("python",),
             tools=("fake",),
             extension="fake",
             claims=(

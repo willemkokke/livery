@@ -14,7 +14,7 @@ levels = ["workspace"]
 [checks.pytest.test]
 run = "livery.extensions.pytest._checks:judge_test"
 narrowing = "packages"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["pytest"]
 arguments = true
 flags = ["point"]
@@ -32,7 +32,7 @@ doc = "run the package's suite across cores; false runs it under -n 0"
 [checks.pytest.examples]
 run = "livery.extensions.pytest._checks:judge_examples"
 narrowing = "packages"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["pytest"]
 arguments = true
 claims = [{ category = "example", suffixes = [".py", ".pyi"] }]

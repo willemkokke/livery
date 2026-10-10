@@ -17,7 +17,7 @@ typecomplete = "verifies that every package's public API is type-complete"
 [checks.basedpyright.typecheck]
 judge = ["basedpyright", "--warnings"]
 narrowing = "paths"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["basedpyright"]
 arguments = true
 editor-extension = "detachhead.basedpyright"
@@ -38,7 +38,7 @@ claims = [
 [checks.basedpyright.typecomplete]
 run = "livery.extensions.basedpyright._checks:judge_typecomplete"
 narrowing = "packages"
-kinds = ["python"]
+extensions = ["python"]
 tools = ["basedpyright"]
 arguments = true
 listed-with = "typecomplete"

@@ -312,7 +312,7 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
     )
     assert gate.returncode == 0, f"{gate.stdout}\n{gate.stderr}"
     for check in ("build.configure", "build.compile", "test.ctest"):
-        assert f"  {check}: packages/geometry runs (cpp-conan kind)" in gate.stdout
+        assert f"  {check}: packages/geometry runs (a cmake package)" in gate.stdout
     rehearsed = subprocess.run(
         ["uv", "run", "fm", "workflow.release", "geometry", "ext", "--local"],
         cwd=root,

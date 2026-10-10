@@ -40,6 +40,11 @@ def main(ctx):
 """
 
 
+#: What the build checks here judge: the library holds python through its
+#: kind, and the app lists the fixture extension.
+BOTH = ("python", "acme.native")
+
+
 def _member(root: Path, name: str, extensions: str, depends: str = "") -> Path:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
@@ -73,7 +78,11 @@ def _workspace(
 
 @pytest.fixture
 def built() -> Iterator[list[str]]:
-    """A counting build check over python packages: the paths it built, in order."""
+    """A counting build check over the fixture's packages: the paths it built.
+
+    The library lists nothing, so it holds python through its kind; the
+    app lists the fixture extension alone.
+    """
     state = _checks.snapshot()
     calls: list[str] = []
 
@@ -82,7 +91,7 @@ def built() -> Iterator[list[str]]:
         calls.append(ctx.package.path)
 
     register_check(
-        CheckRecord("acme", "build", count, scope=_checks.PACKAGE, kinds=("python",))
+        CheckRecord("acme", "build", count, scope=_checks.PACKAGE, extensions=BOTH)
     )
     yield calls
     _checks.restore(state)
@@ -179,14 +188,14 @@ def test_a_failed_build_records_nothing_and_the_next_run_builds_again(
         raise Failed("the library does not compile")
 
     register_check(
-        CheckRecord("acme", "build", refuse, scope=_checks.PACKAGE, kinds=("python",))
+        CheckRecord("acme", "build", refuse, scope=_checks.PACKAGE, extensions=BOTH)
     )
     with pytest.raises(Failed):
         start(root, "app:serve", (), root)
     assert built == ["packages/lib"]
     assert not (root / RECORD).exists()
     register_check(
-        CheckRecord("acme", "build", real, scope=_checks.PACKAGE, kinds=("python",))
+        CheckRecord("acme", "build", real, scope=_checks.PACKAGE, extensions=BOTH)
     )
     assert start(root, "app:serve", (), root) == 3
     assert built == ["packages/lib", "packages/lib", "packages/app"]
@@ -270,7 +279,7 @@ def test_a_member_no_build_check_judges_is_never_built(
             "build",
             lambda ctx: None,
             scope=_checks.PACKAGE,
-            kinds=("cpp-conan",),
+            extensions=("cmake",),
         )
     )
     app, packages = _app_and_packages(root)

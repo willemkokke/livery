@@ -1702,11 +1702,16 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
     visit(name, ())
     stack[-1] = str(Spec(name, tuple(declared_options(name))))
-    declared_kinds = {kind for record in checks for kind in record.kinds}
+    from livery.workshop._kinds import kind_for
+
+    named = {extension for record in checks for extension in record.extensions}
+    # A member counts when its own kind stands for an extension a check
+    # names, never through a parent kind: a pass carries the members its
+    # checks were written for, and no slower one besides.
     kinds = tuple(
         member_kind(seed)
         for _member, seed in LOOP_MEMBERS
-        if member_kind(seed) in declared_kinds
+        if named & set(kind_for(member_kind(seed)).stands_for)
     )
     return tuple(stack), kinds
 

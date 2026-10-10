@@ -361,12 +361,12 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         '[options]\ndeep = "judges every file, not only the changed ones"\n'
         + CHECK
         + 'fix = "acme_declared._checks:mend"\nnarrowing = "paths"\n'
-        'kinds = ["python"]\ntools = ["acme"]\narguments = true\n'
+        'extensions = ["python"]\ntools = ["acme"]\narguments = true\n'
         'listed-with = "deep"\n'
         'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
         "[checks.acme.lint.options.strict]\n"
         'type = "bool"\ndefault = false\ndoc = "refuses warnings too"\n'
-        '[checks.acme.lint.fragments.".acme"]\nkinds = ["cpp", "cpp-conan"]\n'
+        '[checks.acme.lint.fragments.".acme"]\nextensions = ["cpp", "cmake"]\n'
         'text = "strict: true\\n"\n'
         '[contributions]\n"python.dev-group" = ["acme>=1"]\n'
         '[contract.root.acme.mode]\ntypes = ["str"]\nvalues = ["fast", "slow"]\n'
@@ -396,10 +396,10 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
     assert [(o.name, o.kind, o.default) for o in record.options] == [
         ("strict", "bool", False)
     ]
-    assert [(f.file, f.kind) for f in record.fragments] == [
-        (".acme", "cpp"),
-        (".acme", "cpp-conan"),
+    assert [(f.file, f.extensions) for f in record.fragments] == [
+        (".acme", ("cpp", "cmake")),
     ]
+    assert record.extensions == ("python",)
     assert found.additions.contributions == (("python.dev-group", "acme>=1"),)
     assert found.targets["docs"].contributions == (("docs.theme", "acme"),)
 

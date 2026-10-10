@@ -66,19 +66,19 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
             CheckRecord("acme", "lint", _noop, fragments=(Fragment("Makefile", "x"),))
         )
     with pytest.raises(
-        _FAILURES, match="applies to the whole workspace and names no kind"
+        _FAILURES, match="applies to the whole workspace and names no extension"
     ):
         register_check(
             CheckRecord(
                 "acme",
                 "lint",
                 _noop,
-                fragments=(Fragment("pyproject.toml", "x", kind="python"),),
+                fragments=(Fragment("pyproject.toml", "x", extensions=("python",)),),
             )
         )
-    # A per-package file is one a fragment names a kind for; without
-    # one, the file is no project file the render writes.
-    with pytest.raises(_FAILURES, match="a fragment that names a kind is rendered"):
+    # A per-package file is one a fragment names extensions for; without
+    # them, the file is no project file the render writes.
+    with pytest.raises(_FAILURES, match="a fragment that names extensions is rendered"):
         register_check(
             CheckRecord(
                 "acme", "lint", _noop, fragments=(Fragment(".clang-tidy", "x"),)
@@ -87,16 +87,17 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
 
 
 def _native_style() -> CheckRecord:
-    """A base check carrying a per-package file for both native kinds."""
+    """A base check carrying a per-package file for each C or C++ package."""
     record = CheckRecord(
         "native-style",
         "lint",
         _noop,
         scope="package",
-        kinds=("cpp-conan",),
-        fragments=tuple(
-            Fragment(".native-style", "# for the {{ kind }} kind\n", kind=kind)
-            for kind in ("cpp-conan", "python-nanobind")
+        extensions=("cpp",),
+        fragments=(
+            Fragment(
+                ".native-style", "# for a C or C++ package\n", extensions=("cpp",)
+            ),
         ),
     )
     register_check(record)
@@ -121,7 +122,7 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     # The engine writes the file and its receipt in the package.
     assert "  wrote packages/native/.native-style" in deliver(root)
     assert ".native-style" in read_rendered(member)
-    assert "cpp-conan" in (member / ".native-style").read_text()
+    assert "C or C++" in (member / ".native-style").read_text()
     assert deliver(root) == []
     # The check withdrawn: the edited arm first, kept and named.
     unregister_check("lint.native-style", by="acme.brand")
@@ -152,8 +153,8 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import settle_package
 
-    # A package file is any file a registered check's kinded fragment
-    # names: a native check's, and an extension's style beside it.
+    # A package file is any file a registered check's fragment for
+    # extensions names: a native check's, and an extension's style beside it.
     _native_style()
     register_check(
         CheckRecord(
@@ -161,21 +162,19 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
             "format",
             _noop,
             scope="package",
-            kinds=("cpp-conan",),
-            fragments=(
-                Fragment(".acme-style", "style for {{ kind }}\n", kind="cpp-conan"),
-            ),
+            extensions=("cpp",),
+            fragments=(Fragment(".acme-style", "acme style\n", extensions=("cpp",)),),
         )
     )
-    data = {**_data(), "kind": "cpp-conan"}
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
-    rendered = compose_package("cpp-conan", ".acme-style", data)
-    assert rendered == "style for cpp-conan\n"
+    held = ("cmake", "conan", "cpp")
+    rendered = compose_package(held, ".acme-style", _data())
+    assert rendered == "acme style\n"
     (member / ".acme-style").write_bytes(rendered.encode())
     other = member / ".native-style"
     other.write_text("mine\n")
-    assert settle_package(member, "cpp-conan") == [
+    assert settle_package(member, held) == [
         "  kept .native-style: edited here, so it is not rewritten; delete it to"
         " take the rendered file"
     ]
@@ -200,7 +199,7 @@ def test_this_workspace_composes_no_tool_table_from_the_base_s_records() -> None
 
 
 def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
-    from livery.workshop._checks import editor_extensions, tools_for_kind
+    from livery.workshop._checks import editor_extensions, tools_for
 
     register_check(
         CheckRecord(
@@ -216,7 +215,7 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
                 "acme",
                 role,
                 _noop,
-                kinds=("python",),
+                extensions=("python",),
                 tools=("acme",),
                 fragments=(Fragment("pyproject.toml", "[tool.acme]\nstrict = true\n"),)
                 if role == "typecheck"
@@ -232,37 +231,37 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
     composed = compose_project(_data())
     assert "[tool.acme" not in composed["pyproject.toml"]
     assert "acme.checker" not in editor_extensions()
-    assert "acme" not in {tool for tool, _ in tools_for_kind("python")}
+    assert "acme" not in {tool for tool, _ in tools_for(("python",))}
     assert "[tool.bystander]" in composed["pyproject.toml"]
 
 
-def test_a_native_fragment_resolves_down_the_kind_chain(restored_checks) -> None:
+def test_a_package_fragment_resolves_by_the_extensions_a_package_holds(
+    restored_checks,
+) -> None:
     record = _native_style()
     data = _data()
-    cpp = compose_package("cpp-conan", ".native-style", {**data, "kind": "cpp-conan"})
-    nano = compose_package(
-        "python-nanobind", ".native-style", {**data, "kind": "python-nanobind"}
-    )
-    assert cpp == "# for the cpp-conan kind\n"
-    assert nano == "# for the python-nanobind kind\n"
-    assert package_fragment("python", ".native-style") is None
-    # An extension's fragment for one kind differs from the other kind's.
+    native = compose_package(("cmake", "conan", "cpp"), ".native-style", data)
+    nano = compose_package(("python", "cpp"), ".native-style", data)
+    assert native == nano == "# for a C or C++ package\n"
+    assert package_fragment(("python",), ".native-style") is None
+    # Two checks carrying one file for what one package holds: the first
+    # by name renders it there, and the other wherever it alone applies.
     register_check(
         CheckRecord(
             "acme-tidy",
             "lint",
             _noop,
             scope="package",
-            kinds=("python-nanobind",),
+            extensions=("cmake",),
             extension="acme.brand",
             fragments=(
-                Fragment(".native-style", "Checks: acme-*\n", kind="python-nanobind"),
+                Fragment(".native-style", "Checks: acme-*\n", extensions=("cmake",)),
             ),
         )
     )
-    found = package_fragment("python-nanobind", ".native-style")
+    found = package_fragment(("cmake", "conan", "cpp"), ".native-style")
     assert found is not None and found[1] == "lint.acme-tidy"
-    assert package_fragment("cpp-conan", ".native-style") == (
+    assert package_fragment(("python", "cpp"), ".native-style") == (
         record.fragments[0].text,
         "lint.native-style",
     )

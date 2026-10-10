@@ -658,18 +658,18 @@ def _chain(
     # The kind's checks, one line each: the registry walks a native
     # package's records in order, and a role the kind lacks skips by
     # name.
-    for check in (
-        "format.clang-format",
-        "build.configure",
-        "build.compile",
-        "test.ctest",
-        "lint.clang-tidy",
+    for check, held in (
+        ("format.clang-format", "cpp"),
+        ("build.configure", "cmake"),
+        ("build.compile", "cmake"),
+        ("test.ctest", "cmake"),
+        ("lint.clang-tidy", "cpp"),
     ):
         assert (
-            f"  {check}: packages/geometry runs (cpp-conan kind)" in child_gate.stdout
+            f"  {check}: packages/geometry runs (a {held} package)" in child_gate.stdout
         )
     assert (
-        "typecheck.basedpyright: packages/geometry skips (cpp-conan kind)"
+        "typecheck.basedpyright: packages/geometry skips (not a python package)"
         in child_gate.stdout
     )
     # One compiled module, both sides of the graph: the member's own

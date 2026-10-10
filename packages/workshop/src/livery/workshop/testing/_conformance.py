@@ -96,7 +96,7 @@ class Clause:
 
 
 BACKEND_PROTOCOL = "backend-protocol"
-NEAREST_FRAGMENT = "nearest-fragment"
+FRAGMENT_OWNER = "fragment-owner"
 CATEGORY_TABLE = "category-table"
 CHECK_ORDER = "check-order"
 DECLARATION_VALIDATES = "declaration-validates"
@@ -220,70 +220,46 @@ def _backend_protocol(subject: Subject) -> list[Violation]:
     return violations
 
 
-# A fragment per kind down the chain.
+# One owner for a per-package file.
 
 
-def _fragment_owners(kind: str, file: str) -> list[str]:
-    """The checks carrying a fragment for *file* for *kind* itself, by name."""
+def _fragment_owners(extension: str, file: str) -> list[str]:
+    """The checks carrying a fragment for *file* that names *extension*, by name."""
     return sorted(
         name
         for name, record in checks_by_name().items()
         for fragment in record.fragments
-        if fragment.file == file and fragment.kind == kind
+        if fragment.file == file and extension in fragment.extensions
     )
 
 
-def _kinds_in_play(subject: Subject) -> list[str]:
-    """The subject's kinds and the kinds its checks' fragments are for, in order."""
-    names = [kind.name for kind in subject.kinds]
-    names += [
-        fragment.kind
-        for record in subject.checks
-        for fragment in record.fragments
-        if fragment.kind
-    ]
-    known = {kind.name for kind in all_kinds()}
-    return [name for name in dict.fromkeys(names) if name in known]
-
-
-def _nearest_fragment(subject: Subject) -> list[Violation]:
+def _fragment_owner(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     files = sorted(
         {
             fragment.file
             for record in checks_by_name().values()
             for fragment in record.fragments
-            if fragment.kind
+            if fragment.extensions
         }
     )
-    for kind in _kinds_in_play(subject):
-        nearest_first = [record.name for record in reversed(kind_chain(kind))]
+    named = dict.fromkeys(
+        extension
+        for record in subject.checks
+        for fragment in record.fragments
+        for extension in fragment.extensions
+    )
+    for extension in named:
         for file in files:
-            owners = _fragment_owners(kind, file)
+            owners = _fragment_owners(extension, file)
             if len(owners) > 1:
                 violations.append(
                     Violation(
-                        NEAREST_FRAGMENT,
-                        f"kind {kind} {file}",
-                        f"{' and '.join(owners)} both carry it for the kind; the"
-                        " render would pick one by name, so one of them yields",
-                    )
-                )
-            nearest = next(
-                (name for name in nearest_first if _fragment_owners(name, file)), None
-            )
-            if nearest is None:
-                continue
-            wanted = _fragment_owners(nearest, file)[0]
-            found = package_fragment(kind, file)
-            if found is None or found[1] != wanted:
-                rendered = "nothing" if found is None else f"{found[1]}'s fragment"
-                violations.append(
-                    Violation(
-                        NEAREST_FRAGMENT,
-                        f"kind {kind} {file}",
-                        f"renders {rendered}; the nearest kind with one is"
-                        f" {nearest}, whose {wanted} renders it",
+                        FRAGMENT_OWNER,
+                        f"extension {extension} {file}",
+                        f"{' and '.join(owners)} both carry it for the extension's"
+                        " packages; the render picks one by name, so one of them"
+                        " yields",
                     )
                 )
     return violations
@@ -848,7 +824,7 @@ def _package_fragments(subject: Subject) -> list[tuple[CheckRecord, Fragment]]:
         (record, fragment)
         for record in subject.checks
         for fragment in record.fragments
-        if fragment.kind
+        if fragment.extensions
     ]
 
 
@@ -891,15 +867,15 @@ def _package_drift(fragment: Fragment) -> str:
     with tempfile.TemporaryDirectory() as scratch:
         member = Path(scratch)
         try:
-            _shipped_files.settle_package(member, fragment.kind)
+            _shipped_files.settle_package(member, fragment.extensions)
         except Exception as error:
             return f"does not render: {error}"
-        drift = _shipped_files.judge_package(member, fragment.kind)
+        drift = _shipped_files.judge_package(member, fragment.extensions)
         if drift:
             return f"drifts from its own render: {drift[0]}"
         copy = member / fragment.file
         copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
-        if not _shipped_files.judge_package(member, fragment.kind):
+        if not _shipped_files.judge_package(member, fragment.extensions):
             return "a hand edit of the rendered file is not named as drift"
     return ""
 
@@ -909,7 +885,8 @@ def _fragment_drift(subject: Subject) -> list[Violation]:
     for record, fragment in _package_fragments(subject):
         problem = _package_drift(fragment)
         if problem:
-            where = f"check {record.name} {fragment.file} for {fragment.kind}"
+            held = " or ".join(fragment.extensions)
+            where = f"check {record.name} {fragment.file} for {held}"
             violations.append(Violation(FRAGMENT_DRIFT, where, problem))
     return violations
 
@@ -919,8 +896,8 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
 
     The render writes the file into a probe package, a person edits it
     or not, the check is withdrawn, and the render settles the file
-    again. A file another check still renders for the kind is not
-    withdrawn at all, and says nothing here.
+    again. A file another check still renders for the same extensions is
+    not withdrawn at all, and says nothing here.
     """
     from livery.workshop import _shipped_files
 
@@ -931,15 +908,15 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
         member = Path(scratch)
         copy = member / fragment.file
         try:
-            _shipped_files.settle_package(member, fragment.kind)
+            _shipped_files.settle_package(member, fragment.extensions)
             if not copy.is_file():
                 return ""  # it did not render: the drift clause names that
             if edited:
                 copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
             _checks.unregister_check(record.name)
-            if package_fragment(fragment.kind, fragment.file) is not None:
+            if package_fragment(fragment.extensions, fragment.file) is not None:
                 return ""
-            _shipped_files.settle_package(member, fragment.kind)
+            _shipped_files.settle_package(member, fragment.extensions)
         except Exception:
             return ""  # a render that fails is the drift clause's to name
         finally:
@@ -960,7 +937,8 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
 def _withdrawn_file(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     for record, fragment in _package_fragments(subject):
-        where = f"check {record.name} {fragment.file} for {fragment.kind}"
+        held = " or ".join(fragment.extensions)
+        where = f"check {record.name} {fragment.file} for {held}"
         for edited in (False, True):
             problem = _withdraw(record, fragment, edited=edited)
             if problem:
@@ -1008,12 +986,12 @@ def _probe_packages(root: Path) -> tuple[Package, ...]:
 
 def _probed(record: CheckRecord, packages: tuple[Package, ...]) -> bool:
     """Whether the probe workspace gives *record* something to judge."""
+    from livery.workshop._kinds import extension_set
+
     if record.scope == WORKSPACE:
         return True
     return any(
-        kind in {link.name for link in kind_chain(package.kind)}
-        for package in packages
-        for kind in record.kinds
+        set(record.extensions) & set(extension_set(package)) for package in packages
     )
 
 
@@ -1170,11 +1148,10 @@ CLAUSES: tuple[Clause, ...] = (
         _backend_protocol,
     ),
     Clause(
-        NEAREST_FRAGMENT,
-        "A per-package configuration file resolves per kind down the kind"
-        " chain, the nearest kind's fragment winning, and one kind has one"
-        " owner per file.",
-        _nearest_fragment,
+        FRAGMENT_OWNER,
+        "A per-package configuration file has one owner among the checks"
+        " whose fragments name an extension.",
+        _fragment_owner,
     ),
     Clause(
         CATEGORY_TABLE,

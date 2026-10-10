@@ -52,7 +52,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for_kind
+    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
 
@@ -65,7 +65,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         with footman_registry.capture():
             assert mount_extensions(root) == ()
         assert "format.ruff" not in checks_by_name()
-        assert "ruff" not in {tool for tool, _ in tools_for_kind("python")}
+        assert "ruff" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "ruff.toml").exists()
         # Listed, the mount registers both checks under the listed name,
@@ -77,7 +77,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         assert {checks[name].extension for name in ("format.ruff", "lint.ruff")} == {
             "ruff"
         }
-        assert "ruff" in {tool for tool, _ in tools_for_kind("python")}
+        assert "ruff" in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         written = (root / "ruff.toml").read_text()
         assert 'cache-dir = ".workshop/.cache/ruff"' in written
