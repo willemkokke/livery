@@ -5,7 +5,6 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
-extensions = ["python"]
 name = "livery-extensions-mypy"
 description = "mypy as a check of the livery workshop: the type checker, on every platform, configured by the root mypy.ini."
 

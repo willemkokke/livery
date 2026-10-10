@@ -5,7 +5,6 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
-extensions = ["python"]
 name = "livery-extensions-claude"
 description = "Claude Code for the livery workshop: CLAUDE.md, the delivered guidance, .claude/ and the hook verbs the agent's tooling runs."
 

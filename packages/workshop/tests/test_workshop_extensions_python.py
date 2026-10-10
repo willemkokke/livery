@@ -52,7 +52,9 @@ def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
 
 
 def test_the_extension_answers_each_python_package_as_the_kind_backend_does() -> None:
-    """For every package here that lists it, the answers equal the backend's."""
+    """Every python package here, listing it or not, is answered as the backend does."""
+    from dataclasses import replace
+
     import livery.workshop
     from livery.extensions.python import _backend
     from livery.workshop._packages import discover_packages
@@ -70,9 +72,11 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         # alone, beside no checkout's packages.
         pytest.skip("the comparison reads this checkout's packages")
     listing = [
-        package for package in discover_packages(ROOT) if "python" in package.extensions
+        replace(package, extensions=("python",))
+        for package in discover_packages(ROOT)
+        if package.kind == "python"
     ]
-    assert listing, "no package here lists the python extension"
+    assert listing, "no package here is of the python kind"
     for package in listing:
         assert answer(package, CURRENT_VERSION) == _backend.current_version(package)
         assert answer(package, VERSION_FILES) == tuple(

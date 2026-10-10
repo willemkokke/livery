@@ -998,12 +998,17 @@ slices, each mergeable alone:
    module; it only shrinks, and a test keeps it exact.
    1. **The move** (issue #1352): the kind's backend becomes the
       extension's code, and nothing behaves differently.
-   2. **The queries**: the extension answers `current-version`,
-      `version-files`, `requirements`, `module-roots` and
-      `public-modules`. This repository's python packages and the
-      python template list it. The seam asks a package's extensions
-      where they answer, and the kind's backend for a package that
-      lists none: the one bridge of the transition, until slice 6.
+   2. **The queries** (issue #1353): the extension answers
+      `current-version`, `version-files`, `requirements`,
+      `module-roots` and `public-modules`. The workshop package and
+      the python templates list it. The seam asks a package's
+      extensions where they answer, and the kind's backend for a
+      package that lists none: the one bridge of the transition, until
+      slice 6. This repository's other python packages list it once a
+      change to a package's contract alone releases nothing (#1328):
+      today the train counts every commit under a package's path, so
+      the listing would give sixteen packages a release that ships
+      nothing new.
    3. **The phases**: `stamp`, `build`, `prove`, `publish` and
       `replay` as the extension's steps. A phase's steps read the
       engine's inputs (the version, the registry target, the build's

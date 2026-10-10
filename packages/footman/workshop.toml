@@ -5,7 +5,6 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
-extensions = ["python"]
 name = "livery-footman"
 description = "A task runner with typed commands, nested groups, and instant shell completion."
 dev-extras = ["test"]

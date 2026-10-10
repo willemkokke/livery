@@ -5,7 +5,6 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "python"
-extensions = ["python"]
 name = "livery-extensions-ty"
 description = "ty as a check of the livery workshop: the type checker over every platform at once, configured by the root ty.toml."
 
