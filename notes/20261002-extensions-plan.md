@@ -88,20 +88,22 @@ The words this plan uses, each with one meaning:
 - **A plugin**: a footman plugin, verbs only. It registers nothing
   with the workshop beyond the tools its verbs need. It is active
   because the project depends on it directly.
-- **A check**: one job one tool does for one role in the gate, such
-  as ruff's `format` check. An extension registers any number.
-- **A role**: what a check does: `format`, `lint`, `typecheck`,
-  `typecomplete`, `test`, `examples`, `build`. A role exists in a
-  workspace only when a listed extension registers a check for it.
+- **A step**: one piece of work an extension contributes to a phase,
+  declared at `[phases.<phase>.<step>]`, its tool's words or a
+  function. A check is a step of a phase `fm check` runs (ruled
+  2026-10-10; the destination note's "One mechanism" section).
+- **A phase**: the moment a step runs at, declared by the base or an
+  extension with its engine keys, its level and its placement: at the
+  gate `build`, `format`, `lint`, `typecheck`, `typecomplete`, `test`,
+  `examples`; at release `stamp`, `build` and `test` isolated,
+  `publish`, `verify`; by their verbs `sync`, `clean`, `configure`,
+  `run`. A phase exists in a workspace when something declares it.
+  "Role" left the vocabulary on 2026-10-10.
 - **A fragment**: content an extension delivers to a target path,
   composed with the other extensions' fragments by the target's file
   type.
 - **A seed**: a file written once, when a project or a package is
   born, and the project's own from then on.
-- **A phase**: a step of a package's lifecycle (`create`, `sync`,
-  `stamp`, `build`, `prove`, `publish`, `replay`, `clean`, `run`), with
-  `pre`, main and `post`, to which package-level extensions
-  contribute.
 - **A query**: an answer about a package (its version, its files,
   its requirements, its distributions), combined across its
   extensions by a rule per query.
@@ -423,6 +425,11 @@ record.
 
 ### Package composition
 
+Ruled 2026-10-10: composition is requires alone. `compatible`, `before`,
+`after`, the pair check and the combinations below go with #1377; the
+canonical list stays. The destination note's "One mechanism" section
+rules where this one differs.
+
 Each package-level extension declares:
 
 - **requires**: extensions that must also be present, as names; the
@@ -443,6 +450,11 @@ combination of the installed extensions by that name, and completion
 offers it.
 
 ### Phases, context and queries
+
+Ruled 2026-10-10: the phases below are declared, their steps named,
+`pre` and `post` gone, prove folded into test and replay named verify;
+the destination note's "One mechanism" section rules where this one
+differs (#1377). The query table stands.
 
 | Phase | Does |
 |---|---|
@@ -1622,6 +1634,8 @@ Acceptance:
 | `livery-cbor` 0.0.0 on the index | nothing: kept as the name's claim |
 | `griffelib` a dependency of `livery-workshop` | a dependency of `livery-extensions-docs` (phase 10) |
 | `run_suites`, `kind_examples` and `workspace_suite` in `livery.workshop.api` | the python kind's extension's API (phase 11b) |
+| `[checks.<tool>.<role>]` beside `[phases.<phase>]` with `pre`, `main` and `post` | `[phases.<phase>.<step>]`, one mechanism (#1377) |
+| `compatible`, the pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
 
 ## Decision record
 
@@ -2184,6 +2198,16 @@ Acceptance:
   `__init__.py`.
 - Willem, 2026-10-06: Rust must be supported. Java stays possible, as
   recorded above.
+
+- 2026-10-10, Willem: one mechanism, phases with named steps, in
+  place of checks beside phases; composition is requires alone; the
+  generators and five smaller registries fold into steps, queries and
+  fragments. The destination note's "One mechanism" section holds the
+  design and its decision record the reasons. #1377.
+- 2026-10-10, Willem: releases on demand, the train proven by the
+  loop's release scenario on a cadence, one runner for a pull
+  request, and the loop entering once; the destination note's "The
+  sprint". #1378, #1379, #1380.
 
 ## Open
 
