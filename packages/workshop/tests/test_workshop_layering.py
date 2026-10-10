@@ -698,7 +698,7 @@ def test_a_test_reference_writes_the_test_edge_and_no_requirement(
 def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_project(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
     from livery.workshop._packages import Package
 
     def member(name: str, pyproject: str) -> Package:

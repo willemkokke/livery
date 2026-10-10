@@ -18,9 +18,9 @@ from typing import Any
 
 import pytest
 
+from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._release import prepare_release, verify_release

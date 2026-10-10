@@ -216,7 +216,7 @@ def test_the_floor_leg_follows_prove_floors_package_over_workspace(
         ran.append(resolution)
         return {}
 
-    monkeypatch.setattr("livery.workshop._backends._python.run_isolated_test", _leg)
+    monkeypatch.setattr("livery.extensions.python._backend.run_isolated_test", _leg)
     # The fallback first: neither contract says, so the floors are proved.
     assert proves_floors(root, core) == (True, "")
     contract = core.directory / "workshop.toml"
@@ -724,7 +724,7 @@ def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
     )
     packages = {p.directory.name: p for p in discover_packages(root)}
     plan = MemberPlan(packages["core"], "0.2.0")
-    from livery.workshop._backends import _python as _backend
+    from livery.extensions.python import _backend
     from livery.workshop._release_driver import validate_member
 
     _backend.build(plan.package, root)
@@ -787,7 +787,7 @@ def _starve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *versions: str) -> 
     directory; a seeded member has no tests directory, so it is never
     run.
     """
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     links = tmp_path / "links"
     links.mkdir(exist_ok=True)
@@ -811,7 +811,7 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     # names one of the package's own floored dependencies lifts it
     # after the starved install, and the probe must refuse rather
     # than let the floor leg pass against the wrong version.
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     _fake, _git_seam, root = workspace
     member = root / "packages" / "core"
@@ -834,12 +834,12 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
         return pins
 
     monkeypatch.setattr(
-        "livery.workshop._backends._python._dev_pins", _overlapping_pins
+        "livery.extensions.python._backend._dev_pins", _overlapping_pins
     )
     # The guard is the backstop behind the filter: with the filter
     # bypassed, an overlapping pin moves the floor and is refused.
     monkeypatch.setattr(
-        "livery.workshop._backends._python._pins_without", lambda pins, _r: pins
+        "livery.extensions.python._backend._pins_without", lambda pins, _r: pins
     )
     with pytest.raises(_FAILURES) as caught:
         _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
@@ -857,7 +857,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
     # on the member's own dependency is dropped from the toolchain,
     # so the floor leg proves the floor and the guard has nothing to
     # refuse.
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     _fake, _git_seam, root = workspace
     member = root / "packages" / "core"
@@ -880,7 +880,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
         return pins
 
     monkeypatch.setattr(
-        "livery.workshop._backends._python._dev_pins", _overlapping_pins
+        "livery.extensions.python._backend._dev_pins", _overlapping_pins
     )
     resolved = _python.run_isolated_test(
         packages["core"], root, resolution="lowest-direct"
@@ -889,7 +889,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
 
 
 def test_pins_without_drops_only_what_the_leg_resolved(tmp_path: Path) -> None:
-    from livery.workshop._backends._python import _pins_without
+    from livery.extensions.python._backend import _pins_without
 
     pins = tmp_path / "dev-pins.txt"
     pins.write_text(
@@ -912,7 +912,7 @@ def test_pins_without_drops_only_what_the_leg_resolved(tmp_path: Path) -> None:
 def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
     # The fallbacks first: no pyproject, then no declared index, both
     # hand the leg nothing and it resolves from the default alone.
-    from livery.workshop._backends._python import _index_args
+    from livery.extensions.python._backend import _index_args
 
     assert _index_args(tmp_path) == ()
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
@@ -942,7 +942,7 @@ def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
 def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._backends._python import _leg_env
+    from livery.extensions.python._backend import _leg_env
 
     root = tmp_path / "ws"
     venv = tmp_path / "leg-venv"
@@ -966,7 +966,7 @@ def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(
 
 def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
     # The fallback first: no declared extra, no changed spelling.
-    from livery.workshop._backends._python import _install_target
+    from livery.extensions.python._backend import _install_target
 
     member = tmp_path / "packages" / "plain"
     member.mkdir(parents=True)
@@ -987,7 +987,7 @@ def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
 def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
     # The suite the leg runs may need more than the runtime deps; the
     # declared extra names it and the install spelling carries it.
-    from livery.workshop._backends._python import _install_target
+    from livery.extensions.python._backend import _install_target
 
     member = tmp_path / "packages" / "hosted"
     member.mkdir(parents=True)
@@ -1011,7 +1011,7 @@ def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
 
 
 def test_dev_pins_export_the_locks_resolution_or_none(tmp_path: Path) -> None:
-    from livery.workshop._backends._python import _dev_pins
+    from livery.extensions.python._backend import _dev_pins
 
     # The monorepo has a lock and a dev group: the export carries the
     # gate's own pytest pin.
@@ -1032,7 +1032,7 @@ def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
     # A solo release whose declared floor names a version no index
     # serves: the floor leg's install refuses, and the refusal is the
     # release's answer, never a silent pass against the tree.
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     _fake, _git_seam, root = workspace
     member = root / "packages" / "tool"
@@ -1111,7 +1111,7 @@ def test_refresh_args_name_every_wheel_of_the_set_once(tmp_path: Path) -> None:
     # The cold cases first: no dirs, and a dir without wheels, name
     # nothing; a distribution's underscored filename is normalised
     # and a second wheel of the same distribution adds no flag.
-    from livery.workshop._backends._python import _refresh_args
+    from livery.extensions.python._backend import _refresh_args
 
     assert _refresh_args(()) == []
     empty = tmp_path / "empty"
@@ -1142,7 +1142,7 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     from types import SimpleNamespace
 
     import livery.toolroom.tools as toolroom
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     _fake, _git_seam, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
@@ -1179,7 +1179,7 @@ def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:
     # Members export as workspace-relative paths a scratch venv
     # cannot resolve, and reinstalling them would clobber the starved
     # resolution; the released wheel and its floors are already in.
-    from livery.workshop._backends._python import _dev_pins
+    from livery.extensions.python._backend import _dev_pins
 
     pins = _dev_pins(ROOT, tmp_path)
     assert pins is not None

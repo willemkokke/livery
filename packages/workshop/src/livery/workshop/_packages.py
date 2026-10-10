@@ -1019,19 +1019,49 @@ BASE_MODULE = "livery.workshop"
 EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
+#: The base modules that import an extension while the package kinds
+#: live in the base: each module to the extension it imports, and why.
+#: The python kind's code is the python extension's, and the base takes
+#: it as the kind's backend. The list only shrinks, a test keeps it
+#: exact, and it is empty once the package kinds go.
+BASE_EXTENSION_IMPORTS: dict[str, tuple[str, str]] = {
+    "livery.workshop._kinds": (
+        "livery.extensions.python",
+        "registers the python kind with the extension's code as its backend",
+    ),
+    "livery.workshop._backends._python_nanobind": (
+        "livery.extensions.python",
+        "the nanobind kind builds on the python kind's functions",
+    ),
+    "livery.workshop._quality": (
+        "livery.extensions.python",
+        "runs the python kind's suites and reads their coverage",
+    ),
+    "livery.workshop._release_driver": (
+        "livery.extensions.python",
+        "runs a python member's isolated release leg",
+    ),
+}
+
+
 def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
     """Each base module that imports an extension, with the extension named.
 
     The base (``livery.workshop``) imports no extension under
     ``livery.extensions``: what an extension needs of the base it takes through
     the base's seams, and the base reaches an extension only through the
-    registries the extension fills at mount.
+    registries the extension fills at mount. The one exception is
+    [livery.workshop._packages.BASE_EXTENSION_IMPORTS][]: a module it names may
+    import the extension it names, and nothing else under the namespace.
     """
     problems: list[str] = []
     for module in modules:
         if not module.dotted.startswith(BASE_MODULE + "."):
             continue
+        allowed = BASE_EXTENSION_IMPORTS.get(module.dotted, ("", ""))[0]
         for imported in module.imports:
+            if allowed and (imported == allowed or imported.startswith(allowed + ".")):
+                continue
             if imported == EXTENSIONS_NAMESPACE or imported.startswith(
                 EXTENSIONS_NAMESPACE + "."
             ):

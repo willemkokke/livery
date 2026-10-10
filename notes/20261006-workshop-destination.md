@@ -18,8 +18,10 @@ debt to clear (see "First publishes").
 Phase 11 started on 2026-10-09, and 11a is built: package composition
 (issue #1330), the lifecycle phases (issue #1332), the queries (issue
 #1333) and `fm run` (issue #1335). 11a's C++ acceptance waits for 11b's
-cpp extension. 11b's first slice, one seam for a package's lifecycle,
-is issue #1343. The
+cpp extension. 11b's first slice, one seam for a package's lifecycle
+(issue #1343), is built, and the loop's release scenario passed on it
+for the first time. The second slice's first part, the python kind's
+code moving into its extension, is issue #1352. The
 extensions plan (`notes/20261002-extensions-plan.md`) stays the one plan; this note
 rewrites its phases 10 to 15 against a designed destination.
 
@@ -985,17 +987,31 @@ slices, each mergeable alone:
    backend. The train's tests stand in for a build or an upload at the
    seam, so they keep pinning the train's behaviour while the later
    slices change only the seam's inside.
-2. **python.** `livery.extensions.python` ships in the workshop wheel
-   the way docs does, so the workshop's suite and its release leg keep
-   it: the python kind's backend, queries and phases, its categories,
-   its tool (`uv`) and seeds, `run_suites`, `kind_examples` and
-   `workspace_suite`, and the reach rule. This repository's packages
-   list it. Until slice 5 the release train asks a package's
-   extensions where they answer, and the kind's backend for a package
-   still of a kind: the one bridge of the transition. A phase's steps
-   read the engine's inputs (the version, the registry target, the
-   build's epoch) as context keys the base provides, which the phase
-   judge counts as provided.
+2. **python**, in four parts. `livery.extensions.python` ships in
+   the workshop wheel the way docs does, so the workshop's suite and
+   its release leg keep it. Until slice 6 the base imports it: the
+   python kind's registration takes the extension's code as its
+   backend, and the base modules that code serves (the nanobind kind,
+   the quality verbs, the release driver) import it as they imported
+   the backend. `BASE_EXTENSION_IMPORTS`, the allowance of the
+   layering check's `base-imports-no-extension` rule, names each such
+   module; it only shrinks, and a test keeps it exact.
+   1. **The move** (issue #1352): the kind's backend becomes the
+      extension's code, and nothing behaves differently.
+   2. **The queries**: the extension answers `current-version`,
+      `version-files`, `requirements`, `module-roots` and
+      `public-modules`. This repository's python packages and the
+      python template list it. The seam asks a package's extensions
+      where they answer, and the kind's backend for a package that
+      lists none: the one bridge of the transition, until slice 6.
+   3. **The phases**: `stamp`, `build`, `prove`, `publish` and
+      `replay` as the extension's steps. A phase's steps read the
+      engine's inputs (the version, the registry target, the build's
+      epoch) as context keys the base provides, which the phase judge
+      counts as provided.
+   4. **The rest**: its categories, its tool (`uv`) and seeds,
+      `run_suites`, `kind_examples` and `workspace_suite`, and the
+      reach rule.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
    test checks, its root files as `[root-files."<path>"]`, and checks
    naming `extensions` instead of `kinds`.
@@ -1006,8 +1022,9 @@ slices, each mergeable alone:
    extension reads the extractor and the coverage pages from the kinds
    until then.
 6. **The kinds go**: the registry, `KindRecord`, `Backend`, the
-   `kind` key, a check's `kinds` and the bridge; `fm new.package` takes
-   a combination, completed from `fm extensions --combinations`.
+   `kind` key, a check's `kinds`, the bridge and the base's imports of
+   the python extension; `fm new.package` takes a combination,
+   completed from `fm extensions --combinations`.
 7. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09.
@@ -1162,6 +1179,7 @@ the stack, which this design neither needs nor rules out).
 | the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
+| `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 3) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 
@@ -1898,6 +1916,13 @@ the stack, which this design neither needs nor rules out).
   is the seam alone, and the engine's inputs to a phase's steps move to
   slice 2. No step reads them before the python extension's steps do,
   so a key the base provides in slice 1 would have no reader.
+- Willem, 2026-10-10: the base may import `livery.extensions.python`
+  until the package kinds go (slice 6). The python kind's code moves
+  into the extension while the base keeps registering the kind, so a
+  package that lists no extension keeps working, nothing breaks before
+  slice 6, and no extension turns on through `kind`. The exception is
+  an allowance the layering check enforces, not prose. Slice 2 lands
+  in four parts.
 
 ## Open
 

@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery.extensions.python import _backend as _python
 from livery.footman import fail
-from livery.workshop._backends import _python
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -132,7 +132,8 @@ def floor_legs(
             it. A floor whose header lacks a symbol the extension
             calls fails at the compile.
     """
-    from livery.workshop._backends import _cpp_conan, _python
+    from livery.extensions.python import _backend as _python
+    from livery.workshop._backends import _cpp_conan
     from livery.workshop._kinds import kind_for
     from livery.workshop._packages import discover_packages
 

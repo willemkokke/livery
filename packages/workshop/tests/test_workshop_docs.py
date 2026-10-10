@@ -326,7 +326,7 @@ def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None
 def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._backends._python import INVENTORIES
+    from livery.extensions.python._backend import INVENTORIES
 
     root = _workspace(tmp_path)
     config = zensical_config(root)
@@ -1390,7 +1390,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     data.add_arcs({str(source): {(-1, 1), (1, 2), (2, -1)}})
     data.write()
     monkeypatch.setattr(
-        "livery.workshop._backends._python._stored_legs",
+        "livery.extensions.python._backend._stored_legs",
         lambda root: ([stored], ["packages/other on check-a"]),
     )
     # A declared package the data never touched states the absence.
@@ -1428,7 +1428,7 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
     stale.mkdir(parents=True)
     (stale / "index.html").write_text("an older report")
     monkeypatch.setattr(
-        "livery.workshop._backends._python._stored_legs", lambda root: ([], [])
+        "livery.extensions.python._backend._stored_legs", lambda root: ([], [])
     )
     # Inside CI the data is the record of the tree being built: red.
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
@@ -1528,7 +1528,7 @@ def test_the_generators_output_is_printed_in_ci_only() -> None:
 def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     root = _workspace(tmp_path)
     calls: list[tuple[list[str], Path]] = []

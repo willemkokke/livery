@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 import workshop_python_checks as fake_checks
+from livery.extensions.python import _backend as _python
 from livery.workshop import _quality
-from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
@@ -215,7 +215,7 @@ def test_the_module_derives_from_the_src_tree_not_the_dist_name(
 ) -> None:
     # loop-echo under a workspace prefix once became "loop.echo", a
     # module that does not exist: the src tree is the truth.
-    from livery.workshop._backends._python import module_for
+    from livery.extensions.python._backend import module_for
 
     member = tmp_path / "packages" / "loop-echo"
     (member / "src" / "ci_e2e_loop" / "loop_echo").mkdir(parents=True)
@@ -233,7 +233,7 @@ def test_the_module_derives_from_the_src_tree_not_the_dist_name(
 def test_a_srcless_package_falls_back_to_the_dist_spelling(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._backends._python import module_for
+    from livery.extensions.python._backend import module_for
 
     member = tmp_path / "packages" / "plain"
     member.mkdir(parents=True)
@@ -359,7 +359,7 @@ def test_check_refuses_both_fix_flags_and_no_role_verb_is_written_by_hand() -> N
 def test_the_python_test_entry_maps_a_selection_to_its_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
     monkeypatch.setattr(

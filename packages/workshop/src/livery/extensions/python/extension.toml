@@ -1,0 +1,8 @@
+# The python package kind: building, versioning, publishing and testing
+# a python distribution. The base registers the python kind with this
+# extension's code as its backend until the package kinds go.
+
+[extension]
+api-version = 1
+# Listed in a package's extensions.
+levels = ["package"]

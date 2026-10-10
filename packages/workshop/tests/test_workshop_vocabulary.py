@@ -64,14 +64,13 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_packages", "pyproject.toml"): 1,
     ("_publish", "conan"): 4,
     ("_publish", "python"): 1,
-    ("_quality", BACKEND_IMPORT): 3,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
     ("_registries", "python"): 4,
     ("_release", BACKEND_IMPORT): 1,
     ("_release", "conan"): 1,
     ("_release", "python"): 1,
-    ("_release_driver", BACKEND_IMPORT): 2,
+    ("_release_driver", BACKEND_IMPORT): 1,
     ("_release_driver", "conan"): 2,
     ("_release_driver", "conanfile.py"): 2,
     ("_release_driver", "pyproject.toml"): 2,
@@ -221,11 +220,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         "fm new.project writes the stock list, as ruled",
     ),
     ("_new_project", "pytest"): (1, "fm new.project writes the stock list, as ruled"),
-    ("_backends._python", "pytest"): (
-        5,
-        "the python kind's test runner stays in the base until the python"
-        " kind is an extension of its own, as ruled",
-    ),
     ("_replay", "pytest"): (
         2,
         "the release replay runs a member's suite as the python kind's test"

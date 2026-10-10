@@ -18,9 +18,10 @@ if TYPE_CHECKING:
     from livery.workshop._verified import Verified
 
 import livery.footman as footman
+from livery.extensions.python import _backend as _python
 from livery.footman import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
-from livery.workshop._backends import _python, require_backends
+from livery.workshop._backends import require_backends
 from livery.workshop._checks import GateContext
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
@@ -881,7 +882,7 @@ def _with_unstored_suites(
     the suite's lines at its current closure on this leg; the rest run
     fresh, and the line says why.
     """
-    from livery.workshop._backends._python import suites_of
+    from livery.extensions.python._backend import suites_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
     kept = {package.path for package in subset}
@@ -910,8 +911,8 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     nothing. A unit neither record holds, a row written before the
     record named branches, say, runs metered, and nothing else.
     """
+    from livery.extensions.python._backend import units_of
     from livery.workshop import _verified
-    from livery.workshop._backends._python import units_of
 
     packages = _packages()
     # Only a suite a listed test check runs has a record to miss: a

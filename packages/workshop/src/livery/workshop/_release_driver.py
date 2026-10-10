@@ -23,10 +23,10 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery.extensions.python import _backend as _python
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
 from livery.workshop import _lifecycle
-from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages, receipt_member

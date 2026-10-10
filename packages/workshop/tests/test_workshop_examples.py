@@ -132,7 +132,7 @@ class _Pytest:
 def test_the_runner_says_so_without_examples_and_names_a_red_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     package = _package(tmp_path)
     fake = _Pytest(code=1)
@@ -163,7 +163,7 @@ def test_the_runner_says_so_without_examples_and_names_a_red_exit(
 
 
 def test_the_kind_names_its_runner_and_a_child_inherits_it() -> None:
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
     from livery.workshop._kinds import kind_examples
 
     assert kind_examples("python") is _python.run_examples

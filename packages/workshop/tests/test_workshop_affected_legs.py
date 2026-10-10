@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from livery.extensions.python import _backend as _python
 from livery.workshop import _coverage_store, _quality, _verified
-from livery.workshop._backends import _python
 from livery.workshop._gate_record import Plan
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
