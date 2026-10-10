@@ -2205,9 +2205,8 @@ Acceptance:
   fragments. The destination note's "One mechanism" section holds the
   design and its decision record the reasons. #1377.
 - 2026-10-10, Willem: releases on demand, the train proven by the
-  loop's release scenario on a cadence, one runner for a pull
-  request, and the loop entering once; the destination note's "The
-  sprint". #1378, #1379, #1380.
+  loop's release scenario on a cadence and one runner for a pull
+  request; the destination note's "The sprint". #1379, #1380.
 
 ## Open
 

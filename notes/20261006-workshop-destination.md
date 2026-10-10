@@ -472,8 +472,10 @@ consumer. Each rule is set now and set back at alpha.
 - A pull request's check legs run on one runner; the merge and nightly
   points run every runner. A Windows or macOS fault lands on main and
   is fixed forward (#1379).
-- The loop's runner enters the workspace once per pass: 176 s of a
-  183 s leg is the entry today (#1378).
+- The loop's host-mode runner already shares its tool store, uv cache
+  and conan home across jobs, and a job enters in 6 s; #1378 was filed
+  on a September workspace's numbers and closed on 2026-10-11. Where a
+  pass's 26 minutes go between its runs is unmeasured.
 - A mechanism lands with its first consumer, never on fixtures alone,
   tests for the real case first.
 - Inside a refactor slice a package's coverage floor follows the
@@ -2290,7 +2292,7 @@ the stack, which this design neither needs nor rules out).
   not general enough, and fewer constructs. #1377.
 - 2026-10-10, Willem: the rules under "The sprint": releases on demand
   with the loop's release scenario on a cadence (#1380), one runner for
-  a pull request (#1379), the loop entering once (#1378), a mechanism
+  a pull request (#1379), a mechanism
   with its first consumer, floors following the code in a refactor
   slice, short decision records. Why: this repository is its own only
   consumer, and the waves and legs proved releases nobody installed.
@@ -2308,7 +2310,8 @@ the stack, which this design neither needs nor rules out).
   provenance, a version-set grammar. Measured on the way: the local
   rehearsal of the 12-member wave takes 26 to 27 minutes, the loop's
   release act 6.5 minutes inside a 26-minute pass, and a loop leg's
-  entry 176 of 183 seconds.
+  entry 176 of 183 seconds on a workspace born 2026-09-29; today's
+  newborn enters in 6 s, so #1378 closed on 2026-10-11.
 - 2026-10-11, Willem: a step's body is `main`, with `fix` and
   `safe-fix` for a step that rewrites, each a command template, a
   list, or a function, a string; `judge`, `run`, `command` and
