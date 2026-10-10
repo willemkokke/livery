@@ -1,9 +1,12 @@
-"""The Python backend: the quality verbs for ``type = "python"``.
+"""The python package kind: build, version, publish and test a python distribution.
 
-One invocation covers every Python package at once: the checkers read
-their scopes from the workspace's own configuration, so the whole
-repository is linted exactly as CI lints it, and a tracked file
-outside any package still cannot pass the gate and fail the build.
+The base registers the python kind with this module as its backend, so
+every package of kind ``python`` builds, stamps, publishes and runs its
+tests through the functions here. One invocation covers every python
+package at once: the checkers read their scopes from the workspace's
+own configuration, so the whole repository is checked as CI checks it,
+and a tracked file outside any package still cannot pass the gate and
+fail the build.
 """
 
 from __future__ import annotations
@@ -25,13 +28,13 @@ import livery.toolroom.tools as tools
 from livery.footman import fail
 from livery.toolroom.tools import pytest
 from livery.workshop._contract import load_contract
-from livery.workshop._kinds import Extractor
 from livery.workshop._packages import Neighbours, Package
 from livery.workshop._state import RunContext, slug
 
 if TYPE_CHECKING:
     from livery.workshop._coverage_store import Record
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._kinds import Extractor
     from livery.workshop._registries import RegistryTarget
 
 #: The python suffixes a python check's claims admit; a foreign file
@@ -210,8 +213,7 @@ def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None.
 
     ``None`` under auto-ratchet too, whose floor is the mark on the
-    store; [livery.workshop._backends._python.coverage_policy][] tells
-    the two apart.
+    store; ``coverage_policy`` tells the two apart.
     """
     policy = coverage_policy(package)
     return None if policy is None else policy.floor
@@ -2225,12 +2227,20 @@ PYTHON_HANDLER_OPTIONS: dict[str, object] = {
 }
 
 
-#: The Python kind's extractor: mkdocstrings' python handler over the
-#: package's sources and its declared paths.
-EXTRACTOR = Extractor(
-    "python",
-    pages=api_pages,
-    sources=api_sources,
-    options=PYTHON_HANDLER_OPTIONS,
-    inventories=INVENTORIES,
-)
+def extractor() -> Extractor:
+    """The python kind's extractor: mkdocstrings' python handler.
+
+    It reads the package's sources and its declared paths. Built when
+    the kind registers rather than at import: the kind registry imports
+    this module while it registers, so this module imports the registry
+    no earlier.
+    """
+    from livery.workshop._kinds import Extractor
+
+    return Extractor(
+        "python",
+        pages=api_pages,
+        sources=api_sources,
+        options=PYTHON_HANDLER_OPTIONS,
+        inventories=INVENTORIES,
+    )

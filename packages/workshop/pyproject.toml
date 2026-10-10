@@ -68,6 +68,7 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 # mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
 docs = "livery.extensions.docs"
+python = "livery.extensions.python"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
 # `fm self.add livery-workshop` records the name; whether it mounts
@@ -105,10 +106,12 @@ livery-workshop-layout = "livery.workshop._pytest_layout"
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# The wheel ships two roots under the PEP 420 namespace livery: the
-# base, livery.workshop, whose entry module is its __init__.py, and the
-# docs extension, livery.extensions.docs, which has no public names:
-# nobody imports an extension but the workshop's mount. The flag lets
-# uv ship a root with no __init__.py.
-module-name = ["livery.workshop", "livery.extensions.docs"]
+# The wheel ships three roots under the PEP 420 namespace livery: the
+# base, livery.workshop, whose entry module is its __init__.py, and two
+# extensions with no public names, livery.extensions.docs and
+# livery.extensions.python. Nothing imports an extension but the
+# workshop: its mount, and the python kind's registration, which takes
+# the extension's code as its backend until the package kinds go. The
+# flag lets uv ship a root with no __init__.py.
+module-name = ["livery.workshop", "livery.extensions.docs", "livery.extensions.python"]
 namespace = true

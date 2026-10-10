@@ -4,7 +4,11 @@ The workshop mounts an extension through its entry point, which no
 import names, and a package talks to an extension through data: the
 contracts, and the files the extension reads. An extension imports
 another only when its extension.toml requires it. A member's source is
-held to that; tests are exempt, as the reach test exempts them.
+held to that; tests are exempt, as the reach test exempts them. The
+one exception is the workshop's own: the base modules that
+``livery.workshop._packages.BASE_EXTENSION_IMPORTS`` names import the
+python extension until the package kinds go, and the layering check
+reads the same list.
 
 An extension is the module a member's ``workshop.extensions`` entry
 point names; its own modules are the ones under that module's
@@ -59,6 +63,8 @@ def _imported(tree: ast.Module) -> list[tuple[str, int]]:
 
 def scan(root: Path) -> list[str]:
     """Each import of an extension from outside it that the rule refuses, by place."""
+    from livery.workshop._packages import BASE_EXTENSION_IMPORTS
+
     extensions = _extensions(root)
     sources = [*root.glob("packages/*/src"), *root.glob("packages/*/*/src")]
     problems: dict[tuple[str, int, str], str] = {}
@@ -77,6 +83,8 @@ def scan(root: Path) -> list[str]:
                 None,
             )
             place = path.relative_to(root).as_posix()
+            dotted = ".".join(path.relative_to(src).with_suffix("").parts)
+            allowed = BASE_EXTENSION_IMPORTS.get(dotted, ("", ""))[0]
             for name, line in _imported(tree):
                 target = next(
                     (
@@ -86,7 +94,7 @@ def scan(root: Path) -> list[str]:
                     ),
                     None,
                 )
-                if target is None or target == importer:
+                if target is None or target in (importer, allowed):
                     continue
                 wanted = extensions[target][0]
                 if importer is not None and wanted in extensions[importer][2]:

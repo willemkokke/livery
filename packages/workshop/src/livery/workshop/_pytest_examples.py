@@ -6,10 +6,10 @@ runs are one file. This plugin, loaded through the ``pytest11`` entry
 point, collects every ``docs/examples/**/*.py`` pytest is pointed at
 as one test item per file, executed whole in a fresh module namespace
 under its own path, so a failure's traceback names the example's file
-and line. The python kind's runner,
-[livery.workshop._backends._python.run_examples][], points pytest at
-a package's examples directory. A package's own setup around an
-example, a registry capture or a recording mode, is its
+and line. The python kind's runner, ``run_examples`` in the python
+extension, points pytest at a package's examples directory. A
+package's own setup around an example, a registry capture or a
+recording mode, is its
 ``docs/examples/conftest.py``'s business through the ``example``
 marker every item carries; the conftest itself is never an example.
 """

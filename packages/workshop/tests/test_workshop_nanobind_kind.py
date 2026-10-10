@@ -11,7 +11,8 @@ import pytest
 from _pytest.outcomes import Skipped  # the skip a fixture raises
 
 import livery.toolroom.tools as tools
-from livery.workshop._backends import _python, _python_nanobind
+from livery.extensions.python import _backend as _python
+from livery.workshop._backends import _python_nanobind
 from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
     is_python_kind,

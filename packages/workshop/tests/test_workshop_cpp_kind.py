@@ -341,7 +341,7 @@ def test_no_rendered_python_line_of_a_cpp_member_is_over_the_column_limit(
 
 def test_the_cpp_template_seeds_a_line_coverage_floor(tmp_path: Path) -> None:
     """A native member is judged like the others: its contract carries a floor."""
-    from livery.workshop._backends import _python
+    from livery.extensions.python import _backend as _python
 
     package = _render_cpp(tmp_path)
     assert _python.coverage_floor(package) == 100.0
@@ -719,8 +719,8 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     builds with, the part names the package's source with hit
     counts, and the local preview reads a number from it.
     """
+    from livery.extensions.python import _backend as _python
     from livery.workshop import _coverage_lines as lines_
-    from livery.workshop._backends import _python
 
     package = _render_cpp(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)
@@ -1222,8 +1222,8 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The Windows leg: enter MSVC, build, instrument, collect, read; then a red run."""
+    from livery.extensions.python import _backend as _python
     from livery.workshop import _coverage_lines as lines_
-    from livery.workshop._backends import _python
 
     package = _render_cpp(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)

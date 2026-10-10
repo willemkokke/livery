@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 
 import workshop_python_checks as fake_checks
+from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
-from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
 # The site's jobs are the docs extension's, added as the mount adds them.

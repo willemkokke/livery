@@ -26,7 +26,12 @@ from livery.workshop._composition import (
 from livery.workshop._contract import load_contract
 from livery.workshop._declaration import Declaration, DeclarationError
 from livery.workshop.testing import CLAUSES, Subject
-from workshop_extension_fakes import fake_extensions, package_contract, root_contract
+from workshop_extension_fakes import (
+    fake_extensions,
+    fake_package_extensions,
+    package_contract,
+    root_contract,
+)
 
 #: A package-level extension's identity, the start of most fakes here.
 PACKAGE = '[extension]\nlevels = ["package"]\n'
@@ -523,7 +528,7 @@ def test_a_package_level_extensions_keys_belong_where_a_package_lists_it(
 def test_fm_extensions_lists_every_valid_combination_of_what_is_installed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake_extensions(
+    fake_package_extensions(
         tmp_path,
         monkeypatch,
         python=PACKAGE,
@@ -543,7 +548,9 @@ def test_fm_extensions_lists_every_valid_combination_of_what_is_installed(
     _tasks.extensions(combinations=True)
     assert capsys.readouterr().out == "".join(f"  {name}\n" for name in expected)
     # A declaration this workshop cannot take refuses the listing, named.
-    fake_extensions(tmp_path, monkeypatch, odd=PACKAGE + 'before = ["acme.zed"]\n')
+    fake_package_extensions(
+        tmp_path, monkeypatch, odd=PACKAGE + 'before = ["acme.zed"]\n'
+    )
     with pytest.raises(Failed) as raised:
         _tasks.extensions(combinations=True)
     assert str(raised.value).startswith(
@@ -560,8 +567,9 @@ def test_fm_extensions_lists_every_valid_combination_of_what_is_installed(
 
 
 def test_with_no_package_level_extension_installed_the_listing_says_so(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    fake_package_extensions(tmp_path, monkeypatch)
     _tasks.extensions(combinations=True)
     assert capsys.readouterr().out == (
         "  no installed extension declares the package level\n"

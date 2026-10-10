@@ -44,6 +44,49 @@ def test_a_base_module_importing_a_extension_refuses_naming_both() -> None:
     assert "livery.extensions.docs._site" in problems[0]
 
 
+def test_an_allowed_base_module_importing_another_extension_refuses() -> None:
+    # The allowance names one extension per module: _kinds may import the
+    # python extension and nothing else under the namespace.
+    modules = (
+        _module(
+            "livery.workshop._kinds",
+            ("livery.extensions.python._backend", "livery.extensions.docs._site"),
+        ),
+    )
+    problems = extension_imports_in_the_base(modules)
+    assert len(problems) == 1
+    assert "livery.extensions.docs._site" in problems[0]
+
+
+def test_the_base_extension_import_allowance_is_exact() -> None:
+    """Each allowed module still imports its extension; a stale entry refuses.
+
+    The list says what is left of the exception, so an entry whose import
+    went comes out of it.
+    """
+    from livery.workshop._packages import BASE_EXTENSION_IMPORTS
+
+    src = ROOT / "packages" / "workshop" / "src"
+    stale: list[str] = []
+    for dotted, (extension, _reason) in BASE_EXTENSION_IMPORTS.items():
+        tree = ast.parse((src / f"{dotted.replace('.', '/')}.py").read_text("utf-8"))
+        imported = {
+            node.module or ""
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+        } | {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        if not any(
+            name == extension or name.startswith(extension + ".") for name in imported
+        ):
+            stale.append(dotted)
+    assert stale == []
+
+
 # Then the shape: a second tree's extension joins the namespace, and the
 # docs extension arrives through its own entry point.
 

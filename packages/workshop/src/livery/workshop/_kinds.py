@@ -594,7 +594,8 @@ def record_for_template(template_kind: str) -> KindRecord | None:
 
 
 def _register_builtin() -> None:
-    from livery.workshop._backends import _cpp_conan, _python, _python_nanobind
+    from livery.extensions.python import _backend as _python
+    from livery.workshop._backends import _cpp_conan, _python_nanobind
 
     # The base every kind derives from: abstract, the record behind the
     # package-base template. It requires no tool: the release notes'
@@ -625,7 +626,7 @@ def _register_builtin() -> None:
             # uv operates the workspace; the checkers, the formatter and
             # the test runner ride their check records.
             tools=("uv",),
-            extractor=_python.EXTRACTOR,
+            extractor=_python.extractor(),
             examples=_python.run_examples,
             suites=_python.run_test,
             coverage_pages=_python.render_coverage_pages,

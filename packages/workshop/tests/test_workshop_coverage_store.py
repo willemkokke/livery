@@ -574,7 +574,7 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
 def test_the_stored_union_pulls_every_recorded_unit_and_names_the_misses(
     work: Path, tmp_path: Path
 ) -> None:
-    from livery.workshop._backends._python import stored_union
+    from livery.extensions.python._backend import stored_union
 
     fresh = {
         "packages/base": _unit(

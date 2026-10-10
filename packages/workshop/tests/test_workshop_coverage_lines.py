@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.workshop import _coverage_lines as lines_
 from livery.workshop import _coverage_store
-from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
 _FAILURES = (SystemExit, Failed)

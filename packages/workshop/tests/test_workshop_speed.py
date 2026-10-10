@@ -611,7 +611,7 @@ def test_speed_lines_on_a_machine_print_the_sums_and_read_no_mark(
     work: Path, tmp_path: Path
 ) -> None:
     """The marks are judged on the CI legs, so a machine's run never asks for them."""
-    from livery.workshop._backends._python import speed_lines
+    from livery.extensions.python._backend import speed_lines
 
     sums = tmp_path / "speed.json"
     assert speed_lines(work, sums) == []  # the plugin did not run
@@ -642,7 +642,7 @@ def test_the_judge_is_a_ci_verb(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_speed_lines_on_a_check_leg_print_the_sums_beside_the_marks(
     work: Path, tmp_path: Path
 ) -> None:
-    from livery.workshop._backends._python import speed_lines
+    from livery.extensions.python._backend import speed_lines
 
     sums = tmp_path / "speed.json"
     sums.write_text(json.dumps({"packages/forge": {"seconds": 12.3, "tests": 45}}))

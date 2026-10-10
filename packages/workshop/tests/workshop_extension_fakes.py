@@ -32,6 +32,28 @@ def fake_extensions(
     The contract keys' owners are read again for the test alone, so a
     fake's keys never reach a later test.
     """
+    _fake(tmp_path, monkeypatch, modules, real_package_level=True)
+
+
+def fake_package_extensions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **modules: str
+) -> None:
+    """The fakes of [fake_extensions][], and no real extension a package may list.
+
+    For a test that judges the package-level set it built: the real
+    ones the workshop installs are left out of the scan.
+    """
+    _fake(tmp_path, monkeypatch, modules, real_package_level=False)
+
+
+def _fake(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    modules: dict[str, str],
+    *,
+    real_package_level: bool,
+) -> None:
+    """Write the fakes and put them in footman's scan; see [fake_extensions][]."""
     site = tmp_path / "site"
     (site / "acme").mkdir(parents=True, exist_ok=True)
     for name, text in modules.items():
@@ -54,6 +76,8 @@ def fake_extensions(
         for name in modules
     )
     named = {entry.name for entry in fakes}
+    if not real_package_level:
+        named |= _real_package_level()
     scanned = tuple(
         entry
         for entry in installed_entry_points()
@@ -64,6 +88,20 @@ def fake_extensions(
     monkeypatch.setattr(_entries, "_SCAN", None)
     owners = _contract_keys.declarations.__wrapped__
     monkeypatch.setattr(_contract_keys, "declarations", functools.cache(owners))
+
+
+def _real_package_level() -> set[str]:
+    """The installed extensions whose declaration lists the package level."""
+    from livery.workshop._declaration import read
+
+    found: set[str] = set()
+    for entry in installed_entry_points():
+        if entry.group != _extensions.GROUP:
+            continue
+        declared = read(entry.name, entry.value.partition(":")[0])
+        if declared is not None and "package" in declared.levels:
+            found.add(entry.name)
+    return found
 
 
 def fake_steps(tmp_path: Path, name: str, source: str) -> None:
