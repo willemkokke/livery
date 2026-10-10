@@ -5,22 +5,28 @@ artifacts and manifests through these functions alone: its build, the
 version its manifest declares, the files a version is written into,
 writing a version, publishing what it built, its declared requirements,
 writing one, the names other packages reference its code by, and the
-siblings its sources use. Each answers from the package's kind backend
-([livery.workshop._kinds.backend_for][]), so a caller never names a
-backend. A function a backend may leave out answers None or an empty
-tuple when the backend has none, and so does an abstract kind, which
-has no backend.
+siblings its sources use. A question that is a query
+([livery.workshop._queries.Query][]) is answered by the package's
+extensions when one of them answers it, and by the package's kind
+backend ([livery.workshop._kinds.backend_for][]) otherwise; every other
+function answers from the kind backend. So a caller never names an
+extension or a backend. A function a backend may leave out answers None
+or an empty tuple when the backend has none, and so does an abstract
+kind, which has no backend.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.workshop._packages import Neighbours, Package
+    from livery.workshop._queries import Query
     from livery.workshop._registries import RegistryTarget
+
+T = TypeVar("T")
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
@@ -36,6 +42,11 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
 
 def current_version(package: Package) -> str:
     """The version *package*'s own manifest declares."""
+    from livery.workshop._queries import CURRENT_VERSION
+
+    answered = _extensions_answer(package, CURRENT_VERSION)
+    if answered is not None:
+        return answered
     from livery.workshop._kinds import backend_for
 
     return backend_for(package).current_version(package)
@@ -47,6 +58,11 @@ def version_files(package: Package) -> tuple[Path, ...]:
     A caller that writes a version for one build keeps these files
     first, then restores them.
     """
+    from livery.workshop._queries import VERSION_FILES
+
+    answered = _extensions_answer(package, VERSION_FILES)
+    if answered is not None:
+        return answered
     from livery.workshop._kinds import backend_for
 
     return tuple(backend_for(package).stamp_version(package).homes())
@@ -80,6 +96,11 @@ def declared_requirements(package: Package) -> dict[str, str] | None:
     None for a package whose kind reads no manifest, which the layering
     check names, since it cannot compare the package's edges.
     """
+    from livery.workshop._queries import REQUIREMENTS
+
+    answered = _extensions_answer(package, REQUIREMENTS)
+    if answered is not None:
+        return dict(answered)
     reader = _optional(package, "declared_requirements")
     return None if reader is None else reader(package)
 
@@ -96,6 +117,11 @@ def declare_requirement(package: Package, dependency: Package, floor: str) -> li
 
 def module_roots(package: Package) -> tuple[str, ...]:
     """The names other packages reference *package*'s code by; empty for none."""
+    from livery.workshop._queries import MODULE_ROOTS
+
+    answered = _extensions_answer(package, MODULE_ROOTS)
+    if answered is not None:
+        return answered
     roots = _optional(package, "module_roots")
     return () if roots is None else tuple(roots(package))
 
@@ -106,6 +132,11 @@ def public_modules(package: Package) -> tuple[str, ...]:
     What a type-completeness check verifies. A package whose kind has
     no importable API answers nothing.
     """
+    from livery.workshop._queries import PUBLIC_MODULES
+
+    answered = _extensions_answer(package, PUBLIC_MODULES)
+    if answered is not None:
+        return answered
     from livery.workshop._kinds import backend_for
 
     return backend_for(package).public_modules(package)
@@ -136,6 +167,27 @@ def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str] 
     """
     reader = _optional(package, "referenced_siblings")
     return None if reader is None else reader(package, around)
+
+
+def _extensions_answer(package: Package, query: Query[T]) -> T | None:
+    """*package*'s extensions' answer to *query*; None when none of them answers.
+
+    The bridge while package kinds remain: a package whose extensions
+    answer a query takes their answer, and any other takes its kind
+    backend's. Only the declarations are read to decide, so no answer
+    is computed twice.
+    """
+    if not package.extensions:
+        return None
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._queries import answer
+
+    for name in package_set(package.extensions, installed_declaration):
+        declared = installed_declaration(name)
+        if declared is not None and query.name in declared.queries:
+            return answer(package, query)
+    return None
 
 
 def _optional(package: Package, name: str) -> Any:

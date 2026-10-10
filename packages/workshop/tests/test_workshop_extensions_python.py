@@ -5,6 +5,11 @@ from __future__ import annotations
 import importlib.metadata
 import subprocess
 import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_the_python_extension_imported_before_the_base_registers_the_kind() -> None:
@@ -44,3 +49,42 @@ def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
     declared = declaration("python")
     assert declared is not None
     assert declared.levels == ("package",)
+
+
+def test_the_extension_answers_each_python_package_as_the_kind_backend_does() -> None:
+    """Every python package here, listing it or not, is answered as the backend does."""
+    from dataclasses import replace
+
+    import livery.workshop
+    from livery.extensions.python import _backend
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._queries import (
+        CURRENT_VERSION,
+        MODULE_ROOTS,
+        PUBLIC_MODULES,
+        REQUIREMENTS,
+        VERSION_FILES,
+        answer,
+    )
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
+        # The release train's isolated leg installs the workshop's wheel
+        # alone, beside no checkout's packages.
+        pytest.skip("the comparison reads this checkout's packages")
+    listing = [
+        replace(package, extensions=("python",))
+        for package in discover_packages(ROOT)
+        if package.kind == "python"
+    ]
+    assert listing, "no package here is of the python kind"
+    for package in listing:
+        assert answer(package, CURRENT_VERSION) == _backend.current_version(package)
+        assert answer(package, VERSION_FILES) == tuple(
+            _backend.stamp_version(package).homes()
+        )
+        requirements = answer(package, REQUIREMENTS)
+        assert dict(requirements) == _backend.declared_requirements(package)
+        assert answer(package, MODULE_ROOTS) == tuple(_backend.module_roots(package))
+        assert answer(package, PUBLIC_MODULES) == tuple(
+            _backend.public_modules(package)
+        )

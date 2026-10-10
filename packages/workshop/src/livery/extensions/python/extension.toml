@@ -6,3 +6,11 @@
 api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
+
+# The questions about a package this extension answers.
+[queries]
+current-version = "livery.extensions.python._answers:current_version"
+version-files = "livery.extensions.python._answers:version_files"
+requirements = "livery.extensions.python._answers:requirements"
+module-roots = "livery.extensions.python._answers:module_roots"
+public-modules = "livery.extensions.python._answers:public_modules"
