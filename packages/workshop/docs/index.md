@@ -87,6 +87,11 @@ spelling. Every key is optional:
   packages' paths, each category to the patterns it takes; a package
   whose extensions declare categories is answered by them and the base
   kind's rules, and its own `[categories]` wins over both;
+- `[rules.<name>]`, a rule the extension adds to the layering check,
+  over the python sources the check parses once: `judge`, the
+  `"module:function"` that returns the problems, and an optional `fix`,
+  run inside the check's rewrite; a rule applies while the extension
+  is listed;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a

@@ -840,6 +840,22 @@ doc = "the categories a package-level extension gives its packages' paths, which
 types = ["strs"]
 doc = "a category, by its name, to the paths it takes, as patterns relative to the package"
 
+[contract.extension.rules]
+types = ["table"]
+doc = "the rules an extension adds to the layering check, by name, each over the python sources the check parses once"
+
+[contract.extension.rules."*"]
+types = ["table"]
+doc = "one rule: the function that judges the sources, and the one that fixes them"
+
+[contract.extension.rules."*".judge]
+types = ["str"]
+doc = "module:name in the extension's own package, called with the parsed sources and the rule's context; returns the problems, empty when the rule holds"
+
+[contract.extension.rules."*".fix]
+types = ["str"]
+doc = "module:name in the extension's own package, run inside the layering check's rewrite before the judge; returns the lines it wrote"
+
 [contract.extension.queries]
 types = ["table"]
 doc = "the questions about a package a package-level extension answers, by the query's name, each to the function that answers it"

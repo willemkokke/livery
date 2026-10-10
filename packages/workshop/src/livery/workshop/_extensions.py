@@ -25,6 +25,7 @@ from livery.workshop._declaration import (
     Additions,
     Declaration,
     DeclarationError,
+    DeclaredRule,
     DeclaredSlot,
     Reference,
     declaration_file,
@@ -32,6 +33,7 @@ from livery.workshop._declaration import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from importlib.metadata import Distribution, EntryPoint
 
     from livery.toolroom.store import Spec
@@ -540,11 +542,13 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 check_api_version(extension, found)
                 declare_slots(extension, found.slots)
                 notes = declare_release_notes(extension, found.release_notes)
+                rules = declare_rules(extension, found.rules)
                 if (
                     register_declared(
                         extension, found.additions, options.get(extension, ())
                     )
                     or notes
+                    or rules
                 ):
                     mounted.append(extension)
             present.append(extension)
@@ -588,7 +592,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             _note(f"{why}; the mount leaves it off")
         declare_slots(extension, found.slots)
         notes = declare_release_notes(extension, found.release_notes)
-        if register_declared(extension, found.additions, listed) or notes:
+        rules = declare_rules(extension, found.rules)
+        if register_declared(extension, found.additions, listed) or notes or rules:
             mounted.append(extension)
         name = found.plugin
         if name and name not in builtin:
@@ -685,6 +690,21 @@ def _graft_contributions(
                 continue
             register_declared(owner, additions, options.get(owner, ()))
             grafted.add((owner, target))
+
+
+def declare_rules(extension: str, rules: Mapping[str, DeclaredRule]) -> bool:
+    """Add each rule *extension* declares to the layering check; whether any.
+
+    The rule's references are imported when the check first calls them,
+    so a mount imports none of the extension's code.
+    """
+    from livery.workshop._ast_rules import AstRule, register_ast_rule
+
+    for name, rule in rules.items():
+        register_ast_rule(
+            AstRule(name, judge=rule.judge, fix=rule.fix, extension=extension)
+        )
+    return bool(rules)
 
 
 def register_declared(

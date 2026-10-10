@@ -1028,8 +1028,12 @@ slices, each mergeable alone:
    4. **The rest**, one part each: 4a its categories as data, an
       extension's `[categories]` (issue #1362), the python kind's table
       read from the extension's declaration so one table answers either
-      way; then its tool (`uv`), its seeds, `run_suites`,
-      `kind_examples` and `workspace_suite`, and the reach rule.
+      way; 4b the private-reach rule, the extension's
+      `[rules.private-reaches]` over the layering check's parse, its
+      allowance the root contract's `[[python.private-reaches]]`, and
+      this repository's root test retired (issue #1365). Its seeds,
+      `run_suites`, `kind_examples` and `workspace_suite` move with
+      slice 6, and `uv` moves to the base's own declaration there.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind: its build and
    test checks, its root files as `[root-files."<path>"]`, and checks
    naming `extensions` instead of `kinds`.
@@ -1191,7 +1195,6 @@ the stack, which this design neither needs nor rules out).
 | `KindRecord.extractor`, `coverage_pages`, `[docs] generators` as three mechanisms | `Generator` (phase 11c) |
 | `[qa] coverage-floor`, `coverage-epsilon` and the coverage machinery in the base | the coverage extension (phase 12e) |
 | `_site_files` | a whole-file fragment (phase 12a) |
-| `tests/test_private_reaches.py` at this repository's root | the python extension's rule and `[python] private-reaches` (phase 11b) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
@@ -1941,6 +1944,16 @@ the stack, which this design neither needs nor rules out).
   slice 6, and no extension turns on through `kind`. The exception is
   an allowance the layering check enforces, not prose. Slice 2 lands
   in four parts.
+- 2026-10-10, decided while building part 4 of slice 2: the python
+  kind's seeds, `run_suites`, `kind_examples` and `workspace_suite`
+  move with slice 6, and its `uv` requirement goes to the base's own
+  declaration there. A birth reads the seeds of the stack it is born
+  into, and a workspace's first python package is born before anything
+  lists the extension; the three runners dispatch by kind; `uv` runs
+  the workspace itself, so declaring it in the python extension made
+  every base module that names it read as naming another extension's
+  tool (issue #1363, closed). Slice 6 replaces what each needs: the
+  combination `fm new.package` takes, and the kind registry's end.
 
 ## Open
 

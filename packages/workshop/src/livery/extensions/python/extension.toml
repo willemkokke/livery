@@ -48,3 +48,24 @@ provides = { exit-code = "int" }
 test = ["tests/**/test_*.py", "tests/**/*_test.py"]
 test-support = ["tests/**"]
 source = ["src/**"]
+
+# No package's source reaches another distribution's private names; the
+# root contract's [[python.private-reaches]] lists the reaches allowed.
+[rules.private-reaches]
+judge = "livery.extensions.python._reaches:private_reaches"
+
+# The root contract's [python] table.
+[contract.root.python]
+types = ["table"]
+doc = "the python extension's settings for the workspace"
+
+[contract.root.python.private-reaches]
+types = ["list"]
+doc = "each reach into another distribution's private name the private-reaches rule allows, with its reason; an entry no source uses any more refuses"
+
+[contract.root.python."private-reaches[]"]
+types = ["table"]
+doc = "one allowed reach: the distribution that reaches, the private it reaches, and why"
+from = { types = ["str"], doc = "the distribution whose source reaches" }
+reaches = { types = ["str"], doc = "the private it reaches, by its dotted path" }
+reason = { types = ["str"], doc = "why the reach stays, and the public seam that will replace it" }
