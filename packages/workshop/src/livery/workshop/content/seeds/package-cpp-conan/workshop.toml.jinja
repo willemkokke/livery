@@ -5,6 +5,9 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = "cpp-conan"
+# The package-level extensions this package is composed of; conan
+# requires cpp, so the set is the three.
+extensions = ["cmake", "conan"]
 name = "{{ package_name }}"
 description = "{{ package_description }}"
 

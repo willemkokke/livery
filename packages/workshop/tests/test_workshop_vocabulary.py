@@ -58,7 +58,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_e2e", "pyproject.toml"): 1,
     ("_kinds", BACKEND_IMPORT): 1,
     ("_kinds", "conan"): 3,
-    ("_kinds", "cpp-conan"): 2,
+    ("_kinds", "cpp-conan"): 1,
     ("_kinds", "python"): 5,
     ("_kinds", "python-nanobind"): 1,
     ("_packages", "pyproject.toml"): 1,

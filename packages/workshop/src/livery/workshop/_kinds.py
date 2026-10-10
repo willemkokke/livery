@@ -684,6 +684,9 @@ def _register_builtin() -> None:
             wheel_identity="",
             tests_need_build=True,
             root_files=_cpp_conan.root_files,
+            # The category table is the cpp extension's declaration, one
+            # table for a package that lists the extensions or not.
+            categories_from="cpp",
         )
     )
 
@@ -699,18 +702,6 @@ def _register_categories() -> None:
             ("docs/examples/**/*.py", EXAMPLE),
             ("docs/_generated/**", "generated"),
             ("**", CONFIGURATION),
-        ],
-    )
-    register_categories(
-        "cpp-conan",
-        [
-            ("tests/**/*.cpp", TEST),
-            ("tests/**/*.cc", TEST),
-            ("tests/**/*.cxx", TEST),
-            ("tests/**/*.c", TEST),
-            ("tests/**", TEST_SUPPORT),
-            ("src/**", SOURCE),
-            ("include/**", SOURCE),
         ],
     )
     # The workspace's own unit: its tests as the python kind reads
