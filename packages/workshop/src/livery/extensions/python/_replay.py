@@ -29,27 +29,36 @@ def replay(
     Returns:
         The exit code: the install's when it is red, the tests' otherwise.
     """
+    from dataclasses import replace
+
     venv = tree.parent / ".replay"
     requirement = f"{package.name}{f'[{extras}]' if extras else ''}=={version}"
-    module = import_name(tree / "packages" / package.member / "src")
+    module = import_name(replace(package, directory=tree / package.path))
     code = install(venv, python, requirement, index)
     if code != 0:
         return code
     return run_tests(venv, tree, package.member, module)
 
 
-def import_name(src: Path) -> str:
-    """The module a member's ``src`` tree exposes: ``<namespace>.<name>`` or ``<name>``.
+def import_name(package: Package) -> str:
+    """The module *package*'s wheel ships, which the replay imports from site-packages.
 
-    Refuses when no package directory is found, naming the tree.
+    The first of the python kind's module roots
+    ([livery.extensions.python._backend.module_roots][]): the build
+    backend's ``module-name`` where the manifest declares one, which
+    names a module under a namespace too.
+
+    Raises:
+        Failed: when *package* ships no module, naming its ``src``.
     """
-    for first in sorted(p for p in src.iterdir() if p.is_dir()):
-        if (first / "__init__.py").is_file():
-            return first.name
-        for second in sorted(p for p in first.iterdir() if p.is_dir()):
-            if (second / "__init__.py").is_file():
-                return f"{first.name}.{second.name}"
-    fail(f"{src} holds no package directory: nothing to import")
+    from livery.extensions.python._backend import module_roots
+
+    roots = module_roots(package)
+    if not roots:
+        fail(
+            f"{package.directory / 'src'} holds no package directory: nothing to import"
+        )
+    return roots[0]
 
 
 def install(venv: Path, python: str, requirement: str, index: str) -> int:

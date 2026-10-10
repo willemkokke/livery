@@ -145,12 +145,46 @@ def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
     assert uploads == [("acme-core", "https://idx.example/", "t")]
 
 
+def _replayed_package(directory: Path) -> object:
+    from livery.workshop._packages import Package
+
+    return Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        kind="python",
+        depends=(),
+    )
+
+
 def test_a_tree_without_a_package_refuses_to_replay(tmp_path: Path) -> None:
     from livery.extensions.python import _replay
+    from livery.workshop._packages import Package
 
     (tmp_path / "src" / "empty").mkdir(parents=True)
+    package = _replayed_package(tmp_path)
+    assert isinstance(package, Package)
     with pytest.raises(BaseException, match="holds no package directory"):
-        _replay.import_name(tmp_path / "src")
+        _replay.import_name(package)
+
+
+def test_a_namespace_rooted_package_replays_the_module_it_declares(
+    tmp_path: Path,
+) -> None:
+    # Three levels of namespace and no __init__.py: what an extension's
+    # wheel ships, named by its build backend's module-name.
+    from livery.extensions.python import _replay
+    from livery.workshop._packages import Package
+
+    (tmp_path / "src" / "acme" / "extensions" / "lint").mkdir(parents=True)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "acme-extensions-lint"\n\n'
+        '[tool.uv.build-backend]\nmodule-name = "acme.extensions.lint"\n'
+        "namespace = true\n"
+    )
+    package = _replayed_package(tmp_path)
+    assert isinstance(package, Package)
+    assert _replay.import_name(package) == "acme.extensions.lint"
 
 
 def test_a_red_replay_install_runs_no_test(
