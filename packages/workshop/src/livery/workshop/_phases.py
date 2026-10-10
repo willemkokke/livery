@@ -10,6 +10,10 @@ the extensions of a package's set that add steps to the phase: every
 reverse. A ``post`` runs once its extension's ``pre`` ran, whatever
 failed, and the context says what did.
 
+The engine that runs a phase provides keys of its own
+([livery.workshop._phases.ENGINE_KEYS][]): a step reads one like any
+key, and no extension provides one.
+
 The order puts a reader after the provider of each key it reads, then
 follows each extension's ``before`` and ``after``, ties alphabetical
 ([livery.workshop._composition.order][]). Two providers of one key, a
@@ -43,6 +47,17 @@ PHASES = (
     "clean",
     "run",
 )
+
+
+#: The keys the engine that runs a phase provides, with their types:
+#: ``stamp`` the version to write, ``build`` the build's source date (0
+#: takes the build tool's own), ``publish`` the version and the
+#: resolved registry target, a table of its fields.
+ENGINE_KEYS: Mapping[str, Mapping[str, str]] = {
+    "stamp": {"version": "str"},
+    "build": {"epoch": "int"},
+    "publish": {"version": "str", "registry-target": "table"},
+}
 
 
 class PhaseError(RuntimeError):
@@ -149,6 +164,11 @@ class PhaseContext:
                 " [phases] table does not name it in reads"
             )
         if key not in self._values:
+            if key in ENGINE_KEYS.get(self.phase, {}):
+                raise PhaseError(
+                    f"{self._running} reads {key}, which the engine running the"
+                    f" {self.phase} phase did not give it"
+                )
             provider = next(
                 (name for name, step in self._steps.items() if key in step.provides),
                 "its provider",
@@ -158,6 +178,13 @@ class PhaseContext:
                 f" the {self.phase} phase"
             )
         return self._values[key]
+
+    def result(self, key: str) -> object | None:
+        """The value under *key* once the phase ran, for the engine that ran it.
+
+        None when neither a step nor the engine wrote one.
+        """
+        return self._values.get(key)
 
 
 def phase_steps(
@@ -213,16 +240,23 @@ def phase_problems(
     from livery.workshop._composition import OrderCycle
 
     problems: list[str] = []
+    engine = ENGINE_KEYS.get(phase, {})
     providers = _providers(steps)
     for key, names in sorted(providers.items()):
-        if len(names) > 1:
+        if key in engine:
+            verb = "provides" if len(names) == 1 else "provide"
+            problems.append(
+                f"the {phase} phase: {' and '.join(sorted(names))} {verb} {key},"
+                " which the engine running the phase provides; an extension reads it"
+            )
+        elif len(names) > 1:
             problems.append(
                 f"the {phase} phase: {' and '.join(sorted(names))} both provide"
                 f" {key}; one extension of a package provides a key"
             )
     for name, step in steps.items():
         for key in step.reads:
-            if key not in providers:
+            if key not in providers and key not in engine:
                 problems.append(
                     f"the {phase} phase: {name} reads {key}, which no extension of"
                     " the package provides"
@@ -247,6 +281,7 @@ def run_phase(
     mains: frozenset[str] | None = None,
     executable: str = "",
     arguments: tuple[str, ...] = (),
+    inputs: Mapping[str, object] | None = None,
 ) -> PhaseContext:
     """Run *phase* over *package*: each pre, then each main, then each post reversed.
 
@@ -256,7 +291,10 @@ def run_phase(
     *mains* names the extensions whose main runs, every one when None:
     the ``run`` phase's main is the one extension's that owns the
     executable. *executable* and *arguments* reach the steps on the
-    context. A failing step stops the pres or the mains; every post
+    context, and so do *inputs*, the keys the engine provides for the
+    phase ([livery.workshop._phases.ENGINE_KEYS][]); a key the engine
+    does not give refuses when a step reads it. A failing step stops
+    the pres or the mains; every post
     whose extension's pre ran still runs, and reads the failure from
     the context. A post that fails after another failure is named on
     stderr.
@@ -265,8 +303,9 @@ def run_phase(
         The context the steps shared.
 
     Raises:
-        PhaseError: when the phase's steps cannot run as declared,
-            before any runs.
+        PhaseError: when the phase's steps cannot run as declared, or
+            *inputs* holds a key the engine does not provide for the
+            phase or a value of another type, before any step runs.
         Exception: the first step's exception, raised again after every
             post that was due ran.
     """
@@ -276,6 +315,20 @@ def run_phase(
         from livery.workshop._extensions import installed_declaration
 
         lookup = installed_declaration
+    given = dict(inputs or {})
+    engine = ENGINE_KEYS.get(phase, {})
+    for key, value in given.items():
+        if key not in engine:
+            known = ", ".join(sorted(engine)) or "nothing"
+            raise PhaseError(
+                f"{package.path}: the engine gives {key} to the {phase} phase, which"
+                f" takes {known} from it"
+            )
+        if not _holds(engine[key], value):
+            raise PhaseError(
+                f"{package.path}: the engine gives {key} to the {phase} phase as"
+                f" {type(value).__name__}, which the phase takes as {engine[key]}"
+            )
     members = package_set(package.extensions, lookup)
     steps = phase_steps(phase, members, lookup)
     problems = phase_problems(phase, steps, lookup)
@@ -283,7 +336,13 @@ def run_phase(
         raise PhaseError(f"{package.path}: " + "; ".join(problems))
     walk = phase_order(steps, lookup)
     ctx = PhaseContext(
-        phase, package, root, executable=executable, arguments=arguments, _steps=steps
+        phase,
+        package,
+        root,
+        executable=executable,
+        arguments=arguments,
+        _steps=steps,
+        _values=given,
     )
     entered: list[str] = []
     for name in walk:

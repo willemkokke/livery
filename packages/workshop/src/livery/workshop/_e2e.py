@@ -760,7 +760,7 @@ def checkout_index(
                 continue
             copy = Path(scratch) / "copies" / package.member
             shutil.copytree(package.directory, copy, ignore=skipped)
-            _stamp_content(replace(package, directory=copy))
+            _stamp_content(replace(package, directory=copy), root)
             toolroom.uv.opts(cwd=root, recorded=False)(
                 "build", "--wheel", "--out-dir", str(built), str(copy)
             )
@@ -768,7 +768,7 @@ def checkout_index(
     return folder.as_uri()
 
 
-def _stamp_content(package: Package) -> None:
+def _stamp_content(package: Package, root: Path) -> None:
     """Give *package*'s version a local segment naming its tree's content.
 
     A rebuilt wheel at an unchanged version carries the last one's file
@@ -794,7 +794,7 @@ def _stamp_content(package: Package) -> None:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     version = _lifecycle.current_version(package)
-    _lifecycle.stamp(package, f"{version}+checkout.{digest.hexdigest()[:12]}")
+    _lifecycle.stamp(package, root, f"{version}+checkout.{digest.hexdigest()[:12]}")
 
 
 def _dev_index(kind: str, stack: Sequence[str] = ()) -> str:

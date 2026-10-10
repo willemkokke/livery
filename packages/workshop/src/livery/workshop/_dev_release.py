@@ -183,7 +183,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     snapshots = {path: path.read_bytes() for path in touched}
     stamps = {path: path.stat() for path in touched}
     try:
-        _lifecycle.stamp(package, semver_to_pep440(plan.version))
+        _lifecycle.stamp(package, root, semver_to_pep440(plan.version))
         notes = release_notes()
         excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():

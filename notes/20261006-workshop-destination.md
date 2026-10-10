@@ -1009,11 +1009,18 @@ slices, each mergeable alone:
       today the train counts every commit under a package's path, so
       the listing would give sixteen packages a release that ships
       nothing new.
-   3. **The phases**: `stamp`, `build`, `prove`, `publish` and
-      `replay` as the extension's steps. A phase's steps read the
-      engine's inputs (the version, the registry target, the build's
-      epoch) as context keys the base provides, which the phase judge
-      counts as provided.
+   3. **The phases** (issue #1357): `stamp`, `build` and `publish` as
+      the extension's steps. The engine gives a phase keys of its own
+      (`ENGINE_KEYS`: the version to write, the build's epoch, the
+      version and the resolved registry target), which the phase judge
+      counts as provided and no extension provides, and reads back the
+      key each phase's steps provide (`changed`, `dist`,
+      `published`). The seam runs the phase for a package whose
+      extensions add steps to it, and the kind's backend otherwise.
+   3b. **`prove` and `replay`**: the release's isolated legs, one run
+      per resolution with the sibling dists as input, and the replay
+      of a published version, behind the seam and as the extension's
+      steps.
    4. **The rest**: its categories, its tool (`uv`) and seeds,
       `run_suites`, `kind_examples` and `workspace_suite`, and the
       reach rule.
