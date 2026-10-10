@@ -14,3 +14,19 @@ version-files = "livery.extensions.python._answers:version_files"
 requirements = "livery.extensions.python._answers:requirements"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
+
+# The steps this extension adds to a package's lifecycle phases.
+[phases.stamp]
+main = "livery.extensions.python._steps:stamp"
+reads = ["version"]
+provides = { changed = "strs" }
+
+[phases.build]
+main = "livery.extensions.python._steps:build"
+reads = ["epoch"]
+provides = { dist = "path" }
+
+[phases.publish]
+main = "livery.extensions.python._steps:publish"
+reads = ["version", "registry-target"]
+provides = { published = "bool" }

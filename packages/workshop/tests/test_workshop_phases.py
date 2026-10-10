@@ -90,6 +90,74 @@ def _workspace(
 # The refusals first.
 
 
+def _engine_reader(provides: str = "") -> str:
+    """A declaration whose build main reads the engine's epoch."""
+    text = PACKAGE + '\n[phases.build]\nmain = "{package}._steps:main"\n'
+    text += 'reads = ["epoch"]\n'
+    return text + (f"provides = {provides}\n" if provides else "")
+
+
+def test_an_extension_providing_a_key_the_engine_gives_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    own = PACKAGE + '\n[phases.build]\nmain = "{package}._steps:main"\n'
+    fake_extensions(tmp_path, monkeypatch, own=own + 'provides = { epoch = "int" }\n')
+    fake_steps(tmp_path, "own", "def main(ctx):\n    ctx.provide('epoch', 1)\n")
+    with pytest.raises(PhaseError) as raised:
+        run_phase(
+            "build", _package(tmp_path, "acme.own"), tmp_path, inputs={"epoch": 0}
+        )
+    assert str(raised.value) == (
+        "packages/core: the build phase: acme.own provides epoch, which the engine"
+        " running the phase provides; an extension reads it"
+    )
+
+
+def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> None:
+    package = _package(tmp_path)
+    with pytest.raises(
+        PhaseError, match="gives wheel to the build phase, which takes epoch from it"
+    ):
+        run_phase("build", package, tmp_path, inputs={"wheel": "x"})
+    with pytest.raises(
+        PhaseError,
+        match="gives epoch to the build phase as str, which the phase takes as int",
+    ):
+        run_phase("build", package, tmp_path, inputs={"epoch": "0"})
+    with pytest.raises(PhaseError, match="the run phase, which takes nothing from it"):
+        run_phase("run", package, tmp_path, inputs={"epoch": 0})
+
+
+def test_a_step_reading_a_key_the_engine_did_not_give_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, reader=_engine_reader())
+    fake_steps(tmp_path, "reader", "def main(ctx):\n    ctx.read('epoch')\n")
+    with pytest.raises(
+        PhaseError,
+        match=r"acme\.reader reads epoch, which the engine running the build phase"
+        r" did not give it",
+    ):
+        run_phase("build", _package(tmp_path, "acme.reader"), tmp_path)
+
+
+def test_a_step_reads_the_engines_keys_and_the_engine_reads_back_its_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, builder=_engine_reader('{ dist = "path" }'))
+    fake_steps(
+        tmp_path,
+        "builder",
+        "from pathlib import Path\n\n\n"
+        "def main(ctx):\n    ctx.provide('dist', Path(str(ctx.read('epoch'))))\n",
+    )
+    package = _package(tmp_path, "acme.builder")
+    ctx = run_phase("build", package, tmp_path, inputs={"epoch": 7})
+    assert ctx.result("dist") == Path("7")
+    assert ctx.result("epoch") == 7
+    assert ctx.result("absent") is None
+
+
 def test_two_providers_of_one_key_refuse(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

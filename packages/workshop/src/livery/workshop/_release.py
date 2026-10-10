@@ -186,7 +186,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         # heading without its tag under-documents what actually
         # ships either way.
         entry_body = notes.entry(root, package, version)
-    changed = _lifecycle.stamp(package, version)
+    changed = _lifecycle.stamp(package, root, version)
     if notes is not None:
         changed += notes.record(package, version, entry_body)
     else:

@@ -7,9 +7,12 @@ writing a version, publishing what it built, its declared requirements,
 writing one, the names other packages reference its code by, and the
 siblings its sources use. A question that is a query
 ([livery.workshop._queries.Query][]) is answered by the package's
-extensions when one of them answers it, and by the package's kind
-backend ([livery.workshop._kinds.backend_for][]) otherwise; every other
-function answers from the kind backend. So a caller never names an
+extensions when one of them answers it, and a build, a stamp or a
+publish runs as the package's lifecycle phase
+([livery.workshop._phases.run_phase][]) when its extensions add steps
+to it; anything else, and any package whose extensions do neither, is
+answered by the package's kind backend
+([livery.workshop._kinds.backend_for][]). So a caller never names an
 extension or a backend. A function a backend may leave out answers None
 or an empty tuple when the backend has none, and so does an abstract
 kind, which has no backend.
@@ -17,12 +20,14 @@ kind, which has no backend.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from livery.workshop._packages import Neighbours, Package
+    from livery.workshop._phases import PhaseContext
     from livery.workshop._queries import Query
     from livery.workshop._registries import RegistryTarget
 
@@ -35,6 +40,11 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     *epoch* is the build's source date, so two builds of one tree are
     the same bytes; 0 takes the build tool's own.
     """
+    from pathlib import Path
+
+    ctx = _run_steps(package, "build", root, {"epoch": epoch})
+    if ctx is not None:
+        return cast("Path", _provided(ctx, "dist", Path))
     from livery.workshop._kinds import backend_for
 
     return backend_for(package).build(package, root, epoch=epoch)
@@ -68,8 +78,11 @@ def version_files(package: Package) -> tuple[Path, ...]:
     return tuple(backend_for(package).stamp_version(package).homes())
 
 
-def stamp(package: Package, version: str) -> list[str]:
+def stamp(package: Package, root: Path, version: str) -> list[str]:
     """Write *version* into *package*'s version files; the files it changed."""
+    ctx = _run_steps(package, "stamp", root, {"version": version})
+    if ctx is not None:
+        return list(cast("list[str]", _provided(ctx, "changed", (list, tuple))))
     from livery.workshop._kinds import backend_for
 
     return backend_for(package).stamp_version(package).stamp(version)
@@ -83,6 +96,15 @@ def publish(
     A re-run walks past what an earlier attempt uploaded, so False is
     a success that uploaded nothing.
     """
+    from livery.workshop._registries import target_table
+
+    inputs: dict[str, object] = {
+        "version": version,
+        "registry-target": target_table(target),
+    }
+    ctx = _run_steps(package, "publish", root, inputs)
+    if ctx is not None:
+        return cast("bool", _provided(ctx, "published", bool))
     from livery.workshop._kinds import backend_for
 
     return backend_for(package).publish_artifact(
@@ -167,6 +189,40 @@ def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str] 
     """
     reader = _optional(package, "referenced_siblings")
     return None if reader is None else reader(package, around)
+
+
+def _run_steps(
+    package: Package, phase: str, root: Path, inputs: Mapping[str, object]
+) -> PhaseContext | None:
+    """Run *phase* over *package* with the engine's *inputs*; None without steps.
+
+    None when no extension of the package's set adds steps to the phase,
+    which leaves the call to the package's kind backend: the bridge
+    while package kinds remain.
+    """
+    if not package.extensions:
+        return None
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._phases import phase_steps, run_phase
+
+    members = package_set(package.extensions, installed_declaration)
+    if not phase_steps(phase, members, installed_declaration):
+        return None
+    return run_phase(phase, package, root, inputs=inputs)
+
+
+def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> object:
+    """What *ctx*'s steps provided under *key*; refuses when none of them did."""
+    from livery.footman import fail
+
+    value = ctx.result(key)
+    if not isinstance(value, kind):
+        fail(
+            f"{ctx.package.path}: the {ctx.phase} phase's steps provide no {key},"
+            " which the release train reads from the phase"
+        )
+    return value
 
 
 def _extensions_answer(package: Package, query: Query[T]) -> T | None:

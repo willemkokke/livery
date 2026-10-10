@@ -10,6 +10,7 @@ import pytest
 from livery.workshop import _kinds, _lifecycle
 from livery.workshop._kinds import KindRecord
 from livery.workshop._packages import Neighbours, Package, graph_problems
+from livery.workshop._registries import RegistryTarget
 from workshop_extension_fakes import fake_package_extensions, fake_steps
 
 if TYPE_CHECKING:
@@ -155,3 +156,57 @@ def test_a_package_whose_extensions_answer_takes_their_answers(
     assert _lifecycle.declared_requirements(package) == {"acme-other": ">=1"}
     assert _lifecycle.module_roots(package) == ("acme.answered",)
     assert _lifecycle.public_modules(package) == ("acme.answered",)
+
+
+def _stepping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str, phases: str
+) -> Package:
+    """A python package listing one fake extension, whose steps are *source*."""
+    fake_package_extensions(tmp_path, monkeypatch, stepping=PACKAGE + phases)
+    fake_steps(tmp_path, "stepping", source)
+    return _listing(tmp_path, "acme.stepping")
+
+
+def test_a_phase_whose_steps_provide_nothing_the_train_reads_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = _stepping(
+        tmp_path,
+        monkeypatch,
+        "def main(ctx):\n    del ctx\n",
+        '\n[phases.build]\nmain = "{package}._steps:main"\n',
+    )
+    with pytest.raises(
+        _FAILURES,
+        match="the build phase's steps provide no dist, which the release train"
+        " reads from the phase",
+    ):
+        _lifecycle.build(package, tmp_path)
+
+
+def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = (
+        "from pathlib import Path\n\n\n"
+        "def stamp(ctx):\n"
+        "    ctx.provide('changed', ['VERSION=' + str(ctx.read('version'))])\n\n\n"
+        "def build(ctx):\n"
+        "    ctx.provide('dist', Path('dist-' + str(ctx.read('epoch'))))\n\n\n"
+        "def publish(ctx):\n"
+        "    target = ctx.read('registry-target')\n"
+        "    ctx.provide('published', target['url'] + ctx.read('version') == 'idx2')\n"
+    )
+    phases = (
+        '\n[phases.stamp]\nmain = "{package}._steps:stamp"\nreads = ["version"]\n'
+        'provides = { changed = "strs" }\n'
+        '\n[phases.build]\nmain = "{package}._steps:build"\nreads = ["epoch"]\n'
+        'provides = { dist = "path" }\n'
+        '\n[phases.publish]\nmain = "{package}._steps:publish"\n'
+        'reads = ["version", "registry-target"]\nprovides = { published = "bool" }\n'
+    )
+    package = _stepping(tmp_path, monkeypatch, source, phases)
+    assert _lifecycle.stamp(package, tmp_path, "2") == ["VERSION=2"]
+    assert _lifecycle.build(package, tmp_path, epoch=5) == Path("dist-5")
+    target = RegistryTarget(kind="python", url="idx")
+    assert _lifecycle.publish(package, tmp_path, version="2", target=target) is True

@@ -223,6 +223,20 @@ within a phase. Two extensions providing one key, a key nobody
 provides, and an order with no start refuse before any step runs, and
 the layering check names them for each package.
 
+The workshop gives some phases keys of its own, which a step reads like
+any other and no extension provides:
+
+| Phase | Keys the workshop gives | Key the release train reads back |
+| --- | --- | --- |
+| `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
+| `build` | `epoch` (`int`), the build's source date; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
+| `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
+
+The release train stamps, builds and publishes a package through these
+phases when its extensions add steps to them, and through the
+package's kind otherwise. A phase whose steps provide nothing under the
+key the train reads back refuses, naming the phase and the key.
+
 A package-level extension also answers questions about a package:
 
 ```toml

@@ -22,6 +22,8 @@ from livery.footman import fail
 from livery.workshop._contract import load_contract
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from livery.forge import RegistryKind
 
 #: The env cascade's declaration variables, per kind. The python
@@ -83,6 +85,30 @@ class RegistryTarget:
     local: bool = False
     token: str = ""
     releases: bool = False
+
+
+def target_table(target: RegistryTarget) -> dict[str, object]:
+    """*target* as the ``publish`` phase's ``registry-target``: its fields by name."""
+    return {
+        "kind": target.kind,
+        "url": target.url,
+        "publish_url": target.publish_url,
+        "local": target.local,
+        "token": target.token,
+        "releases": target.releases,
+    }
+
+
+def target_from_table(table: Mapping[str, object]) -> RegistryTarget:
+    """The target the ``publish`` phase's ``registry-target`` key holds."""
+    return RegistryTarget(
+        kind=str(table["kind"]),
+        url=str(table["url"]),
+        publish_url=str(table.get("publish_url", "")),
+        local=bool(table.get("local", False)),
+        token=str(table.get("token", "")),
+        releases=bool(table.get("releases", False)),
+    )
 
 
 def _is_local(value: str) -> bool:

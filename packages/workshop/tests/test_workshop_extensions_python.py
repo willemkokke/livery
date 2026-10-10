@@ -88,3 +88,58 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         assert answer(package, PUBLIC_MODULES) == tuple(
             _backend.public_modules(package)
         )
+
+
+def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One package through the extension's steps, its twin through the backend."""
+    from dataclasses import replace
+
+    from livery.workshop import _lifecycle
+    from livery.workshop._packages import Package
+    from livery.workshop._registries import RegistryTarget
+
+    def _member(name: str) -> Path:
+        directory = tmp_path / name
+        module = directory / "src" / "acme" / "core"
+        module.mkdir(parents=True)
+        (directory / "pyproject.toml").write_text(
+            '[project]\nname = "acme-core"\nversion = "1.0.0"\n'
+        )
+        (module / "__init__.py").write_text('__version__ = "1.0.0"\n')
+        return directory
+
+    listing = Package(
+        directory=_member("listing"),
+        path="packages/listing",
+        name="acme-core",
+        kind="python",
+        depends=(),
+        extensions=("python",),
+    )
+    plain = replace(
+        listing, directory=_member("plain"), path="packages/plain", extensions=()
+    )
+    stamped = _lifecycle.stamp(listing, tmp_path, "2.0.0")
+    assert stamped == _lifecycle.stamp(plain, tmp_path, "2.0.0")
+    assert stamped
+    for name in ("pyproject.toml", "src/acme/core/__init__.py"):
+        assert (listing.directory / name).read_text() == (
+            plain.directory / name
+        ).read_text()
+    uploads: list[tuple[str, str, str]] = []
+
+    def _upload(package: Package, *, index_url: str, token: str) -> bool:
+        uploads.append((package.name, index_url, token))
+        return True
+
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _upload)
+    target = RegistryTarget(
+        kind="python",
+        url="https://idx.example/simple",
+        publish_url="https://idx.example/",
+        token="t",
+    )
+    assert _lifecycle.publish(listing, tmp_path, version="2.0.0", target=target)
+    assert uploads == [("acme-core", "https://idx.example/", "t")]

@@ -922,7 +922,7 @@ def test_the_checkout_index_refuses_a_member_without_a_version(
         depends=(),
     )
     with pytest.raises(_FAILURES, match="no version line"):
-        _e2e._stamp_content(member)  # pyright: ignore[reportPrivateUsage]
+        _e2e._stamp_content(member, tmp_path)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_the_checkout_index_builds_what_a_newborn_installs(
