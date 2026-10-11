@@ -22,7 +22,9 @@ from livery.strongroom import Namespace, Source, Store
 TOOLS = "tools"
 """The namespace of installed tools: `tools/<name>@<version>` names the
 extracted archive's tree; write-once, so a version never changes under
-a checkout that pinned it."""
+a checkout that pinned it. `tools/index/<name>` names the tree the
+catalogue last read for the tool, so a sweep keeps the records, the
+versions and the surfaces a read fetched."""
 
 URLS = "urls"
 """The namespace of URL-keyed downloads, the convention strongroom

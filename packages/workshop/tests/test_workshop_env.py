@@ -973,6 +973,11 @@ def test_ci_run_sweeps_the_tool_store_only_on_a_github_job(
         "; the archive saves unswept"
     )
     assert store.state(orphan) == "present"
+    # Gitea's runner shares its store across jobs and saves none: kept whole.
+    assert sweep_tool_store({"GITHUB_ACTIONS": "true", "GITEA_ACTIONS": "true"}) == (
+        "tool store: kept whole; this runner shares it across jobs and saves none"
+    )
+    assert store.state(orphan) == "present"
     # On a job the unreached archive goes and the rooted tree stays.
     assert sweep_tool_store({"GITHUB_ACTIONS": "true"}) == (
         "tool store: 1 unreached object(s) swept before the save"
