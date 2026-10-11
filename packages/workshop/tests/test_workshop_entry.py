@@ -15,7 +15,6 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -308,7 +307,7 @@ def test_sourcing_the_entry_enters_without_persisting(tmp_path: Path) -> None:
     assert not any("--github" in line for line in lines)
 
 
-# --- the reconcile, fallbacks first -----------------------------------------
+# --- the hook's record of installed code, fallbacks first ------------------
 
 
 def _venv_site(root: Path, *dists: str) -> Path:
@@ -321,193 +320,34 @@ def _venv_site(root: Path, *dists: str) -> Path:
     return site
 
 
-def test_cold_states_are_inert(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import livery.toolroom.tools as toolroom
-    from livery.workshop._reconcile import reconcile
-
-    def _explode(*args: object, **kwargs: object) -> object:
-        raise AssertionError("uv must not run on a cold state")
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_explode))
-    # No lock: footman's uv handoff owns it.
-    assert reconcile(tmp_path).ran is False
-    # A lock without a venv: same.
-    (tmp_path / "uv.lock").write_text(LOCK)
-    assert reconcile(tmp_path).ran is False
-
-
-def test_a_failed_sync_reports_and_never_breaks_the_command(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import livery.toolroom.tools as toolroom
-    from livery.workshop import _reconcile
-
-    (tmp_path / "uv.lock").write_text(LOCK)
-    _venv_site(tmp_path, "something-1.0.0")
-
-    def _opts(**kwargs: object) -> object:
-        return lambda *args: SimpleNamespace(code=2, stdout="", stderr="index down\n")
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
-    result = _reconcile.reconcile(tmp_path)
-    assert result.drifted and not result.synced
-    # The failure is uv's own words, and the receipt stays absent so
-    # the next command tries again.
-    assert "index down" in result.failure
-    assert not _reconcile.receipt_path(tmp_path).is_file()
-    # apply() reports and returns; it never re-runs on a failure.
-    ran: list[object] = []
-    monkeypatch.setattr(_reconcile, "_reexec", lambda root, cause: ran.append(root))
-    _reconcile.apply(tmp_path)
-    assert ran == []
-
-
-def test_a_current_receipt_is_a_no_op(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import livery.toolroom.tools as toolroom
-    from livery.workshop._reconcile import receipt_path, reconcile
-
-    (tmp_path / "uv.lock").write_text(LOCK)
-    _venv_site(tmp_path, "something-1.0.0")
-    receipt_path(tmp_path).write_bytes((tmp_path / "uv.lock").read_bytes())
-
-    def _explode(*args: object, **kwargs: object) -> object:
-        raise AssertionError("uv must not run when the receipt is current")
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_explode))
-    result = reconcile(tmp_path)
-    assert result.ran and not result.drifted
-
-
-def test_a_missing_manifests_receipt_is_adopted_and_a_moved_manifest_is_drift(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import livery.toolroom.tools as toolroom
-    from livery.workshop import _reconcile
-
-    (tmp_path / "uv.lock").write_text(LOCK)
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "ws"\n')
-    member = tmp_path / "packages" / "x"
-    member.mkdir(parents=True)
-    (member / "pyproject.toml").write_text('[project]\nname = "x"\n')
-    _venv_site(tmp_path, "something-1.0.0")
-    _reconcile.receipt_path(tmp_path).write_bytes((tmp_path / "uv.lock").read_bytes())
-
-    def _explode(*args: object, **kwargs: object) -> object:
-        raise AssertionError("uv must not run when the lock receipt is current")
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_explode))
-    # No manifests receipt yet: the manifests on disk are adopted as
-    # the venv's, written, and nothing syncs.
-    manifests = _reconcile.manifests_receipt_path(tmp_path)
-    assert not manifests.is_file()
-    result = _reconcile.reconcile(tmp_path)
-    assert result.ran and not result.drifted
-    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
-    # A member's manifest moved without the lock (a new entry point):
-    # drift, and the sync rewrites the manifests receipt.
-    (member / "pyproject.toml").write_text(
-        '[project]\nname = "x"\n[project.entry-points.pytest11]\nx = "x"\n'
-    )
-    synced: list[tuple[str, ...]] = []
-
-    def _opts(**kwargs: object) -> object:
-        def _sync(*args: str) -> object:
-            synced.append(args)
-            return SimpleNamespace(code=0, stdout="", stderr="")
-
-        return _sync
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
-    result = _reconcile.reconcile(tmp_path)
-    assert result.drifted and result.synced
-    assert synced == [("sync", "--frozen")]
-    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
-    # record_receipt writes both receipts.
-    manifests.unlink()
-    _reconcile.record_receipt(tmp_path)
-    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
-
-
-def test_drift_syncs_records_and_names_the_changed_code(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import livery.toolroom.tools as toolroom
-    from livery.workshop import _reconcile
-
-    (tmp_path / "uv.lock").write_text(LOCK)
-    _venv_site(tmp_path, "something-1.0.0")
-    receipt = _reconcile.receipt_path(tmp_path)
-    receipt.write_bytes(b"an older lock")
-
-    def _opts(**kwargs: object) -> object:
-        def _sync(*args: str) -> object:
-            assert args == ("sync", "--frozen")
-            _venv_site(tmp_path, "something-2.0.0")
-            return SimpleNamespace(code=0, stdout="", stderr="")
-
-        return _sync
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
-    result = _reconcile.reconcile(tmp_path)
-    assert result.drifted and result.synced
-    assert receipt.read_bytes() == (tmp_path / "uv.lock").read_bytes()
-    assert result.changed == ("something-1.0.0.dist-info", "something-2.0.0.dist-info")
-    # apply() re-runs exactly when installed code changed.
-    monkeypatch.setattr(_reconcile, "reconcile", lambda root: result)
-    ran: list[tuple[object, str]] = []
-    monkeypatch.setattr(
-        _reconcile, "_reexec", lambda root, cause: ran.append((root, cause))
-    )
-    _reconcile.apply(tmp_path)
-    assert ran == [(tmp_path, _reconcile.SYNCED)]
-
-
-def test_a_sync_that_rewrites_entry_points_at_the_same_version_names_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_sync_that_rewrites_entry_points_at_the_same_version_is_a_change(
+    tmp_path: Path,
 ) -> None:
     # An editable member re-installed at the same version keeps its
     # dist-info's name, and new entry points are a change all the same:
     # the process mounted the old ones.
-    import livery.toolroom.tools as toolroom
     from livery.workshop import _reconcile
 
-    (tmp_path / "uv.lock").write_text(LOCK)
     site = _venv_site(tmp_path, "member-1.0.0", "other-2.0.0")
     points = site / "member-1.0.0.dist-info" / "entry_points.txt"
     points.write_text("[workshop.extensions]\nmember = member._extension\n")
-    _reconcile.receipt_path(tmp_path).write_bytes(b"an older lock")
-
-    def _opts(**kwargs: object) -> object:
-        def _sync(*args: str) -> object:
-            points.write_text("[workshop.extensions]\nmember = member\n")
-            return SimpleNamespace(code=0, stdout="", stderr="")
-
-        return _sync
-
-    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
-    result = _reconcile.reconcile(tmp_path)
-    assert result.synced
-    assert result.changed == ("member-1.0.0.dist-info",)
-    # A sync that rewrites nothing names nothing.
-    _reconcile.receipt_path(tmp_path).write_bytes(b"an older lock")
-    assert _reconcile.reconcile(tmp_path).changed == ()
+    before = _reconcile.installed_distributions(tmp_path)
+    points.write_text("[workshop.extensions]\nmember = member\n")
+    after = _reconcile.installed_distributions(tmp_path)
+    assert before["other-2.0.0.dist-info"] == after["other-2.0.0.dist-info"] == ""
+    assert before["member-1.0.0.dist-info"] != after["member-1.0.0.dist-info"]
 
 
-def test_an_unchanged_sync_does_not_rerun(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_record_receipt_writes_both_receipts(tmp_path: Path) -> None:
     from livery.workshop import _reconcile
 
-    result = _reconcile.Reconciled(ran=True, drifted=True, synced=True, changed=())
-    monkeypatch.setattr(_reconcile, "reconcile", lambda root: result)
-    monkeypatch.setattr(
-        _reconcile,
-        "_reexec",
-        lambda root, cause: pytest.fail("re-ran on unchanged code"),
-    )
-    _reconcile.apply(tmp_path)
+    (tmp_path / "uv.lock").write_text(LOCK)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "ws"\n')
+    _venv_site(tmp_path, "something-1.0.0")
+    _reconcile.record_receipt(tmp_path)
+    assert _reconcile.receipt_path(tmp_path).read_bytes() == LOCK.encode()
+    manifests = _reconcile.manifests_receipt_path(tmp_path)
+    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
 
 
 def test_the_rerun_guard_refuses_a_second_lap_for_one_cause(
@@ -647,7 +487,7 @@ def test_the_windows_arm_hands_the_guard_on_and_forwards_the_code(
     assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
 
 
-def test_only_the_runner_process_reconciles(
+def test_only_the_runner_process_runs_the_hook(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._reconcile import is_cli_process

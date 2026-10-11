@@ -1,16 +1,21 @@
-"""The per-command reconcile: the venv follows the lock on every run.
+"""The per-command hook: a checkout is brought current before its command runs.
 
-Runs at footman's pre-tasks moment, from the cascade hook. It
-compares ``uv.lock`` against the sync receipt the last sync recorded,
-syncs through uv on drift, and re-runs the command when the sync
-changed installed code, so a pull that moved the lock never judges
-from stale code. footman's own uv handoff already re-execs an
-invocation from outside the venv; this closes the remaining gap, the
-process already inside a venv that the lock has moved past.
+Runs at footman's per-task moment, before the first task of a command,
+from the hook in [livery.workshop._env_tasks][]. One predicate,
+[livery.workshop._reconcile.current][], reads the receipts a checkout
+keeps of its last sync: the uv lock and the manifests the venv was
+installed from, the tool receipts against ``toolroom.lock``, and the
+receipt of the files the extensions write for the checkout alone. A
+current checkout costs those reads and nothing else. One that is not
+is synced by the ``sync`` verb itself, called as a function in the
+mode that changes nothing a commit holds and touches no network, and
+the command re-runs on the installed code when that sync changed it,
+so a pull that moved the lock never judges from stale code. When
+``sync`` is the command, the hook leaves the work to it.
 
 Never fatal: on any failure the command proceeds and the failure is
-reported in uv's own words. A task that genuinely cannot run without
-what is missing is still caught by its own gate.
+reported in the sync's own words. A task that cannot run without what
+is missing is still caught by its own gate.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from collections.abc import MutableMapping
 from pathlib import Path
 
 _GUARD = "WORKSHOP_RECONCILE_REEXEC"
@@ -38,10 +43,11 @@ _REASONS = {
     INSTALLED: "listed extensions were installed",
 }
 
-#: Set while a repair runs, so the processes it starts repair nothing. A
-#: delivery lists the workspace's tasks through the runner; that child
-#: would find the files still missing and deliver again, without end.
-_REPAIRING = "WORKSHOP_REPAIRING"
+#: Set while the hook's sync runs, so the processes it starts sync
+#: nothing: a delivery lists the workspace's tasks through the runner,
+#: and that child would find the receipts still missing and sync again,
+#: without end.
+_SYNCING = "WORKSHOP_SYNCING"
 
 #: The receipt's name under ``.venv``: a byte copy of ``uv.lock`` as
 #: the venv last saw it. The emitted ``setup.sh`` writes the same
@@ -125,30 +131,6 @@ def is_cli_process() -> bool:
     return Path(sys.argv[0]).stem.lower() == footman.prog()
 
 
-@dataclass
-class Reconciled:
-    """What the reconcile decided: the testable surface.
-
-    The reporting extension only prints from this, so a test asserts the
-    decisions without string-matching English.
-    """
-
-    ran: bool = False
-    """False when the workspace has no lock or no venv and nothing
-    was tried; footman's uv handoff owns those cold states."""
-    drifted: bool = False
-    """True when a receipt disagreed with the lock or the manifests."""
-    synced: bool = False
-    """True when the drift sync succeeded and the receipt was
-    rewritten."""
-    changed: tuple[str, ...] = ()
-    """The ``dist-info`` names the sync added, removed, or replaced, or
-    whose entry points it rewrote; non-empty means this process may be
-    running stale code."""
-    failure: str = ""
-    """uv's own words when the sync failed; empty otherwise."""
-
-
 def installed_distributions(root: Path) -> dict[str, str]:
     """Every ``*.dist-info`` name in the venv, to its entry points' digest.
 
@@ -173,55 +155,66 @@ def installed_distributions(root: Path) -> dict[str, str]:
     return found
 
 
-def reconcile(root: Path) -> Reconciled:
-    """Bring the venv up to date with the lock; what was decided.
+def current(root: Path) -> str:
+    """Why *root* is not current, in a few words; empty when it is.
 
-    ``--frozen`` deliberately: ``--locked`` fails when the lock
-    disagrees with ``pyproject.toml``, which would break every
-    command for anyone mid-edit on a dependency. Installing the lock
-    as-is is right here; the authoritative ``--locked`` assertion
-    stays in CI's entry step.
+    Four receipts, all local reads. The uv lock receipt and the
+    manifests receipt against ``uv.lock`` and the manifests on disk;
+    a venv synced before the manifests receipt existed adopts the
+    manifests on disk as the ones installed, since the emitted
+    ``setup.sh``'s fresh venv is that case, and the next move is seen.
+    Then a receipt per tool ``toolroom.lock`` holds for this host, at
+    the locked version; then the receipt a delivery leaves. A checkout
+    with no lock or no venv is current here: those cold states are
+    footman's own uv handoff's.
     """
     lock = root / "uv.lock"
     if not lock.is_file() or not (root / ".venv").is_dir():
-        return Reconciled()
-    result = Reconciled(ran=True)
-    lock_bytes = lock.read_bytes()
+        return ""
     receipt = receipt_path(root)
+    if not receipt.is_file() or receipt.read_bytes() != lock.read_bytes():
+        return "uv.lock moved past the environment"
     digest = manifests_digest(root)
     manifests = manifests_receipt_path(root)
-    if receipt.is_file() and receipt.read_bytes() == lock_bytes:
-        if not manifests.is_file():
-            # A venv synced before the manifests receipt existed, or
-            # the emitted setup script's fresh venv: the manifests
-            # installed are the ones on disk, so they are adopted and
-            # the next move is seen.
-            manifests.write_text(digest, "utf-8")
-            return result
-        if manifests.read_text("utf-8") == digest:
-            return result
-    result.drifted = True
-    before = installed_distributions(root)
-    import livery.toolroom.tools as toolroom
+    if not manifests.is_file():
+        manifests.write_text(digest, "utf-8")
+    elif manifests.read_text("utf-8") != digest:
+        return "a package manifest moved past the environment"
+    why = _tools_current(root)
+    if why:
+        return why
+    from livery.workshop._fragment_engine import LOCAL_RECEIPT
 
-    sync = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)("sync", "--frozen")
-    if sync.code != 0:
-        result.failure = (
-            f"uv sync --frozen exited {sync.code}:\n{sync.stdout}{sync.stderr}"
-        )
-        return result
-    receipt.write_bytes(lock_bytes)
-    manifests.write_text(digest, "utf-8")
-    result.synced = True
-    after = installed_distributions(root)
-    result.changed = tuple(
-        sorted(
-            name
-            for name in before.keys() | after.keys()
-            if before.get(name) != after.get(name)
-        )
-    )
-    return result
+    if not (root / LOCAL_RECEIPT).is_file():
+        return "this checkout's own files were never delivered"
+    return ""
+
+
+def _tools_current(root: Path) -> str:
+    """Why the tool receipts do not match ``toolroom.lock``; empty when they do."""
+    import platform
+
+    from livery.toolroom.store import LOCK_FILE, Lock, LockError, host_key
+    from livery.workshop._tools import receipts
+
+    if not (root / LOCK_FILE).is_file():
+        return ""
+    try:
+        lock = Lock.load(root / LOCK_FILE)
+        held = receipts(root)
+    except (LockError, ValueError, OSError):
+        # An unreadable lock or receipt is the sync's to name, not
+        # the hook's to judge: the sync reads both and refuses by name.
+        return f"{LOCK_FILE} or a receipt could not be read"
+    host = host_key(platform.system(), platform.machine())
+    for name in lock.on_host(host):
+        receipt = held.get(name)
+        if receipt is None:
+            return f"no receipt for {name}"
+        if receipt.version != lock.tools[name].version:
+            locked = lock.tools[name].version
+            return f"{name} is at {receipt.version}, the lock holds {locked}"
+    return ""
 
 
 def _say(message: str) -> None:
@@ -240,73 +233,58 @@ def _say(message: str) -> None:
         sys.stderr.write(message.encode("ascii", "replace").decode("ascii") + "\n")
 
 
-def repair(root: Path) -> list[str]:
-    """Write what this checkout lacks of its own; the lines that say what.
+def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
+    """Bring *root* current before *task*, the command's first, runs; whether it synced.
 
-    A checkout holds two things of its own that git does not: a receipt
-    per locked tool, which puts the tools on PATH, and the files the
-    extensions write for it alone, whose receipt says they were
-    delivered. A worktree whose start never synced holds neither, and
-    its first gate finds no tool. Each is written from what the machine
-    already holds, as ``sync --frozen --offline`` writes it: no network,
-    and nothing a commit holds changed. A checkout holding both costs
-    two file checks. A process a repair started repairs nothing.
-    """
-    from livery.toolroom.store import LOCK_FILE
-    from livery.workshop._fragment_engine import LOCAL_RECEIPT
-    from livery.workshop._tools import receipts_dir
-
-    if os.environ.get(_REPAIRING):
-        return []
-    lines: list[str] = []
-    # Set for this process's children and removed after them, so the
-    # command that follows runs in the environment it started with.
-    os.environ[_REPAIRING] = "1"
-    try:
-        if (root / LOCK_FILE).is_file() and not any(receipts_dir(root).glob("*.json")):
-            from livery.workshop._sync import materialise_tools
-
-            lines += materialise_tools(root, offline=True)
-        if not (root / LOCAL_RECEIPT).is_file():
-            from livery.workshop._shipped_files import deliver
-
-            lines += deliver(root, local_only=True)
-    finally:
-        os.environ.pop(_REPAIRING, None)
-    return lines
-
-
-def apply(root: Path) -> bool:
-    """Repair, reconcile, report, and re-run the command on changed code.
+    Nothing happens for a current checkout, when *task* is ``sync``,
+    which does this work itself, and inside a process the hook's own
+    sync started, which *env*, the task's own environment, marks for
+    the processes the sync starts. Otherwise the ``sync`` verb runs as a function,
+    frozen and offline, its lines on stderr so a command whose stdout a
+    shell evaluates stays clean, and the command re-runs on the
+    installed code when the sync changed it. A sync that fails is said
+    and the command runs on what is here.
 
     Returns:
-        Whether the repair wrote anything. The caller entered the
-        environment before it, from receipts the repair may have written
-        since, so it enters again.
+        Whether a sync ran. The caller entered the environment before
+        it, from receipts the sync may have written since, so it enters
+        again.
     """
+    import contextlib
+
     import livery.footman as footman
 
+    if os.environ.get(_SYNCING) or env.get(_SYNCING) or task == "sync":
+        return False
+    prog = footman.prog()
     try:
-        repaired = repair(root)
-    except Exception as error:  # a repair never stops the command it precedes
-        _say(
-            f"{footman.prog()}: this checkout's own files could not be written: {error}"
-        )
-        repaired = []
-    if repaired:
-        _say(
-            f"{footman.prog()}: this checkout lacked its own files (a start that"
-            " never synced); wrote them from what the machine holds"
-        )
-    result = reconcile(root)
-    if result.failure:
-        _say(f"{footman.prog()}: environment reconcile incomplete: {result.failure}")
-        return bool(repaired)
-    if result.synced:
-        _say(f"{footman.prog()}: environment synced from uv.lock")
-        if result.changed:
-            _reexec(root, SYNCED)
-    return bool(repaired)
+        why = current(root)
+    except Exception as error:  # the hook never stops the command it precedes
+        _say(f"{prog}: this checkout's receipts could not be read ({error})")
+        return False
+    if not why:
+        return False
+    _say(f"{prog}: {why}; syncing from what the machine holds")
+    before = installed_distributions(root)
+    # Set in the task's own environment, which the sync's children see
+    # and no sibling does, and removed after them.
+    env[_SYNCING] = "1"
+    try:
+        from livery.workshop._sync import sync
+
+        with contextlib.redirect_stdout(sys.stderr):
+            sync(frozen=True, offline=True)
+    except Exception as error:
+        _say(f"{prog}: the sync did not complete ({error}); running on what is here")
+        return False
+    finally:
+        env.pop(_SYNCING, None)
+    after = installed_distributions(root)
+    if any(
+        before.get(name) != after.get(name) for name in before.keys() | after.keys()
+    ):
+        _reexec(root, SYNCED)
+    return True
 
 
 def _reexec(root: Path, cause: str) -> None:

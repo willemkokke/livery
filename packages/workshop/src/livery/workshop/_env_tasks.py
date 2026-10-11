@@ -17,11 +17,11 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import livery.footman as footman
 import livery.toolroom.tools as toolroom
-from livery.footman import Arg, Stdout, doc, fail, group, pre_tasks
+from livery.footman import Arg, Stdout, doc, fail, group, pre_task, pre_tasks
 from livery.forge import RepoConfig
 from livery.workshop._envfile import (
     Source,
@@ -89,26 +89,52 @@ def apply_cascade(inv: footman.Invocation) -> None:
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
-    # The tools' half of the entry contract, before the reconcile so a
-    # re-exec after a drift sync inherits it and the sync's own spawns
-    # resolve: whatever launched this process, it runs entered.
+    # The tools' half of the entry contract: whatever launched this
+    # process, it runs entered.
     apply_entry(root)
     _warn_unmounted_extensions(root)
-    # Belt and braces around the whole self-healing step: this hook
-    # is the last thing standing between a surprise in the reconcile
-    # and every command failing, so nothing short of a deliberate
+
+
+#: Whether this process's command had its checkout brought current:
+#: the per-task hook below does it once, before the first task.
+_SYNCED: list[bool] = []
+
+
+@pre_task
+def sync_first(inv: footman.Invocation, task: Any) -> None:
+    """Bring the checkout current before the command's first task runs.
+
+    Once per process, at the first task's per-task moment, which is
+    inside the run: footman refuses a task call at discovery, where the
+    completion child would make it on a Tab press. The checkout's
+    receipts decide ([livery.workshop._reconcile.apply][]); a sync that
+    wrote receipts this process entered without enters again, into
+    this task's own environment, which its subprocesses see.
+    """
+    from livery.workshop._extensions import workspace_root
+
+    _ = inv
+    if _SYNCED:
+        return
+    _SYNCED.append(True)
+    root = workspace_root()
+    if root is None:
+        return
+    # Belt and braces around the whole self-healing step: a raising
+    # pre-task hook fails the task, so nothing short of a deliberate
     # SystemExit (the re-run handoff, which derives from
     # BaseException) may escape it.
     try:
         from livery.workshop import _reconcile
 
-        if _reconcile.is_cli_process() and _reconcile.apply(root):
-            # The repair wrote receipts this process entered without.
+        if _reconcile.is_cli_process() and _reconcile.apply(
+            root, str(task.name), task.env
+        ):
             apply_entry(root)
     except Exception as error:
         import sys
 
-        sys.stderr.write(f"environment reconcile skipped ({error})\n")
+        sys.stderr.write(f"environment sync skipped ({error})\n")
 
 
 def apply_entry(root: Path) -> tuple[str, ...]:

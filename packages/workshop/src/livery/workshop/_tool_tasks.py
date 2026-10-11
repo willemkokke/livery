@@ -193,7 +193,8 @@ def sync_tools(
     The engine behind ``toolroom.sync``, taking the workspace root as an
     argument: a birth runs it for the newborn from inside its own
     task, and a task may not change the process directory, so the
-    root travels as a value. The flags mean what the task's do.
+    root travels as a value; ``sync`` calls it for the same reason.
+    The flags mean what the task's do.
     """
     from livery.toolroom.store import LOCK_FILE
     from livery.workshop._sync import materialise_tools

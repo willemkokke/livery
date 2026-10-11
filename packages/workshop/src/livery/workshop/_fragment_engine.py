@@ -701,7 +701,7 @@ LOCAL_RECEIPT = ".workshop/rendered/receipts.json"
 Written by every delivery, empty when there is nothing of its own, so
 its presence says the checkout's own files were delivered at all; a
 checkout without it never had them, which the per-command repair reads
-([livery.workshop._reconcile.repair][]).
+([livery.workshop._reconcile.current][]).
 """
 
 _IGNORE_HEADER = (
