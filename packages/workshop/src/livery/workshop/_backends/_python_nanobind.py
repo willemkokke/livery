@@ -10,6 +10,7 @@ manylinux-compliant; the sdist still comes from ``uv build``.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import sysconfig
@@ -230,9 +231,14 @@ def conan_environment(root: Path) -> dict[str, str]:
     `find_package` through conan. `CONAN_HOME` is made explicit so a
     container build shares this machine's cache. On Linux cibuildwheel
     builds in a container with its own filesystem, so the workspace,
-    the store and the conan home are mounted at their host paths and
-    the store's conan joins the container's PATH. The package itself
-    is copied to ``/project`` there, outside the workspace, so the
+    the store, the provider and the conan home are mounted at their
+    host paths. The store's conan is the host's frozen binary, linked
+    against the host's libc, which a manylinux or musllinux container
+    cannot run, so the container installs conan at the same version
+    before any wheel builds
+    ([livery.workshop._backends._python_nanobind.container_conan_install][])
+    and the store's one stays off its PATH. The package itself is
+    copied to ``/project`` there, outside the workspace, so the
     container also mounts a workspace file of its own beside it
     ([livery.workshop._backends._python_nanobind.container_workspace][]),
     and a sibling resolves from its source in the container too. The
@@ -254,7 +260,7 @@ def conan_environment(root: Path) -> dict[str, str]:
     env = {"CMAKE_CONAN_PROVIDER": provider, "CONAN_HOME": conan_home}
     if sys.platform.startswith("linux"):
         mounts = container_mounts(
-            (root, home.root, Path(conan_home), Path(provider).parent, Path(conan))
+            (root, home.root, Path(conan_home), Path(provider).parent)
         )
         workspace = container_workspace(root)
         if workspace is not None:
@@ -263,8 +269,61 @@ def conan_environment(root: Path) -> dict[str, str]:
             "CMAKE_CONAN_PROVIDER CONAN_HOME CONAN_INSTALL_ARGS"
         )
         env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
-        env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{conan}:$PATH"'
+        env["CIBW_BEFORE_ALL_LINUX"] = container_conan_install(
+            conan_version(root, conan)
+        )
     return env
+
+
+def conan_version(root: Path, conan: str) -> str:
+    """The version of the conan a build uses: the receipt's, else the binary's own.
+
+    The receipt names the version the lock pins. A workspace with no
+    receipts of its own (a CI leg's test building in a temporary
+    directory) resolved conan from PATH, and that binary's
+    ``--version`` is the one answer left; the cmake-conan provider
+    reads it the same way.
+
+    Raises:
+        Failed: when neither a receipt nor the binary names a version.
+    """
+    from livery.workshop._tools import receipts
+
+    held = receipts(root).get("conan")
+    if held is not None and held.version:
+        return held.version
+    why = "a Linux build container installs conan at the host's version"
+    remedy = f"`{footman.prog()} sync` writes the receipt that names it"
+    try:
+        result = footman.run([str(Path(conan) / "conan"), "--version"], nofail=True)
+    except FileNotFoundError:
+        fail(f"no conan at {conan}, and {why}; {remedy}")
+    found = re.search(r"(\d+\.\d+\.\d+)", f"{result.stdout}{result.stderr}")
+    if result.code != 0 or found is None:
+        fail(
+            f"conan at {conan} names no version (`conan --version` exited"
+            f" {result.code}), and {why}; {remedy}"
+        )
+    return found.group(1)
+
+
+#: Where a Linux build container keeps the conan it installs for itself.
+CONTAINER_CONAN = "/opt/workshop-conan"
+
+
+def container_conan_install(version: str) -> str:
+    """The shell line a Linux build container runs before any wheel builds.
+
+    A virtual environment of the container's own python, conan at
+    *version* installed into it from the index, and the executable
+    linked into ``/usr/local/bin``, which every build's PATH holds; the
+    store's conan, the host's frozen binary, is never run there.
+    """
+    return (
+        f"python -m venv {CONTAINER_CONAN}"
+        f" && {CONTAINER_CONAN}/bin/pip install --quiet conan=={version}"
+        f" && ln -sf {CONTAINER_CONAN}/bin/conan /usr/local/bin/conan"
+    )
 
 
 #: Where a Linux build container finds the conan workspace file: beside
