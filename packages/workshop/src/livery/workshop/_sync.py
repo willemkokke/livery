@@ -192,7 +192,13 @@ def _rebase_step(
     return False
 
 
-def restack(git: GitOps, branch: str, *, interactive: bool) -> bool | None:
+def restack(
+    git: GitOps,
+    branch: str,
+    *,
+    interactive: bool,
+    stack: tuple[str, str] | None = None,
+) -> bool | None:
     """Move a stacked branch's own commits onto its parent, or onto main once it merged.
 
     A branch ``fm start --from`` began carries its parent's commits
@@ -209,9 +215,10 @@ def restack(git: GitOps, branch: str, *, interactive: bool) -> bool | None:
     reaches it through the parent.
 
     Returns whether the branch moved; None when it was left behind; a
-    branch that is not stacked returns False.
+    branch that is not stacked returns False. *stack* is the branch's
+    stack when the caller read it already; read here otherwise.
     """
-    parent, tip = git.stack(branch)
+    parent, tip = stack if stack is not None else git.stack(branch)
     if not parent:
         return False
     if tip and not git.is_ancestor(tip, "HEAD"):
@@ -439,9 +446,10 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
             else:
                 rebased = True
     behind_base = git._run("rev-list", "--count", f"{branch}..origin/main").strip()
-    parent, _tip = git.stack(branch)
+    stack = git.stack(branch)
+    parent, _tip = stack
     if parent:
-        moved = restack(git, branch, interactive=interactive)
+        moved = restack(git, branch, interactive=interactive, stack=stack)
         if moved is None:
             return
         if moved:
