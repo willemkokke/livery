@@ -400,17 +400,30 @@ def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
         env = kw["env"]
         assert isinstance(env, dict)
         seen.append((argv, kw["cwd"], str(env.get("FOOTMAN_NO_UV", ""))))
+        if argv[-1] == "--plugins":
+            # The listing a failure prints: what mounted, from which rung.
+            return SimpleNamespace(
+                code=0, stdout="livery-workshop 0.8.0\n  livery.workshop\n", stderr=""
+            )
         return SimpleNamespace(
             code=code[0], stdout="  updated pyproject.toml\n", stderr="no index"
         )
 
     monkeypatch.setattr("livery.footman.run", run)
-    with pytest.raises(_FAILURES, match="the pass's render of the loop exited 3"):
+    with pytest.raises(
+        _FAILURES, match="the pass's render of the loop exited 3"
+    ) as caught:
         _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert "footman's plugins in the loop:\nlivery-workshop 0.8.0" in str(caught.value)
     code[0] = 0
     _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
     argv = [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"]
-    assert seen == [(argv, tmp_path, "1"), (argv, tmp_path, "1")]
+    plugins = [sys.executable, "-m", "livery.footman", "--plugins"]
+    assert seen == [
+        (argv, tmp_path, "1"),
+        (plugins, tmp_path, "1"),
+        (argv, tmp_path, "1"),
+    ]
     assert "updated pyproject.toml" in capsys.readouterr().out
 
 
