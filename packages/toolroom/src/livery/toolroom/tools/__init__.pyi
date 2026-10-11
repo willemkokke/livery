@@ -230,7 +230,7 @@ class Tool(Generic[_R]):
         nofail: bool = ...,
         in_process: bool | None = ...,
         capture: bool = ...,
-        input: str | None = ...,
+        input: str | bytes | None = ...,
         env: dict[str, str] | None = ...,
         title: str | None = ...,
         cwd: str | _Path | None = ...,

@@ -235,7 +235,7 @@ def answers(
         handed: tuple[tuple[Any, ...], dict[str, Any]] | None = None,
         nofail: bool = False,
         capture: bool = True,
-        input: str | None = None,
+        input: str | bytes | None = None,
         env: dict[str, str] | None = None,
         title: str | None = None,
         pre_record: Any = None,
