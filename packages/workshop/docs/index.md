@@ -805,7 +805,10 @@ absence.
   `[ci] affected-legs = true` has its CI check legs run that scoped
   gate, measured by the same rule from CI's own record: from the
   proved tree nearest the checkout's, or from the merge base with the
-  pull request's base branch when the record proves none. A pull
+  pull request's base branch when the record proves none. A push to
+  main whose tree no run proved measures the same way from the
+  previous push's tree, and pays the whole gate when the record proves
+  none in reach, since on main the merge base is the push itself. A pull
   request's run on GitHub tests the merge of its head onto the base
   branch, so its row names the two commits merged, and the next push's
   run rebuilds that merge and gates only what changed since it. The

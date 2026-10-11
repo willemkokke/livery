@@ -2461,6 +2461,22 @@ the stack, which this design neither needs nor rules out).
   on the desk under that load. A pull request's narrowed check leg on
   main's recent runs: 126 s at the median, the whole run about 5 min
   30 s to its merge.
+- 2026-10-11, Willem: a push to main narrows too. Measured on the
+  first main run of the folded shape: the Windows check leg at 843 s
+  was the run's critical path, 660 of them one pytest run, for a
+  change to one package. The pull request's leg already measures from
+  the nearest proved tree with the merge base as its fallback; a push
+  takes the same plan from the previous push's tree and pays the whole
+  gate when the record proves none in reach, since on main the merge
+  base is the push itself. The loop's `unproven-push` scenario lands a
+  member-only branch cut from behind main's tip, so its squash is a
+  tree no run proved, and reads main's run narrowing and composing.
+  Why: the code's own reason for the full gate on a push, "until the
+  verified-tree record exists", was past. What it replaced: nothing,
+  the push's full gate. #1431. Beside it, #1432 measured the git-driven
+  tests: 5824 processes over 298 tests, 83 percent the code under
+  test's; the first slice cut 4 percent, and the rest is the flows'
+  facts and the state store's design.
 
 - 2026-10-11, #1437, a loop default until slice 12e: an extension pass
   births with the test extension beside the extension under test and
