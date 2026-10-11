@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterator, Mapping
+from datetime import datetime
 from itertools import islice
 from typing import Any
 from urllib.parse import quote
@@ -134,6 +135,27 @@ def _run_state(raw_status: str, raw_conclusion: str) -> tuple[RunStatus, Conclus
     return ("queued", "")
 
 
+def _when(value: object) -> str:
+    """A time as the API served it, or empty for one the server has not set.
+
+    Gitea keeps a run's, a job's and a step's times as Unix seconds and
+    serves an unset one as the epoch itself, in the server's offset:
+    a running job's end and a queued job's start both arrive as
+    1970-01-01. Read as a time, the epoch measures the job at minus
+    the current date. The protocol promises an empty string for a
+    time the forge has not set, so the epoch reads as empty, and so
+    does Go's zero time, which a time column serves for the same case.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+    return "" if moment.year <= 1970 else text
+
+
 def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
     """A job's steps as the API lists them, each with its times."""
     steps = []
@@ -145,8 +167,8 @@ def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
             Step(
                 name=str(entry.get("name", "")),
                 conclusion=conclusion,
-                started_at=str(entry.get("started_at") or ""),
-                completed_at=str(entry.get("completed_at") or ""),
+                started_at=_when(entry.get("started_at")),
+                completed_at=_when(entry.get("completed_at")),
             )
         )
     return tuple(steps)
@@ -967,9 +989,9 @@ class _GiteaChecks:
                     status=status,
                     conclusion=conclusion,
                     url=str(entry.get("html_url", "")),
-                    created_at=str(entry.get("created_at") or ""),
-                    started_at=str(entry.get("started_at") or ""),
-                    completed_at=str(entry.get("completed_at") or ""),
+                    created_at=_when(entry.get("created_at")),
+                    started_at=_when(entry.get("started_at")),
+                    completed_at=_when(entry.get("completed_at")),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -997,8 +1019,8 @@ class _GiteaChecks:
                     name=str(entry.get("name", "")),
                     status=status,
                     conclusion=conclusion,
-                    started_at=str(entry.get("started_at") or ""),
-                    completed_at=str(entry.get("completed_at") or ""),
+                    started_at=_when(entry.get("started_at")),
+                    completed_at=_when(entry.get("completed_at")),
                     steps=_steps(entry.get("steps") or []),
                 )
             )

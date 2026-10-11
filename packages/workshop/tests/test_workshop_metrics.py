@@ -8,6 +8,7 @@ state is the assertion surface, by design.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -580,6 +581,78 @@ def test_render_skips_other_schemas_and_renders_percentiles_and_movers(
     assert "movers: the last 2 run(s) against the 5 before" in text
     # Recent median (runs 9, 10 -> 9.0s) against the base median (runs 4-8 -> 6.0s).
     assert "    +3.0s  gate: wall_ms (6.0s -> 9.0s)" in lines
+
+
+def test_collect_measures_a_job_still_running_to_the_collection(
+    work: Path, tmp_path: Path
+) -> None:
+    # The gate job collects while it runs, so its own end and its
+    # Verdict step's end are not set yet: both are measured to the
+    # collection, the row says it is incomplete, and the report names
+    # it. A job the forge has not started carries no times at all.
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    sha = "d" * 40
+    fake.push("owner", "repo", "main", sha=sha)
+    state = fake._repos[("owner", "repo")]
+    run_state = next(iter(state.runs.values()))
+    run = _state.RunContext("gitea", str(run_state.id), "push", "refs/heads/main")
+    run_state.created_at = "2026-10-11T03:18:09Z"
+    run_state.started_at = "2026-10-11T03:18:12Z"
+    run_state.completed_at = ""
+    run_state.steps = (
+        Step(
+            "Run actions/checkout@v4",
+            "success",
+            "2026-10-11T03:18:12Z",
+            "2026-10-11T03:18:13Z",
+        ),
+        Step("Verdict", "", "2026-10-11T03:18:30Z", ""),
+        Step("Post", "", "", ""),
+    )
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
+    lines = _metrics.collect(work, repo, run, sha=sha)
+    assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
+    rows = _state.read(work, _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(run.run_id)])
+    job = entry["jobs"]["gate"]
+    collected = _metrics._between("2026-10-11T03:18:12Z", entry["collected_at"])
+    assert collected is not None and collected > 0
+    assert job["complete"] is False
+    assert job["queued_ms"] == 3000.0 and job["wall_ms"] == collected
+    verdict = _metrics._between("2026-10-11T03:18:30Z", entry["collected_at"])
+    assert job["steps"] == [
+        {"name": "Run actions/checkout@v4", "ms": 1000.0},
+        {"name": "Verdict", "ms": verdict},
+        {"name": "Post", "ms": None},
+    ]
+    text = "\n".join(_metrics.render(work))
+    assert (
+        "still running when the gate job collected: measured to the collection" in text
+    )
+    assert not re.search(r"-\d+\.\ds", text)
+
+
+def test_a_job_the_forge_has_not_started_carries_no_times() -> None:
+    from livery.forge import Job
+
+    row = _metrics._forge_row(
+        Job(4, "deploy", "queued", "", "", "", ()),
+        created="2026-10-11T03:18:09Z",
+        now="2026-10-11T03:20:00Z",
+    )
+    assert row["complete"] is False
+    assert row["queued_ms"] is None and row["wall_ms"] is None
+    running = _metrics._forge_row(
+        Job(3, "gate", "running", "", "2026-10-11T03:19:00Z", "", ()),
+        created="2026-10-11T03:18:09Z",
+        now="2026-10-11T03:20:00Z",
+    )
+    assert running["complete"] is False
+    assert running["queued_ms"] == 51000.0 and running["wall_ms"] == 60000.0
 
 
 def test_collect_drops_the_legs_measured_lines_with_its_half(

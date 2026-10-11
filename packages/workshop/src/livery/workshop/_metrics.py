@@ -260,26 +260,46 @@ def run_file(run_id: str) -> str:
     return f"{int(run_id):020d}.json" if run_id.isdigit() else f"{run_id}.json"
 
 
-def _forge_row(job: Job, *, created: str, now: str) -> dict[str, Any]:
-    """A job's times as the forge reports them, for a job that left no trace.
+def _times(job: Job, *, created: str, now: str) -> dict[str, Any]:
+    """A job's queue, wall and step times from the forge's stamps.
 
-    The docs build, the gate job itself, and the merge point's jobs
-    have no leg row; their queue and wall times come from the forge
-    alone. A job still running when the gate job collects (the gate
-    job is always one) is measured to *now* and marked incomplete; a
-    job the forge has not started carries no times.
+    A job still running when the gate job collects (the gate job is
+    always one) is measured to *now*, its running step too, and marked
+    incomplete, so the row reads as a real duration with its end named
+    rather than as a time the forge never set. A job the forge has not
+    started carries no queue or wall time.
     """
     started = job.started_at
     return {
-        "conclusion": job.conclusion,
-        "status": job.status,
         "complete": bool(job.completed_at),
         "queued_ms": _between(created, started) if started else None,
         "wall_ms": _between(started, job.completed_at or now) if started else None,
         "steps": [
-            {"name": step.name, "ms": _between(step.started_at, step.completed_at)}
+            {
+                "name": step.name,
+                "ms": (
+                    _between(step.started_at, step.completed_at or now)
+                    if step.started_at
+                    else None
+                ),
+            }
             for step in job.steps
         ],
+    }
+
+
+def _forge_row(job: Job, *, created: str, now: str) -> dict[str, Any]:
+    """A job's times as the forge reports them, for a job that left no trace.
+
+    The docs build, the merge point's jobs, and a gate job that ran
+    without a profile have no leg row; their queue and wall times come
+    from the forge alone, measured as [livery.workshop._metrics._times][]
+    measures every job's.
+    """
+    return {
+        "conclusion": job.conclusion,
+        "status": job.status,
+        **_times(job, created=created, now=now),
     }
 
 
@@ -372,12 +392,9 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             lines.append(f"  {name}: unknown to the forge; its trace half rides alone")
         else:
             row["conclusion"] = job.conclusion
-            row["queued_ms"] = _between(entry["created_at"], job.started_at)
-            row["wall_ms"] = _between(job.started_at, job.completed_at)
-            row["steps"] = [
-                {"name": step.name, "ms": _between(step.started_at, step.completed_at)}
-                for step in job.steps
-            ]
+            row.update(
+                _times(job, created=entry["created_at"], now=entry["collected_at"])
+            )
         entry["jobs"][name] = row
     for name, job in sorted(jobs.items()):
         if name not in entry["jobs"]:
@@ -496,6 +513,11 @@ def render(
     latest = _metrics(entries[-1])
     for job in sorted(series):
         lines.append(f"  {job}")
+        if newest.get("jobs", {}).get(job, {}).get("complete") is False:
+            lines.append(
+                "    still running when the gate job collected: measured to the"
+                " collection"
+            )
         lines.append(f"    {'metric':<44} {'latest':>9} {'p50':>9} {'p90':>9}")
         for metric, values in sorted(series[job].items()):
             now = latest.get(job, {}).get(metric)
