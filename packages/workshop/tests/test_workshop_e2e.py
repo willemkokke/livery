@@ -293,6 +293,21 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
+def test_a_git_without_an_identity_gets_the_loops_and_a_configured_one_stands() -> None:
+    # Nothing configured: the loop's identity follows the unsigned entry.
+    outer = _e2e.unsigned_environment({})
+    assert _e2e.identity_environment(outer, name="", email="") == {
+        "GIT_CONFIG_COUNT": "3",
+        "GIT_CONFIG_KEY_1": "user.name",
+        "GIT_CONFIG_VALUE_1": "livery loop",
+        "GIT_CONFIG_KEY_2": "user.email",
+        "GIT_CONFIG_VALUE_2": "loop@livery.invalid",
+    }
+    # A person's identity, even half of one, stands.
+    assert _e2e.identity_environment(outer, name="Acme", email="") == {}
+    assert _e2e.identity_environment({}, name="", email="dev@acme.test") == {}
+
+
 def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
     """A signer that waits for a person fails an unattended pass; the setting rides."""
     assert _e2e.unsigned_environment({}) == {
