@@ -37,7 +37,7 @@ import threading
 from collections.abc import Callable, Generator, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import fail, parallel, step
 
@@ -726,9 +726,10 @@ def run_phase(
                 continue
             units.append(_Unit(record, package))
     _link(units, ordered, after=not fixing)
+    bodies = [_resolved(unit, fixing) for unit in units]
     with parallel() as block:
-        for unit in units:
-            built = step(_body(held, unit, fixing), title=unit.title)
+        for unit, body in zip(units, bodies, strict=True):
+            built = step(_body(held, unit, body), title=unit.title)
             block(built.opts(capture=False)())
     return held
 
@@ -781,10 +782,27 @@ def _link(units: list[_Unit], ordered: tuple[CheckRecord, ...], *, after: bool) 
                     unit.needs.append(other)
 
 
+def _resolved(unit: _Unit, fixing: bool) -> Callable[[PhaseContext], None]:
+    """The body *unit* runs, its module imported now, on the calling thread.
+
+    A declared step names its function, imported when it is first
+    called; the walk imports every step's module before the block
+    starts, so no two steps import at once, and a module that fails to
+    import names its step before any step runs.
+    """
+    from livery.workshop._declaration import Reference
+
+    body = unit.record.fix if fixing else unit.record.run
+    assert body is not None  # a unit is built for a step with a body alone
+    if isinstance(body, Reference):
+        return cast("Callable[[PhaseContext], None]", body.resolve())
+    return body
+
+
 def _body(
-    ctx: PhaseContext, unit: _Unit, fixing: bool
+    ctx: PhaseContext, unit: _Unit, body: Callable[[PhaseContext], None]
 ) -> Callable[[], Generator[None, Any, None]]:
-    """The footman step's body for *unit*: wait for what it needs, then run it.
+    """The footman step's body for *unit*: wait for what it needs, then run *body*.
 
     A generator, so each wait is a checkpoint where footman cancels
     the step; the unit is marked done however the body ends, so a unit
@@ -793,8 +811,6 @@ def _body(
     from livery.workshop._kinds import extension_set
 
     record = unit.record
-    body = record.fix if fixing else record.run
-    assert body is not None  # a unit is built for a step with a body alone
 
     def run() -> Generator[None, Any, None]:
         try:
