@@ -77,6 +77,20 @@ class GitOps:
         out = self._run("rev-parse", "--abbrev-ref", "HEAD").strip()
         return "" if out == "HEAD" else out
 
+    def position(self) -> tuple[str, str]:
+        """The checked-out branch name, empty when detached, and HEAD's commit.
+
+        One process for both: a flow that asks where it stands asks
+        for the branch and the head together, and every process costs
+        tens of milliseconds on a Windows runner. The head is asked
+        first: ``--abbrev-ref`` applies to every revision after it, so
+        the branch's name comes second.
+        """
+        out = self._run("rev-parse", "HEAD", "--abbrev-ref", "HEAD").split()
+        head = out[0] if out else ""
+        branch = "" if len(out) < 2 or out[1] == "HEAD" else out[1]
+        return branch, head
+
     def object_id(self, spec: str) -> str:
         """The object id *spec* names (``HEAD:packages/forge`` is a tree id).
 
@@ -364,9 +378,19 @@ class GitOps:
         started on main; the commit is empty for a branch started before
         it was recorded.
         """
-        parent = self.config_get(f"branch.{branch}.workshop-parent")
-        tip = self.config_get(f"branch.{branch}.workshop-parent-tip") if parent else ""
-        return parent, tip
+        # One process for both keys: a flow reads the stack several
+        # times, and a branch standing on main has neither key.
+        prefix = f"branch.{branch}.workshop-parent"
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "config", "--get-regexp", f"^{prefix}(-tip)?$"
+        )
+        found: dict[str, str] = {}
+        if result.code == 0:
+            for line in result.stdout.splitlines():
+                key, _, value = line.partition(" ")
+                found[key] = value.strip()
+        parent = found.get(prefix, "")
+        return parent, found.get(f"{prefix}-tip", "") if parent else ""
 
     def record_stack(self, branch: str, parent: str, tip: str) -> None:
         """Record *branch* as stacked on *parent*, its own commits after *tip*."""

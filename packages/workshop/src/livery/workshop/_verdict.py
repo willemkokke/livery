@@ -333,7 +333,8 @@ def classify(
     # commit the push replaced. In-flight until the forge catches
     # up; a branch checked out elsewhere (submit.merge from another
     # tree) matches by construction.
-    local_head = git.head_sha() if git.current_branch() == branch else ""
+    standing, head = git.position()
+    local_head = head if standing == branch else ""
     if local_head and pr.head_sha != local_head:
         return Verdict(
             "in-flight",

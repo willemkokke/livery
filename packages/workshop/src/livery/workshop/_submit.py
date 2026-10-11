@@ -343,10 +343,19 @@ class Plan:
 
 
 def prepare(
-    git: GitOps, *, title: str = "", body: str = "", base: str = "main"
+    git: GitOps,
+    *,
+    title: str = "",
+    body: str = "",
+    base: str = "main",
+    branch: str = "",
 ) -> Plan:
-    """Validate the branch and assemble the pull request shape."""
-    branch = git.current_branch()
+    """Validate the branch and assemble the pull request shape.
+
+    *branch* is the checked-out branch when the caller read it already;
+    read here otherwise.
+    """
+    branch = branch or git.current_branch()
     if not branch or branch == base:
         fail(
             f"not on a feature branch (on {branch or '(detached)'!r}, base is"
@@ -387,7 +396,7 @@ def prepare(
     )
 
 
-def resolve_base(git: GitOps, base: str, *, given: bool) -> str:
+def resolve_base(git: GitOps, base: str, *, given: bool, branch: str = "") -> str:
     """The branch the pull request targets.
 
     A ``--base`` flag wins. Otherwise the parent ``fm start --from``
@@ -404,7 +413,7 @@ def resolve_base(git: GitOps, base: str, *, given: bool) -> str:
     """
     if given:
         return base
-    parent, _tip = git.stack(git.current_branch())
+    parent, _tip = git.stack(branch or git.current_branch())
     if not parent:
         return base
     if parent in git.remote_branches(parent):
@@ -828,7 +837,7 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
         )
 
 
-def _restack_before_push(git: GitOps) -> bool:
+def _restack_before_push(git: GitOps, *, branch: str = "") -> bool:
     """Move a stacked branch onto its moved or merged parent; whether it moved.
 
     The pull request of a branch whose parent merged is retargeted to
@@ -839,7 +848,7 @@ def _restack_before_push(git: GitOps) -> bool:
     fold, and a restack with conflicts refuses naming the verb that
     resolves it.
     """
-    branch = git.current_branch()
+    branch = branch or git.current_branch()
     parent, _tip = git.stack(branch)
     if not parent or not git.is_clean():
         return False
@@ -886,8 +895,9 @@ def submit_flow(
     # they could have passed, and the title is decided from the
     # branch as it is, before a fold adds a commit of its own.
     git.fetch()
-    force = _restack_before_push(git) or force
-    plan = prepare(git, title=title, body=body, base=base)
+    branch = git.current_branch()
+    force = _restack_before_push(git, branch=branch) or force
+    plan = prepare(git, title=title, body=body, base=base, branch=branch)
     # A first open only: a pull request that exists, open, merged, or
     # closed, keeps its title, and the merged and closed cases get
     # their own refusals further on.
@@ -1042,8 +1052,8 @@ def _fold_fixes(git: GitOps, base: str) -> None:
     remote already trusts.
     """
     git.fetch()
-    branch = git.current_branch()
-    pushed = git.remote_head(branch) == git.head_sha()
+    branch, head = git.position()
+    pushed = git.remote_head(branch) == head
     if pushed or not git.subjects_ahead(base):
         git.commit_all("chore: apply gate fixes")
         print("  gate fixes committed (the squash merge collapses this)")

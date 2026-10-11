@@ -92,9 +92,16 @@ def _seed(base: Path) -> None:
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
     clone = base / "clone"
-    _git(base, "clone", str(origin), "clone")
-    _git(clone, "config", "user.email", "test@livery.local")
-    _git(clone, "config", "user.name", "Livery Test")
+    _git(
+        base,
+        "clone",
+        "--config",
+        "user.email=test@livery.local",
+        "--config",
+        "user.name=Livery Test",
+        str(origin),
+        "clone",
+    )
     (clone / "seed.txt").write_text("seed\n")
     _git(clone, "add", ".")
     _git(clone, "commit", "-m", "chore: seed")
