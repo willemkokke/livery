@@ -1469,7 +1469,7 @@ the stack, which this design neither needs nor rules out).
 | a phase's level choosing its reader: a package-level phase's steps into `DeclaredPhase`, a workspace-level phase's into check records | the one walk, every step a footman step (#1377, part 6) |
 | the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
-| `[generators]`, `[slots]` and `[contributions]`, `[root-files]`, `[setup]`, `[rules]`, `release-notes`, `editor-extension` | the docs phase's steps, declared queries, fragments, the configure phase, layering steps, a query, a contribution (#1377) |
+| `[generators]`, `[root-files]`, `[setup]`, `[rules]` | the docs phase's steps, fragments, the configure phase, layering steps (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
 | `[release] prove-floors`, and the prove and replay phases | `[release] prove = [...]` on the test phase, and verify (#1377) |
 
@@ -2611,6 +2611,27 @@ the stack, which this design neither needs nor rules out).
   an extension entry with brackets refuses naming `enabled`. Kept: the
   rule that a scoped run reaching every unit a step judges runs its
   configured whole, which is the engine's, not a declared threshold.
+
+- 2026-10-11, #1476, #1377 part 8: slots, contributions,
+  `editor-extension` and `release-notes` are declared queries. A query
+  is declared with its combine rule (`union`, `nearest`, `agreed` or a
+  function), its level, a default and its values, by the base in a
+  `[queries]` section of `contract.toml`, its eight package queries
+  included, and by an extension under `[queries.<name>]`; an answer
+  stays `<name> = "module:function"` under `[queries]`, or
+  `[queries.<name>] value = ...` as a literal. A workspace-level query
+  is asked with the root and answered by the listed extensions in list
+  order; asking at the other level refuses, two declarers refuse naming
+  both, an answer to an undeclared query refuses naming the declared
+  ones, a second answer to a one-answer query refuses, and an answer off
+  the values refuses. The base declares `editor-extensions`,
+  `python.dev-group` and `python.test.addopts` (the last two until the
+  python extension leaves the wheel) and `release-notes`; docs declares
+  `docs.members` and `docs.theme`. Gone: `_slots.py`, `register_slot`,
+  `CheckRecord.contributions`, `register_release_notes`, the
+  `[contributions]` and `[slots]` tables. The templates read every
+  workspace query's answer at render time, since the fragment engine
+  serialises its data, so a render imports the changelog's notes module.
 
 ## Open
 

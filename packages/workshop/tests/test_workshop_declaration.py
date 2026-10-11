@@ -459,7 +459,6 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         record.after,
         record.tests_only,
         record.flags,
-        record.editor_extension,
     ) == (
         "workspace",
         ("acme-kind",),
@@ -467,7 +466,6 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         ("lint.other",),
         True,
         ("point",),
-        "acme.vscode",
     )
     assert [(c.category, c.ignore, c.suffixes) for c in record.claims] == [
         ("source", ("X1",), (".py",))
