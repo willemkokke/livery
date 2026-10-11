@@ -78,7 +78,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
@@ -915,7 +915,18 @@ def _key_group(snapshot: _Snapshot, ref: str, sha: str) -> dict[str, str]:
     return group
 
 
-def fetch_store(root: Path, *, branches: bool = False) -> tuple[int, str]:
+class Fetched(NamedTuple):
+    """What `fetch_store` did: the mirror's size, why it failed, the refs that moved."""
+
+    held: int
+    """The refs the mirror holds after the fetch; zero when it failed."""
+    why: str
+    """Empty, or why the fetch or the stamp failed, in git's words."""
+    changed: int = 0
+    """The refs this fetch added, moved or pruned; zero on a quiet origin."""
+
+
+def fetch_store(root: Path, *, branches: bool = False) -> Fetched:
     """Mirror origin's namespace under `FETCHED_NAMESPACE` and stamp it.
 
     One fetch with an explicit refspec, pruned, so a ref origin dropped
@@ -924,25 +935,35 @@ def fetch_store(root: Path, *, branches: bool = False) -> tuple[int, str]:
     the mirror is absent rather than never fetched. With *branches*
     the same fetch brings origin's heads into ``refs/remotes/origin/``,
     pruned the same way, so a sync that needs both pays one round trip.
+    A fetch transfers only what the checkout lacks: on a quiet origin
+    the round trip is the whole cost and nothing changes.
 
     Returns:
-        ``(count, "")`` with the refs the mirror holds, or ``(0,
-        reason)`` when the fetch or the stamp failed, with git's
-        words; nothing here raises or prints.
+        The refs the mirror holds and how many this fetch changed, or
+        zero of each and the reason when the fetch or the stamp failed,
+        with git's words; nothing here raises or prints.
     """
+    before = _local_refs(root, FETCHED_NAMESPACE) or {}
     refspecs = [f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*"]
     if branches:
         refspecs.insert(0, "+refs/heads/*:refs/remotes/origin/*")
     fetched = _git(root, "fetch", "--quiet", "--prune", "origin", *refspecs)
     if fetched.code != 0:
-        return 0, _words(fetched)
+        return Fetched(0, _words(fetched))
     mirrored = _local_refs(root, FETCHED_NAMESPACE)
     if mirrored is None:
-        return 0, "the mirror could not be listed"
+        return Fetched(0, "the mirror could not be listed")
     why = FETCHED.put(
         root, {"origin": {"refs": len(mirrored)}}, message="fetched origin's store"
     )
-    return (0, why) if why else (len(mirrored), "")
+    if why:
+        return Fetched(0, why)
+    changed = sum(
+        1
+        for name in set(before) | set(mirrored)
+        if before.get(name) != mirrored.get(name)
+    )
+    return Fetched(len(mirrored), "", changed)
 
 
 @contextmanager
