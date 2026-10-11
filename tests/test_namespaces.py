@@ -38,6 +38,7 @@ EXPORTS: dict[str, list[str]] = {
         "Exists",
         "Failed",
         "FetchError",
+        "Finding",
         "Forward",
         "GlobalOption",
         "Group",

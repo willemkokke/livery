@@ -193,6 +193,14 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         ],
     ),
     ("Failing on purpose", "", ["fail", "Failed", "TimedOut"]),
+    (
+        "Checking the runner",
+        "What `fm doctor` prints is findings: footman's own checks of the "
+        "runner's directories and scratch, then every doctor an installed "
+        "package registers under the `footman.doctors` entry-point group. A "
+        "doctor returns these; `--fix` runs each one's repair and checks again.",
+        ["Finding"],
+    ),
     ("Progress", "", ["progress", "track"]),
     (
         "Profiling from inside a task",

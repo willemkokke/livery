@@ -21,7 +21,8 @@ import pytest
 from livery.footman import Failed
 from livery.forge import ForgeError, Repository, Run, StateFilter
 from livery.forge.testing import FakeForge, Outcome
-from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, status_flow
+from livery.workshop._ci_tasks import cancel_flow, rerun_flow, status_flow
+from livery.workshop._doctor import forge_findings
 from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import (
     Plan,
@@ -911,8 +912,7 @@ def test_status_and_rerun_and_doctor(rig: tuple[FakeForge, SubmitGit]) -> None:
     assert status_flow(_repo(fake), git) == EXIT_CI_FAILED
     rerun_flow(_repo(fake), git)  # the failed run re-queues
     # The fake's shas are its own; classify by branch still answers.
-    doctor_flow(fake)
-    assert fake.whoami()
+    assert forge_findings(fake, None) and fake.whoami()
 
 
 def test_rerun_runs_the_whole_run_when_only_the_verdict_job_failed(

@@ -1164,8 +1164,11 @@ BUILTIN: tuple[Entry, ...] = (
     # remote store, and a pull request's run writes nothing it does
     # not own.
     Entry("merge", "gate", "janitor", last=True),
-    # The clock's point: the whole check, with the tests that declare
-    # the nightly point selected in, on every python of the matrix.
+    # The clock's point: the doctor first, so the night's record opens
+    # with the runner's and the forge's state, then the whole check with
+    # the tests that declare the nightly point selected in, on every
+    # python of the matrix.
+    Entry("nightly", "nightly", "doctor"),
     Entry("nightly", "nightly", "check"),
     # The wave, at the squash the dispatch names: each platform's
     # wheels, then the publish that cuts the receipts. Each verb decides

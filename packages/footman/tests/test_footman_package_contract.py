@@ -41,6 +41,7 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
         "footman.env_files",
         "footman.self",
         "footman.janitor",
+        "footman.doctor",
         "footman.profile",
         "livery.footman",
     }
@@ -48,7 +49,7 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
     assert "footman.new" not in tasks
 
 
-def test_the_stock_builtin_is_self_only() -> None:
+def test_the_stock_builtins_are_self_janitor_and_doctor() -> None:
     import livery.footman as footman
 
-    assert footman.BUILTIN == ("footman.self", "footman.janitor")
+    assert footman.BUILTIN == ("footman.self", "footman.janitor", "footman.doctor")

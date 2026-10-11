@@ -116,6 +116,20 @@ voice asks `attended()` like anything else. A sweeper that
 raises is named and the rest still run. A sweeper touches its own
 package's files and nobody else's.
 
+### Checking what a plugin owns
+
+`fm doctor` checks the runner's state, footman's own directories and
+scratch first, then every doctor an installed package registers under the
+`footman.doctors` entry-point group. A doctor is a callable taking the
+keyword arguments `data_dir`, `cache_dir`, `config_dir` and `now` and
+returning its findings: each names what was checked, what is wrong, the
+fix in words, and a repair footman may run. `footman.Finding` is the
+shape; a package that never imports footman returns any object with the
+four attributes. The plain verb reports and runs nothing; `fm doctor
+--fix` runs every repair, asks every doctor again, and prints what stands.
+A doctor that raises is named and the rest still run. A finding that
+stands at the end makes the verb red.
+
 The safe convention is **one subfolder named after your distribution** —
 `data_dir() / "acme-devkit" / …` — which cannot collide with a future
 reserved name, since anything footman adds will be a file or folder named

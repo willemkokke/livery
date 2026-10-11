@@ -967,9 +967,11 @@ absence.
   is merged directly, since a forge that arms only a blocked pull
   request refuses. `fm submit.merge` lands a green,
   deliberately-unarmed PR; `fm abandon [branch]` gives a feature up,
-  this one or a named one, its worktree with it. `fm status`,
-  `fm ci.*`, and `fm doctor` stand beside them, all on
-  [livery-forge](https://pypi.org/project/livery-forge/).
+  this one or a named one, its worktree with it. `fm status` and
+  `fm ci.*` stand beside them, all on
+  [livery-forge](https://pypi.org/project/livery-forge/). `fm doctor`
+  is footman's; the workshop registers its forge and host checks with
+  it, so one verb reports the runner, the forge and the machine.
 - `fm drift` keeps the composed and generated files byte-identical
   to what the listed extensions and the contract write, and names
   `fm sync` as the remedy;

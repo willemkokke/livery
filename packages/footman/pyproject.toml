@@ -87,6 +87,7 @@ footman = "livery.footman._pytest_plugin"
 "footman.env_files" = "livery.footman._env_files"
 "footman.self" = "livery.footman._tasks.self_:tasks"
 "footman.janitor" = "livery.footman._tasks.janitor:tasks"
+"footman.doctor" = "livery.footman._tasks.doctor:tasks"
 "footman.profile" = "livery.footman.profile"
 
 # Mounted in every project that depends on footman directly: any run,
