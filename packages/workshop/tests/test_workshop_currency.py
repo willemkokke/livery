@@ -14,6 +14,7 @@ from livery.workshop._packages import discover_packages
 from livery.workshop._submit import prepare
 from livery.workshop._sync import bring_current, integrate, sweep_residue
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_spawns import counting_spawns
 
 _FAILURES = (SystemExit, Failed)
 
@@ -460,6 +461,37 @@ def test_a_moved_remote_branch_fast_forwards_when_behind_only(
     bring_current(clone, GitOps(clone), interactive=False)
     assert "fast-forwarded" in capsys.readouterr().out
     assert (clone / "theirs.txt").is_file()
+
+
+def test_a_bring_current_told_of_the_fetch_runs_none_and_still_moves(
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The sync fetches origin's heads and the state store in one call
+    # before this; a second fetch here would be the same round trip
+    # again. Told nothing, it still fetches for itself.
+    clone, origin = _rig(seeds)
+    _git(clone, "checkout", "-b", "feat/1-shared")
+    _git(clone, "push", "-u", "origin", "feat/1-shared")
+    other = _other(tmp_path, origin)
+    _git(other, "checkout", "feat/1-shared")
+    (other / "theirs.txt").write_text("t\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: theirs")
+    _git(other, "push", "origin", "feat/1-shared")
+    with counting_spawns() as spawned:
+        bring_current(clone, GitOps(clone), interactive=False)
+    assert spawned["git fetch"] == 1
+    assert (clone / "theirs.txt").is_file()
+    (other / "more.txt").write_text("m\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: more")
+    _git(other, "push", "origin", "feat/1-shared")
+    _git(clone, "fetch", "origin")
+    with counting_spawns() as spawned:
+        bring_current(clone, GitOps(clone), interactive=False, fetched=True)
+    assert spawned["git fetch"] == 0
+    assert "fast-forwarded" in capsys.readouterr().out
+    assert (clone / "more.txt").is_file()
 
 
 def test_main_only_ever_fast_forwards(

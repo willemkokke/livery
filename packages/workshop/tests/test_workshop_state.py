@@ -1280,6 +1280,34 @@ def test_fetch_store_mirrors_origins_namespace_prunes_and_stamps(
     assert _state.list_refs(work, _state.FETCHED_NAMESPACE) is not None
 
 
+def test_fetch_store_brings_origins_branches_in_the_same_fetch_when_asked(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = _state.Series("alpha", window=50, ci_only=False)
+    assert alpha.put(other, {"r": {"x": "alpha"}}, message="alpha") == ""
+    _git(other, "checkout", "-b", "feat/9-theirs")
+    (other / "theirs.txt").write_text("t\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: theirs")
+    _git(other, "push", "-u", "origin", "feat/9-theirs")
+    # The narrow fetch first: the store alone, no branch comes with it.
+    assert _state.fetch_store(work) == (1, "")
+    assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
+    # Asked for the branches, one fetch brings the store and origin's
+    # heads, and a branch origin dropped goes from the remote-tracking
+    # refs the way a dropped ref goes from the mirror.
+    with counting_spawns() as spawned:
+        assert _state.fetch_store(work, branches=True) == (1, "")
+    assert spawned["git fetch"] == 1
+    assert "origin/feat/9-theirs" in _git(work, "branch", "-r")
+    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) is not None
+    _git(other, "push", "origin", "--delete", "feat/9-theirs")
+    assert _state.fetch_store(work, branches=True) == (1, "")
+    assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
+
+
 def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
