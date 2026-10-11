@@ -1171,13 +1171,27 @@ def _tree_files(root: Path, sha: str) -> Read:
     bytes, so no pipe's newline translation touches a row and the
     blobs come back as they were written on any platform. A row a
     Windows checkout once wrote with carriage returns reads back with
-    them, which the row's parser takes as whitespace.
+    them, which the row's parser takes as whitespace. The archive
+    converts line ends the way a checkout would, which Git for Windows
+    turns on by default, so the conversion is switched off for the
+    call: the blobs are wanted as git holds them.
     """
     import tarfile
 
     with tempfile.TemporaryDirectory() as scratch:
         out = Path(scratch) / "tree.tar"
-        archived = _git(root, "archive", "--format=tar", "-o", str(out), sha)
+        archived = _git(
+            root,
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "archive",
+            "--format=tar",
+            "-o",
+            str(out),
+            sha,
+        )
         if archived.code != 0:
             return Read(None, sha, failed=True, reason=_words(archived))
         files: dict[str, str] = {}
