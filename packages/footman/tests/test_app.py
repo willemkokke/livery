@@ -174,6 +174,37 @@ def test_dry_run_runs_bodies_and_fakes_footmans_work(project, capsys):
     assert not (project / "shipped.txt").exists()  # nothing actually spawned
 
 
+def test_task_tree_is_the_tree_the_list_envelope_prints(tmp_path, capsys, monkeypatch):
+    # The same tree, from inside a task and from --json --list, so a task
+    # that needs its own CLI's tree reads it in process instead of
+    # running the CLI again. Read from a worker thread, where a parallel
+    # step runs: the tree is the run's, not the thread's.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "tasks.py").write_text(
+        "import json\n"
+        "import threading\n"
+        "import livery.footman as footman\n"
+        "from livery.footman import task\n\n"
+        "@task\n"
+        "def hi():\n"
+        '    "Say hi."\n\n'
+        "@task\n"
+        "def tree():\n"
+        '    "Print the tree, read from a worker thread."\n'
+        "    seen = []\n"
+        "    worker = threading.Thread(target=lambda: seen.append(footman.task_tree()))\n"
+        "    worker.start()\n"
+        "    worker.join()\n"
+        "    print(json.dumps(seen[0]))\n"
+    )
+    assert _app.run(["--json", "--list"]) == 0
+    listed = json.loads(capsys.readouterr().out)["tree"]
+    assert _app.run(["tree"]) == 0
+    printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert printed == listed
+    assert set(printed["tasks"]) >= {"hi", "tree"}
+
+
 def test_json_output(project, capsys):
     assert _app.run(["--json", "hi"]) == 0
     payload = json.loads(capsys.readouterr().out)

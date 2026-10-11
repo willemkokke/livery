@@ -2542,6 +2542,34 @@ def _run_tree(
     root_dir: str = "",
     record_times: bool = True,
 ) -> int:
+    """The post-manifest tail, *tree* served to `footman.task_tree()` throughout."""
+    with _manifest.serving(tree):
+        return _run_tree_body(
+            reg,
+            tree,
+            argv,
+            cfg,
+            collect,
+            g,
+            pre_globals,
+            after,
+            root_dir=root_dir,
+            record_times=record_times,
+        )
+
+
+def _run_tree_body(
+    reg: registry.Group,
+    tree: dict[str, Any],
+    argv: list[str],
+    cfg: dict[str, object],
+    collect: list[_executor.TaskResult] | None,
+    g: dict[str, object],
+    pre_globals: list[str],
+    after: int,
+    root_dir: str = "",
+    record_times: bool = True,
+) -> int:
     """The post-manifest tail: help/where/split/list/tree/dry-run/run/report.
 
     Shared by the disk path (`_execute`) and the in-memory path (`run_group`),

@@ -162,7 +162,11 @@ straight from the `livery.footman` package
 # under `livery.footman.`; its first component must be a root export, or
 # the whole entry sits in _API_EXTRA with a reason.
 _API_SECTIONS: list[tuple[str, str, list[str]]] = [
-    ("Defining tasks", "", ["task", "group", "Group", "expose", "root_group"]),
+    (
+        "Defining tasks",
+        "",
+        ["task", "group", "Group", "expose", "root_group", "task_tree"],
+    ),
     (
         "Availability gates",
         "Stack these above `@task` to list a task as unavailable (with a "

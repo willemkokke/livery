@@ -478,19 +478,33 @@ def forget_trees() -> None:
     _TREES.clear()
 
 
+def _own_root() -> Path | None:
+    """This process's own project root, the one tree it holds already."""
+    return footman.project_root()
+
+
 def composed_tree(root: Path) -> dict[str, Any] | None:
     """The workspace's composed task tree, as ``--json --list`` reports it.
 
-    None without a tasks file at the root, without the runner on PATH,
-    and when the listing fails: the fragment is then left out rather
-    than guessed. Listed once per process; a later read answers from
-    the first until the tasks file or the contract changes.
+    This process's own workspace answers from the tree it discovered
+    ([livery.footman.task_tree][]). Another root, a newborn a birth syncs
+    from its parent's task, is listed by running the runner there: its
+    tree lives in its own venv's entry points, which only a process in
+    that venv can list. None without a tasks file at the root, without
+    the runner on PATH, and when the listing fails: the fragment is then
+    left out rather than guessed. Listed once per process; a later read
+    answers from the first until the tasks file or the contract changes.
     """
     if not (root / "tasks.py").is_file():
         return None
     key = _tree_key(root)
     if key in _TREES:
         return _TREES[key]
+    own = _own_root()
+    if own is not None and own.resolve() == root.resolve():
+        tree = footman.task_tree()
+        _TREES[key] = tree
+        return tree
     runner = shutil.which(footman.prog())
     if runner is None:
         return None

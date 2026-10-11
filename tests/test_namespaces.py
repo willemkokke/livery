@@ -145,6 +145,7 @@ EXPORTS: dict[str, list[str]] = {
         "styled",
         "suggest",
         "task",
+        "task_tree",
         "tasks_file_name",
         "testing",
         "track",
