@@ -1009,6 +1009,8 @@ class Entry:
             for one run a week, ``2w`` for one run every two weeks;
             a run on any other day skips the entry and names the day
             it runs next.
+        once: Whether the entry runs on a matrix job's first leg alone,
+            the first runner and the first Python; every leg otherwise.
     """
 
     point: str
@@ -1017,6 +1019,7 @@ class Entry:
     args: tuple[str, ...] = ()
     source: str = "builtin"
     every: str = ""
+    once: bool = False
 
 
 #: The cadences an entry may declare, in days.
@@ -1138,6 +1141,7 @@ def declared(root: Path) -> tuple[Entry, ...]:
         # cadence to one of `CADENCES`.
         args = item.get("args", [])
         every = str(item.get("every", ""))
+        once = bool(item.get("once", False))
         entries.append(
             Entry(
                 point,
@@ -1146,6 +1150,7 @@ def declared(root: Path) -> tuple[Entry, ...]:
                 tuple(args),
                 source="workshop.toml",
                 every=every,
+                once=once,
             )
         )
     return tuple(entries)
@@ -1218,6 +1223,35 @@ def jobs_of(root: Path, point: str) -> tuple[str, ...]:
         if entry.point in (INHERITS.get(point), point) and entry.job not in names:
             names.append(entry.job)
     return tuple(names)
+
+
+def first_leg(root: Path, point: str, job: str) -> tuple[str, str]:
+    """The first leg of *job* at *point*: its first runner and its first Python.
+
+    An axis the job does not have is empty. The check legs fan out
+    over ``[ci] runners`` and the gate's Pythons, the nightly over every
+    Python on the first runner, a declared job over its own lists; a
+    job with no matrix has no leg to name.
+    """
+    from livery.workshop._pythons import gate_pythons, python_matrix
+
+    found = next(
+        (item for item in point_by_name(root)[point].jobs if item.name == job), None
+    )
+    if found is None or not found.matrix:
+        return "", ""
+    ci = load_contract(root / "workshop.toml").get("ci") or {}
+    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+    if found.matrix == "legs":
+        return runners[0], gate_pythons(root)[0]
+    if found.matrix == "pythons":
+        return "", python_matrix(root)[0]
+    if found.matrix == "declared":
+        return (
+            found.runners[0] if found.runners else "",
+            found.pythons[0] if found.pythons else "",
+        )
+    return "", ""
 
 
 def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
@@ -1364,6 +1398,20 @@ def run_point(
             env[DROP] = str(drop)
         try:
             for entry in entries:
+                if entry.once:
+                    first_os, first_python = first_leg(root, resolved, job)
+                    leg_is_first = (not os_label or os_label == first_os) and (
+                        not python or python == first_python
+                    )
+                    if not leg_is_first:
+                        first = ", ".join(
+                            part for part in (first_os, first_python) if part
+                        )
+                        print(
+                            f"  {resolved}/{job}: {entry.task} ({entry.source}) runs"
+                            f" once, on the first leg ({first}); skipped"
+                        )
+                        continue
                 if entry.every:
                     is_due, when = due(entry.every, today())
                     if not is_due:
