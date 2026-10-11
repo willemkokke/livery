@@ -36,7 +36,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -228,18 +228,46 @@ def environments() -> tuple[Environment, ...]:
 # --- processes -------------------------------------------------------------------
 
 
+#: The variables that belong to the checkout a verb was run from, and
+#: never to a daemon: uv sets them for the one command it runs.
+_CHECKOUT_VARIABLES = ("VIRTUAL_ENV", "UV_RUN_RECURSION_DEPTH")
+
+
+def daemon_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """The environment a daemon starts with: *environ* without the checkout's own.
+
+    A daemon inherits the entered environment on purpose: the store's
+    node on PATH is what the runner's JavaScript actions need. What it
+    must not inherit is the checkout the verb ran from: ``VIRTUAL_ENV``
+    and ``UV_RUN_RECURSION_DEPTH``, which uv sets for one command, and
+    that venv's bin directory leading PATH. A job's own setup enters
+    its own venv, and a runner whose PATH led with another checkout's
+    would resolve a tool there, at that checkout's version, ahead of
+    the job's lock, and print uv's warning on every sync.
+    """
+    cleaned = {
+        key: value for key, value in environ.items() if key not in _CHECKOUT_VARIABLES
+    }
+    venv = environ.get("VIRTUAL_ENV", "")
+    if venv and cleaned.get("PATH"):
+        own = {str(Path(venv) / "bin"), str(Path(venv) / "Scripts")}
+        cleaned["PATH"] = os.pathsep.join(
+            entry for entry in cleaned["PATH"].split(os.pathsep) if entry not in own
+        )
+    return cleaned
+
+
 def spawn_detached(argv: Sequence[str], *, cwd: Path, log: Path) -> int:
     """Start *argv* as a process of its own that outlives this one; its pid.
 
     Stdout and stderr go to *log*, appended; stdin is closed. The
     child leads its own session (its own process group on Windows), so
     the shell that ran the verb never owns it and `down` can stop it
-    by its pid alone. The environment is this process's own, passed
-    on purpose: a daemon inherits the entered environment, the store's
-    node on PATH included, which the runner's JavaScript actions need.
+    by its pid alone. The environment is this process's own less the
+    checkout's ([livery.workshop._devenv.daemon_environment][]).
     """
     log.parent.mkdir(parents=True, exist_ok=True)
-    environment = dict(os.environ)
+    environment = daemon_environment(os.environ)
     with log.open("ab") as sink:
         if sys.platform == "win32":
             flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
