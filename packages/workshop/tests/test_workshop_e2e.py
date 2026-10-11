@@ -1700,3 +1700,40 @@ def test_a_plain_pass_births_without_the_docs_extension() -> None:
     stock = tuple(birth_extensions([SELF]))
     assert "docs" in stock
     assert _e2e.loop_stack() == tuple(entry for entry in stock if entry != "docs")
+
+
+def test_a_red_run_prints_its_failed_jobs_log_tails_and_nothing_of_the_green() -> None:
+    from types import SimpleNamespace
+
+    # No failed job first: the header alone, so a red run with every
+    # job green (a cancelled run) still says which run it was.
+    logs = {7: "a\nb\n", 8: "\n".join(str(i) for i in range(100)) + "\n"}
+    jobs = (
+        SimpleNamespace(id=6, name="check", conclusion="success"),
+        SimpleNamespace(id=7, name="wheels (e2e-linux-x64-01)", conclusion="failure"),
+        SimpleNamespace(id=8, name="publish", conclusion="failure"),
+    )
+    checks = SimpleNamespace(jobs=lambda run: jobs, job_log=lambda job: logs[job])
+    repo = SimpleNamespace(checks=checks, web_url=lambda: "http://forge/livery/loop")
+    from livery.forge import Run
+
+    run = Run(18, "release.yml", "5730fa48b2", "push", "completed", "failure")
+    quiet = SimpleNamespace(
+        checks=SimpleNamespace(jobs=lambda run: (jobs[0],), job_log=lambda job: ""),
+        web_url=lambda: "http://forge/livery/loop",
+    )
+    assert _e2e.red_jobs_text(quiet, run) == (  # pyright: ignore[reportArgumentType]
+        "  run 18 ended failure: http://forge/livery/loop"
+    )
+    text = _e2e.red_jobs_text(repo, run, lines=3)  # pyright: ignore[reportArgumentType]
+    assert text.splitlines() == [
+        "  run 18 ended failure: http://forge/livery/loop",
+        "  wheels (e2e-linux-x64-01): failure; the last 2 line(s) of its log:",
+        "    a",
+        "    b",
+        "  publish: failure; the last 3 line(s) of its log:",
+        "    97",
+        "    98",
+        "    99",
+    ]
+    assert "check" not in text

@@ -1998,6 +1998,25 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
     print(f"  members {names}: landed through the loop's own gate, one pull request")
 
 
+def red_jobs_text(repo: Repository, run: Run, *, lines: int = 60) -> str:
+    """The failed jobs of *run* with the last *lines* of each log, as text to print.
+
+    A run that went red on the loop's forge is readable at its page on
+    a desk; inside a hosted job the forge vanishes with the job, so the
+    pass prints what the page would show. Every job that ended in
+    failure is named with its log's tail; a run whose jobs all passed
+    or never ran gives the header line alone.
+    """
+    out = [f"  run {run.id} ended {run.conclusion}: {run.url or repo.web_url()}"]
+    for job in repo.checks.jobs(run.id):
+        if job.conclusion != "failure":
+            continue
+        tail = repo.checks.job_log(job.id).rstrip("\n").splitlines()[-lines:]
+        out.append(f"  {job.name}: failure; the last {len(tail)} line(s) of its log:")
+        out.extend(f"    {line}" for line in tail)
+    return "\n".join(out)
+
+
 def _completed_run(
     repo: Repository,
     sha: str,
@@ -2046,6 +2065,7 @@ def _completed_run(
         time.sleep(interval)
     RUNS.count += 1
     if run.conclusion != "success":
+        print(red_jobs_text(repo, run))
         fail(
             f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
             f" {repo.web_url()}/actions/runs/{run.id}"
@@ -2751,6 +2771,14 @@ def _release_act(root: Path, kind: str) -> None:
         )
         if code == 0:
             break
+        # The wave's red run, readable here and nowhere else once a
+        # hosted job's forge is gone.
+        from livery.workshop._ci_tasks import point_runs
+
+        for run in point_runs(repo, "release", root, limit=3):
+            if run.conclusion == "failure":
+                print(red_jobs_text(repo, run))
+                break
         survivor = repo.pr.find_by_head(release_branch)
         if survivor is None or survivor.state != "open":
             fail("the armed release failed with no fresh PR to recover; see above")
