@@ -234,6 +234,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         "[Custom CLIs](../custom-cli.md#two-folders-of-your-own).",
         [
             "cache_dir",
+            "scratch_dir",
             "data_dir",
             "config_dir",
             "config_file",

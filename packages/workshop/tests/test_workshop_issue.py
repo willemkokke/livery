@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -897,6 +898,23 @@ def test_a_hostile_root_path_is_quoted_into_the_eval(tmp_path: Path) -> None:
     # The path rides as one shell word: the embedded quote is
     # spliced (shlex's '"'"' form), so it does not end the string.
     assert "we ird" in rc and "'\"'\"'" in rc
+
+
+def test_the_rc_files_land_in_this_process_s_scratch_under_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The entered shell execs over this process, so no handler removes
+    # the rc files; footman's collector does once the shell is gone, and
+    # it knows them by the owner's pid in the directory's name.
+    import livery.footman as footman
+    from livery.workshop import _shell
+
+    monkeypatch.setattr(_shell, "_resolve_binary", lambda kind: "/bin/bash")
+    plan = _shell._realise("bash")
+    rc = next(iter(plan.files))
+    assert rc.parent.parent == footman.cache_dir() / "scratch"
+    assert rc.parent.name.startswith(f"shell-{os.getpid()}-")
+    assert rc.read_text(encoding="utf-8") == plan.files[rc]
 
 
 def test_default_kind_follows_the_shell_variable(

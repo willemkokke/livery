@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from importlib.metadata import entry_points
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -62,6 +63,34 @@ def test_every_test_and_its_children_run_away_from_the_real_home(
     )
     result = _run(pytester)
     result.assert_outcomes(passed=1)
+
+
+def test_the_home_is_this_process_s_scratch_and_goes_at_unconfigure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The cache stays redirected, so the home lands in the session's own
+    # cache and never in the machine's; the other variables, cleared,
+    # are the plugin's to set. A session that ends takes the home with
+    # it; one that is killed leaves it to footman's collector, which
+    # reads the owner's pid off the directory's name.
+    import livery.footman as footman
+
+    names = [name for name in _pytest_isolation.variables() if "CACHE" not in name]
+    for name in names:
+        monkeypatch.delenv(name, raising=False)
+
+    class Config:
+        stash = pytest.Stash()
+
+    config = cast("pytest.Config", Config())
+    _pytest_isolation.pytest_configure(config)
+    home = Path(os.environ["FOOTMAN_DATA_DIR"]).parent
+    assert home.parent == footman.cache_dir() / "scratch"
+    assert home.name.startswith(f"workshop-isolation-{os.getpid()}-")
+    assert all(Path(os.environ[name]).parent == home for name in names)
+    _pytest_isolation.pytest_unconfigure(config)
+    assert not home.exists()
+    assert not any(name in os.environ for name in names)
 
 
 def test_an_outer_redirect_is_kept(

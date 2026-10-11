@@ -89,9 +89,16 @@ runner claims, and what is therefore yours:
 
 | Directory | footman writes | free for you |
 | --------- | -------------- | ------------ |
-| `cache_dir()` | `<key>.json` and `<key>.times.json` (completion manifests and timing history), `global-<key>.json`, `gc.stamp`, and the `fetch/` folder | any other name — but the collector sweeps this directory by age, so nothing you would mind losing |
+| `cache_dir()` | `<key>.json` and `<key>.times.json` (completion manifests and timing history), `global-<key>.json`, `gc.stamp`, the `fetch/` folder, and `scratch/` | any other name — but the collector sweeps this directory by age, so nothing you would mind losing |
 | `data_dir()` | `builtins-<key>.json` (the discovered built-in list, one per Python environment) | any other name |
 | `config_dir()` | nothing — footman only ever *reads* `config.toml` and the tasks file here | your own files, though footman will not read them |
+
+A directory for one process's scratch comes from `footman.scratch_dir(label)`
+rather than `tempfile.mkdtemp`: it lands in `cache_dir() / "scratch"`, named
+for its label and the process that made it. Remove it yourself when the work
+ends. What a kill or an exec leaves, with no exit handler to remove it, the
+collector removes once that process is gone, so a crashed run never leaves
+a directory behind for good.
 
 ### Sweeping what a plugin leaves
 

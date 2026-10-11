@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -175,6 +176,54 @@ def test_collect_sweeps_a_profile_box_its_run_never_took_away(tmp_path):
     assert _gc.collect(cache) == 1
     assert not (room / "abandoned").exists()
     assert (room / "live" / "fm-4243-1.json").exists()
+
+
+def test_collect_sweeps_a_scratch_directory_whose_owner_is_gone(tmp_path):
+    # Kept first: a live owner's directory, and a name carrying no pid,
+    # which is nobody's leftovers footman can vouch for. Then a dead
+    # owner's goes whole: a kill or an exec ran no handler to remove it.
+    cache = tmp_path / "cache"
+    room = cache / _gc.SCRATCH
+    live = room / f"shell-{os.getpid()}-abc123"
+    live.mkdir(parents=True)
+    (live / "rc").write_text("x", encoding="utf-8")
+    stranger = room / "notes"
+    stranger.mkdir()
+    (stranger / "keep").write_text("x", encoding="utf-8")
+    ended = subprocess.Popen([sys.executable, "-c", "pass"])
+    ended.wait()
+    dead = room / f"fm-replay-{ended.pid}-x1y2z3"
+    (dead / "tree").mkdir(parents=True)
+    (dead / "tree" / "file").write_text("x", encoding="utf-8")
+
+    assert _gc.collect(cache) == 1
+    assert (live / "rc").exists() and (stranger / "keep").exists()
+    assert not dead.exists()
+    # A second sweep finds nothing to do.
+    assert _gc.collect(cache) == 0
+
+
+def test_a_scratch_name_carries_its_owner_or_names_nobody():
+    assert _gc.owner("fm-replay-4242-x1y2z3") == 4242
+    assert _gc.owner("shell-7-abc") == 7
+    assert _gc.owner("notes") is None
+    assert _gc.owner("a-b-c") is None
+    assert _gc.owner("4242") is None
+
+
+def test_scratch_dir_lands_under_the_cache_named_for_this_process():
+    # The refusal first: a label is a name a reader of the cache can
+    # read, and the owner's pid must parse out of it.
+    with pytest.raises(ValueError, match="scratch label"):
+        footman.scratch_dir("")
+    with pytest.raises(ValueError, match="scratch label"):
+        footman.scratch_dir("a label/with slash")
+    first = footman.scratch_dir("fm-replay")
+    second = footman.scratch_dir("fm-replay")
+    assert first.is_dir() and second.is_dir() and first != second
+    assert first.parent == footman.cache_dir() / _gc.SCRATCH
+    assert _gc.owner(first.name) == os.getpid()
+    assert first.name.startswith(f"fm-replay-{os.getpid()}-")
 
 
 def test_collect_tolerates_garbage_manifests(tmp_path):

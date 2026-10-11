@@ -6,6 +6,7 @@ the workshop's examples check; nothing here reads a page for code.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -64,11 +65,12 @@ def _js_source() -> str:
     return (DOCS / "assets" / "playground.js").read_text(encoding="utf-8")
 
 
+@functools.cache
 def _jedi_cache() -> str:
     """One parso cache per test process, warm across that process's probes."""
-    cache = Path(tempfile.gettempdir()) / f"fm-playground-jedi-{os.getpid()}"
-    cache.mkdir(exist_ok=True)
-    return str(cache)
+    import livery.footman as footman
+
+    return str(footman.scratch_dir("playground-jedi"))
 
 
 def _js_bootstrap() -> str:

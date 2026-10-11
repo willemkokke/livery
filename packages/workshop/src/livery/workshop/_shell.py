@@ -22,7 +22,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -170,7 +169,7 @@ def _realise(kind: str) -> ShellLaunch:
     import livery.footman as footman
 
     resolved = kind or default_kind()
-    tmp_dir = Path(tempfile.mkdtemp(prefix="livery-shell-"))
+    tmp_dir = footman.scratch_dir("shell")
     plan = shell_launch_plan(resolved, root=footman.cwd(), tmp_dir=tmp_dir)
     for path, content in plan.files.items():
         path.parent.mkdir(parents=True, exist_ok=True)

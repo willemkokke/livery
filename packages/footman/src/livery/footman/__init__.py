@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from livery.footman._context import prompt as prompt
     from livery.footman._context import real_stderr as real_stderr
     from livery.footman._context import run as run
+    from livery.footman._context import scratch_dir as scratch_dir
     from livery.footman._context import section as section
     from livery.footman._context import select as select
     from livery.footman._context import stream as stream
@@ -263,6 +264,7 @@ __all__ = [
     "rescan_entry_points",
     "root_group",
     "run",
+    "scratch_dir",
     "section",
     "select",
     "stdin",
@@ -484,6 +486,7 @@ def __getattr__(name: str) -> object:
         "chdir",
         "confirm",
         "cache_dir",
+        "scratch_dir",
         "attended",
         "tty",
         "colored",

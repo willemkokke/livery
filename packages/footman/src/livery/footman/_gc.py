@@ -31,6 +31,12 @@ a rebuild. Four rules, in order:
    removes it at the end. One still there after `BOX_DAYS` outlived the
    process that opened it, and an exec or a kill leaves no exit handler to
    notice that.
+5. **A scratch directory belongs to one process.** ``scratch/<label>-<pid>-
+   <random>/`` is what `footman.scratch_dir()` hands a task for one
+   process's scratch, and that process removes it when its work ends. The
+   owner's pid is in the name: one whose owner is gone was left by a kill
+   or an exec, and goes whole at any age. A name carrying no pid is not
+   footman's to judge and stays.
 
 The invoking directory's own pair is never touched, and every failure is
 silent — a concurrently-reading completion child on Windows may hold a file
@@ -41,6 +47,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -49,6 +57,8 @@ IDLE_DAYS = 90
 PART_DAYS = 1
 BOX_DAYS = 1
 STAMP = "gc.stamp"
+#: The cache folder `footman.scratch_dir()` fills, one directory per call.
+SCRATCH = "scratch"
 
 
 def collect(cache_dir: Path, skip_stem: str = "") -> int:
@@ -155,7 +165,79 @@ def collect(cache_dir: Path, skip_stem: str = "") -> int:
         with contextlib.suppress(OSError):
             box.rmdir()
 
+    # Rule 5, the scratch directories. Each is named for its owner's pid,
+    # and the owner removes it when its work ends; one whose owner is
+    # gone was left by a kill or an exec, and no handler is coming for
+    # it. The whole tree counts as one removal.
+    for scratch in (cache_dir / SCRATCH).glob("*"):
+        pid = owner(scratch.name)
+        if pid is None or not scratch.is_dir() or alive(pid):
+            continue
+        shutil.rmtree(scratch, ignore_errors=True)
+        if not scratch.exists():
+            removed += 1
+
     return removed
+
+
+def owner(name: str) -> int | None:
+    """The pid in a scratch directory's name, ``<label>-<pid>-<random>``, or None.
+
+    The label may carry hyphens of its own; the pid and the random part
+    never do, so the name splits from its end. A name of any other shape
+    names nobody, and the collector leaves it alone.
+    """
+    parts = name.rsplit("-", 2)
+    if len(parts) != 3 or not parts[1].isdigit():
+        return None
+    return int(parts[1])
+
+
+def alive(pid: int) -> bool:
+    """Whether a process with *pid* exists; True wherever the platform cannot say.
+
+    A pid of zero or less is nobody's. On POSIX a signal of zero asks
+    without sending, and a process that refuses the asking exists. On
+    Windows the kernel is asked for a handle, since ``os.kill`` there ends
+    the process for any signal it does not special-case.
+    """
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        return _alive_windows(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_ACCESS_DENIED = 5
+_STILL_ACTIVE = 259
+
+
+def _alive_windows(pid: int) -> bool:
+    # A handle refused for access is a process that exists and is not
+    # ours to query; any other refusal is no such process. A handle whose
+    # exit code is not still-active is a process that exited and is not
+    # yet reaped. The names are looked up, because the stubs define them
+    # on Windows alone and the type checkers read this file everywhere.
+    import ctypes
+
+    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)  # noqa: B009
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return int(getattr(ctypes, "get_last_error")()) == _ERROR_ACCESS_DENIED  # noqa: B009
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _baked_cwd(data: object) -> str:
