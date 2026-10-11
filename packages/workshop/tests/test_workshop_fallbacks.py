@@ -210,6 +210,9 @@ def test_the_clean_heal_reships_and_lands(
         def head_body(self) -> str:
             return ""
 
+        def head_message(self) -> tuple[str, str]:
+            return "feat: heal", ""
+
         def subjects_ahead(self, base: str) -> list[str]:
             return ["feat: heal"]
 

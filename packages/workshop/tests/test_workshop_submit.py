@@ -205,9 +205,16 @@ def test_self_heal_integrates_a_conflicting_base(
     # conflict is real, so the heal stops on the merge for a person.
     fake, git = rig
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "work.txt").write_text("their conflicting line\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: their change")
@@ -227,9 +234,16 @@ def test_self_heal_integrates_a_clean_advance(
     # quiet and the flow ends disarmed after the push.
     fake, git = rig
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
@@ -507,6 +521,7 @@ def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, SubmitGit]) ->
         title="feat: the first change",
         body="",
         title_given=False,
+        subjects=("feat: the first change",),
     )
     with pytest.raises(_FAILURES):
         prepare(git, title="no convention here")
@@ -1108,9 +1123,16 @@ def test_the_stalled_and_behind_verdicts_discriminate(
     stalled = classify(StubRepo(), "feat/1-first", git, grace_spent=True)  # type: ignore[arg-type]
     assert stalled.exit_code == EXIT_STALLED
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
@@ -1312,9 +1334,16 @@ def test_conflicts_classify_before_arming(rig: tuple[FakeForge, SubmitGit]) -> N
     fake, git = rig
     _submit(fake, git, armed=False, follow_to_verdict=False)
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "work.txt").write_text("their conflicting line\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: their change")
@@ -1373,9 +1402,16 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
     _fake, git = rig
     git.push("feat/1-first")
     other = tmp_path / "other"
-    _git(tmp_path, "clone", str(tmp_path / "origin.git"), "other")
-    _git(other, "config", "user.email", "o@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        tmp_path,
+        "clone",
+        "--config",
+        "user.email=o@livery.local",
+        "--config",
+        "user.name=Other",
+        str(tmp_path / "origin.git"),
+        "other",
+    )
     _git(other, "checkout", "feat/1-first")
     (other / "theirs.txt").write_text("theirs\n")
     _git(other, "add", ".")
@@ -1698,9 +1734,16 @@ def test_the_self_heal_gate_narrows_the_same_way(
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
     _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
@@ -1734,9 +1777,16 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
     other = git.root.parent / "other"
-    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
-    _git(other, "config", "user.email", "other@livery.local")
-    _git(other, "config", "user.name", "Other")
+    _git(
+        git.root.parent,
+        "clone",
+        "--config",
+        "user.email=other@livery.local",
+        "--config",
+        "user.name=Other",
+        str(git.root.parent / "origin.git"),
+        "other",
+    )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
