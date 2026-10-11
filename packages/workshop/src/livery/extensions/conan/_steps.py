@@ -12,6 +12,18 @@ if TYPE_CHECKING:
     from livery.workshop import PhaseContext
 
 
+def profile(ctx: PhaseContext) -> None:
+    """Make conan's default profile name a compiler before a build runs through it.
+
+    The cmake-conan provider writes a default profile itself when there
+    is none, with no compiler in it, so a profile detected first is the
+    one the provider finds. Prints what was done, nothing when the
+    profile already names a compiler.
+    """
+    for line in _package.ensure_profile(ctx.root):
+        print(line)
+
+
 def stamp(ctx: PhaseContext) -> None:
     """Write the engine's version into the recipe's ``version`` attribute."""
     version = cast("str", ctx.read("version"))

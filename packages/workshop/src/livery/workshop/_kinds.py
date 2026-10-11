@@ -299,9 +299,6 @@ class KindRecord:
             heads their chains with its tools and seed tree, builds
             nothing, and is never a package's ``kind``. A concrete
             kind needs a backend; an abstract one has none.
-        before_install: What a member of the kind needs in place
-            before ``uv sync`` installs it, given the workspace root;
-            the lines it prints. None for a kind that needs nothing.
         stands_for: The package-level extensions a package of the kind
             that lists none is taken to hold: their categories, root
             files and checks are its own. A child kind adds to its
@@ -325,7 +322,6 @@ class KindRecord:
     suites: SuiteRunner | None = None
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
-    before_install: Callable[[Path], list[str]] | None = None
     stands_for: tuple[str, ...] = ()
 
 
@@ -478,20 +474,6 @@ def kind_examples(
         if record.examples is not None:
             return record.examples
     return None
-
-
-def prepare_install(root: Path, packages: tuple[Package, ...]) -> list[str]:
-    """Run what the kinds of *packages* need before ``uv sync``; the lines.
-
-    Each kind with a ``before_install`` runs it once, in name order. A
-    kind that is not registered is passed over here: the gate names it.
-    """
-    lines: list[str] = []
-    for name in sorted({package.kind for package in packages}):
-        record = _KINDS.get(name)
-        if record is not None and record.before_install is not None:
-            lines += record.before_install(root)
-    return lines
 
 
 def run_suites(
@@ -675,13 +657,13 @@ def _register_builtin() -> None:
             tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
             wheel_identity="platform",
-            # The install builds the extension through the cmake-conan
-            # provider, which writes conan's default profile itself when
-            # there is none, with no compiler in it. A profile checked
-            # first is the one the provider finds.
-            before_install=_cpp_conan.ensure_profile,
-            # Beside python's, the extension module's C++ sources.
-            stands_for=("cpp",),
+            # Beside python's, the extension module's C++ sources and
+            # the provider that resolves their dependencies: a nanobind
+            # package consumes conan and is never a recipe, so conan's
+            # sync step applies to it through the bridge, while the
+            # lifecycle phases read the listed extensions alone and this
+            # kind's backend builds it.
+            stands_for=_cpp_conan.CONSUMER_STANDS_FOR,
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the

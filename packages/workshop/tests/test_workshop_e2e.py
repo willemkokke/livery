@@ -750,7 +750,9 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     # deriving from it.
     assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
     _stack, kinds = _e2e.extension_under_test("both")
-    assert kinds == ("python", "cpp-conan")
+    # The nanobind kind stands for conan beside cpp, as a consumer of
+    # its packages, so a check naming conan lands that member too.
+    assert kinds == ("python", "python-nanobind", "cpp-conan")
     # The test extension's own pass lists it once, as the extension
     # under test; one that requires it lists it where the requirement
     # puts it; any other lists it just before itself.
@@ -767,6 +769,7 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     assert _e2e.extension_under_test("typed") == (("pytest", "typed"), ("python",))
     assert [name for name, _seed in _e2e.members_for(kinds)] == [
         "loop-echo",
+        "loop-native",
         "loop-cpp",
     ]
     assert _e2e.members_for(()) == _e2e.LOOP_MEMBERS

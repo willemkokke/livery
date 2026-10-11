@@ -824,11 +824,12 @@ def _sync_locked_tools(root: Path, *, frozen: bool, offline: bool) -> None:
 
 
 def _prepare_installs(root: Path) -> None:
-    from livery.workshop._kinds import prepare_install
+    # What a member's install needs in place first: the sync phase's
+    # steps say what, conan's profile among them.
+    from livery.workshop._lifecycle import sync as sync_phase
     from livery.workshop._packages import discover_packages
 
-    for line in prepare_install(root, discover_packages(root)):
-        print(line)
+    sync_phase(discover_packages(root), root)
 
 
 def _uv_sync(root: Path, flags: tuple[str, ...]) -> None:
