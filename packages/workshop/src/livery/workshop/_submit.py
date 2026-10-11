@@ -332,6 +332,8 @@ class Plan:
             overwrite an existing pull request's.
         body_given: Whether the body came from the caller; the same
             rule for an existing pull request's body.
+        subjects: The subjects of the commits the branch carries beyond
+            ``origin/<base>``, read once for the checks that need them.
     """
 
     branch: str
@@ -340,6 +342,7 @@ class Plan:
     body: str
     title_given: bool
     body_given: bool = False
+    subjects: tuple[str, ...] = ()
 
 
 def prepare(
@@ -371,13 +374,10 @@ def prepare(
     # A merge commit (the engine's MERGE_DEFAULT, `fm integrate`) can
     # be HEAD, and "Merge branch ..." is never the intent: the last
     # real subject is. The squash erases the merge commits anyway.
-    default_title = git.head_subject()
+    default_title, default_body = git.head_message()
+    subjects = tuple(git.subjects_ahead(base))
     if not title and default_title.startswith("Merge "):
-        real = [
-            subject
-            for subject in git.subjects_ahead(base)
-            if not subject.startswith("Merge ")
-        ]
+        real = [subject for subject in subjects if not subject.startswith("Merge ")]
         if real:
             default_title = real[-1]
     resolved_title = title or default_title
@@ -390,9 +390,10 @@ def prepare(
         branch=branch,
         base=base,
         title=resolved_title,
-        body=body or git.head_body(),
+        body=body or default_body,
         title_given=bool(title),
         body_given=bool(body),
+        subjects=subjects,
     )
 
 
@@ -823,9 +824,7 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
     if plan.title_given:
         return
     subjects = [
-        subject
-        for subject in git.subjects_ahead(plan.base)
-        if not subject.startswith("Merge ")
+        subject for subject in plan.subjects if not subject.startswith("Merge ")
     ]
     if len(subjects) > 1:
         listed = "\n".join(f"    - {subject}" for subject in subjects)
@@ -911,7 +910,7 @@ def submit_flow(
     # closed, keeps its title, and the merged and closed cases get
     # their own refusals further on.
     if repo.pr.find_by_head(plan.branch, state="all") is None:
-        if not git.subjects_ahead(plan.base):
+        if not plan.subjects:
             fail(
                 f"{plan.branch} has no commits beyond origin/{plan.base}, so"
                 " there is nothing to submit: commit first"
