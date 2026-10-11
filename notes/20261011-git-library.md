@@ -149,7 +149,7 @@ the workshop.
   nothing.
 - `fm ci.e2e --scenario=develop` is green on the local Gitea.
 
-## Phase 2: one ssh connection per verb
+## Phase 2: one ssh connection per host, shared across verbs
 
 Every network git call opens a fresh ssh connection, and the handshake
 is about half of a quiet fetch. Measured on 2026-10-11 on a macOS
@@ -161,7 +161,9 @@ checkout against github.com, `git fetch origin` with nothing to fetch:
 | multiplexed over one open connection  | 1.0 s to 1.3 s |
 
 A sync makes one round trip, a start three, submit and the release
-driver more. The local loop is not affected: its remotes are
+driver more. With a master kept open for the idle window, every verb
+inside that window, and every process of the same user, reuses one
+connection per remote host. The local loop is not affected: its remotes are
 `http://` with a token (`_e2e.py:591`, `:1295`).
 
 The library gains one function, `ssh_environment(socket_dir, idle)`,
