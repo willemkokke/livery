@@ -837,7 +837,9 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
         )
 
 
-def _restack_before_push(git: GitOps, *, branch: str = "") -> bool:
+def _restack_before_push(
+    git: GitOps, *, branch: str = "", stack: tuple[str, str] | None = None
+) -> bool:
     """Move a stacked branch onto its moved or merged parent; whether it moved.
 
     The pull request of a branch whose parent merged is retargeted to
@@ -849,12 +851,13 @@ def _restack_before_push(git: GitOps, *, branch: str = "") -> bool:
     resolves it.
     """
     branch = branch or git.current_branch()
-    parent, _tip = git.stack(branch)
+    stack = stack if stack is not None else git.stack(branch)
+    parent, _tip = stack
     if not parent or not git.is_clean():
         return False
     from livery.workshop._sync import restack
 
-    moved = restack(git, branch, interactive=False)
+    moved = restack(git, branch, interactive=False, stack=stack)
     if moved is None:
         fail(
             f"{branch} could not follow its parent without conflicts: run"
@@ -896,7 +899,13 @@ def submit_flow(
     # branch as it is, before a fold adds a commit of its own.
     git.fetch()
     branch = git.current_branch()
-    force = _restack_before_push(git, branch=branch) or force
+    # The stack, read once for the flow: a restack that moved the branch
+    # may have forgotten it, so it is read again after one.
+    stack = git.stack(branch)
+    moved = _restack_before_push(git, branch=branch, stack=stack)
+    if moved:
+        stack = git.stack(branch)
+    force = moved or force
     plan = prepare(git, title=title, body=body, base=base, branch=branch)
     # A first open only: a pull request that exists, open, merged, or
     # closed, keeps its title, and the merged and closed cases get
@@ -933,7 +942,7 @@ def submit_flow(
         print(f"  Closes #{linked} on merge")
     elif not close:
         print("  closes nothing (--no-close): the branch's issue stays open")
-    parent, _tip = git.stack(plan.branch)
+    parent, _tip = stack
     if armed and parent and plan.base == parent:
         # The forge refuses to arm a pull request into a branch with no
         # required checks, and arming into the parent would land the
