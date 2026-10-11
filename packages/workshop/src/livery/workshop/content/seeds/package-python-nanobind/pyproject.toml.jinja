@@ -26,6 +26,17 @@ classifiers = [
 {%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] %}
 Repository = "{{ web_root }}/{{ forge_owner }}/{{ project_name }}"
 
+[tool.uv]
+# What decides whether uv rebuilds the extension: the git commit, not
+# the modification times uv tracks by default (pyproject.toml and the
+# src directory). A fresh checkout writes every file with a new time,
+# so a CI job rebuilt the member on every run; keyed on the commit, a
+# checkout at the same commit reuses the build the cache holds, and a
+# new commit rebuilds. On a desk an uncommitted edit under src or to
+# this file does not rebuild until it is committed; an edit to an
+# existing source file never did through uv, the build rig compiles it.
+cache-keys = [{ git = { commit = true } }]
+
 [tool.scikit-build]
 # The compiled module builds through CMake and lands inside the
 # package; the pure-python sources ride from src/ unchanged.
