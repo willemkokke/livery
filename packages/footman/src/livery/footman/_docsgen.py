@@ -235,6 +235,7 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         [
             "cache_dir",
             "scratch_dir",
+            "alive",
             "data_dir",
             "config_dir",
             "config_file",

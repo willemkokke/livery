@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -387,3 +388,55 @@ def test_main_without_a_cache_dir_is_a_quiet_noop(monkeypatch):
         _gc, "collect", lambda *a: pytest.fail("collected without a cache dir")
     )
     _gc.main()
+
+
+def test_a_process_is_alive_while_it_runs_and_gone_once_it_ended():
+    # Nobody first: a pid of zero or less names no process. Then a child
+    # that ended, then this process.
+    assert footman.alive(0) is False
+    assert footman.alive(-1) is False
+    ended = subprocess.Popen([sys.executable, "-c", "pass"])
+    ended.wait()
+    assert footman.alive(ended.pid) is False
+    assert footman.alive(os.getpid()) is True
+
+
+def test_the_windows_probe_reads_the_handle_and_the_exit_code():
+    class Kernel32:
+        def __init__(self, handle: int, code: int | None) -> None:
+            self.handle, self.code = handle, code
+            self.closed: list[int] = []
+
+        def OpenProcess(self, access: int, inherit: bool, pid: int) -> int:
+            assert access == 0x1000 and inherit is False and pid == 4242
+            return self.handle
+
+        def GetExitCodeProcess(self, handle: int, out: Any) -> int:
+            if self.code is None:
+                return 0
+            getattr(out, "_obj").value = self.code
+            return 1
+
+        def CloseHandle(self, handle: int) -> None:
+            self.closed.append(handle)
+
+    def probe(dll: Kernel32, error: int = 0) -> bool:
+        return _gc._alive_windows(4242, kernel32=dll, last_error=lambda: error)
+
+    # No handle: access denied is a process that exists; anything else
+    # is none.
+    assert probe(Kernel32(0, None), error=5) is True
+    assert probe(Kernel32(0, None), error=87) is False
+    # A handle: still active is alive, any other exit code is gone, a
+    # query that fails reads as alive, and the handle closes each time.
+    for dll, expected in ((Kernel32(7, 259), True), (Kernel32(7, 0), False)):
+        assert probe(dll) is expected
+        assert dll.closed == [7]
+    failing = Kernel32(7, None)
+    assert probe(failing) is True
+    assert failing.closed == [7]
+    if sys.platform == "win32":
+        assert _gc._alive_windows(os.getpid()) is True
+    else:
+        with pytest.raises(AttributeError):
+            _gc._alive_windows(os.getpid())

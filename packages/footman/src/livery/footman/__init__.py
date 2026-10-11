@@ -83,6 +83,7 @@ if TYPE_CHECKING:
     from livery.footman._executor import handing_off as handing_off
     from livery.footman._fetch import FetchError as FetchError
     from livery.footman._fetch import fetch as fetch
+    from livery.footman._gc import alive as alive
     from livery.footman._globals import Lane as Lane
     from livery.footman._globals import console_lane as console_lane
     from livery.footman._globals import cwd_lane as cwd_lane
@@ -193,6 +194,7 @@ __all__ = [
     "Tasks",
     "TimedOut",
     "__version__",
+    "alive",
     "ask",
     "attended",
     "between",
@@ -517,6 +519,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import _context as context
 
         return getattr(context, name)
+    if name == "alive":
+        from livery.footman import _gc
+
+        return _gc.alive
     if name in ("App", "Brand"):
         from livery.footman import _application as app
 

@@ -63,6 +63,7 @@ EXPORTS: dict[str, list[str]] = {
         "Tasks",
         "TimedOut",
         "__version__",
+        "alive",
         "ask",
         "attended",
         "between",
