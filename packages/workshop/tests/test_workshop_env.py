@@ -985,8 +985,17 @@ def test_ci_run_sweeps_the_tool_store_only_on_a_github_job(
     assert store.state(orphan) != "present" and store.state(kept) == "present"
 
 
-def test_a_placement_the_job_already_sets_stands(tmp_path: Path) -> None:
-    """A runner with persistent caches sets them; the temp is for what is unset."""
+def test_a_placement_the_job_already_sets_is_persisted_as_it_is(
+    tmp_path: Path,
+) -> None:
+    """A set key keeps its value and is persisted; the temp is for what is unset.
+
+    The entry script exports the data directory and uv's cache for its
+    own sync and then asks for the emission: a key it set must reach
+    the steps after it, with the value it set. A runner with persistent
+    caches sets them for every step, and persisting the same value
+    changes nothing for it. An empty value is unset.
+    """
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     temp = str(tmp_path / "_temp")
@@ -997,9 +1006,15 @@ def test_a_placement_the_job_already_sets_stands(tmp_path: Path) -> None:
         _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }
     kept = runner_placements(
-        {"RUNNER_TEMP": temp, "UV_CACHE_DIR": "/rig/cache/uv", "CONAN_HOME": ""}
+        {
+            "RUNNER_TEMP": temp,
+            "UV_CACHE_DIR": "/rig/cache/uv",
+            "CONAN_HOME": "",
+            _paths.env_var("DATA_DIR"): f"{temp}/footman",
+        }
     )
     assert kept == {
+        "UV_CACHE_DIR": "/rig/cache/uv",
         "CONAN_HOME": f"{temp}/conan",
         _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }

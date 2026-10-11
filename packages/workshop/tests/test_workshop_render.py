@@ -219,6 +219,12 @@ def test_the_nightly_shell_runs_the_clock_and_a_dispatch_on_every_python(
     # The repository's token where there is one, else the job's.
     assert _secrets(jobs["nightly"]) == {"FORGE_TOKEN", "GITHUB_TOKEN"}
     assert "needs" not in jobs["nightly"] and "if" not in jobs["nightly"]
+    # The job pushes its profile trace to the state store at its end,
+    # which GitHub's read-only default token needs the grant for.
+    if kind == "github":
+        assert jobs["nightly"]["permissions"] == {"contents": "write"}
+    else:
+        assert "permissions" not in jobs["nightly"]
 
 
 # --- the release --------------------------------------------------------------
@@ -440,12 +446,17 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     assert "CI_COMMIT_TITLE" not in text
 
     # The job token cannot push: every job that writes the store or
-    # pushes rewrites origin with the push token before its call, and
-    # no other job does.
+    # pushes rewrites origin with the push token before its call, the
+    # nightly for its profile trace among them, and no other job does.
     def rewrites(name: str) -> bool:
         return any("GITLAB_PUSH_TOKEN" in line for line in jobs[name]["script"])
 
-    assert {name for name in jobs if rewrites(name)} == {"check", "gate", "publish"}
+    assert {name for name in jobs if rewrites(name)} == {
+        "check",
+        "gate",
+        "nightly",
+        "publish",
+    }
     assert jobs["check"]["script"][0].startswith("git remote set-url origin")
     # The address is the server's own protocol, host and port: an
     # instance off 443 is unreachable at a bare https host.
