@@ -1,5 +1,5 @@
 # The clang-format extension: one style for every native member, judged
-# per package. The check is clang-format's words, called from the
+# per package. The step is clang-format's words, called from the
 # package's directory on the package's files a run reaches, so each
 # package's own .clang-format sets the style.
 
@@ -9,13 +9,12 @@ api-version = 1
 levels = ["workspace"]
 
 # The packages that carry C or C++.
-[checks.clang-format.format]
-judge = ["clang_format", "--dry-run", "--Werror"]
-fix = ["clang_format", "-i"]
+[phases.format.clang-format]
+main = ["clang_format", "--dry-run", "--Werror", "{arguments}", "{paths}"]
+fix = ["clang_format", "-i", "{arguments}", "{paths}"]
 scope = "package"
 extensions = ["cpp"]
 tools = ["clang_format"]
-arguments = true
 claims = [
     { category = "source", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
     { category = "test", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
@@ -24,7 +23,7 @@ claims = [
 
 # The style each C or C++ package carries; a deeper file with
 # `BasedOnStyle: InheritParentConfig` adds that directory's own lines.
-[checks.clang-format.format.fragments.".clang-format"]
+[phases.format.clang-format.fragments.".clang-format"]
 extensions = ["cpp"]
 text = '''
 # Rendered by the template channel for each C or C++ package; the gate

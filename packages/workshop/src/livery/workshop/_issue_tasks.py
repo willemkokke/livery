@@ -519,7 +519,12 @@ def _kept(repo: Repository, git: GitOps, root: Path, branch: str) -> bool:
     from livery.workshop._sweep import sweep_branch
 
     went, line = sweep_branch(
-        root, git, branch, current=git.current_branch(), dry_run=False, repo=repo
+        root,
+        git,
+        branch,
+        current=git.current_branch(cached=True),
+        dry_run=False,
+        repo=repo,
     )
     print(f"  {line}")
     return not went

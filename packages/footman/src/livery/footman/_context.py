@@ -2846,7 +2846,7 @@ def _captured_streams(out_buf: io.StringIO, err_buf: io.StringIO) -> Generator[N
 # a callable) registers nothing — there is no child to kill, and it finishes.
 # Each child records its task's keep-going policy, so a fail-fast failure can
 # reap the fail-fast trees in a mixed run while a keep-going tree runs on.
-_live_children: dict[subprocess.Popen[str], bool] = {}  # proc -> keep_going
+_live_children: dict[subprocess.Popen[Any], bool] = {}  # proc -> keep_going
 _children_lock = threading.Lock()
 _aborting = threading.Event()  # set once *any* termination (fail-fast/Ctrl-C) fired
 _abort_full = threading.Event()  # set when the abort spares nothing (Ctrl-C, error)
@@ -2868,7 +2868,7 @@ def abort_reaches(keep_going: bool) -> bool:
     return _aborting.is_set() and (_abort_full.is_set() or not keep_going)
 
 
-def _kill_tree(proc: subprocess.Popen[str], *, force: bool) -> None:
+def _kill_tree(proc: subprocess.Popen[Any], *, force: bool) -> None:
     """Signal a spawned child *and its descendants*, not just the child itself.
 
     A killable child leads its own process group (POSIX) / group (Windows), and
@@ -2901,7 +2901,7 @@ def _kill_tree(proc: subprocess.Popen[str], *, force: bool) -> None:
             os.kill(proc.pid, sig)
 
 
-def _register_child(proc: subprocess.Popen[str], keep_going: bool = False) -> None:
+def _register_child(proc: subprocess.Popen[Any], keep_going: bool = False) -> None:
     # Under the one lock: recording the child and reading the abort flags can't
     # interleave with `terminate_live_children` setting them and snapshotting — so
     # a child is killed either by that sweep or by this check, never missed.
@@ -2917,7 +2917,7 @@ def _register_child(proc: subprocess.Popen[str], keep_going: bool = False) -> No
         _kill_tree(proc, force=False)
 
 
-def _forget_child(proc: subprocess.Popen[str]) -> None:
+def _forget_child(proc: subprocess.Popen[Any]) -> None:
     with _children_lock:
         _live_children.pop(proc, None)
 
@@ -3021,7 +3021,7 @@ def _run_subprocess(
     cwd: Path | None,
     capture: bool,
     encoding: str | None = "utf-8",
-    input: str | None = None,
+    input: str | bytes | None = None,
     killable: bool = True,
     isolate: bool = True,
     keep_going: bool = False,
@@ -3073,23 +3073,41 @@ def _run_subprocess(
     # cwd='unmanaged' declares — and the note would tell the author to prefer
     # run() when run() is what they used. Thread-local, so a sibling task's
     # raw Popen in another thread still earns both.
+    # A bytes payload is the binary lane: the child's streams are bytes,
+    # so no newline translation touches the payload on Windows, and the
+    # capture is decoded with surrogateescape, which keeps every byte
+    # recoverable from the text (`_lane_text`). A str payload keeps the
+    # text lane as it is.
+    binary = isinstance(input, bytes)
+    proc: subprocess.Popen[Any]
     try:
         with _globals.internal():
-            proc = subprocess.Popen(
-                _spawnable(argv),
-                env=env,
-                cwd=cwd,
-                # A fed child reads a pipe; otherwise stdin is inherited
-                # untouched, so an uncaptured child keeps the terminal it
-                # always had.
-                stdin=subprocess.PIPE if input is not None else None,
-                stdout=subprocess.PIPE if capture else None,
-                stderr=subprocess.PIPE if capture else None,
-                text=True,
-                encoding=encoding,
-                errors="replace",
-                **group,
-            )
+            # A fed child reads a pipe; otherwise stdin is inherited
+            # untouched, so an uncaptured child keeps the terminal it
+            # always had.
+            if binary:
+                proc = subprocess.Popen(
+                    _spawnable(argv),
+                    env=env,
+                    cwd=cwd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE if capture else None,
+                    stderr=subprocess.PIPE if capture else None,
+                    **group,
+                )
+            else:
+                proc = subprocess.Popen(
+                    _spawnable(argv),
+                    env=env,
+                    cwd=cwd,
+                    stdin=subprocess.PIPE if input is not None else None,
+                    stdout=subprocess.PIPE if capture else None,
+                    stderr=subprocess.PIPE if capture else None,
+                    text=True,
+                    encoding=encoding,
+                    errors="replace",
+                    **group,
+                )
     except FileNotFoundError:
         if cwd is not None and not cwd.is_dir():
             raise  # the *directory* is what's missing — keep the honest OS error
@@ -3143,7 +3161,25 @@ def _run_subprocess(
         return proc.returncode, "", "", timed_out
     # Whatever it managed to say before the kill: on a hang that partial
     # output is usually the only diagnostic there is.
-    return proc.returncode, out or "", err or "", timed_out
+    return (
+        proc.returncode,
+        _lane_text(out, encoding),
+        _lane_text(err, encoding),
+        timed_out,
+    )
+
+
+def _lane_text(captured: str | bytes | None, encoding: str | None) -> str:
+    """A captured stream as text: the binary lane's bytes decoded with surrogateescape.
+
+    ``text.encode(encoding, "surrogateescape")`` gives the bytes back
+    exactly, so a reader of a binary tool's output loses nothing.
+    """
+    if captured is None:
+        return ""
+    if isinstance(captured, bytes):
+        return captured.decode(encoding or "utf-8", "surrogateescape")
+    return captured
 
 
 def _dim(text: str, color: bool) -> str:
@@ -3553,7 +3589,7 @@ def run(
     nofail: bool = False,
     recorded: bool = True,
     capture: bool = True,
-    input: str | None = None,
+    input: str | bytes | None = None,
     timeout: float | None = None,
     title: str | None = None,
     pre_record: Callable[[ResultView], None] | None = None,
@@ -3576,8 +3612,12 @@ def run(
     `input=` feeds the child's standard input and closes it — the one lane a
     payload can't take through argv (`uv pip install -r -` reads its
     requirements there). A string, encoded the way the capture is decoded
-    (`encoding=`). The *read* side of the process boundary is a task
-    parameter marked `stdin`; this is the write side, so a task can sit in
+    (`encoding=`). Bytes go as they are, in a binary lane: no newline
+    translation on any platform, and the captured streams are decoded with
+    `surrogateescape`, so `stdout.encode(encoding, "surrogateescape")`
+    gives a binary tool's bytes back exactly. The *read* side of the process
+    boundary is a task parameter marked `stdin`; this is the write side, so a
+    task can sit in
     the middle of a pipeline without a shell between it and either
     neighbour. An in-process tool has no standard input to feed — `input=`
     on one is a taught `TypeError`.

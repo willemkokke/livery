@@ -737,6 +737,41 @@ def test_the_extension_under_test_is_listed_with_every_option_it_declares(
     assert stack == ("base", "top[deep,wide]")
 
 
+def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._checks import CheckRecord
+    from livery.workshop._declaration import Additions
+
+    def _idle(ctx: object) -> None:
+        del ctx
+
+    declared = Declaration(
+        "x",
+        "x",
+        Path("extension.toml"),
+        additions=Additions(
+            (
+                CheckRecord("t", "lint", _idle, extensions=("python",)),
+                CheckRecord(
+                    "t", "typecomplete", _idle, extensions=("python",), enabled=False
+                ),
+            )
+        ),
+    )
+    _fake_declarations(monkeypatch, {"top": declared})
+    assert _e2e.steps_declared_off("top") == ("typecomplete.t",)
+    assert _e2e.steps_declared_off("none") == ()
+    # The contract gains one table per step, at the step's address,
+    # once: a table already there is kept as it is.
+    text = '[workspace]\nextensions = ["top"]\n'
+    enabled = _e2e._enable_steps(text, ("typecomplete.t",))  # pyright: ignore[reportPrivateUsage]
+    assert enabled.endswith("[phases.typecomplete.t]\nenabled = true\n")
+    assert enabled.startswith(text + "\n")
+    assert _e2e._enable_steps(enabled, ("typecomplete.t",)) == enabled  # pyright: ignore[reportPrivateUsage]
+    assert _e2e._enable_steps(text, ()) == text  # pyright: ignore[reportPrivateUsage]
+
+
 def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

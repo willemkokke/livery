@@ -1,10 +1,21 @@
 """The local git seam the forge-lane verbs stand on.
 
-One class, no state: every method runs git through the store's own
-handle in the repository at ``root``, and returns strings or raises
-with git's own words. The forge-lane flows take a
+One class: every method runs git through the store's own handle in
+the repository at ``root``, and returns strings or raises with git's
+own words. The forge-lane flows take a
 livery.workshop._git_ops.GitOps so tests drive a temporary
 repository through the same seam the tasks use.
+
+The one state is a memory of facts. A fact read live, the position,
+a branch's heads, its stack, a config key, is kept, and a call of the
+same reader with ``cached=True`` answers from it without a process. Any
+call through the helper that can move the repository, a fetch, a
+push, a commit, a switch, a merge, a config write, clears the memory,
+so a cached answer is the last live one since the helper itself
+moved anything. A move outside the helper, a person's shell, a test's
+own git, is invisible to it: a caller passes ``cached=True`` only
+where it read the fact itself in the same flow and nothing else ran
+in between, never around a wait on the forge.
 """
 
 from __future__ import annotations
@@ -12,10 +23,66 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TypeVar, cast
 
 import livery.toolroom.tools as tools
+
+T = TypeVar("T")
+
+#: Subcommands whose call can move the repository: a ref, the index,
+#: the working tree or the config. A call of one clears the helper's
+#: memory of facts. ``config`` and ``tag`` and ``branch`` are reads with
+#: their listing flags and moves otherwise, decided in `_moves`.
+_MOVES = frozenset(
+    {
+        "fetch",
+        "push",
+        "pull",
+        "commit",
+        "checkout",
+        "switch",
+        "merge",
+        "rebase",
+        "reset",
+        "add",
+        "rm",
+        "mv",
+        "update-ref",
+        "symbolic-ref",
+        "worktree",
+        "clone",
+        "remote",
+        "stash",
+        "cherry-pick",
+        "revert",
+        "am",
+        "apply",
+        "clean",
+        "fast-import",
+    }
+)
+
+
+def _moves(args: tuple[str, ...]) -> bool:
+    """Whether a git call with *args* can move the repository.
+
+    The subcommand is the first word that is not an option, past the
+    ``-c key=value`` pairs; ``config``, ``tag`` and ``branch`` move
+    unless called with a listing flag.
+    """
+    words = list(args)
+    while words and words[0].startswith("-"):
+        words = words[2:] if words[0] == "-c" else words[1:]
+    if not words:
+        return True
+    command, rest = words[0], words[1:]
+    if command == "config":
+        return not any(word.startswith("--get") for word in rest)
+    if command in ("tag", "branch"):
+        return not any(word in ("-l", "--list") for word in rest)
+    return command in _MOVES
 
 
 class GitError(RuntimeError):
@@ -31,9 +98,24 @@ class GitOps:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._memo: dict[tuple[str, ...], object] = {}
+
+    def _call(self, *args: str) -> tools.Result:
+        """The one door every git call takes; a call that moves anything forgets."""
+        if _moves(args):
+            self._memo.clear()
+        return tools.git.opts(cwd=self.root, nofail=True, recorded=False)(*args)
+
+    def _fact(self, key: tuple[str, ...], cached: bool, read: Callable[[], T]) -> T:
+        """*key*'s remembered answer under *cached*; else read live and remembered."""
+        if cached and key in self._memo:
+            return cast("T", self._memo[key])
+        value = read()
+        self._memo[key] = value
+        return value
 
     def _run(self, *args: str) -> str:
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(*args)
+        result = self._call(*args)
         if result.code != 0:
             raise GitError(
                 f"git {' '.join(args)} exited {result.code}:"
@@ -63,21 +145,22 @@ class GitOps:
         (the base, in a rebase), 3 the side merged in (the commit
         replayed, in a rebase).
         """
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "show", f":{stage}:{path}"
-        )
+        result = self._call("show", f":{stage}:{path}")
         return result.stdout if result.code == 0 else ""
 
     def add(self, path: str) -> None:
         """Stage *path* as it stands in the working tree, a removal included."""
         self._run("add", "--all", "--", path)
 
-    def current_branch(self) -> str:
+    def current_branch(self, *, cached: bool = False) -> str:
         """The checked-out branch name; empty when detached."""
+        return self._fact(("branch",), cached, self._read_branch)
+
+    def _read_branch(self) -> str:
         out = self._run("rev-parse", "--abbrev-ref", "HEAD").strip()
         return "" if out == "HEAD" else out
 
-    def position(self) -> tuple[str, str]:
+    def position(self, *, cached: bool = False) -> tuple[str, str]:
         """The checked-out branch name, empty when detached, and HEAD's commit.
 
         One process for both: a flow that asks where it stands asks
@@ -86,9 +169,14 @@ class GitOps:
         first: ``--abbrev-ref`` applies to every revision after it, so
         the branch's name comes second.
         """
+        return self._fact(("position",), cached, self._read_position)
+
+    def _read_position(self) -> tuple[str, str]:
         out = self._run("rev-parse", "HEAD", "--abbrev-ref", "HEAD").split()
         head = out[0] if out else ""
         branch = "" if len(out) < 2 or out[1] == "HEAD" else out[1]
+        self._memo[("branch",)] = branch
+        self._memo[("head",)] = head
         return branch, head
 
     def object_id(self, spec: str) -> str:
@@ -182,15 +270,15 @@ class GitOps:
         out = self._run("log", "--first-parent", f"-{count}", "--format=%T", "HEAD")
         return [line.strip() for line in out.splitlines() if line.strip()]
 
-    def head_sha(self) -> str:
+    def head_sha(self, *, cached: bool = False) -> str:
         """The commit HEAD points at."""
-        return self._run("rev-parse", "HEAD").strip()
+        return self._fact(
+            ("head",), cached, lambda: self._run("rev-parse", "HEAD").strip()
+        )
 
     def has_commits(self) -> bool:
         """Whether HEAD names a commit; false with no commit or no repository."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", "--verify", "-q", "HEAD"
-        )
+        result = self._call("rev-parse", "--verify", "-q", "HEAD")
         return result.code == 0
 
     def head_subject(self) -> str:
@@ -222,9 +310,7 @@ class GitOps:
 
     def has_remote(self, name: str = "origin") -> bool:
         """Whether this clone has a remote called *name*; any other failure raises."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "remote", "get-url", name
-        )
+        result = self._call("remote", "get-url", name)
         if result.code in (0, 2):
             return result.code == 0
         raise GitError(
@@ -237,9 +323,7 @@ class GitOps:
         A commit this clone does not know cannot be an ancestor, so
         an unknown *ancestor* answers False rather than raising.
         """
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "merge-base", "--is-ancestor", ancestor, descendant
-        )
+        result = self._call("merge-base", "--is-ancestor", ancestor, descendant)
         return result.code == 0
 
     def push(self, branch: str) -> None:
@@ -273,7 +357,7 @@ class GitOps:
         moves; exit 1 with conflicts is the answer, any other failure
         raises.
         """
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = self._call(
             "merge-tree", "--write-tree", "--name-only", "HEAD", f"origin/{base}"
         )
         if result.code in (0, 1):
@@ -344,52 +428,60 @@ class GitOps:
         self._run("add", "-A")
         self._run("commit", "--amend", "--no-edit")
 
-    def local_branch_exists(self, branch: str) -> bool:
+    def local_branch_exists(self, branch: str, *, cached: bool = False) -> bool:
         """Whether *branch* exists locally; any other failure raises."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
+        return self._fact(
+            ("local", branch), cached, lambda: self._read_local_branch(branch)
         )
+
+    def _read_local_branch(self, branch: str) -> bool:
+        result = self._call("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
         if result.code in (0, 1):
             return result.code == 0
         raise GitError(
             f"git rev-parse exited {result.code}:\n{result.stdout}{result.stderr}"
         )
 
-    def remote_head(self, branch: str) -> str:
+    def remote_head(self, branch: str, *, cached: bool = False) -> str:
         """``origin/<branch>``'s commit, or empty when it does not exist.
 
         Reads the local remote-tracking ref, so call
         livery.workshop._git_ops.GitOps.fetch first for a fresh answer.
         """
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", f"origin/{branch}"
-        )
-        return result.stdout.strip() if result.code == 0 else ""
 
-    def config_get(self, key: str) -> str:
+        def read() -> str:
+            result = self._call("rev-parse", f"origin/{branch}")
+            return result.stdout.strip() if result.code == 0 else ""
+
+        return self._fact(("remote", branch), cached, read)
+
+    def config_get(self, key: str, *, cached: bool = False) -> str:
         """The repository's git config value for *key*; empty when unset."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "config", "--get", key
-        )
-        return result.stdout.strip() if result.code == 0 else ""
+
+        def read() -> str:
+            result = self._call("config", "--get", key)
+            return result.stdout.strip() if result.code == 0 else ""
+
+        return self._fact(("config", key), cached, read)
 
     def config_set(self, key: str, value: str) -> None:
         """Set *key* to *value* in the repository's git config."""
         self._run("config", key, value)
 
-    def stack(self, branch: str) -> tuple[str, str]:
+    def stack(self, branch: str, *, cached: bool = False) -> tuple[str, str]:
         """The parent *branch* was started on, and the commit it started from.
 
         What ``fm start --from`` records. Both are empty for a branch
         started on main; the commit is empty for a branch started before
         it was recorded.
         """
+        return self._fact(("stack", branch), cached, lambda: self._read_stack(branch))
+
+    def _read_stack(self, branch: str) -> tuple[str, str]:
         # One process for both keys: a flow reads the stack several
         # times, and a branch standing on main has neither key.
         prefix = f"branch.{branch}.workshop-parent"
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "config", "--get-regexp", f"^{prefix}(-tip)?$"
-        )
+        result = self._call("config", "--get-regexp", f"^{prefix}(-tip)?$")
         found: dict[str, str] = {}
         if result.code == 0:
             for line in result.stdout.splitlines():
@@ -406,9 +498,7 @@ class GitOps:
     def forget_stack(self, branch: str) -> None:
         """Drop the stack record: *branch* stands on main now."""
         for key in ("workshop-parent", "workshop-parent-tip"):
-            tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-                "config", "--unset", f"branch.{branch}.{key}"
-            )
+            self._call("config", "--unset", f"branch.{branch}.{key}")
 
     def sha_of(self, ref: str) -> str:
         """The commit *ref* resolves to; empty when this checkout cannot.
@@ -420,9 +510,7 @@ class GitOps:
         # `~0` peels to the commit as `^{commit}` does. A caret never
         # reaches git on Windows: the store runs git through a `.cmd`
         # launcher, and cmd.exe takes `^` as its escape character.
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", "--verify", f"{ref}~0"
-        )
+        result = self._call("rev-parse", "--verify", f"{ref}~0")
         return result.stdout.strip() if result.code == 0 else ""
 
     def merge_base(self, base: str) -> str:
@@ -545,16 +633,15 @@ class GitOps:
         )
         return tuple(name for name in names if name and name != "HEAD")
 
-    def any_head(self, branch: str) -> str:
+    def any_head(self, branch: str, *, cached: bool = False) -> str:
         """*branch*'s head sha: local when present, else the remote's, else empty."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
-        )
+        return self._fact(("any", branch), cached, lambda: self._read_any_head(branch))
+
+    def _read_any_head(self, branch: str) -> str:
+        result = self._call("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
         if result.code == 0 and result.stdout.strip():
             return result.stdout.strip()
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "ls-remote", "origin", f"refs/heads/{branch}"
-        )
+        result = self._call("ls-remote", "origin", f"refs/heads/{branch}")
         if result.code == 0 and result.stdout.strip():
             return result.stdout.split()[0]
         return ""
@@ -575,9 +662,7 @@ class GitOps:
 
     def file_at(self, ref: str, path: str) -> str:
         """The contents of *path* as committed at *ref*; empty when absent."""
-        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
-            "show", f"{ref}:{path}"
-        )
+        result = self._call("show", f"{ref}:{path}")
         return result.stdout if result.code == 0 else ""
 
     def commit_message(self, ref: str) -> str:

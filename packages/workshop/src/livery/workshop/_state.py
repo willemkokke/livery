@@ -56,20 +56,15 @@ The rules, ported from hse's stamp transport:
   writer is a CI container with no global git config, and a push to
   this namespace must never start a workflow.
 
-Plumbing, never porcelain: ``hash-object``, ``mktree``,
-``commit-tree``, ``push``, ``ls-remote``, ``archive``. The working
-tree and the index are never touched, so a write is safe from the
-middle of any job. A read or a write is a fixed handful of git
-processes whatever the series holds: one ``archive`` into a file reads
-every blob of a tree, one ``hash-object --stdin-paths`` writes every
-blob of a commit. The archive is read back as bytes from disk, so no
-pipe's newline translation reaches a row on Windows; the paths go
-one per line, which git reads with or without the
-carriage return a text-mode stdin appends on Windows; the tree is fed
-NUL-separated too, so no file name ever crosses a text-mode stdin,
-where that carriage return once named a file no ``show`` could find.
-A blob is hashed from a temporary file written without newline
-translation, so it reads the same bytes on every platform.
+Plumbing, never porcelain: ``fast-import``, ``push``, ``ls-remote``,
+``archive``, ``update-ref``. The working tree and the index are never
+touched, so a write is safe from the middle of any job. A read or a
+write is a fixed handful of git processes whatever the series holds:
+one ``archive`` into a file reads every blob of a tree, one
+``fast-import`` writes every blob, the tree and the commit. Both go
+as bytes, the archive read back from disk and the import stream fed
+through the binary lane of the tool handle, so no pipe's newline
+translation reaches a row or a file name on Windows.
 """
 
 from __future__ import annotations
@@ -1100,7 +1095,7 @@ def _reachable(
     return snapshot.refs.get(ref), ""
 
 
-def _git(root: Path, *args: str, stdin: str | None = None) -> tools.Result:
+def _git(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
     tool = tools.git.opts(cwd=root, nofail=True, recorded=False)
     if stdin is not None:
         tool = tool.opts(input=stdin)
@@ -1176,13 +1171,27 @@ def _tree_files(root: Path, sha: str) -> Read:
     bytes, so no pipe's newline translation touches a row and the
     blobs come back as they were written on any platform. A row a
     Windows checkout once wrote with carriage returns reads back with
-    them, which the row's parser takes as whitespace.
+    them, which the row's parser takes as whitespace. The archive
+    converts line ends the way a checkout would, which Git for Windows
+    turns on by default, so the conversion is switched off for the
+    call: the blobs are wanted as git holds them.
     """
     import tarfile
 
     with tempfile.TemporaryDirectory() as scratch:
         out = Path(scratch) / "tree.tar"
-        archived = _git(root, "archive", "--format=tar", "-o", str(out), sha)
+        archived = _git(
+            root,
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "archive",
+            "--format=tar",
+            "-o",
+            str(out),
+            sha,
+        )
         if archived.code != 0:
             return Read(None, sha, failed=True, reason=_words(archived))
         files: dict[str, str] = {}
@@ -1238,70 +1247,89 @@ def _parse_listing(listed: tools.Result) -> dict[str, str] | None:
     return refs
 
 
+#: The scratch ref ``fast-import`` writes each root commit to, in the
+#: checkout's own git directory: never pushed, since no refspec names
+#: it, and overwritten by every write, so it holds the last commit
+#: built and nothing accrues.
+IMPORT_REF = "refs/workshop-import/head"
+
+
+def _committer_when() -> str:
+    """The commit's time for the import stream: ``GIT_COMMITTER_DATE``, else now.
+
+    git's own override, which the janitor's tests use to write an old
+    row; fast-import takes the time from the stream alone, so the
+    variable is read here. An ISO 8601 stamp or git's raw ``<seconds>
+    <zone>`` form; anything else is now.
+    """
+    import time
+
+    raw = os.environ.get("GIT_COMMITTER_DATE", "").strip()
+    if raw:
+        try:
+            moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=UTC)
+            return f"{int(moment.timestamp())} +0000"
+        except ValueError:
+            seconds = raw.split()[0].lstrip("@")
+            if seconds.isdigit():
+                return f"{seconds} +0000"
+    return f"{int(time.time())} +0000"
+
+
 def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str, str]:
-    """A root commit of *files*; ``(sha, "")`` or ``("", reason)``."""
-    entries: list[str] = []
-    names = sorted(files)
-    paths: list[str] = []
-    try:
-        for name in names:
-            # A temporary file, never stdin, and written without newline
-            # translation: text-mode stdin translates newlines on
-            # Windows, and a translated file would hash to a different
-            # blob per platform.
-            with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", newline="", delete=False
-            ) as handle:
-                handle.write(files[name])
-                paths.append(handle.name)
-        # One path per line: git strips the carriage return a text-mode
-        # stdin appends on Windows, and a temporary file's path holds
-        # no newline of its own.
-        hashed = (
-            _git(
-                root,
-                "hash-object",
-                "-w",
-                "--stdin-paths",
-                stdin="".join(f"{path}\n" for path in paths),
-            )
-            if paths
-            else None
-        )
-    finally:
-        for path in paths:
-            os.unlink(path)
-    if hashed is not None:
-        if hashed.code != 0:
-            return "", f"hash-object failed: {_words(hashed)}"
-        shas = hashed.stdout.split()
-        if len(shas) != len(paths):
-            return "", (
-                f"hash-object returned {len(shas)} hash(es) for {len(paths)} file(s)"
-            )
-        entries.extend(
-            f"100644 blob {sha}\t{name}" for name, sha in zip(names, shas, strict=True)
-        )
-    # NUL-separated entries: no newline crosses stdin, so no platform's
-    # text mode can rename a file to "<name>\r".
-    tree = _git(root, "mktree", "-z", stdin="\0".join(entries) + "\0")
-    if tree.code != 0:
-        return "", f"mktree failed: {_words(tree)}"
+    """A root commit of *files*; ``(sha, "")`` or ``("", reason)``.
+
+    One ``fast-import`` whatever the files: the stream carries every
+    blob inline with its byte length, the tree and the commit, and goes
+    to git as bytes, so no platform's text mode can translate a newline
+    inside a row or a command. The commit lands on `IMPORT_REF`; the
+    caller moves the real ref to it under its own compare-and-swap. The
+    commit's id comes back through the marks file the import exports.
+    """
     name, email = identity()
-    commit = _git(
-        root,
-        "-c",
-        f"user.name={name}",
-        "-c",
-        f"user.email={email}",
-        "commit-tree",
-        tree.stdout.strip(),
-        "-m",
-        f"{message} [skip ci]",
-    )
-    if commit.code != 0:
-        return "", f"commit-tree failed: {_words(commit)}"
-    return commit.stdout.strip(), ""
+    text = f"{message} [skip ci]".encode()
+    lines: list[bytes] = [
+        f"commit {IMPORT_REF}\n".encode(),
+        b"mark :1\n",
+        f"committer {name} <{email}> {_committer_when()}\n".encode(),
+        f"data {len(text)}\n".encode(),
+        text,
+        b"\n",
+        b"deleteall\n",
+    ]
+    for path in sorted(files):
+        body = files[path].encode("utf-8")
+        lines += [
+            f"M 100644 inline {path}\n".encode(),
+            f"data {len(body)}\n".encode(),
+            body,
+            b"\n",
+        ]
+    lines.append(b"done\n")
+    with tempfile.TemporaryDirectory() as scratch:
+        marks = Path(scratch) / "marks"
+        imported = _git(
+            root,
+            "fast-import",
+            "--quiet",
+            "--force",
+            "--done",
+            f"--export-marks={marks}",
+            stdin=b"".join(lines),
+        )
+        if imported.code != 0:
+            return "", f"fast-import failed: {_words(imported)}"
+        try:
+            exported = marks.read_text("utf-8")
+        except OSError as error:
+            return "", f"fast-import exported no marks ({error})"
+    for line in exported.splitlines():
+        mark, _, sha = line.partition(" ")
+        if mark == ":1" and sha.strip():
+            return sha.strip(), ""
+    return "", "fast-import exported no mark for the commit"
 
 
 def _stale(refused: tools.Result) -> bool:

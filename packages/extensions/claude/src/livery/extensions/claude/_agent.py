@@ -68,9 +68,21 @@ def _delivered(root: Path) -> tuple[dict[str, str], list[str]]:
     return files, own
 
 
+#: The composition the guidance files' render made, kept for the entry
+#: file's render that follows it in the same delivery: two views of one
+#: composition, composed once. Taken when read, so a later delivery, with
+#: the locks moved under it, never reads this one's.
+_COMPOSED: dict[Path, tuple[dict[str, str], list[str]]] = {}
+
+
 def entry_file(root: Path) -> str:
-    """``CLAUDE.md``: an import per delivered fragment, the own ones, the project's."""
-    files, own = _delivered(root)
+    """``CLAUDE.md``: an import per delivered fragment, the own ones, the project's.
+
+    Reads the composition `guidance_files` made just before it in the
+    delivery; rendered on its own, it composes for itself.
+    """
+    kept = _COMPOSED.pop(root, None)
+    files, own = kept if kept is not None else _delivered(root)
     stub = STUB_HEADER.format(prog=footman.prog())
     stub += "".join(f"@{DELIVERED}/{name}\n" for name in files)
     stub += "".join(f"@{OWN}/{name}\n" for name in own)
@@ -78,8 +90,14 @@ def entry_file(root: Path) -> str:
 
 
 def guidance_files(root: Path) -> dict[str, str]:
-    """``.workshop/fragments/``: each fragment the agent reads, by delivered name."""
-    return _delivered(root)[0]
+    """``.workshop/fragments/``: each fragment the agent reads, by delivered name.
+
+    Declared before the entry file, so the entry file reads this
+    composition instead of making its own.
+    """
+    composed = _delivered(root)
+    _COMPOSED[root] = composed
+    return composed[0]
 
 
 def claude_files(root: Path) -> dict[str, str | Path]:

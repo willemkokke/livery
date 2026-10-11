@@ -11,27 +11,28 @@ livery.forge.Forge; the workshop orchestrates local, git, and forge
 steps and never hands a raw forge verb to a user.
 
 An extension in its own wheel declares itself in an ``extension.toml``
-beside the package its ``workshop.extensions`` entry point names: its
-checks under ``[checks.<tool>.<role>]``, each naming the function that
-runs it as ``"module:function"``, and the options a workspace may list
-it with under ``[options]``. A check's body takes a
-[livery.workshop.GateContext][]. A check that narrows by paths
-(``narrowing = "paths"``) reads them from
-[livery.workshop.scoped_paths][], which answers
+beside the package its ``workshop.extensions`` entry point names: the
+steps it adds to the gate's phases under ``[phases.<phase>.<step>]``,
+each with its body under ``main``, a template of its tool's words
+with ``{paths}`` where the paths the run reaches go and
+``{arguments}`` where the words after ``--`` go, or the function that
+runs it as ``"module:function"``. A step in code takes a
+[livery.workshop.GateContext][]. One that narrows by paths reads them
+from [livery.workshop.scoped_paths][], which answers
 [livery.workshop.WHOLE][] for the tool's configured whole, and
-calls its tool through [livery.workshop.run_batched][]; one that
-narrows by packages (``narrowing = "packages"``) reads them from
-[livery.workshop.scoped_packages][], and one that judges a package
-at a time (``scope = "package"``) reads its files from
-[livery.workshop.scoped_files][]. One that narrows by neither
-(``narrowing = "none"``, [livery.workshop.NONE][]) judges the whole
-workspace in every scope, and when it declares ``inputs`` it asks
+calls its tool through [livery.workshop.run_batched][]; a workspace
+step that declares no ``inputs`` narrows by packages and reads them
+from [livery.workshop.scoped_packages][], and one that judges a
+package at a time (``scope = "package"``) reads its files from
+[livery.workshop.scoped_files][]. One that declares ``inputs`` judges
+the whole workspace in every scope, and asks
 [livery.workshop.selected_files][] which of them this run's change
 touched, with the context its run was handed; its ``widen``
-reference receives the run's [livery.workshop.Changes][]. A check
-declares the options a
-package may set on it under the check's ``options`` and reads a
-package's value with [livery.workshop.check_option][]. A package's
+reference receives the run's [livery.workshop.Changes][]. A step
+declares the options a package may set on it under its ``options``
+and reads a package's value with [livery.workshop.check_option][]; a
+step declared ``enabled = false`` registers once the root contract
+turns it on at the step's address. A package's
 public modules are its kind's answer,
 [livery.workshop.public_modules][], and so is where its build
 writes a compilation database, [livery.workshop.compile_commands][].

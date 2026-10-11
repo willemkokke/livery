@@ -787,10 +787,17 @@ class _Reader:
         shape. A template narrows by the paths the run reaches when
         ``{paths}`` stands among its words and runs whole without it,
         and takes the words after ``--`` where ``{arguments}`` stands.
+        A step in code places neither, so its record says what its code
+        does: a workspace step that declares no ``inputs`` narrows by
+        the packages the run reaches, which its code asks
+        [livery.workshop.scoped_packages][] for, and one with ``inputs``
+        is selected by them and judges the whole; a step that names
+        ``tools`` wraps them and takes the words after ``--``, and one
+        that names none refuses them.
         """
         from dataclasses import replace
 
-        from livery.workshop._checks import NONE, PATHS
+        from livery.workshop._checks import NONE, PACKAGES, PATHS, WORKSPACE
 
         where = (*prefix, phase, step)
         run, fix, words = self.step_bodies(entry, where)
@@ -799,12 +806,22 @@ class _Reader:
             key: self.other_steps(entry.get(key, {}), (*where, key))
             for key in ("replaces", "deletes")
         }
-        named = words.placeholders() if words is not None else frozenset[str]()
         record = self.record(step, phase, entry, where, run, fix, words)
+        if words is not None:
+            named = words.placeholders()
+            narrowing = PATHS if "paths" in named else NONE
+            arguments = "arguments" in named
+        else:
+            narrowing = (
+                PACKAGES
+                if record.scope == WORKSPACE and record.inputs is None
+                else NONE
+            )
+            arguments = bool(record.tools)
         return replace(
             record,
-            narrowing=PATHS if "paths" in named else NONE,
-            arguments="arguments" in named,
+            narrowing=narrowing,
+            arguments=arguments,
             placed=True,
             enabled=bool(entry.get("enabled", True)),
             provides=tuple(provides.items()),

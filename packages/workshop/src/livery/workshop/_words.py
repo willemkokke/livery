@@ -409,7 +409,8 @@ def explained(record: CheckRecord) -> list[str]:
     """The lines ``fm explain <check>`` prints: what the check runs, and over what.
 
     A check in words shows each mode's command as the tool's handle
-    spells it, the placeholders left for the engine to answer, then
+    spells it, ``main`` for a step's template and ``judge`` for a check
+    table's words, the placeholders left for the engine to answer, then
     what the engine appends, or, for a step's template, what it puts
     where ``{paths}`` and ``{arguments}`` stand; a check that runs code
     names its references.
@@ -443,7 +444,7 @@ def explained(record: CheckRecord) -> list[str]:
         ),
     ]
     for mode, argv in (
-        ("judge", words.judge),
+        ("main" if record.placed else "judge", words.judge),
         ("fix", words.fix),
         ("safe-fix", words.safe_fix),
     ):

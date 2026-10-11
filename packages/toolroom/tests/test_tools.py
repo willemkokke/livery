@@ -618,6 +618,18 @@ def test_in_process_tool_with_matching_cwd_stays_in_process(monkeypatch):
     assert seen.get("in_process") is True
 
 
+def test_tool_opts_input_bytes_takes_the_binary_lane_standalone():
+    # Standalone, no footman host: the handle spawns the binary lane
+    # itself, bytes in and the capture decoded with surrogateescape, so
+    # a binary tool's output is recoverable byte for byte.
+    payload = b"a\r\nb\n\x00\xff\xfe tail"
+    echo = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
+    t = tools.Tool("python", "-c", echo, path=sys.executable)
+    result = t.opts(input=payload)()
+    assert result.ok
+    assert result.stdout.encode("utf-8", "surrogateescape") == payload
+
+
 def test_tool_opts_rel_roots_the_call(tmp_path):
     # Tool.opts(cwd=, rel=) is the bridge's per-call override — the same
     # policy carrier as nofail/capture, threading straight into run().

@@ -1016,3 +1016,48 @@ def test_the_position_and_the_stack_are_read_in_one_process_each(
     assert spawned["git"] == 1
     git.forget_stack("main")
     assert git.stack("main") == ("", "")
+
+
+def test_a_cached_fact_answers_from_memory_until_the_helper_moves_the_repository(
+    seeds: Seeds,
+) -> None:
+    from livery.workshop._git_ops import _moves
+    from workshop_spawns import counting_spawns
+
+    # Which calls forget: a config read and a listing keep the memory,
+    # a config write, a tag, a fetch and a commit clear it.
+    assert not _moves(("config", "--get", "user.name"))
+    assert not _moves(("-c", "a=b", "log", "-1"))
+    assert not _moves(("tag", "-l"))
+    assert _moves(("config", "user.name", "x"))
+    assert _moves(("tag", "v1"))
+    assert _moves(("fetch", "origin")) and _moves(("commit", "-m", "x"))
+    clone, _origin = _rig(seeds)
+    git = GitOps(clone)
+    branch, head = git.position()
+    remote = git.remote_head("main")
+    stack = git.stack("main")
+    assert git.local_branch_exists("main")
+    with counting_spawns() as spawned:
+        assert git.position(cached=True) == (branch, head)
+        assert git.current_branch(cached=True) == branch
+        assert git.head_sha(cached=True) == head
+        assert git.remote_head("main", cached=True) == remote
+        assert git.stack("main", cached=True) == stack
+        assert git.local_branch_exists("main", cached=True)
+    assert spawned["git"] == 0, spawned
+    # A fact never read live is read live under cached=True too.
+    with counting_spawns() as spawned:
+        assert git.local_branch_exists("nonesuch", cached=True) is False
+    assert spawned["git"] == 1
+    # A move through the helper forgets: the next cached read is live.
+    (clone / "moved.txt").write_text("moved\n")
+    git.commit_all("chore: move")
+    with counting_spawns() as spawned:
+        moved_branch, moved_head = git.position(cached=True)
+    assert spawned["git"] == 1 and moved_head != head and moved_branch == branch
+    # A move outside the helper is invisible: the trap the flag's rule
+    # names, so a caller passes cached=True only where nothing else ran.
+    _git(clone, "commit", "-q", "--allow-empty", "-m", "outside")
+    assert git.head_sha(cached=True) == moved_head
+    assert git.head_sha() != moved_head
