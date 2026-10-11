@@ -237,7 +237,9 @@ def measured_coverage(
     hit over the instrumentable lines of its sources, and a native
     package with no part left is absent, never a number. A run that
     left no python data (`NO_DATA`) is empty under *none_ok* and a
-    refusal otherwise.
+    refusal otherwise. A measured file the disk no longer has, a module
+    a test built under its temporary directory, is skipped: no package
+    owns it, so it changes no number.
     """
     from livery.workshop._coverage_lines import percent, read_parts
 
@@ -264,8 +266,13 @@ def measured_coverage(
     }
     # nofail: the exit code is read here, so a run that left no data
     # is told apart from a broken read instead of ending the gate.
+    # --ignore-errors: the data names every livery.* module the tests
+    # imported, a fake one a test built under its tmp_path included,
+    # and a passing test deletes that directory at teardown. A file
+    # outside the workspace is no package's, so the sums below never
+    # read it, and a source the disk no longer has must not stop them.
     result = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True)(
-        "json", "-o", report
+        "json", "--ignore-errors", "-o", report
     )
     if result.code != 0:
         if none_ok and NO_DATA in result.stdout + result.stderr:
