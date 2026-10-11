@@ -50,7 +50,7 @@ other modules, 31 of them in the loop.
 The library takes the helper's methods as module functions, each
 taking the repository's `root: Path` as its first argument, with no
 class, no memory and no `cached` flag: the memory saved a few
-`rev-parse` processes per flow and measured no change, and phase 4
+`rev-parse` processes per flow and measured no change, and phase 5
 makes those reads a file read. The library takes the store whole: the series
 model (`Series`, `Keyed`, `Row`, `Rows`, `Skipped`, `slug`), the
 snapshots (`Read`, `Fetched`), the reads, the compare-and-swap writes,
@@ -81,7 +81,7 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
 
 ## Ground-truth contracts (do not violate)
 
-1. One door. After phase 3, no module under `packages/workshop/src`
+1. One door. After phase 4, no module under `packages/workshop/src`
    calls the git handle; every git access goes through the library. A
    test refuses a call that does, the way the vocabulary test refuses a
    kind's word in the base.
@@ -109,7 +109,12 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    and carries the root and the policy it was built with, nothing else.
 7. Every behaviour pin the state and helper tests hold today holds
    after each phase; the process-count pins move to the new counts, and
-   in phase 4 to zero where a read is in-process.
+   in phase 5 to zero where a read is in-process.
+8. The library never edits a user's ssh configuration, and a user's
+   own `GIT_SSH_COMMAND` or `core.sshCommand` wins over the library's
+   multiplexing, which is the only case where a user meets the
+   setting at all. Whether multiplexing works is decided by a
+   behaviour probe, never by the platform's name.
 
 ## Phase 1: the package, and the helper moves
 
@@ -144,7 +149,98 @@ the workshop.
   nothing.
 - `fm ci.e2e --scenario=develop` is green on the local Gitea.
 
-## Phase 2: the store's transport and series model move
+## Phase 2: one ssh connection per verb
+
+Every network git call opens a fresh ssh connection, and the handshake
+is about half of a quiet fetch. Measured on 2026-10-11 on a macOS
+checkout against github.com, `git fetch origin` with nothing to fetch:
+
+| connection                            | time           |
+| ------------------------------------- | -------------- |
+| a fresh ssh handshake each call       | 2.1 s to 3.0 s |
+| multiplexed over one open connection  | 1.0 s to 1.3 s |
+
+A sync makes one round trip, a start three, submit and the release
+driver more. The local loop is not affected: its remotes are
+`http://` with a token (`_e2e.py:591`, `:1295`).
+
+The library gains one function, `ssh_environment(socket_dir, idle)`,
+which returns a mapping to merge into a spawned git's environment,
+holding `GIT_SSH_COMMAND`, or an empty mapping with a printed reason.
+Its rules, in order:
+
+1. `GIT_SSH_COMMAND` set in the environment to a command that is not
+   the library's own, or `core.sshCommand` set in git's config: empty,
+   no reason printed. The user has an opinion and keeps it.
+2. The socket path would exceed the unix socket limit, 104 bytes on
+   macOS and 108 on Linux: empty, the reason naming the directory and
+   the limit. The socket's name is `%r@%h:%p`, 17 bytes for github.
+3. The probe failed: empty, with ssh's own words. The probe opens no
+   connection of its own: after the first call through the built
+   environment, `ssh -O check` on the socket says whether a master
+   exists, and the verdict is written to a file in the socket
+   directory, so every later process in every verb reads a file. A
+   per-process memory would violate contract 6 and forget at every
+   verb.
+4. Otherwise `GIT_SSH_COMMAND` is `ssh -o ControlMaster=auto -o
+   ControlPath=<quoted path> -o ControlPersist=<idle> -o
+   ServerAliveInterval=15 -o ServerAliveCountMax=2`. The path is
+   shell-quoted: git hands the command to a shell, and footman's data
+   directory on macOS is under `Application Support`, with a space.
+
+Why each option: `ControlMaster=auto` reuses a master when one is up
+and opens one otherwise, and replaces a stale socket from an unclean
+exit; two spawns racing to open a master is allowed, one wins and the
+other connects directly. `ControlPersist=<idle>` keeps the master a
+few minutes after the verb exits so the next verb reuses it; on CI it
+dies with the job. The two `ServerAlive` options make a master whose
+TCP connection died (sleep, a network change) exit within 30 s, so the
+next call opens fresh instead of hanging to the TCP timeout; the first
+call after a wake may still fail once, every workflow verb is
+idempotent, and the docs say so.
+
+The workshop owns the policy: it passes footman's data directory,
+owner-only and durable, and the idle window, and applies the mapping
+once where a verb enters, to the environment the toolroom spawns with,
+so every git spawn inherits it and no call site changes. The library
+imports nothing of footman, so it cannot find the directory itself.
+
+Facts that constrain it: the ssh agent is unaffected, since the
+program is still `ssh` reading `~/.ssh/config`, so an `IdentityAgent`
+entry applies and the master signs once per window; any process of
+the same user may reuse the authenticated connection for the window,
+the same trust boundary as `SSH_AUTH_SOCK`, and the docs state it.
+On Windows the tool store pins PortableGit, whose bundled MSYS2 ssh
+accepts `ControlMaster`, while Windows' own OpenSSH does not; a
+backgrounded `ControlPersist` master on the MSYS2 build has been
+reported to keep git's pipes open so the fetch never returns, which
+`ssh -O check` would not reveal. The phase's own test on the Windows
+leg runs a fetch through the built environment under a timeout; the
+probe is per socket directory, so a Windows host that fails it runs
+the normal path. `https` remotes need no special case.
+
+Tests, fallbacks first: `GIT_SSH_COMMAND` already set leaves it
+untouched; `core.sshCommand` set in the repository config the same; a
+directory past the limit gives the reason with the directory and the
+limit; a failed probe gives ssh's words, with a fake `ssh` first on
+`PATH` that exits non-zero on `-O check`; a probe already written runs
+no ssh; then the happy path, the command with the five options and
+the quoted path.
+
+**Acceptance**
+
+- `fm check` is green on every runner, the Windows leg's fetch under
+  the built environment included.
+- Two `git fetch origin` through the built environment against
+  github.com, the second a channel open, not a handshake, and
+  `ssh -O check` on the socket showing the master; the two times are
+  in the PR body and in the decision record.
+- `fm sync` on a quiet checkout, timed before and after, in the
+  decision record.
+- `fm doctor` names an existing `ControlMaster` entry in the user's
+  ssh config and does nothing more.
+
+## Phase 3: the store's transport and series model move
 
 `livery.git` exports the store as a public interface:
 `StateStore(root, in_ci=..., identity=..., snapshot_variable=...)`
@@ -179,7 +275,7 @@ reason, and a published snapshot reaches a child.
   metrics row and janitor write the store through the library on the
   real runner.
 
-## Phase 3: the direct calls converge
+## Phase 4: the direct calls converge
 
 The loop's 31 direct calls (`fetch`, `switch -C`, `clean`, `reset`,
 listings), `_new_project`'s five, the release driver's four and the
@@ -198,7 +294,7 @@ allowance table.
   refuses a direct call, with no allowance.
 - `fm ci.e2e --scenario=release` is green.
 
-## Phase 4: in-process reads
+## Phase 5: in-process reads
 
 The library takes dulwich as a dependency, ruled over pygit2 on
 2026-10-11, and answers reads without a
@@ -254,13 +350,14 @@ and the number recorded here.
 - 2026-10-11, Willem: the package is `git`: `packages/git`,
   distribution `livery-git`, import `livery.git`. The theme names
   (muniments, ledger, clerk) were weighed and the plain word won.
-- 2026-10-11, Willem: dulwich, not pygit2, for phase 4.
+- 2026-10-11, Willem: dulwich, not pygit2, for phase 5.
 - 2026-10-11, Willem: no class and no memory. The helper's methods
   become functions taking the root; the `cached` flag and its memory
   go in phase 1, since they measured no gain and dulwich removes the
   cost they were for. The store stays a frozen value because forty
   callers must not each pass the policy.
-- 2026-10-11, Willem: phases 1 to 3 land between the #1377 slices;
+- 2026-10-11, Willem: the phases that rewrite imports, 1, 3 and 4,
+  land between the #1377 slices;
   sessions that would conflict are paused for them.
 - 2026-10-11, Willem: the store's value type is `StateStore`, the
   docs' own name for it; `Store` is taken twice already, by the tool
@@ -268,7 +365,20 @@ and the number recorded here.
 - 2026-10-11, Willem: all git access goes through `livery.git`, the
   loop's included. A function only the loop calls lives in the library
   all the same; the one-door test carries no allowance table.
+- 2026-10-11, Willem: ssh connection multiplexing for every network git
+  call the library spawns, on by default, with no setting for a user to
+  find; the library owns the mechanism, the workshop the policy and
+  the socket directory; never an edit of the user's ssh config;
+  support decided by a behaviour probe. It is phase 2, since it needs
+  only the package and pays at once.
 
 ## Open
 
-Nothing open. Every ruling the phases need is in the decision record.
+1. How the ssh environment reaches a spawn: applied once where a verb
+   enters, to the environment the toolroom spawns with, or a parameter
+   on each network function of the library. Owner: Willem.
+   Recommendation: the environment, since no call site changes and
+   the library holds no object to carry it.
+2. The probe's verdict file against a per-process memory. Owner:
+   Willem. Recommendation: the file, for contract 6 and so a verdict
+   outlives the verb.
