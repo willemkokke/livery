@@ -203,6 +203,9 @@ def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
     pyproject = (directory / "pyproject.toml").read_text()
     assert 'build-backend = "scikit_build_core.build"' in pyproject
     assert 'version = "0.0.0"' in pyproject
+    # The build is keyed on the commit, so a fresh checkout at the same
+    # commit reuses it instead of rebuilding on new modification times.
+    assert "cache-keys = [{ git = { commit = true } }]" in pyproject
     # The contract records the leaf kind.
     assert 'kind = "python-nanobind"' in (directory / "workshop.toml").read_text()
     # The leaf's __init__ re-exports the compiled surface.
