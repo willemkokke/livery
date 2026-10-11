@@ -534,7 +534,13 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         # mount carries it and it gets none of its own.
         assert home.root.is_relative_to(tmp_path)
         assert f"-v {home.root}:" not in env["CIBW_CONTAINER_ENGINE"]
-        assert str(conan_bin) in env["CIBW_ENVIRONMENT_LINUX"]
+        # The container installs the receipt's conan for itself: the
+        # store's is the host's frozen binary, which it cannot run.
+        assert env["CIBW_BEFORE_ALL_LINUX"] == (
+            _python_nanobind.container_conan_install("2.32.0")
+        )
+        assert "conan==2.32.0" in env["CIBW_BEFORE_ALL_LINUX"]
+        assert "CIBW_ENVIRONMENT_LINUX" not in env
         # No conan workspace here, so the container mounts none.
         assert "conanws.yml" not in env["CIBW_CONTAINER_ENGINE"]
     else:
@@ -790,3 +796,28 @@ def test_the_rendered_extension_configures_from_its_preset(
     )
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-2000:]
     assert (package.directory / "build" / "release" / "compile_commands.json").is_file()
+
+
+def test_the_conan_version_comes_from_the_receipt_else_the_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No receipt and a binary that names nothing: the refusal names fm sync.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    conan = bin_dir / "conan"
+    conan.write_text("#!/bin/sh\necho nothing here\n")
+    conan.chmod(0o755)
+    if sys.platform == "win32":
+        return  # a shell script is no executable there; the receipt path is the same
+    with pytest.raises(_FAILURES, match="names no version"):
+        _python_nanobind.conan_version(tmp_path, str(bin_dir))
+    # No receipt: the binary's --version answers, as the provider reads it.
+    conan.write_text("#!/bin/sh\necho 'Conan version 2.31.0'\n")
+    assert _python_nanobind.conan_version(tmp_path, str(bin_dir)) == "2.31.0"
+    # A receipt names the lock's version, which wins over the binary.
+    _receipt(tmp_path, "conan", "2.32.0", tool_dir=str(tmp_path), paths=[str(bin_dir)])
+    assert _python_nanobind.conan_version(tmp_path, str(bin_dir)) == "2.32.0"
+    line = _python_nanobind.container_conan_install("2.32.0")
+    assert line.startswith("python -m venv /opt/workshop-conan && ")
+    assert "pip install --quiet conan==2.32.0" in line
+    assert line.endswith("ln -sf /opt/workshop-conan/bin/conan /usr/local/bin/conan")
