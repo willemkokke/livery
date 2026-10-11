@@ -36,7 +36,6 @@ import typing
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from contextvars import ContextVar
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -1172,20 +1171,27 @@ def tree_hash(tree: dict[str, Any]) -> str:
 
 
 #: The manifest tree of the run in progress, set by the app for the span
-#: of the run so a task can read its own CLI's tree without rebuilding it.
-_SERVED: ContextVar[dict[str, Any] | None] = ContextVar(
-    "footman_served_tree", default=None
-)
+#: of the run so a task can read its own CLI's tree without rebuilding
+#: it. One value for the process, not a context variable: a parallel step
+#: runs on a worker thread, which starts with no copy of the main
+#: thread's context, and the tree is the run's wherever the step runs.
+_served: dict[str, Any] | None = None
 
 
 @contextmanager
 def serving(tree: dict[str, Any]) -> Generator[None]:
-    """Serve *tree* as the run's own to `task_tree()` for the block."""
-    token = _SERVED.set(tree)
+    """Serve *tree* as the run's own to `task_tree()` for the block.
+
+    An embedded run inside the block serves its own and gives this one
+    back when it ends.
+    """
+    global _served
+    previous = _served
+    _served = tree
     try:
         yield
     finally:
-        _SERVED.reset(token)
+        _served = previous
 
 
 def task_tree() -> dict[str, Any]:
@@ -1206,9 +1212,8 @@ def task_tree() -> dict[str, Any]:
         ...
     ```
     """
-    served = _SERVED.get()
-    if served is not None:
-        return copy.deepcopy(served)
+    if _served is not None:
+        return copy.deepcopy(_served)
     from livery.footman import _registry
     from livery.footman._context import project_root
 
