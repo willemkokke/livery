@@ -1522,12 +1522,13 @@ def test_a_footman_without_new_project_gets_the_workshop_added_from_the_index(
     def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
         env = kwargs.get("env")
         assert isinstance(env, dict)
+        assert kwargs.get("cwd") == Path("/loop/home")
         calls.append((argv[2:], str(env.get("UV_INDEX", ""))))
         code = 64 if argv[-2:] == ["new.project", "--help"] else 0
         return SimpleNamespace(code=code, stdout="", stderr="")
 
     env = {"UV_INDEX": "file:///dev-index https://pypi.org/simple"}
-    assert _e2e.ensure_birth_verb(env, run=run) is True
+    assert _e2e.ensure_birth_verb(env, Path("/loop/home"), run=run) is True
     assert [argv for argv, _ in calls] == [
         ["livery.footman", "new.project", "--help"],
         ["livery.footman", "--yes", "self.add", "livery-workshop"],
@@ -1545,7 +1546,7 @@ def test_a_footman_that_answers_new_project_adds_nothing() -> None:
         calls.append(argv)
         return SimpleNamespace(code=0, stdout="", stderr="")
 
-    assert _e2e.ensure_birth_verb({}, run=run) is False
+    assert _e2e.ensure_birth_verb({}, Path("/loop/home"), run=run) is False
     assert len(calls) == 1
 
 
@@ -1562,4 +1563,4 @@ def test_a_failed_self_add_refuses_naming_its_exit() -> None:
     with pytest.raises(
         Failed, match=r"could not add the workshop beside its footman \(exit 2\)"
     ):
-        _e2e.ensure_birth_verb({}, run=run)
+        _e2e.ensure_birth_verb({}, Path("/loop/home"), run=run)
