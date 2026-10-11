@@ -340,3 +340,46 @@ def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
     assert "are not locked" in said
     assert said.index("toolroom.lock") < said.index("sync` supplies")
     assert "[toolroom]" in said and "index =" in said
+
+
+def test_an_index_is_read_once_per_process_until_its_pointer_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A sync asks for the catalogue several times; an index by URL
+    # would answer each over the network. One read of the pointer
+    # serves the process, and a rebuilt index (a new pointer file)
+    # is read again.
+    import os
+
+    from livery.toolroom.store import POINTER, _catalogue
+
+    root = _workspace(
+        tmp_path,
+        monkeypatch,
+        '[workspace]\n\n[toolroom]\nindex = "index"\nrequires = ["ruff"]\n',
+    )
+    index = _index(root, {"ruff": ("1.0.0",)}, {"ruff": ("1.0.0",)})
+    reads: list[str] = []
+    real = _catalogue._read_pointer
+
+    def counted(source: str) -> object:
+        reads.append(source)
+        return real(source)
+
+    monkeypatch.setattr(_catalogue, "_read_pointer", counted)
+    _tools.forget_catalogues()
+    first = _tools.catalogue(root)
+    assert _tools.catalogue(root) is first
+    assert len(reads) == 1
+    # An offline read opens the store without its sources: its own.
+    assert _tools.catalogue(root, offline=True) is not first
+    assert len(reads) == 2
+    # The pointer rewritten, even to the same bytes: read again.
+    pointer = index / POINTER
+    stamp = pointer.stat().st_mtime_ns + 2_000_000_000
+    os.utime(pointer, ns=(stamp, stamp))
+    assert _tools.catalogue(root) is not first
+    assert len(reads) == 3
+    _tools.forget_catalogues()
+    assert _tools.catalogue(root) is not first
+    assert len(reads) == 4

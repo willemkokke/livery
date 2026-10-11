@@ -515,16 +515,68 @@ def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
     return _read_catalogue(index_source(root), offline=offline)
 
 
+#: The catalogues this process read, by source, mode and the source's
+#: identity: one read serves every caller in the process. A sync asks
+#: for the catalogue five times (the lock judged, the tools supplied,
+#: the stubs written); an index by URL answers each read over the
+#: network, and a records directory loads every record each time.
+_CATALOGUES: dict[tuple[Any, ...], Catalogue] = {}
+
+
+def _source_stamp(source: str) -> tuple[Any, ...] | None:
+    """What identifies the catalogue at *source* now.
+
+    None for an index by URL, whose pointer stands for the process. For
+    a directory index, the pointer file's modification time and size,
+    which the verbs that build an index move; for a records directory,
+    every record file's. A pointer that is not there is None too, and
+    the read refuses by name.
+    """
+    if "://" in source:
+        return None
+    from livery.toolroom.store import POINTER, records_in
+
+    directory = Path(source)
+    pointer = directory / POINTER
+    if pointer.is_file():
+        found = pointer.stat()
+        return (found.st_mtime_ns, found.st_size)
+    stamps = []
+    for path in records_in(directory):
+        try:
+            found = path.stat()
+        except OSError:
+            return None
+        stamps.append((path.name, found.st_mtime_ns, found.st_size))
+    return tuple(stamps) or None
+
+
+def forget_catalogues() -> None:
+    """Drop every catalogue this process read, so the next read is fresh."""
+    _CATALOGUES.clear()
+
+
 def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
-    """The catalogue at *source*, records or index, with no build first."""
+    """The catalogue at *source*, records or index, with no build first.
+
+    A source is read once per process: a second read answers from the
+    first until the source's files change.
+    """
     from livery.toolroom.store import Catalogue, CatalogueError
 
+    key = (source, offline, _source_stamp(source))
+    held = _CATALOGUES.get(key)
+    if held is not None:
+        return held
     if _is_records(source):
-        return Catalogue.of_records(Path(source))
-    try:
-        return Catalogue.of_index(source, home=_home(), offline=offline)
-    except CatalogueError as error:
-        fail(str(error))
+        listing = Catalogue.of_records(Path(source))
+    else:
+        try:
+            listing = Catalogue.of_index(source, home=_home(), offline=offline)
+        except CatalogueError as error:
+            fail(str(error))
+    _CATALOGUES[key] = listing
+    return listing
 
 
 def _home() -> Home:

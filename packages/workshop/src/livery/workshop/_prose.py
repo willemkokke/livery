@@ -461,15 +461,36 @@ def render_gate(root: Path, audience: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: The trees this process listed, by root and the stamps of the tasks
+#: file and the contract: a listing is a runner process, and a sync
+#: renders the verbs fragment for two readers on each of its passes.
+_TREES: dict[tuple[Any, ...], dict[str, Any] | None] = {}
+
+
+def _tree_key(root: Path) -> tuple[Any, ...]:
+    from livery.workshop._contract import _stamp
+
+    return (str(root), _stamp(root / "tasks.py"), _stamp(root / "workshop.toml"))
+
+
+def forget_trees() -> None:
+    """Drop every tree this process listed, so the next read lists again."""
+    _TREES.clear()
+
+
 def composed_tree(root: Path) -> dict[str, Any] | None:
     """The workspace's composed task tree, as ``--json --list`` reports it.
 
     None without a tasks file at the root, without the runner on PATH,
     and when the listing fails: the fragment is then left out rather
-    than guessed.
+    than guessed. Listed once per process; a later read answers from
+    the first until the tasks file or the contract changes.
     """
     if not (root / "tasks.py").is_file():
         return None
+    key = _tree_key(root)
+    if key in _TREES:
+        return _TREES[key]
     runner = shutil.which(footman.prog())
     if runner is None:
         return None
@@ -478,7 +499,9 @@ def composed_tree(root: Path) -> dict[str, Any] | None:
     )
     if int(result) != 0:
         return None
-    return cast("dict[str, Any]", json.loads(result.stdout)["tree"])
+    tree = cast("dict[str, Any]", json.loads(result.stdout)["tree"])
+    _TREES[key] = tree
+    return tree
 
 
 def _collect(
