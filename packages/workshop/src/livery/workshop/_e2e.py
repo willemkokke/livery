@@ -21,7 +21,7 @@ from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import fail
@@ -1099,62 +1099,13 @@ def _unpushed_commits(root: Path) -> list[str]:
     return [line for line in listed.stdout.splitlines() if line.strip()]
 
 
-def ensure_birth_verb(
-    env: Mapping[str, str], cwd: Path, run: Callable[..., Any] | None = None
-) -> bool:
-    """Make this footman answer ``new.project``; whether the workshop was added.
-
-    A desk has the workshop self-added beside its footman, so the verb
-    answers outside any project. A hosted runner has nothing self-added,
-    and a birth there exits 64 naming no such task. The probe is the
-    verb's own ``--help``; when it refuses, ``self.add livery-workshop``
-    installs the workshop beside the runner from the index *env* names
-    first, the pass's dev index, so the birth runs this checkout's code.
-    The probe runs in *cwd*, where the birth runs, outside any project:
-    inside the checkout the project itself mounts the verb, and a probe
-    there would answer for a birth that cannot. *run* is the spawn,
-    footman's own unless a test hands one in, read when called so a
-    test's stand-in for footman's is the one used.
-    """
-    import sys
-
-    spawn = run or footman.run
-    probe = spawn(
-        [sys.executable, "-m", "livery.footman", "new.project", "--help"],
-        cwd=cwd,
-        env=dict(env),
-        nofail=True,
-        recorded=False,
-    )
-    if probe.code == 0:
-        return False
-    print(
-        "  birth: this footman answers no new.project; adding the workshop beside"
-        " it from the index the pass reads first"
-    )
-    added = spawn(
-        [
-            sys.executable,
-            "-m",
-            "livery.footman",
-            "--yes",
-            "self.add",
-            "livery-workshop",
-        ],
-        cwd=cwd,
-        env=dict(env),
-        nofail=True,
-        timeout=600.0,
-    )
-    if added.code != 0:
-        fail(
-            f"the loop could not add the workshop beside its footman (exit"
-            f" {added.code}):\n{added.stdout}{added.stderr}"
-        )
-    return True
-
-
-def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> Path:
+def _birth(
+    kind: str,
+    url: str,
+    index: str = "",
+    stack: Sequence[str] = (),
+    driver: Path | None = None,
+) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: seeds, git, repository,
@@ -1166,7 +1117,13 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     this is the recovery procedure too. *index*, when given, is
     searched before any other index the environment names
     ([livery.workshop._e2e._dev_index][]); *stack*, when given, is the
-    extensions the workspace lists instead of the stock list.
+    extensions the workspace lists instead of the stock list. The verb
+    runs from *driver*, the checkout running the pass, whose own project
+    mounts the workshop being edited, so a bare runner needs nothing
+    self-added and the birth runs this checkout's code; the folder is
+    then absolute, and the verb hands the finish to the newborn's own
+    runner. Without a driver the machine's footman answers from the
+    loop's home.
     """
     import sys
 
@@ -1175,7 +1132,6 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
-    ensure_birth_verb(env, home)
     # A workspace already there is a birth to resume: the verb refuses
     # to start a second one in its folder.
     resume = ["--resume"] if (home / E2E_REPO / "workshop.toml").is_file() else []
@@ -1186,7 +1142,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
             "livery.footman",
             "--yes",
             "new.project",
-            E2E_REPO,
+            str(home / E2E_REPO) if driver is not None else E2E_REPO,
             f"--forge={kind}",
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
@@ -1194,7 +1150,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
             *([f"--stack={','.join(stack)}"] if stack else []),
             *resume,
         ],
-        cwd=home,
+        cwd=driver if driver is not None else home,
         env=env,
         nofail=True,
         timeout=900.0,
@@ -2928,11 +2884,14 @@ def _born(pass_: Pass) -> None:
         # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
+    from livery.workshop._extensions import workspace_root
+
     root = _birth(
         forge,
         pass_.url,
         index=_dev_index(forge, pass_.stack),
         stack=pass_.stack,
+        driver=workspace_root(),
     )
     _authenticate_remote(root, lane_token, forge)
     provision(forge)
