@@ -134,6 +134,7 @@ EXPORTS: dict[str, list[str]] = {
         "rescan_entry_points",
         "root_group",
         "run",
+        "scratch_dir",
         "section",
         "select",
         "stdin",

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -30,8 +29,10 @@ _HOME = pytest.StashKey[tuple[str, tuple[str, ...]]]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Point every unset runner directory at a fresh temporary home."""
-    home = tempfile.mkdtemp(prefix="toolroom-bench-isolation-")
+    """Point every unset runner directory at a fresh home in this process's scratch."""
+    from livery.footman import scratch_dir
+
+    home = str(scratch_dir("toolroom-bench-isolation"))
     set_here: list[str] = []
     for name in DIRECTORIES:
         if os.environ.get(name):

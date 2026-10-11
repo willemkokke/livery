@@ -106,14 +106,24 @@ def test_a_red_replay_fails_and_leaves_no_worktree(
 ) -> None:
     root, git, package = released
     _replayed(monkeypatch, 1)
+    from livery.footman import scratch_dir as real
+
+    made: list[Path] = []
+
+    def _recorded(label: str) -> Path:
+        made.append(real(label))
+        return made[-1]
+
+    monkeypatch.setattr(_replay, "scratch_dir", _recorded)
     with pytest.raises(
         _FAILURES, match=r"replay of livery-thing==1.2.0 is red \(exit 1\)"
     ):
         _replay.replay_flow(
             root, git, package, python="3.14", registry=_Index("1.2.0"), index=""
         )
-    # The temporary worktree is gone either way.
-    assert "fm-replay-" not in _git(root, "worktree", "list")
+    # The temporary worktree is gone either way, and the scratch that held it.
+    assert "replay-" not in _git(root, "worktree", "list")
+    assert made and not made[0].exists()
 
 
 def test_a_refused_issue_is_named_and_the_replay_still_fails(

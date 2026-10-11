@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from livery.footman import fail
+from livery.footman import fail, scratch_dir
 
 if TYPE_CHECKING:
     from livery.forge import Repository
@@ -156,7 +156,7 @@ def replay_flow(
             " (git fetch --tags), or the release is not this repository's"
         )
     print(f"  replaying {replay.requirement} at {replay.tag} on python {python}")
-    scratch = Path(tempfile.mkdtemp(prefix="fm-replay-"))
+    scratch = scratch_dir("replay")
     tree = scratch / "tree"
     added = toolroom.git.opts(cwd=root, nofail=True)(
         "worktree", "add", "--detach", str(tree), replay.tag
@@ -177,6 +177,7 @@ def replay_flow(
         toolroom.git.opts(cwd=root, nofail=True)(
             "worktree", "remove", "--force", str(tree)
         )
+        shutil.rmtree(scratch, ignore_errors=True)
     if code == 0:
         print(f"  green: {replay.requirement} passes its own tests from site-packages")
         return

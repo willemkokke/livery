@@ -1085,6 +1085,47 @@ def cache_dir() -> Path:
     return _make(_paths.footman_cache_dir())
 
 
+def scratch_dir(label: str) -> Path:
+    """A fresh directory for this process's scratch, swept once the process is gone.
+
+    Under `cache_dir()`, in ``scratch/``, named ``<label>-<pid>-<random>``:
+    the owner's pid is in the name, so footman's collector can tell a
+    directory a killed or replaced process left from one still in use.
+    Remove it yourself when the work ends; what an exit without handlers
+    leaves, a kill or an exec, goes when the collector next runs and finds
+    the owner's pid gone, in the daily child or `fm janitor`. A pid the
+    operating system has given to a new process keeps the directory until
+    that process ends too.
+
+    ```python
+    scratch = footman.scratch_dir("replay")
+    try:
+        build(scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    ```
+
+    Args:
+        label: What the directory is for: letters, digits, dots, hyphens
+            and underscores. It names the directory for a reader of the
+            cache; the collector reads only the pid after it.
+
+    Raises:
+        ValueError: when *label* is empty or carries another character.
+    """
+    import re
+    import tempfile
+
+    from livery.footman import _gc
+
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", label):
+        raise ValueError(
+            f"a scratch label is letters, digits, '.', '-' and '_': {label!r}"
+        )
+    room = _make(cache_dir() / _gc.SCRATCH)
+    return Path(tempfile.mkdtemp(prefix=f"{label}-{os.getpid()}-", dir=room))
+
+
 def data_dir() -> Path:
     """This CLI's data directory, created if it isn't there yet.
 

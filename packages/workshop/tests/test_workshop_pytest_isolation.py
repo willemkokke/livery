@@ -52,6 +52,12 @@ def test_every_test_and_its_children_run_away_from_the_real_home(
             for name in ("FOOTMAN_DATA_DIR", "FOOTMAN_CACHE_DIR", "FOOTMAN_CONFIG_DIR"):
                 value = os.environ[name]
                 assert value and value != REAL and Path(value).is_dir(), name
+            # The home is a process's scratch under the cache, which the
+            # collector sweeps once that process is gone; whichever
+            # isolation plugin set it first.
+            home = Path(os.environ["FOOTMAN_DATA_DIR"]).parent
+            assert home.parent.name == "scratch", home
+            assert "-isolation-" in home.name, home
             code = "import os; print(os.environ['FOOTMAN_DATA_DIR'])"
             child = subprocess.run(
                 [sys.executable, "-c", code],

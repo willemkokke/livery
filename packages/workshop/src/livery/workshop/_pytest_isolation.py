@@ -39,7 +39,6 @@ import contextlib
 import inspect
 import os
 import shutil
-import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -63,8 +62,10 @@ def variables() -> tuple[str, ...]:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Point every unset runner directory at a fresh temporary home."""
-    home = tempfile.mkdtemp(prefix="workshop-isolation-")
+    """Point every unset runner directory at a fresh home in this process's scratch."""
+    from livery.footman import scratch_dir
+
+    home = str(scratch_dir("workshop-isolation"))
     set_here: list[str] = []
     for name in variables():
         if os.environ.get(name):
