@@ -5,14 +5,17 @@ from __future__ import annotations
 import importlib
 import sys
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from livery.workshop._declaration import (
     Additions,
+    CodedFix,
     Declaration,
     DeclarationError,
+    Reference,
     read,
 )
 
@@ -216,6 +219,280 @@ def test_a_check_without_run_or_with_an_undeclared_option_refuses(
         package,
         CHECK + '[checks.acme.lint.fragments.".clang-tidy"]\ntext = "x"\n',
     )
+
+
+STEP = '[phases.lint.acme]\nmain = "acme_declared._checks:judge"\n'
+WORDS_STEP = (
+    '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "check", "{paths}"]\n'
+)
+
+
+def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
+    where = package / "extension.toml"
+    said = {
+        'narrowing = "paths"': "is said by {paths} in main",
+        'transport = "argv"': "the paths go on the command line, where {paths}",
+        "threshold = 0.5": "a template with {paths} runs over the paths",
+        'roles = ["format"]': "a step belongs to one phase",
+        'listed-with = "deep"': "is enabled = false on the step, which a workspace"
+        " turns on with [phases.lint.acme] enabled = true in its root contract",
+        'judge = ["acme"]': "is main: the step's body, a template or a reference",
+        'run = "acme_declared._checks:judge"': "is main: the step's body",
+        "arguments = true": "is said by {arguments} in main, where the words after"
+        " -- go",
+        'pre = "acme_declared._checks:judge"': "a step that runs after it names"
+        " it in after",
+        'post = "acme_declared._checks:judge"': "does its own cleanup on failure",
+    }
+    for line, spelling in said.items():
+        key = line.partition(" = ")[0]
+        refused = _refusal(package, STEP + line + "\n")
+        assert refused.startswith(f"{where}: phases.lint.acme.{key} "), key
+        assert spelling in refused, key
+    # The refusal comes before the contract's, which cannot name the spelling.
+    assert "has no key" not in _refusal(package, STEP + 'narrowing = "paths"\n')
+
+
+def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
+    where = package / "extension.toml"
+    # The refusals: no body, a body of the wrong kind for its phase, a
+    # fix in the other shape, and a template's keys on a reference.
+    assert _refusal(package, '[phases.lint.acme]\ntools = ["acme"]\n') == (
+        f"{where}: phases.lint.acme names no main: a step's body is a template,"
+        " the tool's name then its arguments, or a reference to its code,"
+        " module:function"
+    )
+    assert _refusal(package, "[phases.lint.acme]\nmain = []\n") == (
+        f"{where}: phases.lint.acme.main is empty: the tool's name comes first"
+    )
+    assert _refusal(package, WORDS_STEP + 'fix = "acme_declared._checks:mend"\n') == (
+        f"{where}: phases.lint.acme.fix is 'acme_declared._checks:mend', a"
+        " reference to code; in a step in words, fix is words: the tool's name,"
+        " then its arguments"
+    )
+    assert _refusal(package, STEP + 'fix = ["acme", "--fix"]\n') == (
+        f"{where}: phases.lint.acme.fix is words, and main is a reference to code:"
+        " a step that runs code fixes with code, module:function"
+    )
+    assert _refusal(package, STEP + 'safe-fix = "acme_declared._checks:mend"\n') == (
+        f"{where}: phases.lint.acme.safe-fix is declared without fix: a step that"
+        " fixes safely fixes too"
+    )
+    assert _refusal(package, STEP + 'env = { ACME_COLOR = "never" }\n') == (
+        f"{where}: phases.lint.acme.env belongs to a step in words, and this one"
+        " runs code; declare main as words, the tool's name then its arguments,"
+        " or drop the key"
+    )
+    assert _refusal(package, WORDS_STEP + 'fix = ["acme", "--files={paths}"]\n') == (
+        f"{where}: phases.lint.acme.fix names {{paths}} in '--files={{paths}}';"
+        " it stands alone as one word, where the run's paths go"
+    )
+    # A template: {paths} narrows by the paths the run reaches, and the
+    # fix and safe-fix are templates too.
+    found = _declare(
+        package,
+        WORDS_STEP + 'fix = ["acme", "fix", "{paths}"]\n'
+        'safe-fix = ["acme", "fix", "--safe", "{paths}"]\n'
+        'env = { ACME_COLOR = "never" }\nmatrix = { platform = ["linux", "win32"] }\n',
+    )
+    (record,) = found.additions.checks
+    assert (record.name, record.phase, record.step, record.placed) == (
+        "lint.acme",
+        "lint",
+        "acme",
+        True,
+    )
+    assert record.words is not None
+    assert record.words.judge == ("acme", "check", "{paths}")
+    assert record.words.safe_fix == ("acme", "fix", "--safe", "{paths}")
+    assert record.words.env == (("ACME_COLOR", "never"),)
+    assert record.words.matrix == (("platform", ("linux", "win32")),)
+    assert str(record.run) == "acme check {paths}"
+    assert record.fix is not None and str(record.fix) == "acme fix {paths}"
+    assert (record.narrowing, record.arguments) == ("paths", False)
+    assert "acme_declared._checks" not in sys.modules
+    # A template without {paths} runs whole, and {arguments} takes the
+    # words after --.
+    found = _declare(
+        package,
+        '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "{arguments}"]\n',
+    )
+    (record,) = found.additions.checks
+    assert (record.narrowing, record.arguments) == ("none", True)
+    # A reference: its fix and safe-fix are references, the safe one
+    # run under --safe-fix.
+    found = _declare(
+        package,
+        STEP + 'fix = "acme_declared._checks:mend"\n'
+        'safe-fix = "acme_declared._checks:judge"\n',
+    )
+    (record,) = found.additions.checks
+    assert (str(record.run), record.words, record.narrowing, record.placed) == (
+        "acme_declared._checks:judge",
+        None,
+        "none",
+        True,
+    )
+    assert isinstance(record.fix, CodedFix)
+    assert (str(record.fix.fix), str(record.fix.safe_fix)) == (
+        "acme_declared._checks:mend",
+        "acme_declared._checks:judge",
+    )
+    found = _declare(package, STEP + 'fix = "acme_declared._checks:mend"\n')
+    (record,) = found.additions.checks
+    assert isinstance(record.fix, Reference)
+
+
+def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
+    where = package / "extension.toml"
+    assert _refusal(
+        package, STEP + 'provides = { wheel = "path" }\nreads = ["wheel"]\n'
+    ) == (
+        f"{where}: phases.lint.acme.reads names wheel, which its provides names"
+        " too; a step reads what another step provides"
+    )
+    assert _refusal(package, STEP + 'replaces = ["lint.acme"]\n') == (
+        f"{where}: phases.lint.acme.replaces names 'lint.acme'; a step of another"
+        " extension is <owner>:<phase>.<step>"
+    )
+    assert _refusal(package, STEP + 'deletes = ["acme.base:lint"]\n') == (
+        f"{where}: phases.lint.acme.deletes names 'acme.base:lint'; a step of"
+        " another extension is <owner>:<phase>.<step>"
+    )
+    # A gate phase's table holds steps alone.
+    assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
+        f"{where}: phases.lint.main is not a step, and lint is not a lifecycle"
+        " phase; its table holds steps, [phases.lint.<step>], each with a main"
+    )
+
+
+def test_both_spellings_read_into_one_record(package: Path) -> None:
+    # Every key the two tables share, in one text each; the step's own
+    # keys beside them. The read judges the text against the contract,
+    # so the keys the step table declares pass it.
+    shared = (
+        'scope = "workspace"\nextensions = ["acme-kind"]\ntools = ["acme"]\n'
+        'after = ["lint.other"]\ntests-only = true\nflags = ["point"]\n'
+        'editor-extension = "acme.vscode"\n'
+        'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
+        'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
+        ' on-removal = true, widen = "acme_declared._checks:mend",'
+        ' ignores = ["docs/README.md"], per-file = false }\n'
+    )
+    tables = (
+        '[{table}.options.strict]\ntype = "bool"\ndefault = false\n'
+        'doc = "refuses warnings too"\n'
+        '[{table}.fragments.".acme"]\nextensions = ["acme-kind"]\n'
+        'text = "strict: true\\n"\n'
+    )
+    old = _declare(
+        package,
+        '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+        'fix = "acme_declared._checks:mend"\n'
+        + shared
+        + tables.format(table="checks.acme.lint"),
+    )
+    new = _declare(
+        package,
+        STEP
+        + 'fix = "acme_declared._checks:mend"\n'
+        + shared
+        + 'enabled = false\nisolated = true\nreads = ["wheel"]\n'
+        'replaces = ["acme.base:lint.acme"]\ndeletes = ["acme.base:lint.old"]\n'
+        '[phases.lint.acme.provides]\nreport = "path"\n'
+        + tables.format(table="phases.lint.acme"),
+    )
+    (before,) = old.additions.checks
+    (after,) = new.additions.checks
+    assert (after.name, after.placed, before.placed) == ("lint.acme", True, False)
+    assert (
+        after.enabled,
+        after.isolated,
+        after.reads,
+        after.provides,
+        after.replaces,
+        after.deletes,
+    ) == (
+        False,
+        True,
+        ("wheel",),
+        (("report", "path"),),
+        ("acme.base:lint.acme",),
+        ("acme.base:lint.old",),
+    )
+    assert after.inputs is not None and after.inputs.per_file is False
+    assert (
+        replace(
+            after,
+            placed=False,
+            enabled=True,
+            isolated=None,
+            reads=(),
+            provides=(),
+            replaces=(),
+            deletes=(),
+        )
+        == before
+    )
+
+
+def test_a_lifecycle_phases_step_reads_as_its_main_and_two_refuse(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    identity = '[extension]\nlevels = ["package"]\n'
+    # A lifecycle phase's step runs code, one per extension, and never
+    # beside the phase table's own main.
+    assert _refusal(
+        package, identity + '[phases.build.acme]\nmain = ["acme", "build"]\n'
+    ) == (
+        f"{where}: phases.build.acme.main is words, and build is a lifecycle"
+        " phase, whose steps run code; main is a reference, module:function"
+    )
+    assert _refusal(package, identity + '[phases.build.acme]\nreads = ["epoch"]\n') == (
+        f"{where}: phases.build.acme names no main: a lifecycle phase's step is a"
+        " reference to its code, module:function"
+    )
+    assert _refusal(
+        package,
+        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        '[phases.build.other]\nmain = "acme_declared._checks:mend"\n',
+    ) == (
+        f"{where}: phases.build.other is a second step of the build phase, beside"
+        " acme; an extension declares one step per lifecycle phase, since the"
+        " phase's walk runs one main per extension"
+    )
+    assert _refusal(
+        package,
+        identity + '[phases.build]\nmain = "acme_declared._checks:judge"\n'
+        '[phases.build.acme]\nmain = "acme_declared._checks:mend"\n',
+    ) == (
+        f"{where}: phases.build names main beside its step acme; a phase's body"
+        " is its step's, [phases.build.<step>] main, or its own, never both"
+    )
+    assert _refusal(
+        package,
+        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        'scope = "package"\n',
+    ) == (
+        f"{where}: phases.build.acme.scope is not read on a lifecycle phase's"
+        " step, which takes main, provides and reads"
+    )
+    # The step reads as the phase table's main does, and registers no check.
+    found = _declare(
+        package,
+        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        'provides = { wheel = "path" }\nreads = ["epoch"]\n',
+    )
+    assert found.additions.checks == ()
+    phase = found.phases["build"]
+    assert (str(phase.main), phase.pre, phase.post) == (
+        "acme_declared._checks:judge",
+        None,
+        None,
+    )
+    assert (phase.provides, phase.reads) == ({"wheel": "path"}, ("epoch",))
+    assert "acme_declared._checks" not in sys.modules
 
 
 def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(

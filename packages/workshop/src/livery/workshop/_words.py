@@ -1,14 +1,24 @@
 """Checks in words: a tool and its arguments in a declaration, and their engine.
 
 A check whose verdict is its tool's exit code needs no code. Its
-declaration names the tool and the words it is called with: ``judge``,
-and ``fix`` and ``safe-fix`` for a check that rewrites. The engine
-does the rest. It selects what the run reaches, as the check's scope
-and narrowing say; appends the words after ``--`` on the check's verb,
-then the paths, or nothing when the run is whole; splits a long path
-list into the fewest calls under the command-line limit; and runs the
-tool through its toolroom handle, which prints the tool's output. A
-non-zero exit refuses, and the refusals of every call merge into one.
+declaration names the tool and the words it is called with: ``judge``
+in a check table, ``main`` in a step table, and ``fix`` and
+``safe-fix`` for one that rewrites. The engine does the rest. It
+selects what the run reaches, as the check's scope and narrowing say;
+places the words after ``--`` on the check's verb and the paths; splits
+a long path list into the fewest calls under the command-line limit;
+and runs the tool through its toolroom handle, which prints the tool's
+output. A non-zero exit refuses, and the refusals of every call merge
+into one.
+
+A check table's words have the words after ``--`` appended, then the
+paths, or nothing when the run is whole. A step table's template places
+both itself: ``{paths}`` stands where each batch of the paths goes, and
+a template without it runs whole, once with no path; ``{arguments}``
+stands where the words after ``--`` go, and a template without it
+takes none. Each stands alone as one word, which the engine expands
+into many ([livery.workshop._checks.CheckRecord][]'s ``placed`` says
+which spelling a record has).
 
 A word may name a placeholder, ``{name}``, answered per call:
 ``{cache}``, the check's own directory under ``.workshop/.cache/``;
@@ -19,8 +29,9 @@ database, without which the call does not run; and each key of
 verdict. ``env`` gives every call variables over the run's own.
 
 A check the words cannot say, one whose verdict is not its tool's exit
-code or whose paths need reshaping first, declares ``run``, a reference
-to its code, instead of ``judge``.
+code or whose paths need reshaping first, declares a reference to its
+code instead: ``run`` in a check table, ``main`` as a string in a step
+table.
 """
 
 from __future__ import annotations
@@ -39,10 +50,17 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
 #: The placeholders the engine answers, beside a check's matrix keys.
-PLACEHOLDERS = ("cache", "package", "compile-commands")
+PLACEHOLDERS = ("cache", "package", "compile-commands", "paths", "arguments")
 
 #: The placeholders only a call that judges one package can answer.
 PACKAGE_PLACEHOLDERS = ("package", "compile-commands")
+
+#: The words a step's template places itself, each one word of its own:
+#: the engine puts each batch of the run's paths where the first stands
+#: and the words after ``--`` where the second stands.
+PATHS_WORD = "{paths}"
+ARGUMENTS_WORD = "{arguments}"
+PLACED = (PATHS_WORD, ARGUMENTS_WORD)
 
 #: A placeholder in a word: ``{name}``, lower-case words joined by dashes.
 _PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9-]*)\}")
@@ -194,10 +212,21 @@ def _calls(
 
     def one(varied: dict[str, str]) -> None:
         answers = {**found, **varied}
-        arguments = tuple(_expand(record, word, answers) for word in argv[1:])
+        # A placed word stays as it is: the batching expands it.
+        arguments = tuple(
+            word if record.placed and word in PLACED else _expand(record, word, answers)
+            for word in argv[1:]
+        )
         variables = {name: _expand(record, value, answers) for name, value in words.env}
         _batched(
-            argv[0], arguments, ctx.arguments, paths, cwd=cwd, ctx=ctx, env=variables
+            argv[0],
+            arguments,
+            ctx.arguments,
+            paths,
+            placed=record.placed,
+            cwd=cwd,
+            ctx=ctx,
+            env=variables,
         )
 
     if len(combinations) == 1:
@@ -278,6 +307,12 @@ def _expand(record: CheckRecord, word: str, answers: dict[str, str]) -> str:
 
     def answer(match: re.Match[str]) -> str:
         name = match.group(1)
+        if name in ("paths", "arguments"):
+            fail(
+                f"{record.name} names {{{name}}} in {word!r}, which stands alone as"
+                " one word of a step's main under [phases.<phase>.<step>], where the"
+                " run's paths, or the words after --, go"
+            )
         if name not in answers:
             fail(
                 f"{record.name} names {{{name}}}, which neither the engine nor its"
@@ -294,20 +329,45 @@ def _batched(
     arguments: tuple[str, ...],
     paths: tuple[str, ...],
     *,
+    placed: bool,
     cwd: Path,
     ctx: GateContext,
     env: dict[str, str],
 ) -> None:
-    """Call *tool* with *words*, *arguments*, then *paths*, batched under the limit."""
+    """Call *tool* with *words*, *arguments* and *paths*, batched under the limit.
+
+    A *placed* template takes each batch where ``{paths}`` stands and
+    *arguments* where ``{arguments}`` stands, and without ``{paths}``
+    runs whole, once with no path; a check table's words take
+    *arguments*, then the batch, appended.
+    """
     from livery.workshop._invoke import run_batched
 
     def call(batch: tuple[str, ...]) -> None:
-        run_tool(tool, (*words, *arguments, *batch), cwd=cwd, ctx=ctx, env=env)
+        argv = (
+            _placed(words, arguments, batch) if placed else (*words, *arguments, *batch)
+        )
+        run_tool(tool, argv, cwd=cwd, ctx=ctx, env=env)
 
-    if paths:
+    if paths and (not placed or PATHS_WORD in words):
         run_batched(paths, call)
     else:
         call(())
+
+
+def _placed(
+    words: tuple[str, ...], arguments: tuple[str, ...], batch: tuple[str, ...]
+) -> tuple[str, ...]:
+    """*words* with *batch* at ``{paths}`` and *arguments* at ``{arguments}``."""
+    found: list[str] = []
+    for word in words:
+        if word == PATHS_WORD:
+            found.extend(batch)
+        elif word == ARGUMENTS_WORD:
+            found.extend(arguments)
+        else:
+            found.append(word)
+    return tuple(found)
 
 
 def run_tool(
@@ -350,8 +410,9 @@ def explained(record: CheckRecord) -> list[str]:
 
     A check in words shows each mode's command as the tool's handle
     spells it, the placeholders left for the engine to answer, then
-    what the engine appends; a check that runs code names its
-    references.
+    what the engine appends, or, for a step's template, what it puts
+    where ``{paths}`` and ``{arguments}`` stand; a check that runs code
+    names its references.
     """
     from livery.workshop._checks import PACKAGE, PACKAGES, PATHS
 
@@ -369,9 +430,17 @@ def explained(record: CheckRecord) -> list[str]:
             lines.append(f"    fix: {record.fix} (code)")
         return lines
     appended = [
-        *(["<the words after -->"] if record.arguments else []),
-        *(["<the files the run reaches>"] if record.scope == PACKAGE else []),
-        *(["<the paths the run reaches>"] if record.narrowing == PATHS else []),
+        *(["<the words after -->"] if record.arguments and not record.placed else []),
+        *(
+            ["<the files the run reaches>"]
+            if record.scope == PACKAGE and not record.placed
+            else []
+        ),
+        *(
+            ["<the paths the run reaches>"]
+            if record.narrowing == PATHS and not record.placed
+            else []
+        ),
     ]
     for mode, argv in (
         ("judge", words.judge),
@@ -386,6 +455,11 @@ def explained(record: CheckRecord) -> list[str]:
         lines.append(f"    env: {name}={value}")
     if "cache" in words.placeholders():
         lines.append(f"    {{cache}}: .workshop/.cache/{record.tool}")
+    if record.placed and "paths" in words.placeholders():
+        reached = "files" if record.scope == PACKAGE else "paths"
+        lines.append(f"    {{paths}}: the {reached} the run reaches, a batch per call")
+    if record.placed and "arguments" in words.placeholders():
+        lines.append("    {arguments}: the words after --")
     return lines
 
 

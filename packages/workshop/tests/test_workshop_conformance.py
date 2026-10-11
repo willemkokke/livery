@@ -319,7 +319,7 @@ def test_an_unanswered_placeholder_fails_the_kit(
     assert _names(subject, clause) == [
         "words-are-answerable: checks.acme.lint: names {output}, which neither the"
         " engine nor its matrix answers; the engine answers cache, package,"
-        " compile-commands"
+        " compile-commands, paths, arguments"
     ]
     # A tool the check does not require, and a package's placeholder in a
     # check that judges the workspace whole, fail it as well.
@@ -342,6 +342,28 @@ def test_an_unanswered_placeholder_fails_the_kit(
         'judge = ["acme", "--cache={cache}", "{package}"]\n',
     )
     assert _names(subject, clause) == []
+    # A check table's words name neither {paths} nor {arguments}, which
+    # a step's main places; the step's own table names both.
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[checks.acme.lint]\ntools = ["acme"]\njudge = ["acme", "{paths}"]\n',
+    )
+    assert _names(subject, clause) == [
+        "words-are-answerable: checks.acme.lint: names {paths}, which only a step's"
+        " main under [phases.<phase>.<step>] places; a check table's words have the"
+        " paths and the words after -- appended"
+    ]
+    subject = _words_subject(
+        tmp_path,
+        monkeypatch,
+        '[phases.lint.acme]\ntools = ["other"]\n'
+        'main = ["acme", "{paths}", "{arguments}"]\n',
+    )
+    assert _names(subject, clause) == [
+        "words-are-answerable: phases.lint.acme: runs acme, which its tools do not"
+        " name (other); a check runs a tool it requires"
+    ]
 
 
 def test_a_matrix_key_absent_from_the_words_fails_the_kit(

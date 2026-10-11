@@ -148,6 +148,22 @@ doc = "the forge users who own the root contract and the code owners file"
 # read and publish addresses; an index with an ecosystem default may
 # also name its prerelease policy. The kinds are the env cascade's, in
 # livery.workshop._registries, and a test holds them equal.
+[contract.root.phases]
+types = ["table"]
+doc = "the steps the workspace turns on, by phase and step"
+
+[contract.root.phases."*"]
+types = ["table"]
+doc = "a phase, by its name, to the steps the workspace turns on in it"
+
+[contract.root.phases."*"."*"]
+types = ["table"]
+doc = "a step the workspace turns on, by its name in its phase"
+
+[contract.root.phases."*"."*".enabled]
+types = ["bool"]
+doc = "whether the step registers, for a step its extension declares enabled = false; false when absent"
+
 [contract.root.registries]
 types = ["table"]
 doc = "where each kind of artifact is read and published: conan, container, python; an environment variable for a kind wins over its entry here"
@@ -406,6 +422,22 @@ doc = "the forge teams that own the package, each under the root's [forge] owner
 [contract.package.owners.users]
 types = ["strs"]
 doc = "the forge users who own the package"
+
+[contract.package.phases]
+types = ["table"]
+doc = "options the package sets on the steps of its phases, by phase and step"
+
+[contract.package.phases."*"]
+types = ["table"]
+doc = "a phase, by its name, to the steps the package sets options on"
+
+[contract.package.phases."*"."*"]
+types = ["table"]
+doc = "a step's options, which win over the same step's [checks.<tool>.<role>] table key by key"
+
+[contract.package.phases."*"."*"."*"]
+types = ["any"]
+doc = "an option of the step; the option's default when absent"
 
 [contract.package.qa]
 types = ["table"]
@@ -839,6 +871,180 @@ values = ["str", "int", "bool", "path", "strs", "paths", "table"]
 [contract.extension.phases."*".reads]
 types = ["strs"]
 doc = "the context keys the steps read, each one another extension of the package provides, which runs first"
+
+[contract.extension.phases."*"."*"]
+types = ["table"]
+doc = "a step of the phase, by the one-word name its verb gives it; it answers to <phase>.<step>, and under a lifecycle phase it is the extension's one step there, a reference to its code"
+
+[contract.extension.phases."*"."*".after]
+types = ["strs"]
+doc = "the steps this one runs after in a gate, by name; none when absent"
+
+[contract.extension.phases."*"."*".claims]
+types = ["list"]
+doc = "the categories the step judges, each with the rules it leaves out there and the suffixes it reads; when absent, the step's own code decides what it reads"
+
+[contract.extension.phases."*"."*"."claims[]"]
+types = ["table"]
+doc = "one category the step judges, with the rules it leaves out and the suffixes it reads there"
+
+[contract.extension.phases."*"."*"."claims[]".category]
+types = ["str"]
+doc = "the category the step judges: source, test, test-support, configuration, example, or one an extension registers"
+
+[contract.extension.phases."*"."*"."claims[]".ignore]
+types = ["strs"]
+doc = "the rule codes the step does not apply in the category, written into the tool's per-file ignores; none when absent"
+
+[contract.extension.phases."*"."*"."claims[]".suffixes]
+types = ["strs"]
+doc = "the file suffixes the step reads in the category, each starting with a dot; every file when absent"
+
+[contract.extension.phases."*"."*".deletes]
+types = ["strs"]
+doc = "the steps of earlier extensions this one deletes, each <owner>:<phase>.<step>; none when absent"
+
+[contract.extension.phases."*"."*".editor-extension]
+types = ["str"]
+doc = "the marketplace id of the editor extension the composed .vscode/extensions.json recommends for the step; none when absent"
+
+[contract.extension.phases."*"."*".enabled]
+types = ["bool"]
+doc = "whether the step registers while the extension is listed; true when absent, and a workspace turns a false one on at the step's address in its root contract"
+
+[contract.extension.phases."*"."*".env]
+types = ["table"]
+doc = "the variables every call of a step in words gets, over the run's own"
+
+[contract.extension.phases."*"."*".env."*"]
+types = ["str"]
+doc = "the variable's value; a placeholder in it is answered as in the words"
+
+[contract.extension.phases."*"."*".extensions]
+types = ["strs"]
+doc = "the package-level extensions whose packages the step judges: each package whose set holds one; every package when absent"
+
+[contract.extension.phases."*"."*".fix]
+types = ["str", "strs"]
+doc = "what rewrites what the step judges, run before any judge under --fix, in main's shape: a template, or the function, module:function; the step only judges when absent"
+
+[contract.extension.phases."*"."*".flags]
+types = ["strs"]
+doc = "the command-line flags the step reads: point, to select a CI point's tests; none when absent"
+
+[contract.extension.phases."*"."*".fragments]
+types = ["table"]
+doc = "the configuration the composed files carry for the step, by file; none when absent"
+
+[contract.extension.phases."*"."*".fragments."*"]
+types = ["str", "table"]
+doc = "a file, by its name, to its text for a project file, or a table of its text and extensions for a file in each package"
+
+[contract.extension.phases."*"."*".fragments."*".extensions]
+types = ["strs"]
+doc = "the package-level extensions whose packages carry the file: each package whose set holds one"
+
+[contract.extension.phases."*"."*".fragments."*".text]
+types = ["str"]
+doc = "the fragment's Jinja text, rendered with each package's data"
+
+[contract.extension.phases."*"."*".inputs]
+types = ["table"]
+doc = "the files a workspace step reads, so a run that knows its changes judges it only when one of them changed; when absent, the step narrows by packages alone"
+
+[contract.extension.phases."*"."*".inputs.ignores]
+types = ["strs"]
+doc = "files whose change never counts, though a pattern of reads or widens names them; none when absent"
+
+[contract.extension.phases."*"."*".inputs.on-removal]
+types = ["bool"]
+doc = "whether a deleted or moved file anywhere runs the step over everything it reads; false when absent"
+
+[contract.extension.phases."*"."*".inputs.per-file]
+types = ["bool"]
+doc = "whether the step judges each changed file it reads on its own, rather than everything when one changes; true when absent"
+
+[contract.extension.phases."*"."*".inputs.reads]
+types = ["strs"]
+doc = "the files the step judges, as patterns relative to the root where ** spans directories"
+
+[contract.extension.phases."*"."*".inputs.widen]
+types = ["str"]
+doc = "the step's own further reason to run over everything, a function module:function given the changes; none when absent"
+
+[contract.extension.phases."*"."*".inputs.widens]
+types = ["strs"]
+doc = "files the step does not judge whose change runs it over everything it reads; none when absent"
+
+[contract.extension.phases."*"."*".isolated]
+types = ["bool"]
+doc = "the side of the phase the step serves: true the isolated one, from a copy of the sources in a fresh environment, false the tree; both when absent"
+
+[contract.extension.phases."*"."*".main]
+types = ["str", "strs"]
+doc = "the step's body: a template, the tool's name as tools names it then its arguments, with {paths} where the paths the run reaches go and {arguments} where the words after -- go, the exit code the verdict; or the function that runs it, module:function in the extension's own package"
+
+[contract.extension.phases."*"."*".matrix]
+types = ["table"]
+doc = "the placeholders the calls of a step in words vary: one call per combination of values, in parallel, each its own verdict"
+
+[contract.extension.phases."*"."*".matrix."*"]
+types = ["strs"]
+doc = "the values the placeholder takes, one call each"
+
+[contract.extension.phases."*"."*".options]
+types = ["table"]
+doc = "the options a package may set on the step in its [phases.<phase>.<step>] table; enabled alone when absent"
+
+[contract.extension.phases."*"."*".options."*"]
+types = ["table"]
+
+[contract.extension.phases."*"."*".options."*".default]
+types = ["any"]
+doc = "the value the step reads when no package sets the option; none when absent"
+
+[contract.extension.phases."*"."*".options."*".doc]
+types = ["str"]
+doc = "one line saying what the option changes"
+
+[contract.extension.phases."*"."*".options."*".type]
+types = ["str"]
+doc = "the option's type, which a package's value must have: bool, str or int"
+values = ["bool", "str", "int"]
+
+[contract.extension.phases."*"."*".provides]
+types = ["table"]
+doc = "the context keys the step writes inside its phase, each to its type; one step of a phase provides a key"
+
+[contract.extension.phases."*"."*".provides."*"]
+types = ["str"]
+doc = "a context key's type"
+values = ["str", "int", "bool", "path", "strs", "paths", "table"]
+
+[contract.extension.phases."*"."*".reads]
+types = ["strs"]
+doc = "the context keys the step reads inside its phase, each one another step provides, which runs first"
+
+[contract.extension.phases."*"."*".replaces]
+types = ["strs"]
+doc = "the steps of earlier extensions this one replaces, each <owner>:<phase>.<step>; none when absent"
+
+[contract.extension.phases."*"."*".safe-fix]
+types = ["str", "strs"]
+doc = "what rewrites under --safe-fix, removing no code, in main's shape; fix when absent"
+
+[contract.extension.phases."*"."*".scope]
+types = ["str"]
+doc = "what one run of the step judges: workspace for the whole workspace at once, package for one package at a time; workspace when absent"
+values = ["workspace", "package"]
+
+[contract.extension.phases."*"."*".tests-only]
+types = ["bool"]
+doc = "whether a package step also runs when a package's change is confined to its tests; false when absent"
+
+[contract.extension.phases."*"."*".tools]
+types = ["strs"]
+doc = "the tools the step runs, as the tool profile names them, each added to the profile of every kind the step judges; none when absent"
 
 [contract.extension.categories]
 types = ["table"]

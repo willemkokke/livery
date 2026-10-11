@@ -122,6 +122,7 @@ def test_every_base_key_carries_a_doc() -> None:
     allowed = {
         ("extension", "checks.*.*.options.*"),
         ("extension", "for.*.checks.*.*.options.*"),
+        ("extension", "phases.*.*.options.*"),
     }
     missing = [
         (item.contract, item.path)

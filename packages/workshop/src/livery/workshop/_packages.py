@@ -68,10 +68,11 @@ class Package:
         depends: The declared edges, in contract order.
         checks: The options the package sets on its checks, by the
             table that sets them: ``checks.<tool>`` (every check of the
-            tool), ``checks.<tool>.<role>`` (one check) and
-            ``roles.<role>`` (every check of the role), each to its
-            ``(option, value)`` pairs; the check registry validates
-            them against what the checks they reach declare.
+            tool), ``checks.<tool>.<role>`` (one check),
+            ``phases.<phase>.<step>`` (the same check, as a step of its
+            phase) and ``roles.<role>`` (every check of the role), each
+            to its ``(option, value)`` pairs; the check registry
+            validates them against what the checks they reach declare.
         categories: The package's own reassignments of its paths
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
@@ -399,6 +400,14 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         options.extend(
             (f"roles.{role}", tuple((str(key), value) for key, value in table.items()))
             for role, table in contract.get("roles", {}).items()
+        )
+        options.extend(
+            (
+                f"phases.{phase}.{step}",
+                tuple((str(key), value) for key, value in nested.items()),
+            )
+            for phase, table in contract.get("phases", {}).items()
+            for step, nested in table.items()
         )
         options_by_check = tuple(options)
         publish = bool(release.get("publish", True))

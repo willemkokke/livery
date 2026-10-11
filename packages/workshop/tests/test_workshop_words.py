@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -60,6 +60,7 @@ def _check(
     arguments: bool = False,
     extension: str = "acme",
     extensions: tuple[str, ...] = (),
+    placed: bool = False,
 ) -> CheckRecord:
     record = CheckRecord(
         "acme",
@@ -73,6 +74,7 @@ def _check(
         tools=("acme",),
         arguments=arguments,
         words=words,
+        placed=placed,
     )
     register_check(record)
     return record
@@ -152,6 +154,26 @@ def test_a_package_s_placeholder_in_a_workspace_call_refuses(
         Failed, match=r"lint\.acme names \{package\}, which only a call that judges"
     ):
         record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+
+
+def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = _Tool()
+    monkeypatch.setattr(tools, "acme", tool, raising=False)
+    record = _check(Words(("acme", "--files={paths}")), placed=True)
+    with pytest.raises(Failed) as caught:
+        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    assert str(caught.value) == (
+        "lint.acme names {paths} in '--files={paths}', which stands alone as one"
+        " word of a step's main under [phases.<phase>.<step>], where the run's"
+        " paths, or the words after --, go"
+    )
+    # A check table's words have both appended, and name neither.
+    record = _check(Words(("acme", "{arguments}")))
+    with pytest.raises(Failed, match=r"names \{arguments\} in '\{arguments\}'"):
+        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    assert tool.calls == []
 
 
 def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
@@ -252,6 +274,82 @@ def test_the_words_come_first_then_the_arguments_then_the_paths(
     _paths(monkeypatch, WHOLE)
     record.run(ctx)
     assert tool.calls == [(("check", "--strict"), {})]
+
+
+def test_paths_and_arguments_land_where_the_template_puts_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _invoke
+
+    tool = _Tool()
+    monkeypatch.setattr(tools, "acme", tool, raising=False)
+    record = _check(
+        Words(("acme", "check", "{arguments}", "--strict", "{paths}", "--end")),
+        narrowing="paths",
+        arguments=True,
+        placed=True,
+    )
+    _paths(monkeypatch, ("packages/one/src", "packages/one/tests"))
+
+    def one_path_per_batch(
+        paths: tuple[str, ...], call: Callable[[tuple[str, ...]], None]
+    ) -> None:
+        for path in paths:
+            call((path,))
+
+    monkeypatch.setattr(_invoke, "run_batched", one_path_per_batch)
+    record.run(
+        GateContext(
+            root=tmp_path, packages=(), check=record.name, arguments=("-v", "-x")
+        )
+    )
+    # Each batch goes where {paths} stands, the words after -- where
+    # {arguments} stands, and the words around them stay in place.
+    assert [argv for argv, _chosen in tool.calls] == [
+        ("check", "-v", "-x", "--strict", "packages/one/src", "--end"),
+        ("check", "-v", "-x", "--strict", "packages/one/tests", "--end"),
+    ]
+    # No words after --: {arguments} stands for nothing.
+    tool.calls.clear()
+    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    assert [argv for argv, _chosen in tool.calls] == [
+        ("check", "--strict", "packages/one/src", "--end"),
+        ("check", "--strict", "packages/one/tests", "--end"),
+    ]
+    # The whole is a call with no path where {paths} stands.
+    tool.calls.clear()
+    _paths(monkeypatch, WHOLE)
+    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    assert tool.calls == [(("check", "--strict", "--end"), {})]
+
+
+def test_a_template_without_paths_runs_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = _Tool()
+    monkeypatch.setattr(tools, "acme", tool, raising=False)
+    # A workspace step without {paths} narrows by nothing: one call, no
+    # path, and the words after -- dropped without {arguments}.
+    record = _check(Words(("acme", "check", "--all")), placed=True)
+    _paths(monkeypatch, ("packages/one/src",))
+    record.run(
+        GateContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
+    )
+    assert tool.calls == [(("check", "--all"), {})]
+    # A package step without {paths} runs once from the package, and
+    # none of the files the run reaches is named.
+    tool.calls.clear()
+    record = _check(
+        Words(("acme", "build")), scope="package", extensions=("acme",), placed=True
+    )
+    monkeypatch.setattr(_checks, "scoped_files", _one_file)
+    package = _member(tmp_path, "one")
+    record.run(
+        GateContext(
+            root=tmp_path, packages=(package,), package=package, check=record.name
+        )
+    )
+    assert tool.calls == [(("build",), {"cwd": package.directory})]
 
 
 def test_a_package_check_calls_from_the_package_with_its_files(
