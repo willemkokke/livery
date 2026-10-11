@@ -395,8 +395,9 @@ def bring_current(
     parent instead ([livery.workshop._sync.restack][]). A rebase of a
     pushed branch finishes the job with the leased force-push, because
     rebased-locally with a stale remote is the worst state. *fetched*
-    says origin's heads were brought in this run already, by the one
-    fetch that also mirrors the state store, so none runs here.
+    says origin's heads are not to be fetched here: the one fetch that
+    also mirrors the state store brought them already, or the sync is
+    offline and the remote-tracking refs the last fetch left stand.
     """
     _ = root
     branch = git.current_branch()
@@ -612,7 +613,9 @@ def sync(
     if not local_only and not git.has_commits():
         print("  no git history here: nothing to bring current")
     elif not local_only:
-        moved = bring_checkout_current(root, git, fetched=fetched)()
+        # Offline, the remote-tracking refs the last fetch left are what
+        # the checkout holds: the bring-current reads them and fetches nothing.
+        moved = bring_checkout_current(root, git, fetched=fetched or offline)()
         if moved is not None:
             continue_on_moved_code(root, *moved)
     # Before anything renders or locks: a listed extension the mount

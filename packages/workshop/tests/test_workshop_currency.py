@@ -501,6 +501,44 @@ def test_a_bring_current_told_of_the_fetch_runs_none_and_still_moves(
     assert (clone / "more.txt").is_file()
 
 
+def test_an_offline_sync_fetches_nothing_and_still_brings_the_branch_current(
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _sync
+
+    # The one network call an offline sync still made was the bring-
+    # current's fetch. The other phases are faked: this pins the sync's
+    # wiring, that offline tells the bring-current to fetch nothing.
+    clone, origin = _rig(seeds)
+    _git(clone, "checkout", "-b", "feat/1-shared")
+    _git(clone, "push", "-u", "origin", "feat/1-shared")
+    other = _other(tmp_path, origin)
+    _git(other, "checkout", "feat/1-shared")
+    (other / "theirs.txt").write_text("t\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: theirs")
+    _git(other, "push", "origin", "feat/1-shared")
+    _git(clone, "fetch", "origin")  # what the checkout holds before going offline
+    monkeypatch.setattr(_sync, "workspace_root", lambda start=None: clone)
+    monkeypatch.setattr(_sync, "require_mounted", lambda *a, **k: None)
+    monkeypatch.setattr(_sync, "sweep_residue", lambda root: [])
+    monkeypatch.setattr(_sync, "continue_on_moved_code", lambda *a: None)
+    for name in (
+        "sync_workspace_files",
+        "sync_locked_tools",
+        "prepare_installs",
+        "uv_sync",
+        "deliver_files",
+        "write_generated",
+    ):
+        monkeypatch.setattr(_sync, name, lambda *a, **k: lambda: None)
+    monkeypatch.setattr("livery.workshop._reconcile.record_receipt", lambda root: None)
+    with counting_spawns() as spawned:
+        _sync.sync(offline=True)
+    assert spawned["git fetch"] == 0
+    assert (clone / "theirs.txt").is_file()
+
+
 def test_main_only_ever_fast_forwards(
     seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
