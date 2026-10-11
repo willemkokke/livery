@@ -2462,6 +2462,19 @@ the stack, which this design neither needs nor rules out).
   main's recent runs: 126 s at the median, the whole run about 5 min
   30 s to its merge.
 
+- 2026-10-11, #1437, a loop default until slice 12e: an extension pass
+  births with the test extension beside the extension under test and
+  lands the loop's first member among its members, so every gate it
+  drives meters a suite and the coverage leg and union have something
+  to union. Why: since pytest became its own extension, a pass for any
+  other extension failed at its members scenario, the born project
+  metering nothing (#1225), and 12e, coverage as its own extension,
+  lands after #1377. What it drops: the pass proves the extension
+  beside pytest on a project holding a python member, never the
+  extension alone; that proof is 12e's. Proved by fresh passes for
+  ruff and clang-tidy on the desk. Willem took the interim the same
+  day.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
