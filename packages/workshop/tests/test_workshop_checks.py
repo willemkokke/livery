@@ -193,6 +193,21 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     )
 
 
+def test_a_record_names_its_phase_and_step_as_its_role_and_tool() -> None:
+    record = CheckRecord("fake", "lint", _noop)
+    assert (record.name, record.phase, record.step) == ("lint.fake", "lint", "fake")
+    # A record from a check table: the step's keys at their defaults.
+    assert (
+        record.provides,
+        record.reads,
+        record.isolated,
+        record.enabled,
+        record.replaces,
+        record.deletes,
+        record.placed,
+    ) == ((), (), None, True, (), (), False)
+
+
 def test_the_constants_name_the_vocabulary() -> None:
     assert (WORKSPACE, PACKAGE) == ("workspace", "package")
     assert (PATHS, PACKAGES, NONE) == ("paths", "packages", "none")
@@ -278,6 +293,43 @@ def test_the_deeper_table_wins_key_by_key(
     assert option_value(record, package, "parallel") is False
     # Key by key: the role's `enabled` still reaches the check.
     assert option_value(record, package, "enabled") is False
+    assert option_problems((package,)) == []
+
+
+def test_a_package_sets_a_steps_option_under_either_spelling(
+    tmp_path: Path, python_checks: object
+) -> None:
+    from livery.workshop._checks import (
+        check_for,
+        option_addresses,
+        option_problems,
+        option_value,
+    )
+
+    record = check_for("test.fake")
+    # The refusals: a step nobody registered, and an option none declares.
+    package = _member_with(tmp_path, "[phases.test.nothing]\nenabled = false\n")
+    (problem,) = option_problems((package,))
+    assert problem.startswith(
+        "packages/x/workshop.toml: [phases.test.nothing] reaches no registered"
+        " step; the steps are"
+    )
+    package = _member_with(tmp_path, "[phases.test.fake]\nworkers = 3\n")
+    (problem,) = option_problems((package,))
+    assert "[phases.test.fake] sets 'workers', which no check it reaches" in problem
+    # The step's table reaches the check the check table does.
+    assert option_addresses(record)[-1] == "phases.test.fake"
+    package = _member_with(tmp_path, "[phases.test.fake]\nparallel = false\n")
+    assert package.checks == (("phases.test.fake", (("parallel", False),)),)
+    assert option_value(record, package, "parallel") is False
+    assert option_value(record, package, "enabled") is True
+    assert option_problems((package,)) == []
+    # Both spellings set: the step's table is read last and wins.
+    package = _member_with(
+        tmp_path,
+        "[checks.fake.test]\nparallel = false\n[phases.test.fake]\nparallel = true\n",
+    )
+    assert option_value(record, package, "parallel") is True
     assert option_problems((package,)) == []
 
 

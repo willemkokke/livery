@@ -585,8 +585,20 @@ def _words_are_answerable(subject: Subject) -> list[Violation]:
             words = record.words
             if words is None:
                 continue
-            where = shown((*prefix, "checks", record.tool, record.role))
+            where = shown(
+                (*prefix, "phases", record.role, record.tool)
+                if record.placed
+                else (*prefix, "checks", record.tool, record.role)
+            )
             reasons: list[str] = []
+            if not record.placed:
+                reasons += [
+                    f"names {{{name}}}, which only a step's main under"
+                    " [phases.<phase>.<step>] places; a check table's words have"
+                    " the paths and the words after -- appended"
+                    for name in ("paths", "arguments")
+                    if name in words.placeholders()
+                ]
             if words.tool not in record.tools:
                 reasons.append(
                     f"runs {words.tool}, which its tools do not name"

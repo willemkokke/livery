@@ -140,7 +140,10 @@ class GateContext:
 
 @dataclass(frozen=True)
 class Option:
-    """One option a package may set on a check, in its ``[checks.<tool>.<role>]`` table.
+    """One option a package may set on a check, in the check's own tables.
+
+    The tables are ``[checks.<tool>.<role>]`` and
+    ``[phases.<role>.<tool>]``, the same check in either spelling.
 
     Attributes:
         name: The option's key, kebab-case.
@@ -187,8 +190,10 @@ class CheckRecord:
     """One check, completely.
 
     A check's name is its role and its tool, ``test.pytest``: the
-    verb ``fm test.pytest``, the ``[checks.pytest.test]`` table of its
-    options, the gate's lines, and every lookup use it.
+    verb ``fm test.pytest``, the ``[checks.pytest.test]`` and
+    ``[phases.test.pytest]`` tables of its options, the gate's lines,
+    and every lookup use it. A step of a phase is the same record,
+    its phase the role and its step the tool.
 
     Attributes:
         tool: The tool the check runs, as its sub-task names it under
@@ -278,6 +283,29 @@ class CheckRecord:
         words: The check's words when it is declared in words, which
             ``fm explain`` prints and the conformance kit judges; None
             for a check whose ``run`` is code.
+        provides: The context keys the step writes inside its phase,
+            each to its type name; a step of one phase reads what
+            another provides.
+        reads: The context keys the step reads inside its phase.
+        isolated: Whether the step serves the phase's isolated side
+            (True), from a copy of the sources in a fresh environment,
+            or its tree side (False); None serves both.
+        enabled: Whether the step registers while its extension is
+            listed. An extension declares False for a step a workspace
+            turns on at the step's address in the root contract,
+            ``[phases.<phase>.<step>] enabled = true``.
+        replaces: The steps of earlier extensions this one replaces,
+            each ``<owner>:<phase>.<step>``.
+        deletes: The steps of earlier extensions this one deletes,
+            each ``<owner>:<phase>.<step>``.
+        placed: Whether the record was read from a
+            ``[phases.<phase>.<step>]`` table, whose template places the
+            run's paths and the words after ``--`` itself, where
+            ``{paths}`` and ``{arguments}`` stand; False for a record
+            from a ``[checks.<tool>.<role>]`` table, whose words have
+            both appended. A temporary marker of the transition between
+            the two spellings: it goes with the check tables, in part 4
+            of #1377.
 
     """
 
@@ -305,11 +333,28 @@ class CheckRecord:
     listed_with: str = ""
     arguments: bool = False
     words: Words | None = None
+    provides: tuple[tuple[str, str], ...] = ()
+    reads: tuple[str, ...] = ()
+    isolated: bool | None = None
+    enabled: bool = True
+    replaces: tuple[str, ...] = ()
+    deletes: tuple[str, ...] = ()
+    placed: bool = False
 
     @property
     def name(self) -> str:
         """The check's name: its role and its tool, ``test.pytest``."""
         return f"{self.role}.{self.tool}"
+
+    @property
+    def phase(self) -> str:
+        """The phase the step belongs to: the role, as the step record names it."""
+        return self.role
+
+    @property
+    def step(self) -> str:
+        """The step's name inside its phase: the tool, as the step record names it."""
+        return self.tool
 
 
 _CHECKS: dict[str, CheckRecord] = {}
@@ -434,15 +479,18 @@ def option_addresses(record: CheckRecord) -> tuple[str, ...]:
     """The tables that reach *record*'s options, shallowest first.
 
     ``roles.<role>`` for each role the check answers to, then
-    ``checks.<tool>``, then ``checks.<tool>.<role>`` for each role: a
-    later table wins key by key. The tool's table outranks the role's,
-    since it names fewer checks.
+    ``checks.<tool>``, then ``checks.<tool>.<role>`` for each role,
+    then ``phases.<role>.<tool>``, the step's table, for each: a later
+    table wins key by key. The tool's table outranks the role's, since
+    it names fewer checks, and the step's table outranks the check's,
+    which names the same check in the check tables' spelling.
     """
     roles = (record.role, *record.roles)
     return (
         *(f"roles.{role}" for role in roles),
         f"checks.{record.tool}",
         *(f"checks.{record.tool}.{role}" for role in roles),
+        *(f"phases.{role}.{record.tool}" for role in roles),
     )
 
 
@@ -481,6 +529,13 @@ def _reached(address: str) -> tuple[CheckRecord, ...]:
     kind, _, rest = address.partition(".")
     if kind == "roles":
         return tuple(r for r in _CHECKS.values() if rest in (r.role, *r.roles))
+    if kind == "phases":
+        phase, _, step = rest.partition(".")
+        return tuple(
+            r
+            for r in _CHECKS.values()
+            if r.tool == step and phase in (r.role, *r.roles)
+        )
     tool, _, role = rest.partition(".")
     return tuple(
         r
@@ -520,6 +575,11 @@ def option_problems(packages: tuple[Package, ...]) -> list[str]:
                     problems.append(
                         f"{where}: [{address}] names no role a registered check"
                         f" has; the roles are {', '.join(roles)}"
+                    )
+                elif kind == "phases":
+                    problems.append(
+                        f"{where}: [{address}] reaches no registered step; the"
+                        f" steps are {', '.join(sorted(_CHECKS))}"
                     )
                 else:
                     problems.append(
