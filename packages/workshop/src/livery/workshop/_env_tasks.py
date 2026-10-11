@@ -215,24 +215,25 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     can; the workflow's cache step restores and saves the store under
     the data directory. conan's home joins them, on the working drive
     and at the path the workflow's own cache step restores. Empty off
-    a runner that names no temp, and a key the job's environment
-    already sets is left as it is, which is how a runner with a
-    persistent cache keeps it.
+    a runner that names no temp. A key the job's environment already
+    sets keeps its value, and that value is what gets persisted: a
+    runner with a persistent cache sets the key for every step and
+    loses nothing, and the entry script, which exports the same keys
+    for its own sync before it asks for the emission, hands them on to
+    the steps after it, where an export of a step's shell never
+    reaches by itself.
     """
     from livery.footman import directory_variable
 
     runner_temp = environ.get("RUNNER_TEMP", "")
     if not runner_temp:
         return {}
-    # A placement the job's environment already carries stands: a
-    # runner that keeps its caches across jobs sets them in its own
-    # environment, and the temp is only where nothing is set.
     wanted = {
         "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
         "CONAN_HOME": f"{runner_temp}/conan",
         directory_variable("DATA_DIR"): f"{runner_temp}/footman",
     }
-    return {key: value for key, value in wanted.items() if not environ.get(key)}
+    return {key: environ.get(key) or value for key, value in wanted.items()}
 
 
 def with_runner_placements(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:

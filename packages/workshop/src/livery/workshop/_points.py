@@ -309,11 +309,14 @@ DECLARED: tuple[Point, ...] = (
                 matrix="pythons",
                 fetch="full",
                 token="repository",
+                writes=True,
                 note=(
                     "A replay checks the tree out at a release tag. A pull"
                     " request a scheduled task opens with the job token starts"
                     " no workflow, so the repository's token carries the"
-                    " nightly where there is one."
+                    " nightly where there is one. The job's profile trace"
+                    " rides the state store at its end, which needs the write"
+                    " grant as the check legs' puts do."
                 ),
             ),
         ),
