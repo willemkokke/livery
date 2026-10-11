@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import cwd, prog
 from livery.workshop._composition import OrderCycle, order, package_set
@@ -217,7 +217,7 @@ def listing(text: str) -> Spec:
     """An entry of an ``extensions`` list, as the requirement grammar reads it.
 
     An entry is a name, or a name with the options it turns on,
-    ``basedpyright[typecomplete]``. A spelling the grammar does not
+    ``<name>[<option>]``. A spelling the grammar does not
     read is taken whole as a name: no distribution declares it, so
     the mount names it, and the layering check refuses the spelling.
     """
@@ -234,6 +234,31 @@ def _listed(start: Path | None) -> list[Any]:
     root = workspace_root(start)
     workspace = None if root is None else _workspace_table(root)
     return list(workspace.get("extensions") or []) if workspace else []
+
+
+def enabled_steps(start: Path | None = None) -> frozenset[str]:
+    """The steps the root contract turns on, each ``<phase>.<step>``; empty without.
+
+    A step its extension declares ``enabled = false`` registers only
+    while the root contract sets ``[phases.<phase>.<step>] enabled =
+    true``. Read raw, as the list is, since the mount reads it before
+    any verb judges the contract.
+    """
+    root = workspace_root(start)
+    contract = None if root is None else root / "workshop.toml"
+    if contract is None or not contract.is_file():
+        return frozenset()
+    phases = tomllib.loads(contract.read_text("utf-8")).get("phases")
+    if not isinstance(phases, dict):
+        return frozenset()
+    found: set[str] = set()
+    for phase, steps in cast("dict[str, Any]", phases).items():
+        if not isinstance(steps, dict):
+            continue
+        for step, table in cast("dict[str, Any]", steps).items():
+            if isinstance(table, dict) and table.get("enabled") is True:
+                found.add(f"{phase}.{step}")
+    return frozenset(found)
 
 
 def _spelling(entry: Any) -> str:
@@ -323,9 +348,8 @@ def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
 def extension_options(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each listed extension's options, as its entry spells them, in list order.
 
-    ``basedpyright[typecomplete]`` lists ``basedpyright`` with
-    ``typecomplete``; an entry without brackets has none. Empty
-    outside a workspace.
+    ``<name>[<option>]`` lists ``<name>`` with ``<option>``; an entry
+    without brackets has none. Empty outside a workspace.
     """
     found: dict[str, tuple[str, ...]] = {}
     for entry in _listed(start):
@@ -519,11 +543,12 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     declared = declared_targets(start)
     active = resolved_targets(start)
     options = extension_options(start)
+    enabled = enabled_steps(start)
     # The base is present before this walk; every extension joins once
     # its mount ran.
     present = [SELF]
     grafted: set[tuple[str, str]] = set()
-    _graft_contributions(present, declared, active, grafted, options)
+    _graft_contributions(present, declared, active, grafted, options, enabled)
     packaged = package_extensions(start)
     for extension, dist in extension_entries(start):
         level = PACKAGE if extension in packaged else WORKSPACE
@@ -539,14 +564,17 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 rules = declare_rules(extension, found.rules)
                 if (
                     register_declared(
-                        extension, found.additions, options.get(extension, ())
+                        extension,
+                        found.additions,
+                        options.get(extension, ()),
+                        enabled=enabled,
                     )
                     or notes
                     or rules
                 ):
                     mounted.append(extension)
             present.append(extension)
-            _graft_contributions(present, declared, active, grafted, options)
+            _graft_contributions(present, declared, active, grafted, options, enabled)
             continue
         package = extension_package(extension)
         if extension in _declared() and declaration_file(package) is None:
@@ -587,7 +615,11 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         declare_slots(extension, found.slots)
         notes = declare_release_notes(extension, found.release_notes)
         rules = declare_rules(extension, found.rules)
-        if register_declared(extension, found.additions, listed) or notes or rules:
+        if (
+            register_declared(extension, found.additions, listed, enabled=enabled)
+            or notes
+            or rules
+        ):
             mounted.append(extension)
         name = found.plugin
         if name and name not in builtin:
@@ -603,7 +635,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 if extension not in mounted:
                     mounted.append(extension)
         present.append(extension)
-        _graft_contributions(present, declared, active, grafted, options)
+        _graft_contributions(present, declared, active, grafted, options, enabled)
     # An extension's checks registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
     from livery.workshop._checks import generate_verbs
@@ -665,6 +697,7 @@ def _graft_contributions(
     active: dict[str, tuple[str, ...]],
     grafted: set[tuple[str, str]],
     options: dict[str, tuple[str, ...]],
+    enabled: frozenset[str] = frozenset(),
 ) -> None:
     """Register every ``[for.<target>]`` table whose owner and target are both present.
 
@@ -673,7 +706,8 @@ def _graft_contributions(
     declares nothing for registers nothing: the layering check names
     that entry, and it can only run inside a mount that went on. A check
     in the table registers under the options the owner's listing turns
-    on, *options*, as a check at the file's top level does.
+    on, *options*, and a step declared off under the steps the root
+    contract turns on, *enabled*, as one at the file's top level does.
     """
     for owner in present:
         for target in active.get(owner, ()):
@@ -682,7 +716,7 @@ def _graft_contributions(
             additions = declared.get(owner, {}).get(target)
             if additions is None:
                 continue
-            register_declared(owner, additions, options.get(owner, ()))
+            register_declared(owner, additions, options.get(owner, ()), enabled=enabled)
             grafted.add((owner, target))
 
 
@@ -702,15 +736,22 @@ def declare_rules(extension: str, rules: Mapping[str, DeclaredRule]) -> bool:
 
 
 def register_declared(
-    extension: str, additions: Additions, options: tuple[str, ...] = ()
+    extension: str,
+    additions: Additions,
+    options: tuple[str, ...] = (),
+    *,
+    enabled: frozenset[str] = frozenset(),
 ) -> bool:
     """Register what *additions* declares for *extension*; whether it declares a check.
 
     Each check registers under the extension's listed name, since the
     list is what decides which extension a check belongs to, and each
     value goes into its slot and each job joins its point under the
-    same name. A check that names an option in ``listed-with`` registers
-    only when *options*, the entry's, turn it on.
+    same name. A step declared ``enabled = false`` registers only when
+    *enabled*, the steps the root contract turns on
+    ([livery.workshop._extensions.enabled_steps][]), names it; a check
+    that names an option in ``listed-with`` registers only when
+    *options*, the entry's, turn it on.
     """
     from dataclasses import replace
 
@@ -718,6 +759,8 @@ def register_declared(
     from livery.workshop._checks import register_check
 
     for record in additions.checks:
+        if not record.enabled and record.name not in enabled:
+            continue
         if record.listed_with and record.listed_with not in options:
             continue
         register_check(replace(record, extension=extension))
@@ -903,13 +946,15 @@ def describe_extensions(start: Path | None = None) -> list[str]:
 
     The base, then each extension in mount order: the package-level
     ones with the packages whose sets hold them, then the workspace
-    list.
+    list; under each, its options and the steps it declares off, each
+    with whether it is on.
     """
     names = extension_names(start)
     who = requirers(start)
     tools = extension_tools(start)
     targets = resolved_targets(start)
     listed = extension_options(start)
+    enabled = enabled_steps(start)
     holders = _holders(start)
     lines: list[str] = [f"  {SELF} (the base)"]
     for name in names:
@@ -925,7 +970,53 @@ def describe_extensions(start: Path | None = None) -> list[str]:
         for option, text in declared_options(name).items():
             state = "on" if option in listed.get(name, ()) else "off"
             lines.append(f"    option {option} ({state}): {text}")
+        for step in _declared_off(name):
+            state = "on" if step in enabled else "off"
+            phase, _, name_in_phase = step.partition(".")
+            lines.append(
+                f"    step {step} ({state}): declared off; the root contract turns"
+                f" it on with [phases.{phase}.{name_in_phase}] enabled = true"
+            )
     return lines
+
+
+def _declared_off(extension: str) -> tuple[str, ...]:
+    """The steps *extension* declares ``enabled = false``, each ``<phase>.<step>``.
+
+    Those of its top-level tables and of its ``[for.<target>]`` tables
+    alike, in the file's order; empty for the base and for an extension
+    nothing installed declares.
+    """
+    found = _readable(extension)
+    if found is None:
+        return ()
+    checks = [*found.additions.checks]
+    for additions in found.targets.values():
+        checks += additions.checks
+    return tuple(record.name for record in checks if not record.enabled)
+
+
+def enabled_problems(root: Path) -> list[str]:
+    """Each root ``[phases.<phase>.<step>]`` table turning on no step declared off.
+
+    The root contract turns on a step a listed extension declares
+    ``enabled = false``; a table naming any other step, one no listed
+    extension declares or one that is on already, is refused naming
+    the steps declared off.
+    """
+    off = {step: name for name in extension_names(root) for step in _declared_off(name)}
+    problems: list[str] = []
+    for step in sorted(enabled_steps(root)):
+        if step in off:
+            continue
+        phase, _, name = step.partition(".")
+        declared = ", ".join(f"{other} ({by})" for other, by in sorted(off.items()))
+        problems.append(
+            f"[phases.{phase}.{name}] turns on {step}, which no listed extension"
+            " declares off; the steps declared off are"
+            f" {declared or 'none'}"
+        )
+    return problems
 
 
 def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
@@ -953,7 +1044,9 @@ def closure_problems(start: Path | None = None) -> list[str]:
 
     Empty when every extension a workspace entry requires is listed
     before it, or is a package-level one some package's set holds;
-    when every extension is listed at a level it declares; and when
+    when every extension is listed at a level it declares; when every
+    step the root contract turns on is one a listed extension declares
+    off ([livery.workshop._extensions.enabled_problems][]); and when
     every package's list is a valid composition in its canonical form
     ([livery.workshop._extensions.composition_problems][]). A missing
     workspace entry names the fix; one listed after its dependent names
@@ -1008,6 +1101,7 @@ def closure_problems(start: Path | None = None) -> list[str]:
             problems.append(why)
         problems += level_problems(root)
         problems += listing_problems(root)
+        problems += enabled_problems(root)
         problems += composition_problems(root)
     return problems
 

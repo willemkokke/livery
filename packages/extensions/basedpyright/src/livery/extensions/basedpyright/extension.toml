@@ -1,25 +1,19 @@
 # The basedpyright extension: the type checker, and type completeness as
-# its option. The type checker is basedpyright's words, warnings as
-# errors; a run that reaches the whole calls it with no path, so it reads
-# the files pyrightconfig.json names. Type completeness runs one call per
-# public module and reads its report, so it is code, imported when it
-# runs.
+# a step a workspace turns on. The type checker is basedpyright's words,
+# warnings as errors; a run that reaches the whole calls it with no
+# path, so it reads the files pyrightconfig.json names. Type
+# completeness runs one call per public module and reads its report, so
+# it is code, imported when it runs.
 
 [extension]
 api-version = 1
 # Listed in the workspace's list alone: one configuration for every member.
 levels = ["workspace"]
 
-# Off unless the workspace lists it, `basedpyright[typecomplete]`.
-[options]
-typecomplete = "verifies that every package's public API is type-complete"
-
-[checks.basedpyright.typecheck]
-judge = ["basedpyright", "--warnings"]
-narrowing = "paths"
+[phases.typecheck.basedpyright]
+main = ["basedpyright", "--warnings", "{arguments}", "{paths}"]
 extensions = ["python"]
 tools = ["basedpyright"]
-arguments = true
 editor-extension = "detachhead.basedpyright"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
@@ -30,16 +24,16 @@ claims = [
 # The type checker that answers in the editor is the one this workspace
 # configures: the editor's default python language server is off, so it
 # adds no second verdict with settings of its own.
-[checks.basedpyright.typecheck.fragments]
+[phases.typecheck.basedpyright.fragments]
 ".vscode/settings.json" = '''
 {"python.languageServer": "None"}
 '''
 
-[checks.basedpyright.typecomplete]
-run = "livery.extensions.basedpyright._checks:judge_typecomplete"
-narrowing = "packages"
+# Off unless the workspace turns it on in its root contract:
+# [phases.typecomplete.basedpyright] enabled = true.
+[phases.typecomplete.basedpyright]
+main = "livery.extensions.basedpyright._checks:judge_typecomplete"
+enabled = false
 extensions = ["python"]
 tools = ["basedpyright"]
-arguments = true
-listed-with = "typecomplete"
 claims = [{ category = "source", suffixes = [".py", ".pyi"] }]

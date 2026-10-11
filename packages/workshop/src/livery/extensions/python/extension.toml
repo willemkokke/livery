@@ -15,28 +15,29 @@ requirements = "livery.extensions.python._answers:requirements"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 
-# The steps this extension adds to a package's lifecycle phases.
-[phases.stamp]
+# The steps this extension adds to a package's lifecycle phases, one
+# per phase, each named for the extension.
+[phases.stamp.python]
 main = "livery.extensions.python._steps:stamp"
 reads = ["version"]
 provides = { changed = "strs" }
 
-[phases.build]
+[phases.build.python]
 main = "livery.extensions.python._steps:build"
 reads = ["epoch"]
 provides = { dist = "path" }
 
-[phases.publish]
+[phases.publish.python]
 main = "livery.extensions.python._steps:publish"
 reads = ["version", "registry-target"]
 provides = { published = "bool" }
 
-[phases.prove]
+[phases.prove.python]
 main = "livery.extensions.python._steps:prove"
 reads = ["resolution", "release-dirs"]
 provides = { resolved = "table" }
 
-[phases.replay]
+[phases.replay.python]
 main = "livery.extensions.python._steps:replay"
 reads = ["version", "tree", "interpreter", "index", "extras"]
 provides = { exit-code = "int" }

@@ -1250,6 +1250,27 @@ def _birth(
     return home / E2E_REPO
 
 
+def _enable_steps(contract_text: str, steps: tuple[str, ...]) -> str:
+    """*contract_text* with a table turning on each of *steps* it does not have yet.
+
+    A step is ``<phase>.<step>``, and its table is
+    ``[phases.<phase>.<step>] enabled = true``, the root contract's
+    spelling for a step its extension declares off.
+    """
+    for name in steps:
+        phase, _, step = name.partition(".")
+        table = f"[phases.{phase}.{step}]"
+        if table in contract_text:
+            continue
+        contract_text = (
+            contract_text.rstrip("\n")
+            + f"\n\n# The {name} step, declared off, turned on for the pass.\n"
+            + f"{table}\n"
+            + "enabled = true\n"
+        )
+    return contract_text
+
+
 def _has_remote(root: Path) -> bool:
     """Whether the loop's workspace at *root* has its forge remote."""
     import livery.toolroom.tools as toolroom
@@ -1300,7 +1321,13 @@ def _lock_pins(root: Path, pins: dict[str, str]) -> None:
         )
 
 
-def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> str:
+def _eat_dev_wheels(
+    root: Path,
+    pins: dict[str, str],
+    kind: str = "gitea",
+    *,
+    enabled: tuple[str, ...] = (),
+) -> str:
     """Point the workspace at this pass's dev wheels; the pushed head sha.
 
     The registry joins the contract, the lock pins the wheels the
@@ -1309,8 +1336,10 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
     the templates and the emitter under test. Measured necessity: a
     released workshop predating the emitted verbs fails the docs job
     with "no task named", and a render before the re-lock ships the
-    previous pass's workflows. Idempotent: an already-wired workspace
-    pushes nothing.
+    previous pass's workflows. *enabled* names the steps the contract
+    turns on, each at its own address, the steps the extension under
+    test declares off. Idempotent: an already-wired workspace pushes
+    nothing.
     """
     from livery.workshop._git_ops import GitOps
     from livery.workshop._new_project import _SETUP_BRANCH
@@ -1432,6 +1461,7 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> st
             + 'task = "release.replay"\n'
             + 'args = ["loop-echo", "--python={python}"]\n'
         )
+    contract_text = _enable_steps(contract_text, enabled)
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
     # Birth's pyproject predates the registry in the contract, and the
@@ -1876,12 +1906,28 @@ def metering_extension() -> str:
     return ""
 
 
+def steps_declared_off(name: str) -> tuple[str, ...]:
+    """The steps extension *name* declares ``enabled = false``, by ``<phase>.<step>``.
+
+    An extension pass turns each on in the newborn's root contract, so
+    every step of the extension under test registers and runs.
+    """
+    from livery.workshop._extensions import declaration
+
+    found = declaration(name)
+    if found is None:
+        return ()
+    return tuple(record.name for record in found.additions.checks if not record.enabled)
+
+
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The stack a pass births to test extension *name*, and the member kinds it lands.
 
     The stack is what *name* requires, each before what needs it, then
-    *name* itself with every option it declares, so each of its checks
-    registers; the test extension
+    *name* itself with every option it declares; the steps it declares
+    off are turned on in the newborn's contract
+    ([livery.workshop._e2e.steps_declared_off][]), so each of its
+    checks registers; the test extension
     ([livery.workshop._e2e.metering_extension][]) is listed before
     *name* unless *name* is it or requires it. The members are the
     loop's of the kinds *name*'s checks declare, so each check has
@@ -3160,7 +3206,8 @@ def _born(pass_: Pass) -> None:
     # project, and a fresh start's delete is asynchronous, so a
     # publish before the birth lands in the project being deleted.
     pins = _publish_dev_wheels(forge, pass_.stack)
-    sha = _eat_dev_wheels(root, pins, forge)
+    enabled = steps_declared_off(pass_.extension) if pass_.extension else ()
+    sha = _eat_dev_wheels(root, pins, forge, enabled=enabled)
     print(f"  watching {sha[:12]} on the runner")
     from livery.workshop._new_project import _SETUP_BRANCH
 

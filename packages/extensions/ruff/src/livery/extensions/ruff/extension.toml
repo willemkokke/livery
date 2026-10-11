@@ -1,9 +1,9 @@
 # The ruff extension: the formatter, then the linter, over the python
-# files they claim. Both checks are ruff's words: the workshop selects
-# the paths a run reaches, appends the words after -- on the check's
-# verb and then the paths, and ruff's exit code is the verdict. A file
-# named to ruff follows the configured excludes under --force-exclude,
-# as a file ruff finds itself does.
+# files they claim. Both steps are ruff's words: the workshop selects
+# the paths a run reaches and puts them where {paths} stands, puts the
+# words after -- on the step's verb where {arguments} stands, and ruff's
+# exit code is the verdict. A file named to ruff follows the configured
+# excludes under --force-exclude, as a file ruff finds itself does.
 
 [extension]
 api-version = 1
@@ -12,14 +12,12 @@ levels = ["workspace"]
 
 # Ruff judges a python package's python files, and a conan package's
 # recipe, conanfile.py, beside clang-format over its C and C++ sources.
-[checks.ruff.format]
-judge = ["ruff", "format", "--check", "--force-exclude"]
+[phases.format.ruff]
+main = ["ruff", "format", "--check", "--force-exclude", "{arguments}", "{paths}"]
 # Formatting removes no code, so --safe-fix rewrites as --fix does.
-fix = ["ruff", "format", "--force-exclude"]
-narrowing = "paths"
+fix = ["ruff", "format", "--force-exclude", "{arguments}", "{paths}"]
 extensions = ["python", "conan"]
 tools = ["ruff"]
-arguments = true
 editor-extension = "charliermarsh.ruff"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
@@ -29,7 +27,7 @@ claims = [
 ]
 
 # The editor formats python with ruff, as the gate does.
-[checks.ruff.format.fragments]
+[phases.format.ruff.fragments]
 ".vscode/settings.json" = '''
 {"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}}
 '''
@@ -37,16 +35,14 @@ claims = [
 # Test bodies explain themselves by name and assertion, so the docstring
 # rules stop at the tests. An example keeps the layout its page shows:
 # ruff judges its names, and nothing of its style.
-[checks.ruff.lint]
-judge = ["ruff", "check", "--force-exclude"]
-fix = ["ruff", "check", "--fix", "--force-exclude"]
+[phases.lint.ruff]
+main = ["ruff", "check", "--force-exclude", "{arguments}", "{paths}"]
+fix = ["ruff", "check", "--fix", "--force-exclude", "{arguments}", "{paths}"]
 # --safe-fix withholds the rule that deletes code an edit in flight has
 # not finished writing: an import added before the code that uses it.
-safe-fix = ["ruff", "check", "--fix", "--unfixable=F401", "--force-exclude"]
-narrowing = "paths"
+safe-fix = ["ruff", "check", "--fix", "--unfixable=F401", "--force-exclude", "{arguments}", "{paths}"]
 extensions = ["python", "conan"]
 tools = ["ruff"]
-arguments = true
 editor-extension = "charliermarsh.ruff"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
