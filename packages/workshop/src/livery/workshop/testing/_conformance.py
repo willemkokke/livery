@@ -461,8 +461,8 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
     found: list[tuple[str, object]] = []
     for prefix, additions in _additions_of(declared):
         for record in additions.checks:
-            where = shown((*prefix, "checks", record.tool, record.role))
-            found += [(f"{where}.run", record.run), (f"{where}.fix", record.fix)]
+            where = shown((*prefix, "phases", record.role, record.tool))
+            found += [(f"{where}.main", record.run), (f"{where}.fix", record.fix)]
             if record.inputs is not None:
                 found.append((f"{where}.inputs.widen", record.inputs.widen))
         for item in additions.jobs:
@@ -585,20 +585,8 @@ def _words_are_answerable(subject: Subject) -> list[Violation]:
             words = record.words
             if words is None:
                 continue
-            where = shown(
-                (*prefix, "phases", record.role, record.tool)
-                if record.placed
-                else (*prefix, "checks", record.tool, record.role)
-            )
+            where = shown((*prefix, "phases", record.role, record.tool))
             reasons: list[str] = []
-            if not record.placed:
-                reasons += [
-                    f"names {{{name}}}, which only a step's main under"
-                    " [phases.<phase>.<step>] places; a check table's words have"
-                    " the paths and the words after -- appended"
-                    for name in ("paths", "arguments")
-                    if name in words.placeholders()
-                ]
             if words.tool not in record.tools:
                 reasons.append(
                     f"runs {words.tool}, which its tools do not name"
@@ -641,7 +629,7 @@ def _claims_name_categories(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     for prefix, additions in _additions_of(found[1]):
         for record in additions.checks:
-            where = shown((*prefix, "checks", record.tool, record.role, "claims"))
+            where = shown((*prefix, "phases", record.role, record.tool, "claims"))
             for claim in record.claims:
                 if claim.category not in known:
                     near = difflib.get_close_matches(claim.category, known, n=1)

@@ -184,7 +184,13 @@ def load_contract(path: Path) -> dict[str, Any]:
             own = data.get("extensions")
             entries = [str(name) for name in own] if isinstance(own, list) else []
             listed = listed_extensions(_root_tables(root)) | set(composed_set(entries))
-        problems = judge(data, contract="package", where=str(path), listed=listed)
+        # The check tables' spelling of a step's options is named
+        # before the judge, which would call the table unknown.
+        from livery.workshop._packages import removed_option_tables
+
+        problems = removed_option_tables(data) or judge(
+            data, contract="package", where=str(path), listed=listed
+        )
     else:
         listed = listed_extensions(data) | set(package_extensions(path.parent))
         problems = judge(data, contract="root", where=str(path), listed=listed)

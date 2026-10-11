@@ -278,32 +278,29 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     ]
 
 
-# The options an entry turns on: the refusals first, then what they register.
+# The entries of the list: the refusals first, then what a step declared
+# off registers.
 
-_OPTIONED = """\
-[options]
-deep = "judges deeper"
+_DECLARED_OFF = """\
+[phases.lint.acme]
+main = "{package}._checks:noop"
 
-[checks.acme.lint]
-run = "{package}._checks:noop"
-
-[checks.acme.typecomplete]
-run = "{package}._checks:noop"
-listed-with = "deep"
+[phases.typecomplete.acme]
+main = "{package}._checks:noop"
+enabled = false
 """
 
 
 def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
-    for spelled in ("acme.tool>=1.0", "acme.tool?", "acme.tool[deep]@linux"):
+    fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
+    for spelled in ("acme.tool>=1.0", "acme.tool?", "acme.tool@linux"):
         root_contract(tmp_path, f'["{spelled}"]')
         assert _extensions.closure_problems(tmp_path) == [
-            f"[workspace] extensions lists {spelled!r}; an entry is a name with"
-            " the options it turns on, `name` or `name[option,option]`, and no"
-            " version or scope: the lock pins an extension's version from its"
-            " wheel"
+            f"[workspace] extensions lists {spelled!r}; an entry is a name alone,"
+            " with no version or scope: the lock pins an extension's version from"
+            " its wheel"
         ]
     # A spelling the grammar does not read is named the same way, and
     # read whole as a name no distribution declares.
@@ -316,54 +313,40 @@ def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
     assert _extensions.extension_names(tmp_path) == ("acme.tool[deep",)
 
 
-def test_an_option_the_extension_does_not_declare_refuses_and_mounts_off(
+def test_an_extension_entry_with_brackets_refuses_naming_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     restored_checks: None,
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
-    root_contract(tmp_path, '["acme.tool[deeper]"]')
+    fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
+    root_contract(tmp_path, '["acme.tool[typecomplete.acme]"]')
     why = (
-        "[workspace] extensions lists acme.tool with 'deeper', which it does not"
-        " declare; its options are deep"
+        "[workspace] extensions lists 'acme.tool[typecomplete.acme]'; an entry is"
+        " a name alone, and a step acme.tool declares off is turned on with"
+        " [phases.typecomplete.acme] enabled = true in this contract"
     )
     assert _extensions.closure_problems(tmp_path) == [why]
+    # An option that is no step address names the address's shape.
+    root_contract(tmp_path, '["acme.tool[deep]"]')
+    assert _extensions.closure_problems(tmp_path) == [
+        "[workspace] extensions lists 'acme.tool[deep]'; an entry is a name alone,"
+        " and a step acme.tool declares off is turned on with"
+        " [phases.<phase>.<step>] enabled = true in this contract"
+    ]
+    # The mount names it and reads the name alone: the step declared
+    # off stays off.
     from livery.footman import _registry as registry
 
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ("acme.tool",)
-    assert f"{why}; the mount leaves it off" in capsys.readouterr().err
+    assert (
+        "[workspace] extensions lists 'acme.tool[deep]'; an entry is a name alone"
+        in capsys.readouterr().err
+    )
     names = _checks.checks_by_name()
     assert "lint.acme" in names
     assert "typecomplete.acme" not in names
-
-
-def test_a_check_for_an_option_its_extension_does_not_declare_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
-) -> None:
-    from livery.workshop._declaration import DeclarationError
-
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        tool=_OPTIONED.replace('[options]\ndeep = "judges deeper"\n', ""),
-        odd='options = ["deep"]\n',
-    )
-    with pytest.raises(DeclarationError, match="its options are none"):
-        _extensions.declaration("acme.tool")
-    with pytest.raises(DeclarationError, match=r"options is a list"):
-        _extensions.declared_options("acme.odd")
-
-
-_DECLARED_OFF = """\
-[phases.lint.acme]
-main = "{package}._checks:noop"
-
-[phases.typecomplete.acme]
-main = "{package}._checks:noop"
-enabled = false
-"""
 
 
 def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(
@@ -421,8 +404,8 @@ _BRANDED = """\
 [extension]
 plugin = "{package}"
 
-[checks.brand.lint]
-run = "{package}._checks:noop"
+[phases.lint.brand]
+main = "{package}._checks:noop"
 
 [ci.jobs.gate.brand]
 entries = ["lint.brand"]
@@ -454,13 +437,13 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     assert "did not mount its plugin" not in capsys.readouterr().err
 
 
-def test_the_list_writers_find_an_entry_by_its_name_whatever_its_options(
+def test_the_list_writers_find_an_entry_by_its_name_whatever_its_spelling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
         tmp_path,
         monkeypatch,
-        tool='[extension]\nrequires = ["acme.base"]\n' + _OPTIONED,
+        tool='[extension]\nrequires = ["acme.base"]\n' + _DECLARED_OFF,
         base="",
     )
     (tmp_path / "workshop.toml").write_text(
@@ -529,10 +512,10 @@ def test_a_extension_declaring_contributions_off_the_shape_refuses_naming_it(
         _extensions.declared_targets(tmp_path)
 
 
-#: A house's check for a python extension, registered while both are listed.
+#: A house's step for a python extension, registered while both are listed.
 _HOUSE = """\
-[for."acme.python".checks.house.lint]
-run = "{package}._checks:noop"
+[for."acme.python".phases.lint.house]
+main = "{package}._checks:noop"
 """
 
 
@@ -557,7 +540,7 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
         cpp="",
         needy=(
             '[extension]\nrequires = ["acme.python"]\n\n'
-            '[checks.needy.lint]\nrun = "{package}._checks:noop"\n'
+            '[phases.lint.needy]\nmain = "{package}._checks:noop"\n'
         ),
     )
     # The empty answers first: a target the workspace does not list, and
@@ -574,10 +557,10 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
     root_contract(tmp_path, '["acme.python", "acme.house", "acme.needy"]')
     assert contributions_for("acme.python", tmp_path) == {
         "acme.house": {
-            "checks": {"house": {"lint": {"run": "acme.house._checks:noop"}}}
+            "phases": {"lint": {"house": {"main": "acme.house._checks:noop"}}}
         },
         "acme.needy": {
-            "checks": {"needy": {"lint": {"run": "acme.needy._checks:noop"}}}
+            "phases": {"lint": {"needy": {"main": "acme.needy._checks:noop"}}}
         },
     }
 
@@ -637,32 +620,33 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
 
 
-_HOUSE_DEEP = """\
-[options]
-deep = "judges the python extension's packages deeper"
-
-[for."acme.python".checks.house.lint]
-run = "{package}._checks:noop"
-listed-with = "deep"
+_HOUSE_OFF = """\
+[for."acme.python".phases.lint.house]
+main = "{package}._checks:noop"
+enabled = false
 """
 
 
-def test_a_grafted_check_registers_under_the_options_its_owners_listing_turns_on(
+def test_a_grafted_step_declared_off_registers_where_the_root_contract_enables_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, house=_HOUSE_DEEP, python="")
-    # The fallback first: listed without the option, the check stays off.
+    fake_extensions(tmp_path, monkeypatch, house=_HOUSE_OFF, python="")
+    # The fallback first: listed without the table, the step stays off.
     root_contract(tmp_path, '["acme.python", "acme.house"]')
     _mount(tmp_path)
     assert not _grafted()
-    # Turned on, it registers whichever of the two the list names first.
+    # Turned on at its address, it registers whichever of the two the
+    # list names first.
     for listed in (
-        '["acme.python", "acme.house[deep]"]',
-        '["acme.house[deep]", "acme.python"]',
+        '["acme.python", "acme.house"]',
+        '["acme.house", "acme.python"]',
     ):
         if _grafted():
             _checks.unregister_check("lint.house")
-        root_contract(tmp_path, listed)
+        (tmp_path / "workshop.toml").write_text(
+            f"[workspace]\nextensions = {listed}\n\n"
+            "[phases.lint.house]\nenabled = true\n"
+        )
         _mount(tmp_path)
         assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
 
@@ -676,7 +660,7 @@ def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
     root_contract(tmp_path, '["acme.python", "acme.house"]')
     with pytest.raises(
         RuntimeError,
-        match=r'for\."acme\.python"\.checks\.house\.lint\.run names absent',
+        match=r'for\."acme\.python"\.phases\.lint\.house\.main names absent',
     ):
         _mount(tmp_path)
 

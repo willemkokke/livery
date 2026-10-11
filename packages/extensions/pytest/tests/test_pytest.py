@@ -46,7 +46,7 @@ def _member(root: Path, name: str, *, serial: bool = False) -> Package:
     (directory / "docs" / "examples").mkdir(parents=True)
     checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
     if serial:
-        checks = (("checks.pytest", (("parallel", False),)),)
+        checks = (("phases.test.pytest", (("parallel", False),)),)
     return Package(
         directory=directory,
         path=f"packages/{name}",

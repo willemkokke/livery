@@ -135,7 +135,7 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
     The roster is split the way the project file splits it, ``py`` for
     the members with a dev entry and ``native`` for the rest, and the
     per-file ignores the claims render are added for the kinds present.
-    The fragment engine reads the check tables through this.
+    The fragment engine reads the check records' fragments through this.
     """
     from livery.workshop._checks import per_file_ignores
     from livery.workshop._kinds import kind_names, record_for_template

@@ -196,7 +196,7 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
 def test_a_record_names_its_phase_and_step_as_its_role_and_tool() -> None:
     record = CheckRecord("fake", "lint", _noop)
     assert (record.name, record.phase, record.step) == ("lint.fake", "lint", "fake")
-    # A record from a check table: the step's keys at their defaults.
+    # A record built in code: the step's keys at their defaults.
     assert (
         record.provides,
         record.reads,
@@ -204,8 +204,7 @@ def test_a_record_names_its_phase_and_step_as_its_role_and_tool() -> None:
         record.enabled,
         record.replaces,
         record.deletes,
-        record.placed,
-    ) == ((), (), None, True, (), (), False)
+    ) == ((), (), None, True, (), ())
 
 
 def test_a_step_after_another_phases_step_runs_once_for_the_gate(
@@ -313,37 +312,63 @@ def test_an_option_on_an_unknown_address_or_an_undeclared_option_refuses(
 ) -> None:
     from livery.workshop._checks import check_for, option_problems, option_value
 
-    package = _member_with(tmp_path, "[checks.nothing]\nenabled = false\n")
+    package = _member_with(tmp_path, "[phases.nothing]\nenabled = false\n")
     (problem,) = option_problems((package,))
     assert problem.startswith(
-        "packages/x/workshop.toml: [checks.nothing] reaches no registered check;"
-        " the tools are"
+        "packages/x/workshop.toml: [phases.nothing] names no phase a registered"
+        " step has; the phases are"
     )
-    package = _member_with(tmp_path, "[roles.nothing]\nenabled = false\n")
+    package = _member_with(tmp_path, "[phases.test.nothing]\nenabled = false\n")
     (problem,) = option_problems((package,))
-    assert "[roles.nothing] names no role a registered check has" in problem
-    # The old address, role first, names the new one.
-    package = _member_with(tmp_path, "[checks.test.fake]\nparallel = false\n")
-    (problem,) = option_problems((package,))
-    assert problem.endswith(
-        "[checks.test.fake] names a role then a tool; a check's own table is"
-        " [checks.fake.test]"
+    assert problem.startswith(
+        "packages/x/workshop.toml: [phases.test.nothing] reaches no registered"
+        " step; the steps are"
     )
-    package = _member_with(tmp_path, "[checks.test]\nparallel = false\n")
-    (problem,) = option_problems((package,))
-    assert problem.endswith(
-        "[checks.test] names a role; a role's options are [roles.test]"
-    )
-    package = _member_with(tmp_path, "[checks.fake.test]\nworkers = 3\n")
+    package = _member_with(tmp_path, "[phases.test.fake]\nworkers = 3\n")
     (problem,) = option_problems((package,))
     assert "sets 'workers', which no check it reaches declares" in problem
-    package = _member_with(tmp_path, '[checks.fake.test]\nparallel = "no"\n')
+    package = _member_with(tmp_path, '[phases.test.fake]\nparallel = "no"\n')
     (problem,) = option_problems((package,))
-    assert problem.endswith("[checks.fake.test] parallel is bool, not 'no'")
+    assert problem.endswith("[phases.test.fake] parallel is bool, not 'no'")
     with pytest.raises(_FAILURES, match="parallel is bool"):
         option_value(check_for("test.fake"), package, "parallel")
     with pytest.raises(_FAILURES, match="declares no option 'workers'"):
         option_value(check_for("test.fake"), package, "workers")
+
+
+def test_a_package_option_table_in_the_check_spelling_refuses_naming_the_step_spelling(
+    tmp_path: Path,
+) -> None:
+    said = {
+        "[checks.fake.test]\nparallel = false\n": (
+            "[checks.fake.test] is the check tables' spelling; the step's options"
+            " are [phases.test.fake]"
+        ),
+        "[checks.fake]\nparallel = false\n": (
+            "[checks.fake] is the check tables' spelling; a step's options are"
+            " [phases.<phase>.fake], and [phases.<phase>] reaches every step of"
+            " the phase"
+        ),
+        "checks = 3\n": (
+            "[checks] is the check tables' spelling; a step's options are"
+            " [phases.<phase>.<step>]"
+        ),
+        "[roles.test]\nparallel = false\n": (
+            "[roles.test] is the check tables' spelling; every step of the phase"
+            " takes [phases.test]"
+        ),
+        "roles = 3\n": (
+            "[roles] is the check tables' spelling; every step of a phase takes"
+            " [phases.<phase>]"
+        ),
+    }
+    for text, line in said.items():
+        with pytest.raises(_FAILURES) as caught:
+            _member_with(tmp_path, text)
+        assert line in str(caught.value), text
+        # The refusal comes before the contract's, which cannot name the
+        # spelling.
+        assert "has no key" not in str(caught.value), text
 
 
 def test_the_deeper_table_wins_key_by_key(
@@ -355,28 +380,22 @@ def test_the_deeper_table_wins_key_by_key(
     # The fallback first: nothing set, the default.
     package = _member_with(tmp_path, "")
     assert option_value(record, package, "parallel") is True
-    package = _member_with(tmp_path, "[roles.test]\nparallel = false\n")
+    package = _member_with(tmp_path, "[phases.test]\nparallel = false\n")
     assert option_value(record, package, "parallel") is False
-    # The tool's table outranks the role's, the check's outranks both.
+    # The step's table outranks the phase's.
     package = _member_with(
         tmp_path,
-        "[roles.test]\nparallel = false\n[checks.fake]\nparallel = true\n",
-    )
-    assert option_value(record, package, "parallel") is True
-    package = _member_with(
-        tmp_path,
-        "[roles.test]\nenabled = false\n"
-        "[checks.fake]\nparallel = true\n"
-        "[checks.fake.test]\nparallel = false\n",
+        "[phases.test]\nenabled = false\nparallel = true\n"
+        "[phases.test.fake]\nparallel = false\n",
     )
     assert option_value(record, package, "parallel") is False
-    # Key by key: the role's `enabled` still reaches the check.
+    # Key by key: the phase's `enabled` still reaches the step.
     assert option_value(record, package, "enabled") is False
     assert option_problems((package,)) == []
 
 
-def test_a_package_sets_a_steps_option_under_either_spelling(
-    tmp_path: Path, python_checks: object
+def test_a_phase_wide_option_table_reaches_every_step_of_the_phase(
+    restored_registries, tmp_path: Path, python_checks: object
 ) -> None:
     from livery.workshop._checks import (
         check_for,
@@ -385,51 +404,55 @@ def test_a_package_sets_a_steps_option_under_either_spelling(
         option_value,
     )
 
-    record = check_for("test.fake")
-    # The refusals: a step nobody registered, and an option none declares.
-    package = _member_with(tmp_path, "[phases.test.nothing]\nenabled = false\n")
-    (problem,) = option_problems((package,))
-    assert problem.startswith(
-        "packages/x/workshop.toml: [phases.test.nothing] reaches no registered"
-        " step; the steps are"
+    # A second step of the test phase, beside the fake one.
+    register_check(
+        CheckRecord("other", "test", _noop, scope=PACKAGE, extensions=("python",))
     )
-    package = _member_with(tmp_path, "[phases.test.fake]\nworkers = 3\n")
-    (problem,) = option_problems((package,))
-    assert "[phases.test.fake] sets 'workers', which no check it reaches" in problem
-    # The step's table reaches the check the check table does.
-    assert option_addresses(record)[-1] == "phases.test.fake"
-    package = _member_with(tmp_path, "[phases.test.fake]\nparallel = false\n")
-    assert package.checks == (("phases.test.fake", (("parallel", False),)),)
-    assert option_value(record, package, "parallel") is False
-    assert option_value(record, package, "enabled") is True
+    record = check_for("test.fake")
+    assert option_addresses(record) == ("phases.test", "phases.test.fake")
+    package = _member_with(tmp_path, "[phases.test]\nenabled = false\n")
+    assert package.checks == (("phases.test", (("enabled", False),)),)
     assert option_problems((package,)) == []
-    # Both spellings set: the step's table is read last and wins.
+    # Every step of the phase, and no step of another.
+    assert option_value(record, package, "enabled") is False
+    assert option_value(check_for("test.other"), package, "enabled") is False
+    assert option_value(check_for("lint.fake"), package, "enabled") is True
+    # An option one step of the phase declares reaches it through the
+    # phase's table, and refuses for a step that does not declare it.
+    package = _member_with(tmp_path, "[phases.test]\nparallel = false\n")
+    assert option_value(record, package, "parallel") is False
+    with pytest.raises(_FAILURES, match="declares no option 'parallel'"):
+        option_value(check_for("test.other"), package, "parallel")
+    # The step's own table beside the phase's: both read, by address.
     package = _member_with(
         tmp_path,
-        "[checks.fake.test]\nparallel = false\n[phases.test.fake]\nparallel = true\n",
+        "[phases.test]\nparallel = false\n[phases.test.fake]\nenabled = false\n",
     )
-    assert option_value(record, package, "parallel") is True
+    assert package.checks == (
+        ("phases.test", (("parallel", False),)),
+        ("phases.test.fake", (("enabled", False),)),
+    )
     assert option_problems((package,)) == []
 
 
-def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
+def test_a_phases_table_off_the_shape_refuses(tmp_path: Path) -> None:
     from livery.workshop._packages import discover_packages
 
     member = tmp_path / "packages" / "x"
     member.mkdir(parents=True)
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\nchecks = 3\n'
+        'kind = "python"\nname = "livery-x"\nphases = 3\n'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     with pytest.raises(
-        _FAILURES, match=r"checks is an integer \(3\); it takes a table"
+        _FAILURES, match=r"phases is an integer \(3\); it takes a table"
     ):
         discover_packages(tmp_path)
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[checks]\npytest = 3\n'
+        'kind = "python"\nname = "livery-x"\n[phases]\ntest = 3\n'
     )
     with pytest.raises(
-        _FAILURES, match=r"checks.pytest is an integer \(3\); it takes a table"
+        _FAILURES, match=r"phases.test is an integer \(3\); it takes a table"
     ):
         discover_packages(tmp_path)
 
@@ -439,7 +462,7 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
 ) -> None:
     from livery.workshop._checks import check_for, enabled, option_value
 
-    package = _member_with(tmp_path, "[checks.fake.test]\nenabled = false\n")
+    package = _member_with(tmp_path, "[phases.test.fake]\nenabled = false\n")
     record = check_for("test.fake")
     assert option_value(record, package, "enabled") is False
     assert option_value(check_for("lint.fake"), package, "enabled") is True
@@ -473,9 +496,9 @@ def test_a_code_step_and_a_words_step_share_one_option_table(
     )
     # The refusals first: a value of the wrong type and a key the check does
     # not declare refuse by the same line whichever way the check is written.
-    package = _member_with(tmp_path, '[checks.probe.lint]\nlevel = "deep"\n')
+    package = _member_with(tmp_path, '[phases.lint.probe]\nlevel = "deep"\n')
     for record in (coded, spoken):
-        with pytest.raises(_FAILURES, match=r"\[checks\.probe\.lint\] level is int"):
+        with pytest.raises(_FAILURES, match=r"\[phases\.lint\.probe\] level is int"):
             option_value(record, package, "level")
         with pytest.raises(_FAILURES, match="declares no option 'depth'"):
             option_value(record, package, "depth")
@@ -484,10 +507,10 @@ def test_a_code_step_and_a_words_step_share_one_option_table(
     assert (
         option_addresses(coded)
         == option_addresses(spoken)
-        == ("roles.lint", "checks.probe", "checks.probe.lint", "phases.lint.probe")
+        == ("phases.lint", "phases.lint.probe")
     )
     package = _member_with(
-        tmp_path, "[checks.probe.lint]\nlevel = 2\nenabled = false\n"
+        tmp_path, "[phases.lint.probe]\nlevel = 2\nenabled = false\n"
     )
     assert option_value(coded, package, "level") == 2
     assert option_value(spoken, package, "level") == 2

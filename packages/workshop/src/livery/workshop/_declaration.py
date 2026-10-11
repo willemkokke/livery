@@ -4,23 +4,24 @@ An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, the steps it adds to a package's
-lifecycle phases, the questions about a package it
-answers, the tools its verbs need, the options a listing may turn on,
-its checks and the steps of the gate's phases, its CI jobs,
-the values it puts into slots, the contract keys it owns, what it adds
-to another extension while that one is listed, and the earlier
-extensions' shipped files it replaces or deletes. The file is a
-contract, read as ``workshop.toml`` is: kebab-case keys, every key
-judged, every refusal naming the file.
+lifecycle phases and to the gate's phases, the questions about a
+package it answers, the tools its verbs need, its CI jobs, the values
+it puts into slots, the contract keys it owns, what it adds to another
+extension while that one is listed, and the earlier extensions'
+shipped files it replaces or deletes. The file is a contract, read as
+``workshop.toml`` is: kebab-case keys, every key judged, every refusal
+naming the file.
 
-A check whose verdict is its tool's exit code is its tool's words
-(``judge`` in a check table, ``main`` in a step table, with ``fix``,
-``safe-fix``, ``env`` and ``matrix``), which the engine runs
-([livery.workshop._words.Command][]). Other behaviour is a reference,
-``"module:function"``, imported when it runs. The read
+A step is declared at ``[phases.<phase>.<step>]``. One whose verdict
+is its tool's exit code is its tool's words (``main`` as a template,
+with ``fix``, ``safe-fix``, ``env`` and ``matrix``), which the engine
+runs ([livery.workshop._words.Command][]). Other behaviour is a
+reference, ``"module:function"``, imported when it runs. The read
 imports nothing. A reference whose module is not in the extension's
 package, or whose module does not define the name at its top level,
-refuses here, read from the module's source.
+refuses here, read from the module's source. A ``[checks]`` table or
+an ``[options]`` table refuses naming the step spelling, as does a key
+of a step table that the spelling dropped.
 """
 
 from __future__ import annotations
@@ -114,9 +115,8 @@ class Additions:
     """What a declaration adds while it is mounted.
 
     Attributes:
-        checks: The checks, as records under the extension's name: those
-            of the ``[checks.<tool>.<role>]`` tables and the steps of
-            the ``[phases.<phase>.<step>]`` tables of the gate's phases.
+        checks: The steps of the ``[phases.<phase>.<step>]`` tables of
+            the gate's phases, as records under the extension's name.
         contributions: The values it puts into slots, each ``(slot, value)``.
         jobs: The CI jobs it adds to the builtin points, with their entries.
     """
@@ -233,7 +233,6 @@ class Declaration:
         plugin: The footman plugin carrying its verbs; empty for none.
         requires: The extensions it cannot work without.
         tools: The tools its verbs need, as requirement strings.
-        options: Each option a listing may turn on, to what it turns on.
         additions: What it adds whenever it is mounted.
         targets: What it adds to each target while the target is listed.
         target_tables: Each ``[for.<target>]`` table as the file holds it.
@@ -266,7 +265,6 @@ class Declaration:
     plugin: str = ""
     requires: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()
-    options: dict[str, str] = field(default_factory=dict[str, str])
     additions: Additions = Additions()
     targets: dict[str, Additions] = field(default_factory=dict[str, Additions])
     target_tables: dict[str, dict[str, Any]] = field(
@@ -331,18 +329,20 @@ def declaration_file(package: str) -> Path | None:
 #: file's reference or an environment variable: their keys are data,
 #: never judged kebab-case.
 _NAMED = (
-    ("checks", "*", "*", "fragments"),
-    ("for", "*", "checks", "*", "*", "fragments"),
-    ("checks", "*", "*", "env"),
-    ("for", "*", "checks", "*", "*", "env"),
     ("phases", "*", "*", "fragments"),
+    ("for", "*", "phases", "*", "*", "fragments"),
     ("phases", "*", "*", "env"),
+    ("for", "*", "phases", "*", "*", "env"),
     ("contributions",),
     ("for", "*", "contributions"),
     ("replaces",),
+    ("for", "*", "replaces"),
     ("deletes",),
+    ("for", "*", "deletes"),
     ("slots", "*", "default"),
+    ("for", "*", "slots", "*", "default"),
     ("fragments",),
+    ("for", "*", "fragments"),
 )
 
 
@@ -438,18 +438,9 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             f"{path}:\n" + "\n".join(f"  {line}" for line in problems)
         )
     identity = data.get("extension", {})
-    if data.get("options") and "workspace" not in identity.get(
-        "levels", ("workspace",)
-    ):
-        raise reader.refuse(
-            ("options",),
-            "is turned on by a [workspace] extensions entry, and this extension's"
-            " levels are package; a package's entry is the extension's name alone",
-        )
-    options = {str(name): str(text) for name, text in data.get("options", {}).items()}
-    additions = reader.additions(data, (), options)
+    additions = reader.additions(data, ())
     targets = {
-        str(target): reader.additions(table, ("for", target), options)
+        str(target): reader.additions(table, ("for", target))
         for target, table in data.get("for", {}).items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
@@ -479,7 +470,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         plugin=str(identity.get("plugin", "")),
         requires=tuple(str(name) for name in identity.get("requires", ())),
         tools=tuple(str(text) for text in data.get("toolroom", {}).get("requires", ())),
-        options=options,
         additions=additions,
         targets=targets,
         target_tables={
@@ -550,10 +540,8 @@ class _Reader:
                     " in requires what this extension cannot work without",
                 )
 
-    def additions(
-        self, data: dict[str, Any], prefix: tuple[str, ...], options: dict[str, str]
-    ) -> Additions:
-        """What *data* adds: checks, the gate phases' steps, slot values and jobs.
+    def additions(self, data: dict[str, Any], prefix: tuple[str, ...]) -> Additions:
+        """What *data* adds: the gate phases' steps, slot values and jobs.
 
         A ``[phases.<phase>]`` table whose phase is not a lifecycle
         phase holds steps, each a check record; a lifecycle phase's
@@ -561,11 +549,7 @@ class _Reader:
         """
         from livery.workshop._phases import PHASES
 
-        checks = [
-            self.check(str(tool), str(role), entry, (*prefix, "checks"), options)
-            for tool, roles in data.get("checks", {}).items()
-            for role, entry in roles.items()
-        ]
+        checks: list[CheckRecord] = []
         for phase, table in data.get("phases", {}).items():
             if phase in PHASES or not _step_tables(table):
                 continue
@@ -667,11 +651,59 @@ class _Reader:
         )
 
     def removed(self, data: dict[str, Any]) -> None:
-        """Refuse a key of the check tables in a step table, naming the step's spelling.
+        """Refuse the check tables' spelling, naming the step's.
 
-        Read before the contract judges the file, which would refuse
-        the key as unknown without saying what replaced it.
+        A ``[checks.<tool>.<role>]`` table is the step
+        ``[phases.<role>.<tool>]``, an ``[options]`` table is
+        ``enabled`` on the step, and a key the step table dropped says
+        what says it now. Read before the contract judges the file,
+        which would refuse the key as unknown without saying what
+        replaced it. The tables under ``[for.<target>]`` are judged
+        the same way.
         """
+        tables: list[tuple[tuple[str, ...], dict[str, Any]]] = [((), data)]
+        targets = data.get("for")
+        if isinstance(targets, dict):
+            tables += [
+                (("for", target), cast("dict[str, Any]", table))
+                for target, table in cast("dict[str, Any]", targets).items()
+                if isinstance(table, dict)
+            ]
+        for prefix, table in tables:
+            self.removed_tables(table, prefix)
+
+    def removed_tables(self, data: dict[str, Any], prefix: tuple[str, ...]) -> None:
+        """Refuse the check tables' spelling in *data*, one table of the file."""
+        if "checks" in data:
+            # The first check table names the step it is: [checks.<tool>.<role>]
+            # is [phases.<role>.<tool>]; a bare table names the shape.
+            where = [*prefix, "checks"]
+            tool, role = "<step>", "<phase>"
+            checks = data["checks"]
+            if isinstance(checks, dict) and cast("dict[str, Any]", checks):
+                tool, roles = next(iter(cast("dict[str, Any]", checks).items()))
+                where.append(tool)
+                named = (
+                    [key for key, value in roles.items() if isinstance(value, dict)]
+                    if isinstance(roles, dict)
+                    else []
+                )
+                if named:
+                    role = str(named[0])
+                    where.append(role)
+            raise self.refuse(
+                tuple(where),
+                f"is the check tables' spelling; a step is [phases.{role}.{tool}]"
+                " with main, its body: a template, the tool's name then its"
+                " arguments, or a reference to its code, module:function",
+            )
+        if "options" in data:
+            raise self.refuse(
+                (*prefix, "options"),
+                "is not a table: a step a workspace turns on declares enabled = false"
+                " under [phases.<phase>.<step>], and the workspace turns it on with"
+                " [phases.<phase>.<step>] enabled = true in its root contract",
+            )
         phases = data.get("phases")
         if not isinstance(phases, dict):
             return
@@ -682,7 +714,7 @@ class _Reader:
                 for key, spelling in _REMOVED.items():
                     if key in entry:
                         raise self.refuse(
-                            ("phases", phase, step, key),
+                            (*prefix, "phases", phase, step, key),
                             spelling.format(phase=phase, step=step),
                         )
 
@@ -698,45 +730,6 @@ class _Reader:
                     f" holds steps, [phases.{phase}.<step>], each with a main",
                 )
         return _step_tables(table)
-
-    def check(
-        self,
-        tool: str,
-        role: str,
-        entry: dict[str, Any],
-        prefix: tuple[str, ...],
-        options: dict[str, str],
-    ) -> CheckRecord:
-        """The check ``[checks.<tool>.<role>]`` declares, in the check table's spelling.
-
-        The transition reader: a step table,
-        ``[phases.<phase>.<step>]``, reads into the same record through
-        ``step``, and this reader goes when the check tables go. It
-        keeps the keys a step table drops, ``narrowing``, ``transport``,
-        ``threshold``, ``roles``, ``listed-with`` and ``arguments``, and
-        its words have the words after ``--`` and the paths appended.
-        """
-        from dataclasses import replace
-
-        where = (*prefix, tool, role)
-        run, fix, words = self.bodies(entry, where)
-        listed_with = str(entry.get("listed-with", ""))
-        if listed_with and listed_with not in options:
-            raise self.refuse(
-                (*where, "listed-with"),
-                f"is {listed_with!r}, which [options] does not declare; its"
-                f" options are {', '.join(options) or 'none'}",
-            )
-        record = self.record(tool, role, entry, where, run, fix, words)
-        return replace(
-            record,
-            narrowing=str(entry.get("narrowing", "none")),
-            transport=str(entry.get("transport", "argv")),
-            threshold=float(entry.get("threshold", 1.0)),
-            roles=tuple(entry.get("roles", ())),
-            listed_with=listed_with,
-            arguments=bool(entry.get("arguments", False)),
-        )
 
     def step(
         self, phase: str, step: str, entry: dict[str, Any], prefix: tuple[str, ...]
@@ -788,7 +781,6 @@ class _Reader:
             record,
             narrowing=narrowing,
             arguments=arguments,
-            placed=True,
             enabled=bool(entry.get("enabled", True)),
             provides=tuple(provides.items()),
             reads=reads,
@@ -807,11 +799,11 @@ class _Reader:
         fix: Callable[[GateContext], None] | None,
         words: Words | None,
     ) -> CheckRecord:
-        """The record from the keys a check table and a step table both take.
+        """The record from a step table's shared keys, its body resolved.
 
         ``scope``, ``claims``, ``extensions``, ``options``, ``fragments``,
         ``inputs``, ``after``, ``tools``, ``tests-only``, ``flags`` and
-        ``editor-extension``; each spelling sets its own fields after.
+        ``editor-extension``; ``step`` sets the step's own fields after.
         """
         from livery.workshop._checks import CheckRecord, Claim, Option
         from livery.workshop._fragments import verify
@@ -873,56 +865,6 @@ class _Reader:
             raise self.refuse((*where, "fragments"), f"refuses: {error}") from error
         return record
 
-    def bodies(
-        self, entry: dict[str, Any], where: tuple[str, ...]
-    ) -> tuple[
-        Callable[[GateContext], None],
-        Callable[[GateContext], None] | None,
-        Words | None,
-    ]:
-        """A check's judge and fix, from its words or from references to its code.
-
-        A check is its tool's words, ``judge``, or a reference to code,
-        ``run``, never both. Words fix in words and code in code, and
-        ``safe-fix``, ``env`` and ``matrix`` are words alone.
-        """
-        from livery.workshop._words import Command
-
-        if "judge" in entry and "run" in entry:
-            raise self.refuse(
-                where,
-                "declares both judge and run: a check is its tool's words or a"
-                " reference to its code, never both",
-            )
-        if "judge" in entry:
-            words = self.words(entry, where)
-            name = f"{where[-1]}.{where[-2]}"
-            fixing = Command(words, name, fixing=True) if words.fix else None
-            return Command(words, name), fixing, words
-        if "run" not in entry:
-            raise self.refuse(
-                where,
-                "names neither judge nor run: a check is its tool's words, judge,"
-                " or a reference to its code, run",
-            )
-        for key in ("safe-fix", "env", "matrix"):
-            if key in entry:
-                raise self.refuse(
-                    (*where, key),
-                    "belongs to a check in words, and this one runs code; declare"
-                    " judge instead of run, or drop the key",
-                )
-        if "fix" in entry and not isinstance(entry["fix"], str):
-            raise self.refuse(
-                (*where, "fix"),
-                "is words, and run is a reference to code: a check that runs code"
-                " fixes with code, module:function",
-            )
-        coded = (
-            self.reference(entry["fix"], (*where, "fix")) if "fix" in entry else None
-        )
-        return self.reference(entry["run"], (*where, "run")), coded, None
-
     def step_bodies(
         self, entry: dict[str, Any], where: tuple[str, ...]
     ) -> tuple[
@@ -946,7 +888,7 @@ class _Reader:
                 " its arguments, or a reference to its code, module:function",
             )
         if isinstance(entry["main"], list):
-            words = self.words(entry, where, body="main", what="step")
+            words = self.words(entry, where)
             spelled = [
                 ("main", words.judge),
                 ("fix", words.fix),
@@ -1000,20 +942,8 @@ class _Reader:
                 )
         return self.reference(entry["main"], (*where, "main")), coded, None
 
-    def words(
-        self,
-        entry: dict[str, Any],
-        where: tuple[str, ...],
-        *,
-        body: str = "judge",
-        what: str = "check",
-    ) -> Words:
-        """The words *entry* declares: its *body*, fix, safe-fix, env and matrix.
-
-        *body* is the key the judging words are under, ``judge`` in a
-        check table and ``main`` in a step table, and *what* names the
-        table's kind in a refusal.
-        """
+    def words(self, entry: dict[str, Any], where: tuple[str, ...]) -> Words:
+        """The words *entry* declares: its main, fix, safe-fix, env and matrix."""
         from livery.workshop._words import Words
 
         def argv(key: str) -> tuple[str, ...]:
@@ -1021,25 +951,24 @@ class _Reader:
             if isinstance(value, str):
                 raise self.refuse(
                     (*where, key),
-                    f"is {value!r}, a reference to code; in a {what} in words,"
+                    f"is {value!r}, a reference to code; in a step in words,"
                     f" {key} is words: the tool's name, then its arguments",
                 )
             return tuple(str(word) for word in value)
 
-        judge, fix, safe_fix = argv(body), argv("fix"), argv("safe-fix")
+        judge, fix, safe_fix = argv("main"), argv("fix"), argv("safe-fix")
         if not judge:
-            raise self.refuse((*where, body), "is empty: the tool's name comes first")
+            raise self.refuse((*where, "main"), "is empty: the tool's name comes first")
         if safe_fix and not fix:
             raise self.refuse(
                 (*where, "safe-fix"),
-                f"is declared without fix: a {what} that fixes safely fixes too",
+                "is declared without fix: a step that fixes safely fixes too",
             )
         for key, value in (("fix", fix), ("safe-fix", safe_fix)):
             if value and value[0] != judge[0]:
                 raise self.refuse(
                     (*where, key),
-                    f"runs {value[0]}, and {body} runs {judge[0]}: a {what} runs"
-                    " one tool",
+                    f"runs {value[0]}, and main runs {judge[0]}: a step runs one tool",
                 )
         matrix: list[tuple[str, tuple[str, ...]]] = []
         for key, values in entry.get("matrix", {}).items():
@@ -1353,9 +1282,9 @@ class _Reader:
 #: is a step.
 _PHASE_KEYS = ("pre", "main", "post", "provides", "reads")
 
-#: The keys of a check table a step table does not take, each to what
-#: says it in the step's spelling; ``{phase}`` and ``{step}`` name the
-#: step.
+#: The keys a step table does not take, each to what says it in the
+#: step's spelling, so a stale declaration is told what to write;
+#: ``{phase}`` and ``{step}`` name the step.
 _REMOVED: dict[str, str] = {
     "narrowing": "is said by {{paths}} in main: a template with it narrows by the"
     " paths the run reaches, one without runs whole",

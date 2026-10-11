@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import takewhile
 from pathlib import Path
+from typing import Any
 
 from livery.workshop._ast_rules import (
     AstRule,
@@ -66,13 +67,11 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
-        checks: The options the package sets on its checks, by the
-            table that sets them: ``checks.<tool>`` (every check of the
-            tool), ``checks.<tool>.<role>`` (one check),
-            ``phases.<phase>.<step>`` (the same check, as a step of its
-            phase) and ``roles.<role>`` (every check of the role), each
-            to its ``(option, value)`` pairs; the check registry
-            validates them against what the checks they reach declare.
+        checks: The options the package sets on its steps, by the
+            table that sets them: ``phases.<phase>`` (every step of the
+            phase) and ``phases.<phase>.<step>`` (one step), each to its
+            ``(option, value)`` pairs; the check registry validates them
+            against what the steps they reach declare.
         categories: The package's own reassignments of its paths
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
@@ -333,6 +332,57 @@ def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def removed_option_tables(contract: dict[str, Any]) -> list[str]:
+    """Each ``[checks]`` or ``[roles]`` table of a package *contract*, one line each.
+
+    The check tables' spelling of a step's options: each line names
+    the table and the step spelling that says it, ``[phases.<phase>]``
+    for every step of a phase and ``[phases.<phase>.<step>]`` for one.
+    Read before the contract's judge, which would refuse the table as
+    unknown without naming what replaced it.
+    """
+    problems: list[str] = []
+    checks = contract.get("checks")
+    if "checks" in contract and not isinstance(checks, dict):
+        problems.append(
+            "[checks] is the check tables' spelling; a step's options are"
+            " [phases.<phase>.<step>]"
+        )
+    tools: dict[str, Any] = checks if isinstance(checks, dict) else {}
+    for tool, table in tools.items():
+        # A table beneath the tool's is one check's; a scalar or an
+        # empty table is the tool's own, for every check of the tool.
+        nested = (
+            [str(role) for role, value in table.items() if isinstance(value, dict)]
+            if isinstance(table, dict)
+            else []
+        )
+        problems += [
+            f"[checks.{tool}.{role}] is the check tables' spelling; the step's"
+            f" options are [phases.{role}.{tool}]"
+            for role in nested
+        ]
+        if not isinstance(table, dict) or len(nested) < max(len(table), 1):
+            problems.append(
+                f"[checks.{tool}] is the check tables' spelling; a step's options"
+                f" are [phases.<phase>.{tool}], and [phases.<phase>] reaches"
+                " every step of the phase"
+            )
+    phases = contract.get("roles")
+    if "roles" in contract and not isinstance(phases, dict):
+        problems.append(
+            "[roles] is the check tables' spelling; every step of a phase takes"
+            " [phases.<phase>]"
+        )
+    named: dict[str, Any] = phases if isinstance(phases, dict) else {}
+    problems += [
+        f"[roles.{role}] is the check tables' spelling; every step of the phase"
+        f" takes [phases.{role}]"
+        for role in named
+    ]
+    return problems
+
+
 def discover_packages(root: Path) -> tuple[Package, ...]:
     """Every package the workspace carries, by its contract, sorted by path.
 
@@ -379,36 +429,24 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             for category, patterns in contract.get("categories", {}).items()
         ]
         options: list[tuple[str, tuple[tuple[str, object], ...]]] = []
-        for tool, table in contract.get("checks", {}).items():
-            # Scalars are the tool's own options; a table is one of its
-            # checks, by role.
+        for phase, table in contract.get("phases", {}).items():
+            # Scalars are the phase's own options, for every step of
+            # the phase; a table is one step's.
             own = tuple(
                 (str(key), value)
                 for key, value in table.items()
                 if not isinstance(value, dict)
             )
             if own or not table:
-                options.append((f"checks.{tool}", own))
+                options.append((f"phases.{phase}", own))
             options.extend(
                 (
-                    f"checks.{tool}.{role}",
+                    f"phases.{phase}.{step}",
                     tuple((str(key), value) for key, value in nested.items()),
                 )
-                for role, nested in table.items()
+                for step, nested in table.items()
                 if isinstance(nested, dict)
             )
-        options.extend(
-            (f"roles.{role}", tuple((str(key), value) for key, value in table.items()))
-            for role, table in contract.get("roles", {}).items()
-        )
-        options.extend(
-            (
-                f"phases.{phase}.{step}",
-                tuple((str(key), value) for key, value in nested.items()),
-            )
-            for phase, table in contract.get("phases", {}).items()
-            for step, nested in table.items()
-        )
         options_by_check = tuple(options)
         publish = bool(release.get("publish", True))
         packages.append(

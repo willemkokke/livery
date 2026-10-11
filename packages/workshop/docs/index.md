@@ -397,21 +397,20 @@ context's `arguments`.
 A step's `options` are what a package may set in its own contract,
 each with a type and a default; every step carries `enabled`, and
 pytest's test step carries `parallel`. The step's own table reaches
-them, and a role's table reaches every step of the role:
+them, and a phase's table reaches every step of the phase:
 
 ```toml
 [phases.typecomplete.basedpyright] # the step, as the gate names it
 enabled = false                    # skipped by name in the gate's output
 
-[roles.test]                       # every step of the role, whatever its tool
+[phases.test]                      # every step of the phase, whatever its tool
 parallel = false                   # the suites run under -n 0, each in a run of its own
 ```
 
-The deeper table wins key by key: a role's table, then the step's; a
-check table's spelling of the same step, `[checks.<tool>.<role>]`,
-sits between the two. An option no step the table reaches declares, a
-step or role no registered check has, and a value of the wrong type
-each refuse, naming the vocabulary.
+The deeper table wins key by key: the phase's table, then the step's.
+An option no step the table reaches declares, a step or phase no
+registered step has, and a value of the wrong type each refuse, naming
+the vocabulary.
 
 An extension's kinds and checks are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the extension registers,

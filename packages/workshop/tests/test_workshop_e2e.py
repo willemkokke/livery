@@ -622,10 +622,7 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
 
 
 def _declared(
-    *extensions: str,
-    requires: tuple[str, ...] = (),
-    options: dict[str, str] | None = None,
-    role: str = "lint",
+    *extensions: str, requires: tuple[str, ...] = (), role: str = "lint"
 ) -> Declaration:
     """One check of *role* judging the packages that hold *extensions*."""
     from livery.workshop._checks import CheckRecord
@@ -642,7 +639,6 @@ def _declared(
         "x",
         Path("extension.toml"),
         requires=requires,
-        options=options or {},
         additions=Additions(checks),
     )
 
@@ -652,10 +648,6 @@ def _fake_declarations(
 ) -> None:
     monkeypatch.setattr(
         "livery.workshop._extensions.declaration", lambda name: declared.get(name)
-    )
-    monkeypatch.setattr(
-        "livery.workshop._extensions.declared_options",
-        lambda name: dict(declared[name].options) if name in declared else {},
     )
     monkeypatch.setattr(
         "livery.workshop._extensions.installed_extensions",
@@ -716,25 +708,6 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
     stack, kinds = _e2e.extension_under_test("top")
     assert stack == ("base", "mid", "pytest", "top")
     assert kinds == ("python", "cpp-conan")
-
-
-def test_the_extension_under_test_is_listed_with_every_option_it_declares(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _fake_declarations(
-        monkeypatch,
-        {
-            "top": _declared(
-                "python",
-                requires=("base",),
-                options={"deep": "judges deeper", "wide": "judges wider"},
-            ),
-            "base": _declared("python", options={"x": "an option"}),
-        },
-    )
-    # What it requires is listed plainly: its options are not under test.
-    stack, _kinds = _e2e.extension_under_test("top")
-    assert stack == ("base", "top[deep,wide]")
 
 
 def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
@@ -860,14 +833,14 @@ def test_the_loop_s_own_fm_never_asks_a_signer(
     assert pairs["commit.gpgsign"] == "false"
 
 
-def test_a_contract_s_list_is_read_as_each_entry_spells_it(tmp_path: Path) -> None:
+def test_a_contract_s_list_is_read_by_name(tmp_path: Path) -> None:
     assert _e2e._listed_extensions(tmp_path) == ()  # pyright: ignore[reportPrivateUsage]
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["docs", { name = "acme.house", for = [] },'
-        ' "basedpyright[typecomplete]"]\n'
+        ' "basedpyright"]\n'
     )
     listed = _e2e._listed_extensions(tmp_path)  # pyright: ignore[reportPrivateUsage]
-    assert listed == ("docs", "acme.house", "basedpyright[typecomplete]")
+    assert listed == ("docs", "acme.house", "basedpyright")
 
 
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:

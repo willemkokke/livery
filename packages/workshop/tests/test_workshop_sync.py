@@ -252,8 +252,8 @@ def test_the_monorepo_is_in_sync() -> None:
     from livery.workshop import _checks
     from livery.workshop._extensions import (
         declaration,
+        enabled_steps,
         extension_names,
-        extension_options,
         register_declared,
     )
 
@@ -262,11 +262,11 @@ def test_the_monorepo_is_in_sync() -> None:
     # is put back after.
     state = _checks.snapshot()
     try:
-        options = extension_options(ROOT)
+        enabled = enabled_steps(ROOT)
         for name in extension_names(ROOT):
             found = declaration(name)
             if found is not None:
-                register_declared(name, found.additions, options.get(name, ()))
+                register_declared(name, found.additions, enabled=enabled)
         before = _tracked_state()
         first = sync_workspace(ROOT)
         assert sync_workspace(ROOT) == []

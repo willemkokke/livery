@@ -140,10 +140,11 @@ class GateContext:
 
 @dataclass(frozen=True)
 class Option:
-    """One option a package may set on a check, in the check's own tables.
+    """One option a package may set on a check, in the check's own table.
 
-    The tables are ``[checks.<tool>.<role>]`` and
-    ``[phases.<role>.<tool>]``, the same check in either spelling.
+    The table is ``[phases.<phase>.<step>]``, the step's address; a
+    ``[phases.<phase>]`` table sets an option on every step of the
+    phase.
 
     Attributes:
         name: The option's key, kebab-case.
@@ -190,10 +191,10 @@ class CheckRecord:
     """One check, completely.
 
     A check's name is its role and its tool, ``test.pytest``: the
-    verb ``fm test.pytest``, the ``[checks.pytest.test]`` and
-    ``[phases.test.pytest]`` tables of its options, the gate's lines,
-    and every lookup use it. A step of a phase is the same record,
-    its phase the role and its step the tool.
+    verb ``fm test.pytest``, the ``[phases.test.pytest]`` table of its
+    options, the gate's lines, and every lookup use it. A step of a
+    phase is the same record, its phase the role and its step the
+    tool, read from its ``[phases.<phase>.<step>]`` table.
 
     Attributes:
         tool: The tool the check runs, as its sub-task names it under
@@ -211,15 +212,11 @@ class CheckRecord:
         narrowing: How a workspace check narrows under a scoped gate:
             ``paths`` (the subset's directories), ``packages`` (the
             subset's members) or ``none`` (the whole is always
-            checked). A package check narrows by its packages.
-        transport: How a path list reaches the tool
-            ([livery.workshop._invoke.TRANSPORTS][]): ``argv``, on its
-            command line, split into the fewest calls the platform
-            allows; ``file`` and ``config`` are named for the tools
-            that read one.
-        threshold: The share of affected units at or above which a
-            narrowed check runs over its configured whole instead; 1
-            narrows until every unit is affected.
+            checked). A package check narrows by its packages. No
+            declaration names it: the reader derives it, ``paths``
+            for a template with ``{paths}``, ``packages`` for a
+            workspace step in code with no ``inputs``, ``none``
+            otherwise ([livery.workshop._declaration.read][]).
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
             check that only judges.
@@ -247,7 +244,7 @@ class CheckRecord:
             the check judges, naming ``check <name>`` as its site, and
             leaves it when the check is unregistered.
         options: The options a package may set under
-            ``[checks.<tool>.<role>]``; ``enabled`` is every check's.
+            ``[phases.<phase>.<step>]``; ``enabled`` is every check's.
         contributions: ``(slot, value)`` pairs the record puts into
             slots at registration, the dev group's lines say; withdrawn
             with the record.
@@ -262,27 +259,20 @@ class CheckRecord:
             it withholds there and the suffixes it reads; a check
             judges every file its claims reach and no other, and a
             tool with per-file ignores renders its ignores from them.
-        roles: Further roles the check implements; it answers to
-            ``<role>.<tool>`` under each, and its options stay in its
-            own table, ``[checks.<tool>.<role>]`` for ``role``.
         flags: The command-line flags the check reads, from `FLAGS`:
             ``point`` for a check that selects tests by CI point. A
             generated verb offers the flags its checks declare, and
             ``--fix`` with ``--safe-fix`` where a check has a fix mode.
-        listed_with: The option of its extension that registers the
-            check, which a workspace turns on in its list,
-            ``<name>[<option>]``; empty for a check that registers
-            whenever its extension is listed. The extension declares
-            the option under ``[options]`` in its ``extension.toml``;
-            a step says the same with ``enabled``.
         arguments: Whether the check hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
             which it reads from [livery.workshop.GateContext][]'s
             ``arguments``. A check that wraps no tool leaves it off, and
-            its verb refuses them.
+            its verb refuses them. No declaration names it: the reader
+            derives it, on for a template with ``{arguments}`` and for
+            a step in code that names ``tools``.
         words: The check's words when it is declared in words, which
             ``fm explain`` prints and the conformance kit judges; None
-            for a check whose ``run`` is code.
+            for a check whose ``main`` is code.
         provides: The context keys the step writes inside its phase,
             each to its type name; a step of one phase reads what
             another provides.
@@ -298,14 +288,6 @@ class CheckRecord:
             each ``<owner>:<phase>.<step>``.
         deletes: The steps of earlier extensions this one deletes,
             each ``<owner>:<phase>.<step>``.
-        placed: Whether the record was read from a
-            ``[phases.<phase>.<step>]`` table, whose template places the
-            run's paths and the words after ``--`` itself, where
-            ``{paths}`` and ``{arguments}`` stand; False for a record
-            from a ``[checks.<tool>.<role>]`` table, whose words have
-            both appended. A marker of the transition between the two
-            spellings: it goes with the check tables.
-
     """
 
     tool: str
@@ -313,8 +295,6 @@ class CheckRecord:
     run: Callable[[GateContext], None]
     scope: str = WORKSPACE
     narrowing: str = NONE
-    transport: str = "argv"
-    threshold: float = 1.0
     fix: Callable[[GateContext], None] | None = None
     extensions: tuple[str, ...] = ()
     tests_only: bool = False
@@ -327,9 +307,7 @@ class CheckRecord:
     fragments: tuple[Fragment, ...] = ()
     editor_extension: str = ""
     claims: tuple[Claim, ...] = ()
-    roles: tuple[str, ...] = ()
     flags: tuple[str, ...] = ()
-    listed_with: str = ""
     arguments: bool = False
     words: Words | None = None
     provides: tuple[tuple[str, str], ...] = ()
@@ -338,7 +316,6 @@ class CheckRecord:
     enabled: bool = True
     replaces: tuple[str, ...] = ()
     deletes: tuple[str, ...] = ()
-    placed: bool = False
 
     @property
     def name(self) -> str:
@@ -373,14 +350,12 @@ def register_check(record: CheckRecord) -> None:
     Extensions call this from their plugin at mount. Replacing is how a
     extension swaps a tool under a role, and how a test injects a fake;
     a package check names at least one kind, since a check that
-    judges packages and applies to none never runs. Each address the
-    check answers to, ``<role>.<tool>`` under its role and each
-    further one, is a task's address, so a dot inside the role or
-    the tool refuses, a tool named ``default`` refuses (that address
-    is the role verb's own), and an address another check answers to
-    refuses: one address runs one check.
+    judges packages and applies to none never runs. The check's
+    address, ``<role>.<tool>``, is a task's address, so a dot inside
+    the role or the tool refuses, and a tool named ``default`` refuses
+    (that address is the role verb's own).
     """
-    for part in (record.role, *record.roles, record.tool):
+    for part in (record.role, record.tool):
         if not part or "." in part:
             fail(
                 f"check {record.name!r}: a role and a tool are one word each,"
@@ -391,14 +366,6 @@ def register_check(record: CheckRecord) -> None:
             f"check {record.name!r}: {record.name} is the address of the"
             f" {record.role} verb itself; name the check by its tool"
         )
-    for role in (record.role, *record.roles):
-        address = f"{role}.{record.tool}"
-        holder = answering(address)
-        if holder is not None and holder != record.name:
-            fail(
-                f"check {record.name!r} answers to {address}, which the check"
-                f" {holder!r} answers to already: one address runs one check"
-            )
     if record.scope not in (WORKSPACE, PACKAGE):
         fail(
             f"check {record.name!r}: scope is {WORKSPACE!r} or {PACKAGE!r},"
@@ -409,23 +376,6 @@ def register_check(record: CheckRecord) -> None:
         fail(
             f"check {record.name!r} reads {', '.join(unknown)}, which no verb"
             f" offers; the flags are {', '.join(FLAGS)}"
-        )
-    from livery.workshop._invoke import ARGV, TRANSPORTS
-
-    if record.transport not in TRANSPORTS:
-        fail(
-            f"check {record.name!r}: transport is one of {', '.join(TRANSPORTS)},"
-            f" not {record.transport!r}"
-        )
-    if record.transport != ARGV:
-        fail(
-            f"check {record.name!r}: the engine passes paths by {ARGV!r} alone"
-            f" so far; {record.transport!r} waits for a tool that needs it"
-        )
-    if not 0 < record.threshold <= 1:
-        fail(
-            f"check {record.name!r}: threshold is a share of the units, above 0"
-            f" and at most 1, not {record.threshold!r}"
         )
     if record.narrowing not in (PATHS, PACKAGES, NONE):
         fail(
@@ -477,20 +427,11 @@ def _typed(option: Option, value: object) -> bool:
 def option_addresses(record: CheckRecord) -> tuple[str, ...]:
     """The tables that reach *record*'s options, shallowest first.
 
-    ``roles.<role>`` for each role the check answers to, then
-    ``checks.<tool>``, then ``checks.<tool>.<role>`` for each role,
-    then ``phases.<role>.<tool>``, the step's table, for each: a later
-    table wins key by key. The tool's table outranks the role's, since
-    it names fewer checks, and the step's table outranks the check's,
-    which names the same check in the check tables' spelling.
+    ``phases.<phase>``, the phase's table, which reaches every step of
+    the phase, then ``phases.<phase>.<step>``, the step's own: the
+    later table wins key by key, since it names fewer steps.
     """
-    roles = (record.role, *record.roles)
-    return (
-        *(f"roles.{role}" for role in roles),
-        f"checks.{record.tool}",
-        *(f"checks.{record.tool}.{role}" for role in roles),
-        *(f"phases.{role}.{record.tool}" for role in roles),
-    )
+    return (f"phases.{record.role}", f"phases.{record.role}.{record.tool}")
 
 
 def option_value(record: CheckRecord, package: Package, name: str) -> object:
@@ -524,66 +465,42 @@ def option_value(record: CheckRecord, package: Package, name: str) -> object:
 
 
 def _reached(address: str) -> tuple[CheckRecord, ...]:
-    """The registered checks a table *address* reaches."""
-    kind, _, rest = address.partition(".")
-    if kind == "roles":
-        return tuple(r for r in _CHECKS.values() if rest in (r.role, *r.roles))
-    if kind == "phases":
-        phase, _, step = rest.partition(".")
-        return tuple(
-            r
-            for r in _CHECKS.values()
-            if r.tool == step and phase in (r.role, *r.roles)
-        )
-    tool, _, role = rest.partition(".")
+    """The registered checks a table *address* reaches.
+
+    ``phases.<phase>`` reaches every step of the phase, and
+    ``phases.<phase>.<step>`` the one step.
+    """
+    _kind, _, rest = address.partition(".")
+    phase, _, step = rest.partition(".")
     return tuple(
-        r
-        for r in _CHECKS.values()
-        if r.tool == tool and (not role or role in (r.role, *r.roles))
+        r for r in _CHECKS.values() if r.role == phase and (not step or r.tool == step)
     )
 
 
 def option_problems(packages: tuple[Package, ...]) -> list[str]:
     """Every option table or key no registered check takes, one line each.
 
-    Read by the layering check, so a package that addresses a tool, a
-    check or a role that does not exist, or sets an option none of the
-    checks it reaches declares, is refused with the vocabulary named.
+    Read by the layering check, so a package that addresses a phase or
+    a step that does not exist, or sets an option none of the steps it
+    reaches declares, is refused with the vocabulary named.
     """
     problems: list[str] = []
-    tools = sorted({r.tool for r in _CHECKS.values()})
-    roles = sorted({role for r in _CHECKS.values() for role in (r.role, *r.roles)})
+    phases = sorted({r.role for r in _CHECKS.values()})
     for package in packages:
         where = f"{package.path}/workshop.toml"
         for address, options in package.checks:
             reached = _reached(address)
             if not reached:
-                kind, _, rest = address.partition(".")
-                first, _, second = rest.partition(".")
-                if kind == "checks" and first in roles and second in tools:
-                    problems.append(
-                        f"{where}: [{address}] names a role then a tool; a check's"
-                        f" own table is [checks.{second}.{first}]"
-                    )
-                elif kind == "checks" and first in roles and not second:
-                    problems.append(
-                        f"{where}: [{address}] names a role; a role's options are"
-                        f" [roles.{first}]"
-                    )
-                elif kind == "roles":
-                    problems.append(
-                        f"{where}: [{address}] names no role a registered check"
-                        f" has; the roles are {', '.join(roles)}"
-                    )
-                elif kind == "phases":
+                _kind, _, rest = address.partition(".")
+                if "." in rest:
                     problems.append(
                         f"{where}: [{address}] reaches no registered step; the"
                         f" steps are {', '.join(sorted(_CHECKS))}"
                     )
                 else:
                     problems.append(
-                        f"{where}: [{address}] reaches no registered check; the"
-                        f" tools are {', '.join(tools)}"
+                        f"{where}: [{address}] names no phase a registered step"
+                        f" has; the phases are {', '.join(phases)}"
                     )
                 continue
             declared: dict[str, Option] = {ENABLED.name: ENABLED}
@@ -811,32 +728,23 @@ def editor_extensions() -> tuple[str, ...]:
 
 
 def answering(address: str) -> str | None:
-    """The check answering to *address*, by its name or a further role."""
-    if address in _CHECKS:
-        return address
-    role, _, tool = address.partition(".")
-    for record in _CHECKS.values():
-        if record.tool == tool and role in record.roles:
-            return record.name
-    return None
+    """The check answering to *address*, its name; None when none is registered."""
+    return address if address in _CHECKS else None
 
 
 def check_for(name: str) -> CheckRecord:
-    """The check named *name*, ``test.pytest``, a further role's name included.
+    """The check named *name*, ``test.pytest``.
 
     Refusal names the registry.
     """
-    holder = answering(name)
-    if holder is None:
+    if name not in _CHECKS:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
-    return _CHECKS[holder]
+    return _CHECKS[name]
 
 
 def roles() -> tuple[str, ...]:
     """The roles the registered checks implement, sorted."""
-    return tuple(
-        sorted({role for r in _CHECKS.values() for role in (r.role, *r.roles)})
-    )
+    return tuple(sorted({r.role for r in _CHECKS.values()}))
 
 
 def judges_extensions(record: CheckRecord, extensions: Iterable[str]) -> bool:
@@ -956,8 +864,7 @@ def verb_tree() -> dict[str, dict[str, CheckRecord]]:
     """Each role's checks by tool, sorted: the verbs the registry generates."""
     tree: dict[str, dict[str, CheckRecord]] = {}
     for record in _CHECKS.values():
-        for role in (record.role, *record.roles):
-            tree.setdefault(role, {})[record.tool] = record
+        tree.setdefault(record.role, {})[record.tool] = record
     return {role: dict(sorted(tools.items())) for role, tools in sorted(tree.items())}
 
 
@@ -1068,11 +975,7 @@ def _role_checks(role: str) -> Callable[[], tuple[str, ...]]:
     """Every registered check of *role*, read when the verb runs."""
 
     def select() -> tuple[str, ...]:
-        return tuple(
-            record.name
-            for record in _CHECKS.values()
-            if role in (record.role, *record.roles)
-        )
+        return tuple(record.name for record in _CHECKS.values() if record.role == role)
 
     return select
 
@@ -1599,17 +1502,16 @@ def _claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
     return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
 
 
-def whole_reached(ctx: GateContext, name: str, chosen: int) -> bool:
-    """Whether the scoped check *name* over *chosen* units should run its whole.
+def _every_unit_reached(ctx: GateContext, record: CheckRecord, chosen: int) -> bool:
+    """Whether a scoped run over *chosen* units reaches every unit *record* judges.
 
-    At the check's threshold share of every unit it judges, provided
-    no member anywhere turned it off: the whole would reach that
-    member too.
+    Every member the check judges, the workspace's tests unit among
+    them, with none turned off anywhere: the whole would reach the
+    same, so the check runs over its configured whole instead of a
+    list naming every unit.
     """
     from livery.workshop._coverage_store import WORKSPACE_TESTS
-    from livery.workshop._invoke import runs_whole
 
-    record = check_for(name)
     everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
     gated_all = judged_by(record, everyone, quiet=True)
     # The workspace's tests unit rides in the scope, not always among
@@ -1619,18 +1521,18 @@ def whole_reached(ctx: GateContext, name: str, chosen: int) -> bool:
     }
     units = len(gated_all) + len(tests_unit)
     on = all(option_value(record, p, "enabled") for p in gated_all)
-    return on and runs_whole(chosen, units, record.threshold)
+    return on and 0 < units <= chosen
 
 
 def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     """The paths the path-narrowing check *name* judges in this run.
 
     The files the run names, when it names any. Otherwise the whole
-    tree, ``.``, when the check reaches every member it judges or its
-    threshold says so; else the reached python members' ``src`` and
-    ``tests`` directories, the workspace's own tests when the run
-    judges them, and the files the check's claims give it in the
-    reached native members.
+    tree, ``.``, when the run reaches every member the check judges;
+    else the reached python members' ``src`` and ``tests``
+    directories, the workspace's own tests when the run judges them,
+    and the files the check's claims give it in the reached native
+    members.
     """
     from livery.workshop._kinds import is_python_kind
     from livery.workshop._packages import package_paths
@@ -1660,7 +1562,7 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
         return chosen or WHOLE
     judged = tuple(p for p in ctx.subset if p in pythons or p in unit)
     present = tuple(p for p in natives if p in ctx.subset)
-    if whole_reached(ctx, name, len(judged) + len(present)):
+    if _every_unit_reached(ctx, record, len(judged) + len(present)):
         return WHOLE
     return holding(judged) + _claimed(name, present)
 

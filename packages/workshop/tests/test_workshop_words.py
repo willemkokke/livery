@@ -60,7 +60,6 @@ def _check(
     arguments: bool = False,
     extension: str = "acme",
     extensions: tuple[str, ...] = (),
-    placed: bool = False,
 ) -> CheckRecord:
     record = CheckRecord(
         "acme",
@@ -74,7 +73,6 @@ def _check(
         tools=("acme",),
         arguments=arguments,
         words=words,
-        placed=placed,
     )
     register_check(record)
     return record
@@ -161,7 +159,7 @@ def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
 ) -> None:
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    record = _check(Words(("acme", "--files={paths}")), placed=True)
+    record = _check(Words(("acme", "--files={paths}")))
     with pytest.raises(Failed) as caught:
         record.run(GateContext(root=tmp_path, packages=(), check=record.name))
     assert str(caught.value) == (
@@ -169,9 +167,8 @@ def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
         " word of a step's main under [phases.<phase>.<step>], where the run's"
         " paths, or the words after --, go"
     )
-    # A check table's words have both appended, and name neither.
-    record = _check(Words(("acme", "{arguments}")))
-    with pytest.raises(Failed, match=r"names \{arguments\} in '\{arguments\}'"):
+    record = _check(Words(("acme", "--args={arguments}")))
+    with pytest.raises(Failed, match=r"names \{arguments\} in '--args=\{arguments\}'"):
         record.run(GateContext(root=tmp_path, packages=(), check=record.name))
     assert tool.calls == []
 
@@ -218,7 +215,7 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
 
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    words = Words(("acme", "check"))
+    words = Words(("acme", "check", "{paths}"))
     record = CheckRecord(
         "acme",
         "lint",
@@ -250,30 +247,7 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
     assert tool.calls == []
 
 
-# The calls: the words, the words after --, then the paths.
-
-
-def test_the_words_come_first_then_the_arguments_then_the_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    tool = _Tool()
-    monkeypatch.setattr(tools, "acme", tool, raising=False)
-    record = _check(Words(("acme", "check", "--strict")), narrowing="paths")
-    _paths(monkeypatch, ("packages/one/src", "packages/one/tests"))
-    ctx = GateContext(root=tmp_path, packages=(), check=record.name)
-    record.run(ctx)
-    record.run(
-        GateContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
-    )
-    assert [argv for argv, _chosen in tool.calls] == [
-        ("check", "--strict", "packages/one/src", "packages/one/tests"),
-        ("check", "--strict", "-v", "packages/one/src", "packages/one/tests"),
-    ]
-    # The whole is a call with no path: the tool reads its own configuration.
-    tool.calls.clear()
-    _paths(monkeypatch, WHOLE)
-    record.run(ctx)
-    assert tool.calls == [(("check", "--strict"), {})]
+# The calls: the paths and the words after -- where the template puts them.
 
 
 def test_paths_and_arguments_land_where_the_template_puts_them(
@@ -287,7 +261,6 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
         Words(("acme", "check", "{arguments}", "--strict", "{paths}", "--end")),
         narrowing="paths",
         arguments=True,
-        placed=True,
     )
     _paths(monkeypatch, ("packages/one/src", "packages/one/tests"))
 
@@ -330,7 +303,7 @@ def test_a_template_without_paths_runs_whole(
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     # A workspace step without {paths} narrows by nothing: one call, no
     # path, and the words after -- dropped without {arguments}.
-    record = _check(Words(("acme", "check", "--all")), placed=True)
+    record = _check(Words(("acme", "check", "--all")))
     _paths(monkeypatch, ("packages/one/src",))
     record.run(
         GateContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
@@ -339,9 +312,7 @@ def test_a_template_without_paths_runs_whole(
     # A package step without {paths} runs once from the package, and
     # none of the files the run reaches is named.
     tool.calls.clear()
-    record = _check(
-        Words(("acme", "build")), scope="package", extensions=("acme",), placed=True
-    )
+    record = _check(Words(("acme", "build")), scope="package", extensions=("acme",))
     monkeypatch.setattr(_checks, "scoped_files", _one_file)
     package = _member(tmp_path, "one")
     record.run(
@@ -366,7 +337,7 @@ def test_a_package_check_calls_from_the_package_with_its_files(
         "livery.workshop._lifecycle.compile_commands", lambda package: database
     )
     record = _check(
-        Words(("acme", "-p", "{compile-commands}", "--root={package}")),
+        Words(("acme", "-p", "{compile-commands}", "--root={package}", "{paths}")),
         scope="package",
         extensions=("python",),
     )
@@ -445,10 +416,10 @@ def test_the_matrix_calls_once_per_value_with_a_cache_of_its_own(
 # What fm explain prints for a check.
 
 
-def test_explain_shows_the_words_the_matrix_and_what_the_engine_appends() -> None:
+def test_explain_shows_the_words_the_matrix_and_what_the_engine_places() -> None:
     words = Words(
-        ("ruff", "check", "--force-exclude"),
-        fix=("ruff", "check", "--fix", "--force-exclude"),
+        ("ruff", "check", "--force-exclude", "{arguments}", "{paths}"),
+        fix=("ruff", "check", "--fix", "--force-exclude", "{arguments}", "{paths}"),
         matrix=(("platform", ("linux", "win32")),),
     )
     record = _check(words, narrowing="paths", arguments=True, extension="ruff")
@@ -456,14 +427,14 @@ def test_explain_shows_the_words_the_matrix_and_what_the_engine_appends() -> Non
         "  lint.acme",
         "    extension: ruff",
         "    scope: the workspace, narrowed by paths",
-        "    judge: ruff check --force-exclude <the words after --> <the paths the"
-        " run reaches>",
-        "    fix: ruff check --fix --force-exclude <the words after --> <the paths"
-        " the run reaches>",
+        "    main: ruff check --force-exclude {arguments} {paths}",
+        "    fix: ruff check --fix --force-exclude {arguments} {paths}",
         "    matrix: platform = linux, win32, one call each",
+        "    {paths}: the paths the run reaches, a batch per call",
+        "    {arguments}: the words after --",
     ]
     coded = CheckRecord("acme", "test", Reference("acme._checks", "judge"))
     assert explained(coded)[2:] == [
         "    scope: the workspace, whole every run",
-        "    run: acme._checks:judge (code)",
+        "    main: acme._checks:judge (code)",
     ]

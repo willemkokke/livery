@@ -1,9 +1,7 @@
-"""How a check's path list reaches its tool: whole or narrowed, and in how many calls.
+"""How a check's path list reaches its tool: in how many calls.
 
-A check declares its transport and its threshold
-([livery.workshop._checks.CheckRecord][]); this module is what the
-engine does with them. `runs_whole` decides when a narrowed check
-should run over its configured whole instead, `batches` splits a path
+The paths go on the tool's command line, where a step's template puts
+them ([livery.workshop._words.run_words][]). `batches` splits a path
 list into the fewest calls the platform's command line allows, and
 `run_batched` runs each call and merges their failures into one
 refusal, so a long list never fails on the operating system's limit
@@ -17,33 +15,11 @@ from collections.abc import Callable, Sequence
 
 from livery.footman import Failed, fail
 
-#: How a path list reaches the tool: on its command line.
-ARGV = "argv"
-#: In a file the tool reads, one path per line; named for the tools that
-#: take one, and taken by none of the registered checks yet.
-FILE = "file"
-#: In a configuration file generated for the call; named likewise.
-CONFIG = "config"
-TRANSPORTS = (ARGV, FILE, CONFIG)
-
 #: The bytes of path arguments one call may carry. Windows caps a whole
 #: command line at 32767 characters; POSIX systems allow far more, and
 #: the figure stays well under the smallest of them (macOS's ARG_MAX of
 #: 1 MiB less the environment).
 ARGV_LIMIT = 30_000 if sys.platform == "win32" else 200_000
-
-
-def runs_whole(chosen: int, total: int, threshold: float) -> bool:
-    """Whether a check over *chosen* of *total* units runs its whole instead.
-
-    At or above *threshold*, the share of affected units, narrowing
-    saves too little to be worth a list: the check runs over its
-    configured whole. A threshold of 1 narrows until every unit is
-    affected; nothing affected never runs whole.
-    """
-    if total <= 0 or chosen <= 0:
-        return False
-    return chosen / total >= threshold
 
 
 def batches(
