@@ -1855,13 +1855,38 @@ def members_for(kinds: Sequence[str] = ()) -> tuple[tuple[str, str], ...]:
     )
 
 
+def metering_extension() -> str:
+    """The installed extension whose check runs the tests; empty when none does.
+
+    Found through its registration, the check of the test role, since
+    the base names no extension's tool. A gate that meters no suite is
+    refused by the coverage leg and the union (#1225), so until coverage
+    is its own extension an extension pass lists this extension beside
+    the extension under test and lands the loop's first member, the one
+    it meters, and proves the extension beside them rather than alone.
+    """
+    from livery.workshop._extensions import declaration, installed_extensions
+
+    for candidate in installed_extensions():
+        found = declaration(candidate)
+        if found is not None and any(
+            check.role == "test" for check in found.additions.checks
+        ):
+            return candidate
+    return ""
+
+
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The stack a pass births to test extension *name*, and the member kinds it lands.
 
     The stack is what *name* requires, each before what needs it, then
     *name* itself with every option it declares, so each of its checks
-    registers. The members are the loop's of the kinds *name*'s checks
-    declare, so each check has something of its own to judge.
+    registers; the test extension
+    ([livery.workshop._e2e.metering_extension][]) is listed before
+    *name* unless *name* is it or requires it. The members are the
+    loop's of the kinds *name*'s checks declare, so each check has
+    something of its own to judge, and the loop's first member besides,
+    which the test extension meters.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
@@ -1913,6 +1938,12 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         for _member, seed in LOOP_MEMBERS
         if named & set(kind_for(member_kind(seed)).stands_for)
     )
+    metering = metering_extension()
+    if metering and metering not in stack and name != metering:
+        stack.insert(len(stack) - 1, metering)
+    metered = member_kind(LOOP_MEMBERS[0][1])
+    if metering and metered not in kinds:
+        kinds = (metered, *kinds)
     return tuple(stack), kinds
 
 
@@ -3279,7 +3310,9 @@ if _WORKSHOP_TESTS.is_dir():
         needs run first, once. ``--extension`` tests one extension in
         isolation, ``extension`` the default set: the birth lists that
         extension and what it requires instead of the loop's stack, and
-        the members are those of the kinds its checks declare. ``birth`` builds
+        the members are those of the kinds its checks declare, the test
+        extension and the loop's first member beside them so each gate
+        meters a suite (#1225). ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a
         birth lists into a local index, births or resumes the loop's
         workspace through ``fm new.project`` from that index (so an

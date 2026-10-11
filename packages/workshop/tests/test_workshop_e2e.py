@@ -625,8 +625,9 @@ def _declared(
     *extensions: str,
     requires: tuple[str, ...] = (),
     options: dict[str, str] | None = None,
+    role: str = "lint",
 ) -> Declaration:
-    """A declaration with one check judging the packages holding *extensions*."""
+    """One check of *role* judging the packages that hold *extensions*."""
     from livery.workshop._checks import CheckRecord
     from livery.workshop._declaration import Additions
 
@@ -634,7 +635,7 @@ def _declared(
         del ctx
 
     checks = (
-        (CheckRecord("t", "lint", _idle, extensions=extensions),) if extensions else ()
+        (CheckRecord("t", role, _idle, extensions=extensions),) if extensions else ()
     )
     return Declaration(
         "x",
@@ -655,6 +656,10 @@ def _fake_declarations(
     monkeypatch.setattr(
         "livery.workshop._extensions.declared_options",
         lambda name: dict(declared[name].options) if name in declared else {},
+    )
+    monkeypatch.setattr(
+        "livery.workshop._extensions.installed_extensions",
+        lambda: tuple(sorted(declared)),
     )
 
 
@@ -690,8 +695,27 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
         },
     )
     stack, kinds = _e2e.extension_under_test("top")
+    # No test extension installed: nothing rides along, and the pass
+    # lands the members the checks name alone.
+    assert _e2e.metering_extension() == ""
     assert stack == ("base", "mid", "top")
     assert kinds == ("cpp-conan",)
+    # With one installed it rides before the extension under test, and
+    # the loop's first member lands beside the C++ one, so the gate
+    # meters a suite.
+    _fake_declarations(
+        monkeypatch,
+        {
+            "top": _declared("cmake", requires=("mid", "base")),
+            "mid": _declared("cmake", requires=("base",)),
+            "base": _declared("cmake"),
+            "pytest": _declared("python", role="test"),
+        },
+    )
+    assert _e2e.metering_extension() == "pytest"
+    stack, kinds = _e2e.extension_under_test("top")
+    assert stack == ("base", "mid", "pytest", "top")
+    assert kinds == ("python", "cpp-conan")
 
 
 def test_the_extension_under_test_is_listed_with_every_option_it_declares(
@@ -727,6 +751,20 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
     _stack, kinds = _e2e.extension_under_test("both")
     assert kinds == ("python", "cpp-conan")
+    # The test extension's own pass lists it once, as the extension
+    # under test; one that requires it lists it where the requirement
+    # puts it; any other lists it just before itself.
+    _fake_declarations(
+        monkeypatch,
+        {
+            "pytest": _declared("python", role="test"),
+            "wrap": _declared("python", requires=("pytest",)),
+            "typed": _declared("python"),
+        },
+    )
+    assert _e2e.extension_under_test("pytest")[0] == ("pytest",)
+    assert _e2e.extension_under_test("wrap")[0] == ("pytest", "wrap")
+    assert _e2e.extension_under_test("typed") == (("pytest", "typed"), ("python",))
     assert [name for name, _seed in _e2e.members_for(kinds)] == [
         "loop-echo",
         "loop-cpp",
