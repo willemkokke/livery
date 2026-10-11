@@ -24,7 +24,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from livery.strongroom import Digest, Entry, FolderSource, HttpSource, Source, Tree
+from livery.strongroom import (
+    Digest,
+    Entry,
+    FolderSource,
+    HttpSource,
+    LockTimeout,
+    Source,
+    StoreError,
+    Tree,
+)
 from livery.strongroom import Store as ObjectStore
 from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import Home
@@ -248,7 +257,9 @@ class _LazyTools(Mapping[str, Listed]):
         if held is None:
             entry = self._entries[name]
             where = f"{self._source} {name}"
-            tree = _tree(self._store, Digest.parse(entry["tree"]), where=where)
+            digest = Digest.parse(entry["tree"])
+            tree = _tree(self._store, digest, where=where)
+            _root(self._store, name, digest, self._source)
             self._members[name] = {member.name: member for member in tree.entries}
             held = self._read[name] = _listed(self._store, name, tree, where=where)
         return held
@@ -395,6 +406,30 @@ def _read_pointer(source: str) -> dict[str, Any]:
             f"{source}: {POINTER} is not a pointer document of schema {POINTER_SCHEMA}"
         )
     return found
+
+
+def _root(store: ObjectStore, name: str, digest: Digest, source: str) -> None:
+    """Name the tool's index tree under ``tools/index/<name>``, so a sweep keeps it.
+
+    A tree the catalogue fetched is reached by nothing else: the next
+    sweep would evict it with the record, the versions and the surfaces
+    inside it, and the next read would fetch them all again. The ref
+    moves by compare-and-swap when the pointer names another tree. A
+    ref that cannot be written leaves the read standing; the next read
+    roots it.
+    """
+    from livery.toolroom.store._engine import BY
+    from livery.toolroom.store._home import TOOLS
+
+    path = f"index/{name}"
+    try:
+        current = store.ref(TOOLS, path)
+        if current != digest:
+            store.set_ref(
+                TOOLS, path, digest, previous=current, by=BY, meta={"source": source}
+            )
+    except (LockTimeout, StoreError, OSError):
+        return
 
 
 def _source_of(source: str) -> Source:

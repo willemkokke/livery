@@ -767,14 +767,23 @@ def sweep_tool_store(environ: dict[str, str] | None = None) -> str:
     extracted and named, and nothing reaches it again: the tree is what
     a pinned version runs from. The workflow saves the whole store,
     so those objects would ride in every archive and cost every restore.
-    Off a GitHub job nothing runs and the note is empty. A failed sweep
-    is named and never decides the job.
+    Off a GitHub job nothing runs and the note is empty; on Gitea's
+    runner, which sets the same variable, shares one store across its
+    jobs and saves none, the store is kept whole and the note says so.
+    A failed sweep is named and never decides the job.
     """
     import os as _os
 
     found = _os.environ if environ is None else environ
     if not found.get("GITHUB_ACTIONS"):
         return ""
+    if found.get("GITEA_ACTIONS"):
+        # Gitea's runner sets GITHUB_ACTIONS for compatibility, shares
+        # one store across its jobs and saves no archive, so a sweep
+        # there only makes the next job fetch the catalogue again.
+        return (
+            "tool store: kept whole; this runner shares it across jobs and saves none"
+        )
     from livery.strongroom import LockTimeout, StoreError
     from livery.workshop._tools import _home  # pyright: ignore[reportPrivateUsage]
 

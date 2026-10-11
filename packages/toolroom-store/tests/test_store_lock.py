@@ -1045,3 +1045,59 @@ def test_the_host_allowance_rides_the_entry_and_a_lock_without_it_reads_unchange
         LockError, match=r"tea: `allow-host` is 'yes', not true or false"
     ):
         Lock.load(path)
+
+
+def test_a_catalogue_read_roots_the_tools_tree_so_a_sweep_keeps_it(tmp_path):
+    """The records, versions and surfaces a read fetched survive the store's sweep.
+
+    They reach the home's store by digest and nothing names them, so a
+    sweep would evict them and the next read would fetch them all again,
+    which on a runner is the entry every job paid. The read names the
+    tree under `tools/index/<name>`, and a pointer naming another tree
+    moves the ref.
+    """
+    from livery.toolroom.store import TOOLS, Home
+
+    store = _index_store(tmp_path)
+    index = tmp_path / "index"
+    axis = _delegated("ruff", "1.0.0").to_json()
+    about = {"help": "", "platforms": ["Linux"], "extractor": 1, "absent": {}}
+
+    def _top(versions: list[str]) -> Any:
+        return _tree_entry(
+            store,
+            "ruff",
+            [
+                _blob(store, "tool", axis),
+                _blob(store, "versions", versions),
+                *(
+                    _tree_entry(
+                        store,
+                        version,
+                        [
+                            _blob(store, "observation", about),
+                            _blob(store, "surface", []),
+                        ],
+                    )
+                    for version in versions
+                ),
+            ],
+        )
+
+    top = _top(["1.0.0"])
+    _pointer(index, {"ruff": {"tree": str(top.digest), "record": "x"}})
+    home = Home(tmp_path / "home")
+    Catalogue.of_index(str(index), home=home).listed("ruff")
+    kept = home.open_store()
+    assert kept.ref(TOOLS, "index/ruff") == top.digest
+    orphan = kept.land(b"an archive nothing names").digest
+    kept.sweep()
+    assert kept.state(top.digest) == "present"
+    assert kept.state(orphan) != "present"
+    # The same pointer writes nothing; a pointer naming another tree moves the ref.
+    Catalogue.of_index(str(index), home=home).listed("ruff")
+    assert kept.ref(TOOLS, "index/ruff") == top.digest
+    moved = _top(["1.0.0", "1.1.0"])
+    _pointer(index, {"ruff": {"tree": str(moved.digest), "record": "x"}})
+    Catalogue.of_index(str(index), home=home).listed("ruff")
+    assert kept.ref(TOOLS, "index/ruff") == moved.digest
