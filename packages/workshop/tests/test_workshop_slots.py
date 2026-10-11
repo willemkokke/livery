@@ -221,3 +221,26 @@ def test_a_union_composes_the_same_whatever_order_its_checks_registered() -> Non
         assert all_composed()["python.dev-group"] == before
     finally:
         _checks.restore(state)
+
+
+def test_a_snapshot_puts_back_what_was_declared_and_filled_since(scratch_slots) -> None:
+    from livery.workshop._slots import restore, slots, snapshot
+
+    register_slot("acme.list")
+    contribute("acme.list", "one", extension="acme.brand")
+    state = snapshot()
+    # Declared and filled since: a new slot, a new contribution, and a
+    # contribution to a builtin slot.
+    register_slot("acme.scalar", compose=NEAREST)
+    contribute("acme.list", "two", extension="acme.brand")
+    contribute("python.dev-group", "acme>=1", extension="acme.brand")
+    assert _list("acme.list") == ["one", "two"]
+    restore(state)
+    assert "acme.scalar" not in slots()
+    assert _list("acme.list") == ["one"]
+    assert "acme>=1" not in _list("python.dev-group")
+    # The snapshot is its own copy: filling the registry after it was
+    # taken did not move it, so a second restore lands the same.
+    contribute("acme.list", "three", extension="acme.brand")
+    restore(state)
+    assert _list("acme.list") == ["one"]
