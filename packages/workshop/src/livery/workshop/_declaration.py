@@ -3,8 +3,8 @@
 An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
-the extensions it requires, the steps it adds to a package's
-lifecycle phases, the questions about a package it
+the extensions it requires, the phases it declares and the steps it
+adds to a package's lifecycle phases, the questions about a package it
 answers, the tools its verbs need, the options a listing may turn on,
 its checks and the steps of the gate's phases, its CI jobs,
 the values it puts into slots, the contract keys it owns, what it adds
@@ -12,6 +12,14 @@ to another extension while that one is listed, and the earlier
 extensions' shipped files it replaces or deletes. The file is a
 contract, read as ``workshop.toml`` is: kebab-case keys, every key
 judged, every refusal naming the file.
+
+A ``[phases.<phase>]`` table declares the phase when it carries
+``level``, ``gated``, ``after``, ``verb`` or ``keys``
+([livery.workshop._phases.PhaseSpec][]), in the grammar the base's own
+contract file declares its phases in; a phase no declaration names
+refuses naming the declared ones. The phase's level decides how its
+steps read: a package-level phase's into the one step an extension
+adds to it, a workspace-level phase's into check records.
 
 A check whose verdict is its tool's exit code is its tool's words
 (``judge`` in a check table, ``main`` in a step table, with ``fix``,
@@ -41,6 +49,7 @@ if TYPE_CHECKING:
     from livery.workshop._checks import CheckRecord, GateContext
     from livery.workshop._contract_keys import ContractKind, Declared, Type
     from livery.workshop._influence import Inputs
+    from livery.workshop._phases import PhaseSpec
     from livery.workshop._points import JobContribution
     from livery.workshop._words import Words
 
@@ -247,6 +256,7 @@ class Declaration:
         release_notes: The release-notes provider it names, which the
             mount registers; None for an extension that writes no notes.
         fragments: The files its code writes, by target.
+        phase_specs: The phases it declares, by name.
         phases: The steps it adds to a package's lifecycle phases, by
             phase.
         queries: The questions about a package it answers, each query's
@@ -278,6 +288,7 @@ class Declaration:
     slots: tuple[DeclaredSlot, ...] = ()
     release_notes: Reference | None = None
     fragments: tuple[DeclaredOutput, ...] = ()
+    phase_specs: dict[str, PhaseSpec] = field(default_factory=dict[str, "PhaseSpec"])
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
     queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
@@ -337,6 +348,8 @@ _NAMED = (
     ("for", "*", "checks", "*", "*", "env"),
     ("phases", "*", "*", "fragments"),
     ("phases", "*", "*", "env"),
+    ("phases", "*", "*", "replaces"),
+    ("phases", "*", "*", "deletes"),
     ("contributions",),
     ("for", "*", "contributions"),
     ("replaces",),
@@ -426,7 +439,7 @@ def read(extension: str, package: str) -> Declaration | None:
 
 def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
     from livery.workshop._contract_keys import judge
-    from livery.workshop._phases import PHASES
+    from livery.workshop._phases import PACKAGE_LEVEL
 
     data = _parsed(path, text)
     reader = _Reader(extension, package, path)
@@ -437,6 +450,8 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         raise DeclarationError(
             f"{path}:\n" + "\n".join(f"  {line}" for line in problems)
         )
+    own = phase_specs_of(data, path, extension=extension)
+    reader.specs = _known_phases(own, path)
     identity = data.get("extension", {})
     if data.get("options") and "workspace" not in identity.get(
         "levels", ("workspace",)
@@ -453,12 +468,13 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         for target, table in data.get("for", {}).items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
-    # A gate phase's steps are checks, read with the additions.
-    phases = {
-        str(name): reader.phase(str(name), table, identity)
-        for name, table in data.get("phases", {}).items()
-        if name in PHASES or not _step_tables(table)
-    }
+    # A workspace-level phase's steps are checks, read with the additions.
+    phases: dict[str, DeclaredPhase] = {}
+    for name, table in data.get("phases", {}).items():
+        if reader.spec(str(name), ()).level == PACKAGE_LEVEL:
+            declared = reader.phase(str(name), table, identity)
+            if declared is not None:
+                phases[str(name)] = declared
     queries = {
         str(name): reader.query(str(name), value, identity)
         for name, value in data.get("queries", {}).items()
@@ -501,6 +517,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             reader.output(str(target), table)
             for target, table in data.get("fragments", {}).items()
         ),
+        phase_specs=own,
         phases=phases,
         queries=queries,
         categories=tuple(
@@ -525,11 +542,30 @@ class _Reader:
         self.extension = extension
         self.package = package
         self.path = path
+        #: The declared phases a table of this file may name: every
+        #: installed declaration's and this file's own.
+        self.specs: dict[str, PhaseSpec] = {}
 
     def refuse(self, where: tuple[str, ...], text: str) -> DeclarationError:
         from livery.workshop._contract_keys import shown
 
         return DeclarationError(f"{self.path}: {shown(where)} {text}")
+
+    def spec(self, name: str, prefix: tuple[str, ...]) -> PhaseSpec:
+        """The declared phase *name* a ``[phases.<name>]`` table names.
+
+        Refuses one no declaration names, naming the declared ones and
+        the nearest spelling.
+        """
+        found = self.specs.get(name)
+        if found is None:
+            near = difflib.get_close_matches(name, list(self.specs), n=1)
+            hint = f"; did you mean {near[0]!r}?" if near else ""
+            raise self.refuse(
+                (*prefix, "phases", name),
+                f"names no phase; the phases are {', '.join(self.specs)}{hint}",
+            )
+        return found
 
     def requires_alone(self, identity: object) -> None:
         """Refuse ``compatible``, ``before`` or ``after`` under ``[extension]``.
@@ -555,11 +591,11 @@ class _Reader:
     ) -> Additions:
         """What *data* adds: checks, the gate phases' steps, slot values and jobs.
 
-        A ``[phases.<phase>]`` table whose phase is not a lifecycle
-        phase holds steps, each a check record; a lifecycle phase's
-        table reads into its own record elsewhere.
+        A ``[phases.<phase>]`` table of a workspace-level phase holds
+        steps, each a check record, beside the phase's declaration; a
+        package-level phase's table reads into its own record elsewhere.
         """
-        from livery.workshop._phases import PHASES
+        from livery.workshop._phases import WORKSPACE_LEVEL
 
         checks = [
             self.check(str(tool), str(role), entry, (*prefix, "checks"), options)
@@ -567,7 +603,7 @@ class _Reader:
             for role, entry in roles.items()
         ]
         for phase, table in data.get("phases", {}).items():
-            if phase in PHASES or not _step_tables(table):
+            if self.spec(str(phase), prefix).level != WORKSPACE_LEVEL:
                 continue
             checks += [
                 self.step(str(phase), step, entry, (*prefix, "phases"))
@@ -689,9 +725,11 @@ class _Reader:
     def gate_steps(
         self, phase: str, table: dict[str, Any], prefix: tuple[str, ...]
     ) -> dict[str, dict[str, Any]]:
-        """The steps under a gate phase's table, which holds steps and nothing else."""
+        """The steps under a workspace-level phase's table, beside its declaration."""
         for key, value in table.items():
-            if key in _PHASE_KEYS or not isinstance(value, dict):
+            if key in _DECLARATION_KEYS:
+                continue
+            if key in _LIFECYCLE_KEYS or not isinstance(value, dict):
                 raise self.refuse(
                     (*prefix, "phases", phase, key),
                     f"is not a step, and {phase} is not a lifecycle phase; its table"
@@ -764,14 +802,10 @@ class _Reader:
         where = (*prefix, phase, step)
         run, fix, words = self.step_bodies(entry, where)
         provides, reads = self.context_keys(entry, where, "another step")
-        for key in ("replaces", "deletes"):
-            for text in entry.get(key, ()):
-                if not _step_address(str(text)):
-                    raise self.refuse(
-                        (*where, key),
-                        f"names {text!r}; a step of another extension is"
-                        " <owner>:<phase>.<step>",
-                    )
+        others = {
+            key: self.other_steps(entry.get(key, {}), (*where, key))
+            for key in ("replaces", "deletes")
+        }
         record = self.record(step, phase, entry, where, run, fix, words)
         if words is not None:
             named = words.placeholders()
@@ -793,9 +827,34 @@ class _Reader:
             provides=tuple(provides.items()),
             reads=reads,
             isolated=None if "isolated" not in entry else bool(entry["isolated"]),
-            replaces=tuple(str(text) for text in entry.get("replaces", ())),
-            deletes=tuple(str(text) for text in entry.get("deletes", ())),
+            replaces=others["replaces"],
+            deletes=others["deletes"],
         )
+
+    def other_steps(
+        self, table: dict[str, Any], where: tuple[str, ...]
+    ) -> tuple[tuple[str, str], ...]:
+        """The steps of other extensions *table* names, each to the reason it states.
+
+        A step is ``<owner>:<phase>.<step>``, and the reason is a line
+        of text; a step named with no reason refuses.
+        """
+        found: list[tuple[str, str]] = []
+        for text, reason in table.items():
+            if not _step_address(text):
+                raise self.refuse(
+                    where,
+                    f"names {text!r}; a step of another extension is"
+                    " <owner>:<phase>.<step>",
+                )
+            if not str(reason).strip():
+                raise self.refuse(
+                    (*where, text),
+                    "states no reason; a step names another with the reason it"
+                    " takes its place",
+                )
+            found.append((text, str(reason)))
+        return tuple(found)
 
     def record(
         self,
@@ -1091,31 +1150,26 @@ class _Reader:
 
     def phase(
         self, name: str, table: dict[str, Any], identity: dict[str, Any]
-    ) -> DeclaredPhase:
-        """The steps *table* adds to the phase *name*, its references resolved.
+    ) -> DeclaredPhase | None:
+        """The steps *table* adds to the package-level phase *name*, resolved.
 
         A package-level extension adds steps to a package's phases, so
         one listed at the workspace alone declares none. A table names
-        at least one step, and a key its steps provide is never one
-        they read.
+        at least one step, unless it declares the phase and adds no
+        step, and then this is None; a key its steps provide is never
+        one they read.
         """
-        from livery.workshop._phases import PHASES
-
         where = ("phases", name)
-        if name not in PHASES:
-            near = difflib.get_close_matches(name, PHASES, n=1)
-            hint = f"; did you mean {near[0]!r}?" if near else ""
-            raise self.refuse(
-                where, f"names no phase; the phases are {', '.join(PHASES)}{hint}"
-            )
+        named = _step_tables(table)
+        own = [key for key in ("pre", "main", "post") if key in table]
+        if not named and not own and any(key in table for key in _DECLARATION_KEYS):
+            return None
         if "package" not in identity.get("levels", ("workspace",)):
             raise self.refuse(
                 where,
                 "adds steps to a package's phase, and this extension's levels are"
                 " workspace; add 'package' to levels, or drop the table",
             )
-        named = _step_tables(table)
-        own = [key for key in ("pre", "main", "post") if key in table]
         if named and own:
             raise self.refuse(
                 where,
@@ -1349,9 +1403,124 @@ class _Reader:
         return next((path for path in candidates if path.is_file()), None)
 
 
-#: The keys of a lifecycle phase's own table, beside which a sub-table
-#: is a step.
-_PHASE_KEYS = ("pre", "main", "post", "provides", "reads")
+#: The keys that declare a phase in its ``[phases.<phase>]`` table.
+_DECLARATION_KEYS = ("level", "gated", "after", "verb", "keys")
+
+#: The keys of a lifecycle phase's own steps in its table.
+_LIFECYCLE_KEYS = ("pre", "main", "post", "provides", "reads")
+
+#: The keys of a phase's own table, beside which a sub-table is a step.
+_PHASE_KEYS = (*_DECLARATION_KEYS, *_LIFECYCLE_KEYS)
+
+
+def phase_specs_of(
+    data: dict[str, Any], path: Path, *, extension: str
+) -> dict[str, PhaseSpec]:
+    """The phases *data*'s ``[phases.<phase>]`` tables declare, judged, by name.
+
+    A table declares its phase when it carries ``level``, ``gated``,
+    ``after``, ``verb`` or ``keys``; one that adds steps alone declares
+    nothing. The same reader serves the base's contract file and an
+    extension's declaration file, *extension* naming the declarer.
+
+    Raises:
+        DeclarationError: when a declaration is off its shape: a level
+            that is not ``package`` or ``workspace``, a key of a type
+            no context value has, or a value of the wrong type.
+    """
+    from livery.workshop._contract_keys import shown
+    from livery.workshop._phases import LEVELS, PACKAGE_LEVEL, TYPES, PhaseSpec
+
+    def refuse(where: tuple[str, ...], text: str) -> DeclarationError:
+        return DeclarationError(f"{path}: {shown(where)} {text}")
+
+    found: dict[str, PhaseSpec] = {}
+    phases = data.get("phases")
+    if not isinstance(phases, dict):
+        return found
+    for name, table in cast("dict[str, Any]", phases).items():
+        if not isinstance(table, dict):
+            continue
+        entry = cast("dict[str, Any]", table)
+        if not any(key in entry for key in _DECLARATION_KEYS):
+            continue
+        where = ("phases", name)
+        level = entry.get("level", PACKAGE_LEVEL)
+        if level not in LEVELS:
+            raise refuse(
+                (*where, "level"),
+                f"is {level!r}; a phase runs at one of {', '.join(LEVELS)}",
+            )
+        for key in ("gated", "verb"):
+            if not isinstance(entry.get(key, False), bool):
+                raise refuse((*where, key), "is true or false")
+        after = entry.get("after", [])
+        if not isinstance(after, list) or not all(
+            isinstance(item, str) for item in cast("list[object]", after)
+        ):
+            raise refuse((*where, "after"), "is a list of the phases this one follows")
+        keys = entry.get("keys", {})
+        if not isinstance(keys, dict):
+            raise refuse(
+                (*where, "keys"), "is a table of the engine's keys, each to its type"
+            )
+        typed = cast("dict[str, Any]", keys)
+        for key, kind in typed.items():
+            if kind not in TYPES:
+                raise refuse(
+                    (*where, "keys", key),
+                    f"is {kind!r}; a key's type is one of {', '.join(TYPES)}",
+                )
+        found[name] = PhaseSpec(
+            name,
+            keys={key: str(kind) for key, kind in typed.items()},
+            level=str(level),
+            gated=bool(entry.get("gated", False)),
+            after=tuple(str(item) for item in cast("list[object]", after)),
+            verb=bool(entry.get("verb", False)),
+            extension=extension,
+        )
+    return found
+
+
+def phase_declarations(extension: str, package: str) -> tuple[PhaseSpec, ...]:
+    """The phases the declaration beside *package* declares, for *extension*.
+
+    Empty without a declaration file. Read without judging the rest of
+    the file, and without importing anything, so every installed
+    extension's phases are known before any declaration is judged.
+
+    Raises:
+        DeclarationError: when the file does not parse or a phase's
+            declaration is off its shape.
+    """
+    path = declaration_file(package)
+    if path is None:
+        return ()
+    data = _parsed(path, path.read_text("utf-8"))
+    return tuple(phase_specs_of(data, path, extension=extension).values())
+
+
+def _known_phases(own: dict[str, PhaseSpec], path: Path) -> dict[str, PhaseSpec]:
+    """Every declared phase a file may name: the installed declarations' and *own*.
+
+    Raises:
+        DeclarationError: when *own* declares a phase another extension
+            declares.
+    """
+    from livery.workshop import _phases
+
+    known = dict(_phases.declared_phases())
+    for name, spec in own.items():
+        held = known.get(name)
+        if held is not None and held.extension != spec.extension:
+            raise DeclarationError(
+                f"{path}: phases.{name} declares the {name} phase, which"
+                f" {held.extension} declares; one extension declares a phase"
+            )
+        known[name] = spec
+    return known
+
 
 #: The keys of a check table a step table does not take, each to what
 #: says it in the step's spelling; ``{phase}`` and ``{step}`` name the

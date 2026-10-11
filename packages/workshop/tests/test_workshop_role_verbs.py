@@ -51,6 +51,18 @@ def empty(registry: None) -> None:
     _checks.restore(({}, {}))
 
 
+@pytest.fixture
+def fake_phases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The phases the probes below belong to, declared beside the base's, with verbs."""
+    from livery.workshop import _phases
+    from livery.workshop._phases import WORKSPACE_LEVEL, PhaseSpec
+
+    known = dict(_phases.declared_phases())
+    for name in ("probe", "quiet", "held", "owned", "divination", "style"):
+        known[name] = PhaseSpec(name, {}, WORKSPACE_LEVEL, True, (), True, "acme.fake")
+    monkeypatch.setattr(_phases, "declared_phases", lambda: known)
+
+
 def _idle(ctx: GateContext) -> None:
     del ctx
 
@@ -103,7 +115,7 @@ def test_a_name_that_is_no_task_address_refuses(registry: None) -> None:
         register_check(CheckRecord("default", "lint", _idle))
 
 
-def test_two_checks_at_one_address_refuse(registry: None) -> None:
+def test_two_checks_at_one_address_refuse(registry: None, fake_phases: None) -> None:
     register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
     with pytest.raises(
         _FAILURES,
@@ -126,7 +138,7 @@ def test_two_checks_at_one_address_refuse(registry: None) -> None:
 
 
 def test_a_further_roles_table_reaches_the_check(
-    tmp_path: Path, registry: None
+    tmp_path: Path, registry: None, fake_phases: None
 ) -> None:
     from livery.workshop._checks import check_for, option_value
 
@@ -265,7 +277,9 @@ def test_the_gate_takes_no_words_after_the_dashes(
 # A further role: the check answers under it, and leaves with it.
 
 
-def test_a_further_role_answers_and_leaves_with_its_check(registry: None) -> None:
+def test_a_further_role_answers_and_leaves_with_its_check(
+    registry: None, fake_phases: None
+) -> None:
     register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
     record = check_for("lint.acme")
     assert check_for("style.acme") is record
@@ -289,7 +303,7 @@ def _probes() -> None:
 
 
 def test_each_role_is_a_verb_and_each_check_a_sub_task_with_its_own_flags(
-    empty: None,
+    empty: None, fake_phases: None
 ) -> None:
     _probes()
     root = Group("root")
@@ -308,7 +322,7 @@ def test_each_role_is_a_verb_and_each_check_a_sub_task_with_its_own_flags(
 
 
 def test_a_verb_runs_its_checks_through_the_walk(
-    empty: None, monkeypatch: pytest.MonkeyPatch
+    empty: None, fake_phases: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[tuple[str, ...], tuple[str, ...], dict[str, object]]] = []
 
@@ -350,7 +364,9 @@ def test_a_verb_runs_its_checks_through_the_walk(
     assert calls[0][0] == ("probe.alpha", "probe.beta", "probe.delta")
 
 
-def test_an_address_an_existing_verb_holds_is_served_by_it(empty: None) -> None:
+def test_an_address_an_existing_verb_holds_is_served_by_it(
+    empty: None, fake_phases: None
+) -> None:
     _probes()
     register_check(CheckRecord("check", "held", _idle))
     register_check(CheckRecord("new", "held", _idle))
@@ -377,7 +393,9 @@ def test_an_address_an_existing_verb_holds_is_served_by_it(empty: None) -> None:
     assert inspect.unwrap(root.tasks["owned"]) is owned
 
 
-def test_a_second_generation_follows_the_registry(empty: None) -> None:
+def test_a_second_generation_follows_the_registry(
+    empty: None, fake_phases: None
+) -> None:
     _probes()
     root = Group("root")
     generate_verbs(root)
@@ -428,7 +446,9 @@ def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> No
     assert _flags(root.groups["layering"], "imports") == {"fix", "safe_fix"}
 
 
-def test_a_role_with_no_listed_check_has_no_verb(registry: None) -> None:
+def test_a_role_with_no_listed_check_has_no_verb(
+    registry: None, fake_phases: None
+) -> None:
     # The fallback first: no check of the role, no verb for it.
     root = Group("root")
     generate_verbs(root)
@@ -440,3 +460,33 @@ def test_a_role_with_no_listed_check_has_no_verb(registry: None) -> None:
     unregister_check("divination.crystal")
     generate_verbs(root)
     assert "divination" not in root.groups
+
+
+def test_a_phase_declared_without_a_verb_gets_none(empty: None) -> None:
+    from livery.workshop._phases import base_phases
+
+    # The base's phases: a check per phase, and a verb for each phase
+    # that declares one, the gated phases; the train's and the engines'
+    # own phases get none.
+    for name in base_phases():
+        register_check(CheckRecord("acme", name, _idle))
+    with_verb = {name for name, spec in base_phases().items() if spec.verb}
+    assert with_verb == {
+        "build",
+        "drift",
+        "examples",
+        "format",
+        "layering",
+        "lint",
+        "provenance",
+        "test",
+        "typecheck",
+        "typecomplete",
+    }
+    assert set(verb_tree()) == with_verb
+    root = Group("root")
+    generate_verbs(root)
+    assert set(root.groups) == with_verb
+    assert set(root.tasks) == set()
+    for name in ("stamp", "publish", "prove", "replay", "sync", "clean", "run"):
+        assert name not in root.groups, name

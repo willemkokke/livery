@@ -33,7 +33,7 @@ from livery.workshop._declaration import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
     from importlib.metadata import Distribution, EntryPoint
 
     from livery.toolroom.store import Spec
@@ -559,6 +559,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             found = _readable(extension)
             if found is not None:
                 check_api_version(extension, found)
+                check_phase_declarers(extension, found, present)
                 declare_slots(extension, found.slots)
                 notes = declare_release_notes(extension, found.release_notes)
                 rules = declare_rules(extension, found.rules)
@@ -612,6 +613,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         listed = options.get(extension, ())
         if why := _undeclared(extension, listed):
             _note(f"{why}; the mount leaves it off")
+        check_phase_declarers(extension, found, present)
         declare_slots(extension, found.slots)
         notes = declare_release_notes(extension, found.release_notes)
         rules = declare_rules(extension, found.rules)
@@ -689,6 +691,41 @@ def _note(text: str) -> None:
     import sys
 
     print(f"  note: {text}", file=sys.stderr)
+
+
+def check_phase_declarers(
+    extension: str, found: Declaration, present: Iterable[str]
+) -> None:
+    """Refuse a step of *extension* into a phase whose declarer is not mounted.
+
+    A phase is declared by the base, by *extension* itself, or by an
+    extension among *present*, the ones mounted before it; a step into
+    an installed but unlisted extension's phase names the declarer to
+    list.
+
+    Raises:
+        Failed: naming the extension, the phase and its declarer.
+    """
+    from livery.footman import fail
+    from livery.workshop import _phases
+
+    mounted = {SELF, extension, *present}
+    added = {record.role for record in found.additions.checks}
+    added |= {
+        record.role
+        for additions in found.targets.values()
+        for record in additions.checks
+    }
+    added |= set(found.phases)
+    specs = _phases.declared_phases()
+    for phase in sorted(added):
+        declarer = specs[phase].extension if phase in specs else SELF
+        if declarer not in mounted:
+            fail(
+                f"extension {extension!r} adds steps to the {phase} phase, which"
+                f" {declarer} declares and the workspace does not list; list"
+                f" {declarer} before {extension}, or drop the steps"
+            )
 
 
 def _graft_contributions(
@@ -1137,7 +1174,7 @@ def composition_problems(root: Path) -> list[str]:
     members, since a set is closed under requires.
     """
     from livery.workshop._composition import canonical
-    from livery.workshop._phases import PHASES, phase_problems, phase_steps
+    from livery.workshop._phases import lifecycle_phases, phase_problems, phase_steps
 
     workspace = set(workspace_names(root))
     problems: list[str] = []
@@ -1160,7 +1197,7 @@ def composition_problems(root: Path) -> list[str]:
                         f"{where}: {name} requires {needed}, which [workspace]"
                         " extensions does not list; the gate's --fix adds it"
                     )
-        for phase in PHASES:
+        for phase in lifecycle_phases():
             steps = phase_steps(phase, members, installed_declaration)
             problems += [
                 f"{where}: {line}"
