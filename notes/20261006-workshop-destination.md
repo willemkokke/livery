@@ -2343,8 +2343,9 @@ the stack, which this design neither needs nor rules out).
   hosted runner brings the loop's environment up in host mode as a
   desk does, needs no host alias there, and the result is on the
   forge on a clean machine. `[release] prove = ["head"]` waits for
-  #1377. Not proven yet: the hosted nightly itself, which a dispatch
-  on the branch proves before the entry runs on its own.
+  #1377. The hosted nightly itself was proven on 2026-10-11 by a
+  dispatch on the branch, run 38111804746; the closing entry below
+  names what it took.
 - 2026-10-11, Willem: a step's body is `main`, with `fix` and
   `safe-fix` for a step that rewrites, each a command template, a
   list, or a function, a string; `judge`, `run`, `command` and
@@ -2396,8 +2397,8 @@ the stack, which this design neither needs nor rules out).
   which the pass now gives its children where git has none; and the
   generic forge tokens, which a hosted job carries for the real forge
   and the workshop reads first, so the pass sets them to the local
-  forge's. PR #1387 merged the first; PR #1388, unarmed, carries the
-  other two, its dispatched nightly the acceptance, open until green.
+  forge's. PR #1387 merged the first; PR #1388 carried the rest, and
+  the closing entry below names them all.
   Decided here: a change whose proof is the nightly submits unarmed,
   since auto-merge took two pull requests at gate-green before their
   last push, the nightly not being a required check.
@@ -2413,6 +2414,35 @@ the stack, which this design neither needs nor rules out).
   own once #1225 lets an extension pass past the coverage leg.
   Replaced: three pull requests and the stock stack. Ruled by Willem
   the same day.
+
+- 2026-10-11, #1380 and #1388 closed by two green hosted nightlies: the
+  loop's release pass ran on GitHub's Linux runner through birth,
+  verified-skip, members, ratchet, scoped-leg and release, run
+  38111804746 in 592 s of pass inside 13 min 17 s of wall, run
+  38112453673 in 680 s (birth 64, verified-skip 25, members 90,
+  ratchet 128, scoped-leg 104, release 270) inside 15 min 19 s, each
+  after the job's own full gate of about 160 s. Seven
+  differences from a desk, each found by one dispatched nightly and
+  fixed on PR #1388: the birth from the driver checkout with an
+  absolute folder; a git identity where the machine's git has none;
+  the local forge's tokens in the generic names a hosted job carries
+  for the real forge; the pass's render mounting the workshop as a
+  user built-in, since it runs with the loop's pyproject deleted and
+  footman's project rung then offers nothing, which a desk's global fm
+  masked; CI's markers removed from the pass's environment, or every
+  child refused a fix inside CI; the pass's environment edits written
+  to the task's environment too, since a serial task's os.environ is
+  the real one while footman's run and the store's tool handles spawn
+  from ctx.env; and a red newborn run printing its failed jobs' log
+  tails, since the local forge vanishes with the job. The eighth was
+  the workshop's: a Linux wheel build mounted the store's conan, the
+  host's frozen binary, into cibuildwheel's container, which cannot
+  run it; the container now installs the locked conan for itself
+  (#1407, stacked on #1388). The hosted pass is faster than the desk's
+  fresh pass of the same day (1248 s): one runner, no load beside it.
+  From here the clock's nightly on main proves the train every night,
+  once, on its first leg, and no slice rehearses on the desk unless it
+  touches the train.
 
 ## Open
 
