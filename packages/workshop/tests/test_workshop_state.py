@@ -518,20 +518,38 @@ def test_a_row_written_with_carriage_returns_reads_back_as_written(
     assert [row.data["x"] for row in rows.rows] == [2, 1]
 
 
-def test_a_write_whose_hashes_do_not_match_its_files_is_refused(
+def test_a_write_whose_import_fails_is_refused_with_gits_words(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
     real = _state._git
 
-    def short(root: Path, *args: str, stdin: str | None = None) -> Any:
-        if args[:2] == ("hash-object", "-w"):
-            return SimpleNamespace(code=0, stdout="0123\n", stderr="")
+    def refused(root: Path, *args: str, stdin: str | bytes | None = None) -> Any:
+        if args[:1] == ("fast-import",):
+            return SimpleNamespace(code=128, stdout="", stderr="fatal: no space")
         return real(root, *args, stdin=stdin)
 
-    monkeypatch.setattr(_state, "_git", short)
+    monkeypatch.setattr(_state, "_git", refused)
     why = ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}}, message="two")
-    assert why == "hash-object returned 1 hash(es) for 2 file(s)"
+    assert why == "fast-import failed: fatal: no space"
+    assert ROWS.rows(work) == _state.Rows(())
+
+
+def test_a_written_row_carries_no_platform_line_ends(
+    repos: tuple[Path, Path],
+) -> None:
+    # The import stream goes as bytes: the blob git holds is the row's
+    # UTF-8 exactly, whatever platform wrote it, so a reader on another
+    # platform finds the same bytes and the same blob id.
+    _, work = repos
+    assert ROWS.put(work, {"a": {"x": "caf\u00e9", "n": [1, 2]}}, message="one") == ""
+    found = _state.read(work, ROWS.ref)
+    assert found.files is not None and found.sha is not None
+    blob = subprocess.run(
+        ["git", "show", f"{found.sha}:a"], cwd=work, capture_output=True, check=True
+    ).stdout
+    assert blob == found.files["a"].encode("utf-8")
+    assert b"\r" not in blob
 
 
 def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
@@ -555,9 +573,9 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
             )
             == ""
         )
-    # fetch, rev-parse, archive; hash-object, mktree, commit-tree;
-    # push: seven, whatever the size, and no readback.
-    assert six["git"] == sixty["git"] == 7, (six, sixty)
+    # fetch, rev-parse, archive; fast-import; push: five, whatever the
+    # size, and no readback.
+    assert six["git"] == sixty["git"] == 5, (six, sixty)
     assert sixty["git ls-remote"] == 0
     with counting_spawns() as reading:
         found = wide.rows(work)

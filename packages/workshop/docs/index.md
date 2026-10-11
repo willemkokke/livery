@@ -1114,9 +1114,9 @@ a local run reads them and writes only the local ones, which the
 checkout's worktrees share and a fresh clone starts without. A read
 or a write of a series is a fixed handful of git processes whatever
 the series holds: one `git archive` reads every row, one
-`hash-object --stdin-paths` writes every blob, so a series of three
-hundred rows costs no more processes than one of three (git 2.38 or
-newer). A verb that reads several series takes one snapshot of the
+`fast-import` writes every blob with the tree and the commit, both as
+bytes, so a series of three hundred rows costs no more processes than
+one of three. A verb that reads several series takes one snapshot of the
 remote namespace: one listing of the store's refs and the branches
 together, then one fetch of the refs the checkout lacks, and every
 read inside answers from the local object store, so `fm store.ls`

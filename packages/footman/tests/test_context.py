@@ -2799,6 +2799,19 @@ def test_run_input_feeds_the_childs_stdin():
     assert result.stdout == "FED VIA STDIN\n"
 
 
+def test_run_input_bytes_takes_the_binary_lane():
+    # Bytes in, bytes out: no newline translation on any platform, and
+    # the capture decoded with surrogateescape, so the bytes come back
+    # exactly, carriage returns, NULs and non-UTF-8 included.
+    from livery.footman._context import Context, use_context
+
+    payload = b"a\r\nb\n\x00\xff\xfe tail"
+    echo = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
+    with use_context(Context()):
+        result = run([sys.executable, "-c", echo], input=payload)
+    assert result.stdout.encode("utf-8", "surrogateescape") == payload
+
+
 def test_run_without_input_leaves_stdin_alone():
     # No payload, no pipe: the child sees whatever stdin the process had —
     # here not-a-terminal, and crucially not an instantly-EOF pipe footman

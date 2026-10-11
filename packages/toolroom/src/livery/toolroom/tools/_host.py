@@ -353,7 +353,7 @@ def run(
     handed: tuple[tuple[Any, ...], dict[str, Any]] | None = None,
     nofail: bool = False,
     capture: bool = True,
-    input: str | None = None,
+    input: str | bytes | None = None,
     env: dict[str, str] | None = None,
     title: str | None = None,
     pre_record: Any = None,
@@ -473,7 +473,7 @@ def _standalone(
     *,
     nofail: bool,
     capture: bool,
-    input: str | None,
+    input: str | bytes | None,
     env: dict[str, str] | None,
     color: str,
     timeout: float | None,
@@ -498,23 +498,39 @@ def _standalone(
     """
     base = None if cwd in (None, "unmanaged") else Path(cwd)
     directory = (base or Path(os.getcwd())) / rel if rel is not None else base
-    proc = subprocess.run(
-        argv,
-        capture_output=capture,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        input=input,
-        env=child_env(env, color),
-        cwd=directory,
-        timeout=timeout,
-    )
-    result = Result(
-        proc.returncode,
-        stdout=proc.stdout or "",
-        stderr=proc.stderr or "",
-        tokens=tuple(argv),
-    )
+    stdout: str
+    stderr: str
+    if isinstance(input, bytes):
+        # The binary lane, as footman's `run()` spells it: bytes in, no
+        # newline translation, the capture decoded with surrogateescape so
+        # every byte is recoverable from the text.
+        raw = subprocess.run(
+            argv,
+            capture_output=capture,
+            input=input,
+            env=child_env(env, color),
+            cwd=directory,
+            timeout=timeout,
+        )
+        code = raw.returncode
+        stdout = (raw.stdout or b"").decode("utf-8", "surrogateescape")
+        stderr = (raw.stderr or b"").decode("utf-8", "surrogateescape")
+    else:
+        proc = subprocess.run(
+            argv,
+            capture_output=capture,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            input=input,
+            env=child_env(env, color),
+            cwd=directory,
+            timeout=timeout,
+        )
+        code = proc.returncode
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+    result = Result(code, stdout=stdout, stderr=stderr, tokens=tuple(argv))
     if not result.ok and not nofail:
         raise ToolError(result)
     return result
