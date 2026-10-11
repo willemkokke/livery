@@ -1430,7 +1430,8 @@ members scenario's three pull requests, about 230, against each member
 kind landing through its own gate; the docs job on every run, about
 90, which the newborn's stack carries from the stock list (both taken,
 #1391); local work, 60 to 90, one pytest ending 33 s after its last
-test among it.
+test among it. Measured again at the day's end with every change
+merged: the decision record's last entry of 2026-10-11.
 
 ### Phase 16: one affected engine, and sync at scale
 
@@ -2443,6 +2444,23 @@ the stack, which this design neither needs nor rules out).
   From here the clock's nightly on main proves the train every night,
   once, on its first leg, and no slice rehearses on the desk unless it
   touches the train.
+
+- 2026-10-11, the sprint's measurements at the day's end, every change
+  of the day merged: the catalogue kept across jobs, one members pull
+  request, no docs job, the entry script's single uv sync and persisted
+  placements, the one-fetch store read, the frozen offline sync hook,
+  the pytest tail, the docs build and deploy folded into the gate job,
+  and the catalogue, contract and task tree read once per process. The
+  release pass on GitHub's Linux runner from a scratch branch of main
+  (run 38113895746): 568 s of pass, birth 56, verified-skip 20, members
+  67, ratchet 107, scoped-leg 84, release 234, inside a job of 13 min
+  16 s that first runs the full gate in 161 s. On the desk, fresh, 661 s
+  (birth 73, verified-skip 41, members 97, ratchet 125, scoped-leg 112,
+  release 214) with a load average near 10 on 14 cores, against 1677 s
+  before the day's changes. The full gate: 161 s on the runner, 281 s
+  on the desk under that load. A pull request's narrowed check leg on
+  main's recent runs: 126 s at the median, the whole run about 5 min
+  30 s to its merge.
 
 ## Open
 
