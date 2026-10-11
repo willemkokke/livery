@@ -46,18 +46,26 @@ one-door `_git`, remote series under `refs/workshop/` and local ones
 under `refs/workshop-local/`; and direct calls of the handle in twelve
 other modules, 31 of them in the loop.
 
-The library takes the helper whole and the store's transport and
-series model: `Series`, `Keyed`, `Row`, `Rows`, `Read`, `read`, `put`,
-`drop`, `list_refs`, `remote_snapshot`, `fetched_snapshot`,
-`fetch_store`, `sweep`, and the family rules the sweep applies. The
-workshop keeps what is its own: which series exist and what their rows
-mean (metrics, verified, the coverage record, marks, the gate record,
-diagnostics, traces, the loop's rows), the CI run context (`run_context`,
-`ci_run`, the event payload, the dispatch inputs, the leg and point
-variables), the stack recorded as `branch.<name>.workshop-parent`
-config keys, and the three policy points the store needs handed in:
-whether a write is allowed outside a run, the committer identity, and
-the name of the variable a published snapshot travels in.
+The library takes the helper whole and the store whole: the series
+model (`Series`, `Keyed`, `Row`, `Rows`, `Skipped`, `slug`), the
+snapshots (`Read`, `Fetched`), the reads, the compare-and-swap writes,
+the fetch and the sweep with the family rules it applies. All of it is
+the library's public interface, exported from `livery.git`; nothing a
+workshop module needs is an underscore name of the library.
+
+The store's CI policy, who may write, under which identity, and the
+name of the variable a published snapshot travels in, is handed to the
+library once, as the arguments of a `Store`. The workshop builds that
+`Store` in one place and declares its series beside it:
+`livery.workshop._records` holds the series (metrics, verified, the
+coverage record, marks, the gate record, diagnostics, traces, the
+loop's rows) and `store(root)`, which binds the run context's identity
+and the `ci_only` rule. Every importer calls the library's own names on that
+store; nothing wraps a library call to keep an old name alive.
+
+The workshop also keeps the CI run context (`run_context`, `ci_run`,
+the event payload, the dispatch inputs, the leg and point variables)
+and the stack recorded as `branch.<name>.workshop-parent` config keys.
 
 ## Ground-truth contracts (do not violate)
 
@@ -120,25 +128,34 @@ Deliverables: `packages/git/` with `workshop.toml`, `pyproject.toml`,
 
 ## Phase 2: the store's transport and series model move
 
-`livery.git.store` holds the series model and the transport, with the
-three policy points as parameters: `put` takes `allowed: bool` in place
-of reading the run context, `identity` is passed by the caller, and
-`remote_snapshot(publish=...)` takes the variable's name. The
-workshop's `_state` keeps the CI run context and its public names, and
-wraps the library's calls with the policy, so its 40 importers keep
-their imports. The series declarations stay where their rows mean
-something. The store's tests move to the library with their pins on
-behaviour and process counts; the workshop's state tests shrink to the
-policy: a write from outside a run refuses, a published snapshot
-reaches a child.
+`livery.git` exports the store as a public interface: `Store(root,
+identity=..., writes=..., published=...)` with the methods `read`,
+`list_refs`, `put`, `drop`, `remote_snapshot`, `fetched_snapshot`,
+`fetch` and `sweep`, and the types `Series`, `Keyed`, `Row`, `Rows`,
+`Read`, `Fetched`, `Skipped` beside it. The policy is construction
+data: `writes` is the rule a `put` asks before it starts (the reason it
+refuses, or nothing), `identity` is the committer, `published` the
+variable's name. `_state` is deleted. `livery.workshop._records` holds
+the series declarations and `store(root)`, which builds the `Store`
+from the run context; the CI run context moves to
+`livery.workshop._ci_context`. Each of the 40 importers is rewritten
+in this phase to import the types from `livery.git` and call the store
+it gets from `store(root)`; no name is kept for compatibility. The
+store's tests move to the library with their pins on behaviour and
+process counts; the workshop's tests on the store shrink to the
+policy: a write from outside a run refuses with the run context's
+reason, and a published snapshot reaches a child.
 
 **Acceptance**
 
 - `fm check` is green; `packages/git/tests/test_git_store.py` pins the
   counts (a remote write is five processes, a read three, a local
   family's commit times one) and the compare-and-swap refusals.
-- `packages/workshop/tests/test_workshop_state.py` holds the policy
-  tests alone.
+- `packages/workshop/tests/test_workshop_records.py` holds the policy
+  tests alone; `test_workshop_state.py` and `_state.py` are gone.
+- `grep -rn "livery.git._" packages/workshop` prints nothing: the
+  workshop imports the library's public names alone, and the layering
+  lint's private-import check (#1204) refuses otherwise.
 - `fm ci.e2e --scenario=release` is green: the gate job's union, stamp,
   metrics row and janitor write the store through the library on the
   real runner.
@@ -204,6 +221,12 @@ and the number recorded here.
   outweighs the process start. The leased push stays a process
   (libgit2#4286). dulwich is the recommendation for reads and the
   store, pygit2 only if porcelain ever moved, which it does not.
+- 2026-10-11, Willem: no wrapper. The store moves as the library's
+  public interface and every importer is rewritten in the same phase;
+  the workshop keeps only its series declarations and the one place
+  that binds the CI policy. "It's never cheaper to clean up than now."
+  A shim that kept `_state`'s names would have left 40 modules on an
+  underscore import of a seam the library now owns.
 - 2026-10-11, Willem: no narrowing of a package's tests by reach while
   the workshop changes wholesale; the split takes the git suites out of
   a workshop change by the package rule instead.
