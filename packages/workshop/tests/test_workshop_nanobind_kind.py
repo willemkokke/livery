@@ -306,14 +306,12 @@ def test_the_wheel_is_platform_tagged_and_imports(
     """
     from livery.extensions.conan import _package as _conan
     from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import discover_packages
 
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
     _render_library(tmp_path)
     package = _render_chain(tmp_path)
     _consume_the_library(package)
-    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
-    workspace = _cpp_conan.workspace_file(members)
+    workspace = _cpp_conan.workspace_file(tmp_path)
     (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(workspace)
     dist = _python_nanobind.build(package, tmp_path)
     wheels = sorted(dist.glob("*.whl"))
@@ -334,19 +332,17 @@ def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import discover_packages
 
-    # An extension packages with no conan: no member, so no file.
+    # An extension consumes conan and its recipe names no reference: no
+    # member, so the file lists no package.
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
-    assert _cpp_conan.workspace_members(discover_packages(tmp_path)) == ()
+    assert _cpp_conan.workspace_file(tmp_path).endswith("packages: []\n")
     # The library beside it is a member. Its entry is its path: conan
     # reads the reference from the recipe, so a release's version stamp
     # never leaves the file behind.
     _render_library(tmp_path)
-    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
-    assert [member.path for member in members] == ["packages/geometry"]
-    text = _cpp_conan.workspace_file(members)
+    text = _cpp_conan.workspace_file(tmp_path)
     assert text.endswith("packages:\n  - path: packages/geometry\n")
     assert "ref:" not in text
 
@@ -358,7 +354,6 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import discover_packages
 
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
@@ -367,9 +362,8 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
     # that set it aside, gives the container none, so a sibling
     # resolves from the package the leg created.
     assert _python_nanobind.container_workspace(tmp_path) is None
-    members = _cpp_conan.workspace_members(discover_packages(tmp_path))
     (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(
-        _cpp_conan.workspace_file(members)
+        _cpp_conan.workspace_file(tmp_path)
     )
     written = _python_nanobind.container_workspace(tmp_path)
     assert written is not None
@@ -842,35 +836,34 @@ def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
     # so it is left out, since conan cannot deduce one for it; a member
     # with no recipe at all is left out the same way.
     from livery.extensions.conan import _package as _conan
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import discover_packages
 
     def member(name: str, *, recipe: bool) -> Package:
+        """A member listing nothing, whose kind stands for conan; its record."""
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
+        kind = "cpp-conan" if recipe else "python-nanobind"
+        (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "{name}"\n')
+        if not recipe:
+            (directory / "pyproject.toml").write_text(f'[project]\nname = "{name}"\n')
         text = (
             f'name = "{name}"\nversion = "0.1.0"\n'
             if recipe
             else 'requires = ("fmt/[>=11.0]",)\n'
         )
         (directory / "conanfile.py").write_text(text)
-        return Package(
-            directory=directory,
-            path=f"packages/{name}",
-            name=name,
-            kind="python-nanobind" if not recipe else "cpp-conan",
-            depends=(),
-            extensions=(),
-        )
+        (found,) = [p for p in discover_packages(tmp_path) if p.name == name]
+        return found
 
     consumer = member("ext", recipe=False)
     assert not _conan.names_a_reference(consumer)
     # Spelled as an empty list: conan's loader reads a bare key as
     # nothing and fails on it.
-    assert _conan.workspace_file((consumer,)).endswith("packages: []\n")
+    assert _conan.workspace_file(tmp_path).endswith("packages: []\n")
     (consumer.directory / "conanfile.py").unlink()
     assert not _conan.names_a_reference(consumer)
-    library = member("geometry", recipe=True)
-    text = _conan.workspace_file((consumer, library))
+    member("geometry", recipe=True)
+    text = _conan.workspace_file(tmp_path)
     assert text.endswith("packages:\n  - path: packages/geometry\n")
-    placed = _conan.workspace_file((library, consumer), root=tmp_path)
+    placed = _conan.workspace_file(tmp_path, absolute=True)
     assert placed.endswith(f"  - path: {(tmp_path / 'packages/geometry').as_posix()}\n")

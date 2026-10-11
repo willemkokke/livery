@@ -1,4 +1,4 @@
-"""Root files: the refusals first, then what listed extensions write at the root."""
+"""A package-level extension's fragments: refusals first, then what the sync writes."""
 
 from __future__ import annotations
 
@@ -9,32 +9,50 @@ import pytest
 from livery.footman import Failed
 from livery.workshop import _extensions
 from livery.workshop._declaration import DeclarationError
-from livery.workshop._shipped_files import deliver
+from livery.workshop._shipped_files import deliver, outputs
 from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: A package-level extension's identity, the start of every fake here.
 PACKAGE = '[extension]\nlevels = ["package"]\n'
 
-#: A root file written by the fake's render.
-ROOT_FILE = '\n[root-files."members.txt"]\nrender = "{package}._steps:render"\n'
+#: A fragment written by the fake's render.
+FRAGMENT = '\n[fragments."members.txt"]\nrender = "{package}._steps:render"\n'
 
-#: The render: one line per member, in the order it is handed them.
-RENDER = (
-    "def render(members):\n"
-    "    return ''.join(member.path + '\\n' for member in members)\n"
+#: What a stale declaration is told: the fragments spelling.
+SPELLING = (
+    'is [fragments."{path}"]: a file the extension\'s code writes names its'
+    " render there, module:function called with the workspace root, and a"
+    " package-level extension's fragment lives while a package lists it"
 )
 
-#: The render above, logging each call beside its module: the members it
+#: The render: one line per package whose set holds the extension, in
+#: path order, found through the root it is handed.
+RENDER = (
+    "from livery.workshop._kinds import extension_set\n"
+    "from livery.workshop._packages import discover_packages\n"
+    "\n"
+    "\n"
+    "def render(root):\n"
+    "    name = __name__.rpartition('.')[0]\n"
+    "    held = [p.path for p in discover_packages(root) if name in extension_set(p)]\n"
+    "    return ''.join(path + '\\n' for path in held)\n"
+)
+
+#: The render above, logging each call beside its module: the root it
 #: was handed, one line per call.
 LOGGED_RENDER = (
     "from pathlib import Path\n"
     "\n"
+    "from livery.workshop._kinds import extension_set\n"
+    "from livery.workshop._packages import discover_packages\n"
     "\n"
-    "def render(members):\n"
-    "    handed = ' '.join(member.path for member in members)\n"
+    "\n"
+    "def render(root):\n"
     "    with Path(__file__).with_name('calls.txt').open('a') as log:\n"
-    "        log.write(handed + '\\n')\n"
-    "    return ''.join(member.path + '\\n' for member in members)\n"
+    "        log.write(str(root) + '\\n')\n"
+    "    name = __name__.rpartition('.')[0]\n"
+    "    held = [p.path for p in discover_packages(root) if name in extension_set(p)]\n"
+    "    return ''.join(path + '\\n' for path in held)\n"
 )
 
 
@@ -65,25 +83,38 @@ def _member(root: Path, name: str, extensions: str) -> None:
     ("declared", "refusal"),
     [
         (
-            ROOT_FILE,
-            'root-files."members.txt" is written while a package lists the'
-            " extension, and this extension's levels are workspace; add 'package'"
-            " to levels, or drop the file",
+            PACKAGE + FRAGMENT.replace("[fragments.", "[root-files."),
+            'root-files."members.txt" ' + SPELLING.format(path="members.txt"),
         ),
         (
-            PACKAGE + '\n[root-files."members.txt"]\n',
-            'root-files."members.txt" names no render; a root file\'s code is'
+            PACKAGE + "\n[root-files]\n",
+            "root-files " + SPELLING.format(path="<path>"),
+        ),
+        (
+            PACKAGE + '\n[for."acme.other".root-files."members.txt"]\n',
+            'for."acme.other".root-files."members.txt" '
+            + SPELLING.format(path="members.txt"),
+        ),
+        (
+            PACKAGE + '\n[fragments."members.txt"]\n',
+            'fragments."members.txt" names no render; a fragment\'s code is'
             " render = 'module:function'",
         ),
         (
-            PACKAGE + ROOT_FILE.replace(":render", ":rendered"),
-            'root-files."members.txt".render names rendered, which acme.odd._steps'
+            PACKAGE + FRAGMENT.replace(":render", ":rendered"),
+            'fragments."members.txt".render names rendered, which acme.odd._steps'
             " does not define at its top level; did you mean 'render'?",
         ),
     ],
-    ids=["workspace-level", "no-render", "no-function"],
+    ids=[
+        "root-files",
+        "bare-root-files",
+        "root-files-for-a-target",
+        "no-render",
+        "no-function",
+    ],
 )
-def test_a_root_file_the_declaration_alone_shows_wrong_refuses(
+def test_a_fragment_the_declaration_alone_shows_wrong_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared: str, refusal: str
 ) -> None:
     fake_extensions(tmp_path, monkeypatch, odd=declared)
@@ -94,14 +125,14 @@ def test_a_root_file_the_declaration_alone_shows_wrong_refuses(
     assert str(raised.value) == f"{path}: {refusal}"
 
 
-def test_two_extensions_writing_one_root_file_refuse_naming_both(
+def test_two_extensions_writing_one_fragment_refuse_naming_both(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
         tmp_path,
         monkeypatch,
-        one=PACKAGE + ROOT_FILE,
-        two=PACKAGE + ROOT_FILE,
+        one=PACKAGE + FRAGMENT,
+        two=PACKAGE + FRAGMENT,
     )
     fake_steps(tmp_path, "one", RENDER)
     fake_steps(tmp_path, "two", RENDER)
@@ -110,20 +141,20 @@ def test_two_extensions_writing_one_root_file_refuse_naming_both(
     with pytest.raises(Failed) as raised:
         deliver(root)
     assert str(raised.value) == (
-        "members.txt: both acme.one and acme.two write it at the root; a root file"
-        " has one writer, so list one of the two"
+        "members.txt has one writer, and acme.one:members.txt and"
+        " acme.two:members.txt both write it"
     )
 
 
 # What the listed extensions write.
 
 
-def test_a_root_file_comes_with_the_first_member_listing_it_and_goes_with_the_last(
+def test_a_fragment_comes_with_the_first_package_listing_it_and_goes_with_the_last(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import shutil
 
-    fake_extensions(tmp_path, monkeypatch, lists=PACKAGE + ROOT_FILE)
+    fake_extensions(tmp_path, monkeypatch, lists=PACKAGE + FRAGMENT)
     fake_steps(tmp_path, "lists", RENDER)
     root = _workspace(tmp_path / "ws", monkeypatch)
     _member(root, "plain", "[]")
@@ -132,7 +163,8 @@ def test_a_root_file_comes_with_the_first_member_listing_it_and_goes_with_the_la
     _member(root, "b", '["acme.lists"]')
     _member(root, "a", '["acme.lists"]')
     deliver(root)
-    # The render is handed the members listing it, in path order.
+    # The render reads the root: the packages whose set holds the
+    # extension, in path order.
     assert (root / "members.txt").read_text() == "packages/a\npackages/b\n"
     shutil.rmtree(root / "packages" / "a")
     shutil.rmtree(root / "packages" / "b")
@@ -140,19 +172,17 @@ def test_a_root_file_comes_with_the_first_member_listing_it_and_goes_with_the_la
     assert not (root / "members.txt").exists()
 
 
-def test_a_package_level_root_file_is_written_once_while_any_package_lists_it(
+def test_a_package_level_fragment_renders_once_while_any_package_lists_its_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import shutil
 
-    from livery.workshop._shipped_files import _root_file_outputs
-
     fake_extensions(
         tmp_path,
         monkeypatch,
-        left=PACKAGE + ROOT_FILE,
-        right=PACKAGE + ROOT_FILE,
-        once=PACKAGE + ROOT_FILE,
+        left=PACKAGE + FRAGMENT,
+        right=PACKAGE + FRAGMENT,
+        once=PACKAGE + FRAGMENT,
     )
     fake_steps(tmp_path, "left", RENDER)
     fake_steps(tmp_path, "right", RENDER)
@@ -163,21 +193,21 @@ def test_a_package_level_root_file_is_written_once_while_any_package_lists_it(
     _member(root, "a", '["acme.left"]')
     _member(root, "b", '["acme.right"]')
     with pytest.raises(Failed) as raised:
-        _root_file_outputs(root)
+        outputs(root)
     assert str(raised.value) == (
-        "members.txt: both acme.left and acme.right write it at the root; a root"
-        " file has one writer, so list one of the two"
+        "members.txt has one writer, and acme.left:members.txt and"
+        " acme.right:members.txt both write it"
     )
-    # One extension listed by two packages renders once, handed both members
-    # in path order, into one output it owns alone.
+    # One extension listed by two packages renders once, handed the
+    # root, into one output it owns alone.
     for name in ("a", "b"):
         shutil.rmtree(root / "packages" / name)
         _member(root, name, '["acme.once"]')
-    (found,) = _root_file_outputs(root)
-    assert (found.path, found.owners) == ("members.txt", ("acme.once:members.txt",))
+    (found,) = [output for output in outputs(root) if output.path == "members.txt"]
+    assert found.owners == ("acme.once:members.txt",)
     assert found.body == b"packages/a\npackages/b\n"
     calls = tmp_path / "site" / "acme" / "once" / "calls.txt"
-    assert calls.read_text() == "packages/a packages/b\n"
+    assert calls.read_text() == f"{root}\n"
     # The sync writes that one file at the root.
     deliver(root)
     assert (root / "members.txt").read_text() == "packages/a\npackages/b\n"

@@ -19,7 +19,10 @@ An extension also writes files from its own code: each
 `[fragments."<target>"]` table in its `extension.toml` names a render
 the engine calls with the workspace root, for one file or, with a
 target ending in `/`, a directory of them
-([livery.workshop._shipped_files.computed_outputs][]).
+([livery.workshop._shipped_files.computed_outputs][]). A package-level
+extension's files are written while a package's set holds the
+extension and withdrawn with the last package that did
+([livery.workshop._shipped_files.delivery_order][]).
 """
 
 from __future__ import annotations
@@ -62,9 +65,40 @@ PROJECT_FILE = "pyproject.toml"
 """The workspace's project file, which renders from the contract's identity."""
 
 
+def delivery_order(root: Path) -> list[str]:
+    """The owners whose files a sync delivers to *root*, in the order they apply.
+
+    The stack first ([livery.workshop._extensions.stack_names][]): the
+    base, then every listed extension in mount order. After it, the
+    package-level extensions a package holds through its kind alone
+    ([livery.workshop._kinds.extension_set][]), in composition order.
+    Such a package lists nothing and mounts no extension, and the
+    fragments of what its kind stands for are delivered as a listed
+    extension's are, until the kinds go.
+    """
+    from livery.workshop._composition import order
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._kinds import extension_set
+    from livery.workshop._packages import discover_packages
+
+    stack = list(stack_names(root))
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    held = {
+        name
+        for package in packages
+        for name in extension_set(package)
+        if name not in stack
+    }
+    return [*stack, *order(held, installed_declaration)]
+
+
 def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
-    """Every listed extension's shipped files as fragments, and the order they apply."""
-    order = list(stack_names(root))
+    """Every listed extension's shipped files as fragments, and the order they apply.
+
+    The order is the delivery's
+    ([livery.workshop._shipped_files.delivery_order][]).
+    """
+    order = delivery_order(root)
     fragments: list[Fragment] = []
     for extension in order:
         content = extension_content(extension)
@@ -301,7 +335,7 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         kept.append(output)
     # Every output beside the composed ones, whatever the LFS setting:
     # an output the list leaves out is one the delivery withdraws.
-    rest = (*_root_file_outputs(root), *_schema_outputs(root))
+    rest = _schema_outputs(root)
     taken = {output.path: output.owners[0] for output in (*kept, *rest)}
     return (*kept, *computed_outputs(root, order, taken), *rest), notes
 
@@ -319,45 +353,6 @@ def _schema_outputs(root: Path) -> list[Output]:
         Output(path, body, (f"{SELF}:{path}",), local=True)
         for path, body in schema_files(root).items()
     ]
-
-
-def _root_file_outputs(root: Path) -> list[Output]:
-    """The files package-level extensions write at the root while a package lists one.
-
-    An extension names each file under ``[root-files."<path>"]``, and
-    its render is handed the packages whose set holds the extension, in
-    path order; a package that lists no extension holds what its kind
-    stands for ([livery.workshop._kinds.extension_set][]). A file is
-    the engine's like any composed one: written by the sync, judged by
-    the drift check, and withdrawn with the last package that wanted
-    it.
-
-    Raises:
-        Failed: when two extensions write one path, naming both.
-    """
-    from livery.workshop._extensions import installed_declaration
-    from livery.workshop._kinds import extension_set
-    from livery.workshop._packages import Package, discover_packages
-
-    packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    members: dict[str, list[Package]] = {}
-    for package in sorted(packages, key=lambda p: p.path):
-        for name in extension_set(package):
-            members.setdefault(name, []).append(package)
-    writers: dict[str, str] = {}
-    found: list[Output] = []
-    for name, group in sorted(members.items()):
-        declared = installed_declaration(name)
-        for item in declared.root_files if declared is not None else ():
-            if item.path in writers:
-                fail(
-                    f"{item.path}: both {writers[item.path]} and {name} write it at"
-                    " the root; a root file has one writer, so list one of the two"
-                )
-            writers[item.path] = name
-            text = str(item.render(tuple(group)))
-            found.append(Output(item.path, text.encode(), (f"{name}:{item.path}",)))
-    return sorted(found, key=lambda output: output.path)
 
 
 def deliver(root: Path, *, local_only: bool = False) -> list[str]:
@@ -534,6 +529,10 @@ def computed_outputs(
 ) -> list[Output]:
     """The files the listed extensions' code writes, in *order*.
 
+    *order* is the delivery's
+    ([livery.workshop._shipped_files.delivery_order][]), so a
+    package-level extension's files are written while a package's set
+    holds the extension and withdrawn with the last package that did.
     Each ``[fragments."<target>"]`` table names a render the engine
     calls with *root*. For a file target the render answers the text,
     or nothing for no file; for a target ending in ``/`` it answers each

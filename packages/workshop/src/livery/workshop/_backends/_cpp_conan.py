@@ -125,9 +125,6 @@ from livery.extensions.conan._package import (
 from livery.extensions.conan._package import (
     workspace_file as workspace_file,
 )
-from livery.extensions.conan._package import (
-    workspace_members as workspace_members,
-)
 from livery.extensions.cpp._language import (
     SOURCE_SUFFIXES as SOURCE_SUFFIXES,
 )

@@ -37,7 +37,7 @@ main = "livery.extensions.conan._steps:publish"
 reads = ["version", "registry-target"]
 provides = { published = "bool" }
 
-# The conan workspace at the root: each member that lists conan resolves
-# its siblings from their sources through it.
-[root-files."conanws.yml"]
+# The conan workspace at the root, written while a package's set holds
+# conan: each member resolves its siblings from their sources through it.
+[fragments."conanws.yml"]
 render = "livery.extensions.conan._package:workspace_file"

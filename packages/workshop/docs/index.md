@@ -101,10 +101,14 @@ spelling. Every key is optional:
   packages' paths, each category to the patterns it takes; a package
   whose extensions declare categories is answered by them and the base
   kind's rules, and its own `[categories]` wins over both;
-- `[root-files."<path>"]`, a file a package-level extension writes at
-  the workspace root while a package lists it: `render`, the
-  `"module:function"` called with those packages in path order, which
-  answers the file's text; two extensions writing one path refuse;
+- `[fragments."<target>"]`, a file the extension's code writes, or a
+  directory of them when the target ends in `/`: `render`, the
+  `"module:function"` called with the workspace root, which answers
+  the file's text, or nothing for no file, and for a directory each
+  file's path under it to its text or to the shipped file it links
+  to; `local` for files that belong to this checkout alone. A
+  package-level extension's fragment lives while a package lists it,
+  and two extensions writing one path refuse;
 - `[rules.<name>]`, a rule the extension adds to the layering check,
   over the python sources the check parses once: `judge`, the
   `"module:function"` that returns the problems, and an optional `fix`,
@@ -648,8 +652,8 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
 While the workspace has a member that lists the `conan` extension,
-or whose kind packages with conan, `fm sync` also writes
-`conanws.yml` at the root, the conan extension's root file, listing
+or whose kind stands for conan, `fm sync` also writes
+`conanws.yml` at the root, the conan extension's fragment, listing
 each such member by its path. A conan command run inside the checkout
 resolves a member from its source tree through that file, and nothing
 is registered in the conan home. So each checkout of a repository, a
