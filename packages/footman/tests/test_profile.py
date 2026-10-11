@@ -52,6 +52,11 @@ TASKS = textwrap.dedent(
             footman.step(_sleeper)("a"),
             footman.step(_sleeper)("b"),
         )
+
+    @task
+    def quiet():
+        with footman.step("checking"):
+            footman.run(["python", "-c", "pass"], recorded=False)
     """
 )
 
@@ -935,3 +940,26 @@ def test_a_box_with_nothing_in_it_answers_nothing(tmp_path):
 
     with profile.box() as drop:
         assert profile.swept(drop) == ([], 0.0)
+
+
+def test_a_block_step_and_an_off_the_record_run_both_reach_the_trace(
+    tmp_path, monkeypatch
+):
+    # The record first: the off-the-record call is no step, under a trace
+    # or not. Then the trace: the block is a step slice with its start,
+    # and the call it made is a section slice named for its command.
+    monkeypatch.chdir(tmp_path)
+    src = _tasks(tmp_path)
+    result = Runner().invoke("--profile --json quiet", tasks=src)
+    assert result.ok, result.stderr
+    items = json.loads(result.stdout)["items"]
+    assert [i["command"] for i in items if "command" in i] == ["checking"]
+    events = _trace(tmp_path / "fm-profile.json")
+    steps = [e for e in events if e.get("cat") == "step"]
+    assert [e["name"] for e in steps] == ["checking"]
+    sections = [e for e in events if e.get("cat") == "section"]
+    assert [e["name"] for e in sections] == ["python -c pass"]
+    assert steps[0]["ts"] <= sections[0]["ts"]
+    assert (
+        sections[0]["ts"] + sections[0]["dur"] <= steps[0]["ts"] + steps[0]["dur"] + 1
+    )

@@ -3607,7 +3607,10 @@ def run(
     entry, and its output joins the task's block. Some calls aren't part of
     the task's story, though — they are how a task *knows* something (`git
     rev-parse HEAD` in a release task). Those return their `Result` and
-    report nothing: no record, no receipt, no output replayed.
+    report nothing: no record, no receipt, no output replayed. The one
+    reader they reach is a profile: while the run keeps a trace, the call
+    is timed as a section named for its command, so the trace shows where
+    a task's time went; without `--profile` nothing is kept of it.
 
     Everything else still applies, because the call is not unmanaged — only
     unreported. It runs in `ctx.cwd` with `ctx.env`, inside the task's lane,
@@ -4010,6 +4013,15 @@ def run(
     )
     if recorded:
         ctx.steps.append(result)  # what --json, the report and recording() read
+    else:
+        # Off the record, by contract: no receipt, no row, no recording()
+        # entry. A profile is the one reader it may reach, and only while
+        # the run keeps a trace: a value read still spent the time, and a
+        # trace that hides it shows a blank task where the time went.
+        from livery.footman import profile
+
+        if profile.keeping():
+            ctx.sections.append(Section(show_label, start, duration))
 
     # Task grain at normal verbosity: a step's receipt shows under
     # --verbose (and for uncaptured, live steps, whose output needs its

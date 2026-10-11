@@ -217,6 +217,7 @@ class _StepBlock:
             duration=duration,
             address=_context._child_address(ctx, shown),
             audit=(_audit_entry("body", shown, code),),
+            started=self._start,
         )
         ctx.steps.append(result)
         return False  # an exception propagates; the record sealed first
@@ -508,6 +509,7 @@ def _pump(item: WorkItem[Any]) -> Any:
         timed_out=timed_out,
         address=addr,
         audit=audit,
+        started=start,
     )
     if recorded:
         ctx.steps.append(result)

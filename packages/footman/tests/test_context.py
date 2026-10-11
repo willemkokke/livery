@@ -2573,6 +2573,21 @@ def test_a_non_step_call_runs_and_returns_but_reports_nothing(capsys):
     assert "abc123" not in out  # no receipt, no output replayed
 
 
+def test_a_non_step_call_leaves_no_section_when_no_trace_is_kept(monkeypatch):
+    # The profile is the one reader an off-the-record call may reach, and
+    # only while a trace is being kept; a plain run records nothing of it.
+    monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
+
+    def tasks(reg):
+        @reg.task
+        def release():
+            run(_echo("abc123"), recorded=False)
+
+    _, _, results = drive(tasks, "release")
+    assert results[0].ok, results[0].error
+    assert results[0].steps == [] and results[0].sections == []
+
+
 def test_a_non_step_call_executes_under_recording():
     # A step is faked under dry_run; a non-step is not the story being
     # recorded, and faking it would corrupt the story that is — the real
