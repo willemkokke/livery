@@ -544,12 +544,12 @@ def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_co
     monkeypatch.setattr(_engine, "run_installer", installing_again)
     (root / LOCAL_RECEIPT).parent.mkdir(parents=True)
     (root / LOCAL_RECEIPT).write_text("{}\n")
-    assert _reconcile._tools_current(root).startswith("no receipt for ")
+    assert _reconcile.tools_current(root).startswith("no receipt for ")
     lines = materialise_tools(root, offline=True)
     assert lines[0] == "  tools: up to date"
     held = _tools.receipts(root)
     assert _tools.emission(root)[0] == (held["ruff"].paths[0], held["tea"].paths[0])
-    assert _reconcile._tools_current(root) == ""
+    assert _reconcile.tools_current(root) == ""
 
 
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(
@@ -803,3 +803,69 @@ def test_a_records_directory_is_read_once_until_a_record_changes(
     os.utime(record, ns=(stamp, stamp))
     assert _tools.catalogue(root) is not first
     assert len(reads) == 2
+
+
+# The tools step reads its receipts before it supplies anything: the
+# off cases first, then the current one.
+
+
+def test_the_tools_step_supplies_when_a_receipt_is_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _sync
+    from livery.workshop._tool_tasks import sync_tools
+    from workshop_receipts import synced
+
+    synced(tmp_path, "something-1.0.0")
+    (_tools.receipts_dir(tmp_path) / "ruff.json").unlink()
+    supplied: list[Path] = []
+
+    def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
+        supplied.append(root)
+        return ["  tools: 1 receipt(s), installed ruff"]
+
+    monkeypatch.setattr(_sync, "materialise_tools", materialise_tools)
+    sync_tools(tmp_path, frozen=True, offline=True)
+    assert supplied == [tmp_path]
+    assert capsys.readouterr().out.splitlines() == [
+        "  tools: no receipt for ruff; supplying",
+        "  tools: 1 receipt(s), installed ruff",
+    ]
+
+
+def test_a_checkout_without_a_tool_lock_is_told_so_by_the_supply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.toolroom.store import LOCK_FILE
+    from livery.workshop import _sync
+    from livery.workshop._tool_tasks import sync_tools
+    from workshop_receipts import synced
+
+    synced(tmp_path, "something-1.0.0")
+    (tmp_path / LOCK_FILE).unlink()
+    supplied: list[Path] = []
+
+    def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
+        supplied.append(root)
+        return [f"  tools: no {LOCK_FILE}"]
+
+    monkeypatch.setattr(_sync, "materialise_tools", materialise_tools)
+    sync_tools(tmp_path, frozen=True, offline=True)
+    assert supplied == [tmp_path]
+
+
+def test_the_tools_step_skips_the_supply_when_every_receipt_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _sync
+    from livery.workshop._tool_tasks import sync_tools
+    from workshop_receipts import synced
+
+    synced(tmp_path, "something-1.0.0")
+    monkeypatch.setattr(
+        _sync,
+        "materialise_tools",
+        lambda root, *, offline=False: pytest.fail("supplied a current checkout"),
+    )
+    sync_tools(tmp_path, frozen=True, offline=True)
+    assert capsys.readouterr().out == "  tools: up to date\n"

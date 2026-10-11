@@ -418,7 +418,16 @@ def start(
         path = worktree_path(root, work.number, work.title)
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
-    git.fetch()
+    # One round trip: origin's heads for the base and the store for the
+    # worktree's first gate, the shape a sync's own fetch has.
+    from livery.workshop._state import fetch_store
+    from livery.workshop._sync import store_lines
+
+    fetched = fetch_store(root, branches=True)
+    if fetched.why:
+        fail(f"origin could not be fetched: {fetched.why}")
+    for line in store_lines(fetched):
+        print(line)
     base = "main"
     if from_:
         if from_ == branch:
@@ -430,10 +439,6 @@ def start(
                 " start on it"
             )
         base = from_
-    from livery.workshop._sync import fetch_store_lines
-
-    for line in fetch_store_lines(root):
-        print(line)
     if worktree:
         from livery.workshop._sweep import sweep_worktrees
 

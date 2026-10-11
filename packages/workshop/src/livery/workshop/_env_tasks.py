@@ -106,10 +106,11 @@ def sync_first(inv: footman.Invocation, task: Any) -> None:
 
     Once per process, at the first task's per-task moment, which is
     inside the run: footman refuses a task call at discovery, where the
-    completion child would make it on a Tab press. The checkout's
-    receipts decide ([livery.workshop._reconcile.apply][]); a sync that
-    wrote receipts this process entered without enters again, into
-    this task's own environment, which its subprocesses see.
+    completion child would make it on a Tab press. The sync verb
+    decides from the checkout's receipts
+    ([livery.workshop._reconcile.apply][]); a sync that wrote receipts
+    this process entered without enters again, into this task's own
+    environment, which its subprocesses see.
     """
     from livery.workshop._extensions import workspace_root
 
