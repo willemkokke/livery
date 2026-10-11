@@ -13,6 +13,15 @@ on:
   workflow_dispatch:
 
 jobs:
+  legs:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.legs.outputs.matrix }}
+    steps:
+      - id: legs
+        env:
+          LEGS: ${{ github.event_name == 'pull_request' && '{"os":["ubuntu-latest"],"python":["3.14"]}' || '{"os":["ubuntu-latest","macos-latest","windows-latest"],"python":["3.14"]}' }}
+        run: echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"
   # The check legs: the tests run metered, and only they. The leg's
   # measured suites ride its per-run ref on the state store, and the gate
   # job unions them with main's record and judges once. The scoped gate
@@ -21,13 +30,12 @@ jobs:
   # merge base with the pull request's base branch; each needs history a
   # shallow clone lacks.
   check:
+    needs: [legs]
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
-        python: ["3.14"]
+      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

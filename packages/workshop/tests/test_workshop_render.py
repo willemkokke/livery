@@ -498,15 +498,27 @@ def test_pull_request_runners_narrow_the_check_legs_on_a_pull_request_alone(
 ) -> None:
     root = _root_narrowing(tmp_path, kind, '["ubuntu-latest"]')
     jobs = _doc(generate(root)[f".{kind}/workflows/ci.yml"])["jobs"]
-    # One expression, both lists literal, the event choosing: a pull
-    # request runs the narrowed list, a push or a dispatch every runner.
-    assert jobs["check"]["strategy"]["matrix"]["os"] == (
+    # A legs job holds both matrices as literals, the event picks one,
+    # and the check job reads it from the output: GitHub starts no run
+    # for a workflow whose matrix axis is itself an expression.
+    assert list(jobs)[:2] == ["legs", "check"]
+    assert jobs["legs"]["runs-on"] == "ubuntu-latest"
+    assert jobs["legs"]["outputs"] == {"matrix": "${{ steps.legs.outputs.matrix }}"}
+    (step,) = jobs["legs"]["steps"]
+    assert step["env"]["LEGS"] == (
         "${{ github.event_name == 'pull_request'"
-        " && fromJSON('[\"ubuntu-latest\"]')"
-        ' || fromJSON(\'["ubuntu-latest", "macos-latest"]\') }}'
+        ' && \'{"os":["ubuntu-latest"],"python":["3.13","3.14"]}\''
+        ' || \'{"os":["ubuntu-latest","macos-latest"],"python":["3.13","3.14"]}\' }}'
+    )
+    assert step["run"] == 'echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"'
+    assert jobs["check"]["needs"] == ["legs"]
+    assert (
+        jobs["check"]["strategy"]["matrix"]
+        == "${{ fromJSON(needs.legs.outputs.matrix) }}"
     )
     assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
-    assert jobs["check"]["strategy"]["matrix"]["python"] == ["3.13", "3.14"]
+    # The verdict still waits on the legs it judges, and nothing else moved.
+    assert jobs["gate"]["needs"] == ["check", "docs"]
 
 
 def test_pull_request_runners_equal_to_the_runners_render_the_plain_list(
@@ -514,7 +526,9 @@ def test_pull_request_runners_equal_to_the_runners_render_the_plain_list(
 ) -> None:
     root = _root_narrowing(tmp_path, "github", '["ubuntu-latest", "macos-latest"]')
     jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
+    assert "legs" not in jobs
     assert jobs["check"]["strategy"]["matrix"]["os"] == [
         "ubuntu-latest",
         "macos-latest",
     ]
+    assert jobs["check"].get("needs", []) == []

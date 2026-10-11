@@ -352,21 +352,43 @@ def _event_filter(point: Point) -> str:
     return " || ".join(f"github.event_name == '{event}'" for event in point.events)
 
 
-def _legs_os(answers: dict[str, Any], point: Point, runners: list[str]) -> str:
-    """The ``os`` axis of the check legs: every runner, narrowed on a pull request.
-
-    One expression with both lists literal, chosen by the event: the
-    decision is the contract's at render time, and the file carries
-    only which list applies to which event. The plain list when the
-    contract narrows nothing, or when *point* takes no pull request.
-    """
+def _narrows(answers: dict[str, Any]) -> bool:
+    """Whether a pull request's check legs run on fewer runners than every other event."""
+    runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
     narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
-    if narrowed == runners or "pull_request" not in point.events:
-        return f"[{_csv(runners)}]"
+    return narrowed != runners
+
+
+def _legs_job(answers: dict[str, Any]) -> str:
+    """The job that picks the check legs' matrix by the event, as its output.
+
+    GitHub starts no run for a workflow whose matrix axis is an
+    expression, so the two literal matrices sit in this job's
+    environment, the event picks one, and the check job reads it with
+    ``fromJSON`` from the output: the one documented shape for a matrix
+    decided when the run starts. The decision is still the contract's;
+    the file carries two literals and which event takes which. The job
+    checks nothing out and enters nothing, so it costs seconds.
+    """
+    runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
+    narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
+    versions = json.dumps(
+        [str(version) for version in answers.get("gate_pythons", ["3.11"])],
+        separators=(",", ":"),
+    )
+    axes = '{{"os":{},"python":{}}}'
+    full = axes.format(json.dumps(runners, separators=(",", ":")), versions)
+    pull = axes.format(json.dumps(narrowed, separators=(",", ":")), versions)
     return (
-        "${{ github.event_name == 'pull_request'"
-        f" && fromJSON('{json.dumps(narrowed)}')"
-        f" || fromJSON('{json.dumps(runners)}') }}}}"
+        "  legs:\n"
+        f"    runs-on: {runners[0]}\n"
+        "    outputs:\n"
+        "      matrix: ${{ steps.legs.outputs.matrix }}\n"
+        "    steps:\n"
+        "      - id: legs\n"
+        "        env:\n"
+        f"          LEGS: ${{{{ github.event_name == 'pull_request' && '{pull}' || '{full}' }}}}\n"
+        '        run: echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"\n'
     )
 
 
@@ -554,6 +576,8 @@ def _actions_job(
     if conditions:
         lines.append(f"    if: {' && '.join(conditions)}\n")
     needs = _needs(point, job, answers, everything)
+    if job.matrix == "legs" and _narrows(answers):
+        needs = ["legs", *needs]
     if needs:
         lines.append(f"    needs: [{', '.join(needs)}]\n")
     if forge == "github":
@@ -562,12 +586,18 @@ def _actions_job(
             lines.append(f"    environment: {job.environment}\n")
     if job.matrix == "legs":
         pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
-        lines.append(
-            "    strategy:\n      fail-fast: false\n      matrix:\n"
-            f"        os: {_legs_os(answers, point, runners)}\n"
-            f"        python: [{pythons}]\n"
-            "    runs-on: ${{ matrix.os }}\n"
-        )
+        if _narrows(answers):
+            lines.append(
+                "    strategy:\n      fail-fast: false\n"
+                "      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}\n"
+                "    runs-on: ${{ matrix.os }}\n"
+            )
+        else:
+            lines.append(
+                "    strategy:\n      fail-fast: false\n      matrix:\n"
+                f"        os: [{_csv(runners)}]\n        python: [{pythons}]\n"
+                "    runs-on: ${{ matrix.os }}\n"
+            )
     elif job.matrix == "pythons":
         pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
         lines.append(
@@ -659,6 +689,8 @@ def _actions_workflow(
     lines.append("\njobs:\n")
     for point in owners_all:
         for job in point.jobs:
+            if job.matrix == "legs" and _narrows(answers):
+                lines.append(_legs_job(answers))
             if _renders(job, answers):
                 lines.append(
                     _actions_job(
