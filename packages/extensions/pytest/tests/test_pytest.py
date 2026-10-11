@@ -133,6 +133,9 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         coverage = configparser.ConfigParser()
         coverage.read_string((root / ".coveragerc").read_text())
         assert coverage["run"]["source"] == "acme"
+        # A module a test wrote under its tmp_path and ran is never a
+        # source: the directory is gone before the report is written.
+        assert coverage["run"]["omit"] == "*/pytest-of-*/*"
         assert coverage["paths"]["packages"].split() == ["packages/", "packages\\"]
     finally:
         registry.restore(state)

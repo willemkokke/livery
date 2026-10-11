@@ -617,8 +617,10 @@ def sync(
     # runs cmake, conan and the provider the store supplies, and resolves
     # a sibling library at HEAD through the conan workspace file the
     # delivery above wrote. The engine takes the root as a value, as a
-    # birth syncs its newborn's tools from inside its own task.
-    sync_tools(root, frozen=frozen, locked=locked, offline=offline)
+    # birth syncs its newborn's tools from inside its own task. Under
+    # --locked the lock was judged current above, so the tools install
+    # it as it is rather than resolving it a second time.
+    sync_tools(root, frozen=frozen or locked, offline=offline)
     # A member whose install builds something may need it in place
     # first; its kind's registration says what.
     for line in prepare_install(root, discover_packages(root)):
