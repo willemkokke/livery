@@ -1584,3 +1584,27 @@ def test_the_birth_runs_from_the_driver_with_an_absolute_folder(
     argv, cwd = seen[-1]
     assert cwd == home
     assert argv[argv.index("new.project") + 1] == "ci-e2e-loop"
+
+
+def test_the_pass_removes_ci_markers_from_its_children_environment() -> None:
+    # Nothing to remove first: a desk's environment is left as it is.
+    desk = {"PATH": "/usr/bin", "GITHUB_TOKEN": "t"}
+    assert _e2e.scrub_ci_markers(desk) == ()
+    assert desk == {"PATH": "/usr/bin", "GITHUB_TOKEN": "t"}
+    # A hosted job's markers go, every other key stays: a child reading
+    # CI would refuse a fix and stamp the loop's runs as the runner's.
+    hosted = {
+        "CI": "true",
+        "GITHUB_ACTIONS": "true",
+        "GITEA_ACTIONS": "true",
+        "GITLAB_CI": "true",
+        "RUNNER_TEMP": "/t",
+        "PATH": "/usr/bin",
+    }
+    assert _e2e.scrub_ci_markers(hosted) == (
+        "CI",
+        "GITHUB_ACTIONS",
+        "GITEA_ACTIONS",
+        "GITLAB_CI",
+    )
+    assert hosted == {"RUNNER_TEMP": "/t", "PATH": "/usr/bin"}

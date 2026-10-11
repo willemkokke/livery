@@ -17,7 +17,14 @@ import contextlib
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection, Generator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -122,6 +129,20 @@ def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
 
 #: The identity the loop's commits carry on a machine whose git has none.
 LOOP_IDENTITY = ("livery loop", "loop@livery.invalid")
+
+#: The variables that make the workshop read a process as a CI run: a
+#: fix is refused inside CI, a tool the store cannot supply refuses, and
+#: a run is stamped as the runner's. The pass drives its project as a
+#: desk does, so its children run without them, on a hosted runner too.
+CI_MARKERS: tuple[str, ...] = ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI")
+
+
+def scrub_ci_markers(environ: MutableMapping[str, str]) -> tuple[str, ...]:
+    """Remove CI's markers from *environ*; the names removed, in declared order."""
+    removed = tuple(name for name in CI_MARKERS if name in environ)
+    for name in removed:
+        del environ[name]
+    return removed
 
 
 def identity_environment(
@@ -3231,6 +3252,13 @@ if _WORKSHOP_TESTS.is_dir():
             # the loop's own fm's, is unsigned: the setting rides the
             # task's environment into each child.
             os.environ.update(unsigned_environment(os.environ))
+            # On a hosted runner the job's CI markers would reach every
+            # child, which would then refuse a fix and stamp its runs
+            # as the runner's; the pass drives its project as a desk.
+            scrubbed = scrub_ci_markers(os.environ)
+            if scrubbed:
+                names = ", ".join(scrubbed)
+                print(f"  ci markers removed for the pass's children: {names}")
             if driver is not None:
                 from livery.workshop._git_ops import GitOps
 
