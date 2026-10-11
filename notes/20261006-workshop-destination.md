@@ -1428,8 +1428,9 @@ run, govern, deploy and dispatch, about 240, which folding them into
 the gate job removes once the token split is ruled (open item 6); the
 members scenario's three pull requests, about 230, against each member
 kind landing through its own gate; the docs job on every run, about
-90, which the newborn's stack carries from the stock list; local work,
-60 to 90, one pytest ending 33 s after its last test among it.
+90, which the newborn's stack carries from the stock list (both taken,
+#1391); local work, 60 to 90, one pytest ending 33 s after its last
+test among it.
 
 ### Phase 16: one affected engine, and sync at scale
 
@@ -2400,6 +2401,18 @@ the stack, which this design neither needs nor rules out).
   Decided here: a change whose proof is the nightly submits unarmed,
   since auto-merge took two pull requests at gate-green before their
   last push, the nightly not being a required check.
+- 2026-10-11, #1391: the loop's members land through one pull
+  request, and the docs extension leaves a plain pass's stack. Why: a
+  release pass waits on twelve serial CI runs of its project; a pull
+  request per member cost a gate run and a merge each, about 230 s, for
+  each kind's narrowed gate alone, and the docs job on every run about
+  90 s for a site the pass never reads. Dropped with it: the three
+  doc lint checks the docs extension registers no longer run in the
+  loop's project; this repository's own gate runs them on every pull
+  request, and `fm ci.e2e --extension=docs` proves the extension on its
+  own once #1225 lets an extension pass past the coverage leg.
+  Replaced: three pull requests and the stock stack. Ruled by Willem
+  the same day.
 
 ## Open
 
@@ -2438,9 +2451,3 @@ recommendation. Owner: Willem, unless named.
    govern carries the admin token and the gate job the run's own, so
    one job would hold both, against the rule that a job takes the
    run's token alone (#1280). Owner: Willem.
-7. **The loop's stack and its pull requests.** Dropping `docs` from
-   the newborn's stack saves about 90 seconds a pass, landing the
-   three members in one pull request about 230; each drops something
-   the loop proves, the docs job's publish and each member kind's own
-   gate. Loop defaults are the agent's to set, but these drop proof.
-   Owner: Willem.
