@@ -8,6 +8,7 @@ test double.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import urllib.error
@@ -259,6 +260,62 @@ def test_gitea_cancel_below_the_floor_names_the_version() -> None:
     )
     with pytest.raises(Unsupported, match=re.escape("1.27.4")):
         forge.repository("o", "r").checks.cancel_run(1)
+
+
+def test_gitea_reads_an_epoch_stamp_as_a_time_it_has_not_set() -> None:
+    # Gitea serves a job's or a step's unset time as the Unix epoch in
+    # the server's offset, never as null: a running job's end, a queued
+    # job's start. Read as a time, the epoch measures the job at minus
+    # the current date; the protocol promises an empty string.
+    epoch = "1970-01-01T01:00:00+01:00"
+    body = json.dumps(
+        {
+            "jobs": [
+                {
+                    "id": 1,
+                    "name": "gate",
+                    "status": "running",
+                    "started_at": "2026-10-11T03:18:12Z",
+                    "completed_at": epoch,
+                    "steps": [
+                        {
+                            "name": "Verdict",
+                            "status": "running",
+                            "started_at": "2026-10-11T03:18:30Z",
+                            "completed_at": "1970-01-01T00:00:00Z",
+                        }
+                    ],
+                },
+                {
+                    "id": 2,
+                    "name": "deploy",
+                    "status": "waiting",
+                    "started_at": epoch,
+                    "completed_at": "0001-01-01T00:00:00Z",
+                    "steps": [],
+                },
+            ]
+        }
+    )
+    cassette = Cassette(
+        [
+            _exchange(
+                "GET",
+                "http://g.invalid/api/v1/repos/o/r/actions/runs/7/jobs?page=1&limit=50",
+                200,
+                body,
+            )
+        ]
+    )
+    forge = GiteaForge(
+        "http://g.invalid/api/v1", token="t", opener=ReplayOpener(cassette)
+    )
+    gate, deploy = forge.repository("o", "r").checks.jobs(7)
+    assert gate.started_at == "2026-10-11T03:18:12Z" and gate.completed_at == ""
+    assert gate.steps[0].started_at == "2026-10-11T03:18:30Z"
+    assert gate.steps[0].completed_at == ""
+    assert deploy.status == "queued"
+    assert deploy.started_at == "" and deploy.completed_at == ""
 
 
 def test_gitea_refuses_creating_for_a_foreign_user() -> None:
