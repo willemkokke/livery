@@ -273,18 +273,21 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
             paths relative to the workspace root, for the file the
             root holds.
     """
+    entries = [
+        f"  - path: {member.path}"
+        if root is None
+        else f"  - path: {(root / member.path).as_posix()}"
+        for member in members
+        if names_a_reference(member)
+    ]
+    # An empty list, spelled: a bare key reads as nothing, and conan's
+    # loader fails iterating it, while a workspace of consumers alone
+    # is a workspace with no package.
     lines = [
         "# The conan workspace: a conan command run inside this folder",
         "# resolves each package below from its source tree. Rendered from",
         "# the members packaged with conan; the gate keeps it matching.",
-        "packages:",
-        *(
-            f"  - path: {member.path}"
-            if root is None
-            else f"  - path: {(root / member.path).as_posix()}"
-            for member in members
-            if names_a_reference(member)
-        ),
+        *(["packages:", *entries] if entries else ["packages: []"]),
     ]
     return "\n".join(lines) + "\n"
 

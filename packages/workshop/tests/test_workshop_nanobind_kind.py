@@ -864,7 +864,9 @@ def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
 
     consumer = member("ext", recipe=False)
     assert not _conan.names_a_reference(consumer)
-    assert _conan.workspace_file((consumer,)).endswith("packages:\n")
+    # Spelled as an empty list: conan's loader reads a bare key as
+    # nothing and fails on it.
+    assert _conan.workspace_file((consumer,)).endswith("packages: []\n")
     (consumer.directory / "conanfile.py").unlink()
     assert not _conan.names_a_reference(consumer)
     library = member("geometry", recipe=True)
