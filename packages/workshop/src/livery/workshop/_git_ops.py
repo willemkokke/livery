@@ -288,6 +288,24 @@ class GitOps:
         """Whether the working tree has no changes, staged or not."""
         return not self._run("status", "--porcelain").strip()
 
+    def dirty_paths(self) -> list[str]:
+        """The paths the working tree changed, staged or not, in status order."""
+        lines = self._run("status", "--porcelain").splitlines()
+        return [line[3:].strip() for line in lines if line.strip()]
+
+    def commits_since(self, ref: str) -> int:
+        """How many commits HEAD carries beyond *ref*."""
+        out = self._run("rev-list", "--count", f"{ref}..HEAD").strip()
+        return int(out or "0")
+
+    def detach(self, ref: str) -> None:
+        """Check *ref* out as a detached HEAD."""
+        self._run("switch", "--detach", ref)
+
+    def delete_branch(self, name: str) -> None:
+        """Delete the local branch *name*, merged or not."""
+        self._run("branch", "-D", name)
+
     def create_branch(self, name: str) -> None:
         """Create and switch to *name*."""
         self._run("checkout", "-b", name)

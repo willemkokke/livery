@@ -82,6 +82,10 @@ values = ["1w", "2w"]
 types = ["str"]
 doc = "the job of the point the task runs in; the job named after the point when absent"
 
+[contract.root.ci."schedule[]".once]
+types = ["bool"]
+doc = "whether the task runs on a matrix job's first leg alone, the first runner and the first Python of the nightly; every leg when absent"
+
 [contract.root.ci."schedule[]".point]
 types = ["str"]
 doc = "the point the task runs at: gate, merge, nightly, release, or a point a package contributes"

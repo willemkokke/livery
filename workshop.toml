@@ -127,6 +127,16 @@ task = "toolroom.refresh"
 args = ["--submit"]
 every = "2w"
 
+# The train's proof, nightly: the loop's release scenario on the first
+# runner, from a scratch branch of main, publishing nothing; the
+# release itself happens when a consumer outside this repository needs
+# one (ruled 2026-10-10).
+[[ci.schedule]]
+point = "nightly"
+task = "ci.e2e"
+args = ["--scenario=release", "--from-main"]
+once = true
+
 # The reaches into another distribution's private names the python
 # extension's private-reaches rule allows, each with the public seam
 # that will replace it. An entry no source uses any more refuses.

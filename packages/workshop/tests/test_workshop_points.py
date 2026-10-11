@@ -247,6 +247,49 @@ def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
     assert _points.pull_request_legs(root) == ["check-b-3.14"]
 
 
+def test_an_entry_that_runs_once_runs_on_the_first_leg_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.11"\n'
+    )
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "ci.e2e"\n'
+        'args = ["--scenario=release", "--from-main"]\nonce = true\n',
+    )
+    seen: list[list[str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        return 0
+
+    first, *rest = _points_pythons(root)
+    _points.run_point(root, "nightly", "nightly", python=rest[-1], spawn=green)
+    out = capsys.readouterr().out
+    assert (
+        f"ci.e2e (workshop.toml) runs once, on the first leg ({first}); skipped" in out
+    )
+    assert [argv[-1] for argv in seen] == ["check"]
+    seen.clear()
+    _points.run_point(root, "nightly", "nightly", python=first, spawn=green)
+    assert [argv[-3:] for argv in seen][-1] == [
+        "ci.e2e",
+        "--scenario=release",
+        "--from-main",
+    ]
+    # Without a leg to name, the entry runs: a job with no matrix has one leg.
+    assert _points.first_leg(root, "nightly", "govern") == ("", "")
+
+
+def _points_pythons(root: Path) -> list[str]:
+    from livery.workshop._pythons import python_matrix
+
+    versions = python_matrix(root)
+    assert len(versions) > 1, versions
+    return versions
+
+
 def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
     # A pull request the refresh opens with the job token starts no
     # workflow; the secret, when present, is what makes it a real one.
