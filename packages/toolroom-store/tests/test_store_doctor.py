@@ -31,6 +31,9 @@ def _supplied(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pa
     files = {
         f"tool-1.0.0/bin/tool{EXE}": b"#!/bin/sh\necho hi\n",
         "tool-1.0.0/README": b"r",
+        "tool-1.0.0/doc/a": b"a",
+        "tool-1.0.0/doc/b": b"b",
+        "tool-1.0.0/doc/c": b"c",
     }
     zipped = make_zip(files, executable=(f"tool-1.0.0/bin/tool{EXE}",))
     url = f"https://origin.test/tool/1.0.0/{host}.zip"
@@ -77,3 +80,27 @@ def test_a_damaged_view_is_named_and_the_repair_views_the_tree_again(
     found[0].repair()
     assert tool.exists()
     assert [f.what for f in _doctor.doctor(data_dir=data)] == whole
+
+
+def test_many_missing_files_are_counted_and_three_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data, tool = _supplied(tmp_path, monkeypatch)
+    for name in ("a", "b", "c"):
+        (tool.parent.parent / "doc" / name).unlink()
+    (tool.parent.parent / "README").unlink()
+    found = _doctor.doctor(data_dir=data)
+    assert found[0].found.startswith("4 file(s) missing: ")
+    assert found[0].found.endswith(" and 1 more")
+
+
+def test_a_url_is_an_index_wherever_it_is_named(tmp_path: Path) -> None:
+    from livery.toolroom.store import CatalogueError, index_source, is_records
+
+    assert is_records("https://tools.example/index/") is False
+    assert index_source({"index": "https://tools.example/"}, tmp_path) == (
+        "https://tools.example/"
+    )
+    assert index_source({"index": "records"}, tmp_path) == str(tmp_path / "records")
+    with pytest.raises(CatalogueError, match="names no source"):
+        index_source({}, tmp_path)

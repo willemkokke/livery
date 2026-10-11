@@ -443,6 +443,9 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     # dangles with it; on Windows it is a copy and stands.
     missing = {f"bin/tool{EXE}"} | ({"alias"} if sys.platform != "win32" else set())
     assert set(store.audit("tool", "1.0.0") or ()) == missing
+    # A view the store made elsewhere is no tool's: the audit skips it.
+    assert ensured.tree is not None
+    store.objects.view(ensured.tree, home.root / "aside")
     assert [(d.name, d.version) for d in store.audit_views()] == [("tool", "1.0.0")]
     # The mend views the tree the store holds again: nothing is fetched.
     events.clear()
