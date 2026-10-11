@@ -51,7 +51,9 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 IDLE_DAYS = 90
 PART_DAYS = 1
@@ -194,12 +196,20 @@ def owner(name: str) -> int | None:
 
 
 def alive(pid: int) -> bool:
-    """Whether a process with *pid* exists; True wherever the platform cannot say.
+    """Whether a process with *pid* exists.
 
-    A pid of zero or less is nobody's. On POSIX a signal of zero asks
-    without sending, and a process that refuses the asking exists. On
-    Windows the kernel is asked for a handle, since ``os.kill`` there ends
-    the process for any signal it does not special-case.
+    The one probe for every pid a task or a plugin writes down: a daemon's
+    pid file, a scratch directory's owner, a lock's holder. A pid of zero
+    or less is nobody's. On POSIX a signal of zero asks without sending,
+    and a process that refuses the asking exists. On Windows the kernel is
+    asked for a handle, since ``os.kill`` there ends the process for any
+    signal it does not special-case, and a handle whose exit code is set
+    is a process that ended and is not yet reaped.
+
+    ```python
+    if not footman.alive(int(pid_file.read_text())):
+        pid_file.unlink()
+    ```
     """
     if pid <= 0:
         return False
@@ -219,25 +229,42 @@ _ERROR_ACCESS_DENIED = 5
 _STILL_ACTIVE = 259
 
 
-def _alive_windows(pid: int) -> bool:
+def _kernel32() -> Any:
+    # Windows only: elsewhere ctypes has no WinDLL and this raises. Looked
+    # up by name, because the stubs define it on Windows alone and the type
+    # checkers read this file everywhere.
+    import ctypes
+
+    return getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)  # noqa: B009
+
+
+def _last_error() -> int:
+    import ctypes
+
+    return int(getattr(ctypes, "get_last_error")())  # noqa: B009
+
+
+def _alive_windows(
+    pid: int, *, kernel32: Any = None, last_error: Callable[[], int] = _last_error
+) -> bool:
     # A handle refused for access is a process that exists and is not
     # ours to query; any other refusal is no such process. A handle whose
     # exit code is not still-active is a process that exited and is not
-    # yet reaped. The names are looked up, because the stubs define them
-    # on Windows alone and the type checkers read this file everywhere.
+    # yet reaped. The kernel and the error reader are parameters so every
+    # platform's tests reach the four answers.
     import ctypes
 
-    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)  # noqa: B009
-    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    dll = kernel32 if kernel32 is not None else _kernel32()
+    handle = dll.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
-        return int(getattr(ctypes, "get_last_error")()) == _ERROR_ACCESS_DENIED  # noqa: B009
+        return last_error() == _ERROR_ACCESS_DENIED
     try:
         code = ctypes.c_ulong()
-        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+        if not dll.GetExitCodeProcess(handle, ctypes.byref(code)):
             return True
         return code.value == _STILL_ACTIVE
     finally:
-        kernel32.CloseHandle(handle)
+        dll.CloseHandle(handle)
 
 
 def _baked_cwd(data: object) -> str:

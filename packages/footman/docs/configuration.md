@@ -98,7 +98,9 @@ rather than `tempfile.mkdtemp`: it lands in `cache_dir() / "scratch"`, named
 for its label and the process that made it. Remove it yourself when the work
 ends. What a kill or an exec leaves, with no exit handler to remove it, the
 collector removes once that process is gone, so a crashed run never leaves
-a directory behind for good.
+a directory behind for good. The probe behind that is `footman.alive(pid)`,
+for a plugin that keeps pid files of its own: it answers for a daemon's pid
+the same way on every platform.
 
 ### Sweeping what a plugin leaves
 

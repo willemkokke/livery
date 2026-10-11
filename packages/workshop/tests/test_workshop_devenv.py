@@ -270,3 +270,12 @@ def test_a_spawned_daemon_starts_with_the_cleaned_environment(
     seen = json.loads(log.read_text())
     assert "VIRTUAL_ENV" not in seen and "UV_RUN_RECURSION_DEPTH" not in seen
     assert seen["PATH"] == "/usr/bin"
+
+
+def test_the_liveness_probe_is_footmans() -> None:
+    # One probe for every pid file on the machine: the rig's seam is
+    # footman's function, and the tasklist spawn is gone with it.
+    import livery.footman as footman
+
+    assert _devenv.ALIVE is footman.alive
+    assert not hasattr(_devenv, "TASKLIST")

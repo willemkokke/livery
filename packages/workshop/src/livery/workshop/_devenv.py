@@ -70,9 +70,6 @@ CACHES = ("footman", "uv", "conan", "actcache")
 HEALTH_TIMEOUT = 60.0
 """How long `up` waits for Gitea to answer its health endpoint."""
 
-TASKLIST = "tasklist"
-"""Windows' process lister, for the liveness probe."""
-
 TASKKILL = "taskkill"
 """Windows' process killer, for `down`."""
 
@@ -295,30 +292,9 @@ def spawn_detached(argv: Sequence[str], *, cwd: Path, log: Path) -> int:
     return child.pid
 
 
-def alive(pid: int) -> bool:
-    """Whether a process with *pid* exists."""
-    if pid <= 0:
-        return False
-    if sys.platform == "win32":
-        listed = subprocess.run(
-            [TASKLIST, "/FI", f"PID eq {pid}", "/NH"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return str(pid) in listed.stdout
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
 def stop(pid: int, *, timeout: float = 15.0) -> bool:
     """Stop the process *pid* and wait for it to go; whether it went."""
-    if not alive(pid):
+    if not footman.alive(pid):
         return True
     if sys.platform == "win32":
         subprocess.run(
@@ -333,7 +309,7 @@ def stop(pid: int, *, timeout: float = 15.0) -> bool:
             return True
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if not alive(pid):
+        if not footman.alive(pid):
             return True
         time.sleep(0.2)
     if sys.platform != "win32":
@@ -342,13 +318,13 @@ def stop(pid: int, *, timeout: float = 15.0) -> bool:
         except ProcessLookupError:
             return True
         time.sleep(0.5)
-    return not alive(pid)
+    return not footman.alive(pid)
 
 
 #: The seams a test replaces: how a process is started, whether one
 #: lives, and how one is stopped.
 SPAWN: Callable[..., int] = spawn_detached
-ALIVE: Callable[[int], bool] = alive
+ALIVE: Callable[[int], bool] = footman.alive
 STOP: Callable[..., bool] = stop
 
 
