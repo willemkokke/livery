@@ -1,0 +1,1 @@
+{"forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "37884252854", "schema": 1, "scope": "full", "sha": "398a5b11beb95e51981cf6ac6d2cf448524e750b", "tree": "38252672370dbbcd29fb606cc335ae9ccd866462", "when": "2026-10-09T04:46:16.478574+00:00"}
