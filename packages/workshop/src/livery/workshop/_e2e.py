@@ -17,11 +17,18 @@ import contextlib
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection, Generator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import fail
@@ -117,15 +124,92 @@ def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
     outer environment already carries keeps its index and this one
     follows it.
     """
+    return _config_environment(environ, (("commit.gpgsign", "false"),))
+
+
+#: The identity the loop's commits carry on a machine whose git has none.
+LOOP_IDENTITY = ("livery loop", "loop@livery.invalid")
+
+#: The variables that make the workshop read a process as a CI run: a
+#: fix is refused inside CI, a tool the store cannot supply refuses, and
+#: a run is stamped as the runner's. The pass drives its project as a
+#: desk does, so its children run without them, on a hosted runner too.
+CI_MARKERS: tuple[str, ...] = ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI")
+
+
+def scrub_ci_markers(environ: MutableMapping[str, str]) -> tuple[str, ...]:
+    """Remove CI's markers from *environ*; the names removed, in declared order."""
+    removed = tuple(name for name in CI_MARKERS if name in environ)
+    for name in removed:
+        del environ[name]
+    return removed
+
+
+def edit_environments(
+    values: Mapping[str, str], *, remove: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Write *values* and drop *remove* where this task and every child read them.
+
+    The pass is a serial task, so ``os.environ`` in it is the real
+    environment, which a child given an explicit environment built from
+    it inherits; footman's own ``run`` and the store's tool handles
+    spawn from the task's ``ctx.env``, the environment the task started
+    with, so the same edit lands there too. Without the second write a
+    git the pass runs through the store commits without the identity
+    and the unsigned setting, which a hosted runner showed. Returns the
+    names removed from the process environment, in *remove*'s order.
+    """
+    from livery.footman import current
+
+    environments: list[MutableMapping[str, str]] = [os.environ, current().env]
+    removed = tuple(name for name in remove if name in os.environ)
+    for environ in environments:
+        environ.update(values)
+        for name in remove:
+            environ.pop(name, None)
+    return removed
+
+
+def identity_environment(
+    environ: Mapping[str, str], *, name: str, email: str
+) -> dict[str, str]:
+    """The variables that give every git a pass runs an identity, when it has none.
+
+    A desk's git knows its person; a hosted runner's knows nobody, and
+    the newborn's first commit stops on "Author identity unknown". With
+    *name* and *email* both empty, what `git config` answers where the
+    pass runs, the loop's own identity ([livery.workshop._e2e.LOOP_IDENTITY][])
+    rides the environment as [livery.workshop._e2e.unsigned_environment][]
+    does, into the birth's git and the loop's fm. Either value configured
+    adds nothing: the person's identity stands.
+    """
+    if name or email:
+        return {}
+    loop_name, loop_email = LOOP_IDENTITY
+    return _config_environment(
+        environ, (("user.name", loop_name), ("user.email", loop_email))
+    )
+
+
+def _config_environment(
+    environ: Mapping[str, str], pairs: Sequence[tuple[str, str]]
+) -> dict[str, str]:
+    """*pairs* as git configuration riding the environment, after what it carries.
+
+    git reads `GIT_CONFIG_COUNT` with a key and a value per index, so an
+    entry the outer environment already carries keeps its index and
+    these follow it.
+    """
     count = 0
     raw = environ.get("GIT_CONFIG_COUNT", "")
     if raw.isdigit():
         count = int(raw)
-    return {
-        "GIT_CONFIG_COUNT": str(count + 1),
-        f"GIT_CONFIG_KEY_{count}": "commit.gpgsign",
-        f"GIT_CONFIG_VALUE_{count}": "false",
-    }
+    made: dict[str, str] = {}
+    for index, (key, value) in enumerate(pairs, start=count):
+        made[f"GIT_CONFIG_KEY_{index}"] = key
+        made[f"GIT_CONFIG_VALUE_{index}"] = value
+    made["GIT_CONFIG_COUNT"] = str(count + len(pairs))
+    return made
 
 
 def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[str, ...]:
@@ -320,13 +404,18 @@ def _enter_host(values: Mapping[str, str], env: str) -> None:
     before the bring-up seeded the environment, and every child the
     pass starts (the birth, the loop's own fm) copies that
     environment, so each would otherwise reach the forge with a token
-    the environment no longer holds.
+    the environment no longer holds. The generic forge variables go
+    too: the workshop reads ``FORGE_TOKEN`` and ``FORGE_ADMIN_TOKEN``
+    before a forge's own, and a hosted job carries the real forge's in
+    them, so the newborn would otherwise hand GitHub's token to the
+    local Gitea and meet a 401.
     """
     CURRENT.name, CURRENT.mode = env, "host"
     CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
     CURRENT.label = values["LABELS"].split(",")[0]
     lane = LANES["gitea"]
     os.environ[lane.url_var], os.environ[lane.token_var] = CURRENT.url, CURRENT.token
+    os.environ["FORGE_TOKEN"] = os.environ["FORGE_ADMIN_TOKEN"] = CURRENT.token
 
 
 def _dev_forge(kind: str) -> tuple[Forge, str]:
@@ -1099,62 +1188,13 @@ def _unpushed_commits(root: Path) -> list[str]:
     return [line for line in listed.stdout.splitlines() if line.strip()]
 
 
-def ensure_birth_verb(
-    env: Mapping[str, str], cwd: Path, run: Callable[..., Any] | None = None
-) -> bool:
-    """Make this footman answer ``new.project``; whether the workshop was added.
-
-    A desk has the workshop self-added beside its footman, so the verb
-    answers outside any project. A hosted runner has nothing self-added,
-    and a birth there exits 64 naming no such task. The probe is the
-    verb's own ``--help``; when it refuses, ``self.add livery-workshop``
-    installs the workshop beside the runner from the index *env* names
-    first, the pass's dev index, so the birth runs this checkout's code.
-    The probe runs in *cwd*, where the birth runs, outside any project:
-    inside the checkout the project itself mounts the verb, and a probe
-    there would answer for a birth that cannot. *run* is the spawn,
-    footman's own unless a test hands one in, read when called so a
-    test's stand-in for footman's is the one used.
-    """
-    import sys
-
-    spawn = run or footman.run
-    probe = spawn(
-        [sys.executable, "-m", "livery.footman", "new.project", "--help"],
-        cwd=cwd,
-        env=dict(env),
-        nofail=True,
-        recorded=False,
-    )
-    if probe.code == 0:
-        return False
-    print(
-        "  birth: this footman answers no new.project; adding the workshop beside"
-        " it from the index the pass reads first"
-    )
-    added = spawn(
-        [
-            sys.executable,
-            "-m",
-            "livery.footman",
-            "--yes",
-            "self.add",
-            "livery-workshop",
-        ],
-        cwd=cwd,
-        env=dict(env),
-        nofail=True,
-        timeout=600.0,
-    )
-    if added.code != 0:
-        fail(
-            f"the loop could not add the workshop beside its footman (exit"
-            f" {added.code}):\n{added.stdout}{added.stderr}"
-        )
-    return True
-
-
-def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> Path:
+def _birth(
+    kind: str,
+    url: str,
+    index: str = "",
+    stack: Sequence[str] = (),
+    driver: Path | None = None,
+) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: seeds, git, repository,
@@ -1166,7 +1206,13 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     this is the recovery procedure too. *index*, when given, is
     searched before any other index the environment names
     ([livery.workshop._e2e._dev_index][]); *stack*, when given, is the
-    extensions the workspace lists instead of the stock list.
+    extensions the workspace lists instead of the stock list. The verb
+    runs from *driver*, the checkout running the pass, whose own project
+    mounts the workshop being edited, so a bare runner needs nothing
+    self-added and the birth runs this checkout's code; the folder is
+    then absolute, and the verb hands the finish to the newborn's own
+    runner. Without a driver the machine's footman answers from the
+    loop's home.
     """
     import sys
 
@@ -1175,7 +1221,6 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
-    ensure_birth_verb(env, home)
     # A workspace already there is a birth to resume: the verb refuses
     # to start a second one in its folder.
     resume = ["--resume"] if (home / E2E_REPO / "workshop.toml").is_file() else []
@@ -1186,7 +1231,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
             "livery.footman",
             "--yes",
             "new.project",
-            E2E_REPO,
+            str(home / E2E_REPO) if driver is not None else E2E_REPO,
             f"--forge={kind}",
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
@@ -1194,7 +1239,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
             *([f"--stack={','.join(stack)}"] if stack else []),
             *resume,
         ],
-        cwd=home,
+        cwd=driver if driver is not None else home,
         env=env,
         nofail=True,
         timeout=900.0,
@@ -1713,23 +1758,44 @@ def _render_with_the_pass(root: Path) -> None:
 
     A child of the pass's interpreter, as the birth is, with the uv
     handoff off: the loop's lock pins the workshop the loop last
-    locked, and the handoff would run that one instead.
+    locked, and the handoff would run that one instead. The caller has
+    deleted the loop's ``pyproject.toml`` so the render starts from
+    nothing, and footman's project rung reads that file for the
+    built-ins a project's dependencies offer, so here it offers none.
+    The child mounts the workshop as a user built-in instead, through
+    a config directory of its own: what a desk's global fm carries in
+    its user config and a bare runner lacks. A failure also prints
+    footman's ``--plugins`` listing from the same child: what mounted,
+    and from which rung.
     """
     import sys
+    import tempfile
 
-    result = footman.run(
-        [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"],
-        cwd=root,
-        env={**os.environ, "FOOTMAN_NO_UV": "1"},
-        nofail=True,
-        timeout=900.0,
-    )
-    print(result.stdout.rstrip("\n"))
-    if result.code != 0:
-        fail(
-            f"the pass's render of the loop exited {result.code}:"
-            f"\n{result.stdout}{result.stderr}"
+    runner = [sys.executable, "-m", "livery.footman"]
+    with tempfile.TemporaryDirectory(prefix="loop-render-") as config:
+        (Path(config) / "config.toml").write_text(
+            "# The pass's own workshop, mounted for the render alone.\n"
+            '[builtins]\nuser = ["livery.workshop"]\n',
+            "utf-8",
         )
+        env = {**os.environ, "FOOTMAN_NO_UV": "1", "FOOTMAN_CONFIG_DIR": config}
+        result = footman.run(
+            [*runner, "--yes", "drift.check", "--fix"],
+            cwd=root,
+            env=env,
+            nofail=True,
+            timeout=900.0,
+        )
+        print(result.stdout.rstrip("\n"))
+        if result.code != 0:
+            plugins = footman.run(
+                [*runner, "--plugins"], cwd=root, env=env, nofail=True, timeout=120.0
+            )
+            fail(
+                f"the pass's render of the loop exited {result.code}:"
+                f"\n{result.stdout}{result.stderr}"
+                f"\nfootman's plugins in the loop:\n{plugins.stdout}{plugins.stderr}"
+            )
 
 
 def _loop_fm(
@@ -2928,11 +2994,14 @@ def _born(pass_: Pass) -> None:
         # as a first birth does.
         _authenticate_remote(root, lane_token, forge)
         _align_main(root)
+    from livery.workshop._extensions import workspace_root
+
     root = _birth(
         forge,
         pass_.url,
         index=_dev_index(forge, pass_.stack),
         stack=pass_.stack,
+        driver=workspace_root(),
     )
     _authenticate_remote(root, lane_token, forge)
     provision(forge)
@@ -3206,8 +3275,27 @@ if _WORKSHOP_TESTS.is_dir():
                 _enter_host(place.values(), env)
             # Every commit the pass makes, the driver's, the birth's and
             # the loop's own fm's, is unsigned: the setting rides the
-            # task's environment into each child.
-            os.environ.update(unsigned_environment(os.environ))
+            # task's environment into each child. On a hosted runner the
+            # job's CI markers would reach every child, which would then
+            # refuse a fix and stamp its runs as the runner's; the pass
+            # drives its project as a desk.
+            scrubbed = edit_environments(
+                unsigned_environment(os.environ), remove=CI_MARKERS
+            )
+            if scrubbed:
+                names = ", ".join(scrubbed)
+                print(f"  ci markers removed for the pass's children: {names}")
+            if driver is not None:
+                from livery.workshop._git_ops import GitOps
+
+                git = GitOps(driver)
+                edit_environments(
+                    identity_environment(
+                        os.environ,
+                        name=git.config_get("user.name"),
+                        email=git.config_get("user.email"),
+                    )
+                )
             _require_host_alias(forge)
             if daemon_needed(chosen):
                 _require_runner_docker(forge)

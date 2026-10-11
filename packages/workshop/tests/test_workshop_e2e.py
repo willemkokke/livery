@@ -293,6 +293,21 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
+def test_a_git_without_an_identity_gets_the_loops_and_a_configured_one_stands() -> None:
+    # Nothing configured: the loop's identity follows the unsigned entry.
+    outer = _e2e.unsigned_environment({})
+    assert _e2e.identity_environment(outer, name="", email="") == {
+        "GIT_CONFIG_COUNT": "3",
+        "GIT_CONFIG_KEY_1": "user.name",
+        "GIT_CONFIG_VALUE_1": "livery loop",
+        "GIT_CONFIG_KEY_2": "user.email",
+        "GIT_CONFIG_VALUE_2": "loop@livery.invalid",
+    }
+    # A person's identity, even half of one, stands.
+    assert _e2e.identity_environment(outer, name="Acme", email="") == {}
+    assert _e2e.identity_environment({}, name="", email="dev@acme.test") == {}
+
+
 def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
     """A signer that waits for a person fails an unattended pass; the setting rides."""
     assert _e2e.unsigned_environment({}) == {
@@ -335,7 +350,11 @@ def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
         calls.append("authenticate")
 
     def _birth(
-        kind: str, url: str, index: str = "", stack: tuple[str, ...] = ()
+        kind: str,
+        url: str,
+        index: str = "",
+        stack: tuple[str, ...] = (),
+        driver: Path | None = None,
     ) -> Path:
         calls.append("birth")
         return root
@@ -376,22 +395,42 @@ def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
 
     seen: list[tuple[list[str], object, str]] = []
     code = [3]
+    builtins: list[str] = []
 
     def run(argv: list[str], **kw: object) -> SimpleNamespace:
         env = kw["env"]
         assert isinstance(env, dict)
         seen.append((argv, kw["cwd"], str(env.get("FOOTMAN_NO_UV", ""))))
+        # The render runs with no pyproject, so the project rung offers
+        # nothing: the child's own config names the workshop instead.
+        config = Path(str(env["FOOTMAN_CONFIG_DIR"])) / "config.toml"
+        builtins.append(config.read_text("utf-8"))
+        if argv[-1] == "--plugins":
+            # The listing a failure prints: what mounted, from which rung.
+            return SimpleNamespace(
+                code=0, stdout="livery-workshop 0.8.0\n  livery.workshop\n", stderr=""
+            )
         return SimpleNamespace(
             code=code[0], stdout="  updated pyproject.toml\n", stderr="no index"
         )
 
     monkeypatch.setattr("livery.footman.run", run)
-    with pytest.raises(_FAILURES, match="the pass's render of the loop exited 3"):
+    with pytest.raises(
+        _FAILURES, match="the pass's render of the loop exited 3"
+    ) as caught:
         _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert "footman's plugins in the loop:\nlivery-workshop 0.8.0" in str(caught.value)
     code[0] = 0
     _e2e._render_with_the_pass(tmp_path)  # pyright: ignore[reportPrivateUsage]
     argv = [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"]
-    assert seen == [(argv, tmp_path, "1"), (argv, tmp_path, "1")]
+    plugins = [sys.executable, "-m", "livery.footman", "--plugins"]
+    assert seen == [
+        (argv, tmp_path, "1"),
+        (plugins, tmp_path, "1"),
+        (argv, tmp_path, "1"),
+    ]
+    assert len(builtins) == 3
+    assert all('[builtins]\nuser = ["livery.workshop"]\n' in text for text in builtins)
     assert "updated pyproject.toml" in capsys.readouterr().out
 
 
@@ -1344,6 +1383,10 @@ def test_a_host_pass_hands_its_children_the_environments_own_token(
     monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
     monkeypatch.setenv("GITEA_URL", "http://localhost:1")
     monkeypatch.setenv("GITEA_TOKEN", "stale")
+    # A hosted job carries the real forge's tokens in the generic names
+    # the workshop reads first; inside the pass the forge is the local one.
+    monkeypatch.setenv("FORGE_TOKEN", "github-job-token")
+    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "github-admin-token")
     values = {
         "GITEA_URL": "http://localhost:43210",
         "GITEA_TOKEN": "token-abc",
@@ -1352,6 +1395,10 @@ def test_a_host_pass_hands_its_children_the_environments_own_token(
     _e2e._enter_host(values, "scratch")  # pyright: ignore[reportPrivateUsage]
     assert (os.environ["GITEA_URL"], os.environ["GITEA_TOKEN"]) == (
         "http://localhost:43210",
+        "token-abc",
+    )
+    assert (os.environ["FORGE_TOKEN"], os.environ["FORGE_ADMIN_TOKEN"]) == (
+        "token-abc",
         "token-abc",
     )
     assert (
@@ -1512,55 +1559,73 @@ def test_from_main_leaves_a_dev_branch_and_an_unasked_checkout_alone(
     assert "from main" not in capsys.readouterr().out
 
 
-def test_a_footman_without_new_project_gets_the_workshop_added_from_the_index(
-    capsys: pytest.CaptureFixture[str],
+def test_the_birth_runs_from_the_driver_with_an_absolute_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from types import SimpleNamespace
 
-    calls: list[tuple[list[str], str]] = []
+    seen: list[tuple[list[str], object]] = []
 
-    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
-        env = kwargs.get("env")
-        assert isinstance(env, dict)
-        assert kwargs.get("cwd") == Path("/loop/home")
-        calls.append((argv[2:], str(env.get("UV_INDEX", ""))))
-        code = 64 if argv[-2:] == ["new.project", "--help"] else 0
-        return SimpleNamespace(code=code, stdout="", stderr="")
-
-    env = {"UV_INDEX": "file:///dev-index https://pypi.org/simple"}
-    assert _e2e.ensure_birth_verb(env, Path("/loop/home"), run=run) is True
-    assert [argv for argv, _ in calls] == [
-        ["livery.footman", "new.project", "--help"],
-        ["livery.footman", "--yes", "self.add", "livery-workshop"],
-    ]
-    assert all(index == env["UV_INDEX"] for _, index in calls)
-    assert "answers no new.project; adding the workshop" in capsys.readouterr().out
-
-
-def test_a_footman_that_answers_new_project_adds_nothing() -> None:
-    from types import SimpleNamespace
-
-    calls: list[list[str]] = []
-
-    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
-        calls.append(argv)
+    def _run(argv: list[str], **kwargs: object) -> object:
+        seen.append((argv, kwargs.get("cwd")))
         return SimpleNamespace(code=0, stdout="", stderr="")
 
-    assert _e2e.ensure_birth_verb({}, Path("/loop/home"), run=run) is False
-    assert len(calls) == 1
+    monkeypatch.setattr("livery.footman.run", _run)
+    home = tmp_path / "home"
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: home)
+    driver = tmp_path / "driver"
+    # From a driver checkout: the verb its project mounts, the folder absolute.
+    _e2e._birth("gitea", "http://localhost:1", driver=driver)
+    argv, cwd = seen[-1]
+    assert cwd == driver
+    assert argv[argv.index("new.project") + 1] == str(home / "ci-e2e-loop")
+    # Without one: the machine's footman, from the loop's home.
+    _e2e._birth("gitea", "http://localhost:1")
+    argv, cwd = seen[-1]
+    assert cwd == home
+    assert argv[argv.index("new.project") + 1] == "ci-e2e-loop"
 
 
-def test_a_failed_self_add_refuses_naming_its_exit() -> None:
+def test_the_pass_removes_ci_markers_from_its_children_environment() -> None:
+    # Nothing to remove first: a desk's environment is left as it is.
+    desk = {"PATH": "/usr/bin", "GITHUB_TOKEN": "t"}
+    assert _e2e.scrub_ci_markers(desk) == ()
+    assert desk == {"PATH": "/usr/bin", "GITHUB_TOKEN": "t"}
+    # A hosted job's markers go, every other key stays: a child reading
+    # CI would refuse a fix and stamp the loop's runs as the runner's.
+    hosted = {
+        "CI": "true",
+        "GITHUB_ACTIONS": "true",
+        "GITEA_ACTIONS": "true",
+        "GITLAB_CI": "true",
+        "RUNNER_TEMP": "/t",
+        "PATH": "/usr/bin",
+    }
+    assert _e2e.scrub_ci_markers(hosted) == (
+        "CI",
+        "GITHUB_ACTIONS",
+        "GITEA_ACTIONS",
+        "GITLAB_CI",
+    )
+    assert hosted == {"RUNNER_TEMP": "/t", "PATH": "/usr/bin"}
+
+
+def test_the_pass_edits_the_process_and_the_task_environments_alike(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A git the pass runs through the store spawns from the task's own
+    # environment, footman's run from ctx.env: both must carry the edit.
     from types import SimpleNamespace
 
-    from livery.footman import Failed
-
-    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
-        if "self.add" in argv:
-            return SimpleNamespace(code=2, stdout="", stderr="no index\n")
-        return SimpleNamespace(code=64, stdout="", stderr="")
-
-    with pytest.raises(
-        Failed, match=r"could not add the workshop beside its footman \(exit 2\)"
-    ):
-        _e2e.ensure_birth_verb({}, Path("/loop/home"), run=run)
+    task_env: dict[str, str] = {"CI": "true", "KEEP": "1"}
+    monkeypatch.setattr("livery.footman.current", lambda: SimpleNamespace(env=task_env))
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.delenv("GITEA_ACTIONS", raising=False)
+    removed = _e2e.edit_environments(
+        {"GIT_CONFIG_COUNT": "1"}, remove=("CI", "GITEA_ACTIONS")
+    )
+    assert removed == ("CI",)
+    assert os.environ["GIT_CONFIG_COUNT"] == "1"
+    assert "CI" not in os.environ and os.environ["GITHUB_ACTIONS"] == "true"
+    assert task_env == {"KEEP": "1", "GIT_CONFIG_COUNT": "1"}
