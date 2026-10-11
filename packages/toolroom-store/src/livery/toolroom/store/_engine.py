@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from io import BytesIO
 from pathlib import Path
+from typing import NamedTuple
 
 from livery.strongroom import (
     Digest,
@@ -382,6 +383,14 @@ symlink: Callable[[Path, Path], None] = _symlink
 where the platform would have allowed the link."""
 
 
+class DamagedView(NamedTuple):
+    """A view the disk no longer holds whole: tool, version, the paths missing."""
+
+    name: str
+    version: str
+    missing: tuple[str, ...]
+
+
 class Store:
     """The tool store: a home's objects, refs and views, driven by specs.
 
@@ -422,9 +431,11 @@ class Store:
     def probe(self, record: Record, version: str) -> Ensured | None:
         """The tool version when it is present here, else None; no source is consulted.
 
-        Present means the ref names a tree and the view directory holds
-        every path the view recorded; for a delegated kind, that its
-        installer's directory holds what it installed.
+        Present means the ref names a tree made from this host's
+        deployment and a view of it was made at the tool's directory;
+        for a delegated kind, that its installer's directory holds what
+        it installed. Whether the view's files are all still on disk is
+        `audit`'s question, asked by `fm doctor` and not on every sync.
 
         Raises:
             RecordError: for a version the record does not track, or a
@@ -589,7 +600,7 @@ class Store:
         tool_dir = self.home.tool_dir(name, version)
         key = f"{name}@{version}"
         tree = self._objects.ref(TOOLS, key)
-        if tree is None or not self._whole(tool_dir):
+        if tree is None or self._view_of(tool_dir) is None:
             return None
         # The tree is present for this deployment alone: a ref made from
         # another layout of the version, or one that recorded none, is
@@ -1123,15 +1134,69 @@ class Store:
                 return record
         return None
 
-    def _whole(self, tool_dir: Path) -> bool:
+    def audit(self, name: str, version: str) -> tuple[str, ...] | None:
+        """The paths of *name*'s view at *version* the disk lacks; None without a view.
+
+        A walk of every path the view's record names, the check a sync
+        no longer pays: a view damaged by hand after it was made is
+        found here, named path by path, and mended by `mend_view`. An
+        empty tuple is a whole view. None is a tool with no view at the
+        directory, a delegated kind or one never supplied, which is the
+        sync's to supply and nothing to audit.
+        """
+        tool_dir = self.home.tool_dir(name, version)
         record = self._view_of(tool_dir)
         if record is None:
-            return False
-        return all(
-            (tool_dir / entry.path).exists()
+            return None
+        return tuple(
+            entry.path
             for entry in record.entries
-            if entry.rung != "parked"
+            if entry.rung != "parked" and not (tool_dir / entry.path).exists()
         )
+
+    def audit_views(self) -> tuple[DamagedView, ...]:
+        """Every view under the home that lacks files on disk, by tool and version.
+
+        The views are the store's own records, so nothing outside the
+        store is read: no lock, no catalogue. A whole view is not
+        listed. The paths are the view's, relative to the tool's
+        directory.
+        """
+        found: list[DamagedView] = []
+        for record in self._objects.views():
+            at = Path(record.at)
+            if at.parent != self.home.tools or "@" not in at.name:
+                continue
+            name, _, version = at.name.rpartition("@")
+            missing = tuple(
+                entry.path
+                for entry in record.entries
+                if entry.rung != "parked" and not (at / entry.path).exists()
+            )
+            if missing:
+                found.append(DamagedView(name, version, missing))
+        return tuple(found)
+
+    def mend_view(self, name: str, version: str) -> None:
+        """Make *name*'s view at *version* whole again from the tree the store holds.
+
+        The repair for a view `audit` or `audit_views` found damaged: the
+        view's record goes, which removes what the store created there
+        and nothing else, and the same tree is viewed again at the same
+        directory. The tree's blobs are in the object store already, so
+        nothing is fetched and no record of the tool is read. A whole
+        view is dropped and made again the same way.
+
+        Raises:
+            StoreError: when no view of the tool exists at the directory.
+        """
+        tool_dir = self.home.tool_dir(name, version)
+        stale = self._view_of(tool_dir)
+        if stale is None:
+            raise StoreError(f"{name} {version}: no view at {tool_dir} to mend")
+        self._objects.drop_view(stale.id)
+        tool_dir.parent.mkdir(parents=True, exist_ok=True)
+        self._objects.view(stale.tree, tool_dir)
 
     # --- the bin directory ---------------------------------------------------
 

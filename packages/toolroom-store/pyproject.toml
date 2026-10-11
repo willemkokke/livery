@@ -42,3 +42,9 @@ Repository = "https://github.com/willemkokke/livery"
 # root's __init__.py; livery and livery.toolroom are PEP 420 namespaces
 # with no __init__.py.
 module-name = "livery.toolroom.store"
+
+# The store's doctor: every view the store made is whole, or
+# `fm doctor --fix` views it again from its tree. Metadata footman
+# loads; nothing here imports footman.
+[project.entry-points."footman.doctors"]
+"livery.toolroom.store" = "livery.toolroom.store._doctor:doctor"

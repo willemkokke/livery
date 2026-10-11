@@ -250,3 +250,14 @@ otherwise, and every installer's kind takes `path`.
 A version or host the record does not carry refuses by name, naming
 what it does carry. The six host keys are `macos-arm`, `macos-x64`,
 `linux-x64`, `linux-arm`, `windows-x64` and `windows-arm`.
+
+A view is a materialisation of a tree the object store keeps, and the
+store keeps a record of every view it made: the tree, the directory and
+every path. `Store.probe` answers present from the ref and that record,
+without walking the files, so a sync pays no walk. `Store.audit(name,
+version)` walks one view and names the paths the disk lacks;
+`Store.audit_views()` does so for every view under the home;
+`Store.mend_view(name, version)` drops a damaged view's record and views
+its tree again, fetching nothing. `fm doctor` runs the store's doctor,
+registered under footman's `footman.doctors` group, which reports every
+damaged view and mends it under `--fix`.
