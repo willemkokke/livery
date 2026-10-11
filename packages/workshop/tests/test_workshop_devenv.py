@@ -253,7 +253,9 @@ def test_a_spawned_daemon_starts_with_the_cleaned_environment(
 
     monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / ".venv"))
     monkeypatch.setenv("UV_RUN_RECURSION_DEPTH", "1")
-    monkeypatch.setenv("PATH", os.pathsep.join([str(tmp_path / ".venv" / "bin"), "/usr/bin"]))
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join([str(tmp_path / ".venv" / "bin"), "/usr/bin"])
+    )
     log = tmp_path / "daemon.log"
     pid = spawn_detached(
         [sys.executable, "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
