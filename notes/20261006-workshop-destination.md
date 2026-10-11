@@ -2491,6 +2491,40 @@ the stack, which this design neither needs nor rules out).
   ruff and clang-tidy on the desk. Willem took the interim the same
   day.
 
+- 2026-10-11, #1377 planned in eleven parts, each mergeable alone and
+  gate-green, no part touching the CI generator, which another change
+  edits: (1) pins, in today's spelling, for what the code enforces and
+  no test names, a step's `after` running once, a tests-only step on a
+  tests-only change, one option table for a code and a words step, the
+  isolated legs' order and dist directories, a package-level root file
+  written once; (2) the step record and a transition reader, the
+  record gaining phase, step, provides, reads, isolated, enabled,
+  replaces and deletes, `[phases.<phase>.<step>]` read with `main`,
+  `fix` and `safe-fix` as a template or a reference, `{paths}` and
+  `{arguments}` placing the run's paths and the words after `--`, the
+  old spelling read into the same record by a reader named temporary;
+  (3) the fifteen declarations and the package option tables move to
+  the new spelling, `listed-with` becoming `enabled`; (4) the old
+  spelling refuses and the reader, `narrowing`, `transport`,
+  `threshold`, `roles`, `listed-with`, `[options]`, `judge`, `run` and
+  `arguments` go, `[for.<target>]` carrying every table; (5) phases are
+  declared, by the base in `contract.toml` and by extensions, with
+  engine keys, level, placement and whether a verb is generated, an
+  undeclared phase refusing and two steps at one address refusing
+  unless one replaces or deletes; (6) one walk, `pre` and `post` gone,
+  every step a footman step inside `parallel()`, the gate's walk and
+  the train's phases through one function, `GateContext` folding into
+  `PhaseContext`; (7) composition is requires alone, `compatible`,
+  `before` and `after`, the pair check and `--combinations` gone; (8)
+  slots, contributions, editor-extension and release-notes become
+  declared queries with a combine rule; (9) root files become
+  fragments and `[rules]` become layering steps; (10) the train takes
+  `isolated` and `configuration`, `[release] prove` replaces
+  `prove-floors`, replay is verify; (11) the names: `StepRecord`,
+  `_steps.py`, `register_step`, the allowance shrinking, the temporary
+  rows closing. Parts 2 and 5 rebase onto #1443's sync step. The
+  phases' first extension-declared consumer is 11c's docs phase.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
