@@ -1341,10 +1341,13 @@ def test_broken_coverage_declarations_refuse(tmp_path: Path) -> None:
 
 
 def test_a_missing_report_states_the_absence_and_stays_green(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.docs._site import generate_coverage_pages
 
+    # A desk's build, wherever the test runs: on a push to main the
+    # page frames the tree the gate job renders later instead.
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     root = _workspace(tmp_path)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'

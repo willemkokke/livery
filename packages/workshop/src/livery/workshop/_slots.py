@@ -19,7 +19,7 @@ contributes.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 #: The extension the builtin declarations and contributions belong to.
 _BASE = "livery.workshop"
@@ -138,6 +138,25 @@ def withdraw(name: str, *, by: str) -> None:
 def slots() -> tuple[str, ...]:
     """Every declared slot's name, sorted."""
     return tuple(sorted(_SLOTS))
+
+
+def snapshot() -> dict[str, Slot]:
+    """The registry's state, every slot with its contributions, for `restore`."""
+    return {
+        name: replace(slot, contributions=list(slot.contributions))
+        for name, slot in _SLOTS.items()
+    }
+
+
+def restore(state: dict[str, Slot]) -> None:
+    """Put the registry back to *state*: a slot declared or filled since is gone."""
+    _SLOTS.clear()
+    _SLOTS.update(
+        {
+            name: replace(slot, contributions=list(slot.contributions))
+            for name, slot in state.items()
+        }
+    )
 
 
 def composed(name: str) -> object:
