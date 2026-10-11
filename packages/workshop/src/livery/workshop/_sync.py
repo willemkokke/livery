@@ -566,7 +566,7 @@ def sync(
     without one.
     """
     from livery.workshop._git_ops import GitOps
-    from livery.workshop._kinds import prepare_install
+    from livery.workshop._lifecycle import sync as sync_phase
     from livery.workshop._packages import discover_packages
     from livery.workshop._tool_tasks import sync_tools
     from livery.workshop._uv import run_uv
@@ -622,9 +622,8 @@ def sync(
     # it as it is rather than resolving it a second time.
     sync_tools(root, frozen=frozen or locked, offline=offline)
     # A member whose install builds something may need it in place
-    # first; its kind's registration says what.
-    for line in prepare_install(root, discover_packages(root)):
-        print(line)
+    # first: the sync phase's steps say what, conan's profile among them.
+    sync_phase(discover_packages(root), root)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
     # The locks just moved, and composed and generated files read them
     # (the locked tools' fragment, the uv pin in setup.sh), so the sync

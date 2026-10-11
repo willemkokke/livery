@@ -1458,7 +1458,6 @@ the stack, which this design neither needs nor rules out).
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
-| `KindRecord.before_install`, the nanobind kind's conan profile check before `uv sync` | the conan extension's `sync` phase step (phase 11b, slice 4) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
@@ -2474,6 +2473,21 @@ the stack, which this design neither needs nor rules out).
   extension alone; that proof is 12e's. Proved by fresh passes for
   ruff and clang-tidy on the desk. Willem took the interim the same
   day.
+
+- 2026-10-11, #1443, phase 11b slice 4's first part: `fm sync` runs the
+  sync phase, and conan's profile step there replaces
+  `KindRecord.before_install`, which goes with `prepare_install`. The
+  role decision the slice owned: a nanobind package consumes conan and
+  is never a recipe, so it takes conan's sync step and the cmake-conan
+  provider and none of conan's stamp, build or publish; the nanobind
+  kind stands for conan beside cpp, a package that lists no extension
+  runs the sync phase over what its kind stands for until slice 6, and
+  the lifecycle phases keep reading the listed extensions alone, so the
+  kind's backend still builds it. When nanobind lists conan as an
+  extension, #1377's `enabled` on a step is where the recipe's steps
+  stay off a consumer. Unreal is pushed back the same day: nothing
+  forecloses it, the toolchain declaration stays typed per family and
+  an unreal extension declares its own steps under the same phases.
 
 ## Open
 

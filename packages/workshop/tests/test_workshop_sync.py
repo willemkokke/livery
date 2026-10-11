@@ -50,10 +50,12 @@ def _recorded_steps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(_sync, "fetch_store_lines", _step("store", []))
     monkeypatch.setattr(_sync, "sync_workspace", _step("content", []))
     monkeypatch.setattr("livery.workshop._tool_tasks.sync_tools", _step("tools"))
-    monkeypatch.setattr(
-        "livery.workshop._kinds.prepare_install",
-        _step("prepare", ["  conan: the default profile was detected again"]),
-    )
+
+    def _prepare(packages: object, root: object) -> None:
+        steps.append("prepare")
+        print("  conan: the default profile was detected again")
+
+    monkeypatch.setattr("livery.workshop._lifecycle.sync", _prepare)
     monkeypatch.setattr("livery.workshop._uv.run_uv", _step("uv"))
     monkeypatch.setattr("livery.workshop._shipped_files.deliver", _step("deliver", []))
     monkeypatch.setattr(
@@ -63,7 +65,7 @@ def _recorded_steps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return steps
 
 
-def test_the_kinds_prepare_their_members_after_the_tools_and_before_uv(
+def test_the_sync_phase_runs_after_the_tools_and_before_uv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import _sync
@@ -76,35 +78,59 @@ def test_the_kinds_prepare_their_members_after_the_tools_and_before_uv(
     assert "the default profile was detected again" in capsys.readouterr().out
 
 
-def test_a_kind_prepares_once_however_many_members_it_has(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _kinds
-    from livery.workshop._kinds import KindRecord, prepare_install
+    """A listed extension's sync step runs; a kind standing for it runs it too."""
+    from livery.workshop import _kinds, _lifecycle
     from livery.workshop._packages import Package
+    from workshop_extension_fakes import fake_extensions, fake_steps
 
-    asked: list[Path] = []
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        prof='[extension]\nlevels = ["package"]\n\n[phases.sync]\n'
+        'main = "{package}._steps:main"\n',
+    )
+    fake_steps(
+        tmp_path,
+        "prof",
+        """
+        def main(ctx):
+            print(f"prof.main for {ctx.package.path}")
+        """,
+    )
 
-    def _prepare(root: Path) -> list[str]:
-        asked.append(root)
-        return [f"  prepared {len(asked)}"]
-
-    record = KindRecord(name="acme-native", before_install=_prepare, abstract=True)
-    monkeypatch.setitem(_kinds._KINDS, record.name, record)
-    members = tuple(
-        Package(
+    def member(name: str, kind: str, *extensions: str) -> Package:
+        return Package(
             directory=tmp_path / name,
             path=f"packages/{name}",
             name=name,
             kind=kind,
             depends=(),
+            extensions=extensions,
         )
-        for name, kind in (("a", "acme-native"), ("b", "acme-native"), ("c", "acme"))
+
+    # The bridge: a kind standing for the fake, as nanobind stands for conan.
+    monkeypatch.setattr(
+        _kinds,
+        "kind_stands_for",
+        lambda kind: ("acme.prof",) if kind == "python-nanobind" else (),
     )
-    # A kind nothing registers passes here; a kind with no step adds none.
-    assert prepare_install(tmp_path, members) == ["  prepared 1"]
-    assert asked == [tmp_path]
-    assert prepare_install(tmp_path, ()) == []
+    # Nothing first: a package listing nothing of a kind standing for
+    # nothing, and a package of a kind nothing registers, run no step.
+    _lifecycle.sync(
+        (member("plain", "python"), member("odd", "acme-unknown")), tmp_path
+    )
+    assert capsys.readouterr().out == ""
+    _lifecycle.sync(
+        (member("listed", "python", "acme.prof"), member("native", "python-nanobind")),
+        tmp_path,
+    )
+    assert capsys.readouterr().out.splitlines() == [
+        "prof.main for packages/listed",
+        "prof.main for packages/native",
+    ]
 
 
 def test_sync_runs_where_git_has_no_history(

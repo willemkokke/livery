@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
     from pathlib import Path
 
     from livery.workshop._packages import Neighbours, Package
@@ -32,6 +32,29 @@ if TYPE_CHECKING:
     from livery.workshop._registries import RegistryTarget
 
 T = TypeVar("T")
+
+
+def sync(packages: Iterable[Package], root: Path) -> None:
+    """Run the sync phase over *packages*: what a member needs before ``uv sync``.
+
+    The steps are the listed extensions' (conan's profile check among
+    them), and a package that lists no extension runs the phase over
+    what its kind stands for ([livery.workshop._kinds.kind_stands_for][]),
+    the bridge while package kinds remain. The sync phase alone takes
+    that bridge: the lifecycle phases read the listed extensions, so
+    the kind's backend still builds such a package, and a nanobind
+    package, which consumes conan and is never a recipe, gets conan's
+    profile and none of its stamp, build or publish.
+    """
+    from dataclasses import replace
+
+    from livery.workshop._kinds import kind_names, kind_stands_for
+
+    for package in packages:
+        held = package
+        if not package.extensions and package.kind in kind_names():
+            held = replace(package, extensions=kind_stands_for(package.kind))
+        _run_steps(held, "sync", root, {})
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
