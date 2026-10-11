@@ -11,21 +11,21 @@ import pytest
 
 from livery.extensions.docs._navblocks import NAV_BEGIN, NAV_END
 from livery.extensions.docs._site import (
-    MEMBERS_SLOT,
     mount_package_docs,
     named_package,
     scoped_config,
     zensical_config,
 )
-from livery.extensions.docs._theme import THEME_SLOT
 from livery.footman import Failed
+from livery.workshop._declaration import DeclarationError
 from livery.workshop._docs_contract import (
     materialise_module_docs,
     module_docs,
     module_docs_dir,
 )
 from livery.workshop._packages import discover_packages
-from workshop_docs_declared import docs_jobs, docs_slots  # noqa: F401
+from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_extension_fakes import fake_extensions
 
 _FAILURES = (SystemExit, Failed)
 
@@ -355,30 +355,36 @@ def _python_options(config: str) -> dict[str, object]:
     return options
 
 
-@pytest.fixture
-def members_extensions() -> Iterator[None]:
-    """Withdraw what the test extensions contributed to the members slot."""
-    from livery.workshop._slots import withdraw
+def _answering(query: str, value: str, requires: str = "") -> str:
+    """A workspace-level extension answering *query* with the literal *value*."""
+    return (
+        '[extension]\nlevels = ["workspace"]\n'
+        + (f'requires = ["{requires}"]\n' if requires else "")
+        + f'[queries."{query}"]\nvalue = {value}\n'
+    )
 
-    yield
-    for by in ("acme.base", "acme.site"):
-        withdraw(MEMBERS_SLOT, by=by)
+
+def _relist(root: Path, extensions: str) -> None:
+    """Rewrite *root*'s contract listing *extensions*, a TOML list as written."""
+    (root / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
 
 
 def test_a_members_policy_outside_public_and_all_refuses_naming_them(
-    members_extensions: None,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._slots import SlotError, contribute
+    from livery.workshop import _extensions
 
-    with pytest.raises(
-        SlotError,
-        match=r"acme\.site contributes 'some' to slot 'docs\.members', whose values"
-        r" are 'public', 'all'",
-    ):
-        contribute(MEMBERS_SLOT, "some", extension="acme.site", by="acme.site")
+    fake_extensions(tmp_path, monkeypatch, site=_answering("docs.members", '"some"'))
+    path = tmp_path / "site" / "acme" / "site" / "extension.toml"
+    with pytest.raises(DeclarationError) as raised:
+        _extensions.declaration("acme.site")
+    assert str(raised.value) == (
+        f"{path}: queries.\"docs.members\".value is 'some'; the query's values are"
+        " 'public', 'all'"
+    )
 
 
-def test_without_a_contribution_the_handler_keeps_its_default_filter(
+def test_without_an_answer_the_handler_keeps_its_default_filter(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path)
@@ -388,20 +394,23 @@ def test_without_a_contribution_the_handler_keeps_its_default_filter(
 
 
 def test_all_members_writes_an_empty_filter_and_the_nearest_extension_wins(
-    tmp_path: Path, members_extensions: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._slots import contribute, withdraw
-
-    root = _workspace(tmp_path)
-    contribute(MEMBERS_SLOT, "all", extension="acme.base", by="acme.base")
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        base=_answering("docs.members", '"all"'),
+        site=_answering("docs.members", '"public"', requires="acme.base"),
+    )
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "acme.base"]\n')
     assert _python_options(zensical_config(root))["filters"] == []
     preview = scoped_config(root, named_package(root, "core"))
     assert _python_options(preview)["filters"] == []
-    # The nearest extension decides: a later contribution wins over an
-    # earlier one, and its withdrawal restores the earlier one.
-    contribute(MEMBERS_SLOT, "public", extension="acme.site", by="acme.site")
+    # The nearest extension decides: the one that requires the other
+    # wins over it, and taking it off the list restores the other's.
+    _relist(root, '["docs", "acme.base", "acme.site"]')
     assert "filters" not in _python_options(zensical_config(root))
-    withdraw(MEMBERS_SLOT, by="acme.site")
+    _relist(root, '["docs", "acme.base"]')
     assert _python_options(zensical_config(root))["filters"] == []
 
 
@@ -1187,60 +1196,55 @@ def test_extension_assets_are_staged_whole_and_listed_in_cascade_order(
     assert "theme.css" not in zensical_config(root)
 
 
-# The theme block, a slot a theme extension fills. Refusals first.
+# The theme block, a query a theme extension answers. Refusals first.
 
 
-@pytest.fixture
-def theme_extensions() -> Iterator[None]:
-    """Withdraw what the test extensions contributed to the theme slot."""
-    from livery.workshop._slots import withdraw
-
-    yield
-    for by in ("acme.base", "acme.site"):
-        withdraw(THEME_SLOT, by=by)
-
-
-def test_a_theme_contribution_outside_the_vocabulary_refuses_naming_the_keys(
-    theme_extensions: None,
+def test_a_theme_answer_outside_the_vocabulary_refuses_naming_the_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.docs._site import theme_values
-    from livery.workshop._slots import SlotError, contribute, withdraw
+    from livery.workshop._queries import QueryError
 
-    contribute(THEME_SLOT, {"font.body": "Lato"}, extension="acme.site", by="acme.site")
-    # The composition names the slot, once; the theme says what is wrong.
+    fake_extensions(
+        tmp_path, monkeypatch, site=_answering("docs.theme", '{ "font.body" = "Lato" }')
+    )
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "acme.site"]\n')
+    # The asker names the query, once; the theme says what is wrong.
     with pytest.raises(
-        SlotError,
-        match=r"^slot 'docs\.theme': unknown key 'font\.body'; the keys are"
-        r" language, font\.text, font\.code, features, palette$",
+        QueryError,
+        match=r"^docs\.theme: acme\.site answers the unknown key 'font\.body'; the"
+        r" keys are language, font\.text, font\.code, features, palette$",
     ):
-        theme_values()
-    withdraw(THEME_SLOT, by="acme.site")
-    contribute(THEME_SLOT, "Lato", extension="acme.site", by="acme.site")
+        theme_values(root)
+    fake_extensions(tmp_path, monkeypatch, site=_answering("docs.theme", '"Lato"'))
     with pytest.raises(
-        SlotError,
-        match=r"^slot 'docs\.theme': a contribution is a table of the theme's",
+        QueryError,
+        match=r"^docs\.theme: acme\.site answers 'Lato', and an answer is a table of"
+        r" the theme's keys$",
     ):
-        theme_values()
+        theme_values(root)
 
 
-def test_a_theme_contribution_changes_the_fonts_and_keeps_the_rest(
-    tmp_path: Path, theme_extensions: None
+def test_a_theme_answer_changes_the_fonts_and_keeps_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._slots import contribute, withdraw
-
+    fake_extensions(
+        tmp_path, monkeypatch, site=_answering("docs.theme", '{ "font.text" = "Lato" }')
+    )
     root = _workspace(tmp_path)
     theme = tomllib.loads(zensical_config(root))["project"]["theme"]
     assert theme["font"] == {"text": "Inter", "code": "Fira Code"}
-    contribute(THEME_SLOT, {"font.text": "Lato"}, extension="acme.site", by="acme.site")
+    _relist(root, '["docs", "acme.site"]')
     theme = tomllib.loads(zensical_config(root))["project"]["theme"]
     assert theme["font"] == {"text": "Lato", "code": "Fira Code"}
     assert theme["language"] == "en" and len(theme["palette"]) == 3
     assert "navigation.tabs" in theme["features"]
     assert theme["custom_dir"] == "overrides"
-    # The scoped preview follows, and the withdrawal restores the base's.
+    # The scoped preview follows, and taking the extension off the list
+    # restores the base's.
     preview = tomllib.loads(scoped_config(root, named_package(root, "core")))
     assert preview["project"]["theme"]["font"]["text"] == "Lato"
-    withdraw(THEME_SLOT, by="acme.site")
+    _relist(root, '["docs"]')
     restored = tomllib.loads(zensical_config(root))["project"]["theme"]
     assert restored["font"]["text"] == "Inter"
 

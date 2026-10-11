@@ -65,11 +65,11 @@ dev = [
     # where nanobind's cmake directory is, so the venv carries it
     # beside the build's own isolated copy.
     "nanobind>=2.7",
-{% endif %}    # What the registered checks need in the venv: each line is a
-    # check record's contribution to the `python.dev-group` slot, so a
-    # check an extension withdraws takes its line with it, and the record
-    # is where its floor and its reason live.
-{% for requirement in slots['python.dev-group'] %}    "{{ requirement }}",
+{% endif %}    # What the listed extensions need in the venv: each line is an
+    # extension's answer to the `python.dev-group` query, so an extension
+    # taken off the list takes its lines with it, and its declaration is
+    # where each floor and its reason live.
+{% for requirement in queries['python.dev-group'] %}    "{{ requirement }}",
 {% endfor %}]
 
 [tool.footman]

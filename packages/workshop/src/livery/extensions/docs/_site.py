@@ -8,9 +8,9 @@ generated tree. Nothing committed enumerates the packages. Authors
 write ``packages/<name>/docs/`` and the root ``docs/`` tree; every
 underscore path this module writes is machine territory, refreshed by
 the verbs and never edited by a person. Whether private members are
-documented is the extensions' decision through the ``docs.members`` slot:
-``public`` keeps each extractor's default filter, ``all`` documents
-every member.
+documented is the extensions' decision through the ``docs.members``
+query: ``public`` keeps each extractor's default filter, ``all``
+documents every member.
 
 A package owns the shape of its own site section through
 ``docs/nav.toml``: a hand-authored tree the emitter merges under
@@ -55,9 +55,16 @@ from livery.extensions.docs._packages_page import (
     package_tree,
     write_packages_page,
 )
-from livery.extensions.docs._theme import THEME_SLOT
+from livery.extensions.docs._theme import THEME
 from livery.footman import doc, fail, group
-from livery.workshop import HUMAN, _extensions, guidance, read_contract, slot
+from livery.workshop import (
+    HUMAN,
+    Query,
+    _extensions,
+    answer,
+    guidance,
+    read_contract,
+)
 from livery.workshop._docs_contract import (
     GENERATED,
     GENERATED_DIR,
@@ -558,16 +565,16 @@ def abbreviation_files(root: Path) -> list[str]:
     return files
 
 
-#: The slot deciding whether private members are documented: ``public``
+#: The query deciding whether private members are documented: ``public``
 #: keeps each extractor's default filter, ``all`` documents every
-#: member. A scalar the nearest extension decides; the base contributes
-#: nothing, so its default stands until an extension says otherwise.
-MEMBERS_SLOT = "docs.members"
+#: member. The nearest answering extension decides; the base answers
+#: nothing, so the declared default stands until an extension answers.
+MEMBERS: Query[str] = Query("docs.members")
 
 
-def members_policy() -> str:
-    """The composed private-members policy, ``public`` or ``all``."""
-    return str(slot(MEMBERS_SLOT))
+def members_policy(root: Path) -> str:
+    """The members policy the listed extensions answer, ``public`` or ``all``."""
+    return answer(root, MEMBERS)
 
 
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
@@ -709,12 +716,9 @@ def _extra_asset_lines(root: Path) -> list[str]:
     return lines
 
 
-def theme_values() -> dict[str, object]:
-    """The composed theme block's values, by key."""
-    composed = slot(THEME_SLOT)
-    assert isinstance(composed, dict)
-    table: dict[object, object] = dict(composed)
-    return {str(key): value for key, value in table.items()}
+def theme_values(root: Path) -> dict[str, object]:
+    """The theme block's values the listed extensions answer, by key."""
+    return dict(answer(root, THEME))
 
 
 def _theme_lines(theme: dict[str, object]) -> list[str]:
@@ -972,9 +976,9 @@ def zensical_config(root: Path) -> str:
     lines.append(f"    {NAV_END}")
     lines.append("]")
     lines += _extra_asset_lines(root)
-    lines += _theme_lines(theme_values())
+    lines += _theme_lines(theme_values(root))
     lines += _extension_block(root)
-    members = members_policy()
+    members = members_policy(root)
     for extractor, paths in handlers.values():
         if paths:
             lines += handler_lines(extractor, paths, extractor.inventories, members)
@@ -1136,7 +1140,7 @@ def changelog_page(root: Path, package: Package) -> str | None:
     text = changelog.read_text("utf-8")
     from livery.workshop import release_notes
 
-    notes = release_notes()
+    notes = release_notes(root)
     try:
         unreleased = notes.entry(root, package) if notes is not None else ""
     except BaseException as error:
@@ -1533,7 +1537,7 @@ def scoped_config(root: Path, package: Package) -> str:
     section, extracts = _package_section(package)
     lines += section
     lines.append("]")
-    lines += _theme_lines(theme_values())
+    lines += _theme_lines(theme_values(root))
     lines += _extension_block(root, relative_to="../..")
     extractor = kind_extractor(package.kind)
     if extracts and extractor is not None:
@@ -1542,7 +1546,9 @@ def scoped_config(root: Path, package: Package) -> str:
         if site_url:
             inventories.append(site_url.rstrip("/") + "/objects.inv")
         paths = [f"../../{path}" for path in extractor.sources(package)]
-        lines += handler_lines(extractor, paths, tuple(inventories), members_policy())
+        lines += handler_lines(
+            extractor, paths, tuple(inventories), members_policy(root)
+        )
     return "\n".join(lines) + "\n"
 
 

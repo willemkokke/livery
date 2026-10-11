@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import livery.footman as footman
 from livery.footman import Group, doc, fail, group, prog, root_group
-from livery.workshop import _fragments, _slots
+from livery.workshop import _fragments
 from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
@@ -249,16 +249,10 @@ class CheckRecord:
             leaves it when the check is unregistered.
         options: The options a package may set under
             ``[phases.<phase>.<step>]``; ``enabled`` is every check's.
-        contributions: ``(slot, value)`` pairs the record puts into
-            slots at registration, the dev group's lines say; withdrawn
-            with the record.
         fragments: The configuration the render manages for the
             check, one per rendered file it has something to say in;
             composed in check-name order, judged by the drift gate,
             gone from the next render with the record.
-        editor_extension: The editor extension's marketplace id, when the
-            record carries a verified one; the rendered
-            recommendations list names these and nothing else.
         claims: The categories the check judges, each with the rules
             it withholds there and the suffixes it reads; a check
             judges every file its claims reach and no other, and a
@@ -310,9 +304,7 @@ class CheckRecord:
     extension: str = BASE_EXTENSION
     tools: tuple[str, ...] = ()
     options: tuple[Option, ...] = ()
-    contributions: tuple[tuple[str, object], ...] = ()
     fragments: tuple[Fragment, ...] = ()
-    editor_extension: str = ""
     claims: tuple[Claim, ...] = ()
     flags: tuple[str, ...] = ()
     arguments: bool = False
@@ -429,19 +421,7 @@ def register_check(record: CheckRecord) -> None:
             )
     _CHECKS[record.name] = record
     _WITHDRAWN.pop(record.name, None)
-    _contribute(record)
     _ensure_task(record)
-
-
-def _contribute(record: CheckRecord) -> None:
-    _slots_withdraw(record.name)
-    for slot, value in record.contributions:
-        _slots.contribute(slot, value, extension=record.extension, by=record.name)
-
-
-def _slots_withdraw(name: str) -> None:
-    for slot in _slots.slots():
-        _slots.withdraw(slot, by=name)
 
 
 def _typed(option: Option, value: object) -> bool:
@@ -587,7 +567,6 @@ def unregister_check(name: str, *, by: str = "") -> None:
     if name not in _CHECKS:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
     record = _CHECKS.pop(name)
-    _slots_withdraw(name)
     if by and record.extension != by:
         _WITHDRAWN[name] = by
 
@@ -620,21 +599,12 @@ def snapshot() -> tuple[dict[str, CheckRecord], dict[str, str]]:
 
 
 def restore(state: tuple[dict[str, CheckRecord], dict[str, str]]) -> None:
-    """Put the registry back to *state*, the slot contributions with it.
-
-    A test that replaces a record with one that contributes nothing
-    would otherwise leave the slots short of the real record's lines
-    for every test after it on the same worker.
-    """
+    """Put the registry back to *state*."""
     records, withdrawn = state
-    for name in list(_CHECKS):
-        _slots_withdraw(name)
     _CHECKS.clear()
     _CHECKS.update(records)
     _WITHDRAWN.clear()
     _WITHDRAWN.update(withdrawn)
-    for record in records.values():
-        _contribute(record)
 
 
 def _reaches(claim: Claim, relative: str) -> bool:
@@ -745,13 +715,6 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
 def checks_by_name() -> dict[str, CheckRecord]:
     """Every registered record by name, in registration order."""
     return dict(_CHECKS)
-
-
-def editor_extensions() -> tuple[str, ...]:
-    """The editor extension ids the registered checks carry, sorted, each once."""
-    return tuple(
-        sorted({r.editor_extension for r in _CHECKS.values() if r.editor_extension})
-    )
 
 
 def answering(address: str) -> str | None:
@@ -1801,12 +1764,6 @@ def _register_builtin() -> None:
         _cpp_conan.test(
             package, ctx.root, selection=ctx.selection, arguments=ctx.arguments
         )
-
-    # The slots the extensions' records fill: the dev group's tool
-    # lines, and the options of the test runner the python kind runs.
-    # The python kind's extension declares both once it exists.
-    _slots.register_slot("python.dev-group")
-    _slots.register_slot("python.test.addopts")
 
     for record in (
         CheckRecord(

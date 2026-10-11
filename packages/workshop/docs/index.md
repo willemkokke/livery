@@ -84,8 +84,17 @@ spelling. Every key is optional:
   adds to a package's lifecycle phase, named for the extension: `main`,
   `"module:function"` in its own package, and the context keys the
   step `provides`, each with its type, and `reads`;
-- `[queries]`, the questions about a package a package-level extension
-  answers, each query's name to the `"module:function"` that answers it;
+- `[queries.<name>]`, a query the extension declares, in the grammar
+  the base declares its own in: `combine`, how the answers make one,
+  `union`, `nearest`, `agreed` or a `"module:function"`; `level`,
+  `package` for a question about one package or `workspace` for one
+  about the workspace; `default`, the answer while nobody answers; and
+  `values`, the only answers it takes. Two extensions declaring one
+  query refuse naming both;
+- `[queries]`, the queries the extension answers, each query's name to
+  the `"module:function"` that answers it, called with the package or
+  the workspace root, or `[queries.<name>] value`, a literal answer; an
+  answer to a query nobody declares refuses naming the declared ones;
 - `[categories]`, the categories a package-level extension gives its
   packages' paths, each category to the patterns it takes; a package
   whose extensions declare categories is answered by them and the base
@@ -108,7 +117,6 @@ spelling. Every key is optional:
   listed name, which the gate prints beside each; a step declared
   `enabled = false` registers only while the root contract turns it on
   at the step's own address, `[phases.<phase>.<step>] enabled = true`;
-- `[contributions]`, the values it puts into slots, by slot;
 - `[for.<target>]`, the same tables, read only while the target is
   listed;
 - `[replaces]` and `[deletes]`, an earlier extension's shipped file,
@@ -282,32 +290,47 @@ extensions add steps to them, and through the package's kind
 otherwise. A phase whose steps provide nothing under the
 key the train reads back refuses, naming the phase and the key.
 
-A package-level extension also answers questions about a package:
+An extension also answers queries, questions the base or another
+extension declares:
 
 ```toml
 [queries]
 public-modules = "acme.native._answers:public_modules"
 executables = "acme.native._answers:executables"
+
+[queries.editor-extensions]
+value = ["acme.editor"]
 ```
 
-The workshop defines each query, typed by its answer, and the rule
-that combines the answers of a package's extensions; `answer(package,
-query)` asks each extension of the package's set that answers, in
-composition order, and combines them:
+A query is declared with the rule that combines its answers, by the
+base in its contract file and by an extension under `[queries.<name>]`
+in its own; a handle, `Query("docs.members")`, names it and types its
+answer. A package-level query is asked with a package,
+`answer(package, query)`, and each extension of the package's set that
+answers is asked in composition order; a workspace-level one is asked
+with the workspace root, `answer(root, query)`, and the listed
+extensions answer in list order. The answers combine by the query's
+rule, and with nobody answering the query's declared default stands,
+or the rule's answer over nothing. The base declares:
 
-| Query | Answer | Combined |
-| --- | --- | --- |
-| `public-modules` | the modules that declare the public API | the union |
-| `module-roots` | the names other packages reference the code by | the union |
-| `version-files` | the files `stamp` may write a version into | the union |
-| `current-version` | the version the manifests declare | one value every answer agrees on |
-| `requirements` | each required distribution to its constraint | the union; a name valued twice refuses |
-| `distributions` | each released distribution's ecosystem and name | the union |
-| `compile-commands` | the build's compilation database | the answer of the extension no other answering one requires |
-| `executables` | the executables `fm run` starts | the union; a name two extensions answer refuses |
+| Query | Level | Answer | Combined |
+| --- | --- | --- | --- |
+| `public-modules` | package | the modules that declare the public API | the union |
+| `module-roots` | package | the names other packages reference the code by | the union |
+| `version-files` | package | the files `stamp` may write a version into | the union |
+| `current-version` | package | the version the manifests declare | one value every answer agrees on |
+| `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
+| `distributions` | package | each released distribution's ecosystem and name | the union |
+| `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
+| `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
+| `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
+| `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
+| `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
+| `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 
-A name the workshop does not define refuses with the nearest one, and
-an extension listed at the workspace alone answers none.
+A name no extension declares refuses with the nearest one; an answer
+refuses when the extension's levels lack the query's, and when it is
+off the query's `values`.
 
 `fm run <package>[:<executable>] -- <arguments>` starts one of the
 executables a package's extensions answer under `executables`, and
@@ -372,18 +395,19 @@ owners whose keys that schema holds.
 A check also says what its tool needs of the workspace. Its `tools`
 reach the tool profile while a package it judges exists, each
 requirement naming `check <name>` as its site, so unregistering a
-check removes its tool. An extension's `[contributions]` fill
-**slots**, the holes the base template leaves: the `dev` dependency
-group's tool lines and pytest's `addopts` are the first two, a list
-composing as the union in contribution order and a scalar taking the
-nearest contribution. The
-site's private-members policy is the third, `docs.members`: `public`
-keeps each extractor's default filter, `all` documents every member,
-and any other value refuses naming both. The theme block is the
-fourth, `docs.theme`: a table of the block's values (`language`,
-`font.text`, `font.code`, `features`, `palette`) a theme extension
-contributes in part, merged key by key in contribution order over the
-base's block, an unknown key refusing. An extension's site css ships in
+check removes its tool. What the base template leaves to the listed
+extensions, they answer through workspace-level queries: the `dev`
+dependency group's tool lines and pytest's `addopts` are the union of
+the answers in list order, and a rendered template reads any
+workspace-level query by its name, `queries['python.dev-group']`. The
+docs extension declares two more. The site's private-members policy,
+`docs.members`: `public` keeps each extractor's default filter, `all`
+documents every member, the nearest answer wins, and any other value
+refuses naming both. The theme block, `docs.theme`: a table of the
+block's values (`language`, `font.text`, `font.code`, `features`,
+`palette`) a theme extension answers in part, merged key by key in
+list order over the base's block, an unknown key refusing. An
+extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before
 the packages' declared sheets and the workspace's own
@@ -465,7 +489,7 @@ checks pass the same clauses in its test suite.
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
 table naming `livery-workshop` as its distribution. It owns the site's
-assembly, the `docs` verbs, the `docs.members` and `docs.theme` slots,
+assembly, the `docs` verbs, the `docs.members` and `docs.theme` queries,
 the staged extension css, the generators a package declares and the
 seam the site publishes through, and it arrives through its own task
 entry point. The base keeps what it reads of a package's docs for its

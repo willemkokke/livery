@@ -11,11 +11,12 @@ feature bumps minor with breaks riding along. A package with nothing
 unreleased is refused rather than given a new number.
 
 The entry the commits earn is written by the release notes'
-provider, which an extension registers: the changelog extension,
-`livery-extensions-changelog`, writes each package's `CHANGELOG.md`
-with [git-cliff](https://git-cliff.org/). A workspace that lists no
-such extension releases without notes, and the train says so where
-it would have written them.
+provider, the one answer to the base's `release-notes` query: the
+changelog extension, `livery-extensions-changelog`, answers it and
+writes each package's `CHANGELOG.md` with
+[git-cliff](https://git-cliff.org/). A workspace that lists no
+extension answering releases without notes, and the train says so
+where it would have written them.
 
 `fm release.prepare` stamps the version into the three places that
 must agree, and `fm release.verify` refuses the tag when they do

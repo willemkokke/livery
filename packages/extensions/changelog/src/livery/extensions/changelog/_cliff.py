@@ -3,10 +3,10 @@
 Each package carries a ``cliff.toml``, the extension's per-package
 content, which states its tag line, its paths, and the entry's shape.
 This module runs git-cliff against that config for the entry the
-commits since the last release earn, and `NOTES`, which the
-extension's ``extension.toml`` names as its ``release-notes``, writes
-it into the package's ``CHANGELOG.md``. The next version is not
-git-cliff's: the workshop derives it from the same commits.
+commits since the last release earn, and `NOTES`, the extension's
+answer to the workshop's ``release-notes`` query, writes it into the
+package's ``CHANGELOG.md``. The next version is not git-cliff's: the
+workshop derives it from the same commits.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop import Package, forge_token
+from livery.workshop import Package, ReleaseNotes, forge_token
 
 #: Where a package's changelog contract lives.
 CONFIG_NAME = "cliff.toml"
@@ -255,6 +255,11 @@ def _replace_entry(text: str, version: str, entry_body: str) -> str:
     return rewritten if count else text
 
 
-#: The provider the extension's ``extension.toml`` names as its
-#: ``release-notes``, which the workshop registers at mount.
+#: The provider the extension answers the ``release-notes`` query with.
 NOTES = CliffChangelog()
+
+
+def notes(root: Path) -> ReleaseNotes:
+    """Answer the ``release-notes`` query about the workspace at *root* with `NOTES`."""
+    del root
+    return NOTES

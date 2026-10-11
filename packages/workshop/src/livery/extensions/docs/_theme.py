@@ -1,17 +1,26 @@
-"""The site's theme block: its default values, and how contributions merge over them.
+"""The site's theme block: its default values, and how the answers merge over them.
 
-The ``docs.theme`` slot's compose function lives here, apart from the
+The ``docs.theme`` query's combine function lives here, apart from the
 site's verbs, so the declaration can name it and importing it registers
 nothing.
 """
 
 from __future__ import annotations
 
-#: The slot deciding the theme block's values. The base's block is
-#: the default; a theme extension contributes a table of the keys it
-#: changes, and contributions merge key by key in contribution order,
-#: so the nearest extension's keys win.
-THEME_SLOT = "docs.theme"
+from typing import TYPE_CHECKING
+
+from livery.workshop import Query
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from livery.workshop._declaration import Declaration
+
+#: The query deciding the theme block's values. The base's block is
+#: the default; a theme extension answers with a table of the keys it
+#: changes, and the answers merge key by key in list order, so the
+#: last listed extension's keys win.
+THEME: Query[dict[str, object]] = Query("docs.theme")
 #: The base's theme: the stock fonts, and a palette that follows the
 #: OS with a manual light/dark/auto toggle cycle.
 THEME_DEFAULT: dict[str, object] = {
@@ -57,25 +66,33 @@ THEME_DEFAULT: dict[str, object] = {
 }
 
 
-def merge_theme(values: list[object]) -> object:
-    """The theme's values: the default, each contribution's keys over it.
+def merge_theme(
+    answers: Mapping[str, object], lookup: Callable[[str], Declaration | None]
+) -> dict[str, object]:
+    """The theme's values: the default, each answer's keys over it, by extension.
+
+    The ``docs.theme`` query's combine rule, called with the answers by
+    extension in list order.
 
     Raises:
-        ValueError: when a contribution is not a table, or names a key
-            outside the block's vocabulary; the composition names the
-            slot.
+        ValueError: when an answer is not a table, or names a key
+            outside the block's vocabulary; the message names the
+            extension, and the query is named by the asker.
     """
+    del lookup
     theme: dict[str, object] = dict(THEME_DEFAULT)
-    for value in values:
+    for extension, value in answers.items():
         if not isinstance(value, dict):
             raise ValueError(
-                f"a contribution is a table of the theme's keys, not {value!r}"
+                f"{extension} answers {value!r}, and an answer is a table of the"
+                " theme's keys"
             )
         table: dict[object, object] = dict(value)
         for key, setting in table.items():
             if not isinstance(key, str) or key not in THEME_DEFAULT:
                 raise ValueError(
-                    f"unknown key {key!r}; the keys are {', '.join(THEME_DEFAULT)}"
+                    f"{extension} answers the unknown key {key!r}; the keys are"
+                    f" {', '.join(THEME_DEFAULT)}"
                 )
             theme[key] = setting
     return theme

@@ -18,11 +18,10 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery.footman import Context, doc, fail, group
-from livery.workshop import _lifecycle
+from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages, release_tag
-from livery.workshop._release_notes import NO_PROVIDER, release_notes
 from livery.workshop._versions import derive_version
 
 release = group("release", help="The release train's CI entries")
@@ -77,7 +76,7 @@ def verify_release(
     declared = _lifecycle.current_version(package)
     if declared != version:
         problems.append(f"tag says {version}, the package declares {declared}")
-    notes = release_notes()
+    notes = _release_notes.release_notes(root)
     if notes is not None:
         problems += notes.verify(package, version)
     if requires_pyproject(package.kind):
@@ -160,7 +159,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     if package is None:
         fail(f"{path} is not a workspace package")
     entry_body = ""
-    notes = release_notes()
+    notes = _release_notes.release_notes(root)
     if not version:
         derived = derive_version(root, package)
         released = _last_released(root, package)
@@ -190,7 +189,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     if notes is not None:
         changed += notes.record(package, version, entry_body)
     else:
-        print(f"  {NO_PROVIDER}")
+        print(f"  {_release_notes.NO_PROVIDER}")
     lock = root / "uv.lock"
     if changed and lock.is_file():
         # The lock records every member's version, so a stamp without

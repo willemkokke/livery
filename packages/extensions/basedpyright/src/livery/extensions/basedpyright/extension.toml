@@ -14,7 +14,6 @@ levels = ["workspace"]
 main = ["basedpyright", "--warnings", "{arguments}", "{paths}"]
 extensions = ["python"]
 tools = ["basedpyright"]
-editor-extension = "detachhead.basedpyright"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
     { category = "test", suffixes = [".py", ".pyi"] },
@@ -28,6 +27,10 @@ claims = [
 ".vscode/settings.json" = '''
 {"python.languageServer": "None"}
 '''
+
+# The editor extension the rendered recommendations list names.
+[queries.editor-extensions]
+value = ["detachhead.basedpyright"]
 
 # Off unless the workspace turns it on in its root contract:
 # [phases.typecomplete.basedpyright] enabled = true.

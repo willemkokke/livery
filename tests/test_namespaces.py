@@ -464,7 +464,6 @@ EXPORTS: dict[str, list[str]] = {
         "scoped_paths",
         "selected_files",
         "shipped_content",
-        "slot",
         "testing",
         "this_forge",
         "this_repository",

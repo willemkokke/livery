@@ -13,9 +13,9 @@
 # again but [extension], [for] and [contract]: the composer repeats them
 # under for.*, so they are written once, below.
 #
-# The base's phases are declared at the end, under [phases.<phase>], in
-# the grammar an extension declares a phase in under the same table of
-# its extension.toml.
+# The base's phases are declared at the end, under [phases.<phase>], and
+# its queries under [queries.<name>], each in the grammar an extension
+# declares one in under the same table of its extension.toml.
 
 # workshop.toml at a workspace's root.
 
@@ -559,14 +559,6 @@ doc = "a contract the extension declares keys in: root for the workspace's works
 types = ["any"]
 doc = "a key of that contract: a table with its types, and its values and doc where it has them, and the keys beneath it"
 
-[contract.extension.contributions]
-types = ["table"]
-doc = "the values the extension puts into slots while it is listed, by slot"
-
-[contract.extension.contributions."*"]
-types = ["strs"]
-doc = "a slot, by its name, to the values the extension puts into it"
-
 [contract.extension.deletes]
 types = ["table"]
 doc = "the shipped files of earlier extensions this one deletes"
@@ -718,10 +710,6 @@ doc = "the steps of earlier extensions this one deletes, each <owner>:<phase>.<s
 [contract.extension.phases."*"."*".deletes."*"]
 types = ["str"]
 doc = "an earlier extension's step, <owner>:<phase>.<step>, to the reason this one deletes it"
-
-[contract.extension.phases."*"."*".editor-extension]
-types = ["str"]
-doc = "the marketplace id of the editor extension the composed .vscode/extensions.json recommends for the step; none when absent"
 
 [contract.extension.phases."*"."*".enabled]
 types = ["bool"]
@@ -903,15 +891,32 @@ doc = "module:name in the extension's own package, run inside the layering check
 
 [contract.extension.queries]
 types = ["table"]
-doc = "the questions about a package a package-level extension answers, by the query's name, each to the function that answers it"
+doc = "the queries the extension declares, each a table with its combine rule, and the ones it answers, each a function module:name or a table with its literal value"
 
 [contract.extension.queries."*"]
-types = ["str"]
-doc = "module:name in the extension's own package, called with the package; the workshop combines the answers of a package's extensions by the query's rule"
+types = ["str", "table"]
+doc = "a query, by its name: module:name in the extension's own package, called with the package or the workspace root, answers it; a table with value answers it with that value; a table with combine, level, default or values declares it"
 
-[contract.extension.release-notes]
+[contract.extension.queries."*".combine]
 types = ["str"]
-doc = "the release notes' writer, module:name in the extension's own package: the provider the release train asks for each release's entry, registered at mount"
+doc = "how the query's answers make one: union for lists, nearest for the answer of the extension no other answering one requires, agreed for one value every answer holds, or a function module:name; union when absent"
+
+[contract.extension.queries."*".level]
+types = ["str"]
+values = ["package", "workspace"]
+doc = "whether the query is asked about one package, answered by its set, or about the workspace, answered by the listed extensions in list order; package when absent"
+
+[contract.extension.queries."*".default]
+types = ["any"]
+doc = "the answer while no extension answers; the rule's answer over nothing when absent"
+
+[contract.extension.queries."*".values]
+types = ["list"]
+doc = "the only answers the query takes; any answer when absent"
+
+[contract.extension.queries."*".value]
+types = ["any"]
+doc = "the extension's literal answer to the query"
 
 [contract.extension.replaces]
 types = ["table"]
@@ -921,25 +926,6 @@ doc = "the shipped files of earlier extensions that this one's own files replace
 types = ["str"]
 doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one's file of that name replaces it"
 
-[contract.extension.slots]
-types = ["table"]
-doc = "the slots the extension declares, which extensions and checks put values into"
-
-[contract.extension.slots."*"]
-types = ["table"]
-doc = "a slot, by its dotted name: docs.theme"
-
-[contract.extension.slots."*".compose]
-types = ["str"]
-doc = "how the slot's values compose: union for a list, nearest for the last contribution, or a function module:function; union when absent"
-
-[contract.extension.slots."*".default]
-types = ["any"]
-doc = "the value a nearest slot takes while nothing is contributed; none when absent"
-
-[contract.extension.slots."*".values]
-types = ["list"]
-doc = "the only values a contribution may carry; any value when absent"
 
 # The base's phases, in the grammar of [contract.extension.phases."*"]:
 # the keys the engine running the phase gives its steps, each to its
@@ -1089,3 +1075,70 @@ verb = false
 [phases.run.keys]
 executable = "str"
 arguments = "strs"
+
+# The base's queries, in the grammar an extension declares a query in
+# under the same table of its extension.toml. A package-level query is
+# asked with a package and answered by its set in composition order; a
+# workspace-level one with the workspace root and answered by the listed
+# extensions in list order.
+
+# The modules that declare a package's public API, by import path.
+[queries.public-modules]
+combine = "union"
+
+# Where a package's build writes its compilation database.
+[queries.compile-commands]
+combine = "nearest"
+
+# The names other packages reference a package's code by.
+[queries.module-roots]
+combine = "union"
+
+# The version a package's own manifests declare.
+[queries.current-version]
+combine = "agreed"
+
+# Every file the stamp phase may write a version into.
+[queries.version-files]
+combine = "union"
+
+# What a package's native manifests require, each distribution's name
+# to its constraint; a name two answers constrain differently refuses.
+[queries.requirements]
+combine = "livery.workshop._queries:merged"
+
+# The distributions a package releases, each as its ecosystem and name.
+[queries.distributions]
+combine = "union"
+
+# The executables fm run may start, by name; a name two extensions
+# answer refuses.
+[queries.executables]
+combine = "livery.workshop._queries:owned"
+
+# The marketplace ids of the editor extensions the listed extensions
+# recommend, which the rendered .vscode/extensions.json lists.
+[queries.editor-extensions]
+level = "workspace"
+combine = "union"
+
+# The lines of the root project file's dev dependency group: what the
+# listed extensions need in the venv, each line naming its floor.
+# Declared by the base while the python extension ships in its wheel.
+[queries."python.dev-group"]
+level = "workspace"
+combine = "union"
+
+# The words the rendered pytest.toml's addopts holds, as the test
+# runner's extension answers them. Declared by the base while the
+# python extension ships in its wheel.
+[queries."python.test.addopts"]
+level = "workspace"
+combine = "union"
+
+# The release notes' provider, which the release train asks for each
+# release's entry: one answer, from the extension that writes the
+# history.
+[queries.release-notes]
+level = "workspace"
+combine = "nearest"

@@ -1,25 +1,27 @@
-"""Release notes: the one registration the release train writes notes through.
+"""Release notes: the one-answer query the release train writes notes through.
 
 A release stamps a version, and a package's history says what the
 version holds. The train never writes that history itself: it asks
-the provider an extension registers here for the entry the unreleased
-commits earn, has the provider record it, and has it judge the
-recorded notes before a tag is cut. A workspace with no provider
-releases without notes, and the train says so where it would have
-written them.
+the provider the listed extensions answer the ``release-notes`` query
+with for the entry the unreleased commits earn, has the provider
+record it, and has it judge the recorded notes before a tag is cut. A
+workspace whose extensions answer nothing releases without notes, and
+the train says so where it would have written them.
 
-One provider at a time: a later registration replaces an earlier
-one, and withdrawing it by its extension leaves none.
+One answer at a time: the query combines by ``nearest``, so two
+listed extensions answering, neither requiring the other, refuse
+naming both.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
+from livery.workshop._queries import Query, answer
+
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.workshop._declaration import Reference
     from livery.workshop._packages import Package
 
 
@@ -48,51 +50,24 @@ class ReleaseNotes(Protocol):
         ...
 
 
-_PROVIDER: list[tuple[ReleaseNotes, str]] = []
+#: The release notes' provider, a workspace-level query the base
+#: declares; the extension that writes the history answers it with a
+#: function called with the workspace root.
+RELEASE_NOTES: Query[ReleaseNotes | None] = Query("release-notes")
 
 
-def register_release_notes(notes: ReleaseNotes, *, extension: str) -> None:
-    """Make *notes* the provider, registered by *extension*; it replaces any other."""
-    _PROVIDER[:] = [(notes, extension)]
+def release_notes(root: Path) -> ReleaseNotes | None:
+    """The provider the extensions listed at *root* answer; None when none answers.
 
+    The answer is imported when first asked, so a mount imports none
+    of the answering extension's code.
 
-def unregister_release_notes(*, extension: str) -> None:
-    """Withdraw the provider *extension* registered; nothing when it registered none."""
-    _PROVIDER[:] = [(n, owner) for n, owner in _PROVIDER if owner != extension]
-
-
-def release_notes() -> ReleaseNotes | None:
-    """The registered provider, or None when no extension records release notes."""
-    return _PROVIDER[0][0] if _PROVIDER else None
-
-
-class DeclaredNotes:
-    """The provider a declaration names, imported when the train first asks it.
-
-    Attributes:
-        reference: The ``module:name`` reference to the provider, in the
-            declaring extension's own package.
+    Raises:
+        QueryError: when two listed extensions answer and neither
+            requires the other, naming both.
     """
-
-    def __init__(self, reference: Reference) -> None:
-        self.reference = reference
-
-    def _provider(self) -> ReleaseNotes:
-        found: ReleaseNotes = self.reference.resolve()
-        return found
-
-    def entry(self, root: Path, package: Package, version: str = "") -> str:
-        """The provider's entry for what is unreleased in *package*."""
-        return self._provider().entry(root, package, version)
-
-    def record(self, package: Package, version: str, entry: str) -> list[str]:
-        """The provider's record of *version*'s *entry* in *package*'s history."""
-        return self._provider().record(package, version, entry)
-
-    def verify(self, package: Package, version: str) -> list[str]:
-        """The provider's problems with *version*'s recorded notes."""
-        return self._provider().verify(package, version)
+    return answer(root, RELEASE_NOTES)
 
 
 #: What the train prints where it would have written notes and has no provider.
-NO_PROVIDER = "no release notes: no mounted extension records them, so none are written"
+NO_PROVIDER = "no release notes: no listed extension writes them, so none are written"

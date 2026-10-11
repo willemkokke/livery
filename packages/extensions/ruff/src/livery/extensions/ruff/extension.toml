@@ -18,7 +18,6 @@ main = ["ruff", "format", "--check", "--force-exclude", "{arguments}", "{paths}"
 fix = ["ruff", "format", "--force-exclude", "{arguments}", "{paths}"]
 extensions = ["python", "conan"]
 tools = ["ruff"]
-editor-extension = "charliermarsh.ruff"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
     { category = "test", suffixes = [".py", ".pyi"] },
@@ -32,6 +31,10 @@ claims = [
 {"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}}
 '''
 
+# The editor extension the rendered recommendations list names.
+[queries.editor-extensions]
+value = ["charliermarsh.ruff"]
+
 # Test bodies explain themselves by name and assertion, so the docstring
 # rules stop at the tests. An example keeps the layout its page shows:
 # ruff judges its names, and nothing of its style.
@@ -43,7 +46,6 @@ fix = ["ruff", "check", "--fix", "--force-exclude", "{arguments}", "{paths}"]
 safe-fix = ["ruff", "check", "--fix", "--unfixable=F401", "--force-exclude", "{arguments}", "{paths}"]
 extensions = ["python", "conan"]
 tools = ["ruff"]
-editor-extension = "charliermarsh.ruff"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
     { category = "test", ignore = ["D1"], suffixes = [".py", ".pyi"] },

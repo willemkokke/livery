@@ -38,11 +38,14 @@ claims = [{ category = "example", suffixes = [".py", ".pyi"] }]
 # .pth it installs, which starts the meter in every python the tests
 # start once the runner arms it and imports nothing otherwise, and xdist
 # for -n auto.
-[contributions]
-"python.dev-group" = [
+[queries."python.dev-group"]
+value = [
     "pytest>=9.0",
     "pytest-cov>=5",
     "coverage>=7.13",
     "pytest-xdist>=3.6",
 ]
-"python.test.addopts" = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]
+
+# The options the rendered pytest.toml hands every run.
+[queries."python.test.addopts"]
+value = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]

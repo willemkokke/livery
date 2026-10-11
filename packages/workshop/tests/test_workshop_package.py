@@ -80,7 +80,6 @@ def test_the_surface_is_declared() -> None:
         "scoped_paths",
         "selected_files",
         "shipped_content",
-        "slot",
         "testing",
         "this_forge",
         "this_repository",

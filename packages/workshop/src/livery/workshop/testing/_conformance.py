@@ -472,10 +472,9 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
                 (f"{where}.deploy", item.job.deploy),
             ]
     found += [
-        (f"{shown(('slots', slot.name))}.compose", slot.compose)
-        for slot in declared.slots
+        (f"{shown(('queries', name))}.combine", spec.combine)
+        for name, spec in declared.query_specs.items()
     ]
-    found.append(("release-notes", declared.release_notes))
     found += [
         (f"{shown(('fragments', output.target))}.render", output.render)
         for output in declared.fragments

@@ -82,8 +82,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         for entry in answers.get("packages", [])
         if isinstance(entry, dict)
     }
-    from livery.workshop._checks import editor_extensions
-    from livery.workshop._slots import all_composed
+    from livery.workshop._queries import EDITOR_EXTENSIONS, answer, workspace_answers
 
     injected: dict[str, Any] = {
         "runner_prog": footman.prog(),
@@ -95,15 +94,16 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # checker such as mypy refuses a named directory with none, and
         # an extension's src may hold data alone.
         "python_dirs": python_dirs(root),
-        # The slots the check records fill: the dev group's tool lines,
-        # pytest's addopts. An extension's contribution lands here, and a
-        # withdrawn check takes its line with it.
-        "slots": all_composed(),
+        # The workspace-level queries' answers, by name, each answered
+        # when a template reads it: the dev group's tool lines, pytest's
+        # addopts. A listed extension's answer lands here, and an
+        # unlisted one's leaves with it.
+        "queries": workspace_answers(root),
         "extension_imports": [import_path for import_path, _ in entries],
         # One line per distribution: a wheel may ship several extensions.
         "extension_requirements": _extension_requirements(entries, members),
-        # The editor extension ids the registered checks carry.
-        "extensions": list(editor_extensions()),
+        # The editor extension ids the listed extensions answer.
+        "extensions": list(answer(root, EDITOR_EXTENSIONS)),
         **registry_injections(root),
     }
     injected["fragments"] = compose_fragments({**answers, **injected})
@@ -139,7 +139,6 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
     """
     from livery.workshop._checks import per_file_ignores
     from livery.workshop._kinds import kind_names, record_for_template
-    from livery.workshop._slots import all_composed
 
     roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
     kinds = []
@@ -155,9 +154,6 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
         if name not in kinds:
             kinds.append(name)
     return {
-        # The slots come from the registry when the caller's data
-        # carries none, as the render injection would supply them.
-        "slots": all_composed(),
         **data,
         "py": [entry for entry in roster if entry.get("dev")],
         "native": [entry for entry in roster if not entry.get("dev")],

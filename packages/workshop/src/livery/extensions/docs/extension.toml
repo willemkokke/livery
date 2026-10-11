@@ -139,13 +139,18 @@ entries = ["docs.coverage-pages", "docs.publish"]
 collects = "site"
 deploy = "livery.extensions.docs._contract:publish_seam"
 
-# The private-members policy the API reference renders: the nearest
-# contract that sets one wins.
-[slots."docs.members"]
-compose = "nearest"
+# The private-members policy the API reference renders, a query the
+# listed extensions answer: the nearest answer, the one of the
+# extension no other answering one requires, wins.
+[queries."docs.members"]
+level = "workspace"
+combine = "nearest"
 default = "public"
 values = ["public", "all"]
 
-# The site's theme: each contribution's keys over the stock theme.
-[slots."docs.theme"]
-compose = "livery.extensions.docs._theme:merge_theme"
+# The site's theme, a query a theme extension answers with a table of
+# the keys it changes: each answer's keys over the stock theme, in list
+# order.
+[queries."docs.theme"]
+level = "workspace"
+combine = "livery.extensions.docs._theme:merge_theme"
