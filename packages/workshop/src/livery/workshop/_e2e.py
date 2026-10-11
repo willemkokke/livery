@@ -145,6 +145,31 @@ def scrub_ci_markers(environ: MutableMapping[str, str]) -> tuple[str, ...]:
     return removed
 
 
+def edit_environments(
+    values: Mapping[str, str], *, remove: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Write *values* and drop *remove* where this task and every child read them.
+
+    The pass is a serial task, so ``os.environ`` in it is the real
+    environment, which a child given an explicit environment built from
+    it inherits; footman's own ``run`` and the store's tool handles
+    spawn from the task's ``ctx.env``, the environment the task started
+    with, so the same edit lands there too. Without the second write a
+    git the pass runs through the store commits without the identity
+    and the unsigned setting, which a hosted runner showed. Returns the
+    names removed from the process environment, in *remove*'s order.
+    """
+    from livery.footman import current
+
+    environments: list[MutableMapping[str, str]] = [os.environ, current().env]
+    removed = tuple(name for name in remove if name in os.environ)
+    for environ in environments:
+        environ.update(values)
+        for name in remove:
+            environ.pop(name, None)
+    return removed
+
+
 def identity_environment(
     environ: Mapping[str, str], *, name: str, email: str
 ) -> dict[str, str]:
@@ -3250,12 +3275,13 @@ if _WORKSHOP_TESTS.is_dir():
                 _enter_host(place.values(), env)
             # Every commit the pass makes, the driver's, the birth's and
             # the loop's own fm's, is unsigned: the setting rides the
-            # task's environment into each child.
-            os.environ.update(unsigned_environment(os.environ))
-            # On a hosted runner the job's CI markers would reach every
-            # child, which would then refuse a fix and stamp its runs
-            # as the runner's; the pass drives its project as a desk.
-            scrubbed = scrub_ci_markers(os.environ)
+            # task's environment into each child. On a hosted runner the
+            # job's CI markers would reach every child, which would then
+            # refuse a fix and stamp its runs as the runner's; the pass
+            # drives its project as a desk.
+            scrubbed = edit_environments(
+                unsigned_environment(os.environ), remove=CI_MARKERS
+            )
             if scrubbed:
                 names = ", ".join(scrubbed)
                 print(f"  ci markers removed for the pass's children: {names}")
@@ -3263,7 +3289,7 @@ if _WORKSHOP_TESTS.is_dir():
                 from livery.workshop._git_ops import GitOps
 
                 git = GitOps(driver)
-                os.environ.update(
+                edit_environments(
                     identity_environment(
                         os.environ,
                         name=git.config_get("user.name"),

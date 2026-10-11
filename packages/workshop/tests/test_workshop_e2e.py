@@ -1608,3 +1608,24 @@ def test_the_pass_removes_ci_markers_from_its_children_environment() -> None:
         "GITLAB_CI",
     )
     assert hosted == {"RUNNER_TEMP": "/t", "PATH": "/usr/bin"}
+
+
+def test_the_pass_edits_the_process_and_the_task_environments_alike(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A git the pass runs through the store spawns from the task's own
+    # environment, footman's run from ctx.env: both must carry the edit.
+    from types import SimpleNamespace
+
+    task_env: dict[str, str] = {"CI": "true", "KEEP": "1"}
+    monkeypatch.setattr("livery.footman.current", lambda: SimpleNamespace(env=task_env))
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.delenv("GITEA_ACTIONS", raising=False)
+    removed = _e2e.edit_environments(
+        {"GIT_CONFIG_COUNT": "1"}, remove=("CI", "GITEA_ACTIONS")
+    )
+    assert removed == ("CI",)
+    assert os.environ["GIT_CONFIG_COUNT"] == "1"
+    assert "CI" not in os.environ and os.environ["GITHUB_ACTIONS"] == "true"
+    assert task_env == {"KEEP": "1", "GIT_CONFIG_COUNT": "1"}
