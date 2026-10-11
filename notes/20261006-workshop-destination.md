@@ -1465,6 +1465,9 @@ the stack, which this design neither needs nor rules out).
 | one step per extension per lifecycle phase, read into `DeclaredPhase.main` | the one walk, every step a footman step (#1377, part 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `[phases.<phase>]` with `pre`, `main` and `post`, `PHASES`, `ENGINE_KEYS`, the context's failure fields | `[phases.<phase>.<step>]` and declared phases (#1377) |
+| `[checks.<tool>.<role>]`, `[phases.<phase>]` with `pre`, `main` and `post`, the context's failure fields | `[phases.<phase>.<step>]` (#1377) |
+| a phase's level choosing its reader: a package-level phase's steps into `DeclaredPhase`, a workspace-level phase's into check records | the one walk, every step a footman step (#1377, part 6) |
+| the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
 | `[generators]`, `[slots]` and `[contributions]`, `[root-files]`, `[setup]`, `[rules]`, `release-notes`, `editor-extension` | the docs phase's steps, declared queries, fragments, the configure phase, layering steps, a query, a contribution (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
@@ -2497,9 +2500,16 @@ the stack, which this design neither needs nor rules out).
   (#1431 on a push, the pull request rule before it) keeps its suite,
   1424 s of the Windows leg's 2141 s, on every leg; a finer selection
   over a package in flux would be a mess to keep true. What stands:
-  the package rule, and the git-process cuts of #1432 (7 percent on
-  the git-driven files after three slices, the rest the flows' facts
-  and the state store's design).
+  the package rule, and the git-process cuts: #1432's three slices on
+  the flows and the fixtures, then the state store's transport
+  (#1456), one `git archive` into a file per read and one
+  `fast-import` per write through a binary lane of footman's `run`
+  and the toolroom's handle (a bytes stdin), and a memory of facts on
+  the git helper that a reader answers from under `cached=True` until
+  a call through the helper moves the repository. Measured on main at
+  eaf21300a over the seven slowest files: 5820 processes to 4813, 17
+  percent, the store's share 1981 to 1410; the rest is the flows'
+  facts, 1278 of them `rev-parse`.
 
 - 2026-10-11, #1377 planned in eleven parts, each mergeable alone and
   gate-green, no part touching the CI generator, which another change
@@ -2549,6 +2559,27 @@ the stack, which this design neither needs nor rules out).
   stay off a consumer. Unreal is pushed back the same day: nothing
   forecloses it, the toolchain declaration stays typed per family and
   an unreal extension declares its own steps under the same phases.
+
+- 2026-10-11, #1463, #1377 part 5: phases are declared. The base
+  declares its phases in a `[phases]` section of its `contract.toml`
+  and an extension declares one under `[phases.<phase>]` in its
+  `extension.toml`, in one grammar: `keys`, typed; `level`, package or
+  workspace; `gated`; `after`; `verb`. `PHASES` and `ENGINE_KEYS` are
+  gone, every reader reads the declared phases, and a phase's level
+  decides which reader its steps take. A phase no installed extension
+  declares refuses naming the declared ones, a step into a phase whose
+  declarer the workspace does not list refuses at mount, two
+  extensions declaring one phase refuse naming both, and two
+  extensions at one `<phase>.<step>` refuse unless the later names the
+  earlier in `replaces` or `deletes`, `<owner>:<phase>.<step>`, each a
+  table of address to reason. The base declares build's `isolated` and
+  `configuration`, test's `isolated`, `resolution` and `release-dirs`
+  and run's `executable` and `arguments` ahead of the engines that
+  give them (part 10); `prove` stays declared until test takes its
+  legs; `create` is gone, since nothing ran it. Why the installed set
+  and not the mounted one declares: a declaration reads the same from
+  every command, `fm extensions` and `fm doctor` among them, and the
+  mount's lists decide what runs.
 
 - 2026-10-11, #1455, #1377 part 7: composition is requires alone.
   `compatible`, `before` and `after` on `[extension]` are gone with the

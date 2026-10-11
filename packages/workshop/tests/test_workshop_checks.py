@@ -291,6 +291,99 @@ def test_the_constants_name_the_vocabulary() -> None:
     assert (PATHS, PACKAGES, NONE) == ("paths", "packages", "none")
 
 
+# A step belongs to a declared phase, and one extension declares it.
+
+
+def test_a_check_of_an_undeclared_phase_refuses_naming_the_declared_ones(
+    restored_registries,
+) -> None:
+    from livery.workshop._phases import declared_phases
+
+    listed = ", ".join(declared_phases())
+    with pytest.raises(_FAILURES) as raised:
+        register_check(CheckRecord("acme", "divination", _noop))
+    assert str(raised.value) == (
+        f"check 'divination.acme': divination is not a declared phase; the phases"
+        f" are {listed}"
+    )
+    with pytest.raises(_FAILURES, match="sometimes is not a declared phase"):
+        register_check(CheckRecord("acme", "lint", _noop, roles=("sometimes",)))
+    assert "lint.acme" not in check_names()
+
+
+def test_two_extensions_declaring_one_step_refuse_unless_one_replaces_or_deletes_it(
+    restored_registries,
+) -> None:
+    import re
+
+    register_check(CheckRecord("acme", "lint", _noop, extension="acme.one"))
+    refusal = re.escape(
+        "step lint.acme is declared by both acme.one and acme.two; two extensions"
+        " declare one step unless the later names acme.one:lint.acme in replaces"
+        " or deletes, with a reason"
+    )
+    with pytest.raises(_FAILURES, match=refusal):
+        register_check(CheckRecord("acme", "lint", _noop, extension="acme.two"))
+    # Naming another owner's step excuses nothing.
+    with pytest.raises(_FAILURES, match=refusal):
+        register_check(
+            CheckRecord(
+                "acme",
+                "lint",
+                _noop,
+                extension="acme.two",
+                replaces=(("acme.other:lint.acme", "it reads faster"),),
+            )
+        )
+    assert check_for("lint.acme").extension == "acme.one"
+    # Naming the registered step, in replaces or in deletes, takes the address.
+    register_check(
+        CheckRecord(
+            "acme",
+            "lint",
+            _noop,
+            extension="acme.two",
+            replaces=(("acme.one:lint.acme", "it reads faster"),),
+        )
+    )
+    assert check_for("lint.acme").extension == "acme.two"
+    register_check(
+        CheckRecord(
+            "acme",
+            "lint",
+            _noop,
+            extension="acme.three",
+            deletes=(("acme.two:lint.acme", "it reads nothing"),),
+        )
+    )
+    assert check_for("lint.acme").extension == "acme.three"
+    # The same extension registers its step again, as a mount run again does.
+    register_check(CheckRecord("acme", "lint", _noop, extension="acme.three"))
+    assert check_for("lint.acme").extension == "acme.three"
+
+
+def test_a_step_of_an_ungated_phase_stays_out_of_the_gate(
+    restored_registries, tmp_path: Path
+) -> None:
+    from livery.workshop._checks import verb_tree
+
+    # The base declares configure outside the gate and without a verb;
+    # lint is gated with one.
+    register_check(CheckRecord("acme", "configure", _noop, fix=_noop))
+    register_check(CheckRecord("acme", "lint", _noop, fix=_noop))
+    judging = GateContext(root=tmp_path, packages=())
+    fixing = GateContext(root=tmp_path, packages=(), fix=True)
+    assert "lint.acme" in judges(judging) and "lint.acme" in rewriters(fixing)
+    assert "configure.acme" not in judges(judging)
+    assert "configure.acme" not in rewriters(fixing)
+    assert "configure" not in verb_tree() and "lint" in verb_tree()
+    # Run by name, the step still runs: its verb is its engine's to make.
+    seen: list[str] = []
+    register_check(CheckRecord("acme", "configure", lambda ctx: seen.append(ctx.check)))
+    run_check("configure.acme", judging)
+    assert seen == ["configure.acme"]
+
+
 # The options a package may set, refusals first.
 
 

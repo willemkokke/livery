@@ -99,6 +99,14 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
     }
     assert prerelease == set(_ECOSYSTEM)
     assert ("root", f"workspace.{KEY}") in keys
+    # A phase's declaration: its levels and the types its keys take, the
+    # types a context value has.
+    from livery.workshop._phases import LEVELS, TYPES
+
+    assert keys[("extension", "phases.*.level")].values == LEVELS
+    assert keys[("extension", "phases.*.keys.*")].values == TYPES
+    assert keys[("extension", "phases.*.provides.*")].values == TYPES
+    assert keys[("extension", "phases.*.*.provides.*")].values == TYPES
 
 
 def test_for_a_target_takes_every_table_again() -> None:

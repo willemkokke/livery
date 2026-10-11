@@ -280,7 +280,7 @@ def test_the_trace_lands_on_the_run_s_ref_and_no_mirror_brings_it(
     assert json.loads(found.files[_traces.TRACE_FILE])["originEpochUs"] == 1.0
     # The one refspec a sync mirrors is the store's own namespace, so a
     # fetch brings no trace and the gate reads none.
-    assert _state.fetch_store(work) == (0, "")
+    assert _state.fetch_store(work)[:2] == (0, "")
     assert _state.list_refs(work, _state.FETCHED_NAMESPACE) == {}
 
 

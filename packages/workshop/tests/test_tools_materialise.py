@@ -301,7 +301,7 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     assert (ruff.kind, ruff.mode, ruff.deployment) == ("pypi", "path", "")
     assert ruff.paths == (str(Path(ruff.tool_dir) / "bin"),)
     # A second sync finds everything present.
-    assert _sync.materialise_tools(root)[0] == "  tools: 2 receipt(s), all present"
+    assert _sync.materialise_tools(root)[0] == "  tools: up to date"
     written = json.loads((_tools.receipts_dir(root) / "tea.json").read_text())
     # The receipt names what reached PATH, in path mode too: a check
     # resolves the tool by these names, never by its lock name.
@@ -546,7 +546,7 @@ def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_co
     (root / LOCAL_RECEIPT).write_text("{}\n")
     assert _reconcile._tools_current(root).startswith("no receipt for ")
     lines = materialise_tools(root, offline=True)
-    assert lines[0] == "  tools: 2 receipt(s), all present"
+    assert lines[0] == "  tools: up to date"
     held = _tools.receipts(root)
     assert _tools.emission(root)[0] == (held["ruff"].paths[0], held["tea"].paths[0])
     assert _reconcile._tools_current(root) == ""

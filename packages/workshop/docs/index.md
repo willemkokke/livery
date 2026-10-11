@@ -71,6 +71,15 @@ spelling. Every key is optional:
   the root's list, each one before it; for a package-level extension,
   in the package's set, which takes them in. The layering check keeps
   them listed, and its `--fix` writes a missing workspace entry;
+- `[phases.<phase>]`, a phase the extension declares, in the grammar
+  the base declares its own in: `level`, `package` for a phase run
+  over one package at a time or `workspace` for one run over the
+  workspace once; `gated`, whether `fm check` runs it; `after`, the
+  phases it follows in the train's order; `verb`, whether `fm <phase>`
+  is generated; and `keys`, the keys the engine running it gives its
+  steps, each with its type. A phase no declaration names refuses
+  naming the declared ones, and two extensions declaring one phase
+  refuse naming both.;
 - `[phases.<phase>.<extension>]`, the step a package-level extension
   adds to a package's lifecycle phase, named for the extension: `main`,
   `"module:function"` in its own package, and the context keys the
@@ -217,9 +226,17 @@ extension's content, tools and distribution belong to the workspace
 while a package lists it. A set is named by its canonical list joined
 with `+`, such as `cmake+cpp`.
 
-A package lives through nine lifecycle phases: `create`, `sync`,
-`stamp`, `build`, `prove`, `publish`, `replay`, `clean` and `run`. Each
-extension of a package's set may add steps to a phase:
+The base declares its phases in the `[phases]` section of its
+`contract.toml`: `sync`, `clean`, `build`, `format`, `lint`,
+`typecheck`, `typecomplete`, `examples`, `drift`, `provenance`,
+`layering`, `test`, `prove`, `stamp`, `publish`, `replay`, `configure`
+and `run`. The gated ones, `build`, `format`, `lint`, `typecheck`,
+`typecomplete`, `examples`, `drift`, `provenance`, `layering` and
+`test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
+with a sub-task per step. A package-level phase, `sync`, `clean`,
+`build`, `prove`, `stamp`, `publish`, `replay` or `run`, runs over one
+package at a time, and each extension of the package's set may add
+steps to it:
 
 ```toml
 [phases.build]
@@ -240,22 +257,24 @@ with `read`, and a `post` learns what failed from `failed`, `failure`
 and `failed_extension`. A value of another type than the declared one
 (`str`, `int`, `bool`, `path`, `strs`, `paths` or `table`), and a key
 the extension does not declare, refuse naming the extension. The order
-puts a reader after the provider of each key it reads, then follows
-`before` and `after`, ties alphabetical; requirements order nothing
-within a phase. Two extensions providing one key, a key nobody
-provides, and an order with no start refuse before any step runs, and
-the layering check names them for each package.
+puts a reader after the provider of each key it reads, ties
+alphabetical; requirements order nothing within a phase. Two
+extensions providing one key, a key nobody provides, and an order with
+no start refuse before any step runs, and the layering check names
+them for each package.
 
-The workshop gives some phases keys of its own, which a step reads like
-any other and no extension provides:
+A phase's declaration names the keys the engine running it gives its
+steps, which a step reads like any other and no extension provides:
 
-| Phase | Keys the workshop gives | Key the release train reads back |
+| Phase | Keys the engine gives | Key the release train reads back |
 | --- | --- | --- |
 | `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
-| `build` | `epoch` (`int`), the build's source date; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
+| `build` | `epoch` (`int`), the build's source date; 0 takes the build tool's own. `isolated` (`bool`) and `configuration` (`str`) are declared, and no engine gives them: a step that reads one refuses | `dist` (`path`), where the artifacts are |
 | `prove` | `resolution` (`str`), the leg's dependency resolution, and `release-dirs` (`paths`), the co-released set's `dist/` directories | `resolved` (`table`), each distribution the leg installed, to its version |
 | `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
 | `replay` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the replay's |
+| `run` | `executable` (`str`) and `arguments` (`strs`) are declared; the walk hands them to the steps as the context's `executable` and `arguments`, and the main sets `exit_code` | |
+| `test` | `isolated` (`bool`), `resolution` (`str`) and `release-dirs` (`paths`) are declared; the test phase runs through the gate, and no engine gives them | |
 
 The release train stamps, builds, proves and publishes a package, and
 `fm release.replay` replays it, through these phases when its

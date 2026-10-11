@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -100,7 +101,9 @@ def test_an_extension_providing_a_key_the_engine_gives_refuses(
 def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> None:
     package = _package(tmp_path)
     with pytest.raises(
-        PhaseError, match="gives wheel to the build phase, which takes epoch from it"
+        PhaseError,
+        match="gives wheel to the build phase, which takes configuration, epoch,"
+        " isolated from it",
     ):
         run_phase("build", package, tmp_path, inputs={"wheel": "x"})
     with pytest.raises(
@@ -108,8 +111,45 @@ def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> 
         match="gives epoch to the build phase as str, which the phase takes as int",
     ):
         run_phase("build", package, tmp_path, inputs={"epoch": "0"})
-    with pytest.raises(PhaseError, match="the run phase, which takes nothing from it"):
+    with pytest.raises(
+        PhaseError, match="the run phase, which takes arguments, executable from it"
+    ):
         run_phase("run", package, tmp_path, inputs={"epoch": 0})
+    with pytest.raises(PhaseError, match="the sync phase, which takes nothing from it"):
+        run_phase("sync", package, tmp_path, inputs={"epoch": 0})
+
+
+def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
+    tmp_path: Path,
+) -> None:
+    # What the train, fm sync, fm clean and fm run hand each phase: each
+    # input is a key the phase declares, of the declared type, so a
+    # package without steps takes it and runs nothing.
+    package = _package(tmp_path)
+    given: list[tuple[str, dict[str, object]]] = [
+        ("sync", {}),
+        ("clean", {}),
+        ("stamp", {"version": "1.2.3"}),
+        ("build", {"epoch": 7}),
+        ("prove", {"resolution": "floor", "release-dirs": [Path("dist")]}),
+        ("publish", {"version": "1.2.3", "registry-target": {"url": "x"}}),
+        (
+            "replay",
+            {
+                "version": "1.2.3",
+                "tree": Path("tree"),
+                "interpreter": "3.14",
+                "index": "https://index",
+                "extras": "",
+            },
+        ),
+        ("run", {}),
+    ]
+    for phase, inputs in given:
+        ctx = run_phase(phase, package, tmp_path, inputs=inputs)
+        assert (ctx.phase, ctx.failed) == (phase, False)
+        for key, value in inputs.items():
+            assert ctx.result(key) == value
 
 
 def test_a_step_reading_a_key_the_engine_did_not_give_refuses(
@@ -189,8 +229,10 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
     [
         (
             PACKAGE + '\n[phases.biuld]\nmain = "{package}._steps:main"\n',
-            "phases.biuld names no phase; the phases are create, sync, stamp, build,"
-            " prove, publish, replay, clean, run; did you mean 'build'?",
+            "phases.biuld names no phase; the phases are sync, clean, build, format,"
+            " lint, typecheck, typecomplete, examples, drift, provenance, layering,"
+            " test, prove, stamp, publish, replay, configure, run; did you mean"
+            " 'build'?",
         ),
         (
             PACKAGE + '\n[phases.build]\nreads = ["x"]\n',
@@ -406,3 +448,314 @@ def test_each_context_type_takes_its_values_alone(
     fake_steps(tmp_path, "z", source.format(bad))
     with pytest.raises(PhaseError, match=f"declares it {kind}$"):
         run_phase("build", package, tmp_path)
+
+
+# The declared phases: the base's from its contract file, an extension's
+# from its declaration file, and the refusals of a phase nobody declares.
+
+
+@pytest.fixture
+def restored_checks() -> Iterator[None]:
+    """Put the check registry back after a mount registered steps into it."""
+    from livery.workshop import _checks
+
+    state = _checks.snapshot()
+    yield
+    _checks.restore(state)
+
+
+#: A workspace-level extension declaring a workspace-level phase, docs,
+#: with one step of its own.
+DECLARES_DOCS = """\
+[phases.docs]
+level = "workspace"
+gated = true
+after = []
+verb = true
+keys = { site = "path" }
+
+[phases.docs.pages]
+tools = ["acme-pages"]
+main = ["acme-pages", "build", "{paths}"]
+"""
+
+#: A step into the docs phase, declared by another extension.
+ADDS_DOCS_STEP = """\
+[phases.docs.index]
+tools = ["acme-index"]
+main = ["acme-index", "{paths}"]
+"""
+
+
+def test_the_bases_phases_are_read_from_its_contract_file() -> None:
+    from livery.workshop._phases import (
+        PACKAGE_LEVEL,
+        TYPES,
+        WORKSPACE_LEVEL,
+        PhaseSpec,
+        base_phases,
+        declared_phases,
+        lifecycle_phases,
+    )
+
+    found = base_phases()
+    assert list(found) == [
+        "sync",
+        "clean",
+        "build",
+        "format",
+        "lint",
+        "typecheck",
+        "typecomplete",
+        "examples",
+        "drift",
+        "provenance",
+        "layering",
+        "test",
+        "prove",
+        "stamp",
+        "publish",
+        "replay",
+        "configure",
+        "run",
+    ]
+    assert found["build"] == PhaseSpec(
+        "build",
+        {"isolated": "bool", "configuration": "str", "epoch": "int"},
+        PACKAGE_LEVEL,
+        True,
+        ("stamp",),
+        True,
+    )
+    assert found["format"] == PhaseSpec("format", {}, WORKSPACE_LEVEL, True, (), True)
+    assert found["stamp"] == PhaseSpec(
+        "stamp", {"version": "str"}, PACKAGE_LEVEL, False, (), False
+    )
+    # The gated phases are the ones with a verb; the lifecycle phases are
+    # the package-level ones, in the file's order.
+    gated = {name for name, spec in found.items() if spec.gated}
+    assert gated == {
+        "build",
+        "format",
+        "lint",
+        "typecheck",
+        "typecomplete",
+        "examples",
+        "drift",
+        "provenance",
+        "layering",
+        "test",
+    }
+    assert {name for name, spec in found.items() if spec.verb} == gated
+    assert lifecycle_phases() == (
+        "sync",
+        "clean",
+        "build",
+        "prove",
+        "stamp",
+        "publish",
+        "replay",
+        "run",
+    )
+    # The train's order, by after.
+    assert {name: spec.after for name, spec in found.items() if spec.after} == {
+        "build": ("stamp",),
+        "test": ("build",),
+        "prove": ("build",),
+        "publish": ("prove",),
+        "replay": ("publish",),
+        "run": ("build",),
+    }
+    # Each engine's keys, typed with the types a context value has.
+    assert {name: dict(spec.keys) for name, spec in found.items() if spec.keys} == {
+        "build": {"isolated": "bool", "configuration": "str", "epoch": "int"},
+        "test": {"isolated": "bool", "resolution": "str", "release-dirs": "paths"},
+        "prove": {"resolution": "str", "release-dirs": "paths"},
+        "stamp": {"version": "str"},
+        "publish": {"version": "str", "registry-target": "table"},
+        "replay": {
+            "version": "str",
+            "tree": "path",
+            "interpreter": "str",
+            "index": "str",
+            "extras": "str",
+        },
+        "run": {"executable": "str", "arguments": "strs"},
+    }
+    for spec in found.values():
+        assert set(spec.keys.values()) <= set(TYPES)
+        assert spec.extension == "livery.workshop"
+    # The base's are among every declared phase, as the base declares them.
+    declared = declared_phases()
+    assert all(declared[name] == spec for name, spec in found.items())
+
+
+def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    from livery.footman import _registry as registry
+    from livery.workshop import _phases
+
+    # The reader: a step into a phase no declaration names.
+    fake_extensions(tmp_path, monkeypatch, odd=ADDS_DOCS_STEP.replace("docs", "dcos"))
+    listed = ", ".join(_phases.declared_phases())
+    with pytest.raises(DeclarationError) as raised:
+        _extensions.declaration("acme.odd")
+    path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
+    assert str(raised.value) == (
+        f"{path}: phases.dcos names no phase; the phases are {listed}"
+    )
+    # The engine: a phase nobody declares cannot run.
+    with pytest.raises(PhaseError) as refused:
+        run_phase("dcos", _package(tmp_path), tmp_path)
+    assert (
+        str(refused.value) == f"dcos is not a declared phase; the phases are {listed}"
+    )
+    # The mount: a phase an installed extension declares reads anywhere,
+    # and a step into it refuses while the workspace does not list the
+    # declarer.
+    fake_extensions(tmp_path, monkeypatch, site=DECLARES_DOCS, index=ADDS_DOCS_STEP)
+    root_contract(tmp_path, '["acme.index"]')
+    found = _extensions.declaration("acme.index")
+    assert found is not None and [r.name for r in found.additions.checks] == [
+        "docs.index"
+    ]
+    refusal = (
+        r"extension 'acme\.index' adds steps to the docs phase, which acme\.site"
+        r" declares and the workspace does not list; list acme\.site before"
+        r" acme\.index, or drop the steps"
+    )
+    with pytest.raises(BaseException, match=refusal), registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    # Listed before it, the declarer mounts first and the step registers.
+    from livery.workshop import _checks
+
+    root_contract(tmp_path, '["acme.site", "acme.index"]')
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    assert _checks.checks_by_name()["docs.index"].extension == "acme.index"
+
+
+def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_verb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+) -> None:
+    from livery.footman import _registry as registry
+    from livery.workshop import _checks, _phases
+    from livery.workshop._checks import GateContext
+    from livery.workshop._phases import WORKSPACE_LEVEL, PhaseSpec, phase_spec
+
+    # The declared phases are read through the module: each fake set
+    # below reads them afresh.
+    def declared_phases() -> dict[str, PhaseSpec]:
+        return _phases.declared_phases()
+
+    # The refusals first: a declaration off its shape, read from the
+    # installed file before any declaration is judged.
+    for text, refusal in (
+        (
+            DECLARES_DOCS.replace('level = "workspace"', 'level = "sometimes"'),
+            "phases.docs.level is 'sometimes'; a phase runs at one of package,"
+            " workspace",
+        ),
+        (
+            DECLARES_DOCS.replace('{ site = "path" }', '{ site = "folder" }'),
+            "phases.docs.keys.site is 'folder'; a key's type is one of str, int,"
+            " bool, path, strs, paths, table",
+        ),
+        (
+            DECLARES_DOCS.replace("gated = true", 'gated = "yes"'),
+            "phases.docs.gated is true or false",
+        ),
+        (
+            DECLARES_DOCS.replace("after = []", 'after = "build"'),
+            "phases.docs.after is a list of the phases this one follows",
+        ),
+    ):
+        fake_extensions(tmp_path, monkeypatch, site=text)
+        with pytest.raises(DeclarationError) as raised:
+            declared_phases()
+        path = tmp_path / "site" / "acme" / "site" / "extension.toml"
+        assert str(raised.value) == f"{path}: {refusal}"
+    # An after naming no phase, two declarers of one phase, and an order
+    # with no start refuse naming the extensions.
+    fake_extensions(
+        tmp_path, monkeypatch, site=DECLARES_DOCS.replace("after = []", 'after = ["x"]')
+    )
+    with pytest.raises(DeclarationError) as raised:
+        declared_phases()
+    assert str(raised.value).startswith(
+        "acme.site declares the docs phase after x, which no extension declares;"
+        " the phases are sync, clean,"
+    )
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        site='[phases.one]\nlevel = "workspace"\nafter = ["two"]\n'
+        '[phases.two]\nlevel = "workspace"\nafter = ["one"]\n',
+    )
+    with pytest.raises(
+        DeclarationError,
+        match=r"^the phases' order has no start: one after two after one; remove an"
+        r" after among them$",
+    ):
+        declared_phases()
+    # A package-level phase declared with no step declares alone, and a
+    # step into it from a workspace-level extension refuses as any does.
+    fake_extensions(
+        tmp_path, monkeypatch, site='[phases.notes]\nlevel = "package"\ngated = false\n'
+    )
+    found = _extensions.declaration("acme.site")
+    assert found is not None and found.phases == {}
+    assert found.phase_specs == {
+        "notes": PhaseSpec("notes", {}, "package", False, (), False, "acme.site")
+    }
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        site='[phases.notes]\nlevel = "package"\n'
+        '[phases.notes.write]\nmain = "{package}._checks:noop"\n',
+    )
+    with pytest.raises(DeclarationError, match="adds steps to a package's phase"):
+        _extensions.declaration("acme.site")
+    # Then the declaration: its keys, level, placement and verb, read from
+    # the file and known to every reader.
+    fake_extensions(tmp_path, monkeypatch, site=DECLARES_DOCS)
+    found = _extensions.declaration("acme.site")
+    assert found is not None
+    docs = PhaseSpec(
+        "docs", {"site": "path"}, WORKSPACE_LEVEL, True, (), True, "acme.site"
+    )
+    assert found.phase_specs == {"docs": docs}
+    assert declared_phases()["docs"] == docs and phase_spec("docs") == docs
+    (record,) = found.additions.checks
+    assert (record.name, record.phase, record.step) == ("docs.pages", "docs", "pages")
+    assert found.phases == {}
+    # Mounted, the step registers, the phase's verb is generated and the
+    # gate runs the step.
+    root_contract(tmp_path, '["acme.site"]')
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    registered = _checks.checks_by_name()["docs.pages"]
+    assert registered.extension == "acme.site"
+    assert _checks.verb_tree()["docs"] == {"pages": registered}
+    assert "docs.pages" in _checks.judges(GateContext(root=tmp_path, packages=()))
+    # Declared without a verb and outside the gate, the step keeps its
+    # address and gets neither.
+    quiet = DECLARES_DOCS.replace("gated = true", "gated = false").replace(
+        "verb = true", "verb = false"
+    )
+    fake_extensions(tmp_path, monkeypatch, site=quiet)
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    assert "docs.pages" in _checks.checks_by_name()
+    assert "docs" not in _checks.verb_tree()
+    assert "docs.pages" not in _checks.judges(GateContext(root=tmp_path, packages=()))
+    # Two installed extensions declaring one phase refuse naming both; a
+    # fake stays in the scan for the test, so this comes last.
+    fake_extensions(tmp_path, monkeypatch, other=DECLARES_DOCS)
+    with pytest.raises(
+        DeclarationError,
+        match=r"^the docs phase is declared by both acme\.other and acme\.site; one"
+        r" extension declares a phase$",
+    ):
+        declared_phases()

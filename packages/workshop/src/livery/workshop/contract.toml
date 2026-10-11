@@ -12,6 +12,10 @@
 # [for.<target>] in an extension.toml takes every table of its top level
 # again but [extension], [for] and [contract]: the composer repeats them
 # under for.*, so they are written once, below.
+#
+# The base's phases are declared at the end, under [phases.<phase>], in
+# the grammar an extension declares a phase in under the same table of
+# its extension.toml.
 
 # workshop.toml at a workspace's root.
 
@@ -622,11 +626,37 @@ doc = "whether the files belong to this checkout alone and are never committed; 
 
 [contract.extension.phases]
 types = ["table"]
-doc = "the steps a package-level extension contributes to a package's lifecycle phases, by phase: create, sync, stamp, build, prove, publish, replay, clean or run"
+doc = "the phases the extension declares and the steps it adds, by phase: the base's, or one an installed extension declares"
 
 [contract.extension.phases."*"]
 types = ["table"]
-doc = "one phase's steps and the context keys they share"
+doc = "one phase: its declaration when the extension declares it, and the steps the extension adds to it; a package-level phase takes the extension's one step, a workspace-level one its step tables"
+
+[contract.extension.phases."*".after]
+types = ["strs"]
+doc = "the phases this one follows in the train's order, when the extension declares the phase; none when absent"
+
+[contract.extension.phases."*".gated]
+types = ["bool"]
+doc = "whether fm check runs the phase, when the extension declares it; false when absent"
+
+[contract.extension.phases."*".keys]
+types = ["table"]
+doc = "the keys the engine running the phase gives its steps, when the extension declares the phase, each to its type; a step reads one like any key, and no step provides one"
+
+[contract.extension.phases."*".keys."*"]
+types = ["str"]
+doc = "an engine key's type"
+values = ["str", "int", "bool", "path", "strs", "paths", "table"]
+
+[contract.extension.phases."*".level]
+types = ["str"]
+doc = "where the phase runs, when the extension declares it: package for one package at a time, workspace for the workspace once; package when absent"
+values = ["package", "workspace"]
+
+[contract.extension.phases."*".verb]
+types = ["bool"]
+doc = "whether a verb is generated for the phase, fm <phase> with a sub-task per step, when the extension declares it; false when absent"
 
 [contract.extension.phases."*".pre]
 types = ["str"]
@@ -682,8 +712,12 @@ types = ["strs"]
 doc = "the file suffixes the step reads in the category, each starting with a dot; every file when absent"
 
 [contract.extension.phases."*"."*".deletes]
-types = ["strs"]
-doc = "the steps of earlier extensions this one deletes, each <owner>:<phase>.<step>; none when absent"
+types = ["table"]
+doc = "the steps of earlier extensions this one deletes, each <owner>:<phase>.<step> to the reason; none when absent"
+
+[contract.extension.phases."*"."*".deletes."*"]
+types = ["str"]
+doc = "an earlier extension's step, <owner>:<phase>.<step>, to the reason this one deletes it"
 
 [contract.extension.phases."*"."*".editor-extension]
 types = ["str"]
@@ -807,8 +841,12 @@ types = ["strs"]
 doc = "the context keys the step reads inside its phase, each one another step provides, which runs first"
 
 [contract.extension.phases."*"."*".replaces]
-types = ["strs"]
-doc = "the steps of earlier extensions this one replaces, each <owner>:<phase>.<step>; none when absent"
+types = ["table"]
+doc = "the steps of earlier extensions this one replaces, each <owner>:<phase>.<step> to the reason; naming the step at this one's address lets a second extension take the address; none when absent"
+
+[contract.extension.phases."*"."*".replaces."*"]
+types = ["str"]
+doc = "an earlier extension's step, <owner>:<phase>.<step>, to the reason this one replaces it"
 
 [contract.extension.phases."*"."*".safe-fix]
 types = ["str", "strs"]
@@ -902,3 +940,152 @@ doc = "the value a nearest slot takes while nothing is contributed; none when ab
 [contract.extension.slots."*".values]
 types = ["list"]
 doc = "the only values a contribution may carry; any value when absent"
+
+# The base's phases, in the grammar of [contract.extension.phases."*"]:
+# the keys the engine running the phase gives its steps, each to its
+# type; level, package for a phase run over one package at a time and
+# workspace for one run over the workspace once; gated, whether fm check
+# runs it; after, the phases it follows in the train's order; and verb,
+# whether a verb is generated for it. The train runs stamp, build, prove,
+# publish and replay in that order; fm sync, fm clean and fm run run
+# their phases; fm check runs the gated ones.
+
+[phases.sync]
+level = "package"
+gated = false
+after = []
+verb = false
+
+[phases.clean]
+level = "package"
+gated = false
+after = []
+verb = false
+
+[phases.build]
+level = "package"
+gated = true
+after = ["stamp"]
+verb = true
+
+[phases.build.keys]
+isolated = "bool"
+configuration = "str"
+epoch = "int"
+
+[phases.format]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.lint]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.typecheck]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.typecomplete]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.examples]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.drift]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.provenance]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.layering]
+level = "workspace"
+gated = true
+after = []
+verb = true
+
+[phases.test]
+level = "workspace"
+gated = true
+after = ["build"]
+verb = true
+
+[phases.test.keys]
+isolated = "bool"
+resolution = "str"
+release-dirs = "paths"
+
+[phases.prove]
+level = "package"
+gated = false
+after = ["build"]
+verb = false
+
+[phases.prove.keys]
+resolution = "str"
+release-dirs = "paths"
+
+[phases.stamp]
+level = "package"
+gated = false
+after = []
+verb = false
+
+[phases.stamp.keys]
+version = "str"
+
+[phases.publish]
+level = "package"
+gated = false
+after = ["prove"]
+verb = false
+
+[phases.publish.keys]
+version = "str"
+registry-target = "table"
+
+[phases.replay]
+level = "package"
+gated = false
+after = ["publish"]
+verb = false
+
+[phases.replay.keys]
+version = "str"
+tree = "path"
+interpreter = "str"
+index = "str"
+extras = "str"
+
+[phases.configure]
+level = "workspace"
+gated = false
+after = []
+verb = false
+
+[phases.run]
+level = "package"
+gated = false
+after = ["build"]
+verb = false
+
+[phases.run.keys]
+executable = "str"
+arguments = "strs"

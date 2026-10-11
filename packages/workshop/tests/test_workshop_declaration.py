@@ -405,13 +405,17 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
         f"{where}: phases.lint.acme.reads names wheel, which its provides names"
         " too; a step reads what another step provides"
     )
-    assert _refusal(package, STEP + 'replaces = ["lint.acme"]\n') == (
+    assert _refusal(package, STEP + 'replaces = { "lint.acme" = "faster" }\n') == (
         f"{where}: phases.lint.acme.replaces names 'lint.acme'; a step of another"
         " extension is <owner>:<phase>.<step>"
     )
-    assert _refusal(package, STEP + 'deletes = ["acme.base:lint"]\n') == (
+    assert _refusal(package, STEP + 'deletes = { "acme.base:lint" = "gone" }\n') == (
         f"{where}: phases.lint.acme.deletes names 'acme.base:lint'; a step of"
         " another extension is <owner>:<phase>.<step>"
+    )
+    assert _refusal(package, STEP + 'replaces = { "acme.base:lint.acme" = " " }\n') == (
+        f'{where}: phases.lint.acme.replaces."acme.base:lint.acme" states no reason;'
+        " a step names another with the reason it takes its place"
     )
     # A gate phase's table holds steps alone.
     assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
@@ -435,7 +439,8 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         ' on-removal = true, widen = "acme_declared._checks:mend",'
         ' ignores = ["docs/README.md"], per-file = false }\n'
         'enabled = false\nisolated = true\nreads = ["wheel"]\n'
-        'replaces = ["acme.base:lint.acme"]\ndeletes = ["acme.base:lint.old"]\n'
+        'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
+        'deletes = { "acme.base:lint.old" = "it reads nothing" }\n'
         '[phases.lint.acme.provides]\nreport = "path"\n'
         '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n'
         'doc = "refuses warnings too"\n'
@@ -487,8 +492,8 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         True,
         ("wheel",),
         (("report", "path"),),
-        ("acme.base:lint.acme",),
-        ("acme.base:lint.old",),
+        (("acme.base:lint.acme", "it reads faster"),),
+        (("acme.base:lint.old", "it reads nothing"),),
     )
     # A step in code with inputs is selected by them and judges the
     # whole; one that names tools takes the words after --.

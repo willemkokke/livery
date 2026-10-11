@@ -17,10 +17,14 @@ python formatter and over its sources by clang-format because both
 checks name its kind. A role is the set of checks that implement it,
 so the roles that exist are what the listed extensions register.
 
-A check is named by its role and its tool, ``test.pytest``. Every
-role is a verb and every check a sub-task of it, made by
-[livery.workshop._checks.generate_verbs][] from the registry: ``fm
-test`` runs the test role's checks and ``fm test.pytest`` the one.
+A check is named by its role and its tool, ``test.pytest``. A role is
+a declared phase ([livery.workshop._phases.declared_phases][]), and a
+check of a phase nobody declares refuses naming the declared ones. A
+role whose phase declares a verb is a verb and every check a sub-task
+of it, made by [livery.workshop._checks.generate_verbs][] from the
+registry: ``fm test`` runs the test role's checks and ``fm
+test.pytest`` the one; the gate runs the checks of the phases that
+declare themselves gated.
 
 Every registered check is also a hidden task, ``checks.test-pytest``,
 and the gate schedules those tasks: the rewriters serially before
@@ -285,9 +289,12 @@ class CheckRecord:
             turns on at the step's address in the root contract,
             ``[phases.<phase>.<step>] enabled = true``.
         replaces: The steps of earlier extensions this one replaces,
-            each ``<owner>:<phase>.<step>``.
+            each ``<owner>:<phase>.<step>`` with the reason; naming the
+            step registered at this one's address is what lets a
+            second extension take the address.
         deletes: The steps of earlier extensions this one deletes,
-            each ``<owner>:<phase>.<step>``.
+            each ``<owner>:<phase>.<step>`` with the reason.
+
     """
 
     tool: str
@@ -314,8 +321,8 @@ class CheckRecord:
     reads: tuple[str, ...] = ()
     isolated: bool | None = None
     enabled: bool = True
-    replaces: tuple[str, ...] = ()
-    deletes: tuple[str, ...] = ()
+    replaces: tuple[tuple[str, str], ...] = ()
+    deletes: tuple[tuple[str, str], ...] = ()
 
     @property
     def name(self) -> str:
@@ -355,17 +362,38 @@ def register_check(record: CheckRecord) -> None:
     the role or the tool refuses, and a tool named ``default`` refuses
     (that address is the role verb's own).
     """
+    from livery.workshop import _phases
+
     for part in (record.role, record.tool):
         if not part or "." in part:
             fail(
                 f"check {record.name!r}: a role and a tool are one word each,"
                 f" not {part!r}; the check answers to <role>.<tool>"
             )
+    declared = _phases.declared_phases()
+    for role in (record.role, *record.roles):
+        if role not in declared:
+            fail(
+                f"check {record.name!r}: {role} is not a declared phase; the phases"
+                f" are {', '.join(declared)}"
+            )
     if record.tool == "default":
         fail(
             f"check {record.name!r}: {record.name} is the address of the"
             f" {record.role} verb itself; name the check by its tool"
         )
+    held = _CHECKS.get(record.name)
+    if held is not None and held.extension != record.extension:
+        # A second extension takes an address by saying so: the step it
+        # replaces or deletes, named with its owner, and why.
+        named = {address for address, _reason in (*record.replaces, *record.deletes)}
+        if f"{held.extension}:{held.name}" not in named:
+            fail(
+                f"step {record.name} is declared by both {held.extension} and"
+                f" {record.extension}; two extensions declare one step unless the"
+                f" later names {held.extension}:{held.name} in replaces or deletes,"
+                " with a reason"
+            )
     if record.scope not in (WORKSPACE, PACKAGE):
         fail(
             f"check {record.name!r}: scope is {WORKSPACE!r} or {PACKAGE!r},"
@@ -860,11 +888,23 @@ def task_for(name: str) -> Any:
     return _TASKS[name]
 
 
+def _makes_verb(role: str) -> bool:
+    """Whether *role* gets a verb: its phase declares one."""
+    from livery.workshop import _phases
+
+    spec = _phases.declared_phases().get(role)
+    return spec is None or spec.verb
+
+
 def verb_tree() -> dict[str, dict[str, CheckRecord]]:
-    """Each role's checks by tool, sorted: the verbs the registry generates."""
+    """Each role's checks by tool, sorted: the verbs the registry generates.
+
+    A role whose phase declares no verb is left out.
+    """
     tree: dict[str, dict[str, CheckRecord]] = {}
     for record in _CHECKS.values():
-        tree.setdefault(record.role, {})[record.tool] = record
+        if _makes_verb(record.role):
+            tree.setdefault(record.role, {})[record.tool] = record
     return {role: dict(sorted(tools.items())) for role, tools in sorted(tree.items())}
 
 
@@ -1448,29 +1488,39 @@ def with_files(names: tuple[str, ...], ctx: GateContext) -> tuple[str, ...]:
     return tuple(kept)
 
 
+def _gated(record: CheckRecord) -> bool:
+    """Whether the gate runs *record*: its phase declares itself gated."""
+    from livery.workshop import _phases
+
+    spec = _phases.declared_phases().get(record.role)
+    return spec is None or spec.gated
+
+
 def rewriters(ctx: GateContext) -> tuple[str, ...]:
     """The checks whose fix mode runs, serially and in order, under --fix.
 
-    Empty unless the gate runs in its fix mode.
+    Those of the gated phases; empty unless the gate runs in its fix
+    mode.
     """
     if not ctx.fix:
         return ()
     return tuple(
         record.name
         for record in _CHECKS.values()
-        if record.fix is not None and _applies_now(record, ctx)
+        if record.fix is not None and _gated(record) and _applies_now(record, ctx)
     )
 
 
 def judges(ctx: GateContext) -> tuple[str, ...]:
     """The checks the gate judges together, in registration order.
 
-    A check that rewrote in this run is not judged again: re-judging
-    the style it just wrote would only spend time agreeing.
+    Those of the gated phases. A check that rewrote in this run is not
+    judged again: re-judging the style it just wrote would only spend
+    time agreeing.
     """
     names = []
     for record in _CHECKS.values():
-        if not _applies_now(record, ctx):
+        if not _gated(record) or not _applies_now(record, ctx):
             continue
         if record.fix is not None and ctx.fix:
             continue
