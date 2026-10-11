@@ -484,7 +484,7 @@ def test_a_code_step_and_a_words_step_share_one_option_table(
     assert (
         option_addresses(coded)
         == option_addresses(spoken)
-        == ("roles.lint", "checks.probe", "checks.probe.lint")
+        == ("roles.lint", "checks.probe", "checks.probe.lint", "phases.lint.probe")
     )
     package = _member_with(
         tmp_path, "[checks.probe.lint]\nlevel = 2\nenabled = false\n"
