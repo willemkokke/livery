@@ -465,8 +465,9 @@ consumer. Each rule is set now and set back at alpha.
 - Releases happen on demand, when something outside this repository
   needs a version, and release the whole set. Between releases main
   carries breaks. The train is proven by the loop's release scenario
-  on a cadence, publishing nothing, and by `fm workflow.release
-  --local` only in a slice that touches the train (#1380). The rule
+  on the nightly point in CI, from a scratch branch of main,
+  publishing nothing, and by `fm workflow.release --local` only in a
+  slice that touches the train (#1380). The rule
   that a phase's go covers its releases, and the schedule under "First
   publishes", are retired.
 - A pull request's check legs run on one runner; the merge and nightly
@@ -2312,6 +2313,17 @@ the stack, which this design neither needs nor rules out).
   release act 6.5 minutes inside a 26-minute pass, and a loop leg's
   entry 176 of 183 seconds on a workspace born 2026-09-29; today's
   newborn enters in 6 s, so #1378 closed on 2026-10-11.
+- 2026-10-11, #1380 built: the nightly point runs `ci.e2e
+  --scenario=release --from-main` on its first leg, through a
+  `[[ci.schedule]]` entry with `once = true`, a new key for an entry
+  that runs on a matrix job's first leg alone. `--from-main` moves a
+  checkout standing where a build is the release train to a scratch
+  branch at the same commit and back afterwards. Why on CI: the
+  hosted runner brings the loop's environment up in host mode as a
+  desk does, needs no host alias there, and the result is on the
+  forge on a clean machine. `[release] prove = ["head"]` waits for
+  #1377. Not proven yet: the hosted nightly itself, which a dispatch
+  on the branch proves before the entry runs on its own.
 - 2026-10-11, Willem: a step's body is `main`, with `fix` and
   `safe-fix` for a step that rewrites, each a command template, a
   list, or a function, a string; `judge`, `run`, `command` and

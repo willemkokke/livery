@@ -1420,3 +1420,93 @@ def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
     # A feature branch's release verb is the dev act, and the loop goes on.
     git("checkout", "-q", "-b", "chore/loop")
     _e2e.require_dev_branch(root)
+
+
+def _main_repo(tmp_path: Path) -> Path:
+    """A seeded repository on main, as a nightly's checkout stands."""
+    import subprocess
+
+    root = tmp_path / "driver"
+    root.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "dev@acme.test")
+    git("config", "user.name", "Acme")
+    (root / "seed.txt").write_text("x\n")
+    git("add", "-A")
+    git("commit", "-qm", "chore: seed")
+    return root
+
+
+def test_from_main_refuses_a_dirty_checkout_naming_the_paths(tmp_path: Path) -> None:
+    from livery.footman import Failed
+
+    root = _main_repo(tmp_path)
+    (root / "seed.txt").write_text("y\n")
+    with (
+        pytest.raises(
+            Failed, match=r"working tree has changes: seed.txt; commit or discard"
+        ),
+        _e2e.scratch_branch(root, enabled=True),
+    ):
+        pass
+
+
+def test_from_main_runs_the_pass_on_a_scratch_branch_and_returns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._git_ops import GitOps
+
+    root = _main_repo(tmp_path)
+    git = GitOps(root)
+    with _e2e.scratch_branch(root, enabled=True):
+        inside = git.current_branch()
+        assert inside.startswith("chore/loop-")
+        # The loop's own refusal lets the pass go on from here.
+        _e2e.require_dev_branch(root)
+    assert git.current_branch() == "main"
+    assert not git.local_branch_exists(inside)
+    out = capsys.readouterr().out
+    assert f"from main: left 'main' for {inside}" in out
+    assert f"back on main; {inside} deleted" in out
+
+
+def test_from_main_keeps_a_scratch_branch_the_pass_committed_on(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._git_ops import GitOps
+
+    root = _main_repo(tmp_path)
+    git = GitOps(root)
+    with _e2e.scratch_branch(root, enabled=True):
+        inside = git.current_branch()
+        (root / "made.txt").write_text("by the pass\n")
+        git.commit_all("chore: what the pass made")
+    assert git.current_branch() == "main"
+    assert git.local_branch_exists(inside)
+    assert f"{inside} holds 1 commit(s) and stays" in capsys.readouterr().out
+
+
+def test_from_main_leaves_a_dev_branch_and_an_unasked_checkout_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._git_ops import GitOps
+
+    root = _main_repo(tmp_path)
+    git = GitOps(root)
+    with _e2e.scratch_branch(root, enabled=False):
+        assert git.current_branch() == "main"
+    git.create_branch("chore/loop")
+    with _e2e.scratch_branch(root, enabled=True):
+        assert git.current_branch() == "chore/loop"
+    with _e2e.scratch_branch(None, enabled=True):
+        pass
+    assert "from main" not in capsys.readouterr().out

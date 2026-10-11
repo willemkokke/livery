@@ -13,11 +13,13 @@ carry it at all.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -840,6 +842,82 @@ def require_dev_branch(root: Path) -> None:
         f" {where} that is the release train, which opens a real release: start a"
         f" branch at this commit (`{prog} start chore/<slug>`) and run the loop there"
     )
+
+
+@contextlib.contextmanager
+def scratch_branch(root: Path | None, *, enabled: bool) -> Generator[None, None, None]:
+    """Run a pass from a scratch branch where a build would be the release train.
+
+    ``--from-main``: a nightly's checkout stands on ``main``, where the
+    loop's first build is the release train, so the pass moves to
+    ``chore/loop-<stamp>`` at the same commit before anything builds
+    and returns afterwards, deleting the branch when it gained no
+    commit. A checkout already on a dev branch, or none, is left
+    alone. A dirty tree refuses naming the paths, so the scratch branch
+    holds exactly the commit it started from.
+
+    Args:
+        root: The driver checkout, None when the pass runs outside one.
+        enabled: Whether ``--from-main`` was asked.
+
+    Yields:
+        Nothing; the pass runs inside.
+    """
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._release_driver import runs_the_train
+
+    if root is None or not enabled:
+        yield
+        return
+    git = GitOps(root)
+    branch = git.current_branch()
+    if branch and not runs_the_train(branch):
+        yield
+        return
+    dirty = git.dirty_paths()
+    if dirty:
+        fail(
+            "--from-main starts a scratch branch at this commit, and the working"
+            f" tree has changes: {', '.join(dirty)}; commit or discard them first"
+        )
+    origin = branch or git.head_sha()
+    scratch = f"chore/loop-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+    git.create_branch(scratch)
+    where = f"'{branch}'" if branch else "a detached HEAD"
+    print(f"  from main: left {where} for {scratch} at {git.head_sha()[:12]}")
+    try:
+        yield
+    finally:
+        _leave_scratch(root, origin, scratch, branch)
+
+
+def _leave_scratch(root: Path, origin: str, scratch: str, branch: str) -> None:
+    """Return *root* to *origin*; *scratch* goes when it gained nothing."""
+    from livery.workshop._git_ops import GitOps
+
+    git = GitOps(root)
+    if git.current_branch() != scratch:
+        print(
+            f"  from main: the checkout left {scratch} during the pass;"
+            " nothing restored"
+        )
+        return
+    if not git.is_clean():
+        print(f"  from main: the tree has changes, so {scratch} stays checked out")
+        return
+    gained = git.commits_since(origin)
+    if branch:
+        git.switch(branch)
+    else:
+        git.detach(origin)
+    back = branch or origin[:12]
+    if gained:
+        print(
+            f"  from main: back on {back}; {scratch} holds {gained} commit(s) and stays"
+        )
+    else:
+        git.delete_branch(scratch)
+        print(f"  from main: back on {back}; {scratch} deleted")
 
 
 def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
@@ -3000,6 +3078,7 @@ if _WORKSHOP_TESTS.is_dir():
         env: str = "e2e",
         purge_cache: bool = False,
         extension: str = "",
+        from_main: bool = False,
     ) -> None:
         """Exercise the CI and release story on a local environment, by scenario.
 
@@ -3033,7 +3112,10 @@ if _WORKSHOP_TESTS.is_dir():
         the dev forge, its releases in the forge's registry, and the
         local workspace go, then the pass births everything anew. It
         refuses while the workspace holds commits the forge has not
-        seen.
+        seen. ``--from-main`` moves a checkout standing on ``main`` or a
+        reserved ``workflow/`` branch, where a build would be the release
+        train, to a scratch branch at the same commit for the pass and
+        back afterwards; the nightly's checkout is one.
         """
         import os
 
@@ -3041,52 +3123,55 @@ if _WORKSHOP_TESTS.is_dir():
         from livery.workshop._extensions import workspace_root
 
         driver = workspace_root()
-        if driver is not None:
-            # Before anything is brought up: on a branch whose release
-            # verb is the train, the first build would open a release.
-            require_dev_branch(driver)
-        asked = scenario or ("extension" if extension else "develop")
-        chosen = scenarios_for(asked)
-        stack, kinds = extension_under_test(extension) if extension else ((), ())
-        if forge != "gitea":
-            fail(f"--env addresses a Gitea environment; --forge={forge} has none yet")
-        if purge_cache:
-            for line in _devenv.purge_cache():
-                print(line)
-        place = _devenv.environment(env)
-        if fresh and place.mode == "host":
-            for line in _devenv.remove(place):
-                print(line)
-            place = _devenv.environment(env)
-        if place.mode == "docker":
-            CURRENT.name, CURRENT.mode = env, "docker"
-        else:
-            _devenv.up_host(place, ("host",))
-            _enter_host(place.values(), env)
-        # Every commit the pass makes, the driver's, the birth's and
-        # the loop's own fm's, is unsigned: the setting rides the
-        # task's environment into each child.
-        os.environ.update(unsigned_environment(os.environ))
-        _require_host_alias(forge)
-        if daemon_needed(chosen):
-            _require_runner_docker(forge)
-        pass_ = Pass(
-            forge,
-            CURRENT.url or os.environ.get(_lane(forge).url_var, ""),
-            fresh,
-            extension=extension,
-            stack=stack,
-            kinds=kinds,
-        )
-        RUNS.count = 0
-        try:
-            for item in chosen:
-                run_scenario(pass_, item)
-        finally:
-            for line in timing_table(pass_.timings):
-                print(line)
-            driver = workspace_root()
+        with scratch_branch(driver, enabled=from_main):
             if driver is not None:
-                print(record_pass(driver, pass_, asked))
-        names = ", ".join(item.name for item in chosen)
-        print(f"  the loop proved {names}")
+                # Before anything is brought up: on a branch whose release
+                # verb is the train, the first build would open a release.
+                require_dev_branch(driver)
+            asked = scenario or ("extension" if extension else "develop")
+            chosen = scenarios_for(asked)
+            stack, kinds = extension_under_test(extension) if extension else ((), ())
+            if forge != "gitea":
+                fail(
+                    f"--env addresses a Gitea environment; --forge={forge} has none yet"
+                )
+            if purge_cache:
+                for line in _devenv.purge_cache():
+                    print(line)
+            place = _devenv.environment(env)
+            if fresh and place.mode == "host":
+                for line in _devenv.remove(place):
+                    print(line)
+                place = _devenv.environment(env)
+            if place.mode == "docker":
+                CURRENT.name, CURRENT.mode = env, "docker"
+            else:
+                _devenv.up_host(place, ("host",))
+                _enter_host(place.values(), env)
+            # Every commit the pass makes, the driver's, the birth's and
+            # the loop's own fm's, is unsigned: the setting rides the
+            # task's environment into each child.
+            os.environ.update(unsigned_environment(os.environ))
+            _require_host_alias(forge)
+            if daemon_needed(chosen):
+                _require_runner_docker(forge)
+            pass_ = Pass(
+                forge,
+                CURRENT.url or os.environ.get(_lane(forge).url_var, ""),
+                fresh,
+                extension=extension,
+                stack=stack,
+                kinds=kinds,
+            )
+            RUNS.count = 0
+            try:
+                for item in chosen:
+                    run_scenario(pass_, item)
+            finally:
+                for line in timing_table(pass_.timings):
+                    print(line)
+                driver = workspace_root()
+                if driver is not None:
+                    print(record_pass(driver, pass_, asked))
+            names = ", ".join(item.name for item in chosen)
+            print(f"  the loop proved {names}")
