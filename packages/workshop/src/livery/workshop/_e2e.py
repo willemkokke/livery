@@ -1100,7 +1100,7 @@ def _unpushed_commits(root: Path) -> list[str]:
 
 
 def ensure_birth_verb(
-    env: Mapping[str, str], run: Callable[..., Any] = footman.run
+    env: Mapping[str, str], cwd: Path, run: Callable[..., Any] | None = None
 ) -> bool:
     """Make this footman answer ``new.project``; whether the workshop was added.
 
@@ -1110,12 +1110,18 @@ def ensure_birth_verb(
     verb's own ``--help``; when it refuses, ``self.add livery-workshop``
     installs the workshop beside the runner from the index *env* names
     first, the pass's dev index, so the birth runs this checkout's code.
-    *run* is the spawn, footman's own unless a test hands one in.
+    The probe runs in *cwd*, where the birth runs, outside any project:
+    inside the checkout the project itself mounts the verb, and a probe
+    there would answer for a birth that cannot. *run* is the spawn,
+    footman's own unless a test hands one in, read when called so a
+    test's stand-in for footman's is the one used.
     """
     import sys
 
-    probe = run(
+    spawn = run or footman.run
+    probe = spawn(
         [sys.executable, "-m", "livery.footman", "new.project", "--help"],
+        cwd=cwd,
         env=dict(env),
         nofail=True,
         recorded=False,
@@ -1126,7 +1132,7 @@ def ensure_birth_verb(
         "  birth: this footman answers no new.project; adding the workshop beside"
         " it from the index the pass reads first"
     )
-    added = run(
+    added = spawn(
         [
             sys.executable,
             "-m",
@@ -1135,6 +1141,7 @@ def ensure_birth_verb(
             "self.add",
             "livery-workshop",
         ],
+        cwd=cwd,
         env=dict(env),
         nofail=True,
         timeout=600.0,
@@ -1168,7 +1175,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
-    ensure_birth_verb(env)
+    ensure_birth_verb(env, home)
     # A workspace already there is a birth to resume: the verb refuses
     # to start a second one in its folder.
     resume = ["--resume"] if (home / E2E_REPO / "workshop.toml").is_file() else []
