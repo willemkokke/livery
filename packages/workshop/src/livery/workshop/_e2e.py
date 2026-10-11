@@ -1712,22 +1712,31 @@ def _render_with_the_pass(root: Path) -> None:
 
     A child of the pass's interpreter, as the birth is, with the uv
     handoff off: the loop's lock pins the workshop the loop last
-    locked, and the handoff would run that one instead.
+    locked, and the handoff would run that one instead. The workshop
+    mounts there through footman's project rung, from the loop's own
+    dependencies, so a failure also prints footman's ``--plugins``
+    listing from the same child: what mounted, and from which rung.
     """
     import sys
 
+    runner = [sys.executable, "-m", "livery.footman"]
+    env = {**os.environ, "FOOTMAN_NO_UV": "1"}
     result = footman.run(
-        [sys.executable, "-m", "livery.footman", "--yes", "drift.check", "--fix"],
+        [*runner, "--yes", "drift.check", "--fix"],
         cwd=root,
-        env={**os.environ, "FOOTMAN_NO_UV": "1"},
+        env=env,
         nofail=True,
         timeout=900.0,
     )
     print(result.stdout.rstrip("\n"))
     if result.code != 0:
+        plugins = footman.run(
+            [*runner, "--plugins"], cwd=root, env=env, nofail=True, timeout=120.0
+        )
         fail(
             f"the pass's render of the loop exited {result.code}:"
             f"\n{result.stdout}{result.stderr}"
+            f"\nfootman's plugins in the loop:\n{plugins.stdout}{plugins.stderr}"
         )
 
 
