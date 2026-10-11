@@ -41,9 +41,16 @@ def _instance(tmp_path: Path) -> Path:
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
+    _git(
+        tmp_path,
+        "clone",
+        "--config",
+        "user.email=t@livery.local",
+        "--config",
+        "user.name=T",
+        str(origin),
+        "ws",
+    )
     (root / "workshop.toml").write_text("[workspace]\n")
     (root / "seed.txt").write_text("s\n")
     _git(root, "add", "-A")

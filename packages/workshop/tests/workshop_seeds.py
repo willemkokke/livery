@@ -185,9 +185,9 @@ def pushed(base: Path, *, clone: str = "work", fill: Fill | None = None) -> Path
     origin = base / "origin.git"
     _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
     repo = base / clone
-    _git(base, "clone", "-q", str(origin), str(repo))
-    _git(repo, "config", "user.name", "tester")
-    _git(repo, "config", "user.email", "tester@example.invalid")
+    # The identity rides the clone: two processes fewer per repository,
+    # which the Windows leg pays tens of milliseconds each for.
+    _git(base, "clone", "-q", *_IDENTITY, str(origin), str(repo))
     if fill is None:
         (repo / "seed.txt").write_text("seed\n")
     else:
@@ -196,6 +196,15 @@ def pushed(base: Path, *, clone: str = "work", fill: Fill | None = None) -> Path
     _git(repo, "commit", "-qm", "chore: seed")
     _git(repo, "push", "-q", "-u", "origin", "main")
     return repo
+
+
+#: The committer a seeded repository carries, set at the clone.
+_IDENTITY = (
+    "--config",
+    "user.name=tester",
+    "--config",
+    "user.email=tester@example.invalid",
+)
 
 
 def _git(cwd: Path, *args: str) -> None:

@@ -31,9 +31,17 @@ def _git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
 
 def _clone(tmp_path: Path, name: str, origin: Path) -> Path:
     work = tmp_path / name
-    _git(tmp_path, "clone", "-q", str(origin), str(work))
-    _git(work, "config", "user.name", "tester")
-    _git(work, "config", "user.email", "tester@example.invalid")
+    _git(
+        tmp_path,
+        "clone",
+        "-q",
+        "--config",
+        "user.name=tester",
+        "--config",
+        "user.email=tester@example.invalid",
+        str(origin),
+        str(work),
+    )
     return work
 
 

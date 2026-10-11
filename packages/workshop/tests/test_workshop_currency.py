@@ -35,9 +35,16 @@ def _other(tmp_path: Path, origin: Path, email: str = "them@livery.local") -> Pa
     if other.is_dir():
         _git(other, "pull", "--ff-only", "origin", "main")
         return other
-    _git(tmp_path, "clone", str(origin), other.name)
-    _git(other, "config", "user.email", email)
-    _git(other, "config", "user.name", "Them")
+    _git(
+        tmp_path,
+        "clone",
+        "--config",
+        f"user.email={email}",
+        "--config",
+        "user.name=Them",
+        str(origin),
+        other.name,
+    )
     return other
 
 
@@ -949,3 +956,31 @@ def test_the_sync_sweeps_before_anything_discovers_packages(
     assert seen == [()]
     assert not package.exists()
     assert "packages/gone: removed 2 ignored file(s)" in capsys.readouterr().out
+
+
+def test_the_position_and_the_stack_are_read_in_one_process_each(
+    seeds: Seeds,
+) -> None:
+    from workshop_spawns import counting_spawns
+
+    clone, _origin = _rig(seeds)
+    git = GitOps(clone)
+    with counting_spawns() as spawned:
+        branch, head = git.position()
+    assert spawned["git"] == 1
+    assert (branch, head) == (git.current_branch(), git.head_sha())
+    # Detached: no branch, the same head.
+    _git(clone, "checkout", "-q", "--detach")
+    assert git.position() == ("", head)
+    _git(clone, "checkout", "-q", "main")
+    # A branch standing on main has no stack, and reading it is one
+    # process; a recorded stack reads both keys in one process too.
+    with counting_spawns() as spawned:
+        assert git.stack("main") == ("", "")
+    assert spawned["git"] == 1
+    git.record_stack("main", "feat/0-parent", head)
+    with counting_spawns() as spawned:
+        assert git.stack("main") == ("feat/0-parent", head)
+    assert spawned["git"] == 1
+    git.forget_stack("main")
+    assert git.stack("main") == ("", "")
