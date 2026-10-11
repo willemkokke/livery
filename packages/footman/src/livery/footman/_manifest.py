@@ -22,6 +22,7 @@ Parameter mapping (function signature -> CLI shape):
 from __future__ import annotations
 
 import contextlib
+import copy
 import dataclasses
 import datetime
 import decimal
@@ -33,6 +34,9 @@ import os
 import sys
 import typing
 import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -1165,6 +1169,53 @@ def tree_hash(tree: dict[str, Any]) -> str:
     """Stable hash of the tree's structure (names, params, help)."""
     blob = json.dumps(tree, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+#: The manifest tree of the run in progress, set by the app for the span
+#: of the run so a task can read its own CLI's tree without rebuilding it.
+_SERVED: ContextVar[dict[str, Any] | None] = ContextVar(
+    "footman_served_tree", default=None
+)
+
+
+@contextmanager
+def serving(tree: dict[str, Any]) -> Generator[None]:
+    """Serve *tree* as the run's own to `task_tree()` for the block."""
+    token = _SERVED.set(tree)
+    try:
+        yield
+    finally:
+        _SERVED.reset(token)
+
+
+def task_tree() -> dict[str, Any]:
+    """The composed task tree of this process, as ``--json --list`` reports it.
+
+    Every task and group the cascade and the plugins mounted into the
+    running CLI, with each task's ``hidden`` flag and the extension that
+    mounted it, in the shape the catalog envelope prints. A task that
+    renders a listing of its own CLI reads this instead of running the
+    CLI again: the tree is built before any task runs, and this is a copy
+    of it. A tree is a process's own, made from the distributions on its
+    path, so another directory's tree is listed by running that
+    directory's CLI with ``--json --list``. Outside a run the tree is the
+    process registry's, which holds what was registered so far.
+
+    ```python
+    for name in footman.task_tree()["tasks"]:
+        ...
+    ```
+    """
+    served = _SERVED.get()
+    if served is not None:
+        return copy.deepcopy(served)
+    from livery.footman import _registry
+    from livery.footman._context import project_root
+
+    tree: dict[str, Any] = build_manifest(
+        _registry.root, project=project_root() is not None
+    )["tree"]
+    return tree
 
 
 def build_manifest(

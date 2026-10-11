@@ -330,6 +330,9 @@ things ran; present when footman refused.
 
 ## The catalog: `fm --json --list`
 
+Inside a task, `footman.task_tree()` is the same tree without the process:
+the running CLI has it built already.
+
 The machine twin of `--list`/`--tree` (bare `fm --json` does the same): the
 full task tree, every task and group with its parameters: kinds, types,
 choices, bounds, env fallbacks, required-ness, and the one-line help:

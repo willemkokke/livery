@@ -91,6 +91,7 @@ if TYPE_CHECKING:
     from livery.footman._host import Host as Host
     from livery.footman._host import host as host
     from livery.footman._invocation import Invocation as Invocation
+    from livery.footman._manifest import task_tree as task_tree
     from livery.footman._params import Arg as Arg
     from livery.footman._params import Exists as Exists
     from livery.footman._params import Forward as Forward
@@ -276,6 +277,7 @@ __all__ = [
     "styled",
     "suggest",
     "task",
+    "task_tree",
     "tasks_file_name",
     "testing",
     "track",
@@ -523,6 +525,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import _gc
 
         return _gc.alive
+    if name == "task_tree":
+        from livery.footman import _manifest
+
+        return _manifest.task_tree
     if name in ("App", "Brand"):
         from livery.footman import _application as app
 

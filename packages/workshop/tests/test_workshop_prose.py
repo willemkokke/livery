@@ -526,3 +526,44 @@ def test_the_tree_is_listed_once_until_the_tasks_file_or_the_contract_moves(
     _prose.forget_trees()
     _prose.composed_tree(root)
     assert len(runs) == 4
+
+
+def test_the_tree_is_read_in_process_for_this_process_s_own_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import shutil
+
+    import livery.footman as footman
+
+    root = _workspace(tmp_path)
+    (root / "tasks.py").write_text("")
+    runs: list[list[str]] = []
+
+    class _Done:
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+
+        def __int__(self) -> int:
+            return 0
+
+    def running(argv: list[str], **kwargs: object) -> _Done:
+        runs.append(argv)
+        return _Done(json.dumps({"tree": {"tasks": {"check": {}}, "groups": {}}}))
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/x/" + name)
+    monkeypatch.setattr(footman, "run", running)
+    monkeypatch.setattr(
+        footman, "task_tree", lambda: {"tasks": {"own": {}}, "groups": {}}
+    )
+    # Another root first: its tree lives in its own venv's entry points,
+    # which only a process in that venv can list, so the runner runs there.
+    monkeypatch.setattr(_prose, "_own_root", lambda: tmp_path / "elsewhere")
+    _prose.forget_trees()
+    assert _prose.composed_tree(root) == {"tasks": {"check": {}}, "groups": {}}
+    assert len(runs) == 1
+    # This process's own root: the tree it discovered already, no run.
+    monkeypatch.setattr(_prose, "_own_root", lambda: root)
+    _prose.forget_trees()
+    assert _prose.composed_tree(root) == {"tasks": {"own": {}}, "groups": {}}
+    assert len(runs) == 1
