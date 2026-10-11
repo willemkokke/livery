@@ -20,13 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from livery.workshop._ast_rules import (
-    AstRule,
+    Judge,
     ParsedModule,
     RuleContext,
-    ast_rules,
     parsed_modules,
     parsed_source,
-    register_ast_rule,
 )
 from livery.workshop._contract import load_contract
 
@@ -471,8 +469,8 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
     """The layering lint: check every workspace invariant, or raise.
 
     The graph's invariants ([livery.workshop._packages.verify_graph][]) and
-    the rules over every python source
-    ([livery.workshop._packages.verify_imports][]) together, in one refusal.
+    the base's rules over every python source
+    ([livery.workshop._packages.import_problems][]) together, in one refusal.
     Returns the discovered packages when everything holds. Raises
     ValueError listing every violation verbatim otherwise:
 
@@ -517,38 +515,33 @@ def verify_graph(root: Path) -> tuple[Package, ...]:
     return packages
 
 
-def verify_imports(
-    root: Path, files: frozenset[str] | None = None
-) -> tuple[Package, ...]:
-    """The rules over the python sources: each module's imports and references.
-
-    *files* names the root-relative sources in scope; None judges
-    every one. A rule over a module judges the named ones, and a rule
-    over a package's references judges each package holding one.
-    Returns the discovered packages; raises ValueError listing every
-    violation otherwise.
-    """
-    packages = discover_packages(root)
-    problems = import_problems(root, packages, files)
-    if problems:
-        raise ValueError(
-            "the workspace breaks its layering:\n  " + "\n  ".join(problems)
-        )
-    return packages
-
-
 def import_problems(
     root: Path, packages: tuple[Package, ...], files: frozenset[str] | None = None
 ) -> list[str]:
-    """Every registered rule's findings over the sources in scope, by rule name."""
-    # The rules over the sources, builtin and registered alike, read
-    # the one parse; each problem carries its rule's name.
+    """Every base rule's findings over the sources in scope, each by its step's name."""
+    return [
+        f"{step}: {line}"
+        for step in RULES
+        for line in rule_problems(step, root, packages, files)
+    ]
+
+
+def rule_problems(
+    step: str,
+    root: Path,
+    packages: tuple[Package, ...],
+    files: frozenset[str] | None = None,
+) -> list[str]:
+    """What the base's layering step *step* finds over the sources in scope.
+
+    *files* names the root-relative sources a narrowed run judges;
+    None judges every one. The modules come from the one parse
+    ([livery.workshop._ast_rules.parsed_modules][]). A rule over a
+    module judges the named ones, and a rule over a package's
+    references judges each package holding one.
+    """
     context = RuleContext(root=root, packages=packages, files=files)
-    modules = parsed_modules(root, packages, files)
-    problems: list[str] = []
-    for rule in ast_rules():
-        problems.extend(f"{rule.name}: {line}" for line in rule.judge(modules, context))
-    return problems
+    return RULES[step](parsed_modules(root, packages, files), context)
 
 
 def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
@@ -792,7 +785,7 @@ def declare_edge(
 def write_edges(root: Path) -> list[str]:
     """Declare every sibling reference the graph already reaches; the lines written.
 
-    The layering check's fix mode. For each reference
+    The fix of the layering phase's sibling-references step. For each reference
     [livery.workshop._packages.undeclared_references][] can write, the
     ``[[depends]]`` edge joins the package's contract and the kind
     writes the native requirement, both at the floor the graph
@@ -1051,14 +1044,6 @@ def _sibling_references(
     return problems
 
 
-def _write_edges_fix(
-    modules: tuple[ParsedModule, ...], context: RuleContext
-) -> list[str]:
-    """The sibling rule's fix: declare what the graph already reaches."""
-    del modules
-    return write_edges(context.root)
-
-
 #: The base's own import path, and the namespace extensions live under.
 BASE_MODULE = "livery.workshop"
 EXTENSIONS_NAMESPACE = "livery.extensions"
@@ -1141,11 +1126,14 @@ def _base_imports_no_extension(
     return extension_imports_in_the_base(modules)
 
 
-# The builtin rules, registered at import the way the builtin checks
-# and kinds are; an extension registers its own beside them.
-register_ast_rule(AstRule("runner-terminal", _runner_terminal))
-register_ast_rule(AstRule("base-imports-no-extension", _base_imports_no_extension))
-register_ast_rule(AstRule("forge-stdlib-only", _forge_stdlib))
-register_ast_rule(
-    AstRule("sibling-references", _sibling_references, fix=_write_edges_fix)
-)
+#: The base's rules over the one parse, each the layering step of its
+#: name, which [livery.workshop._checks][] registers beside the base's
+#: other steps: the runner's one-answer rule, the base importing no
+#: extension, the forge's stdlib rule, and the sibling references, whose
+#: step's fix writes the edges ([livery.workshop._packages.write_edges][]).
+RULES: dict[str, Judge] = {
+    "runner-terminal": _runner_terminal,
+    "base-imports-no-extension": _base_imports_no_extension,
+    "forge-stdlib-only": _forge_stdlib,
+    "sibling-references": _sibling_references,
+}

@@ -223,13 +223,14 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
     for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
         monkeypatch.setattr(fake_checks, name, spy(name))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
-    monkeypatch.setattr("livery.workshop._packages.verify_imports", spy("imports"))
-    # A source file: the style and type checks take it, the import rules
-    # judge it, and the package's whole suite runs, since its tests
-    # measure that source. The graph is not made of sources.
+    monkeypatch.setattr("livery.workshop._packages.rule_problems", spy("rules"))
+    # A source file: the style and type checks take it, the layering
+    # steps over the sources judge it, and the package's whole suite
+    # runs, since its tests measure that source. The graph is not made
+    # of sources.
     _quality.check(str(root / "packages" / "one" / "src" / "one" / "__init__.py"))
     ran = {name for name, _ in calls}
-    assert {"run_format", "run_lint", "run_typecheck", "run_test", "imports"} <= ran
+    assert {"run_format", "run_lint", "run_typecheck", "run_test", "rules"} <= ran
     assert "graph" not in ran
     source = str(root / "packages" / "one" / "src" / "one" / "__init__.py")
     assert dict(calls)["run_format"]["paths"] == (source,)

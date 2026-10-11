@@ -9,6 +9,11 @@ reason. An entry no source uses any more refuses, so the list only
 shrinks. Each distribution's roots are what its build ships, so the
 roots one wheel ships are one distribution's.
 
+The rule is a step of the layering phase,
+``[phases.layering.private-reaches]``, judged over the one parse of
+the python sources ([livery.workshop._ast_rules.parsed_modules][]):
+the files a narrowed run reaches, every source otherwise.
+
 The scan reads names, not types: a private read through a value
 (``current()._x``) or named in a string (an entry point,
 ``import_module``) is not seen.
@@ -19,9 +24,13 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
+from livery.footman import fail
+from livery.workshop import selected_files
+
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from livery.workshop import Changes, PhaseContext
     from livery.workshop._ast_rules import ParsedModule, RuleContext
     from livery.workshop._packages import Package
 
@@ -29,9 +38,43 @@ if TYPE_CHECKING:
 ALLOWANCE = "[[python.private-reaches]]"
 
 
-def private_reaches(
-    modules: tuple[ParsedModule, ...], context: RuleContext
-) -> list[str]:
+def private_reaches(ctx: PhaseContext) -> None:
+    """The step: refuse each reach outside the allowance, and each unused entry.
+
+    The files the run reaches ([livery.workshop.selected_files][]) are
+    judged over the one parse; an unused entry is judged on a run over
+    every source alone.
+    """
+    from livery.workshop._ast_rules import RuleContext, parsed_modules
+
+    files = selected_files(ctx)
+    context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)
+    found = problems(parsed_modules(ctx.root, ctx.packages, files), context)
+    if found:
+        fail("the sources break the private-reaches rule:\n  " + "\n  ".join(found))
+
+
+def graph_changed(changes: Changes) -> bool:
+    """Whether a contract, a native manifest or a root ``src/`` changed.
+
+    The step's inputs widen on them: the distributions' roots come
+    from the manifests and the allowance from the root contract, so a
+    change there judges every source, as the base's layering steps do
+    ([livery.workshop._checks.graph_files][]).
+    """
+    from livery.workshop._categories import matches
+    from livery.workshop._checks import NOT_INPUTS, graph_files
+
+    patterns = graph_files(changes.root)
+    return any(
+        matches(pattern, path)
+        for path in changes.paths
+        if not any(matches(ignored, path) for ignored in NOT_INPUTS)
+        for pattern in patterns
+    )
+
+
+def problems(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
     """Each reach outside the allowance, by its place; each allowance entry unused.
 
     An unused entry is judged only when the run reads every source: a

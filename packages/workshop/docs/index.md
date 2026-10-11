@@ -109,11 +109,6 @@ spelling. Every key is optional:
   to; `local` for files that belong to this checkout alone. A
   package-level extension's fragment lives while a package lists it,
   and two extensions writing one path refuse;
-- `[rules.<name>]`, a rule the extension adds to the layering check,
-  over the python sources the check parses once: `judge`, the
-  `"module:function"` that returns the problems, and an optional `fix`,
-  run inside the check's rewrite; a rule applies while the extension
-  is listed;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -636,14 +631,17 @@ the repository's own `fragments/` last. The gate, verbs, kinds and
 tools sections render from the registries, so no fragment names a
 checker by hand.
 
-The layering check parses every python source once per gate and
-memoises the parse by the file's bytes, and a kind or an extension may
-register a rule over that parse beside the builtin three (the
-runner's one-answer rule, the forge's stdlib rule, the sibling
-references): `register_ast_rule(AstRule(name, judge, fix=...))` in
-`livery.workshop._ast_rules`. A rule's fix runs inside the check's
-rewrite and its judgment inside the check's judge, and each problem
-it reports carries the rule's name.
+The layering phase parses every python source once per gate and
+memoises the parse by the file's path, size and modification time.
+Each rule over the sources is a step of the phase: the base's four
+(the runner's one-answer rule, the base importing no extension, the
+forge's stdlib rule, and the sibling references, whose fix writes the
+edges the graph already reaches), and an extension's own, declared as
+`[phases.layering.<step>]` with `main = "module:function"`, called
+with the gate's context. A step asks for the parsed modules in its
+scope, the files a narrowed run reaches or every source, and the
+steps run in one process, so every one reads the one parse. A step's
+fix runs inside the gate's rewrite, before the judges.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into
@@ -865,9 +863,9 @@ absence.
   the cross-references in the changed sources' docstrings, resolved as
   the API site resolves them, and every source's when a changed one
   lost a name; `layering.graph`
-  only when a contract or a manifest changed; `layering.imports`, the
-  rules over the python sources, the changed sources, and every one
-  when the graph changed; `drift.check` a tracked composed or
+  only when a contract or a manifest changed; the layering phase's
+  rule steps the changed sources, and every one when the graph
+  changed; `drift.check` a tracked composed or
   generated file when it, or what it is made from, changed;
   `provenance.check` the changed content files. A check whose own code
   changed reads everything. A diff that reaches no package and no

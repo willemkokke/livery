@@ -217,15 +217,11 @@ def test_drift_judges_only_the_files_it_was_handed(
         _templates.drift_check()
 
 
-def test_the_import_rules_judge_the_files_they_were_handed(tmp_path: Path) -> None:
-    from livery.workshop._ast_rules import (
-        AstRule,
-        ParsedModule,
-        RuleContext,
-        register_ast_rule,
-        unregister_ast_rule,
-    )
-    from livery.workshop._packages import verify_imports
+def test_the_rule_steps_judge_the_files_they_were_handed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _packages
+    from livery.workshop._ast_rules import ParsedModule, RuleContext
 
     member = tmp_path / "packages" / "tool"
     (member / "src").mkdir(parents=True)
@@ -240,12 +236,11 @@ def test_the_import_rules_judge_the_files_they_were_handed(tmp_path: Path) -> No
         seen.extend(module.relative for module in modules)
         return []
 
-    register_ast_rule(AstRule("acme-seen", judge, extension="acme.brand"))
-    try:
-        verify_imports(tmp_path, frozenset({"packages/tool/src/a.py"}))
-        assert seen == ["packages/tool/src/a.py"]
-        seen.clear()
-        verify_imports(tmp_path)
-        assert sorted(seen) == ["packages/tool/src/a.py", "packages/tool/src/b.py"]
-    finally:
-        unregister_ast_rule("acme-seen")
+    monkeypatch.setattr(_packages, "RULES", {"acme-seen": judge})
+    packages = _packages.discover_packages(tmp_path)
+    narrowed = frozenset({"packages/tool/src/a.py"})
+    assert _packages.rule_problems("acme-seen", tmp_path, packages, narrowed) == []
+    assert seen == ["packages/tool/src/a.py"]
+    seen.clear()
+    assert _packages.rule_problems("acme-seen", tmp_path, packages) == []
+    assert sorted(seen) == ["packages/tool/src/a.py", "packages/tool/src/b.py"]

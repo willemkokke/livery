@@ -25,13 +25,12 @@ from livery.workshop._declaration import (
     Additions,
     Declaration,
     DeclarationError,
-    DeclaredRule,
     declaration_file,
     read,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable
     from importlib.metadata import Distribution, EntryPoint
 
     from livery.toolroom.store import Spec
@@ -569,11 +568,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             if found is not None:
                 check_api_version(extension, found)
                 check_phase_declarers(extension, found, present)
-                rules = declare_rules(extension, found.rules)
                 if (
                     register_declared(extension, found.additions, enabled=enabled)
                     or found.queries
-                    or rules
                 ):
                     mounted.append(extension)
             present.append(extension)
@@ -613,11 +610,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             )
             continue
         check_phase_declarers(extension, found, present)
-        rules = declare_rules(extension, found.rules)
         if (
             register_declared(extension, found.additions, enabled=enabled)
             or found.queries
-            or rules
         ):
             mounted.append(extension)
         name = found.plugin
@@ -750,21 +745,6 @@ def _graft_contributions(
                 continue
             register_declared(owner, additions, enabled=enabled)
             grafted.add((owner, target))
-
-
-def declare_rules(extension: str, rules: Mapping[str, DeclaredRule]) -> bool:
-    """Add each rule *extension* declares to the layering check; whether any.
-
-    The rule's references are imported when the check first calls them,
-    so a mount imports none of the extension's code.
-    """
-    from livery.workshop._ast_rules import AstRule, register_ast_rule
-
-    for name, rule in rules.items():
-        register_ast_rule(
-            AstRule(name, judge=rule.judge, fix=rule.fix, extension=extension)
-        )
-    return bool(rules)
 
 
 def register_declared(

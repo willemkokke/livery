@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import discover_packages, verify_workspace
-from livery.workshop._packages import write_edges
+from livery.workshop._packages import RULES, write_edges
 
 _FAILURES = (BaseException,)
 
@@ -805,7 +805,7 @@ def test_the_layering_check_parses_each_source_once(
 
     monkeypatch.setattr(_ast_rules, "_parse", counting)
     _ast_rules._PARSED.clear()
-    assert len(_ast_rules.ast_rules()) >= 3
+    assert len(RULES) >= 3
     verify_workspace(tmp_path)
     assert sorted(p.name for p in counted) == ["a.py", "b.py", "ok.py", "tasks.py"]
     # The memo: a second gate over the same bytes parses nothing.
@@ -817,66 +817,77 @@ def test_the_layering_check_parses_each_source_once(
     assert [p.name for p in counted[4:]] == ["a.py"]
 
 
-def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
+def test_each_base_rule_is_a_step_of_the_layering_phase_over_the_sources() -> None:
+    from livery.workshop._checks import BASE_EXTENSION, check_for
+
+    for step in RULES:
+        record = check_for(f"layering.{step}")
+        assert record.extension == BASE_EXTENSION
+        assert record.inputs is not None
+        assert record.inputs.reads == ("tasks.py", "packages/**/*.py")
+        # The sibling step's fix is the one rewrite among them.
+        assert (record.fix is not None) == (step == "sibling-references")
+
+
+def test_a_base_step_refuses_with_its_rules_findings_and_the_others_hold(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop import discover_packages
-    from livery.workshop._ast_rules import (
-        AstRule,
-        ParsedModule,
-        RuleContext,
-        register_ast_rule,
-        unregister_ast_rule,
-    )
+    from livery.footman import Failed
     from livery.workshop._checks import check_for
     from livery.workshop._phases import PhaseContext
 
-    seen: list[str] = []
-
-    def judge(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
-        seen.extend(module.relative for module in modules)
-        if (context.root / "fixed.marker").is_file():
-            return []
-        return ["the marker is missing; the gate's --fix writes it"]
-
-    def fix(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
-        del modules
-        (context.root / "fixed.marker").write_text("")
-        return ["  acme-rule: wrote fixed.marker"]
-
-    register_ast_rule(AstRule("acme-rule", judge, fix=fix, extension="acme.brand"))
-    try:
-        _package(tmp_path, "tool")
-        _module(tmp_path, "tool", "a.py", "import json\n")
-        tests = tmp_path / "packages" / "tool" / "tests"
-        tests.mkdir()
-        (tests / "test_a.py").write_text("import json\n")
-        _forge_stub(tmp_path)
-        # The refusal first, naming the rule.
-        with pytest.raises(ValueError, match="acme-rule: the marker is missing"):
-            verify_workspace(tmp_path)
-        assert "packages/tool/src/a.py" in seen
-        assert "packages/tool/tests/test_a.py" in seen
-        assert "packages/forge/src/ok.py" in seen
-        # The fix runs inside the layering check's rewrite, and the
-        # judge that follows it passes.
-        record = check_for("layering.imports")
-        assert record.fix is not None
-        context = PhaseContext(
-            root=tmp_path, packages=discover_packages(tmp_path), fix=True
-        )
-        record.fix(context)
-        assert (tmp_path / "fixed.marker").is_file()
-        verify_workspace(tmp_path)
-    finally:
-        unregister_ast_rule("acme-rule")
+    _package(tmp_path, "tool")
+    _forge_stub(tmp_path)
+    (tmp_path / "packages" / "forge" / "src" / "bad.py").write_text("import requests\n")
+    ctx = PhaseContext(root=tmp_path, packages=discover_packages(tmp_path))
+    with pytest.raises(Failed) as raised:
+        check_for("layering.forge-stdlib-only").run(ctx)
+    assert str(raised.value).startswith("the workspace breaks its layering:\n  ")
+    assert "imports 'requests': livery.forge is stdlib-only at import time" in str(
+        raised.value
+    )
+    for step in ("runner-terminal", "base-imports-no-extension", "sibling-references"):
+        check_for(f"layering.{step}").run(ctx)
 
 
-def test_a_rule_without_a_name_refuses() -> None:
-    from livery.workshop._ast_rules import AstRule, register_ast_rule
+def test_the_sibling_fix_rewrites_then_locks_a_moved_manifest_then_judges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _packages
+    from livery.workshop._checks import check_for
+    from livery.workshop._phases import PhaseContext
 
-    with pytest.raises(ValueError, match="needs a name"):
-        register_ast_rule(AstRule("", lambda modules, context: []))
+    order: list[str] = []
+
+    def written(root: Path) -> list[str]:
+        order.append(f"fix at {root.name}")
+        return [
+            "  layering: packages/tool declares the build edge on packages/forge"
+            " at floor 1 (pyproject.toml)"
+        ]
+
+    def judged(
+        step: str, root: Path, packages: object, files: object = None
+    ) -> list[str]:
+        del root, packages, files
+        order.append(f"judge {step}")
+        return []
+
+    def locked(*args: str, root: Path) -> None:
+        order.append(f"uv {' '.join(args)} at {root.name}")
+
+    monkeypatch.setattr(_packages, "write_edges", written)
+    monkeypatch.setattr(_packages, "rule_problems", judged)
+    monkeypatch.setattr("livery.workshop._uv.run_uv", locked)
+    record = check_for("layering.sibling-references")
+    assert record.fix is not None
+    record.fix(PhaseContext(root=tmp_path, packages=(), fix=True))
+    # The rewrite, the lock the moved manifest asks for, then the judge.
+    assert order == [
+        f"fix at {tmp_path.name}",
+        f"uv lock at {tmp_path.name}",
+        "judge sibling-references",
+    ]
 
 
 def test_a_src_at_the_workspace_root_refuses_naming_the_move(tmp_path: Path) -> None:

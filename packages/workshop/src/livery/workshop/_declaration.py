@@ -41,8 +41,8 @@ or whose module does not define the name at its top level, refuses
 here, read from the module's source. A ``[checks]`` table or an
 ``[options]`` table refuses naming the step spelling, as does a key
 of a step table that the spelling dropped, ``pre`` and ``post`` among
-them, and a ``[root-files]`` table refuses naming the fragments
-spelling.
+them; a ``[root-files]`` table refuses naming the fragments spelling,
+and a ``[rules]`` table the layering phase's steps.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from livery.workshop._checks import CheckRecord
     from livery.workshop._contract_keys import ContractKind, Declared, Type
@@ -183,21 +183,6 @@ class DeclaredOutput:
 
 
 @dataclass(frozen=True)
-class DeclaredRule:
-    """A rule an extension adds to the layering check, over the parsed sources.
-
-    Attributes:
-        judge: Called with the parsed sources and the rule's context;
-            returns the problems, empty when the rule holds.
-        fix: Run inside the layering check's rewrite before the judge;
-            returns the lines it wrote. None for a rule with no fix.
-    """
-
-    judge: Reference
-    fix: Reference | None = None
-
-
-@dataclass(frozen=True)
 class Declaration:
     """An extension's declaration file, read and judged.
 
@@ -232,7 +217,6 @@ class Declaration:
             function that answers it or to its literal answer.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
-        rules: The rules it adds to the layering check, by name.
     """
 
     extension: str
@@ -261,7 +245,6 @@ class Declaration:
         default_factory=dict[str, "Reference | DeclaredValue"]
     )
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    rules: dict[str, DeclaredRule] = field(default_factory=dict[str, DeclaredRule])
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -474,10 +457,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
         ),
-        rules={
-            str(name): reader.rule(str(name), table)
-            for name, table in data.get("rules", {}).items()
-        },
     )
 
 
@@ -654,8 +633,9 @@ class _Reader:
         A ``[checks.<tool>.<role>]`` table is the step
         ``[phases.<role>.<tool>]``, an ``[options]`` table is
         ``enabled`` on the step, a ``[root-files."<path>"]`` table is
-        ``[fragments."<path>"]``, and a key the step table dropped says
-        what says it now. Read before the contract judges the file,
+        ``[fragments."<path>"]``, a ``[rules.<name>]`` table is
+        ``[phases.layering.<name>]``, and a key the step table dropped
+        says what says it now. Read before the contract judges the file,
         which would refuse the key as unknown without saying what
         replaced it. The tables under ``[for.<target>]`` are judged
         the same way.
@@ -718,6 +698,22 @@ class _Reader:
                 " its render there, module:function called with the workspace root,"
                 " and a package-level extension's fragment lives while a package"
                 " lists it",
+            )
+        if "rules" in data:
+            # The first rule names the step it is; a bare table names
+            # the shape.
+            where = [*prefix, "rules"]
+            step = "<step>"
+            rules = data["rules"]
+            if isinstance(rules, dict) and cast("dict[str, Any]", rules):
+                step = next(iter(cast("dict[str, Any]", rules)))
+                where.append(step)
+            raise self.refuse(
+                tuple(where),
+                f"is [phases.layering.{step}]: a rule is a step of the layering"
+                " phase, its main a reference to its code, module:function called"
+                " with the gate's context over the one parse, and its fix the same"
+                " shape where it rewrites",
             )
         phases = data.get("phases")
         if not isinstance(phases, dict):
@@ -1183,20 +1179,6 @@ class _Reader:
             if "widen" in table
             else None,
             ignores=tuple(table.get("ignores", ())),
-        )
-
-    def rule(self, name: str, table: Mapping[str, Any]) -> DeclaredRule:
-        """The rule ``[rules.<name>]`` declares; refuses one with no judge."""
-        if "judge" not in table:
-            raise self.refuse(
-                ("rules", name),
-                'names no judge; add judge = "module:function", the function'
-                " that returns the rule's problems",
-            )
-        fix = table.get("fix")
-        return DeclaredRule(
-            judge=self.reference(table["judge"], ("rules", name, "judge")),
-            fix=None if fix is None else self.reference(fix, ("rules", name, "fix")),
         )
 
     def reference(self, text: object, where: tuple[str, ...]) -> Reference:
