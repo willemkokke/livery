@@ -382,6 +382,11 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
             "conan_tools",
             lambda root: (str(provider), str(tmp_path / "bin"), ""),
         )
+        # The container's own conan install is another test's; here the
+        # faked directory holds no binary to ask.
+        monkeypatch.setattr(
+            _python_nanobind, "conan_version", lambda root, conan: "2.0.0"
+        )
         env = _python_nanobind.conan_environment(tmp_path)
         assert f"-v {written}:/project/conanws.yml:ro" in env["CIBW_CONTAINER_ENGINE"]
 
@@ -801,9 +806,13 @@ def test_the_rendered_extension_configures_from_its_preset(
 def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # No receipt and a binary that names nothing: the refusal names fm sync.
+    # No receipt and no binary: the refusal names fm sync, never the
+    # spawn's own error.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    with pytest.raises(_FAILURES, match="no conan at"):
+        _python_nanobind.conan_version(tmp_path, str(bin_dir))
+    # A binary that names nothing refuses the same way.
     conan = bin_dir / "conan"
     conan.write_text("#!/bin/sh\necho nothing here\n")
     conan.chmod(0o755)

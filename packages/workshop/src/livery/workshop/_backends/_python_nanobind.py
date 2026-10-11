@@ -292,14 +292,17 @@ def conan_version(root: Path, conan: str) -> str:
     held = receipts(root).get("conan")
     if held is not None and held.version:
         return held.version
-    result = footman.run([str(Path(conan) / "conan"), "--version"], nofail=True)
+    why = "a Linux build container installs conan at the host's version"
+    remedy = f"`{footman.prog()} sync` writes the receipt that names it"
+    try:
+        result = footman.run([str(Path(conan) / "conan"), "--version"], nofail=True)
+    except FileNotFoundError:
+        fail(f"no conan at {conan}, and {why}; {remedy}")
     found = re.search(r"(\d+\.\d+\.\d+)", f"{result.stdout}{result.stderr}")
     if result.code != 0 or found is None:
         fail(
             f"conan at {conan} names no version (`conan --version` exited"
-            f" {result.code}), and a Linux build container installs conan at"
-            f" the host's version; `{footman.prog()} sync` writes the receipt"
-            " that names it"
+            f" {result.code}), and {why}; {remedy}"
         )
     return found.group(1)
 
