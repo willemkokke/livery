@@ -78,7 +78,7 @@ import os
 import re
 import tempfile
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -821,18 +821,21 @@ def remote_snapshot(
     answers from it, and a ref whose commit the checkout already
     holds is read with no network at all. The refs whose names start
     with a prefix in *fetch* (spelled below the namespace, ``metrics``
-    or ``run/1400/``) and whose commits the checkout lacks are fetched
-    together, one round trip, when the block opens; a ref outside
-    them is fetched on its own read. A ref another writer moved after
-    the listing is listed again and read at its current commit, so a
-    concurrent writer never turns a read into a failure. A write
-    inside keeps its compare-and-swap on the listed sha: a refused
-    push lists again and retries, and a successful write records its
-    new sha, so a read after it sees it. A listing the forge could not
-    answer makes
-    every read inside a failure naming the reason and every listing
-    unlistable, never an absence. A block opened inside another for
-    the same checkout shares the outer listing.
+    or ``run/1400/``, or in full from ``refs/`` for another namespace,
+    ``refs/workshop-trace/about/``) and whose commits the checkout
+    lacks are fetched together, one round trip, when the block opens.
+    A read of a ref outside them brings the ref's whole key group in
+    one fetch (`_key_group`), so a loop over a family's keys costs one
+    round trip whichever ref it reads first. A ref another writer
+    moved after the listing is listed again and read at its current
+    commit, so a concurrent writer never turns a read into a failure.
+    A write inside keeps its compare-and-swap on the listed sha: a
+    refused push lists again and retries, and a successful write
+    records its new sha, so a read after it sees it. A listing the
+    forge could not answer makes every read inside a failure naming
+    the reason and every listing unlistable, never an absence. A block
+    opened inside another for the same checkout shares the outer
+    listing and brings what its own *fetch* names against it.
 
     With *publish* the listing is written to a file whose path the
     block yields, for the caller to hand its child processes under
@@ -846,6 +849,7 @@ def remote_snapshot(
     """
     key = root.resolve()
     if key in _SNAPSHOTS:
+        _bring_prefixes(root, _SNAPSHOTS[key], fetch)
         yield None
         return
     snapshot = _published_snapshot(key)
@@ -853,10 +857,7 @@ def remote_snapshot(
         refs, why = _list_namespace(root)
         snapshot = _Snapshot(refs, why)
     refs = snapshot.refs
-    if refs is not None:
-        prefixes = tuple(NAMESPACE + prefix for prefix in fetch)
-        wanted = {ref: sha for ref, sha in refs.items() if ref.startswith(prefixes)}
-        _bring(root, snapshot, wanted)  # a ref it cannot bring fails at its read
+    _bring_prefixes(root, snapshot, fetch)
     published_here = ""
     if publish and refs is not None and snapshot.published is None:
         with tempfile.NamedTemporaryFile(
@@ -872,6 +873,50 @@ def remote_snapshot(
         _SNAPSHOTS.pop(key, None)
         if published_here:
             Path(published_here).unlink(missing_ok=True)
+
+
+def _prefix_ref(prefix: str) -> str:
+    """A *fetch* prefix as a ref prefix: under `NAMESPACE` unless spelled in full."""
+    return prefix if prefix.startswith("refs/") else NAMESPACE + prefix
+
+
+def _bring_prefixes(root: Path, snapshot: _Snapshot, fetch: Iterable[str]) -> None:
+    """Bring every listed ref under the prefixes *fetch* names local, in one fetch.
+
+    A ref the fetch cannot bring is left to fail at its read, which
+    names the reason.
+    """
+    prefixes = tuple(_prefix_ref(prefix) for prefix in fetch)
+    if snapshot.refs is None or not prefixes:
+        return
+    wanted = {
+        ref: sha for ref, sha in snapshot.refs.items() if ref.startswith(prefixes)
+    }
+    _bring(root, snapshot, wanted)
+
+
+def _key_group(snapshot: _Snapshot, ref: str, sha: str) -> dict[str, str]:
+    """*ref* and the listed refs of its key group, by sha.
+
+    A family keeps one ref per key under one prefix, and a reader of
+    one key reads the others soon after, so a read of one brings the
+    group in one fetch. The group is every listed ref under the ref's
+    parent with the same number of parts: a run's legs, a base's legs,
+    every commit a run was about. A ref directly under its namespace
+    (``metrics``) is a group of one, and so is a family's single
+    series beside its keys (``coverage/marks`` beside
+    ``coverage/<base>/<leg>``), since its depth differs.
+    """
+    group = {ref: sha}
+    space = next((s for s in (NAMESPACE, TRACE_NAMESPACE) if ref.startswith(s)), "")
+    if snapshot.refs is None or not space or "/" not in ref[len(space) :]:
+        return group
+    parent = ref.rpartition("/")[0] + "/"
+    depth = ref.count("/")
+    for name, listed in snapshot.refs.items():
+        if name.startswith(parent) and name.count("/") == depth:
+            group[name] = listed
+    return group
 
 
 def fetch_store(root: Path) -> tuple[int, str]:
@@ -1042,11 +1087,13 @@ def _reachable(
 
     The listed *sha* when the checkout holds it or the fetch brings it;
     the ref's current commit when the remote moved past the listing;
-    ``None`` with no reason when the ref is gone from the remote.
+    ``None`` with no reason when the ref is gone from the remote. The
+    fetch brings the ref's whole key group (`_key_group`), so the
+    reads of its siblings that follow cost no round trip.
     """
     if sha in snapshot.local:
         return sha, ""
-    failed = _bring(root, snapshot, {ref: sha})
+    failed = _bring(root, snapshot, _key_group(snapshot, ref, sha))
     if ref in failed:
         return None, failed[ref]
     if snapshot.refs is None:
@@ -1430,27 +1477,64 @@ def drop(root: Path, ref: str) -> str:
     return ""
 
 
-def _commit_time(root: Path, ref: str) -> datetime | None:
-    """When *ref*'s commit was made, remote refs fetched; ``None`` when unreadable."""
-    at = ref
-    if not ref.startswith(LOCAL_NAMESPACE):
-        snapshot = _snapshot(root)
-        if snapshot is not None:
-            if snapshot.refs is None or ref not in snapshot.refs:
-                return None
-            sha, why = _reachable(root, snapshot, ref, snapshot.refs[ref])
-            if why or sha is None:
-                return None
-            at = sha
-        else:
-            fetched = _git(root, "fetch", "--quiet", "origin", ref)
-            if fetched.code != 0:
-                return None
-            at = "FETCH_HEAD"
-    stamp = _git(root, "log", "-1", "--format=%ct", at).stdout.strip()
-    if not stamp.isdigit():
-        return None
-    return datetime.fromtimestamp(int(stamp), tz=UTC)
+def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]:
+    """When each of *refs*' commits was made; ``None`` for one gone or unreadable.
+
+    As few processes as the refs allow, whatever their number: the
+    remote refs are brought local together through the open snapshot,
+    and every commit's time is read by one ``git log`` fed through
+    stdin, so a family of a thousand keys costs the janitor two calls
+    rather than two per key. A local ref is read from the checkout's
+    own refs in one call as well. Remote refs are read inside a
+    snapshot alone, which `sweep` opens; outside one they are unknown.
+    """
+    found: dict[str, datetime | None] = dict.fromkeys(refs)
+    local = [ref for ref in refs if ref.startswith(LOCAL_NAMESPACE)]
+    remote = [ref for ref in refs if not ref.startswith(LOCAL_NAMESPACE)]
+    if local:
+        listed = _git(
+            root,
+            "for-each-ref",
+            "--format=%(refname) %(committerdate:unix)",
+            *local,
+        )
+        for line in listed.stdout.splitlines():
+            ref, _, stamp = line.partition(" ")
+            if ref in found and stamp.isdigit():
+                found[ref] = datetime.fromtimestamp(int(stamp), tz=UTC)
+    if not remote:
+        return found
+    snapshot = _snapshot(root)
+    if snapshot is None or snapshot.refs is None:
+        return found
+    wanted = {ref: snapshot.refs[ref] for ref in remote if ref in snapshot.refs}
+    failed = _bring(root, snapshot, wanted)
+    at: dict[str, str] = {}
+    for ref in wanted:
+        # A ref another writer moved is listed again by the bring and
+        # read at its current commit; one it dropped is left unknown.
+        sha = snapshot.refs.get(ref) if snapshot.refs is not None else None
+        if ref not in failed and sha is not None:
+            at[ref] = sha
+    if not at:
+        return found
+    logged = _git(
+        root,
+        "log",
+        "--no-walk=unsorted",
+        "--format=%H %ct",
+        "--stdin",
+        stdin="".join(f"{sha}\n" for sha in sorted(set(at.values()))),
+    )
+    stamps: dict[str, str] = {}
+    for line in logged.stdout.splitlines():
+        sha, _, stamp = line.partition(" ")
+        if stamp.isdigit():
+            stamps[sha] = stamp
+    for ref, sha in at.items():
+        if sha in stamps:
+            found[ref] = datetime.fromtimestamp(int(stamps[sha]), tz=UTC)
+    return found
 
 
 def sweep(
@@ -1474,18 +1558,22 @@ def sweep(
     keys cannot be told, drops nothing and says so. Under *dry_run*
     every line says what would go and nothing is written. Every line
     names what happened; a failure is a line, never a raise, and a
-    second sweep finds nothing to do.
+    second sweep finds nothing to do. A remote sweep reads through one
+    snapshot of the namespace, its caller's when one is open, so a
+    family's keys, rows and commit times cost a fetch per key group,
+    never one per key.
     """
     moment = now or datetime.now(UTC)
     lines: list[str] = []
     skipped = False
-    for item in declared:
-        if not item.local and not remote:
-            skipped = True
-        elif isinstance(item, Series):
-            lines += _sweep_series(root, item, dry_run=dry_run, now=moment)
-        else:
-            lines += _sweep_family(root, item, dry_run=dry_run, now=moment)
+    with remote_snapshot(root) if remote else nullcontext():
+        for item in declared:
+            if not item.local and not remote:
+                skipped = True
+            elif isinstance(item, Series):
+                lines += _sweep_series(root, item, dry_run=dry_run, now=moment)
+            else:
+                lines += _sweep_family(root, item, dry_run=dry_run, now=moment)
     if skipped:
         lines.append("  remote series: swept inside CI, never from a machine")
     return lines
@@ -1551,11 +1639,21 @@ def _sweep_family(
             " told; none dropped by count"
         )
     verb = "would drop" if dry_run else "dropped"
+    # The commit times the rules below read, in one listing, one fetch
+    # and one log for the whole family: every key's under an age rule,
+    # the gone keys' under a linger.
+    timed = [
+        family.at(*key).ref
+        for key in keys
+        if family.stale_after is not None
+        or (family.linger is not None and current is not None and key not in current)
+    ]
+    made_by = _commit_times(root, timed) if timed else {}
     for key in keys:
         series = family.at(*key)
         reason = "" if key[0] not in beyond else over_words
         if family.stale_after is not None:
-            made = _commit_time(root, series.ref)
+            made = made_by.get(series.ref)
             if made is None:
                 lines.append(f"  {series.ref}: unreadable; kept")
                 continue
@@ -1565,7 +1663,7 @@ def _sweep_family(
         if not reason and current is not None and key not in current:
             reason = f"no current {' and '.join(family.keys)} produces it"
             if family.linger is not None:
-                made = _commit_time(root, series.ref)
+                made = made_by.get(series.ref)
                 kept: timedelta | None = None if made is None else now - made
                 if kept is not None and kept <= family.linger:
                     # A run in flight may still read it: main's union

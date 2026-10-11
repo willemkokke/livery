@@ -1346,3 +1346,124 @@ def test_the_mirror_that_cannot_be_listed_and_a_stamp_that_is_not_a_row_are_reas
     with _state.fetched_snapshot(work):
         found = _state.read(work, REF)
     assert found.failed and found.reason.endswith("the mirror could not be listed")
+
+
+# --- the batch is the only way a read reaches origin --------------------------
+
+
+def test_a_read_inside_a_snapshot_brings_the_refs_key_group_in_one_fetch(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    family = _state.Keyed("fam", ("leg", "unit"), ci_only=False)
+    keys = [("a", "x"), ("a", "y"), ("b", "x"), ("b", "y")]
+    for key in keys:
+        assert family.series(*key).put(other, {"r": {"k": key}}, message="m") == ""
+    # A single series beside the keys, one level up: its own group.
+    marks = _state.Series("fam/marks", ci_only=False)
+    assert marks.put(other, {"r": {"m": 1}}, message="marks") == ""
+    with _state.remote_snapshot(work), counting_spawns() as spawned:
+        assert [row.name for row in marks.rows(work).rows] == ["r"]
+        assert spawned["git fetch"] == 1
+        # A key's read brings its siblings under the same parent; the
+        # sibling's read then answers from the object store.
+        expected = {("a", "x"): 2, ("a", "y"): 2, ("b", "x"): 3, ("b", "y"): 3}
+        for key in keys:
+            found = family.series(*key).rows(work)
+            assert [row.data["k"] for row in found.rows] == [list(key)], key
+            assert spawned["git fetch"] == expected[key], (key, spawned)
+
+
+def test_a_snapshot_names_a_prefix_of_another_namespace_in_full(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    traces = _state.Keyed(
+        "tr", ("run", "leg"), ci_only=False, namespace=_state.TRACE_NAMESPACE
+    )
+    for key in (("1", "a"), ("1", "b"), ("2", "a")):
+        assert traces.series(*key).put(other, {"r": {}}, message="m") == ""
+    with (
+        counting_spawns() as spawned,
+        _state.remote_snapshot(work, fetch=(traces.prefix,)),
+    ):
+        assert spawned["git fetch"] == 1
+        for key in (("1", "a"), ("1", "b"), ("2", "a")):
+            assert not traces.series(*key).rows(work).failed
+        assert spawned["git fetch"] == 1, spawned
+
+
+def test_a_block_inside_another_brings_what_it_names(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    series = [_state.Series(name, ci_only=False) for name in ("alpha", "beta", "gamma")]
+    for item in series:
+        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
+    with _state.remote_snapshot(work, fetch=("alpha",)), counting_spawns() as inner:
+        with _state.remote_snapshot(work, fetch=("beta", "gamma")):
+            assert inner["git fetch"] == 1
+            for item in series[1:]:
+                assert [row.data["x"] for row in item.rows(work).rows] == [item.name]
+        assert inner["git fetch"] == 1 and inner["git ls-remote"] == 0, inner
+
+
+def test_the_janitor_reads_a_familys_commit_times_in_one_fetch_and_one_log(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    family = _state.Keyed(
+        "halves", ("run", "leg"), ci_only=False, stale_after=timedelta(hours=6)
+    )
+    keys = [(str(run), leg) for run in (1, 2, 3) for leg in ("a", "b")]
+    for key in keys:
+        assert family.series(*key).put(other, {"r": {}}, message="m") == ""
+    # The fallback first: no block open, the sweep opens its own, so
+    # the keys are listed once, their commits brought in one fetch,
+    # their times read in one log, and their rows from the object store.
+    with counting_spawns() as bare:
+        lines = _state.sweep(work, (family,), remote=True, dry_run=True)
+    assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
+    assert bare["git fetch"] == 1 and bare["git log"] == 1, bare
+    assert bare["git ls-remote"] == 1, bare
+    # Inside a caller's block, from a checkout holding none of the
+    # commits (a clone over the wire brings the branches alone): one
+    # fetch and one log, and no listing beyond the block's own.
+    cold = tmp_path / "cold"
+    _git(tmp_path, "clone", "-q", "--no-local", str(tmp_path / "origin.git"), str(cold))
+    with _state.remote_snapshot(cold), counting_spawns() as snap:
+        lines = _state.sweep(cold, (family,), remote=True, dry_run=True)
+    assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
+    assert snap["git fetch"] == 1 and snap["git log"] == 1, snap
+    assert snap["git ls-remote"] == 0, snap
+
+
+def test_a_local_familys_commit_times_are_read_in_one_call_and_no_fetch(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    family = _state.Keyed(
+        "aged",
+        ("run", "leg"),
+        ci_only=False,
+        local=True,
+        stale_after=timedelta(hours=6),
+    )
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+    assert family.series("1", "a").put(work, {"r": {}}, message="old") == ""
+    monkeypatch.delenv("GIT_COMMITTER_DATE")
+    monkeypatch.delenv("GIT_AUTHOR_DATE")
+    assert family.series("2", "a").put(work, {"r": {}}, message="young") == ""
+    with counting_spawns() as spawned:
+        lines = _state.sweep(work, (family,), remote=False)
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0, spawned
+    # One listing of the keys, one read of every key's commit time.
+    assert spawned["git for-each-ref"] == 2, spawned
+    old, young = family.series("1", "a").ref, family.series("2", "a").ref
+    assert any(line.startswith(f"  {old}: ") and "dropped" in line for line in lines)
+    assert f"  {young}: 1 row(s), within its bounds" in lines

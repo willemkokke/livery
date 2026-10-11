@@ -1279,3 +1279,35 @@ def test_a_chain_written_for_a_person_records_the_zero_it_is_measured_from(
     nothing, why = _traces.write_chain(work, cast(Any, repo), "a" * 40, depth=1)
     assert nothing is None
     assert any("no run assembled" in line for line in why)
+
+
+def test_the_assembler_brings_every_legs_trace_in_one_fetch(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typing import cast
+
+    from livery.forge import Repository
+    from workshop_spawns import counting_spawns
+
+    began = "2026-09-27T10:00:00Z"
+    for leg in ("check", "docs", "gate"):
+        _pushed(work, monkeypatch, leg=leg, origin=_epoch(began), tasks={leg: 1000.0})
+    # A checkout holding none of the traces (a clone over the wire
+    # brings the branches alone): the three legs come in one listing
+    # and one fetch, not one fetch per leg.
+    cold = tmp_path / "cold"
+    subprocess.run(
+        ["git", "clone", "-q", "--no-local", str(tmp_path / "origin.git"), str(cold)],
+        check=True,
+    )
+    _contract(cold)
+    jobs = tuple(
+        _job(leg, started=began, completed="2026-09-27T10:00:01Z")
+        for leg in ("check", "docs", "gate")
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    with counting_spawns() as spawned:
+        made = _traces.assemble(cold, repo, "77")
+    assert spawned["git fetch"] == 1 and spawned["git ls-remote"] == 1, spawned
+    tasks = {e["name"] for e in made.events if e.get("cat") == "task"}
+    assert tasks == {"check", "docs", "gate"}
