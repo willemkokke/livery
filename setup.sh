@@ -10,18 +10,6 @@
 # emission (GITHUB_ENV/GITHUB_PATH) for the CI steps after it, which
 # then call fm bare.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/0.12.7/install.sh | sh >&2
-    PATH="$HOME/.local/bin:$PATH"
-    export PATH
-    # Name the install that failed here. Left to fall through, uv's
-    # absence surfaces below as "uv sync failed", which sends the
-    # reader after the venv instead of after the network.
-    if ! command -v uv >/dev/null 2>&1; then
-        echo "setup: could not install uv - check network access to astral.sh" >&2
-        return 1 2>/dev/null || exit 1
-    fi
-fi
 # On a GitHub job uv's cache and the runner's data directory, the tool
 # store under it, live under the runner's temp, the working drive. On
 # a Windows runner the working drive is not the home directory's: a
@@ -37,6 +25,32 @@ if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
     UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
     FOOTMAN_DATA_DIR="${FOOTMAN_DATA_DIR:-$RUNNER_TEMP/footman}"
     export UV_CACHE_DIR FOOTMAN_DATA_DIR
+fi
+# uv at the lock's pin, the version the venv carries: every sync in
+# this job, this script's and fm's own, runs the same uv and
+# fills one cache. A uv on PATH at the pin serves; any other version
+# is left where it is, and the pinned one is installed once, under
+# the runner's data directory, and put ahead of it. Without a lock
+# there is no pin, and any uv serves.
+_pin="0.12.7"
+_uv_at_pin() {
+    command -v uv >/dev/null 2>&1 || return 1
+    [ -z "$_pin" ] || [ "$(uv --version 2>/dev/null | cut -d' ' -f2)" = "$_pin" ]
+}
+if ! _uv_at_pin; then
+    _uv_dir="${FOOTMAN_DATA_DIR:-$HOME/.local/share/footman}/uv/${_pin:-any}"
+    if [ ! -x "$_uv_dir/uv" ]; then
+        curl -LsSf https://astral.sh/uv/0.12.7/install.sh | env UV_UNMANAGED_INSTALL="$_uv_dir" sh >&2
+    fi
+    PATH="$_uv_dir:$PATH"
+    export PATH
+    # Name the install that failed here. Left to fall through, uv's
+    # absence surfaces below as "uv sync failed", which sends the
+    # reader after the venv instead of after the network.
+    if ! _uv_at_pin; then
+        echo "setup: could not install uv $_pin: check network access to astral.sh" >&2
+        return 1 2>/dev/null || exit 1
+    fi
 fi
 # An ARRAY, not a string: CI may invoke this with zsh, which does not
 # word-split unquoted expansions, so a two-word string would arrive

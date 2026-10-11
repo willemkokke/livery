@@ -177,6 +177,16 @@ def _stub(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+#: The arm a stubbed uv answers `--version` with, at the test lock's pin.
+_AT_PIN = 'case "$1" in --version) echo "uv 0.12.7"; exit 0;; esac\n'
+
+
+def _uv_stub(path: Path, body: str) -> None:
+    """A stubbed uv at the pin: *body* follows the shebang and the version arm."""
+    shebang, _, rest = body.partition("\n")
+    _stub(path, shebang + "\n" + _AT_PIN + rest)
+
+
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 @pytest.mark.skipif(
     sys.platform == "win32",
@@ -191,15 +201,59 @@ def test_a_failed_uv_install_names_the_network(tmp_path: Path) -> None:
         [str(BASH), "setup.sh"], cwd=root, env=env, capture_output=True, text=True
     )
     assert done.returncode == 1
-    assert "could not install uv" in done.stderr
+    assert "could not install uv 0.12.7:" in done.stderr
     assert "astral.sh" in done.stderr
+
+
+@pytest.mark.skipif(BASH is None, reason="no bash on this machine")
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the stubbed curl and sh are the POSIX entry's install path",
+)
+def test_a_uv_at_another_version_is_left_alone_and_the_pin_installed_once(
+    tmp_path: Path,
+) -> None:
+    # The runner's PATH holds some uv; the job's syncs, this script's
+    # and fm's, must run the lock's pin and share one cache. The
+    # pinned uv lands under the runner's data directory, once.
+    root, bin_dir, env = _script_home(tmp_path)
+    other = tmp_path / "other-calls"
+    _stub(
+        bin_dir / "uv",
+        f'#!/bin/sh\ncase "$1" in --version) echo "uv 0.11.0"; exit 0;; esac\n'
+        f'echo "$@" >> "{other}"\nexit 0\n',
+    )
+    data = tmp_path / "data"
+    env["FOOTMAN_DATA_DIR"] = str(data)
+    curls = tmp_path / "curls"
+    _stub(bin_dir / "curl", f'#!/bin/sh\necho "$@" >> "{curls}"\nexit 0\n')
+    pinned_calls = tmp_path / "pinned-calls"
+    # The installer, stubbed: it writes a uv at the pin where it is told.
+    _stub(
+        bin_dir / "sh",
+        f'#!{BASH}\nmkdir -p "$UV_UNMANAGED_INSTALL"\n'
+        f"cat > \"$UV_UNMANAGED_INSTALL/uv\" <<'EOF'\n#!/bin/sh\n{_AT_PIN}"
+        f'echo "$@" >> "{pinned_calls}"\nmkdir -p "{root}/.venv"\nexit 0\nEOF\n'
+        f'chmod +x "$UV_UNMANAGED_INSTALL/uv"\n',
+    )
+    for _ in range(2):
+        done = subprocess.run(
+            [str(BASH), "setup.sh"], cwd=root, env=env, capture_output=True, text=True
+        )
+        assert done.returncode == 0, done.stderr
+    assert (data / "uv" / "0.12.7" / "uv").is_file()
+    # Installed once, every sync through the pinned uv, none through the other.
+    assert len(curls.read_text().splitlines()) == 1
+    assert not other.exists()
+    syncs = [line for line in pinned_calls.read_text().splitlines() if "sync" in line]
+    assert len(syncs) >= 2
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 def test_a_failed_sync_is_named_after_one_retry(tmp_path: Path) -> None:
     root, bin_dir, env = _script_home(tmp_path)
     calls = tmp_path / "uv-calls"
-    _stub(
+    _uv_stub(
         bin_dir / "uv",
         f'#!/bin/sh\necho "$@" >> "{calls}"\nexit 1\n',
     )
@@ -217,7 +271,7 @@ def test_a_failed_sync_is_named_after_one_retry(tmp_path: Path) -> None:
 def test_the_happy_path_syncs_locked_records_and_emits(tmp_path: Path) -> None:
     root, bin_dir, env = _script_home(tmp_path)
     calls = tmp_path / "uv-calls"
-    _stub(
+    _uv_stub(
         bin_dir / "uv",
         f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
     )
@@ -254,7 +308,7 @@ def test_a_native_member_is_left_to_the_workshop_sync(tmp_path: Path) -> None:
     assert native_members(root) == ("acme-ext",)
     (root / "setup.sh").write_text(entry_script(root))
     calls = tmp_path / "uv-calls"
-    _stub(
+    _uv_stub(
         bin_dir / "uv",
         f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
     )
@@ -294,7 +348,7 @@ def test_sourcing_the_entry_enters_without_persisting(tmp_path: Path) -> None:
     root, bin_dir, env = _script_home(tmp_path)
     (root / "setup.sh").write_text(entry_script(root))
     calls = tmp_path / "uv-calls"
-    _stub(
+    _uv_stub(
         bin_dir / "uv",
         f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
     )
