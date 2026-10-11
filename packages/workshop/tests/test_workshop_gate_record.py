@@ -285,7 +285,7 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
     monkeypatch.setattr(_state, "run_context", lambda environ=None: run)
     assert _verified.SERIES.put(work, {base: {"scope": "full"}}, message="ci") == ""
     monkeypatch.setattr(_state, "run_context", lambda environ=None: None)
-    assert _state.fetch_store(work) == (1, "")
+    assert _state.fetch_store(work)[:2] == (1, "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     with counting_spawns() as spawned, _state.fetched_snapshot(work):
         assert _gate_record.verified_roots(work, git, "main") == ({base}, "")

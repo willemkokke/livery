@@ -21,6 +21,7 @@ from livery.footman import Forward, doc, fail, step, task
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._state import Fetched
 
 from livery.workshop._extensions import (
     workspace_root,
@@ -769,18 +770,19 @@ def fetch_store_lines(root: Path) -> list[str]:
     """
     from livery.workshop._state import fetch_store
 
-    count, why = fetch_store(root)
-    return _store_lines(count, why)
+    return _store_lines(fetch_store(root))
 
 
-def _store_lines(count: int, why: str) -> list[str]:
-    """The line `fetch_store`'s answer prints: the count, or the reason it stands."""
-    if why:
+def _store_lines(fetched: Fetched) -> list[str]:
+    """The line `fetch_store`'s answer prints: what the mirror holds and what moved."""
+    if fetched.why:
         return [
-            f"  store: origin's state store not fetched ({why}); the last"
+            f"  store: origin's state store not fetched ({fetched.why}); the last"
             " snapshot stands"
         ]
-    return [f"  store: {count} ref(s) of origin's state store fetched"]
+    if not fetched.changed:
+        return ["  store: up to date"]
+    return [f"  store: {fetched.changed} ref(s) changed, {fetched.held} mirrored"]
 
 
 def _fetch_origin(root: Path) -> bool:
@@ -792,10 +794,10 @@ def _fetch_origin(root: Path) -> bool:
     """
     from livery.workshop._state import fetch_store
 
-    count, why = fetch_store(root, branches=True)
-    for line in _store_lines(count, why):
+    fetched = fetch_store(root, branches=True)
+    for line in _store_lines(fetched):
         print(line)
-    return not why
+    return not fetched.why
 
 
 def _bring_checkout_current(
@@ -924,8 +926,11 @@ def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
     ]
     lines = [
         *unread,
-        f"  tools: {len(supplied)} receipt(s)"
-        + (f", installed {', '.join(installed)}" if installed else ", all present")
+        (
+            f"  tools: {len(supplied)} receipt(s), installed {', '.join(installed)}"
+            if installed
+            else "  tools: up to date"
+        )
         + (f", from the host: {', '.join(hosted)}" if hosted else ""),
     ]
     lines += [f"  tools: {m.note}" for m in done if m.note]

@@ -159,7 +159,7 @@ def test_a_checkout_that_is_not_current_is_synced_frozen_and_offline_on_stderr(
 
     def sync(**kwargs: object) -> None:
         calls.append(kwargs)
-        print("  tools: 1 receipt(s), all present")
+        print("  tools: up to date")
         _reconcile.record_receipt(tmp_path)
         _tool_receipt(tmp_path, "ruff", "1.0")
         _delivered(tmp_path)
@@ -176,7 +176,7 @@ def test_a_checkout_that_is_not_current_is_synced_frozen_and_offline_on_stderr(
     # A command whose stdout a shell evaluates stays clean.
     assert captured.out == ""
     assert "uv.lock moved past the environment; syncing from what" in captured.err
-    assert "tools: 1 receipt(s), all present" in captured.err
+    assert "tools: up to date" in captured.err
     # Current now: the next command reads the receipts and nothing else.
     _exploding_sync(monkeypatch)
     assert _reconcile.current(tmp_path) == ""
