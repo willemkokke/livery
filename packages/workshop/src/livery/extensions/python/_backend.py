@@ -885,6 +885,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                         # moved it on and kept it at this closure.
                         kept = ", a row kept after its record moved on"
                     break
+                if leg.scope == ABSENT and current is not None:
+                    # The leg did not run on this pull request, so no
+                    # measurement of this closure exists on its
+                    # platform: the record's last one stands in, and
+                    # the merge point measures it afresh.
+                    carried[suite.path] = (base, current)
+                    kept = (
+                        f", at closure {current.closure[:12]} since the leg did not run"
+                    )
+                    break
                 states.append(
                     f"{base} only at {current.closure[:12]}"
                     if current is not None

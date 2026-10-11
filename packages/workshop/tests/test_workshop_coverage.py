@@ -928,6 +928,36 @@ def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
     ]
 
 
+def test_a_leg_a_pull_request_does_not_run_carries_a_changed_suite_at_its_older_closure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = str(_source(tmp_path, "x"))
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setattr(
+        _python,
+        "expected_legs",
+        lambda root, run: (["check-a", "check-b"], ["check-a"]),
+    )
+    # The change moved x's closure; main measured x on check-b at the old one.
+    held = _coverage_store.Record(
+        {"packages/x": _unit("packages/x", {source: [3, 4]}, closure="o" * 64)}
+    )
+    fresh = _unit("packages/x", {source: [1, 2]}, run="7")
+    _union(
+        monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})], held=held
+    )
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        "coverage: packages/x on check-b: reused from run 7 (1 files), main's record,"
+        " at closure oooooooooooo since the leg did not run" in out
+    )
+    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+
+
 def test_a_push_carries_no_absent_leg(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
