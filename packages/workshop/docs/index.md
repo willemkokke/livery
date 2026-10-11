@@ -71,12 +71,6 @@ spelling. Every key is optional:
   the root's list, each one before it; for a package-level extension,
   in the package's set, which takes them in. The layering check keeps
   them listed, and its `--fix` writes a missing workspace entry;
-- `[extension] compatible`, the package-level extensions it combines
-  with on one package where neither requires the other nor contributes
-  to it; a claim from either side connects the two;
-- `[extension] before` and `after`, the extensions it runs before or
-  after in a package's phases, each one it requires, declares
-  compatible or contributes to;
 - `[phases.<phase>]`, the steps a package-level extension adds to a
   package's lifecycle phase: `pre`, `main` and `post`, each
   `"module:function"` in its own package, and the context keys the
@@ -193,26 +187,24 @@ tools, its targets, and each option with whether it is on.
 
 A package's `extensions` names the package-level extensions it is
 composed of. Its set is that list and every package-level extension
-the list requires, transitively. The set is valid when every pair in
-it knows each other: one requires the other, one contributes to the
-other through `[for.<target>]`, or one declares the other
-`compatible`. The layering check refuses an unconnected pair, naming
-both, and a requirement that no list holds at its level. A package
-writes its set as its canonical list, the minimal one: no extension
-another listed one requires, in composition order. In that order an
-extension comes after what it requires and what it names in `after`,
-and before what it names in `before`; ties go alphabetically. The
-layering check names a list in any other form, and its `--fix`
-rewrites it. A package's entry is the extension's name alone: a
-package-level extension takes no options.
+the list requires, transitively: requires alone composes a package,
+and the layering check refuses a requirement that no list holds at
+its level. Two extensions that cannot share a package are refused by
+the rules of the phase they both add steps to, two providers of one
+context key or two owners of one executable, never by a rule over the
+pair. A package writes its set as its canonical list, the minimal
+one: no extension another listed one requires, in composition order.
+In that order an extension comes after what it requires; ties go
+alphabetically. The layering check names a list in any other form,
+and its `--fix` rewrites it. A package's entry is the extension's name
+alone: a package-level extension takes no options.
 
 The mount takes the package-level extensions every package's set
 holds first, in composition order, then `[workspace] extensions` in
 its order, and composition follows the same order. So a package-level
 extension's content, tools and distribution belong to the workspace
-while a package lists it. `fm extensions --combinations` prints every
-valid set of the installed package-level extensions, each named by its
-canonical list joined with `+`, such as `cmake+cpp`.
+while a package lists it. A set is named by its canonical list joined
+with `+`, such as `cmake+cpp`.
 
 A package lives through nine lifecycle phases: `create`, `sync`,
 `stamp`, `build`, `prove`, `publish`, `replay`, `clean` and `run`. Each
@@ -307,14 +299,13 @@ at the directory that holds the root's `workshop.toml`: a package's own
 contract below it is passed over, and nothing is written into the
 package's directory.
 
-An extension's wheel carries its relations. Each `requires` target is
-a dependency of the wheel, and each `compatible` or `[for.<target>]`
-target is an extra of it that requires the target's distribution. A
-target that ships in the same wheel needs neither, since one wheel has
-one version. The composed dev group installs an extension with the
-extras its listed targets put in use, so the version ranges its wheel
-states hold. The conformance kit's `requirements-in-metadata` clause
-judges the wheel's metadata against the declaration.
+An extension's wheel carries its requirements. Each `requires` target
+is a dependency of the wheel, so the resolver holds the two to the
+range the wheel states. A target that ships in the same wheel needs
+none, since one wheel has one version. The composed dev group lists
+each stack distribution once. The conformance kit's
+`requirements-in-metadata` clause judges the wheel's metadata against
+the declaration.
 
 The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its
@@ -1122,7 +1113,7 @@ CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
 checkout's worktrees share and a fresh clone starts without. A read
 or a write of a series is a fixed handful of git processes whatever
-the series holds: one `cat-file --batch` reads every row, one
+the series holds: one `git archive` reads every row, one
 `hash-object --stdin-paths` writes every blob, so a series of three
 hundred rows costs no more processes than one of three (git 2.38 or
 newer). A verb that reads several series takes one snapshot of the

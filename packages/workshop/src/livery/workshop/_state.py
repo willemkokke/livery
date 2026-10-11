@@ -57,13 +57,14 @@ The rules, ported from hse's stamp transport:
   this namespace must never start a workflow.
 
 Plumbing, never porcelain: ``hash-object``, ``mktree``,
-``commit-tree``, ``push``, ``ls-remote``, ``cat-file``. The working
+``commit-tree``, ``push``, ``ls-remote``, ``archive``. The working
 tree and the index are never touched, so a write is safe from the
 middle of any job. A read or a write is a fixed handful of git
-processes whatever the series holds: one ``cat-file --batch`` reads
+processes whatever the series holds: one ``archive`` into a file reads
 every blob of a tree, one ``hash-object --stdin-paths`` writes every
-blob of a commit. The object names go NUL-separated (git 2.38 or
-newer), the paths one per line, which git reads with or without the
+blob of a commit. The archive is read back as bytes from disk, so no
+pipe's newline translation reaches a row on Windows; the paths go
+one per line, which git reads with or without the
 carriage return a text-mode stdin appends on Windows; the tree is fed
 NUL-separated too, so no file name ever crosses a text-mode stdin,
 where that carriage return once named a file no ``show`` could find.
@@ -1170,75 +1171,33 @@ def read(root: Path, ref: str) -> Read:
 def _tree_files(root: Path, sha: str) -> Read:
     """The files of the root commit *sha*, or a failure with git's words.
 
-    Two processes whatever the tree holds: one ``ls-tree`` for the
-    names, one ``cat-file --batch`` for every blob, read back by the
-    byte sizes git prints before each. An object git does not have or
-    a stream that ends early is a failure naming the file: a partial
-    tree must never read as the series. A blob whose bytes do not
-    match its size after the pipe's newline translation (a row a
-    Windows checkout wrote with carriage returns, before blobs were
-    written without translation) is read on its own with ``show``,
-    the translation both agree on.
+    One process whatever the tree holds: ``git archive`` writes the
+    tree as a tar into a temporary file, and the file is read back as
+    bytes, so no pipe's newline translation touches a row and the
+    blobs come back as they were written on any platform. A row a
+    Windows checkout once wrote with carriage returns reads back with
+    them, which the row's parser takes as whitespace.
     """
-    listed = _git(root, "ls-tree", "--name-only", sha)
-    if listed.code != 0:
-        return Read(None, sha, failed=True, reason=_words(listed))
-    names = listed.stdout.split()
-    if not names:
-        return Read({}, sha, failed=False)
-    batch = _git(
-        root,
-        "cat-file",
-        "--batch",
-        "-z",
-        stdin="".join(f"{sha}:{name}\0" for name in names),
-    )
-    if batch.code != 0:
-        return Read(None, sha, failed=True, reason=_words(batch))
-    files, mismatched, why = _split_batch(batch.stdout, names)
-    if why:
-        return Read(None, sha, failed=True, reason=why)
-    for name in mismatched:
-        shown = _git(root, "show", f"{sha}:{name}")
-        if shown.code != 0:
-            return Read(None, sha, failed=True, reason=_words(shown))
-        files[name] = shown.stdout
+    import tarfile
+
+    with tempfile.TemporaryDirectory() as scratch:
+        out = Path(scratch) / "tree.tar"
+        archived = _git(root, "archive", "--format=tar", "-o", str(out), sha)
+        if archived.code != 0:
+            return Read(None, sha, failed=True, reason=_words(archived))
+        files: dict[str, str] = {}
+        try:
+            with tarfile.open(out) as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    handle = tar.extractfile(member)
+                    if handle is None:
+                        continue
+                    files[member.name] = handle.read().decode("utf-8")
+        except (OSError, tarfile.TarError, UnicodeDecodeError) as error:
+            return Read(None, sha, failed=True, reason=f"the tree's archive: {error}")
     return Read(files, sha, failed=False)
-
-
-def _split_batch(
-    output: str, names: list[str]
-) -> tuple[dict[str, str], list[str], str]:
-    """The blobs of a ``cat-file --batch`` stream, by *names* in order.
-
-    Returns the files, the names whose bytes did not match their
-    size, and the reason when the stream is not a whole answer: an
-    object git does not have, or a stream that ends before a header.
-    """
-    data = output.encode("utf-8")
-    files: dict[str, str] = {}
-    mismatched: list[str] = []
-    at = 0
-    for name in names:
-        end = data.find(b"\n", at)
-        if end < 0:
-            return {}, [], f"{name}: the batch stream ended before its header"
-        header = data[at:end].decode("utf-8", "replace").split()
-        at = end + 1
-        if len(header) < 3 or header[1] != "blob" or not header[2].isdigit():
-            said = " ".join(header[1:]) or "nothing"
-            return {}, [], f"{name}: git said {said}"
-        size = int(header[2])
-        body = data[at : at + size]
-        if len(body) == size and data[at + size : at + size + 1] == b"\n":
-            files[name] = body.decode("utf-8")
-            at += size + 1
-            continue
-        # The pipe translated a carriage return away: the sizes no
-        # longer index the stream, so the rest is read one by one.
-        mismatched.extend(names[len(files) + len(mismatched) :])
-        break
-    return files, mismatched, ""
 
 
 def list_refs(root: Path, prefix: str) -> dict[str, str] | None:

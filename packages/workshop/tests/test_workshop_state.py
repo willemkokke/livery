@@ -468,46 +468,22 @@ def test_a_ci_only_series_refuses_a_local_put_by_its_rule(
     assert guarded.rows(work) == _state.Rows(())
 
 
-def _batch_faults(monkeypatch: pytest.MonkeyPatch, output: str) -> None:
-    """Make the next ``cat-file --batch`` answer *output* and exit 0."""
-    real = _state._git
-
-    def faulty(root: Path, *args: str, stdin: str | None = None) -> Any:
-        if args[:2] == ("cat-file", "--batch"):
-            return SimpleNamespace(code=0, stdout=output, stderr="")
-        return real(root, *args, stdin=stdin)
-
-    monkeypatch.setattr(_state, "_git", faulty)
-
-
-def test_a_batch_read_that_is_not_whole_fails_naming_the_row(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+def test_a_tree_that_cannot_be_archived_fails_with_gits_words(
+    repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    assert ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}}, message="two") == ""
-    # An object git does not have: the stream says so, the read fails.
-    _batch_faults(monkeypatch, '0123 blob 8\n{"x": 1}\n0456 missing\n')
-    found = _state.read(work, ROWS.ref)
-    assert found.failed and found.reason == "b: git said missing"
-    # A stream that ends before a header is no answer either.
-    _batch_faults(monkeypatch, '0123 blob 8\n{"x": 1}\n')
-    found = _state.read(work, ROWS.ref)
-    assert (
-        found.failed and found.reason == "b: the batch stream ended before its header"
-    )
-    # A header that is not a blob's is refused with git's words.
-    _batch_faults(monkeypatch, '0123 tree 8\n{"x": 1}\n0456 blob 8\n{"x": 2}\n')
-    found = _state.read(work, ROWS.ref)
-    assert found.failed and found.reason == "a: git said tree 8"
+    found = _state._tree_files(work, "0" * 40)
+    assert found.failed and found.files is None
+    assert "fatal" in found.reason or "not a valid" in found.reason.lower()
 
 
-def test_a_blob_whose_bytes_disagree_with_its_size_is_read_on_its_own(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+def test_a_row_written_with_carriage_returns_reads_back_as_written(
+    repos: tuple[Path, Path],
 ) -> None:
-    # A row written with carriage returns, as a Windows checkout did
-    # before blobs were written without newline translation: the pipe
-    # translates them away, the sizes no longer index the stream, and
-    # the read falls back to one show per remaining file.
+    # A row a Windows checkout wrote with carriage returns, before blobs
+    # were written without newline translation: the archive is read
+    # from a file as bytes, so the row comes back as it is, in one
+    # process beside the ref's resolve.
     _, work = repos
     ref = _state.LOCAL_NAMESPACE + "legacy"
     crlf = work / "crlf.json"
@@ -534,10 +510,12 @@ def test_a_blob_whose_bytes_disagree_with_its_size_is_read_on_its_own(
     with counting_spawns() as spawned:
         found = _state.read(work, ref)
     assert not found.failed and found.files is not None
-    assert found.files["a"].rstrip("\r\n") == crlf.read_bytes().decode().rstrip("\r\n")
+    assert found.files["a"] == crlf.read_bytes().decode()
     assert found.files["b"] == plain.read_bytes().decode()
-    # ls-tree, the batch, then one show per file after the mismatch.
-    assert spawned["git"] == 5
+    # The resolve, then the archive.
+    assert spawned["git"] == 2, spawned
+    rows = _state.Series("legacy", local=True, ci_only=False, schema=2).rows(work)
+    assert [row.data["x"] for row in rows.rows] == [2, 1]
 
 
 def test_a_write_whose_hashes_do_not_match_its_files_is_refused(
@@ -577,14 +555,14 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
             )
             == ""
         )
-    # fetch, rev-parse, ls-tree, cat-file; hash-object, mktree,
-    # commit-tree; push: eight, whatever the size, and no readback.
-    assert six["git"] == sixty["git"] == 8, (six, sixty)
+    # fetch, rev-parse, archive; hash-object, mktree, commit-tree;
+    # push: seven, whatever the size, and no readback.
+    assert six["git"] == sixty["git"] == 7, (six, sixty)
     assert sixty["git ls-remote"] == 0
     with counting_spawns() as reading:
         found = wide.rows(work)
     assert len(found.rows) == 67 and not found.failed
-    assert reading["git"] == 4, reading
+    assert reading["git"] == 3, reading
 
 
 # --- the snapshot: refusals first, then one listing for a verb ----------------

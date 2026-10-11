@@ -328,12 +328,11 @@ def test_outside_a_workspace_the_verb_refuses_and_completion_offers_nothing(
     assert str(raised.value) == "no package is named app: the workspace has no packages"
 
 
-#: A second extension in the app's set: compatible with the fixture's, its
-#: run steps say when they run, and its main must not run.
+#: A second extension in the app's set: its run steps say when they run,
+#: and its main must not run.
 EXTRA = """\
 [extension]
 levels = ["package"]
-compatible = ["acme.native"]
 
 [phases.run]
 pre = "{package}._steps:pre"

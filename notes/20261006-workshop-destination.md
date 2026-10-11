@@ -2551,6 +2551,15 @@ the stack, which this design neither needs nor rules out).
   forecloses it, the toolchain declaration stays typed per family and
   an unreal extension declares its own steps under the same phases.
 
+- 2026-10-11, #1455, #1377 part 7: composition is requires alone.
+  `compatible`, `before` and `after` on `[extension]` are gone with the
+  every-pair check, `fm extensions --combinations` and the extras half
+  of the metadata clause; a package's set is its list and what the list
+  requires, ordered requires first and ties alphabetical, and two
+  extensions that cannot share a package are refused by the phase's own
+  rules. Gone with it: the union-of-all-packages order check, since a
+  set closed under requires shows a cycle inside some package.
+
 ## Open
 
 Each with its options, what each option does not cover, and a

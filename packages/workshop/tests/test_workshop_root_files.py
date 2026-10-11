@@ -100,7 +100,7 @@ def test_two_extensions_writing_one_root_file_refuse_naming_both(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        one=PACKAGE + 'compatible = ["acme.two"]\n' + ROOT_FILE,
+        one=PACKAGE + ROOT_FILE,
         two=PACKAGE + ROOT_FILE,
     )
     fake_steps(tmp_path, "one", RENDER)

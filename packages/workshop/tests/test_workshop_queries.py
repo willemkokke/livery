@@ -59,17 +59,14 @@ def _fakes(
 ) -> Package:
     """Fakes for *declared*, each its declaration and its ``_steps`` source.
 
-    Every fake declares every other compatible, and one package lists them all.
+    One package lists them all.
     """
     names = [f"acme.{name}" for name in declared]
-    texts: dict[str, str] = {}
-    for name, (declaration, _source) in declared.items():
-        others = [other for other in names if other != f"acme.{name}"]
-        listed = ", ".join(f'"{other}"' for other in others)
-        texts[name] = declaration.replace(
-            PACKAGE, PACKAGE + f"compatible = [{listed}]\n", 1
-        )
-    fake_extensions(tmp_path, monkeypatch, **texts)
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        **{name: declaration for name, (declaration, _source) in declared.items()},
+    )
     for name, (declaration, source) in declared.items():
         if "[phases.run]" in declaration:
             source += "\n\ndef main(ctx):\n    del ctx\n"
@@ -195,13 +192,13 @@ def test_a_union_holds_each_answer_once_in_composition_order(
         tmp_path,
         monkeypatch,
         z=(
-            PACKAGE
-            + 'before = ["acme.a"]\n'
-            + _answering(**{"public-modules": "mods"}),
+            PACKAGE + _answering(**{"public-modules": "mods"}),
             "def mods(package):\n    return ('z.api', 'shared')\n",
         ),
         a=(
-            PACKAGE + _answering(**{"public-modules": "mods"}),
+            PACKAGE
+            + 'requires = ["acme.z"]\n'
+            + _answering(**{"public-modules": "mods"}),
             "def mods(package):\n    return ('shared', 'a.api')\n",
         ),
     )
@@ -288,11 +285,15 @@ def test_a_set_whose_order_has_no_start_is_asked_alphabetically(
         tmp_path,
         monkeypatch,
         b=(
-            PACKAGE + 'after = ["acme.a"]\n' + _answering(**{"public-modules": "mods"}),
+            PACKAGE
+            + 'requires = ["acme.a"]\n'
+            + _answering(**{"public-modules": "mods"}),
             "def mods(package):\n    return ('b.api',)\n",
         ),
         a=(
-            PACKAGE + 'after = ["acme.b"]\n' + _answering(**{"public-modules": "mods"}),
+            PACKAGE
+            + 'requires = ["acme.b"]\n'
+            + _answering(**{"public-modules": "mods"}),
             "def mods(package):\n    return ('a.api',)\n",
         ),
     )

@@ -2,18 +2,17 @@
 
 A package lists the package-level extensions it is made of in its own
 ``workshop.toml``. Its set is that list and every package-level
-extension the list requires, transitively. The set is valid when every
-pair in it is connected: one requires the other, one contributes to the
-other through a ``[for.<target>]`` table, or one names the other in
-``[extension] compatible``.
+extension the list requires, transitively: requires alone composes a
+package. Two extensions that cannot share one are refused by the rules
+of the phase they both add steps to, two providers of one key or two
+owners of one executable, never by a rule over the pair.
 
 Composition order is the order a set mounts in and is named in: an
-extension comes after the extensions it requires and the ones it names
-in ``after``, and before the ones it names in ``before``; ties go
+extension comes after the extensions it requires, and ties go
 alphabetically. A package writes its set as the canonical list, the
 minimal one: no extension another member requires, in composition
-order. A combination is a valid set, named by its canonical list joined
-with ``+``.
+order. A combination is a set, named by its canonical list joined with
+``+``.
 
 Every function here reads declarations through a lookup and imports
 nothing: [livery.workshop._extensions][] answers the lookup from what
@@ -22,9 +21,7 @@ is installed, and a test from what it declares.
 
 from __future__ import annotations
 
-import contextlib
 import heapq
-import itertools
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
@@ -52,7 +49,7 @@ class OrderCycle(ValueError):
         super().__init__(
             "the extensions' declared order has no start: "
             + " before ".join((*members, members[0]))
-            + "; remove one requires, before or after among them"
+            + "; remove one requires among them"
         )
 
 
@@ -100,26 +97,6 @@ def implied(names: Iterable[str], lookup: Lookup) -> frozenset[str]:
     return frozenset(found)
 
 
-def connected(first: str, second: str, lookup: Lookup) -> bool:
-    """Whether *first* and *second* know each other, so one package may hold both.
-
-    One requires the other, transitively; one contributes to the other
-    through a ``[for.<target>]`` table; or one names the other in
-    ``compatible``.
-    """
-    for one, other in ((first, second), (second, first)):
-        declared = lookup(one)
-        if declared is None:
-            continue
-        if (
-            other in closure(declared.requires, lookup)
-            or other in declared.compatible
-            or other in declared.target_tables
-        ):
-            return True
-    return False
-
-
 def order(
     names: Iterable[str],
     lookup: Lookup,
@@ -127,16 +104,15 @@ def order(
     requires: bool = True,
     edges: Iterable[tuple[str, str]] = (),
 ) -> tuple[str, ...]:
-    """*names* in order: each after what it requires and names in ``after``.
+    """*names* in order: after what each requires and the *edges*, ties alphabetical.
 
-    An extension also comes before what it names in ``before``. A name
-    outside *names* orders nothing, and ties go alphabetically.
+    A name outside *names* orders nothing.
 
     Args:
         names: The extensions to order.
         lookup: Where each one's declaration is found.
         requires: Whether a requirement comes first. A phase orders by
-            its context keys, ``before`` and ``after`` alone.
+            its context keys alone.
         edges: Further ``(earlier, later)`` pairs, such as a phase's
             context keys from provider to reader.
 
@@ -147,15 +123,11 @@ def order(
     members = sorted(set(names))
     present = set(members)
     waiting: dict[str, set[str]] = {name: set() for name in members}
-    for name in members:
-        declared = lookup(name)
-        if declared is None:
-            continue
-        earlier = (*declared.requires, *declared.after) if requires else declared.after
-        waiting[name].update(other for other in earlier if other in present)
-        for later in declared.before:
-            if later in present:
-                waiting[later].add(name)
+    if requires:
+        for name in members:
+            waiting[name].update(
+                other for other in requirements(name, lookup) if other in present
+            )
     for earlier_name, later_name in edges:
         if earlier_name in present and later_name in present:
             waiting[later_name].add(earlier_name)
@@ -214,45 +186,3 @@ def combination(listed: Iterable[str], lookup: Lookup) -> str:
         OrderCycle: when the set's declared order has no start.
     """
     return "+".join(canonical(listed, lookup))
-
-
-def unconnected(members: Iterable[str], lookup: Lookup) -> list[tuple[str, str]]:
-    """Each pair of *members* that do not know each other, alphabetical."""
-    return [
-        (first, second)
-        for first, second in itertools.combinations(sorted(set(members)), 2)
-        if not connected(first, second, lookup)
-    ]
-
-
-def combinations(names: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
-    """Every valid set of the package-level extensions among *names*, by name, sorted.
-
-    A set is valid when every pair in it is connected, it holds every
-    package-level extension its members require, each of those is
-    installed, and its declared order has a start. Each set is named
-    once, by its canonical list.
-    """
-    candidates = sorted(name for name in set(names) if package_level(name, lookup))
-    found: set[str] = set()
-
-    def grow(chosen: tuple[str, ...], rest: list[str]) -> None:
-        if chosen and _complete(chosen, lookup):
-            with contextlib.suppress(OrderCycle):
-                found.add(combination(chosen, lookup))
-        for index, name in enumerate(rest):
-            if all(connected(name, other, lookup) for other in chosen):
-                grow((*chosen, name), rest[index + 1 :])
-
-    grow((), candidates)
-    return tuple(sorted(found))
-
-
-def _complete(chosen: tuple[str, ...], lookup: Lookup) -> bool:
-    """Whether *chosen* holds every installed package-level extension it requires."""
-    for name in closure(chosen, lookup):
-        if lookup(name) is None:
-            return False
-        if package_level(name, lookup) and name not in chosen:
-            return False
-    return True

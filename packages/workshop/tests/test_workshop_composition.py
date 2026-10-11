@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib.metadata import EntryPoint, distributions
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -13,13 +12,11 @@ from livery.footman import (
     Failed,
     _entries,  # pyright: ignore[reportPrivateUsage]
 )
-from livery.workshop import _checks, _extensions, _tasks, _templates
+from livery.workshop import _checks, _extensions
 from livery.workshop._composition import (
     OrderCycle,
     canonical,
     combination,
-    combinations,
-    connected,
     order,
     package_set,
 )
@@ -42,22 +39,9 @@ def _declared(
     *,
     levels: tuple[str, ...] = ("package",),
     requires: tuple[str, ...] = (),
-    compatible: tuple[str, ...] = (),
-    before: tuple[str, ...] = (),
-    after: tuple[str, ...] = (),
-    contributes: tuple[str, ...] = (),
 ) -> Declaration:
-    tables: dict[str, dict[str, Any]] = {target: {} for target in contributes}
     return Declaration(
-        name,
-        name,
-        Path(name) / "extension.toml",
-        levels=levels,
-        requires=requires,
-        compatible=compatible,
-        before=before,
-        after=after,
-        target_tables=tables,
+        name, name, Path(name) / "extension.toml", levels=levels, requires=requires
     )
 
 
@@ -75,30 +59,19 @@ def restored_checks():
 # The refusals first.
 
 
-def test_an_unconnected_pair_refuses_naming_both(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("key", ["compatible", "before", "after"])
+def test_an_extension_declaring_compatible_before_or_after_refuses_naming_requires(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, cpp=PACKAGE, python=PACKAGE)
-    root_contract(tmp_path, "[]")
-    package_contract(tmp_path, "core", '["acme.cpp", "acme.python"]')
-    assert _extensions.closure_problems(tmp_path) == [
-        "packages/core: `extensions` composes acme.cpp and acme.python, and"
-        " neither requires the other, contributes to it, nor declares it"
-        " compatible; list only one of them, or ask either extension to declare"
-        " the other compatible"
-    ]
-    # A claim from either side connects the two, and so does a contribution.
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        cpp=PACKAGE,
-        python=PACKAGE + 'compatible = ["acme.cpp"]\n',
+    fake_extensions(tmp_path, monkeypatch, odd=PACKAGE + f'{key} = ["acme.other"]\n')
+    with pytest.raises(DeclarationError) as raised:
+        _extensions.declaration("acme.odd")
+    path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
+    assert str(raised.value) == (
+        f"{path}: extension.{key} is not a key: a package's set is its list and"
+        " what the list requires, so composition is requires alone; drop it, and"
+        " name in requires what this extension cannot work without"
     )
-    assert _extensions.closure_problems(tmp_path) == []
-    fake_extensions(
-        tmp_path, monkeypatch, cpp=PACKAGE + '[for."acme.python"]\n', python=PACKAGE
-    )
-    assert _extensions.closure_problems(tmp_path) == []
 
 
 def test_a_requirement_no_list_holds_at_its_level_refuses_naming_it(
@@ -136,57 +109,28 @@ def test_a_requirement_no_list_holds_at_its_level_refuses_naming_it(
     ]
 
 
-@pytest.mark.parametrize(
-    ("declared", "refusal"),
-    [
-        (
-            '[extension]\ncompatible = ["acme.other"]\n',
-            "extension.compatible composes package-level extensions on one package,"
-            " and this extension's levels are workspace; add 'package' to levels,"
-            " or drop compatible",
-        ),
-        (
-            PACKAGE + 'before = ["acme.other"]\n',
-            "extension.before names acme.other, which this extension neither"
-            " requires, declares compatible, nor contributes to; it orders itself"
-            " only against extensions it knows",
-        ),
-        (
-            PACKAGE + 'compatible = ["acme.other"]\nbefore = ["acme.other"]\n'
-            'after = ["acme.other"]\n',
-            "extension.after names acme.other, which before names too; an extension"
-            " runs either before another or after it",
-        ),
-        (
-            PACKAGE + 'compatible = ["acme.odd"]\n',
-            "extension.compatible names acme.odd, this extension itself; it names"
-            " the others",
-        ),
-        (
-            PACKAGE + '\n[options]\ndeep = "judges deeper"\n',
-            "options is turned on by a [workspace] extensions entry, and this"
-            " extension's levels are package; a package's entry is the"
-            " extension's name alone",
-        ),
-    ],
-    ids=["workspace-level", "unknown", "both", "itself", "options"],
-)
-def test_a_composition_the_file_alone_shows_wrong_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared: str, refusal: str
+def test_options_on_a_package_level_extension_refuse_naming_the_level(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, odd=declared)
+    fake_extensions(
+        tmp_path, monkeypatch, odd=PACKAGE + '\n[options]\ndeep = "judges deeper"\n'
+    )
     with pytest.raises(DeclarationError) as raised:
         _extensions.declaration("acme.odd")
     path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
-    assert str(raised.value) == f"{path}: {refusal}"
+    assert str(raised.value) == (
+        f"{path}: options is turned on by a [workspace] extensions entry, and this"
+        " extension's levels are package; a package's entry is the extension's"
+        " name alone"
+    )
 
 
 def test_an_order_with_no_start_refuses_naming_its_cycle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     lookup = _lookup(
-        _declared("a", compatible=("b",), after=("b",)),
-        _declared("b", compatible=("a",), after=("a",)),
+        _declared("a", requires=("b",)),
+        _declared("b", requires=("a",)),
         _declared("c", requires=("a",)),
     )
     with pytest.raises(OrderCycle) as raised:
@@ -194,46 +138,26 @@ def test_an_order_with_no_start_refuses_naming_its_cycle(
     assert raised.value.members == ("a", "b")
     assert str(raised.value) == (
         "the extensions' declared order has no start: a before b before a;"
-        " remove one requires, before or after among them"
+        " remove one requires among them"
     )
-    # The layering check names it per package, and never twice.
+    # The layering check names it per package, and never twice: a set is
+    # closed under requires, so a package listing one member holds both.
     fake_extensions(
         tmp_path,
         monkeypatch,
-        a=PACKAGE + 'compatible = ["acme.b"]\nafter = ["acme.b"]\n',
-        b=PACKAGE + 'compatible = ["acme.a"]\nafter = ["acme.a"]\n',
+        a=PACKAGE + 'requires = ["acme.b"]\n',
+        b=PACKAGE + 'requires = ["acme.a"]\n',
     )
     root_contract(tmp_path, "[]")
-    package_contract(tmp_path, "core", '["acme.a", "acme.b"]')
+    package_contract(tmp_path, "core", '["acme.a"]')
     assert _extensions.closure_problems(tmp_path) == [
         "packages/core: the extensions' declared order has no start: acme.a"
-        " before acme.b before acme.a; remove one requires, before or after"
-        " among them"
+        " before acme.b before acme.a; remove one requires among them"
     ]
     # The mount still finds an order, so the sync that repairs it runs, and
     # the fix leaves the list to the person who removes the cycle.
     assert _extensions.package_extensions(tmp_path) == ("acme.a", "acme.b")
     assert _extensions.write_extensions(tmp_path) == []
-
-
-def test_an_order_only_the_packages_together_cycle_is_named_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        a=PACKAGE + 'compatible = ["acme.b", "acme.c"]\nafter = ["acme.c"]\n',
-        b=PACKAGE,
-        c=PACKAGE + 'compatible = ["acme.a"]\nafter = ["acme.a"]\n',
-    )
-    root_contract(tmp_path, "[]")
-    package_contract(tmp_path, "core", '["acme.a", "acme.b"]')
-    package_contract(tmp_path, "tool", '["acme.c"]')
-    assert _extensions.closure_problems(tmp_path) == [
-        "the package-level extensions the packages list: the extensions' declared"
-        " order has no start: acme.a before acme.c before acme.a; remove one"
-        " requires, before or after among them"
-    ]
 
 
 def test_a_package_entry_with_options_or_nothing_installed_refuses_naming_it(
@@ -284,16 +208,14 @@ def test_a_package_contract_the_mount_cannot_read_lists_nothing_and_the_mount_ru
     assert str(raised.value).startswith(f"{broken}:{refusal}")
 
 
-def test_a_claim_missing_from_the_wheels_metadata_fails_the_kit(
+def test_a_requirement_missing_from_the_wheels_metadata_fails_the_kit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site = tmp_path / "site"
     package = site / "acme_kit_meta"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("")
-    (package / "extension.toml").write_text(
-        PACKAGE + 'requires = ["acme.base"]\ncompatible = ["acme.python"]\n'
-    )
+    (package / "extension.toml").write_text(PACKAGE + 'requires = ["acme.base"]\n')
     info = site / "acme_kit_meta-0.1.dist-info"
     info.mkdir()
     (info / "entry_points.txt").write_text(
@@ -316,33 +238,23 @@ def test_a_claim_missing_from_the_wheels_metadata_fails_the_kit(
     # With no distribution declaring it, there is no metadata to read.
     monkeypatch.setattr(_extensions, "_declared", lambda: previous)
     assert [str(item) for item in clause.judge(Subject("acme_kit_meta"))] == [
-        "requirements-in-metadata: extension acme_kit_meta: declares requires,"
-        " compatible or [for] targets, and no installed distribution declares it in"
-        " workshop.extensions, so its wheel's metadata cannot be read"
+        "requirements-in-metadata: extension acme_kit_meta: declares requires, and"
+        " no installed distribution declares it in workshop.extensions, so its"
+        " wheel's metadata cannot be read"
     ]
     monkeypatch.setattr(_extensions, "_declared", lambda: {**previous, "meta": entry})
     assert [str(item) for item in clause.judge(Subject("acme_kit_meta"))] == [
         "requirements-in-metadata: extension acme_kit_meta: requires acme.base, and"
         " its wheel does not depend on acme-base; a requires range is a dependency"
         " of the wheel, so the resolver holds the two to it",
-        "requirements-in-metadata: extension acme_kit_meta: composes with"
-        " acme.python or contributes to it, and its wheel has no extra"
-        " 'acme-python' that requires acme-python; a compatibility claim is an"
-        " extra of the wheel, which a workspace listing both installs",
     ]
     metadata.write_text(
         "Metadata-Version: 2.4\nName: acme-kit-meta\nVersion: 0.1\n"
         "Requires-Dist: acme-base>=0.1\n"
-        'Requires-Dist: acme-python>=1.0; extra == "acme-python"\n'
-        "Provides-Extra: acme-python\n"
     )
     assert clause.judge(Subject("acme_kit_meta")) == []
     # A target the extension's own wheel ships needs no dependency on it.
-    metadata.write_text(
-        "Metadata-Version: 2.4\nName: acme-base\nVersion: 0.1\n"
-        'Requires-Dist: acme-python>=1.0; extra == "acme-python"\n'
-        "Provides-Extra: acme-python\n"
-    )
+    metadata.write_text("Metadata-Version: 2.4\nName: acme-base\nVersion: 0.1\n")
     assert clause.judge(Subject("acme_kit_meta")) == []
 
 
@@ -356,38 +268,36 @@ def test_a_set_is_the_list_and_the_package_level_extensions_it_requires() -> Non
         _declared("site", levels=("workspace",)),
     )
     assert package_set(("nanobind",), lookup) == ("nanobind", "python")
-    # A requirement connects through whatever it requires in turn.
+    # A requirement pulls in whatever it requires in turn.
     lookup = _lookup(
         _declared("a", requires=("b",)), _declared("b", requires=("c",)), _declared("c")
     )
-    assert connected("a", "c", lookup)
-    assert connected("c", "a", lookup)
+    assert package_set(("a",), lookup) == ("a", "b", "c")
 
 
-def test_the_order_puts_requirements_and_after_first_and_ties_alphabetically() -> None:
+def test_the_order_puts_requirements_first_and_ties_alphabetically() -> None:
     lookup = _lookup(
-        _declared("nanobind", requires=("python",), after=("cmake",)),
+        _declared("nanobind", requires=("python", "cmake")),
         _declared("python"),
-        _declared("cmake", compatible=("nanobind",)),
-        _declared("conan", compatible=("cmake",), before=("cmake",)),
+        _declared("cmake"),
+        _declared("conan", requires=("cmake",)),
     )
     assert order(("python", "nanobind", "cmake", "conan"), lookup) == (
-        "conan",
         "cmake",
+        "conan",
         "python",
         "nanobind",
     )
-    # A phase orders by its keys, before and after, and not by requires.
+    # A phase orders by its keys, and not by requires.
     assert order(
         ("python", "nanobind"), lookup, requires=False, edges=[("nanobind", "python")]
     ) == ("nanobind", "python")
 
 
-def test_a_name_nothing_declares_orders_nothing_and_connects_to_nothing() -> None:
-    lookup = _lookup(_declared("a", compatible=("b",), before=("b",)), _declared("b"))
-    assert not connected("a", "ghost", lookup)
+def test_a_name_nothing_declares_orders_nothing() -> None:
+    lookup = _lookup(_declared("a", requires=("b",)), _declared("b"))
     assert order(("ghost", "a"), lookup) == ("a", "ghost")
-    # Before and the edges name extensions outside the set: no order.
+    # A requirement and the edges name extensions outside the set: no order.
     assert order(("a",), lookup, edges=[("a", "zed"), ("zed", "a")]) == ("a",)
 
 
@@ -403,8 +313,8 @@ def test_a_metadata_line_that_names_no_distribution_is_read_past() -> None:
 
 def test_the_canonical_list_drops_what_another_requires_and_names_the_set() -> None:
     lookup = _lookup(
-        _declared("nanobind", requires=("python",), compatible=("cmake",)),
-        _declared("python", compatible=("cmake",)),
+        _declared("nanobind", requires=("python",)),
+        _declared("python"),
         _declared("cmake"),
     )
     assert canonical(("python", "nanobind", "cmake", "python"), lookup) == (
@@ -422,7 +332,7 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
         monkeypatch,
         python=PACKAGE,
         nanobind=PACKAGE + 'requires = ["acme.python"]\n',
-        cpp=PACKAGE + 'compatible = ["acme.zig"]\nbefore = ["acme.zig"]\n',
+        cpp=PACKAGE,
         zig=PACKAGE,
     )
     root_contract(tmp_path, "[]")
@@ -434,8 +344,8 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
         " listed extension; the gate's --fix rewrites it",
         'packages/tool: `extensions` is ["acme.zig", "acme.cpp"], and its canonical'
         ' list is ["acme.cpp", "acme.zig"]; its order is composition order: each'
-        " extension after what it requires and names in after, before what it"
-        " names in before, ties alphabetical; the gate's --fix rewrites it",
+        " extension after what it requires, ties alphabetical; the gate's --fix"
+        " rewrites it",
     ]
     assert _extensions.write_extensions(tmp_path) == [
         '  layering: packages/core `extensions` is ["acme.nanobind"], its canonical'
@@ -498,6 +408,15 @@ def test_the_package_level_extensions_mount_first_in_composition_order(
     ]
 
 
+def test_outside_a_workspace_the_stack_is_the_base_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(tmp_path, monkeypatch)
+    assert _extensions.describe_extensions(tmp_path) == [
+        f"  {_extensions.SELF} (the base)"
+    ]
+
+
 def test_a_package_level_extensions_keys_belong_where_a_package_lists_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -530,98 +449,3 @@ def test_a_package_level_extensions_keys_belong_where_a_package_lists_it(
         f"{root}:\n  native.depth is a key of acme.native, which no package's"
         " `extensions` lists; list the extension, or remove the key"
     )
-
-
-def test_fm_extensions_lists_every_valid_combination_of_what_is_installed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    fake_package_extensions(
-        tmp_path,
-        monkeypatch,
-        python=PACKAGE,
-        nanobind=PACKAGE + 'requires = ["acme.python"]\n',
-        cpp=PACKAGE,
-        cmake=PACKAGE + 'compatible = ["acme.cpp"]\n',
-        site="",
-    )
-    expected = (
-        "acme.cmake",
-        "acme.cmake+acme.cpp",
-        "acme.cpp",
-        "acme.nanobind",
-        "acme.python",
-    )
-    assert _extensions.combination_names() == expected
-    _tasks.extensions(combinations=True)
-    assert capsys.readouterr().out == "".join(f"  {name}\n" for name in expected)
-    # A declaration this workshop cannot take refuses the listing, named.
-    fake_package_extensions(
-        tmp_path, monkeypatch, odd=PACKAGE + 'before = ["acme.zed"]\n'
-    )
-    with pytest.raises(Failed) as raised:
-        _tasks.extensions(combinations=True)
-    assert str(raised.value).startswith(
-        f"{tmp_path / 'site' / 'acme' / 'odd' / 'extension.toml'}: extension.before"
-    )
-    # A set missing what it requires, or with an order with no start, is
-    # never a combination.
-    lookup = _lookup(
-        _declared("a", requires=("absent",)),
-        _declared("b", compatible=("c",), after=("c",)),
-        _declared("c", compatible=("b",), after=("b",)),
-    )
-    assert combinations(("a", "b", "c"), lookup) == ("b", "c")
-
-
-def test_with_no_package_level_extension_installed_the_listing_says_so(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    fake_package_extensions(tmp_path, monkeypatch)
-    _tasks.extensions(combinations=True)
-    assert capsys.readouterr().out == (
-        "  no installed extension declares the package level\n"
-    )
-    # Outside a workspace the stack is the base alone.
-    assert _extensions.describe_extensions(tmp_path) == [
-        f"  {_extensions.SELF} (the base)"
-    ]
-
-
-def test_a_listed_claim_installs_with_its_extra(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        python=PACKAGE,
-        nanobind=PACKAGE + '[for."acme.python"]\n',
-    )
-    entries = (
-        (_extensions.SELF, "livery-workshop"),
-        ("acme.python", "acme-python"),
-        ("acme.nanobind", "acme-nanobind"),
-    )
-    lines = _templates._extension_requirements(  # pyright: ignore[reportPrivateUsage]
-        entries, {"livery-workshop"}
-    )
-    assert lines == ["acme-python", "acme-nanobind[acme-python]"]
-    alone = _templates._extension_requirements(  # pyright: ignore[reportPrivateUsage]
-        entries[::2], {"livery-workshop"}
-    )
-    assert alone == ["acme-nanobind"]
-
-
-def test_a_claim_on_an_extension_of_the_same_wheel_puts_no_extra_in_use(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        python=PACKAGE,
-        nanobind=PACKAGE + 'compatible = ["acme.python"]\n',
-    )
-    present = ("acme.python", "acme.nanobind")
-    assert _extensions.extension_extras("acme.nanobind", present) == ("acme-python",)
-    # One wheel shipping both holds the two to its one version.
-    monkeypatch.setattr(_extensions, "distribution_of", lambda _name: "acme-kit")
-    assert _extensions.extension_extras("acme.nanobind", present) == ()
