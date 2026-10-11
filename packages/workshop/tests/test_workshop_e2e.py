@@ -1510,3 +1510,56 @@ def test_from_main_leaves_a_dev_branch_and_an_unasked_checkout_alone(
     with _e2e.scratch_branch(None, enabled=True):
         pass
     assert "from main" not in capsys.readouterr().out
+
+
+def test_a_footman_without_new_project_gets_the_workshop_added_from_the_index(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    calls: list[tuple[list[str], str]] = []
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        env = kwargs.get("env")
+        assert isinstance(env, dict)
+        calls.append((argv[2:], str(env.get("UV_INDEX", ""))))
+        code = 64 if argv[-2:] == ["new.project", "--help"] else 0
+        return SimpleNamespace(code=code, stdout="", stderr="")
+
+    env = {"UV_INDEX": "file:///dev-index https://pypi.org/simple"}
+    assert _e2e.ensure_birth_verb(env, run=run) is True
+    assert [argv for argv, _ in calls] == [
+        ["livery.footman", "new.project", "--help"],
+        ["livery.footman", "--yes", "self.add", "livery-workshop"],
+    ]
+    assert all(index == env["UV_INDEX"] for _, index in calls)
+    assert "answers no new.project; adding the workshop" in capsys.readouterr().out
+
+
+def test_a_footman_that_answers_new_project_adds_nothing() -> None:
+    from types import SimpleNamespace
+
+    calls: list[list[str]] = []
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append(argv)
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    assert _e2e.ensure_birth_verb({}, run=run) is False
+    assert len(calls) == 1
+
+
+def test_a_failed_self_add_refuses_naming_its_exit() -> None:
+    from types import SimpleNamespace
+
+    from livery.footman import Failed
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        if "self.add" in argv:
+            return SimpleNamespace(code=2, stdout="", stderr="no index\n")
+        return SimpleNamespace(code=64, stdout="", stderr="")
+
+    with pytest.raises(
+        Failed, match=r"could not add the workshop beside its footman \(exit 2\)"
+    ):
+        _e2e.ensure_birth_verb({}, run=run)

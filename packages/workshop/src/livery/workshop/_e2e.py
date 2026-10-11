@@ -21,7 +21,7 @@ from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery.footman import fail
@@ -1099,6 +1099,54 @@ def _unpushed_commits(root: Path) -> list[str]:
     return [line for line in listed.stdout.splitlines() if line.strip()]
 
 
+def ensure_birth_verb(
+    env: Mapping[str, str], run: Callable[..., Any] = footman.run
+) -> bool:
+    """Make this footman answer ``new.project``; whether the workshop was added.
+
+    A desk has the workshop self-added beside its footman, so the verb
+    answers outside any project. A hosted runner has nothing self-added,
+    and a birth there exits 64 naming no such task. The probe is the
+    verb's own ``--help``; when it refuses, ``self.add livery-workshop``
+    installs the workshop beside the runner from the index *env* names
+    first, the pass's dev index, so the birth runs this checkout's code.
+    *run* is the spawn, footman's own unless a test hands one in.
+    """
+    import sys
+
+    probe = run(
+        [sys.executable, "-m", "livery.footman", "new.project", "--help"],
+        env=dict(env),
+        nofail=True,
+        recorded=False,
+    )
+    if probe.code == 0:
+        return False
+    print(
+        "  birth: this footman answers no new.project; adding the workshop beside"
+        " it from the index the pass reads first"
+    )
+    added = run(
+        [
+            sys.executable,
+            "-m",
+            "livery.footman",
+            "--yes",
+            "self.add",
+            "livery-workshop",
+        ],
+        env=dict(env),
+        nofail=True,
+        timeout=600.0,
+    )
+    if added.code != 0:
+        fail(
+            f"the loop could not add the workshop beside its footman (exit"
+            f" {added.code}):\n{added.stdout}{added.stderr}"
+        )
+    return True
+
+
 def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
@@ -1120,6 +1168,7 @@ def _birth(kind: str, url: str, index: str = "", stack: Sequence[str] = ()) -> P
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
+    ensure_birth_verb(env)
     # A workspace already there is a birth to resume: the verb refuses
     # to start a second one in its folder.
     resume = ["--resume"] if (home / E2E_REPO / "workshop.toml").is_file() else []
