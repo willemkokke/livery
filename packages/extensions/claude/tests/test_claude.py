@@ -326,6 +326,41 @@ def test_the_stub_imports_the_sections_in_order_then_the_instance(
         assert (root / line[1:]).is_file()
 
 
+def test_the_entry_file_takes_the_guidance_files_composition_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.claude import _agent
+    from livery.workshop._extensions import declaration
+
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    composed: list[Path] = []
+    real = _agent._delivered
+
+    def counting(where: Path) -> tuple[dict[str, str], list[str]]:
+        composed.append(where)
+        return real(where)
+
+    monkeypatch.setattr(_agent, "_delivered", counting)
+    # On its own first: an entry file composes for itself.
+    alone = _agent.entry_file(root)
+    assert len(composed) == 1
+    # After the guidance files, it takes their composition, once; a
+    # second entry file composes again.
+    files = _agent.guidance_files(root)
+    assert _agent.entry_file(root) == alone
+    assert len(composed) == 2
+    assert set(files) >= {"voice.interaction.md", "verbs.extensions.md"}
+    assert _agent.entry_file(root) == alone
+    assert len(composed) == 3
+    # The delivery renders in declaration order, so the guidance files
+    # come before the entry file.
+    found = declaration("claude")
+    assert found is not None
+    targets = [fragment.target for fragment in found.fragments]
+    assert targets.index(".workshop/fragments/") < targets.index("CLAUDE.md")
+
+
 def test_the_stub_header_names_the_running_brand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
