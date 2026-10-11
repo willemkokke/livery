@@ -18,6 +18,11 @@ relative_files = true
 # once its line ran. The floors judge the combined figure.
 branch = true
 source = {{ namespace_package }}
+# A file under a test's temp directory is never a source. The tests
+# keep a passing test's tmp_path only until its teardown, so a module a
+# test wrote there and ran is gone when the report is written, and a
+# report whose measured file is gone refuses.
+omit = */pytest-of-*/*
 # The C tracer, not sys.monitoring: the sysmon core records a line
 # under the first context that reaches it and never again, and the
 # check legs split one run's data per suite by context, which needs

@@ -198,11 +198,9 @@ def test_a_locked_or_frozen_sync_moves_no_branch_and_writes_no_tracked_file(
         monkeypatch.setattr(_sync, "stale_locks", refused)
         _sync.sync(frozen=True)
     assert asked["workspace"] is True and asked["deliver"] is True
-    assert asked["tools"] == {
-        "frozen": mode == "frozen",
-        "locked": mode == "locked",
-        "offline": False,
-    }
+    # Either way the tools install the lock as it is: a locked sync
+    # judged it current before anything ran, and judges it once.
+    assert asked["tools"] == {"frozen": True, "offline": False}
     assert f"--{mode}" in _args(asked["uv"])
 
 

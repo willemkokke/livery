@@ -774,3 +774,32 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
         "path",
     )
     assert default_mode("system-check") == "none"
+
+
+def test_a_records_directory_is_read_once_until_a_record_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    from livery.toolroom.store import Catalogue, records_in
+
+    root = _workspace(tmp_path, monkeypatch)
+    reads: list[Path] = []
+    from typing import cast
+
+    real = Catalogue.of_records.__func__  # type: ignore[attr-defined]
+
+    def counted(cls: type[Catalogue], directory: Path) -> Catalogue:
+        reads.append(directory)
+        return cast(Catalogue, real(cls, directory))
+
+    monkeypatch.setattr(Catalogue, "of_records", classmethod(counted))
+    _tools.forget_catalogues()
+    first = _tools.catalogue(root)
+    assert _tools.catalogue(root) is first
+    assert len(reads) == 1
+    record = records_in(root / "records")[0]
+    stamp = record.stat().st_mtime_ns + 2_000_000_000
+    os.utime(record, ns=(stamp, stamp))
+    assert _tools.catalogue(root) is not first
+    assert len(reads) == 2

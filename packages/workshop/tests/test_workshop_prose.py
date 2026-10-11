@@ -481,3 +481,48 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     # A tool locked for some hosts alone says so.
     assert "- dotnet_coverage 18.11.2 (windows-x64 only)\n" in agent
     assert render_tools(root, HUMAN) != agent
+
+
+def test_the_tree_is_listed_once_until_the_tasks_file_or_the_contract_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A listing is a runner process; a sync renders the verbs fragment
+    # for two readers on each pass. One listing serves the process.
+    import json
+    import os
+    import shutil
+
+    import livery.footman as footman
+
+    root = _workspace(tmp_path)
+    (root / "tasks.py").write_text("")
+    runs: list[list[str]] = []
+
+    class _Done:
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+
+        def __int__(self) -> int:
+            return 0
+
+    def running(argv: list[str], **kwargs: object) -> _Done:
+        runs.append(argv)
+        return _Done(json.dumps({"tree": {"tasks": {"check": {}}, "groups": {}}}))
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/x/" + name)
+    monkeypatch.setattr(footman, "run", running)
+    _prose.forget_trees()
+    first = _prose.composed_tree(root)
+    assert first == {"tasks": {"check": {}}, "groups": {}}
+    assert _prose.composed_tree(root) is first
+    assert len(runs) == 1
+    stamp = (root / "tasks.py").stat().st_mtime_ns + 2_000_000_000
+    os.utime(root / "tasks.py", ns=(stamp, stamp))
+    assert _prose.composed_tree(root) == first
+    assert len(runs) == 2
+    os.utime(root / "workshop.toml", ns=(stamp, stamp))
+    _prose.composed_tree(root)
+    assert len(runs) == 3
+    _prose.forget_trees()
+    _prose.composed_tree(root)
+    assert len(runs) == 4

@@ -113,8 +113,50 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
     return data
 
 
+#: The contracts this process loaded and judged, by path and the stamps
+#: of every file the judgement read: one parse serves the process, and a
+#: contract edited since is parsed and judged again. Package discovery
+#: loads every member's contract on each call, and a sync discovers
+#: many times.
+_CONTRACTS: dict[tuple[Any, ...], dict[str, Any]] = {}
+
+
+def _stamp(path: Path) -> tuple[int, int] | None:
+    """A file's modification time and size, or None when it is not there."""
+    try:
+        found = path.stat()
+    except OSError:
+        return None
+    return (found.st_mtime_ns, found.st_size)
+
+
+def _contract_key(path: Path, workspace: Path | None) -> tuple[Any, ...]:
+    """What a judgement of *path* depends on: its stamp and its workspace's.
+
+    A package's contract is judged against the root's list, so the
+    root's stamp is part of the key; a root's against every package's
+    set, so theirs are.
+    """
+    if workspace is not None:
+        return (str(path), _stamp(path), _stamp(workspace / CONTRACT))
+    return (
+        str(path),
+        _stamp(path),
+        tuple((str(member), _stamp(member)) for member in contract_paths(path.parent)),
+    )
+
+
+def forget_contracts() -> None:
+    """Drop every contract this process loaded, so the next load parses again."""
+    _CONTRACTS.clear()
+
+
 def load_contract(path: Path) -> dict[str, Any]:
     """Parse the contract at *path* and judge its keys; a refusal names the file.
+
+    A contract is parsed and judged once per process; a later load
+    answers from the first until the file, or one the judgement read,
+    changes. The caller gets its own copy.
 
     A contract under ``packages/<name>/`` or ``packages/<group>/<name>/``
     is a package's, judged against the extensions its workspace's root
@@ -124,11 +166,17 @@ def load_contract(path: Path) -> dict[str, Any]:
     problem is listed in one refusal
     ([livery.workshop._contract_keys.judge][]).
     """
+    import copy
+
     from livery.workshop._contract_keys import judge, listed_extensions
     from livery.workshop._extensions import composed_set, package_extensions
 
-    data = parse_contract(path.read_text("utf-8"), where=str(path))
     workspace = _package_workspace(path)
+    key = _contract_key(path, workspace)
+    held = _CONTRACTS.get(key)
+    if held is not None:
+        return copy.deepcopy(held)
+    data = parse_contract(path.read_text("utf-8"), where=str(path))
     if workspace is not None:
         root = workspace / CONTRACT
         listed = None
@@ -142,6 +190,7 @@ def load_contract(path: Path) -> dict[str, Any]:
         problems = judge(data, contract="root", where=str(path), listed=listed)
     if problems:
         fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
+    _CONTRACTS[key] = copy.deepcopy(data)
     return data
 
 

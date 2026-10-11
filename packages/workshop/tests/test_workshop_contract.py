@@ -214,3 +214,48 @@ def test_normalise_keys_reads_history_as_if_spelled_right() -> None:
         "ci": {"required-context": "gate"},
         "depends": [{"floor-kind": "x"}],
     }
+
+
+def test_a_contract_is_parsed_once_until_it_or_a_sibling_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Package discovery loads every member's contract on each call, and
+    # a sync discovers many times: one parse and judgement serve the
+    # process until a file the judgement read changes.
+    import os
+
+    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n')
+    root = tmp_path / "workshop.toml"
+    parsed: list[str] = []
+    real = _contract.parse_contract
+
+    def counted(text: str, *, where: str) -> dict[str, object]:
+        parsed.append(where)
+        return real(text, where=where)
+
+    monkeypatch.setattr(_contract, "parse_contract", counted)
+    _contract.forget_contracts()
+    first = _contract.load_contract(root)
+    assert _contract.load_contract(root) == first
+    assert parsed == [str(root)]
+    # The caller gets its own copy: an edit never reaches the next load.
+    first["workspace"]["extensions"].append("ruff")
+    assert _contract.load_contract(root)["workspace"]["extensions"] == []
+    # The member's contract: once too, and the root's list is part of
+    # its judgement, so a root rewritten re-judges it.
+    assert _contract.load_contract(member)["name"] == "m"
+    assert _contract.load_contract(member)["name"] == "m"
+    assert parsed == [str(root), str(member)]
+    stamp = root.stat().st_mtime_ns + 2_000_000_000
+    os.utime(root, ns=(stamp, stamp))
+    _contract.load_contract(member)
+    _contract.load_contract(root)
+    assert parsed == [str(root), str(member), str(member), str(root)]
+    # The root's judgement reads every package's set: a member rewritten
+    # re-judges the root.
+    os.utime(member, ns=(stamp, stamp))
+    _contract.load_contract(root)
+    assert parsed[-1] == str(root) and len(parsed) == 5
+    _contract.forget_contracts()
+    _contract.load_contract(root)
+    assert len(parsed) == 6
