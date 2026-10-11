@@ -51,8 +51,8 @@ def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> No
     assert cmake is not None
     assert conan is not None
     # cmake names no language, and conan packages C and C++.
-    assert (cmake.requires, cmake.compatible) == ((), ())
-    assert (conan.requires, conan.compatible) == (("cpp",), ("cmake",))
+    assert cmake.requires == ()
+    assert conan.requires == ("cpp",)
 
 
 def test_the_extensions_answer_a_cpp_conan_package_as_the_kind_backend_does(

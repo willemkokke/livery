@@ -62,23 +62,7 @@ def _workspace(
 ) -> Package:
     """Fakes for *declared*, each saying when it runs, listed by one package."""
     names = [f"acme.{name}" for name in declared]
-    compatible = {
-        name: [other for other in names if other != f"acme.{name}"] for name in declared
-    }
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        **{
-            name: text.replace(
-                "[phases.build]",
-                f"compatible = {compatible[name]!r}\n\n[phases.build]".replace(
-                    "'", '"'
-                ),
-                1,
-            )
-            for name, text in declared.items()
-        },
-    )
+    fake_extensions(tmp_path, monkeypatch, **declared)
     for name in declared:
         fake_steps(tmp_path, name, SAYS.format(name=name))
     root_contract(tmp_path, "[]")
@@ -196,8 +180,7 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
     )
     assert _extensions.closure_problems(tmp_path) == [
         "packages/core: the build phase: its steps' order has no start: acme.a"
-        " before acme.b before acme.a; remove a key read, a before or an after"
-        " among them"
+        " before acme.b before acme.a; remove a key read among them"
     ]
 
 
