@@ -140,15 +140,17 @@ def affected_legs(root: Path) -> bool:
 
 
 def ci_affected_base(root: Path, run: RunContext | None) -> str:
-    """The base branch a CI check leg narrows against, or empty for the full gate.
+    """The base branch a pull request's check leg narrows against, or empty.
 
     Empty outside CI, when the contract does not declare
-    ``[ci] affected-legs``, on any event but a pull request (the merge
-    point runs the full gate until the verified-tree record exists),
-    and when the payload names no base; the last two print why, so a
-    full leg is never a silent fallback.
+    ``[ci] affected-legs``, on any event but a pull request, and when
+    the payload names no base. A push's legs take their plan from
+    `ci_push_base` instead; the nightly and a dispatch pay the whole
+    gate, and say so, so a full leg is never a silent fallback.
     """
     if run is None or not affected_legs(root):
+        return ""
+    if run.event == "push":
         return ""
     if run.event != "pull_request":
         print(
@@ -160,6 +162,22 @@ def ci_affected_base(root: Path, run: RunContext | None) -> str:
         print("  affected-legs: the event payload names no base branch; full gate")
         return ""
     return run.base_ref
+
+
+def ci_push_base(root: Path, run: RunContext | None) -> str:
+    """The branch a push's check leg stands on, for its plan; empty off a push.
+
+    Empty outside CI, without ``[ci] affected-legs``, on any event but
+    a push, and on a push of a ref that is not a branch. A push's leg
+    measures from the nearest tree CI's record proves in HEAD's
+    history, the previous push's as a rule, and pays the whole gate
+    when the record proves none: on the pushed branch the merge base
+    is HEAD itself, so it is never the step's base (`_leg_plan`).
+    """
+    if run is None or not affected_legs(root) or run.event != "push":
+        return ""
+    prefix = "refs/heads/"
+    return run.ref[len(prefix) :] if run.ref.startswith(prefix) else ""
 
 
 def ci_changes(root: Path) -> Changes | None:
@@ -237,16 +255,24 @@ def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
     not bring) falls open to everything, with git's words.
     """
     from livery.workshop import _gate_record
+    from livery.workshop._gate_record import Plan
     from livery.workshop._git_ops import GitOps
 
     git = GitOps(root)
     git.fetch()
     step = _gate_record.leg_plan(root, git, base=base, branch=run.head_ref)
+    if run.event == "push" and step.mode == _gate_record.MERGE_BASE:
+        # On the pushed branch the merge base is HEAD itself, and a step
+        # from it would judge nothing: a push with no proved tree in
+        # reach pays the whole gate.
+        step = Plan("full", step.tree, why=f"{step.why}; a push pays the whole gate")
     count = f"{len(step.paths)} path(s) changed"
     if step.mode == _gate_record.MERGE_BASE:
         print(f"  from the merge base, tree {step.base_tree[:12]}: {step.why}; {count}")
     elif step.mode == "step":
         print(f"  since tree {step.base_tree[:12]} ({step.why}): {count}")
+    elif run.event == "push":
+        print(f"  affected: {step.why}; everything runs")
     else:
         print(f"  affected: {step.why}; failing open to everything")
     return step
@@ -555,16 +581,20 @@ def _run_check(
             if proved is not None:
                 _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
                 return
-    ci_base = (
-        ci_affected_base(root_for_ci, run)
-        if not nightly and root_for_ci is not None and run is not None
-        else ""
-    )
-    if ci_base and root_for_ci is not None and run is not None:
+    ci_base = push_base = ""
+    if not nightly and root_for_ci is not None and run is not None:
+        ci_base = ci_affected_base(root_for_ci, run)
+        push_base = ci_push_base(root_for_ci, run)
+    if (ci_base or push_base) and root_for_ci is not None and run is not None:
         from livery.workshop._influence import Changes
 
-        print(f"  affected-legs: the scoped gate against origin/{ci_base}")
-        step = _leg_plan(root_for_ci, ci_base, run)
+        if ci_base:
+            print(f"  affected-legs: the scoped gate against origin/{ci_base}")
+        else:
+            print(
+                "  affected-legs: the scoped gate from the record's nearest proved tree"
+            )
+        step = _leg_plan(root_for_ci, ci_base or push_base, run)
         subset = _affected(root_for_ci, step)
         if subset is not None:
             packages = _packages()

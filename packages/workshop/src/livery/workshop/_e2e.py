@@ -2392,6 +2392,84 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     )
 
 
+def _prove_unproven_push(root: Path, kind: str) -> None:
+    """Prove main's run narrows from its own record when a squash lands a new tree.
+
+    Every other squash the loop lands is a tree a pull request's run
+    proved, so main's run skips. This branch is cut from the commit
+    the scoped-leg branch stood on and touches one other member, so
+    its squash onto main, which carries the scoped-leg squash already,
+    is a tree no run proved: main's push run cannot skip, measures
+    from the previous push's tree, narrows to the member the branch
+    touched, reuses the other suites from main's record, and composes
+    its stamp on that tree. A push that paid the whole gate here, or
+    skipped, is the failure this proof exists for.
+    """
+    import livery.toolroom.tools as toolroom
+    from livery.workshop._git_ops import GitOps
+
+    _align_main(root)
+    git = GitOps(root)
+    before = git.head_sha()
+    toolroom.git.opts(cwd=root)("switch", "-C", "chore/unproven-push", f"{before}~1")
+    probe = root / "packages" / "loop-native" / "tests" / "test_unproven_push.py"
+    probe.write_text(
+        '"""A member-only change behind main: the loop proves a push narrows."""\n'
+        "\n"
+        f'STAMP = "{before}"\n'
+        "\n\n"
+        "def test_the_stamp_is_a_commit():\n"
+        "    assert len(STAMP) == 40\n",
+        "utf-8",
+    )
+    git.commit_all(
+        "chore(loop-native): a member-only change behind main\n\nCut from the"
+        " commit before main's tip, so its squash lands a tree no run proved."
+    )
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    _loop_fm(root, "submit", "--force", "--armed")
+    _align_main(root)
+    landed = git.head_sha()
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run, logs = _completed_run(repo, landed, event="push")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        (
+            "affected-legs: the scoped gate from the record's nearest proved tree",
+            "since tree ",
+            "affected: packages/loop-native",
+        ),
+        forbidden=(
+            "skipping the gate",
+            "everything runs",
+            "affected: packages/loop-echo",
+            "affected: packages/loop-cpp",
+        ),
+    )
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
+            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
+            "coverage packages/loop-native: 100.0%",
+            "recorded as proved green by run",
+            " on top of tree ",
+        ),
+        forbidden=("unjudged this run", "not recorded:"),
+    )
+    print(
+        f"  unproven push: proven on main's run {run.id}; the leg measured from the"
+        " previous push's tree, ran loop-native alone, and the stamp composed"
+    )
+
+
 def _prove_prose_leg(root: Path, kind: str) -> None:
     """Prove a note-only pull request pays no package gate.
 
@@ -3114,6 +3192,11 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("members", ("birth",), lambda p: _ensure_members(_at(p), p.kinds)),
     Scenario("ratchet", ("members",), lambda p: _prepare_ratchet(_at(p), p.forge)),
     Scenario("scoped-leg", ("ratchet",), lambda p: _prove_scoped_leg(_at(p), p.forge)),
+    Scenario(
+        "unproven-push",
+        ("scoped-leg",),
+        lambda p: _prove_unproven_push(_at(p), p.forge),
+    ),
     Scenario("prose-leg", ("members",), lambda p: _prove_prose_leg(_at(p), p.forge)),
     Scenario("tests-leg", ("members",), lambda p: _prove_tests_leg(_at(p), p.forge)),
     Scenario(
@@ -3134,8 +3217,15 @@ SCENARIOS: tuple[Scenario, ...] = (
 
 #: The named sets ``--scenario`` takes beside the scenarios' own names.
 SETS: dict[str, tuple[str, ...]] = {
-    "develop": ("birth", "verified-skip", "members", "scoped-leg"),
-    "release": ("birth", "verified-skip", "members", "scoped-leg", "release"),
+    "develop": ("birth", "verified-skip", "members", "scoped-leg", "unproven-push"),
+    "release": (
+        "birth",
+        "verified-skip",
+        "members",
+        "scoped-leg",
+        "unproven-push",
+        "release",
+    ),
     "points": ("nightly", "dispatched-gate", "contributed-point"),
     "extension": ("birth", "members"),
     "all": tuple(scenario.name for scenario in SCENARIOS),
