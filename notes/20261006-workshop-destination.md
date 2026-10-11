@@ -473,10 +473,14 @@ consumer. Each rule is set now and set back at alpha.
 - A pull request's check legs run on one runner; the merge and nightly
   points run every runner. A Windows or macOS fault lands on main and
   is fixed forward (#1379).
-- The loop's host-mode runner already shares its tool store, uv cache
-  and conan home across jobs, and a job enters in 6 s; #1378 was filed
-  on a September workspace's numbers and closed on 2026-10-11. Where a
-  pass's 26 minutes go between its runs is unmeasured.
+- The loop's runner entered a job in 33 s, 26 of them re-fetching the
+  tool catalogue: the store's sweep ran after every job, on Gitea's
+  runner too, and evicted the catalogue because no ref rooted it. The
+  catalogue roots each tool's index tree and the sweep keeps the store
+  whole where no cache save follows (#1378, PR #1389); the entry is
+  12 to 16 s now, the store fetch and three `uv sync` calls, a lever
+  still open. A profiled pass of 1677 s waited 1438 s on the newborn's
+  twelve serial CI runs; its levers are under phase 15.
 - A mechanism lands with its first consumer, never on fixtures alone,
   tests for the real case first.
 - Inside a refactor slice a package's coverage floor follows the
@@ -1413,6 +1417,20 @@ protocol carries deleting a published version, so `_e2e` reaches no
 private forge name, and 14 moves `_e2e` out of the base; the reach
 allowance is then empty.
 
+**What a pass costs**, measured on 2026-10-11 with `fm --profile`
+over `fm ci.e2e --scenario=release`, 1677 s: the loop's own work is
+231 s, 14 percent; the rest waits on the newborn's twelve serial CI
+runs, seven pull-request runs of about 110 s for 16 s of work and
+four main runs of about 165 s for 12 s, plus the release wave. The
+levers, in critical-path seconds: the per-job entry, about 700, cut to
+about 300 by #1378 and open for the rest; the third wave of every main
+run, govern, deploy and dispatch, about 240, which folding them into
+the gate job removes once the token split is ruled (open item 6); the
+members scenario's three pull requests, about 230, against each member
+kind landing through its own gate; the docs job on every run, about
+90, which the newborn's stack carries from the stock list; local work,
+60 to 90, one pytest ending 33 s after its last test among it.
+
 ### Phase 16: one affected engine, and sync at scale
 
 The plan's phase 15, unchanged. Follow-ups beside it, not inside it:
@@ -2312,7 +2330,9 @@ the stack, which this design neither needs nor rules out).
   rehearsal of the 12-member wave takes 26 to 27 minutes, the loop's
   release act 6.5 minutes inside a 26-minute pass, and a loop leg's
   entry 176 of 183 seconds on a workspace born 2026-09-29; today's
-  newborn enters in 6 s, so #1378 closed on 2026-10-11.
+  newborn's four morning runs entered in 6 s, which closed #1378 that
+  day; the profiled pass the same night entered its 23 jobs in 33 s
+  and reopened it with the cause, recorded below.
 - 2026-10-11, #1380 built: the nightly point runs `ci.e2e
   --scenario=release --from-main` on its first leg, through a
   `[[ci.schedule]]` entry with `once = true`, a new key for an entry
@@ -2338,12 +2358,48 @@ the stack, which this design neither needs nor rules out).
   whose environment holds the two literal matrices, the event picks
   one, and the check job reads it with `fromJSON` from the job's
   output, so the decision stays the contract's and the file carries
-  two literals and which event takes which. A matrix axis that is
-  itself an expression starts no run on GitHub, found on PR #1383's
-  first push. This repository names
+  two literals and which event takes which. Whether a matrix axis
+  that is itself an expression starts a run on GitHub is untested:
+  PR #1383's first push started no run because GitHub could not merge
+  it (#1386), and the legs job is the documented shape. This
+  repository names
   ubuntu-latest. Not covered: a Gitea workspace that declares the key
   relies on act evaluating an expression in a matrix, which no loop
   member exercises, since the loop's runner set is one runner.
+
+- 2026-10-11, #1378 reopened and fixed (PR #1389): the tool catalogue
+  reaches the store by digest with no ref, so the sweep after every job
+  evicted it with the records, versions and surfaces, and the next
+  job's `fm sync --locked` fetched it all again, 26 of a 33 s entry.
+  The sweep also ran on Gitea's runner, which sets `GITHUB_ACTIONS`,
+  shares one store and saves none. Fixed: a catalogue read roots each
+  tool's index tree under `tools/index/<name>`, and the sweep keeps the
+  store whole where `GITEA_ACTIONS` is set. Measured after: the entry
+  12 to 16 s, the scoped-leg scenario 275 to 208 s on two runs; a
+  fresh pass is the clean comparison, not run. Why the closing was
+  wrong: it read four morning runs, not the pass's jobs.
+- 2026-10-11, #1379 merged (PR #1383), its own run the proof: one
+  check leg on the pull request and the gate green. The coverage
+  union carries a leg a pull request did not run from the records, a
+  changed suite at the record's older closure, since no platform
+  measured the change there and the merge point measures it afresh.
+  Found on the way: GitHub starts no run on a pull request it cannot
+  merge, and `fm submit` waited 1800 s on one twice (#1386); three
+  note merges appending to this record made the branch unmergeable
+  for GitHub, which knows no union merge driver.
+- 2026-10-11, #1380 merged (PR #1385) with the hosted nightly open.
+  Dispatched on its branch, the nightly found what a desk had by hand
+  and a bare runner lacked: the workshop self-added beside footman,
+  replaced by birthing from the driver checkout with an absolute
+  folder, where the project mounts `new.project`; a git identity,
+  which the pass now gives its children where git has none; and the
+  generic forge tokens, which a hosted job carries for the real forge
+  and the workshop reads first, so the pass sets them to the local
+  forge's. PR #1387 merged the first; PR #1388, unarmed, carries the
+  other two, its dispatched nightly the acceptance, open until green.
+  Decided here: a change whose proof is the nightly submits unarmed,
+  since auto-merge took two pull requests at gate-green before their
+  last push, the nightly not being a required check.
 
 ## Open
 
@@ -2376,3 +2432,15 @@ recommendation. Owner: Willem, unless named.
    and `fetch` as the plumbing of a phase at a point on a runner set,
    which would retire `[ci.jobs.<point>.<name>]`. Owner: Willem, after
    #1377.
+6. **The post-merge jobs' fold.** govern, deploy and dispatch in the
+   gate job would remove a 60-second wave from every main run of the
+   loop's newborn and of this repository, for 12 seconds of work.
+   govern carries the admin token and the gate job the run's own, so
+   one job would hold both, against the rule that a job takes the
+   run's token alone (#1280). Owner: Willem.
+7. **The loop's stack and its pull requests.** Dropping `docs` from
+   the newborn's stack saves about 90 seconds a pass, landing the
+   three members in one pull request about 230; each drops something
+   the loop proves, the docs job's publish and each member kind's own
+   gate. Loop defaults are the agent's to set, but these drop proof.
+   Owner: Willem.
