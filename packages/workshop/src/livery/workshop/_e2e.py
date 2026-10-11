@@ -117,15 +117,53 @@ def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
     outer environment already carries keeps its index and this one
     follows it.
     """
+    return _config_environment(environ, (("commit.gpgsign", "false"),))
+
+
+#: The identity the loop's commits carry on a machine whose git has none.
+LOOP_IDENTITY = ("livery loop", "loop@livery.invalid")
+
+
+def identity_environment(
+    environ: Mapping[str, str], *, name: str, email: str
+) -> dict[str, str]:
+    """The variables that give every git a pass runs an identity, when it has none.
+
+    A desk's git knows its person; a hosted runner's knows nobody, and
+    the newborn's first commit stops on "Author identity unknown". With
+    *name* and *email* both empty, what `git config` answers where the
+    pass runs, the loop's own identity ([livery.workshop._e2e.LOOP_IDENTITY][])
+    rides the environment as [livery.workshop._e2e.unsigned_environment][]
+    does, into the birth's git and the loop's fm. Either value configured
+    adds nothing: the person's identity stands.
+    """
+    if name or email:
+        return {}
+    loop_name, loop_email = LOOP_IDENTITY
+    return _config_environment(
+        environ, (("user.name", loop_name), ("user.email", loop_email))
+    )
+
+
+def _config_environment(
+    environ: Mapping[str, str], pairs: Sequence[tuple[str, str]]
+) -> dict[str, str]:
+    """*pairs* as git configuration riding the environment, after what it carries.
+
+    git reads `GIT_CONFIG_COUNT` with a key and a value per index, so an
+    entry the outer environment already carries keeps its index and
+    these follow it.
+    """
     count = 0
     raw = environ.get("GIT_CONFIG_COUNT", "")
     if raw.isdigit():
         count = int(raw)
-    return {
-        "GIT_CONFIG_COUNT": str(count + 1),
-        f"GIT_CONFIG_KEY_{count}": "commit.gpgsign",
-        f"GIT_CONFIG_VALUE_{count}": "false",
-    }
+    made: dict[str, str] = {}
+    for index, (key, value) in enumerate(pairs, start=count):
+        made[f"GIT_CONFIG_KEY_{index}"] = key
+        made[f"GIT_CONFIG_VALUE_{index}"] = value
+    made["GIT_CONFIG_COUNT"] = str(count + len(pairs))
+    return made
 
 
 def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[str, ...]:
@@ -3167,6 +3205,17 @@ if _WORKSHOP_TESTS.is_dir():
             # the loop's own fm's, is unsigned: the setting rides the
             # task's environment into each child.
             os.environ.update(unsigned_environment(os.environ))
+            if driver is not None:
+                from livery.workshop._git_ops import GitOps
+
+                git = GitOps(driver)
+                os.environ.update(
+                    identity_environment(
+                        os.environ,
+                        name=git.config_get("user.name"),
+                        email=git.config_get("user.email"),
+                    )
+                )
             _require_host_alias(forge)
             if daemon_needed(chosen):
                 _require_runner_docker(forge)
