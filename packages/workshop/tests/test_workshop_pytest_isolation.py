@@ -129,29 +129,3 @@ def test_a_test_that_leaks_into_the_global_registry_fails_by_name(
     result = _run(pytester)
     result.assert_outcomes(passed=2, errors=1)
     result.stdout.fnmatch_lines(["*left tasks in the global registry: leaked*"])
-
-
-def test_a_slot_a_test_filled_never_reaches_the_test_after_it(
-    pytester: pytest.Pytester,
-) -> None:
-    # Two tests in one file run in order on one worker: the first
-    # declares and fills a slot, the second finds the registry as it
-    # was before. Without the plugin's restore the second would see
-    # the first's slot and contribution.
-    pytester.makepyfile(
-        """
-        from livery.workshop._slots import composed, contribute, register_slot, slots
-
-        def test_fills():
-            register_slot("acme.left")
-            contribute("acme.left", "value", extension="acme")
-            contribute("python.dev-group", "acme>=1", extension="acme")
-            assert composed("acme.left") == ["value"]
-
-        def test_finds_nothing_of_it():
-            assert "acme.left" not in slots()
-            assert "acme>=1" not in composed("python.dev-group")
-        """
-    )
-    result = _run(pytester)
-    result.assert_outcomes(passed=2)

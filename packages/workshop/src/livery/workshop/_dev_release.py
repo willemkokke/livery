@@ -19,11 +19,10 @@ from pathlib import Path
 
 import livery.footman as footman
 from livery.footman import fail
-from livery.workshop import _lifecycle
+from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
-from livery.workshop._release_notes import release_notes
 from livery.workshop._update import latest_released
 from livery.workshop._versions import derive_version
 
@@ -184,7 +183,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     stamps = {path: path.stat() for path in touched}
     try:
         _lifecycle.stamp(package, root, semver_to_pep440(plan.version))
-        notes = release_notes()
+        notes = _release_notes.release_notes(root)
         excerpt = notes.entry(root, package) if notes is not None else ""
         if excerpt and readme.is_file():
             original = readme.read_text("utf-8")

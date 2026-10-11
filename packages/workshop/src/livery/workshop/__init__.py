@@ -43,17 +43,18 @@ documentation examples, [livery.workshop.kind_examples][].
 
 An extension reads the workspace through the names the engine reads
 it by: a contract's judged keys, [livery.workshop.read_contract][];
-a slot's composed value, [livery.workshop.slot][]; the CI run it
-belongs to, [livery.workshop.ci_run][], a
+a query's answer, [livery.workshop.answer][], asked with a package or
+the workspace root through a [livery.workshop.Query][] handle; the CI
+run it belongs to, [livery.workshop.ci_run][], a
 [livery.workshop.RunContext][] or None at a desk; the workspace's
 repository on its forge, [livery.workshop.forge_repository][], and,
 connected, [livery.workshop.this_repository][] on
 [livery.workshop.this_forge][], whose everyday token
 [livery.workshop.forge_token][] resolves; the
 registry an artifact kind goes to, [livery.workshop.registry][], a
-[livery.workshop.RegistryTarget][]; and the mounted release-notes
-provider, [livery.workshop.release_notes][], which answers the
-[livery.workshop.ReleaseNotes][] protocol. A file an extension
+[livery.workshop.RegistryTarget][]; and the release notes' provider
+the listed extensions answer, [livery.workshop.release_notes][], which
+answers the [livery.workshop.ReleaseNotes][] protocol. A file an extension
 writes outside the engine opens with
 [livery.workshop.generated_header][]. What a CI run changed
 against the base it measures from is [livery.workshop.ci_changes][].
@@ -138,7 +139,6 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
-    from livery.workshop._slots import slot as slot
     from livery.workshop._state import RunContext as RunContext
     from livery.workshop._state import ci_run as ci_run
     from livery.workshop._tokens import forge_token as forge_token
@@ -197,7 +197,6 @@ __all__ = [
     "scoped_paths",
     "selected_files",
     "shipped_content",
-    "slot",
     "testing",
     "this_forge",
     "this_repository",
@@ -260,7 +259,6 @@ _EXPORTS: dict[str, str] = {
     "scoped_packages": "livery.workshop._checks",
     "scoped_paths": "livery.workshop._checks",
     "selected_files": "livery.workshop._checks",
-    "slot": "livery.workshop._slots",
     "verify_workspace": "livery.workshop._packages",
     "workspace_root": "livery.workshop._extensions",
     "workspace_suite": "livery.workshop._coverage_store",

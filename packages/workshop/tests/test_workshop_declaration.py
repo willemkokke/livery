@@ -433,7 +433,6 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         STEP + 'fix = "acme_declared._checks:mend"\n'
         'scope = "workspace"\nextensions = ["acme-kind"]\ntools = ["acme"]\n'
         'after = ["lint.other"]\ntests-only = true\nflags = ["point"]\n'
-        'editor-extension = "acme.vscode"\n'
         'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
         'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
         ' on-removal = true, widen = "acme_declared._checks:mend",'
@@ -460,7 +459,6 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         record.after,
         record.tests_only,
         record.flags,
-        record.editor_extension,
     ) == (
         "workspace",
         ("acme-kind",),
@@ -468,7 +466,6 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         ("lint.other",),
         True,
         ("point",),
-        "acme.vscode",
     )
     assert [(c.category, c.ignore, c.suffixes) for c in record.claims] == [
         ("source", ("X1",), (".py",))
@@ -588,33 +585,38 @@ def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
     assert record.inputs.ignores == ("docs/README.md",)
 
 
-def test_a_slot_composes_by_a_rule_or_a_reference_that_resolves(
+def test_a_query_combines_by_a_rule_or_a_reference_that_resolves(
     package: Path,
 ) -> None:
+    from livery.workshop._queries import QuerySpec
+
     where = package / "extension.toml"
-    assert _refusal(package, '[slots."acme.style"]\ncompose = "longest"\n') == (
-        f"{where}: slots.\"acme.style\".compose is 'longest'; a slot composes by"
-        " 'union', 'nearest', or a reference 'module:function'"
+    assert _refusal(package, '[queries."acme.style"]\ncombine = "longest"\n') == (
+        f"{where}: queries.\"acme.style\".combine is 'longest'; a query combines"
+        " its answers by 'union', 'nearest', 'agreed', or a function 'module:name'"
     )
     assert "names gone, which acme_declared._checks does not define" in _refusal(
-        package, '[slots."acme.style"]\ncompose = "acme_declared._checks:gone"\n'
+        package, '[queries."acme.style"]\ncombine = "acme_declared._checks:gone"\n'
+    )
+    # A query the base declares is not declared again.
+    assert _refusal(package, '[queries.public-modules]\ncombine = "union"\n') == (
+        f"{where}: queries.public-modules declares the public-modules query, which"
+        " livery.workshop declares; one extension declares a query"
     )
     found = _declare(
         package,
-        '[slots."acme.depth"]\ncompose = "nearest"\ndefault = "shallow"\n'
-        'values = ["shallow", "deep"]\n'
-        '[slots."acme.style"]\ncompose = "acme_declared._checks:mend"\n'
-        '[slots."acme.paths"]\n',
+        '[queries."acme.depth"]\nlevel = "workspace"\ncombine = "nearest"\n'
+        'default = "shallow"\nvalues = ["shallow", "deep"]\n'
+        '[queries."acme.style"]\ncombine = "acme_declared._checks:mend"\n'
+        '[queries."acme.paths"]\nlevel = "package"\n',
     )
-    depth, style, paths = found.slots
-    assert (depth.name, depth.compose, depth.default, depth.values) == (
-        "acme.depth",
-        "nearest",
-        "shallow",
-        ("shallow", "deep"),
+    depth, style, paths = found.query_specs.values()
+    assert depth == QuerySpec(
+        "acme.depth", "nearest", "workspace", "shallow", ("shallow", "deep"), "acme"
     )
-    assert str(style.compose) == "acme_declared._checks:mend"
-    assert (paths.compose, paths.values) == ("union", None)
+    assert str(style.combine) == "acme_declared._checks:mend"
+    assert (style.level, paths.combine, paths.values) == ("package", "union", None)
+    assert found.queries == {}
 
 
 JOB = '[ci.jobs.gate.prose]\nentries = ["acme.prose"]\n'
@@ -730,10 +732,8 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         'type = "bool"\ndefault = false\ndoc = "refuses warnings too"\n'
         '[phases.lint.acme.fragments.".acme"]\nextensions = ["cpp", "cmake"]\n'
         'text = "strict: true\\n"\n'
-        '[contributions]\n"python.dev-group" = ["acme>=1"]\n'
         '[contract.root.acme.mode]\ntypes = ["str"]\nvalues = ["fast", "slow"]\n'
-        'doc = "how hard acme looks"\n'
-        '[for.docs.contributions]\n"docs.theme" = ["acme"]\n',
+        'doc = "how hard acme looks"\n',
     )
     assert found.levels == ("workspace", "package")
     assert (found.plugin, found.requires, found.tools) == (
@@ -757,8 +757,6 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         (".acme", ("cpp", "cmake")),
     ]
     assert record.extensions == ("python",)
-    assert found.additions.contributions == (("python.dev-group", "acme>=1"),)
-    assert found.targets["docs"].contributions == (("docs.theme", "acme"),)
 
 
 def test_a_job_reads_into_a_contribution_named_for_the_extension(

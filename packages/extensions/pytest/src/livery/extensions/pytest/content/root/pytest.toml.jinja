@@ -11,7 +11,7 @@ pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endf
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
-addopts = [{% for word in slots['python.test.addopts'] | join(' ') | split %}"{{ word }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+addopts = [{% for word in queries['python.test.addopts'] | join(' ') | split %}"{{ word }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 # The cache lives with the workshop's state, never in the root.
 cache_dir = ".workshop/.cache/pytest"
 # A passing test's tmp_path goes at its teardown, on the worker that ran

@@ -258,15 +258,15 @@ def test_prepare_leaves_a_lockless_workspace_alone(seeds: Seeds) -> None:
 
 
 def test_a_release_without_the_changelog_extension_writes_no_notes(
-    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # The fallback first: a workspace mounting no release notes extension
+    # The fallback first: a workspace listing no release notes extension
     # still releases; the train stamps the version and says why no
     # entry was written.
     from livery.workshop import _release_notes
 
     root = _workspace(seeds)
-    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
+    assert _release_notes.release_notes(root) is None
     changelog = root / "packages" / "core" / "CHANGELOG.md"
     before = changelog.read_text() if changelog.is_file() else None
     changed = prepare_release(root, "packages/core", "0.3.0")
@@ -275,32 +275,15 @@ def test_a_release_without_the_changelog_extension_writes_no_notes(
     assert _release_notes.NO_PROVIDER in capsys.readouterr().out
 
 
-def test_the_notes_provider_is_one_registration_withdrawn_by_its_extension(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from livery.workshop import _release_notes
-
-    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
-    assert _release_notes.release_notes() is None
-    first, second = FakeNotes(), FakeNotes()
-    _release_notes.register_release_notes(first, extension="acme.notes")
-    assert _release_notes.release_notes() is first
-    _release_notes.register_release_notes(second, extension="acme.other")
-    assert _release_notes.release_notes() is second
-    _release_notes.unregister_release_notes(extension="acme.notes")
-    assert _release_notes.release_notes() is second
-    _release_notes.unregister_release_notes(extension="acme.other")
-    assert _release_notes.release_notes() is None
-
-
 def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import sys
+
     import workshop_seeds
-    from livery.workshop import _release_notes
-    from livery.workshop._declaration import Reference
-    from livery.workshop._extensions import declare_release_notes
+    from livery.workshop import _extensions, _release_notes
     from livery.workshop._packages import Package
+    from workshop_extension_fakes import fake_extensions, fake_steps, root_contract
 
     package = Package(
         directory=tmp_path,
@@ -309,23 +292,33 @@ def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
         kind="python",
         depends=(),
     )
-    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
-    # The fallbacks first: a declaration naming no provider registers
-    # none, and one naming a module nobody installed costs nothing
-    # until the train asks it, which then names the module.
-    assert not declare_release_notes("acme.notes", None)
-    assert _release_notes.release_notes() is None
-    assert declare_release_notes("acme.notes", Reference("acme_absent_notes", "NOTES"))
-    absent = _release_notes.release_notes()
-    assert isinstance(absent, _release_notes.DeclaredNotes)
-    with pytest.raises(ModuleNotFoundError, match="acme_absent_notes"):
-        absent.verify(package, "1.0.0")
-    # A provider the declaration names answers through the registration.
+    # The fallback first: a workspace listing no extension that answers
+    # has no provider.
+    root_contract(tmp_path, "[]")
+    assert _release_notes.release_notes(tmp_path) is None
+    # A listed extension answers the query with a function in its own
+    # package, imported when the train first asks, never at the read.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        notes='[extension]\nlevels = ["workspace"]\n'
+        '[queries]\nrelease-notes = "{package}._steps:notes"\n',
+    )
+    fake_steps(
+        tmp_path,
+        "notes",
+        "import workshop_seeds\n\n\ndef notes(root):\n"
+        "    return workshop_seeds.DECLARED_NOTES\n",
+    )
+    root_contract(tmp_path, '["acme.notes"]')
+    found = _extensions.declaration("acme.notes")
+    assert found is not None and "release-notes" in found.queries
+    assert "acme.notes._steps" not in sys.modules
     provider = FakeNotes("- Born.")
     monkeypatch.setattr(workshop_seeds, "DECLARED_NOTES", provider, raising=False)
-    declare_release_notes("acme.notes", Reference("workshop_seeds", "DECLARED_NOTES"))
-    declared = _release_notes.release_notes()
-    assert declared is not None
+    declared = _release_notes.release_notes(tmp_path)
+    assert declared is not None and declared is provider
+    assert "acme.notes._steps" in sys.modules
     entry = declared.entry(tmp_path, package, "1.0.0")
     assert entry == "## [1.0.0]\n\n- Born."
     assert declared.record(package, "1.0.0", entry) == ["CHANGELOG.md"]

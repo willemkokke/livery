@@ -118,7 +118,7 @@ def test_for_a_target_takes_every_table_again() -> None:
         for path in keys
         if not path.startswith("for.") and path.split(".")[0] != "toolroom"
     }
-    assert {"phases", "ci", "contributions", "queries", "fragments"} <= tables
+    assert {"phases", "ci", "queries", "fragments"} <= tables
     mirrored = [
         path
         for path in keys

@@ -69,10 +69,13 @@ def test_a_key_the_author_names_is_no_fixed_property() -> None:
     schema = compose("extension", None)
     queries = schema["properties"]["queries"]
     assert "properties" not in queries
-    assert queries["additionalProperties"]["type"] == "string"
+    assert [one["type"] for one in queries["additionalProperties"]["anyOf"]] == [
+        "string",
+        "object",
+    ]
     assert problems(schema, {"queries": {"executables": "acme._queries:answer"}}) == []
     assert problems(schema, {"queries": {"executables": 3}}) == [
-        "queries.executables is an integer (3); it takes a string"
+        "queries.executables is an integer (3); it takes a string or a table"
     ]
     # Two named levels: a step's phase, then its name; the phase's own
     # keys stand beside its steps.

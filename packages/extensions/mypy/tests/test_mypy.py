@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.workshop import GateContext, Package
+from livery.workshop import GateContext, Package, Query, answer
 from livery.workshop import _checks as registry
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -60,11 +60,13 @@ def _member(root: Path, name: str) -> Package:
     )
 
 
-def _dev_group(slots: dict[str, object]) -> list[str]:
-    """The dev group's lines, as the slots compose them."""
-    group = slots["python.dev-group"]
-    assert isinstance(group, list)
-    return [str(line) for line in group]  # pyright: ignore[reportUnknownVariableType]
+#: The dev group's lines, a query the listed extensions answer.
+DEV_GROUP: Query[tuple[str, ...]] = Query("python.dev-group")
+
+
+def _dev_group(root: Path) -> list[str]:
+    """The dev group's lines, as the extensions listed at *root* answer them."""
+    return list(answer(root, DEV_GROUP))
 
 
 def _read(path: Path) -> configparser.ConfigParser:
@@ -84,7 +86,6 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
-    from livery.workshop._slots import all_composed
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr(
@@ -96,7 +97,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
             assert mount_extensions(root) == ()
         assert "typecheck.mypy" not in checks_by_name()
         assert "mypy" not in {tool for tool, _ in tools_for(("python",))}
-        assert "mypy>=1.14" not in _dev_group(all_composed())
+        assert "mypy>=1.14" not in _dev_group(root)
         deliver(root)
         assert not (root / "mypy.ini").exists()
         # Listed, the mount registers the check under the listed name,
@@ -107,7 +108,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
             assert mount_extensions(root) == ("mypy",)
         assert checks_by_name()["typecheck.mypy"].extension == "mypy"
         assert "mypy" in {tool for tool, _ in tools_for(("python",))}
-        assert "mypy>=1.14" in _dev_group(all_composed())
+        assert "mypy>=1.14" in _dev_group(root)
         deliver(root)
         cache = _read(root / "mypy.ini")["mypy"]["cache_dir"]
         assert cache == ".workshop/.cache/mypy/linux"

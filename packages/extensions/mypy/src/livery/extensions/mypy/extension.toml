@@ -23,5 +23,5 @@ claims = [
 
 # mypy reads the members' own stubs from the venv, so it rides the dev
 # group beside the store's copy.
-[contributions]
-"python.dev-group" = ["mypy>=1.14"]
+[queries."python.dev-group"]
+value = ["mypy>=1.14"]

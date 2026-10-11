@@ -78,17 +78,17 @@ def _repository(root: Path) -> None:
 
 
 # The fallbacks first: unlisted, the extension writes nothing and
-# registers no notes; then a credential nobody holds, a refused lookup,
+# answers no notes; then a credential nobody holds, a refused lookup,
 # a missing git-cliff and a package without its cliff.toml.
 
 
-def test_unlisted_it_writes_no_cliff_toml_and_registers_no_notes(
+def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.changelog import _cliff
     from livery.footman import _registry as footman_registry
     from livery.workshop import _checks as registry
-    from livery.workshop import _release_notes
+    from livery.workshop import release_notes
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver, shipped_drift
 
@@ -97,23 +97,20 @@ def test_unlisted_it_writes_no_cliff_toml_and_registers_no_notes(
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
-    monkeypatch.setattr(_release_notes, "_PROVIDER", [])
     state = registry.snapshot()
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert _release_notes.release_notes() is None
+        assert release_notes(root) is None
         deliver(root)
         assert not (root / "packages" / "thing" / "cliff.toml").exists()
-        # Listed, the mount registers the provider, imported only when
-        # the train first asks it, and the sync writes each member's
-        # cliff.toml, which the gate then keeps.
+        # Listed, the extension answers the release-notes query with its
+        # provider, and the sync writes each member's cliff.toml, which
+        # the gate then keeps.
         _workspace(root, '["changelog"]')
         with footman_registry.capture():
             assert mount_extensions(root) == ("changelog",)
-        found = _release_notes.release_notes()
-        assert isinstance(found, _release_notes.DeclaredNotes)
-        assert found.reference.resolve() is _cliff.NOTES
+        assert release_notes(root) is _cliff.NOTES
         assert "packages/thing/cliff.toml: missing; `fm sync` writes it" in (
             shipped_drift(root)
         )

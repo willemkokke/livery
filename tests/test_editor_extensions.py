@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import urllib.request
 from importlib.metadata import entry_points
+from typing import cast
 
 import pytest
 
@@ -21,24 +22,22 @@ BY_ID = 7
 
 
 def _recommended() -> list[str]:
-    """The editor ids the installed extensions' checks recommend, sorted.
+    """The editor ids the installed extensions recommend, sorted.
 
-    Read from each extension's declaration, its own checks and those it
-    adds to a target alike, without importing the extension.
+    Read from each extension's declaration, its literal answer to the
+    ``editor-extensions`` query, without importing the extension.
     """
-    from livery.workshop._declaration import read
+    from livery.workshop._declaration import DeclaredValue, read
+    from livery.workshop._queries import EDITOR_EXTENSIONS
 
     found: set[str] = set()
     for entry in entry_points(group="workshop.extensions"):
         declared = read(entry.name, entry.value)
         if declared is None:
             continue
-        for additions in (declared.additions, *declared.targets.values()):
-            found.update(
-                check.editor_extension
-                for check in additions.checks
-                if check.editor_extension
-            )
+        answered = declared.queries.get(EDITOR_EXTENSIONS.name)
+        if isinstance(answered, DeclaredValue) and isinstance(answered.value, list):
+            found.update(str(name) for name in cast("list[object]", answered.value))
     return sorted(found)
 
 

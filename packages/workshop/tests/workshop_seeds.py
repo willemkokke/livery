@@ -259,11 +259,16 @@ class FakeNotes:
 
 @pytest.fixture(name="notes")
 def fake_notes(monkeypatch: pytest.MonkeyPatch) -> FakeNotes:
-    """A stand-in provider, registered as a listed extension registers its own."""
+    """A stand-in provider, answered as a listed extension answers the query."""
     from livery.workshop import _release_notes
 
     provider = FakeNotes()
-    monkeypatch.setattr(_release_notes, "_PROVIDER", [(provider, "acme.notes")])
+
+    def answered(root: Path) -> FakeNotes:
+        del root
+        return provider
+
+    monkeypatch.setattr(_release_notes, "release_notes", answered)
     return provider
 
 

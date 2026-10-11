@@ -8,11 +8,12 @@ import sys
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from livery.extensions.pytest import _checks
-from livery.workshop import GateContext, Package
+from livery.workshop import GateContext, Package, Query, answer
 from livery.workshop import _checks as registry
 
 CONTRACT = (
@@ -57,11 +58,13 @@ def _member(root: Path, name: str, *, serial: bool = False) -> Package:
     )
 
 
-def _dev_group(slots: dict[str, object]) -> list[str]:
-    """The dev group's lines, as the slots compose them."""
-    group = slots["python.dev-group"]
-    assert isinstance(group, list)
-    return [str(line) for line in group]  # pyright: ignore[reportUnknownVariableType]
+#: The dev group's lines, a query the listed extensions answer.
+DEV_GROUP: Query[tuple[str, ...]] = Query("python.dev-group")
+
+
+def _dev_group(root: Path) -> list[str]:
+    """The dev group's lines, as the extensions listed at *root* answer them."""
+    return list(answer(root, DEV_GROUP))
 
 
 Call = tuple[tuple[str, ...], dict[str, object]]
@@ -96,7 +99,6 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
-    from livery.workshop._slots import all_composed
 
     root = tmp_path / "ws"
     root.mkdir()
@@ -111,7 +113,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         assert "test.pytest" not in checks_by_name()
         assert "examples.pytest" not in checks_by_name()
         assert "pytest" not in {tool for tool, _ in tools_for(("python",))}
-        assert "pytest>=9.0" not in _dev_group(all_composed())
+        assert "pytest>=9.0" not in _dev_group(root)
         deliver(root)
         assert not (root / "pytest.toml").exists()
         assert not (root / ".coveragerc").exists()
@@ -124,7 +126,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         assert checks_by_name()["test.pytest"].extension == "pytest"
         assert checks_by_name()["examples.pytest"].extension == "pytest"
         assert "pytest" in {tool for tool, _ in tools_for(("python",))}
-        assert "pytest>=9.0" in _dev_group(all_composed())
+        assert "pytest>=9.0" in _dev_group(root)
         deliver(root)
         settings = tomllib.loads((root / "pytest.toml").read_text())["pytest"]
         assert settings["cache_dir"] == ".workshop/.cache/pytest"
@@ -235,15 +237,14 @@ def test_a_failed_test_keeps_its_tmp_path_and_a_passed_test_s_goes_at_teardown(
 
 
 def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
+    from livery.workshop._declaration import DeclaredValue
     from livery.workshop._extensions import declaration
 
     found = declaration("pytest")
     assert found is not None
-    contributed = [
-        value
-        for slot, value in found.additions.contributions
-        if slot == "python.dev-group"
-    ]
+    answered = found.queries["python.dev-group"]
+    assert isinstance(answered, DeclaredValue)
+    contributed = [str(value) for value in cast("list[object]", answered.value)]
     # 7.13 is the first coverage that installs its own startup hook: an
     # older one would leave every process the tests start unmetered.
     assert "coverage>=7.13" in contributed

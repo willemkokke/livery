@@ -174,7 +174,6 @@ _REPLACED = frozenset(
         "_provenance",
         "_registries",
         "_release_notes",
-        "_slots",
         "_state",
     }
 )

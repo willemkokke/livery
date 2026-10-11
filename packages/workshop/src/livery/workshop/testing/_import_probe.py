@@ -23,9 +23,7 @@ REGISTRARS: dict[str, tuple[str, ...]] = {
     "livery.workshop._kinds": ("register_kind",),
     "livery.workshop._points": ("contribute_job",),
     "livery.workshop._prose": ("register_section", "register_fragment"),
-    "livery.workshop._release_notes": ("register_release_notes",),
     "livery.workshop._site_files": ("register_site_file",),
-    "livery.workshop._slots": ("register_slot", "contribute"),
 }
 
 

@@ -24,13 +24,6 @@ them; a production module a test imported lazily is dropped the same
 way as at collection. The registry is
 restored either way, so the next test in the same worker never
 inherits anything.
-
-The slot registry is put back after every test the same way. A mount
-inside a test contributes an extension's lines to the slots, and the
-checks registry's restore withdraws a check's contributions alone, so
-an extension's own would otherwise reach every test after it on the
-worker, and a test reading the composed slots would pass or fail by
-the worker's schedule.
 """
 
 from __future__ import annotations
@@ -145,16 +138,6 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         n for n, g in root.groups.items() if n not in groups0 and not _from_tests(g)
     ]:
         del root.groups[name]
-
-
-@pytest.fixture(autouse=True)
-def _slots_stay() -> Iterator[None]:
-    """Put the slot registry back after the test, so the next test finds the same."""
-    from livery.workshop import _slots
-
-    state = _slots.snapshot()
-    yield
-    _slots.restore(state)
 
 
 @pytest.fixture(autouse=True)

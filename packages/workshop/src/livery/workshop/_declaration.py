@@ -5,9 +5,9 @@ package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, the phases it declares and the steps it
 adds to a package's lifecycle phases and to the gate's phases, the
-questions about a package it answers, the tools its verbs need, its CI
-jobs, the values it puts into slots, the contract keys it owns, what it
-adds to another extension while that one is listed, and the earlier
+queries it declares and the ones it answers, the tools its verbs
+need, its CI jobs, the contract keys it owns, what it adds to
+another extension while that one is listed, and the earlier
 extensions' shipped files it replaces or deletes. The file is a
 contract, read as ``workshop.toml`` is: kebab-case keys, every key
 judged, every refusal naming the file.
@@ -19,6 +19,14 @@ contract file declares its phases in; a phase no declaration names
 refuses naming the declared ones. The phase's level decides how its
 steps read: a package-level phase's into the one step an extension
 adds to it, a workspace-level phase's into check records.
+
+A ``[queries.<name>]`` table declares the query when it carries
+``combine``, ``level``, ``default`` or ``values``
+([livery.workshop._queries.QuerySpec][]), in the grammar the base's own
+contract file declares its queries in; a table carrying ``value`` is a
+literal answer, and ``<name> = "module:function"`` under ``[queries]``
+answers by a function. An answer to a query no declaration names
+refuses naming the declared ones.
 
 A step is declared at ``[phases.<phase>.<step>]``. One whose verdict
 is its tool's exit code is its tool's words (``main`` as a template,
@@ -52,6 +60,7 @@ if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
     from livery.workshop._phases import PhaseSpec
     from livery.workshop._points import JobContribution
+    from livery.workshop._queries import QuerySpec
     from livery.workshop._words import Words
 
 #: The declaration file's name, beside the package an entry point names.
@@ -126,32 +135,22 @@ class Additions:
     Attributes:
         checks: The steps of the ``[phases.<phase>.<step>]`` tables of
             the gate's phases, as records under the extension's name.
-        contributions: The values it puts into slots, each ``(slot, value)``.
         jobs: The CI jobs it adds to the builtin points, with their entries.
     """
 
     checks: tuple[CheckRecord, ...] = ()
-    contributions: tuple[tuple[str, str], ...] = ()
     jobs: tuple[JobContribution, ...] = ()
 
 
 @dataclass(frozen=True)
-class DeclaredSlot:
-    """A slot a declaration declares, which extensions put values into.
+class DeclaredValue:
+    """A literal answer to a query: ``[queries.<name>] value = ...``.
 
     Attributes:
-        name: The slot's name, ``docs.theme``.
-        compose: How the values compose: ``union``, ``nearest``, or the
-            function that composes them.
-        default: The value with nothing contributed; a union's is an
-            empty list.
-        values: The only values the slot accepts; None accepts any.
+        value: The answer, as the file spells it.
     """
 
-    name: str
-    compose: str | Reference = "union"
-    default: object = None
-    values: tuple[object, ...] | None = None
+    value: object
 
 
 @dataclass(frozen=True)
@@ -251,15 +250,13 @@ class Declaration:
             its own file of that name replaces, to the reason.
         deletes: Each earlier extension's shipped file it deletes, to the
             reason.
-        slots: The slots it declares.
-        release_notes: The release-notes provider it names, which the
-            mount registers; None for an extension that writes no notes.
         fragments: The files its code writes, by target.
         phase_specs: The phases it declares, by name.
         phases: The steps it adds to a package's lifecycle phases, by
             phase.
-        queries: The questions about a package it answers, each query's
-            name to the function that answers it.
+        query_specs: The queries it declares, by name.
+        queries: The queries it answers, each query's name to the
+            function that answers it or to its literal answer.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
         root_files: The files it writes at the workspace root while a
@@ -283,12 +280,13 @@ class Declaration:
     tables: dict[str, Any] = field(default_factory=dict[str, Any])
     replaces: dict[str, str] = field(default_factory=dict[str, str])
     deletes: dict[str, str] = field(default_factory=dict[str, str])
-    slots: tuple[DeclaredSlot, ...] = ()
-    release_notes: Reference | None = None
     fragments: tuple[DeclaredOutput, ...] = ()
     phase_specs: dict[str, PhaseSpec] = field(default_factory=dict[str, "PhaseSpec"])
     phases: dict[str, DeclaredPhase] = field(default_factory=dict[str, DeclaredPhase])
-    queries: dict[str, Reference] = field(default_factory=dict[str, Reference])
+    query_specs: dict[str, QuerySpec] = field(default_factory=dict[str, "QuerySpec"])
+    queries: dict[str, Reference | DeclaredValue] = field(
+        default_factory=dict[str, "Reference | DeclaredValue"]
+    )
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
     root_files: tuple[DeclaredRootFile, ...] = ()
     rules: dict[str, DeclaredRule] = field(default_factory=dict[str, DeclaredRule])
@@ -336,9 +334,9 @@ def declaration_file(package: str) -> Path | None:
     return found / FILE
 
 
-#: The tables whose keys the author names, a file or a slot or a shipped
-#: file's reference or an environment variable: their keys are data,
-#: never judged kebab-case.
+#: The tables whose keys the author names, a file or a query's answer or
+#: a shipped file's reference or an environment variable: their keys are
+#: data, never judged kebab-case.
 _NAMED = (
     ("phases", "*", "*", "fragments"),
     ("for", "*", "phases", "*", "*", "fragments"),
@@ -346,14 +344,12 @@ _NAMED = (
     ("for", "*", "phases", "*", "*", "env"),
     ("phases", "*", "*", "replaces"),
     ("phases", "*", "*", "deletes"),
-    ("contributions",),
-    ("for", "*", "contributions"),
     ("replaces",),
     ("for", "*", "replaces"),
     ("deletes",),
     ("for", "*", "deletes"),
-    ("slots", "*", "default"),
-    ("for", "*", "slots", "*", "default"),
+    ("queries", "*", "default"),
+    ("queries", "*", "value"),
     ("fragments",),
     ("for", "*", "fragments"),
 )
@@ -452,6 +448,8 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         )
     own = phase_specs_of(data, path, extension=extension)
     reader.specs = _known_phases(own, path)
+    own_queries = query_specs_of(data, path, extension=extension, package=package)
+    reader.query_specs = _known_queries(own_queries, path)
     identity = data.get("extension", {})
     additions = reader.additions(data, ())
     targets = {
@@ -469,6 +467,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
     queries = {
         str(name): reader.query(str(name), value, identity)
         for name, value in data.get("queries", {}).items()
+        if not _declares_query(value)
     }
     run = phases.get("run")
     if "executables" in queries and (run is None or run.main is None):
@@ -496,19 +495,13 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         },
         replaces={str(ref): str(why) for ref, why in data.get("replaces", {}).items()},
         deletes={str(ref): str(why) for ref, why in data.get("deletes", {}).items()},
-        slots=tuple(
-            reader.slot(str(name), table)
-            for name, table in data.get("slots", {}).items()
-        ),
-        release_notes=reader.reference(data["release-notes"], ("release-notes",))
-        if "release-notes" in data
-        else None,
         fragments=tuple(
             reader.output(str(target), table)
             for target, table in data.get("fragments", {}).items()
         ),
         phase_specs=own,
         phases=phases,
+        query_specs=own_queries,
         queries=queries,
         categories=tuple(
             (str(category), tuple(str(pattern) for pattern in patterns))
@@ -535,6 +528,9 @@ class _Reader:
         #: The declared phases a table of this file may name: every
         #: installed declaration's and this file's own.
         self.specs: dict[str, PhaseSpec] = {}
+        #: The declared queries an answer in this file may name, the
+        #: same way.
+        self.query_specs: dict[str, QuerySpec] = {}
 
     def refuse(self, where: tuple[str, ...], text: str) -> DeclarationError:
         from livery.workshop._contract_keys import shown
@@ -577,7 +573,7 @@ class _Reader:
                 )
 
     def additions(self, data: dict[str, Any], prefix: tuple[str, ...]) -> Additions:
-        """What *data* adds: the gate phases' steps, slot values and jobs.
+        """What *data* adds: the gate phases' steps and jobs.
 
         A ``[phases.<phase>]`` table of a workspace-level phase holds
         steps, each a check record, beside the phase's declaration; a
@@ -593,11 +589,6 @@ class _Reader:
                 self.step(str(phase), step, entry, (*prefix, "phases"))
                 for step, entry in self.gate_steps(str(phase), table, prefix).items()
             ]
-        contributions = tuple(
-            (str(slot), str(value))
-            for slot, values in data.get("contributions", {}).items()
-            for value in values
-        )
         jobs: list[JobContribution] = []
         for point, named in data.get("ci", {}).get("jobs", {}).items():
             for name, entry in named.items():
@@ -610,7 +601,7 @@ class _Reader:
                         earlier=tuple(jobs),
                     )
                 )
-        return Additions(tuple(checks), contributions, tuple(jobs))
+        return Additions(tuple(checks), tuple(jobs))
 
     def job(
         self,
@@ -861,8 +852,8 @@ class _Reader:
         """The record from a step table's shared keys, its body resolved.
 
         ``scope``, ``claims``, ``extensions``, ``options``, ``fragments``,
-        ``inputs``, ``after``, ``tools``, ``tests-only``, ``flags`` and
-        ``editor-extension``; ``step`` sets the step's own fields after.
+        ``inputs``, ``after``, ``tools``, ``tests-only`` and ``flags``;
+        ``step`` sets the step's own fields after.
         """
         from livery.workshop._checks import CheckRecord, Claim, Option
         from livery.workshop._fragments import verify
@@ -907,7 +898,6 @@ class _Reader:
                 for name, option in entry.get("options", {}).items()
             ),
             fragments=self.fragments(entry.get("fragments", {}), (*where, "fragments")),
-            editor_extension=str(entry.get("editor-extension", "")),
             claims=tuple(claims),
             flags=tuple(entry.get("flags", ())),
             inputs=inputs,
@@ -1191,54 +1181,54 @@ class _Reader:
             )
         return provides, reads
 
-    def query(self, name: str, value: object, identity: dict[str, Any]) -> Reference:
-        """The function that answers the query *name*, resolved.
+    def query(
+        self, name: str, value: object, identity: dict[str, Any]
+    ) -> Reference | DeclaredValue:
+        """The answer to the query *name*: a function, resolved, or a literal.
 
-        The name is one the workshop defines, and a package-level
-        extension answers questions about a package, so one listed at
-        the workspace alone answers none.
+        The name is a declared query, and the extension's levels hold
+        the query's: a package-level query is answered by an extension
+        a package may list, a workspace-level one by an extension the
+        workspace may list. A literal answer is one of the query's
+        values when it declares them.
         """
-        from livery.workshop._queries import QUERIES
+        from livery.workshop._queries import PACKAGE_LEVEL
 
         where = ("queries", name)
-        if name not in QUERIES:
-            near = difflib.get_close_matches(name, sorted(QUERIES), n=1)
+        spec = self.query_specs.get(name)
+        if spec is None:
+            near = difflib.get_close_matches(name, list(self.query_specs), n=1)
             hint = f"; did you mean {near[0]!r}?" if near else ""
             raise self.refuse(
                 where,
-                f"names no query; the queries are {', '.join(QUERIES)}{hint}",
+                f"names no query; the queries are {', '.join(self.query_specs)}{hint}",
             )
-        if "package" not in identity.get("levels", ("workspace",)):
+        levels = tuple(str(level) for level in identity.get("levels", ("workspace",)))
+        if spec.level not in levels:
+            about = "a package" if spec.level == PACKAGE_LEVEL else "the workspace"
             raise self.refuse(
                 where,
-                "answers a question about a package, and this extension's levels are"
-                " workspace; add 'package' to levels, or drop the answer",
+                f"answers a question about {about}, and this extension's levels are"
+                f" {', '.join(levels)}; add {spec.level!r} to levels, or drop the"
+                " answer",
             )
+        if isinstance(value, dict):
+            table = cast("dict[str, Any]", value)
+            if "value" not in table:
+                raise self.refuse(
+                    where,
+                    "is a table without value; an answer is 'module:function', or"
+                    " a table with value alone",
+                )
+            held: object = table["value"]
+            if spec.values is not None and held not in spec.values:
+                listed = ", ".join(repr(known) for known in spec.values)
+                raise self.refuse(
+                    (*where, "value"),
+                    f"is {held!r}; the query's values are {listed}",
+                )
+            return DeclaredValue(held)
         return self.reference(value, where)
-
-    def slot(self, name: str, table: dict[str, Any]) -> DeclaredSlot:
-        """The slot *name* declares, its compose a rule or a reference."""
-        from livery.workshop._slots import NEAREST, UNION
-
-        where = ("slots", name)
-        rule = str(table.get("compose", UNION))
-        if rule in (UNION, NEAREST):
-            compose: str | Reference = rule
-        elif ":" in rule:
-            compose = self.reference(rule, (*where, "compose"))
-        else:
-            raise self.refuse(
-                (*where, "compose"),
-                f"is {rule!r}; a slot composes by {UNION!r}, {NEAREST!r}, or a"
-                " reference 'module:function'",
-            )
-        values = table.get("values")
-        return DeclaredSlot(
-            name,
-            compose,
-            default=table.get("default"),
-            values=tuple(values) if values is not None else None,
-        )
 
     def inputs(self, table: dict[str, Any], where: tuple[str, ...]) -> Inputs:
         """The files a workspace check or a job reads, from its ``inputs`` table."""
@@ -1430,6 +1420,128 @@ def phase_declarations(extension: str, package: str) -> tuple[PhaseSpec, ...]:
     return tuple(phase_specs_of(data, path, extension=extension).values())
 
 
+#: The keys that declare a query in its ``[queries.<name>]`` table.
+_QUERY_KEYS = ("combine", "level", "default", "values")
+
+
+def _declares_query(entry: object) -> bool:
+    """Whether a ``[queries.<name>]`` entry declares the query, not answers it."""
+    return isinstance(entry, dict) and any(
+        key in cast("dict[str, Any]", entry) for key in _QUERY_KEYS
+    )
+
+
+def query_specs_of(
+    data: dict[str, Any], path: Path, *, extension: str, package: str
+) -> dict[str, QuerySpec]:
+    """The queries *data*'s ``[queries.<name>]`` tables declare, judged, by name.
+
+    A table declares its query when it carries ``combine``, ``level``,
+    ``default`` or ``values``; one carrying ``value`` answers a query
+    instead. The same reader serves the base's contract file and an
+    extension's declaration file, *extension* naming the declarer and
+    *package* the package a ``combine`` function lives in.
+
+    Raises:
+        DeclarationError: when a declaration is off its shape: a
+            ``combine`` that is no rule and no reference, a level that
+            is not ``package`` or ``workspace``, ``values`` that are no
+            list, or a table that declares and answers at once.
+    """
+    from livery.workshop._queries import LEVELS, PACKAGE_LEVEL, RULES, UNION, QuerySpec
+
+    reader = _Reader(extension, package, path)
+    found: dict[str, QuerySpec] = {}
+    queries = data.get("queries")
+    if not isinstance(queries, dict):
+        return found
+    for name, table in cast("dict[str, Any]", queries).items():
+        if not _declares_query(table):
+            continue
+        entry = cast("dict[str, Any]", table)
+        where = ("queries", name)
+        if "value" in entry:
+            raise reader.refuse(
+                where,
+                "declares the query and answers it in one table; a declaration"
+                " takes default for the answer while nobody answers",
+            )
+        rule = entry.get("combine", UNION)
+        if isinstance(rule, str) and rule in RULES:
+            combine: str | Reference = rule
+        elif isinstance(rule, str) and ":" in rule:
+            combine = reader.reference(rule, (*where, "combine"))
+        else:
+            rules = ", ".join(repr(known) for known in RULES)
+            raise reader.refuse(
+                (*where, "combine"),
+                f"is {rule!r}; a query combines its answers by {rules}, or a"
+                " function 'module:name'",
+            )
+        level = entry.get("level", PACKAGE_LEVEL)
+        if level not in LEVELS:
+            raise reader.refuse(
+                (*where, "level"),
+                f"is {level!r}; a query is asked at one of {', '.join(LEVELS)}",
+            )
+        values = entry.get("values")
+        if values is not None and not isinstance(values, list):
+            raise reader.refuse(
+                (*where, "values"), "is a list of the answers the query takes"
+            )
+        found[name] = QuerySpec(
+            name,
+            combine,
+            level=str(level),
+            default=entry.get("default"),
+            values=tuple(cast("list[object]", values)) if values is not None else None,
+            extension=extension,
+        )
+    return found
+
+
+def query_declarations(extension: str, package: str) -> tuple[QuerySpec, ...]:
+    """The queries the declaration beside *package* declares, for *extension*.
+
+    Empty without a declaration file. Read without judging the rest of
+    the file, and without importing anything, so every installed
+    extension's queries are known before any declaration is judged.
+
+    Raises:
+        DeclarationError: when the file does not parse or a query's
+            declaration is off its shape.
+    """
+    path = declaration_file(package)
+    if path is None:
+        return ()
+    data = _parsed(path, path.read_text("utf-8"))
+    return tuple(
+        query_specs_of(data, path, extension=extension, package=package).values()
+    )
+
+
+def _known_queries(own: dict[str, QuerySpec], path: Path) -> dict[str, QuerySpec]:
+    """Every declared query an answer in a file may name: the installed ones and *own*.
+
+    Raises:
+        DeclarationError: when *own* declares a query another extension
+            declares.
+    """
+    from livery.workshop import _queries
+    from livery.workshop._contract_keys import shown
+
+    known = dict(_queries.declared_queries())
+    for name, spec in own.items():
+        held = known.get(name)
+        if held is not None and held.extension != spec.extension:
+            raise DeclarationError(
+                f"{path}: {shown(('queries', name))} declares the {name} query, which"
+                f" {held.extension} declares; one extension declares a query"
+            )
+        known[name] = spec
+    return known
+
+
 def _known_phases(own: dict[str, PhaseSpec], path: Path) -> dict[str, PhaseSpec]:
     """Every declared phase a file may name: the installed declarations' and *own*.
 
@@ -1468,6 +1580,8 @@ _REMOVED: dict[str, str] = {
     "judge": "is main: the step's body, a template or a reference",
     "run": "is main: the step's body, a template or a reference",
     "arguments": "is said by {{arguments}} in main, where the words after -- go",
+    "editor-extension": "is the extension's answer to the editor-extensions query:"
+    ' [queries.editor-extensions] value = ["<marketplace id>"]',
     "pre": "goes: a step is named, and a step that runs after it names it in after",
     "post": "goes: a step is named, runs after the steps it names in after, and"
     " does its own cleanup on failure",
@@ -1662,7 +1776,7 @@ def contract_keys_of(
 
 
 #: The keys a contract key's own declaration holds. Under one of these
-#: names a table is a key of its own, declared beneath: a slot's
+#: names a table is a key of its own, declared beneath: a query's
 #: ``values`` is a key of ``extension.toml``, and its declaration is a
 #: table.
 _OWN = ("types", "values", "doc")

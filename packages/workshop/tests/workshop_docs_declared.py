@@ -1,13 +1,11 @@
-"""The docs extension's slots and CI jobs, declared as the mount declares them.
+"""The docs extension's CI jobs, declared as the mount declares them.
 
-A test that composes the site, or renders the CI, calls the code
-directly, with no mount before it. Importing ``docs_slots`` into a test
-module declares the slots for each of its tests; a declaration made
-again keeps the values already contributed. Importing ``docs_jobs``
-adds the site's two jobs to their points for each of its tests, and
-puts the contributed jobs back as they were after it: a mount earlier
-in the worker's session keeps the jobs it added, so a render after the
-test takes the same jobs as one before it.
+A test that renders the CI calls the code directly, with no mount
+before it. Importing ``docs_jobs`` into a test module adds the site's
+two jobs to their points for each of its tests, and puts the
+contributed jobs back as they were after it: a mount earlier in the
+worker's session keeps the jobs it added, so a render after the test
+takes the same jobs as one before it.
 """
 
 from __future__ import annotations
@@ -16,16 +14,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def docs_slots() -> None:
-    """Declare the docs extension's slots from its declaration file."""
-    from livery.workshop._extensions import declaration, declare_slots
-
-    found = declaration("docs")
-    assert found is not None
-    declare_slots("docs", found.slots)
 
 
 @contextmanager

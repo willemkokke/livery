@@ -81,10 +81,10 @@ dev = [
     "livery-workshop[dev]",
     # Every contract extension that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
-    # What the registered checks need in the venv: each line is a
-    # check record's contribution to the `python.dev-group` slot, so a
-    # check an extension withdraws takes its line with it, and the record
-    # is where its floor and its reason live.
+    # What the listed extensions need in the venv: each line is an
+    # extension's answer to the `python.dev-group` query, so an extension
+    # taken off the list takes its lines with it, and its declaration is
+    # where each floor and its reason live.
     "mypy>=1.14",
     "pytest>=9.0",
     "pytest-cov>=5",

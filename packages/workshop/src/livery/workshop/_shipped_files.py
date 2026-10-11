@@ -82,7 +82,7 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
                     Fragment(extension, relative, f"{prefix}{relative}", source=source)
                 )
     fragments = declared(fragments, order)
-    fragments += _check_contributions(order)
+    fragments += _editor_contributions(order, root)
     from livery.workshop._identity import is_born
 
     if not is_born(root):
@@ -137,16 +137,30 @@ def declared(
     return result
 
 
-def _check_contributions(order: list[str]) -> list[Fragment]:
-    """What each registered check says to the editor, as data its extension contributes.
+def _editor_contributions(order: list[str], root: Path) -> list[Fragment]:
+    """What the checks and the listed extensions say to the editor, as contributed data.
 
-    A check's settings land in `.vscode/settings.json` and its marketplace
-    id in `.vscode/extensions.json`, each a fragment of its own, so a check
-    that is unregistered takes its lines with it.
+    A check's settings land in `.vscode/settings.json`, a fragment of
+    its own, so a check that is unregistered takes its lines with it;
+    each listed extension's answer to the ``editor-extensions`` query
+    lands in `.vscode/extensions.json`, so an extension taken off the
+    list takes its recommendations with it.
     """
     from livery.workshop._checks import checks_by_name
+    from livery.workshop._queries import EDITOR_EXTENSIONS, answers
 
     found: list[Fragment] = []
+    for extension, ids in answers(root, EDITOR_EXTENSIONS).items():
+        if extension in order:
+            found.append(
+                Fragment(
+                    extension,
+                    f"{extension} recommendations",
+                    ".vscode/extensions.json",
+                    json.dumps({"recommendations": list(ids)}),
+                    contributes=True,
+                )
+            )
     for name, record in sorted(checks_by_name().items()):
         if record.extension not in order:
             continue
@@ -170,16 +184,6 @@ def _check_contributions(order: list[str]) -> list[Fragment]:
                         contributes=True,
                     )
                 )
-        if record.editor_extension:
-            found.append(
-                Fragment(
-                    record.extension,
-                    f"check {name} recommendation",
-                    ".vscode/extensions.json",
-                    json.dumps({"recommendations": [record.editor_extension]}),
-                    contributes=True,
-                )
-            )
     return found
 
 
@@ -188,8 +192,8 @@ def _data(root: Path) -> dict[str, Any]:
 
     The runner's name and the project's always; once the contract names
     the project, also its identity and everything the workspace's state
-    gives the render: the roster, the Python floor, the slots, the
-    extension requirements and the registry.
+    gives the render: the roster, the Python floor, the queries'
+    answers, the extension requirements and the registry.
     """
     from livery.workshop._identity import is_born, project_facts
     from livery.workshop._templates import fragment_data, render_injections

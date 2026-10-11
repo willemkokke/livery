@@ -26,8 +26,6 @@ from livery.workshop._declaration import (
     Declaration,
     DeclarationError,
     DeclaredRule,
-    DeclaredSlot,
-    Reference,
     declaration_file,
     read,
 )
@@ -505,7 +503,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     same way and read as its name alone. The gate's layering check and
     ``fm extensions`` refuse the same problems. An extension
     whose declaration names no ``plugin`` registers what it declares
-    and mounts no verbs. A plugin a branded App already mounts as a
+    and mounts no verbs, and one that declares nothing but answers to
+    queries is mounted all the same, since the listed extensions'
+    answers are read while they are listed. A plugin a branded App already mounts as a
     builtin is not mounted again, since claiming its tasks again puts
     the same task in one rung twice; what its declaration adds
     registers as any other extension's does.
@@ -545,12 +545,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             if found is not None:
                 check_api_version(extension, found)
                 check_phase_declarers(extension, found, present)
-                declare_slots(extension, found.slots)
-                notes = declare_release_notes(extension, found.release_notes)
                 rules = declare_rules(extension, found.rules)
                 if (
                     register_declared(extension, found.additions, enabled=enabled)
-                    or notes
+                    or found.queries
                     or rules
                 ):
                     mounted.append(extension)
@@ -591,12 +589,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             )
             continue
         check_phase_declarers(extension, found, present)
-        declare_slots(extension, found.slots)
-        notes = declare_release_notes(extension, found.release_notes)
         rules = declare_rules(extension, found.rules)
         if (
             register_declared(extension, found.additions, enabled=enabled)
-            or notes
+            or found.queries
             or rules
         ):
             mounted.append(extension)
@@ -754,24 +750,19 @@ def register_declared(
 
     Each check registers under the extension's listed name, since the
     list is what decides which extension a check belongs to, and each
-    value goes into its slot and each job joins its point under the
-    same name. A step declared ``enabled = false`` registers only when
+    job joins its point under the same name. A step declared
+    ``enabled = false`` registers only when
     *enabled*, the steps the root contract turns on
     ([livery.workshop._extensions.enabled_steps][]), names it.
     """
     from dataclasses import replace
 
-    from livery.workshop import _slots
     from livery.workshop._checks import register_check
 
     for record in additions.checks:
         if not record.enabled and record.name not in enabled:
             continue
         register_check(replace(record, extension=extension))
-    for slot in {slot for slot, _ in additions.contributions}:
-        _slots.withdraw(slot, by=extension)
-    for slot, value in additions.contributions:
-        _slots.contribute(slot, value, extension=extension, by=extension)
     register_jobs(extension, additions.jobs)
     return bool(additions.checks)
 
@@ -794,37 +785,6 @@ def register_jobs(extension: str, jobs: tuple[JobContribution, ...]) -> None:
             entries=tuple(replace(entry, source=extension) for entry in item.entries),
             gates=item.gates,
             extension=extension,
-        )
-
-
-def declare_release_notes(extension: str, reference: Reference | None) -> bool:
-    """Make the provider *reference* names the release notes' writer, for *extension*.
-
-    The provider is imported when the release train first asks it, so a
-    mount imports none of the extension's code.
-
-    Returns:
-        Whether a provider was registered: False when *reference* is None.
-    """
-    if reference is None:
-        return False
-    from livery.workshop._release_notes import DeclaredNotes, register_release_notes
-
-    register_release_notes(DeclaredNotes(reference), extension=extension)
-    return True
-
-
-def declare_slots(extension: str, slots: tuple[DeclaredSlot, ...]) -> None:
-    """Declare *slots* for *extension*, before anything contributes to them."""
-    from livery.workshop import _slots
-
-    for slot in slots:
-        _slots.register_slot(
-            slot.name,
-            compose=slot.compose,
-            default=slot.default,
-            extension=extension,
-            values=slot.values,
         )
 
 
@@ -879,10 +839,12 @@ def notes_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     them, so no host allowance reaches these tools
     ([livery.workshop._tools.host_allowed][]).
     """
+    from livery.workshop._release_notes import RELEASE_NOTES
+
     found: dict[str, tuple[str, ...]] = {}
     for extension in extension_names(start):
         declared = _readable(extension)
-        if declared is not None and declared.release_notes is not None:
+        if declared is not None and RELEASE_NOTES.name in declared.queries:
             found[extension] = declared.tools
     return found
 

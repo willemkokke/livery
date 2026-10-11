@@ -11,9 +11,12 @@ levels = ["workspace"]
 main = ["ty", "check", "{arguments}"]
 extensions = ["python"]
 tools = ["ty"]
-editor-extension = "astral-sh.ty"
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
     { category = "test", suffixes = [".py", ".pyi"] },
     { category = "test-support", suffixes = [".py", ".pyi"] },
 ]
+
+# The editor extension the rendered recommendations list names.
+[queries.editor-extensions]
+value = ["astral-sh.ty"]

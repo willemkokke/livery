@@ -20,7 +20,7 @@ from livery.workshop._fragments import (
     compose_project,
     package_fragment,
 )
-from livery.workshop._slots import all_composed
+from livery.workshop._queries import EDITOR_EXTENSIONS, answer
 
 _FAILURES = (BaseException,)
 
@@ -49,7 +49,6 @@ def _data() -> dict[str, object]:
         "runner_prog": "fm",
         "project_name": "x",
         "kind": "",
-        "slots": all_composed(),
     }
 
 
@@ -193,13 +192,14 @@ def test_this_workspace_composes_no_tool_table_from_the_base_s_records() -> None
     injected = render_injections(root, project_facts(root))
     # Each tool's configuration is a file of its extension's own, and no
     # extension is mounted here: the base's records add no table to the
-    # project file and recommend no editor extension.
+    # project file. The recommendations are the listed extensions'
+    # answers, read from their declarations, mounted or not.
     assert injected["fragments"]["pyproject.toml"] == ""
-    assert injected["extensions"] == []
+    assert injected["extensions"] == list(answer(root, EDITOR_EXTENSIONS))
 
 
 def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
-    from livery.workshop._checks import editor_extensions, tools_for
+    from livery.workshop._checks import tools_for
 
     register_check(
         CheckRecord(
@@ -220,17 +220,14 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
                 fragments=(Fragment("pyproject.toml", "[tool.acme]\nstrict = true\n"),)
                 if role == "typecheck"
                 else (),
-                editor_extension="acme.checker",
             )
         )
     composed = compose_project(_data())
     assert "[tool.acme]" in composed["pyproject.toml"]
-    assert "acme.checker" in editor_extensions()
     unregister_check("typecheck.acme", by="acme.brand")
     unregister_check("typecomplete.acme", by="acme.brand")
     composed = compose_project(_data())
     assert "[tool.acme" not in composed["pyproject.toml"]
-    assert "acme.checker" not in editor_extensions()
     assert "acme" not in {tool for tool, _ in tools_for(("python",))}
     assert "[tool.bystander]" in composed["pyproject.toml"]
 
@@ -267,18 +264,15 @@ def test_a_package_fragment_resolves_by_the_extensions_a_package_holds(
     )
 
 
-def test_the_extension_ids_come_from_the_records_and_are_well_formed() -> None:
+def test_the_extension_ids_come_from_the_listed_extensions_and_are_well_formed() -> (
+    None
+):
     import re
 
-    from livery.workshop._checks import checks_by_name, editor_extensions
-
-    carried = {
-        record.editor_extension
-        for record in checks_by_name().values()
-        if record.editor_extension
-    }
-    assert set(editor_extensions()) == carried
-    assert all(
-        re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", name) for name in editor_extensions()
-    )
-    assert json.dumps(list(editor_extensions()))  # what the rendered list carries
+    root = Path(__file__).resolve().parents[3]
+    ids = answer(root, EDITOR_EXTENSIONS)
+    assert ids, "this workspace lists extensions that recommend one"
+    assert all(re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", name) for name in ids)
+    rendered = (root / ".vscode" / "extensions.json").read_text()
+    assert all(f'"{name}",' in rendered for name in ids)
+    assert json.dumps(list(ids))  # what the rendered list carries
