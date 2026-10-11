@@ -519,7 +519,7 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
 def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The repair each command runs first supplies the tools from the machine's store.
+    """The hook's offline sync supplies the tools from the machine's store.
 
     A start whose sync failed leaves a checkout holding the lock and no
     receipt, so the gate's PATH holds no tool. The store already has
@@ -530,6 +530,7 @@ def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_co
 
     from livery.workshop import _reconcile
     from livery.workshop._fragment_engine import LOCAL_RECEIPT
+    from livery.workshop._sync import materialise_tools
 
     root = _workspace(tmp_path, monkeypatch)
     _tools.write_lock(root)
@@ -543,10 +544,12 @@ def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_co
     monkeypatch.setattr(_engine, "run_installer", installing_again)
     (root / LOCAL_RECEIPT).parent.mkdir(parents=True)
     (root / LOCAL_RECEIPT).write_text("{}\n")
-    assert _reconcile.repair(root)[0] == "  tools: 2 receipt(s), all present"
+    assert _reconcile._tools_current(root).startswith("no receipt for ")
+    lines = materialise_tools(root, offline=True)
+    assert lines[0] == "  tools: 2 receipt(s), all present"
     held = _tools.receipts(root)
     assert _tools.emission(root)[0] == (held["ruff"].paths[0], held["tea"].paths[0])
-    assert _reconcile.repair(root) == []
+    assert _reconcile._tools_current(root) == ""
 
 
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(

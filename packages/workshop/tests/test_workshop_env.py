@@ -603,19 +603,24 @@ def test_the_cascade_hook_enters_the_environment_for_the_process(
     ]
 
 
-def test_the_cascade_hook_enters_the_tools_its_repair_wrote(
+def test_the_first_task_hook_enters_the_tools_its_sync_wrote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A checkout that never synced has no receipt when the hook first
-    # enters the environment; the repair writes them after it.
+    # A checkout that never synced has no receipt when the cascade hook
+    # enters the environment; the per-task hook's sync writes them, once
+    # per process, before the first task, and enters again.
+    from types import SimpleNamespace
     from typing import cast
 
     import livery.footman as footman
     from livery.workshop import _env_tasks
 
     ruff = str(tmp_path / "store" / "ruff")
+    asked: list[str] = []
 
-    def repairing(root: Path) -> bool:
+    def syncing(root: Path, task: str, env: dict[str, str]) -> bool:
+        asked.append(task)
+        env["SEEN"] = "by the sync's children"
         _receipt(root, "ruff", paths=(ruff,))
         return True
 
@@ -623,15 +628,48 @@ def test_the_cascade_hook_enters_the_tools_its_repair_wrote(
         "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: True)
-    monkeypatch.setattr("livery.workshop._reconcile.apply", repairing)
+    monkeypatch.setattr("livery.workshop._reconcile.apply", syncing)
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    monkeypatch.setattr(_env_tasks, "_SYNCED", [])
     monkeypatch.setenv("PATH", "/usr/bin")
-    _env_tasks.apply_cascade(cast(footman.Invocation, None))
+    inv = cast(footman.Invocation, None)
+    handle = SimpleNamespace(name="check", env={})
+    _env_tasks.sync_first(inv, handle)
+    assert asked == ["check"]
+    assert handle.env == {"SEEN": "by the sync's children"}
     assert os.environ["PATH"].split(os.pathsep) == [
         str(venv_bin(tmp_path)),
         ruff,
         "/usr/bin",
     ]
+    # The second task of the same command, and the sync's own nested
+    # executions, ask nothing more.
+    _env_tasks.sync_first(inv, SimpleNamespace(name="docs.build", env={}))
+    assert asked == ["check"]
+
+
+def test_the_first_task_hook_never_fails_the_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from types import SimpleNamespace
+    from typing import cast
+
+    import livery.footman as footman
+    from livery.workshop import _env_tasks
+
+    def broken(root: Path, task: str, env: dict[str, str]) -> bool:
+        raise RuntimeError("receipts dir is a file")
+
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: True)
+    monkeypatch.setattr("livery.workshop._reconcile.apply", broken)
+    monkeypatch.setattr(_env_tasks, "_SYNCED", [])
+    handle = SimpleNamespace(name="check", env={})
+    _env_tasks.sync_first(cast(footman.Invocation, None), handle)
+    err = capsys.readouterr().err
+    assert "environment sync skipped (receipts dir is a file)" in err
 
 
 def test_apply_cascade_defaults_absent_keys_and_never_overrides(

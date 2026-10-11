@@ -551,8 +551,10 @@ def sync(
     are. They differ as uv's do, in whether the locks are judged:
     ``--locked`` refuses a stale one, so CI's setup runs it and a job
     holds what a person's checkout holds; ``--frozen`` takes them as
-    they are, which is how a command repairs a checkout that lacks its
-    own files. Judging the tracked files stays the drift check's.
+    they are, which is how the per-command hook brings a checkout that
+    lacks its own files current, calling this verb frozen and offline
+    ([livery.workshop._reconcile.apply][]). Judging the tracked files
+    stays the drift check's.
 
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
@@ -603,17 +605,19 @@ def sync(
     # directory refuses discovery until it goes.
     for line in sweep_residue(root):
         print(line)
-    for line in fetch_store_lines(root):
-        print(line)
+    # Offline touches no network: the mirror the last fetch took stands.
+    if offline:
+        print("  store: not fetched (--offline); the last snapshot stands")
+    else:
+        for line in fetch_store_lines(root):
+            print(line)
     for line in sync_workspace(root, local_only=local_only):
         print(line)
     # The tools come before `uv sync`: a native member's build under uv
     # runs cmake, conan and the provider the store supplies, and resolves
     # a sibling library at HEAD through the conan workspace file the
-    # delivery above wrote.
-    # The engine, not the `toolroom.sync` task: this task owns the console,
-    # and a task called from inside it waits for the console to free,
-    # which it never does while its caller runs.
+    # delivery above wrote. The engine takes the root as a value, as a
+    # birth syncs its newborn's tools from inside its own task.
     sync_tools(root, frozen=frozen, locked=locked, offline=offline)
     # A member whose install builds something may need it in place
     # first; its kind's registration says what.
