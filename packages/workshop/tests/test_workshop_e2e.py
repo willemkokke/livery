@@ -1363,6 +1363,10 @@ def test_a_host_pass_hands_its_children_the_environments_own_token(
     monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
     monkeypatch.setenv("GITEA_URL", "http://localhost:1")
     monkeypatch.setenv("GITEA_TOKEN", "stale")
+    # A hosted job carries the real forge's tokens in the generic names
+    # the workshop reads first; inside the pass the forge is the local one.
+    monkeypatch.setenv("FORGE_TOKEN", "github-job-token")
+    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "github-admin-token")
     values = {
         "GITEA_URL": "http://localhost:43210",
         "GITEA_TOKEN": "token-abc",
@@ -1371,6 +1375,10 @@ def test_a_host_pass_hands_its_children_the_environments_own_token(
     _e2e._enter_host(values, "scratch")  # pyright: ignore[reportPrivateUsage]
     assert (os.environ["GITEA_URL"], os.environ["GITEA_TOKEN"]) == (
         "http://localhost:43210",
+        "token-abc",
+    )
+    assert (os.environ["FORGE_TOKEN"], os.environ["FORGE_ADMIN_TOKEN"]) == (
+        "token-abc",
         "token-abc",
     )
     assert (

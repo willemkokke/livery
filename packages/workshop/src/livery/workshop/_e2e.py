@@ -358,13 +358,18 @@ def _enter_host(values: Mapping[str, str], env: str) -> None:
     before the bring-up seeded the environment, and every child the
     pass starts (the birth, the loop's own fm) copies that
     environment, so each would otherwise reach the forge with a token
-    the environment no longer holds.
+    the environment no longer holds. The generic forge variables go
+    too: the workshop reads ``FORGE_TOKEN`` and ``FORGE_ADMIN_TOKEN``
+    before a forge's own, and a hosted job carries the real forge's in
+    them, so the newborn would otherwise hand GitHub's token to the
+    local Gitea and meet a 401.
     """
     CURRENT.name, CURRENT.mode = env, "host"
     CURRENT.url, CURRENT.token = values["GITEA_URL"], values["GITEA_TOKEN"]
     CURRENT.label = values["LABELS"].split(",")[0]
     lane = LANES["gitea"]
     os.environ[lane.url_var], os.environ[lane.token_var] = CURRENT.url, CURRENT.token
+    os.environ["FORGE_TOKEN"] = os.environ["FORGE_ADMIN_TOKEN"] = CURRENT.token
 
 
 def _dev_forge(kind: str) -> tuple[Forge, str]:
