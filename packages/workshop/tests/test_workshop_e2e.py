@@ -395,11 +395,16 @@ def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
 
     seen: list[tuple[list[str], object, str]] = []
     code = [3]
+    builtins: list[str] = []
 
     def run(argv: list[str], **kw: object) -> SimpleNamespace:
         env = kw["env"]
         assert isinstance(env, dict)
         seen.append((argv, kw["cwd"], str(env.get("FOOTMAN_NO_UV", ""))))
+        # The render runs with no pyproject, so the project rung offers
+        # nothing: the child's own config names the workshop instead.
+        config = Path(str(env["FOOTMAN_CONFIG_DIR"])) / "config.toml"
+        builtins.append(config.read_text("utf-8"))
         if argv[-1] == "--plugins":
             # The listing a failure prints: what mounted, from which rung.
             return SimpleNamespace(
@@ -424,6 +429,8 @@ def test_the_pass_renders_the_loop_with_its_own_workshop_and_no_handoff(
         (plugins, tmp_path, "1"),
         (argv, tmp_path, "1"),
     ]
+    assert len(builtins) == 3
+    assert all('[builtins]\nuser = ["livery.workshop"]\n' in text for text in builtins)
     assert "updated pyproject.toml" in capsys.readouterr().out
 
 
