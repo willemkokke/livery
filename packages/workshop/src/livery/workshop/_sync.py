@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import livery.footman as footman
-from livery.footman import Forward, doc, fail, task
+from livery.footman import Forward, doc, fail, step, task
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
@@ -379,7 +379,9 @@ def require_mounted(
     )
 
 
-def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
+def bring_current(
+    root: Path, git: GitOps, *, interactive: bool, fetched: bool = False
+) -> None:
     """Bring the current checkout up to date; the one-stop's first act.
 
     ``main`` only ever fast-forwards. A reserved ``workflow/`` branch
@@ -391,7 +393,9 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     diverged, then rebases onto the base; a stacked branch follows its
     parent instead ([livery.workshop._sync.restack][]). A rebase of a
     pushed branch finishes the job with the leased force-push, because
-    rebased-locally with a stale remote is the worst state.
+    rebased-locally with a stale remote is the worst state. *fetched*
+    says origin's heads were brought in this run already, by the one
+    fetch that also mirrors the state store, so none runs here.
     """
     _ = root
     branch = git.current_branch()
@@ -401,7 +405,8 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     if not git.has_remote("origin"):
         print("  no origin remote: nothing to bring current")
         return
-    git.fetch()
+    if not fetched:
+        git.fetch()
     if branch == "main":
         ahead = git._run("rev-list", "--count", "origin/main..main").strip()
         if ahead != "0":
@@ -574,10 +579,6 @@ def sync(
     without one.
     """
     from livery.workshop._git_ops import GitOps
-    from livery.workshop._kinds import prepare_install
-    from livery.workshop._packages import discover_packages
-    from livery.workshop._tool_tasks import sync_tools
-    from livery.workshop._uv import run_uv
 
     root = workspace_root()
     if root is None:
@@ -595,12 +596,24 @@ def sync(
     # Neither mode changes what a commit holds.
     local_only = locked or frozen
     git = GitOps(root)
+    # Each phase is a step: a receipt line with its duration, a row in
+    # --json, a slice in a profile, and a unit parallel() could schedule
+    # where two were independent. They are not yet: the fetch moves the
+    # checkout before anything renders, the delivery writes the conan
+    # workspace file the tools' build reads, the tools come before uv's
+    # build, and the last delivery and the generated files read the locks
+    # both halves just wrote.
+    fetched = False
+    stored = False
+    if not local_only and not offline and git.has_commits():
+        fetched = fetch_origin(root)()
+        stored = True
     if not local_only and not git.has_commits():
         print("  no git history here: nothing to bring current")
     elif not local_only:
-        before = git.head_sha()
-        bring_current(root, git, interactive=footman.attended())
-        continue_on_moved_code(root, before, git.head_sha())
+        moved = bring_checkout_current(root, git, fetched=fetched)()
+        if moved is not None:
+            continue_on_moved_code(root, *moved)
     # Before anything renders or locks: a listed extension the mount
     # found missing would count as withdrawn, and its files and its
     # tools would go.
@@ -616,35 +629,15 @@ def sync(
     # Offline touches no network: the mirror the last fetch took stands.
     if offline:
         print("  store: not fetched (--offline); the last snapshot stands")
-    else:
-        for line in fetch_store_lines(root):
-            print(line)
-    for line in sync_workspace(root, local_only=local_only):
-        print(line)
-    # The tools come before `uv sync`: a native member's build under uv
-    # runs cmake, conan and the provider the store supplies, and resolves
-    # a sibling library at HEAD through the conan workspace file the
-    # delivery above wrote. The engine takes the root as a value, as a
-    # birth syncs its newborn's tools from inside its own task. Under
-    # --locked the lock was judged current above, so the tools install
-    # it as it is rather than resolving it a second time.
-    sync_tools(root, frozen=frozen or locked, offline=offline)
-    # A member whose install builds something may need it in place
-    # first; its kind's registration says what.
-    for line in prepare_install(root, discover_packages(root)):
-        print(line)
-    run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
-    # The locks just moved, and composed and generated files read them
-    # (the locked tools' fragment, the uv pin in setup.sh), so the sync
-    # ends by writing both again: the tree it leaves is settled.
-    from livery.workshop._shipped_files import deliver
-    from livery.workshop._templates import apply_generated
-
-    for line in deliver(root, local_only=local_only):
-        print(line)
+    elif not stored:
+        fetch_store_mirror(root)()
+    sync_workspace_files(root, local_only=local_only)()
+    sync_locked_tools(root, frozen=frozen or locked, offline=offline)()
+    prepare_installs(root)()
+    uv_sync(root, _uv_flags(frozen=frozen, locked=locked, offline=offline))()
+    deliver_files(root, local_only=local_only)()
     if not local_only:
-        for path in apply_generated(root):
-            print(f"  generated: {path}")
+        write_generated(root)()
     # The receipt records this sync, so the next command's reconcile
     # compares instead of syncing again.
     from livery.workshop._reconcile import record_receipt
@@ -777,12 +770,103 @@ def fetch_store_lines(root: Path) -> list[str]:
     from livery.workshop._state import fetch_store
 
     count, why = fetch_store(root)
+    return _store_lines(count, why)
+
+
+def _store_lines(count: int, why: str) -> list[str]:
+    """The line `fetch_store`'s answer prints: the count, or the reason it stands."""
     if why:
         return [
             f"  store: origin's state store not fetched ({why}); the last"
             " snapshot stands"
         ]
     return [f"  store: {count} ref(s) of origin's state store fetched"]
+
+
+def _fetch_origin(root: Path) -> bool:
+    """One round trip: origin's heads for the bring-current, the store for the gate.
+
+    Prints the store's line. Returns whether the fetch succeeded, so the
+    bring-current knows origin's heads are fresh; after a failed fetch it
+    fetches for itself and fails in its own words.
+    """
+    from livery.workshop._state import fetch_store
+
+    count, why = fetch_store(root, branches=True)
+    for line in _store_lines(count, why):
+        print(line)
+    return not why
+
+
+def _bring_checkout_current(
+    root: Path, git: GitOps, *, fetched: bool
+) -> tuple[str, str]:
+    """Bring the checkout current; HEAD before and after, for the handoff."""
+    before = git.head_sha()
+    bring_current(root, git, interactive=footman.attended(), fetched=fetched)
+    return before, git.head_sha()
+
+
+def _fetch_store_mirror(root: Path) -> None:
+    for line in fetch_store_lines(root):
+        print(line)
+
+
+def _sync_workspace_files(root: Path, *, local_only: bool) -> None:
+    for line in sync_workspace(root, local_only=local_only):
+        print(line)
+
+
+def _sync_locked_tools(root: Path, *, frozen: bool, offline: bool) -> None:
+    from livery.workshop._tool_tasks import sync_tools
+
+    sync_tools(root, frozen=frozen, offline=offline)
+
+
+def _prepare_installs(root: Path) -> None:
+    from livery.workshop._kinds import prepare_install
+    from livery.workshop._packages import discover_packages
+
+    for line in prepare_install(root, discover_packages(root)):
+        print(line)
+
+
+def _uv_sync(root: Path, flags: tuple[str, ...]) -> None:
+    from livery.workshop._uv import run_uv
+
+    run_uv("sync", *flags, root=root)
+
+
+def _deliver_files(root: Path, *, local_only: bool) -> None:
+    from livery.workshop._shipped_files import deliver
+
+    for line in deliver(root, local_only=local_only):
+        print(line)
+
+
+def _write_generated(root: Path) -> None:
+    from livery.workshop._templates import apply_generated
+
+    for path in apply_generated(root):
+        print(f"  generated: {path}")
+
+
+# The sync's phases as steps, live: each prints its own lines as it goes
+# and earns a receipt with its duration, a row in --json and a slice in a
+# profile. A phase's title is what every one of those shows.
+fetch_origin = step(_fetch_origin, title="fetch origin").opts(capture=False)
+bring_checkout_current = step(_bring_checkout_current, title="bring current").opts(
+    capture=False
+)
+fetch_store_mirror = step(_fetch_store_mirror, title="fetch store").opts(capture=False)
+sync_workspace_files = step(_sync_workspace_files, title="sync workspace").opts(
+    capture=False
+)
+sync_locked_tools = step(_sync_locked_tools, title="sync tools").opts(capture=False)
+prepare_installs = step(_prepare_installs, title="prepare install").opts(capture=False)
+uv_sync = step(_uv_sync, title="uv sync").opts(capture=False)
+deliver_files = step(_deliver_files, title="deliver").opts(capture=False)
+write_generated = step(_write_generated, title="generated").opts(capture=False)
 
 
 #: Lock files the store never reads, which a workspace may still hold

@@ -919,27 +919,25 @@ def _key_group(snapshot: _Snapshot, ref: str, sha: str) -> dict[str, str]:
     return group
 
 
-def fetch_store(root: Path) -> tuple[int, str]:
+def fetch_store(root: Path, *, branches: bool = False) -> tuple[int, str]:
     """Mirror origin's namespace under `FETCHED_NAMESPACE` and stamp it.
 
     One fetch with an explicit refspec, pruned, so a ref origin dropped
     goes from the mirror too; then the ``origin`` row of `FETCHED`,
     which is what tells a `fetched_snapshot` that a ref missing from
-    the mirror is absent rather than never fetched.
+    the mirror is absent rather than never fetched. With *branches*
+    the same fetch brings origin's heads into ``refs/remotes/origin/``,
+    pruned the same way, so a sync that needs both pays one round trip.
 
     Returns:
         ``(count, "")`` with the refs the mirror holds, or ``(0,
         reason)`` when the fetch or the stamp failed, with git's
         words; nothing here raises or prints.
     """
-    fetched = _git(
-        root,
-        "fetch",
-        "--quiet",
-        "--prune",
-        "origin",
-        f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*",
-    )
+    refspecs = [f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*"]
+    if branches:
+        refspecs.insert(0, "+refs/heads/*:refs/remotes/origin/*")
+    fetched = _git(root, "fetch", "--quiet", "--prune", "origin", *refspecs)
     if fetched.code != 0:
         return 0, _words(fetched)
     mirrored = _local_refs(root, FETCHED_NAMESPACE)
