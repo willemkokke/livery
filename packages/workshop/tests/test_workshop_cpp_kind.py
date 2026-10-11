@@ -7,6 +7,7 @@ import os
 import platform
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -175,6 +176,8 @@ def _profile_conan(
     """
     calls: list[tuple[str, ...]] = []
     answers = iter(shown)
+    # No profile file to read: every answer below comes from conan.
+    monkeypatch.setenv("CONAN_HOME", str(Path(tempfile.mkdtemp())))
 
     def _fake(cwd: Path, *args: str, env: object = None) -> _Said:
         del cwd, env
@@ -248,6 +251,39 @@ def test_a_profile_that_names_a_compiler_is_kept(
     calls = _profile_conan(monkeypatch, [_DETECTED])
     assert _cpp_conan.ensure_profile(tmp_path) == []
     assert calls == [_EXIST_OK, _SHOW]
+
+
+def test_a_profile_file_that_names_a_compiler_costs_no_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The prepare runs before every install on every job; a profile
+    # already detected is read from its file and conan never starts.
+    from livery.extensions.conan import _package
+
+    calls = _profile_conan(monkeypatch, [])
+    home = tmp_path / "conan-home"
+    monkeypatch.setenv("CONAN_HOME", str(home))
+    profile = home / "profiles" / "default"
+    assert _package.profile_path(os.environ) == profile
+    # Missing: conan is asked, as the fallbacks above pin.
+    assert not _package.profile_names_compiler(profile)
+    profile.parent.mkdir(parents=True)
+    # Naming no compiler itself (an include may): conan is asked.
+    profile.write_text("include(base)\n[settings]\narch=armv8\nos=Macos\n")
+    assert not _package.profile_names_compiler(profile)
+    profile.write_text("[settings]\ncompiler=\n[options]\ncompiler=x\n")
+    assert not _package.profile_names_compiler(profile)
+    # Naming one: nothing to ask.
+    profile.write_text(
+        "[settings]\narch=armv8\ncompiler=apple-clang\ncompiler.version=21\n"
+    )
+    assert _package.profile_names_compiler(profile)
+    assert _cpp_conan.ensure_profile(tmp_path) == []
+    assert calls == []
+    # Without CONAN_HOME the file is conan's own default.
+    monkeypatch.delenv("CONAN_HOME")
+    own = Path.home() / ".conan2" / "profiles" / "default"
+    assert _package.profile_path(os.environ) == own
 
 
 def test_conan_create_runs_once_the_profile_names_a_compiler(
