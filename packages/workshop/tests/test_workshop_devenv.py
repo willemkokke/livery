@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -215,3 +216,55 @@ def test_gitea_that_never_answers_or_exits_early_fails_naming_its_log(
     monkeypatch.setattr(_devenv, "ALIVE", lambda pid: False)
     with pytest.raises(Failed, match=r"exited before it answered; its log is"):
         _devenv.devenv_up("dev")
+
+
+def test_a_daemon_never_inherits_the_checkout_the_verb_ran_from(tmp_path: Path) -> None:
+    # The runner daemon carried the launching shell's VIRTUAL_ENV and a
+    # PATH led by that worktree's venv: every job's uv warned, and a
+    # tool could resolve from a checkout that may be deleted under it.
+    from livery.workshop._devenv import daemon_environment
+
+    venv = tmp_path / "wt" / ".venv"
+    environ = {
+        "VIRTUAL_ENV": str(venv),
+        "UV_RUN_RECURSION_DEPTH": "1",
+        "PATH": os.pathsep.join(
+            [str(venv / "bin"), "/store/node/bin", str(venv / "Scripts"), "/usr/bin"]
+        ),
+        "FOOTMAN_DATA_DIR": "/cache/footman",
+    }
+    cleaned = daemon_environment(environ)
+    assert "VIRTUAL_ENV" not in cleaned and "UV_RUN_RECURSION_DEPTH" not in cleaned
+    assert cleaned["PATH"] == os.pathsep.join(["/store/node/bin", "/usr/bin"])
+    # The entered environment stays: the store's tools are the point.
+    assert cleaned["FOOTMAN_DATA_DIR"] == "/cache/footman"
+    # Outside any venv there is nothing to strip.
+    assert daemon_environment({"PATH": "/usr/bin"}) == {"PATH": "/usr/bin"}
+
+
+def test_a_spawned_daemon_starts_with_the_cleaned_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import sys
+    import time
+
+    from livery.workshop._devenv import spawn_detached
+
+    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / ".venv"))
+    monkeypatch.setenv("UV_RUN_RECURSION_DEPTH", "1")
+    monkeypatch.setenv("PATH", os.pathsep.join([str(tmp_path / ".venv" / "bin"), "/usr/bin"]))
+    log = tmp_path / "daemon.log"
+    pid = spawn_detached(
+        [sys.executable, "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
+        cwd=tmp_path,
+        log=log,
+    )
+    assert pid > 0
+    for _ in range(100):
+        if log.is_file() and log.read_text().endswith("}\n"):
+            break
+        time.sleep(0.05)
+    seen = json.loads(log.read_text())
+    assert "VIRTUAL_ENV" not in seen and "UV_RUN_RECURSION_DEPTH" not in seen
+    assert seen["PATH"] == "/usr/bin"
