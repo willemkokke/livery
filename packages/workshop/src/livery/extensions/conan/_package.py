@@ -121,6 +121,24 @@ def current_version(package: Package) -> str:
     return match.group(1) if match else "0.0.0"
 
 
+def names_a_reference(package: Package) -> bool:
+    """Whether *package*'s recipe declares both ``name`` and ``version``.
+
+    A recipe that does is a conan package, which the workspace resolves
+    from its source; one that declares neither, a consumer's recipe
+    with requirements alone, is what conan installs for, never a
+    workspace package.
+    """
+    recipe = package.directory / RECIPE_FILE
+    if not recipe.is_file():
+        return False
+    text = recipe.read_text("utf-8")
+    return all(
+        re.search(rf'^\s*{key} = "[^"]+"$', text, re.M) is not None
+        for key in ("name", "version")
+    )
+
+
 def stamp_version(package: Package) -> _Stamper:
     """Where a conan package's version lives, ready to stamp."""
     return _Stamper(package)
@@ -239,14 +257,15 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     ``version``, so the file stays right when a release stamps the
     version.
 
-    A member without a recipe is left out: conan deduces a reference
-    from the recipe's ``name`` and ``version``, and a package that
-    consumes conan without being a recipe is never resolved from the
-    workspace.
+    A member whose recipe names no reference is left out: conan
+    deduces a workspace package's reference from the recipe's ``name``
+    and ``version``, and a consumer's recipe, requirements alone, is
+    what conan installs for, never a workspace package
+    ([livery.extensions.conan._package.names_a_reference][]).
 
     Args:
         members: The conan members, in the order the file lists them;
-            those with no ``conanfile.py`` are passed over.
+            those whose recipe names no reference are passed over.
         root: The workspace root, for a file placed outside it: each
             path is then the member's absolute POSIX path. A Linux
             build container mounts the root at its host path and reads
@@ -264,7 +283,7 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
             if root is None
             else f"  - path: {(root / member.path).as_posix()}"
             for member in members
-            if (member.directory / RECIPE_FILE).is_file()
+            if names_a_reference(member)
         ),
     ]
     return "\n".join(lines) + "\n"

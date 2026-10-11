@@ -838,16 +838,21 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
 def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
     tmp_path: Path,
 ) -> None:
-    # A consumer first: standing for conan without a recipe, it is
-    # left out, since conan cannot deduce a reference for it.
+    # A consumer first: its recipe names requirements and no reference,
+    # so it is left out, since conan cannot deduce one for it; a member
+    # with no recipe at all is left out the same way.
     from livery.extensions.conan import _package as _conan
     from livery.workshop._packages import Package
 
     def member(name: str, *, recipe: bool) -> Package:
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
-        if recipe:
-            (directory / "conanfile.py").write_text("# a recipe\n")
+        text = (
+            f'name = "{name}"\nversion = "0.1.0"\n'
+            if recipe
+            else 'requires = ("fmt/[>=11.0]",)\n'
+        )
+        (directory / "conanfile.py").write_text(text)
         return Package(
             directory=directory,
             path=f"packages/{name}",
@@ -858,7 +863,10 @@ def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
         )
 
     consumer = member("ext", recipe=False)
+    assert not _conan.names_a_reference(consumer)
     assert _conan.workspace_file((consumer,)).endswith("packages:\n")
+    (consumer.directory / "conanfile.py").unlink()
+    assert not _conan.names_a_reference(consumer)
     library = member("geometry", recipe=True)
     text = _conan.workspace_file((consumer, library))
     assert text.endswith("packages:\n  - path: packages/geometry\n")
