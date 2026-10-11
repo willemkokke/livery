@@ -1851,15 +1851,21 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
-    """Give the loop its members of *kinds*, all when empty, each landed by its gate.
+    """Give the loop its members of *kinds*, all when empty, through one pull request.
 
-    ``new.package`` renders and wires a member, a `[release] baseline`
-    seeds the first release's number, the nanobind member's contract
-    names the loop's one runner as its wheel platform, and the loop's
-    own ``fm submit --armed`` lands it: the branch, the pull request,
-    the gate on the runner (which compiles the native member's
-    editable install), and the merge, all on the dev wheels.
-    Idempotent: a member already on main skips everything.
+    ``new.package`` renders and wires each missing member, a `[release]
+    baseline` seeds the first release's number, the nanobind member's
+    contract names the loop's one runner as its wheel platform, and the
+    loop's own ``fm submit --armed`` lands them together: one branch,
+    one pull request, one gate on the runner over every kind at once
+    (it compiles the native member's editable install), and one merge,
+    all on the dev wheels. One pull request rather than one per member:
+    every member edits the same rendered root files, so pull requests
+    in flight together conflict, and landing them one after another
+    costs a gate run and a merge each; what the one gate drops is each
+    kind's narrowed gate and its own submit. Idempotent: a member
+    already on main is skipped, and nothing is submitted when none is
+    missing.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -1868,12 +1874,17 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
     # tree would skip straight to the release act with nothing
     # merged. The alignment makes the glob read main's truth.
     _align_main(root)
+    missing: list[tuple[str, str]] = []
     for name, kind in members_for(kinds):
         if (root / "packages" / name / "workshop.toml").is_file():
             print(f"  member {name}: already landed")
-            continue
-        git = GitOps(root)
-        _fresh_branch(root, f"feat/{name}")
+        else:
+            missing.append((name, kind))
+    if not missing:
+        return
+    git = GitOps(root)
+    _fresh_branch(root, "feat/members")
+    for name, kind in missing:
         _loop_fm(root, "new.package", name, f"--kind={kind}")
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
@@ -1903,21 +1914,22 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
                 + 'runners = ["ubuntu-latest"]\n'
             )
         member.write_text(body, "utf-8")
-        # The baseline is a render input: cliff.toml was rendered before
-        # the append, so it must settle again or the gate names it as
-        # drift.
-        _loop_fm(root, "drift.check", "--fix")
-        git.commit_all(
-            f"feat({name}): a loop member\n\nBorn through new.package on"
-            " the dev wheels, with the release baseline seeded so the"
-            " first release lands at 0.1.0."
-        )
-        # Force for the same reason the setup branch pushes force: the
-        # branch is pass-owned, rebuilt from main every time, so the
-        # remote's copy is always superseded.
-        _loop_fm(root, "submit", "--force", "--armed")
-        _align_main(root)
-        print(f"  member {name}: landed through the loop's own gate")
+    # The baseline is a render input: cliff.toml was rendered before
+    # the append, so it must settle again or the gate names it as
+    # drift.
+    _loop_fm(root, "drift.check", "--fix")
+    names = ", ".join(name for name, _kind in missing)
+    git.commit_all(
+        f"feat: the loop's members\n\n{names}: born through new.package on"
+        " the dev wheels, with the release baseline seeded so the"
+        " first release lands at 0.1.0."
+    )
+    # Force for the same reason the setup branch pushes force: the
+    # branch is pass-owned, rebuilt from main every time, so the
+    # remote's copy is always superseded.
+    _loop_fm(root, "submit", "--force", "--armed")
+    _align_main(root)
+    print(f"  members {names}: landed through the loop's own gate, one pull request")
 
 
 def _completed_run(
@@ -2842,7 +2854,9 @@ class Pass:
         root: The loop's workspace once ``birth`` has run; None before.
         timings: One entry per scenario run, in order.
         extension: The extension under test; empty for a plain pass.
-        stack: The extensions the birth lists; empty for the stock list.
+        stack: The extensions the birth lists: the loop's own
+            ([livery.workshop._e2e.loop_stack][]) or the extension
+            under test's; empty for the stock list.
         kinds: The member kinds the members scenario lands; empty for all.
     """
 
@@ -2956,6 +2970,21 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
     from livery.workshop._new_project import birth_extensions
 
     return pass_.stack or tuple(birth_extensions([SELF]))
+
+
+def loop_stack() -> tuple[str, ...]:
+    """The extensions a plain pass's birth lists: the stock list without ``docs``.
+
+    The docs extension puts a docs job on every run of the loop's
+    project, for a site nothing in a pass reads; the pass proves the
+    gate, the release train and the points, and
+    ``fm ci.e2e --extension=docs`` proves the docs extension on its
+    own.
+    """
+    from livery.workshop._extensions import SELF
+    from livery.workshop._new_project import birth_extensions
+
+    return tuple(entry for entry in birth_extensions([SELF]) if entry != "docs")
 
 
 def _listed_extensions(root: Path) -> tuple[str, ...]:
@@ -3152,7 +3181,7 @@ if _WORKSHOP_TESTS.is_dir():
         ``extension`` (birth and the members) and ``all``; a scenario's
         needs run first, once. ``--extension`` tests one extension in
         isolation, ``extension`` the default set: the birth lists that
-        extension and what it requires instead of the stock list, and
+        extension and what it requires instead of the loop's stack, and
         the members are those of the kinds its checks declare. ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a
         birth lists into a local index, births or resumes the loop's
@@ -3186,7 +3215,9 @@ if _WORKSHOP_TESTS.is_dir():
                 require_dev_branch(driver)
             asked = scenario or ("extension" if extension else "develop")
             chosen = scenarios_for(asked)
-            stack, kinds = extension_under_test(extension) if extension else ((), ())
+            stack, kinds = (
+                extension_under_test(extension) if extension else (loop_stack(), ())
+            )
             if forge != "gitea":
                 fail(
                     f"--env addresses a Gitea environment; --forge={forge} has none yet"
