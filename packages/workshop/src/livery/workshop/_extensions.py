@@ -112,32 +112,6 @@ def normal_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def extension_extras(extension: str, present: tuple[str, ...]) -> tuple[str, ...]:
-    """The extras of *extension*'s wheel that *present* puts in use, sorted.
-
-    One per extension of *present* that *extension* declares compatible
-    or contributes to through ``[for.<target>]``: its wheel declares
-    each such claim as an extra requiring the target's distribution,
-    so installing the extra holds the two to the range the wheel
-    states. A target its own wheel ships puts no extra in use. Empty
-    for an extension nothing installed declares.
-    """
-    found = _readable(extension)
-    if found is None:
-        return ()
-    claimed = (*found.compatible, *found.target_tables)
-    own = distribution_of(extension)
-    return tuple(
-        sorted(
-            {
-                normal_name(name)
-                for name in claimed
-                if name in present and ships_elsewhere(name, own)
-            }
-        )
-    )
-
-
 def declaration(extension: str) -> Declaration | None:
     """*extension*'s declaration file, read and judged; None when none is installed.
 
@@ -1060,25 +1034,24 @@ def composition_problems(root: Path) -> list[str]:
 
     Judged for each package whose entries are installed package-level
     extensions: every extension its set requires is installed and
-    listed at its level, every pair in the set knows each other, each
-    lifecycle phase can run as the set's extensions declare it
-    ([livery.workshop._phases.phase_problems][]), the set's declared
-    order has a start, and the list is the canonical one, which the
-    gate's ``--fix`` writes ([livery.workshop._composition.canonical][]).
+    listed at its level, each lifecycle phase can run as the set's
+    extensions declare it ([livery.workshop._phases.phase_problems][]),
+    the set's declared order has a start, and the list is the canonical
+    one, which the gate's ``--fix`` writes
+    ([livery.workshop._composition.canonical][]). A cycle of
+    requirements shows in every package whose set holds one of its
+    members, since a set is closed under requires.
     """
-    from livery.workshop._composition import canonical, unconnected
+    from livery.workshop._composition import canonical
     from livery.workshop._phases import PHASES, phase_problems, phase_steps
 
     workspace = set(workspace_names(root))
     problems: list[str] = []
-    cycled = False
-    every: list[str] = []
     for contract, listed in _package_lists(root):
         if not _composable(listed):
             continue
         where = contract.parent.relative_to(root).as_posix()
         names = list(listed)
-        every += names
         members = package_set(names, installed_declaration)
         for name in members:
             found = installed_declaration(name)
@@ -1093,13 +1066,6 @@ def composition_problems(root: Path) -> list[str]:
                         f"{where}: {name} requires {needed}, which [workspace]"
                         " extensions does not list; the gate's --fix adds it"
                     )
-        for first, second in unconnected(members, installed_declaration):
-            problems.append(
-                f"{where}: `extensions` composes {first} and {second}, and neither"
-                " requires the other, contributes to it, nor declares it"
-                " compatible; list only one of them, or ask either extension to"
-                " declare the other compatible"
-            )
         for phase in PHASES:
             steps = phase_steps(phase, members, installed_declaration)
             problems += [
@@ -1110,7 +1076,6 @@ def composition_problems(root: Path) -> list[str]:
             wanted = canonical(names, installed_declaration)
         except OrderCycle as error:
             problems.append(f"{where}: {error}")
-            cycled = True
             continue
         if tuple(names) != wanted:
             problems.append(
@@ -1118,11 +1083,6 @@ def composition_problems(root: Path) -> list[str]:
                 f" is {_spelled(wanted)}{_why(names, wanted)}; the gate's --fix"
                 " rewrites it"
             )
-    if not cycled:
-        try:
-            order(package_set(every, installed_declaration), installed_declaration)
-        except OrderCycle as error:
-            problems.append(f"the package-level extensions the packages list: {error}")
     return problems
 
 
@@ -1135,8 +1095,8 @@ def _why(names: list[str], wanted: tuple[str, ...]) -> str:
     if len(set(names)) != len(names):
         return "; it lists an extension twice"
     return (
-        "; its order is composition order: each extension after what it requires"
-        " and names in after, before what it names in before, ties alphabetical"
+        "; its order is composition order: each extension after what it requires,"
+        " ties alphabetical"
     )
 
 
@@ -1494,21 +1454,6 @@ def _append_to_list(text: str, name: str) -> str:
         + "]"
         + text[found.end() :]
     )
-
-
-def combination_names() -> tuple[str, ...]:
-    """Every valid combination of the installed package-level extensions, by name.
-
-    What a package's ``extensions`` may compose from what is installed
-    ([livery.workshop._composition.combinations][]).
-
-    Raises:
-        DeclarationError: when an installed extension's declaration file
-            says something this workshop cannot take.
-    """
-    from livery.workshop._composition import combinations
-
-    return combinations(installed_extensions(), installed_declaration)
 
 
 def available_extensions(

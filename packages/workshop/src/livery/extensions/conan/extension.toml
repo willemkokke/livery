@@ -8,7 +8,6 @@ levels = ["package"]
 # Conan packages C and C++, so a package that lists conan is a C or C++
 # package.
 requires = ["cpp"]
-compatible = ["cmake"]
 
 # The questions about a package this extension answers, from its recipe.
 [queries]

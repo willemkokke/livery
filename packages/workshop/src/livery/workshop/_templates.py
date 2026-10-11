@@ -116,20 +116,10 @@ def _extension_requirements(
     """The dev group's line for each stack distribution that is not a member.
 
     One line per distribution, since a wheel may ship several
-    extensions, carrying the extras every extension it ships puts in
-    use ([livery.workshop._extensions.extension_extras][]).
+    extensions.
     """
-    from livery.workshop._extensions import extension_extras
-
-    present = tuple(name for name, _ in entries)
-    extras: dict[str, set[str]] = {}
-    for name, dist in entries:
-        if _requirement_name(dist) not in members:
-            extras.setdefault(dist, set()).update(extension_extras(name, present))
-    return [
-        f"{dist}[{','.join(sorted(used))}]" if used else dist
-        for dist, used in extras.items()
-    ]
+    found = [dist for _name, dist in entries if _requirement_name(dist) not in members]
+    return list(dict.fromkeys(found))
 
 
 def compose_fragments(data: dict[str, Any]) -> dict[str, str]:

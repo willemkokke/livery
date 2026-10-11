@@ -712,8 +712,7 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
     if found is None:
         return []
     declared = found[1]
-    claims = sorted({*declared.compatible, *declared.target_tables})
-    if not declared.requires and not claims:
+    if not declared.requires:
         return []
     where = f"extension {subject.extension}"
     dist = shipping_distribution(subject.extension)
@@ -722,19 +721,14 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
             Violation(
                 REQUIREMENTS_IN_METADATA,
                 where,
-                "declares requires, compatible or [for] targets, and no installed"
-                " distribution declares it in workshop.extensions, so its wheel's"
-                " metadata cannot be read",
+                "declares requires, and no installed distribution declares it in"
+                " workshop.extensions, so its wheel's metadata cannot be read",
             )
         ]
     required = _required(list(dist.requires or ()))
-    provided = {
-        normal_name(extra) for extra in dist.metadata.get_all("Provides-Extra") or ()
-    }
     violations: list[Violation] = []
     # A target the same wheel ships is held to it by being in it.
     requires = [name for name in declared.requires if ships_elsewhere(name, dist.name)]
-    claims = [name for name in claims if ships_elsewhere(name, dist.name)]
     for target in requires:
         wanted = normal_name(distribution_of(target))
         if (wanted, frozenset()) not in required:
@@ -745,22 +739,6 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
                     f"requires {target}, and its wheel does not depend on"
                     f" {distribution_of(target)}; a requires range is a dependency"
                     " of the wheel, so the resolver holds the two to it",
-                )
-            )
-    for target in claims:
-        extra = normal_name(target)
-        wanted = normal_name(distribution_of(target))
-        if extra not in provided or not any(
-            name == wanted and extra in extras for name, extras in required
-        ):
-            violations.append(
-                Violation(
-                    REQUIREMENTS_IN_METADATA,
-                    where,
-                    f"composes with {target} or contributes to it, and its wheel has"
-                    f" no extra {extra!r} that requires {distribution_of(target)}; a"
-                    " compatibility claim is an extra of the wheel, which a"
-                    " workspace listing both installs",
                 )
             )
     return violations
@@ -1207,9 +1185,7 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         REQUIREMENTS_IN_METADATA,
-        "Every extension an extension.toml requires is a dependency of its"
-        " wheel, and every extension it declares compatible or contributes to"
-        " is an extra of the wheel that requires the target's distribution.",
+        "Every extension an extension.toml requires is a dependency of its wheel.",
         _requirements_in_metadata,
     ),
     Clause(

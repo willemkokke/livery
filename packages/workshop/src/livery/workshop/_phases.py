@@ -14,11 +14,10 @@ The engine that runs a phase provides keys of its own
 ([livery.workshop._phases.ENGINE_KEYS][]): a step reads one like any
 key, and no extension provides one.
 
-The order puts a reader after the provider of each key it reads, then
-follows each extension's ``before`` and ``after``, ties alphabetical
-([livery.workshop._composition.order][]). Two providers of one key, a
-key nobody provides and an order with no start refuse before any step
-runs; the layering check names them for each package.
+The order puts a reader after the provider of each key it reads, ties
+alphabetical ([livery.workshop._composition.order][]). Two providers of
+one key, a key nobody provides and an order with no start refuse
+before any step runs; the layering check names them for each package.
 """
 
 from __future__ import annotations
@@ -222,8 +221,8 @@ def _providers(steps: Mapping[str, DeclaredPhase]) -> dict[str, list[str]]:
 def phase_order(steps: Mapping[str, DeclaredPhase], lookup: Lookup) -> tuple[str, ...]:
     """The extensions of *steps* in the order the phase walks them.
 
-    A reader after the provider of each key it reads, then ``before``
-    and ``after``, ties alphabetical; requirements order nothing here.
+    A reader after the provider of each key it reads, ties
+    alphabetical; requirements order nothing here.
 
     Raises:
         OrderCycle: when the order has no start.
@@ -278,7 +277,7 @@ def phase_problems(
         cycle = " before ".join((*error.members, error.members[0]))
         problems.append(
             f"the {phase} phase: its steps' order has no start: {cycle}; remove a"
-            " key read, a before or an after among them"
+            " key read among them"
         )
     return problems
 
