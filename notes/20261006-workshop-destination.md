@@ -2490,6 +2490,16 @@ the stack, which this design neither needs nor rules out).
   extension alone; that proof is 12e's. Proved by fresh passes for
   ruff and clang-tidy on the desk. Willem took the interim the same
   day.
+- 2026-10-11, Willem: no narrowing of a package's tests by what each
+  test module reaches, with the coverage union composing a package at
+  file level, while the workshop changes wholesale. Why: nearly every
+  change touches the workshop package, so package-level narrowing
+  (#1431 on a push, the pull request rule before it) keeps its suite,
+  1424 s of the Windows leg's 2141 s, on every leg; a finer selection
+  over a package in flux would be a mess to keep true. What stands:
+  the package rule, and the git-process cuts of #1432 (7 percent on
+  the git-driven files after three slices, the rest the flows' facts
+  and the state store's design).
 
 - 2026-10-11, #1377 planned in eleven parts, each mergeable alone and
   gate-green, no part touching the CI generator, which another change
