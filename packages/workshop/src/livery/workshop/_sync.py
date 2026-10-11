@@ -541,7 +541,7 @@ def sync(
     frozen: Forward[bool] = False,
     locked: Forward[bool] = False,
     offline: Forward[bool] = False,
-) -> None:
+) -> bool:
     """Bring the checkout current, materialise content, match the lock.
 
     The one-stop: fast-forward or rebase the current branch (asking
@@ -566,10 +566,19 @@ def sync(
     are. They differ as uv's do, in whether the locks are judged:
     ``--locked`` refuses a stale one, so CI's setup runs it and a job
     holds what a person's checkout holds; ``--frozen`` takes them as
-    they are, which is how the per-command hook brings a checkout that
-    lacks its own files current, calling this verb frozen and offline
+    they are, which is how the per-command hook brings a checkout
+    current before every command, calling this verb frozen and offline
     ([livery.workshop._reconcile.apply][]). Judging the tracked files
     stays the drift check's.
+
+    A frozen sync reads the receipts first
+    ([livery.workshop._reconcile.current][]). When the environment, the
+    tools and the delivered files all match them, its local steps have
+    nothing to do and are skipped, and nothing is printed, so the hook
+    costs a current checkout those reads and nothing else. A plain sync
+    renders and installs again regardless, since a fragment edit is in
+    no receipt; the tools' supply alone reads its receipts in every
+    mode ([livery.workshop._tool_tasks.sync_tools][]).
 
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
@@ -579,6 +588,10 @@ def sync(
     same way before anything renders or locks
     ([livery.workshop._sync.require_mounted][]): a sync never renders
     without one.
+
+    Returns:
+        Whether the local steps ran. A frozen sync of a current
+        checkout returns False.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -630,11 +643,30 @@ def sync(
     # directory refuses discovery until it goes.
     for line in sweep_residue(root):
         print(line)
+    # The receipts say what the machine holds against the locks and the
+    # delivery. A frozen sync matches the machine to them and nothing
+    # else, so when every receipt matches its local steps have nothing
+    # to do and are skipped, silently: the per-command hook runs this
+    # form before every command. A plain sync renders again regardless,
+    # since a fragment edit is in no receipt. A receipt that cannot be
+    # read is off: the steps rewrite it.
+    from livery.workshop._reconcile import current, record_receipt
+
+    try:
+        why = current(root)
+    except Exception as error:
+        why = f"the receipts could not be read ({error})"
+    skipped = frozen and not why
     # Offline touches no network: the mirror the last fetch took stands.
     if offline:
-        print("  store: not fetched (--offline); the last snapshot stands")
+        if not skipped:
+            print("  store: not fetched (--offline); the last snapshot stands")
     elif not stored:
         fetch_store_mirror(root)()
+    if skipped:
+        return False
+    if frozen:
+        print(f"  {why}; syncing from what the machine holds")
     sync_workspace_files(root, local_only=local_only)()
     sync_locked_tools(root, frozen=frozen or locked, offline=offline)()
     prepare_installs(root)()
@@ -642,11 +674,10 @@ def sync(
     deliver_files(root, local_only=local_only)()
     if not local_only:
         write_generated(root)()
-    # The receipt records this sync, so the next command's reconcile
+    # The receipt records this sync, so the next command's sync
     # compares instead of syncing again.
-    from livery.workshop._reconcile import record_receipt
-
     record_receipt(root)
+    return True
 
 
 def stale_locks(root: Path) -> list[str]:
@@ -773,10 +804,10 @@ def fetch_store_lines(root: Path) -> list[str]:
     """
     from livery.workshop._state import fetch_store
 
-    return _store_lines(fetch_store(root))
+    return store_lines(fetch_store(root))
 
 
-def _store_lines(fetched: Fetched) -> list[str]:
+def store_lines(fetched: Fetched) -> list[str]:
     """The line `fetch_store`'s answer prints: what the mirror holds and what moved."""
     if fetched.why:
         return [
@@ -798,7 +829,7 @@ def _fetch_origin(root: Path) -> bool:
     from livery.workshop._state import fetch_store
 
     fetched = fetch_store(root, branches=True)
-    for line in _store_lines(fetched):
+    for line in store_lines(fetched):
         print(line)
     return not fetched.why
 
