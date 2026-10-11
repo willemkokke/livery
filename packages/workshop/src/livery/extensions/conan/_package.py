@@ -208,6 +208,9 @@ def cache_name(name: str, version: str, host: str = "") -> str:
 
 
 #: The conan workspace file at the workspace root.
+#: The recipe a conan member holds, the one file its reference is read from.
+RECIPE_FILE = "conanfile.py"
+
 WORKSPACE_FILE = "conanws.yml"
 
 
@@ -236,8 +239,14 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     ``version``, so the file stays right when a release stamps the
     version.
 
+    A member without a recipe is left out: conan deduces a reference
+    from the recipe's ``name`` and ``version``, and a package that
+    consumes conan without being a recipe is never resolved from the
+    workspace.
+
     Args:
-        members: The conan members, in the order the file lists them.
+        members: The conan members, in the order the file lists them;
+            those with no ``conanfile.py`` are passed over.
         root: The workspace root, for a file placed outside it: each
             path is then the member's absolute POSIX path. A Linux
             build container mounts the root at its host path and reads
@@ -255,6 +264,7 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
             if root is None
             else f"  - path: {(root / member.path).as_posix()}"
             for member in members
+            if (member.directory / RECIPE_FILE).is_file()
         ),
     ]
     return "\n".join(lines) + "\n"

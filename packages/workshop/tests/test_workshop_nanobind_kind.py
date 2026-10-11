@@ -833,3 +833,34 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     assert line.startswith("python -m venv /opt/workshop-conan && ")
     assert "pip install --quiet conan==2.32.0" in line
     assert line.endswith("ln -sf /opt/workshop-conan/bin/conan /usr/local/bin/conan")
+
+
+def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
+    tmp_path: Path,
+) -> None:
+    # A consumer first: standing for conan without a recipe, it is
+    # left out, since conan cannot deduce a reference for it.
+    from livery.extensions.conan import _package as _conan
+    from livery.workshop._packages import Package
+
+    def member(name: str, *, recipe: bool) -> Package:
+        directory = tmp_path / "packages" / name
+        directory.mkdir(parents=True)
+        if recipe:
+            (directory / "conanfile.py").write_text("# a recipe\n")
+        return Package(
+            directory=directory,
+            path=f"packages/{name}",
+            name=name,
+            kind="python-nanobind" if not recipe else "cpp-conan",
+            depends=(),
+            extensions=(),
+        )
+
+    consumer = member("ext", recipe=False)
+    assert _conan.workspace_file((consumer,)).endswith("packages:\n")
+    library = member("geometry", recipe=True)
+    text = _conan.workspace_file((consumer, library))
+    assert text.endswith("packages:\n  - path: packages/geometry\n")
+    placed = _conan.workspace_file((library, consumer), root=tmp_path)
+    assert placed.endswith(f"  - path: {(tmp_path / 'packages/geometry').as_posix()}\n")

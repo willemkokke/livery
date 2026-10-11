@@ -109,6 +109,9 @@ def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the
     (member / "workshop.toml").write_text(
         'kind = "cpp-conan"\nname = "acme-geometry"\n'
     )
+    # The recipe is what the workspace lists a member by: conan reads
+    # the reference from it.
+    (member / "conanfile.py").write_text("# a recipe\n")
     assert "  wrote conanws.yml" in deliver(root)
     text = (root / "conanws.yml").read_text()
     assert text.endswith("packages:\n  - path: packages/geometry\n")
@@ -119,6 +122,7 @@ def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the
     (listing / "workshop.toml").write_text(
         'kind = "cpp-conan"\nname = "acme-mesh"\nextensions = ["cmake", "conan"]\n'
     )
+    (listing / "conanfile.py").write_text("# a recipe\n")
     deliver(root)
     text = (root / "conanws.yml").read_text()
     assert text.endswith(
