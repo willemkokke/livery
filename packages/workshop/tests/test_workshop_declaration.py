@@ -330,7 +330,7 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     assert (str(record.run), record.words, record.narrowing, record.placed) == (
         "acme_declared._checks:judge",
         None,
-        "none",
+        "packages",
         True,
     )
     assert isinstance(record.fix, CodedFix)
@@ -341,6 +341,63 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     found = _declare(package, STEP + 'fix = "acme_declared._checks:mend"\n')
     (record,) = found.additions.checks
     assert isinstance(record.fix, Reference)
+
+
+def test_a_step_in_code_says_what_its_code_does(package: Path) -> None:
+    # A workspace step in code without inputs narrows by the packages
+    # the run reaches, as the walk runs it; one with inputs is selected
+    # by them and judges the whole; a package step narrows by its
+    # packages and says none. Without tools, none takes the words
+    # after --.
+    (record,) = _declare(package, STEP).additions.checks
+    assert (record.narrowing, record.arguments) == ("packages", False)
+    (record,) = _declare(
+        package, STEP + 'inputs = { reads = ["docs/**/*.md"] }\n'
+    ).additions.checks
+    assert (record.narrowing, record.arguments) == ("none", False)
+    (record,) = _declare(
+        package, STEP + 'scope = "package"\nextensions = ["python"]\n'
+    ).additions.checks
+    assert (record.narrowing, record.arguments) == ("none", False)
+    # A step in code that names tools wraps them: its verb hands them
+    # the words after --.
+    (record,) = _declare(package, STEP + 'tools = ["acme"]\n').additions.checks
+    assert (record.narrowing, record.arguments) == ("packages", True)
+
+
+def test_every_declaration_is_in_the_step_spelling() -> None:
+    import tomllib
+    from importlib.metadata import entry_points
+
+    from livery.workshop._declaration import declaration_file
+
+    removed = {
+        "narrowing",
+        "transport",
+        "threshold",
+        "roles",
+        "listed-with",
+        "judge",
+        "run",
+        "arguments",
+        "pre",
+        "post",
+    }
+    found = 0
+    for entry in entry_points(group="workshop.extensions"):
+        path = declaration_file(entry.value.partition(":")[0])
+        assert path is not None, entry.name
+        data = tomllib.loads(path.read_text("utf-8"))
+        tables = [data, *data.get("for", {}).values()]
+        for table in tables:
+            assert "checks" not in table, path
+            assert "options" not in table, path
+            for phase, steps in table.get("phases", {}).items():
+                for step, declared in steps.items():
+                    assert isinstance(declared, dict), (path, phase, step)
+                    assert not removed & set(declared), (path, phase, step)
+                    found += 1
+    assert found > 0
 
 
 def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
@@ -385,10 +442,12 @@ def test_both_spellings_read_into_one_record(package: Path) -> None:
         '[{table}.fragments.".acme"]\nextensions = ["acme-kind"]\n'
         'text = "strict: true\\n"\n'
     )
+    # The check table says with arguments = true what the step table
+    # says by naming tools.
     old = _declare(
         package,
         '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
-        'fix = "acme_declared._checks:mend"\n'
+        'fix = "acme_declared._checks:mend"\narguments = true\n'
         + shared
         + tables.format(table="checks.acme.lint"),
     )

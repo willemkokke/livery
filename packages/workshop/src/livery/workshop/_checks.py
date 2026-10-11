@@ -271,10 +271,10 @@ class CheckRecord:
             ``--fix`` with ``--safe-fix`` where a check has a fix mode.
         listed_with: The option of its extension that registers the
             check, which a workspace turns on in its list,
-            ``basedpyright[typecomplete]``; empty for a check that
-            registers whenever its extension is listed. The extension
-            declares the option under ``[options]`` in its
-            ``extension.toml``.
+            ``<name>[<option>]``; empty for a check that registers
+            whenever its extension is listed. The extension declares
+            the option under ``[options]`` in its ``extension.toml``;
+            a step says the same with ``enabled``.
         arguments: Whether the check hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
             which it reads from [livery.workshop.GateContext][]'s
