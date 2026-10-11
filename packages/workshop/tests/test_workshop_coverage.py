@@ -322,6 +322,29 @@ def test_the_preview_tolerates_a_run_that_measured_nothing(
         _python.measured_coverage(tmp_path, (package,))
 
 
+def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
+    tmp_path: Path,
+) -> None:
+    # A test that builds a livery.* module under its tmp_path and imports
+    # it leaves the module's lines in the run's data, and a passing test
+    # deletes that directory at teardown. The preview reports the
+    # packages' own files; a file outside the workspace is none of
+    # theirs, so its absence changes no number and stops no report.
+    pytest.importorskip("coverage")
+    from coverage import CoverageData
+
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+    source = package.directory / "src" / "livery" / "thing" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("a = 1\nb = 2\n")
+    gone = tmp_path / "gone" / "livery" / "acme" / "__init__.py"
+    data = CoverageData(basename=str(tmp_path / ".coverage"))
+    data.add_lines({str(source): [1], str(gone): [1]})
+    data.write()
+    measured = _python.measured_coverage(tmp_path, (package,))
+    assert measured == {"packages/thing": 50.0}
+
+
 def test_without_a_parent_the_meter_and_the_preview_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
