@@ -527,10 +527,12 @@ def env_emit(
     Bare: the entered-shell emission plus the interactive completion
     hook. ``--agent``: the membership selection for an agent session
     (evaluated by its env file, so no completion hook). ``--github``
-    writes the runner's env files instead of printing, and on a
-    Windows leg points ``TEMP`` and ``TMP`` under the runner's temp
-    when the contract's ``[ci] windows-temp`` says ``runner``, the
-    default of a GitHub-shaped workspace.
+    writes the runner's env files, and on a Windows leg points
+    ``TEMP`` and ``TMP`` under the runner's temp when the contract's
+    ``[ci] windows-temp`` says ``runner``, the default of a
+    GitHub-shaped workspace; alone it prints what it wrote, and with a
+    target it prints that same emission for the shell to evaluate, so
+    the entry step enters and persists in one call.
     """
     import sys
 
@@ -543,6 +545,8 @@ def env_emit(
             dict(os.environ),
         )
         written = github_persist(delta, dict(os.environ))
+        if target:
+            return "\n".join(emit_lines(delta, dialect))
         return "\n".join([*written, note] if note else written)
     if agent:
         delta = agent_delta(root, cwd, dict(os.environ))

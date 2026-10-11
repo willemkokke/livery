@@ -314,6 +314,32 @@ def test_the_github_emission_persists_the_moved_temp(
     assert "TEMP:" in out and "the runner's working drive" in out
 
 
+def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The entry step enters its own shell and persists for the steps
+    # after in one call: the env file receives the emission, and the
+    # output is the same emission in the shell's dialect, not the
+    # written names.
+    from livery.workshop import _env_tasks
+
+    root = _contract(tmp_path, "github")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    env_file = tmp_path / "env"
+    path_file = tmp_path / "path"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("GITHUB_PATH", str(path_file))
+    out = _env_tasks.env_emit("posix", github=True)
+    assert env_file.is_file() and path_file.is_file()
+    assert "export " in out and "PATH+" not in out
+    for line in path_file.read_text().splitlines():
+        assert line in out
+
+
 def test_the_tool_profile_derives_from_package_types(
     tmp_path: Path, python_checks: object
 ) -> None:

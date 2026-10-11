@@ -232,16 +232,16 @@ def test_the_happy_path_syncs_locked_records_and_emits(tmp_path: Path) -> None:
     assert done.returncode == 0, done.stderr
     lines = calls.read_text().splitlines()
     assert any("sync" in line and "--locked" in line for line in lines)
-    assert any("env.emit --github" in line and "--no-sync" in line for line in lines)
+    assert any(
+        "env.emit posix --github" in line and "--no-sync" in line for line in lines
+    )
     receipt = root / ".venv" / ".workshop-sync-receipt"
     assert receipt.read_bytes() == (root / "uv.lock").read_bytes()
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
-def test_a_native_member_installs_after_the_tools_are_in_the_environment(
-    tmp_path: Path,
-) -> None:
-    """The first sync leaves a platform-wheel member out; the second builds it."""
+def test_a_native_member_is_left_to_the_workshop_sync(tmp_path: Path) -> None:
+    """One uv sync leaves a platform-wheel member out; the workshop sync builds it."""
     from livery.workshop._entry import entry_script, native_members
 
     root, bin_dir, env = _script_home(tmp_path)
@@ -269,28 +269,43 @@ def test_a_native_member_installs_after_the_tools_are_in_the_environment(
     assert done.returncode == 0, done.stderr
     lines = calls.read_text().splitlines()
     syncs = [line for line in lines if line.startswith("sync ")]
-    assert len(syncs) == 2
+    assert len(syncs) == 1
     assert "--no-install-package acme-ext" in syncs[0]
-    assert "--no-install-package" not in syncs[1]
 
     def step(line: str) -> str:
         if line.startswith("sync "):
             return "sync"
-        for tag in ("sync --locked", "env.emit posix", "env.emit --github"):
+        for tag in ("sync --locked", "env.emit posix --github", "env.emit posix"):
             if tag in line:
                 return tag
         return ""
 
     # The workshop's own sync runs in the mode that changes nothing a
-    # commit holds, after the bootstrap sync and before the emission.
+    # commit holds, after the bootstrap sync; the emission is one call
+    # that enters this shell and persists for the steps after. No uv
+    # sync follows the workshop's: it installed the native member.
     order = [tag for tag in map(step, lines) if tag]
-    assert order == [
-        "sync",
-        "sync --locked",
-        "env.emit posix",
-        "sync",
-        "env.emit --github",
-    ]
+    assert order == ["sync", "sync --locked", "env.emit posix --github"]
+
+
+@pytest.mark.skipif(BASH is None, reason="no bash on this machine")
+def test_sourcing_the_entry_enters_without_persisting(tmp_path: Path) -> None:
+    from livery.workshop._entry import entry_script
+
+    root, bin_dir, env = _script_home(tmp_path)
+    (root / "setup.sh").write_text(entry_script(root))
+    calls = tmp_path / "uv-calls"
+    _stub(
+        bin_dir / "uv",
+        f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
+    )
+    done = subprocess.run(
+        [str(BASH), "setup.sh"], cwd=root, env=env, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    lines = calls.read_text().splitlines()
+    assert any(line.endswith("env.emit posix") for line in lines)
+    assert not any("--github" in line for line in lines)
 
 
 # --- the reconcile, fallbacks first -----------------------------------------
