@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -1564,3 +1565,73 @@ def test_a_failed_self_add_refuses_naming_its_exit() -> None:
         Failed, match=r"could not add the workshop beside its footman \(exit 2\)"
     ):
         _e2e.ensure_birth_verb({}, Path("/loop/home"), run=run)
+
+
+def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The skip first: every member already on main submits nothing.
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(_e2e, "_align_main", lambda root: calls.append(("align",)))
+    monkeypatch.setattr(
+        _e2e, "_fresh_branch", lambda root, name: calls.append(("branch", name))
+    )
+
+    def loop_fm(root: Path, *args: str, **kw: object) -> int:
+        calls.append(("fm", *args))
+        if args[0] == "new.package":
+            member = root / "packages" / args[1]
+            member.mkdir(parents=True)
+            hosted = '["ubuntu-latest", "macos-latest", "windows-latest"]'
+            (member / "workshop.toml").write_text(
+                f"wheel-platforms = {hosted}\n", "utf-8"
+            )
+        return 0
+
+    monkeypatch.setattr(_e2e, "_loop_fm", loop_fm)
+
+    class Git:
+        def __init__(self, root: Path) -> None:
+            pass
+
+        def commit_all(self, message: str) -> None:
+            calls.append(("commit", message.splitlines()[0]))
+
+    monkeypatch.setattr("livery.workshop._git_ops.GitOps", Git)
+    for name, _kind in _e2e.LOOP_MEMBERS:
+        (tmp_path / "packages" / name).mkdir(parents=True)
+        (tmp_path / "packages" / name / "workshop.toml").write_text("", "utf-8")
+    _e2e._ensure_members(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert calls == [("align",)]
+    assert "member loop-echo: already landed" in capsys.readouterr().out
+    # Two missing members: one branch, one commit, one submit for both.
+    calls.clear()
+    shutil.rmtree(tmp_path / "packages" / "loop-native")
+    shutil.rmtree(tmp_path / "packages" / "loop-cpp")
+    _e2e._ensure_members(tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert calls == [
+        ("align",),
+        ("branch", "feat/members"),
+        ("fm", "new.package", "loop-native", "--kind=package-python-nanobind"),
+        ("fm", "new.package", "loop-cpp", "--kind=package-cpp-conan"),
+        ("fm", "drift.check", "--fix"),
+        ("commit", "feat: the loop's members"),
+        ("fm", "submit", "--force", "--armed"),
+        ("align",),
+    ]
+    native = (tmp_path / "packages" / "loop-native" / "workshop.toml").read_text(
+        "utf-8"
+    )
+    assert f'wheel-platforms = ["{_e2e.CURRENT.label}"]' in native
+    assert 'baseline = "0.1.0"' in native
+    out = capsys.readouterr().out
+    assert "members loop-native, loop-cpp: landed through the loop's own gate" in out
+
+
+def test_a_plain_pass_births_without_the_docs_extension() -> None:
+    from livery.workshop._extensions import SELF
+    from livery.workshop._new_project import birth_extensions
+
+    stock = tuple(birth_extensions([SELF]))
+    assert "docs" in stock
+    assert _e2e.loop_stack() == tuple(entry for entry in stock if entry != "docs")
