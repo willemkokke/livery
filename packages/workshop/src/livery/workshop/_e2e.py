@@ -1712,32 +1712,44 @@ def _render_with_the_pass(root: Path) -> None:
 
     A child of the pass's interpreter, as the birth is, with the uv
     handoff off: the loop's lock pins the workshop the loop last
-    locked, and the handoff would run that one instead. The workshop
-    mounts there through footman's project rung, from the loop's own
-    dependencies, so a failure also prints footman's ``--plugins``
-    listing from the same child: what mounted, and from which rung.
+    locked, and the handoff would run that one instead. The caller has
+    deleted the loop's ``pyproject.toml`` so the render starts from
+    nothing, and footman's project rung reads that file for the
+    built-ins a project's dependencies offer, so here it offers none.
+    The child mounts the workshop as a user built-in instead, through
+    a config directory of its own: what a desk's global fm carries in
+    its user config and a bare runner lacks. A failure also prints
+    footman's ``--plugins`` listing from the same child: what mounted,
+    and from which rung.
     """
     import sys
+    import tempfile
 
     runner = [sys.executable, "-m", "livery.footman"]
-    env = {**os.environ, "FOOTMAN_NO_UV": "1"}
-    result = footman.run(
-        [*runner, "--yes", "drift.check", "--fix"],
-        cwd=root,
-        env=env,
-        nofail=True,
-        timeout=900.0,
-    )
-    print(result.stdout.rstrip("\n"))
-    if result.code != 0:
-        plugins = footman.run(
-            [*runner, "--plugins"], cwd=root, env=env, nofail=True, timeout=120.0
+    with tempfile.TemporaryDirectory(prefix="loop-render-") as config:
+        (Path(config) / "config.toml").write_text(
+            "# The pass's own workshop, mounted for the render alone.\n"
+            '[builtins]\nuser = ["livery.workshop"]\n',
+            "utf-8",
         )
-        fail(
-            f"the pass's render of the loop exited {result.code}:"
-            f"\n{result.stdout}{result.stderr}"
-            f"\nfootman's plugins in the loop:\n{plugins.stdout}{plugins.stderr}"
+        env = {**os.environ, "FOOTMAN_NO_UV": "1", "FOOTMAN_CONFIG_DIR": config}
+        result = footman.run(
+            [*runner, "--yes", "drift.check", "--fix"],
+            cwd=root,
+            env=env,
+            nofail=True,
+            timeout=900.0,
         )
+        print(result.stdout.rstrip("\n"))
+        if result.code != 0:
+            plugins = footman.run(
+                [*runner, "--plugins"], cwd=root, env=env, nofail=True, timeout=120.0
+            )
+            fail(
+                f"the pass's render of the loop exited {result.code}:"
+                f"\n{result.stdout}{result.stderr}"
+                f"\nfootman's plugins in the loop:\n{plugins.stdout}{plugins.stderr}"
+            )
 
 
 def _loop_fm(
