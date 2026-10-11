@@ -119,6 +119,8 @@ class Job:
             forge's own hosting: GitHub's grant and upload, GitLab's
             ``pages`` job.
         publishes: The artifact the job uploads, ``""`` for none.
+        paths: The paths the uploaded artifact carries, as the forge
+            globs them; ``()`` for a job that publishes none.
         collects: The artifact the job downloads first, ``""`` for none.
         environment: The named deployment environment the job runs in,
             ``""`` for none.
@@ -136,6 +138,12 @@ class Job:
         step: What the forge's run page calls the one call; the job's
             name capitalised when empty.
         note: The comment the rendered shell prints above the job.
+        joins: Whether the job is a contribution to a job the point
+            already has, declared or inherited. It renders as no job of
+            its own: its entries follow that job's, and its plumbing,
+            what it collects and publishes, the seam it deploys through
+            and the packages it installs, renders on that job under the
+            contributing point's own event condition.
     """
 
     name: str
@@ -153,6 +161,7 @@ class Job:
     conan_cache: bool = False
     deploy: Callable[[Path], str] | None = None
     publishes: str = ""
+    paths: tuple[str, ...] = ()
     collects: str = ""
     environment: str = ""
     dispatches: bool = False
@@ -161,6 +170,7 @@ class Job:
     inputs: Inputs | None = None
     step: str = ""
     note: str = ""
+    joins: bool = False
 
 
 @dataclass(frozen=True)
@@ -243,6 +253,7 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 token="job",
                 writes=True,
+                dispatches=True,
                 step="Verdict",
                 note=(
                     "The one required context. Branch protection points"
@@ -254,7 +265,9 @@ DECLARED: tuple[Point, ...] = (
                     " run proved; a red run is judged too. The stamp composes"
                     " a narrowed run with the record of the tree its legs"
                     " measured from, and names the two commits a merge"
-                    " checkout joined."
+                    " checkout joined. On a push to main the same job then"
+                    " dispatches the release wave, runs what the extensions"
+                    " add to the merge point, and runs the janitor."
                 ),
             ),
         ),
@@ -274,20 +287,6 @@ DECLARED: tuple[Point, ...] = (
                     " changed a contract or the owners file. The commit's own"
                     " file list decides whether anything is governed; a depth"
                     " of one would read a squash as a root."
-                ),
-            ),
-            Job(
-                "dispatch",
-                needs=("gate",),
-                fetch="full",
-                token="job",
-                dispatches=True,
-                note=(
-                    "The release wave is dispatched from here, after main's"
-                    " own verdict: the verb reads the manifest at HEAD and the"
-                    " receipts on the remote, and is green unless a merged"
-                    " release is unpublished. The commit that stamped the"
-                    " manifest can be far back."
                 ),
             ),
         ),
@@ -351,6 +350,7 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 driver_pin=True,
                 publishes="wheels",
+                paths=("packages/*/dist/*", "packages/*/*/dist/*"),
                 conan_cache=True,
                 note=(
                     "Every platform's wheels, built before the wave: the"
@@ -430,8 +430,10 @@ def verify_points(points: tuple[Point, ...]) -> None:
                     " a run would belong to both"
                 )
         inherited = by_name[point.inherits].jobs if point.inherits else ()
-        names: list[str] = [job.name for job in inherited]
+        names: list[str] = [job.name for job in inherited if not job.joins]
         for job in point.jobs:
+            if job.joins:
+                continue
             if job.name in names:
                 fail(f"the {point.name} point declares the job {job.name!r} twice")
             names.append(job.name)
@@ -627,6 +629,26 @@ class JobContribution:
 
 _CONTRIBUTED_JOBS: dict[tuple[str, str], JobContribution] = {}
 
+#: The jobs the extensions joined, by point, job and extension: several
+#: extensions may join one job.
+_JOINED_JOBS: dict[tuple[str, str, str], JobContribution] = {}
+
+
+def point_has_job(point: str, name: str) -> bool:
+    """Whether the builtin *point* has the job *name*, declared, inherited or added."""
+    by_name = {declared.name: declared for declared in DECLARED}
+    if point not in by_name:
+        return False
+    lineage = [point]
+    if by_name[point].inherits:
+        lineage.append(by_name[point].inherits)
+    for name_ in lineage:
+        if name in {job.name for job in by_name[name_].jobs}:
+            return True
+        if any(item.job.name == name for item in contributed_jobs(name_)):
+            return True
+    return False
+
 
 def contribute_job(
     point: str,
@@ -636,14 +658,18 @@ def contribute_job(
     gates: bool = False,
     extension: str,
 ) -> None:
-    """Add *job* to the builtin *point* on behalf of *extension*.
+    """Add *job* to the builtin *point* on behalf of *extension*, or join one.
 
     The job sits before the point's verdict job when the point has
     one, else last, so a contributed job renders where a declared one
-    would; a gating job joins the verdict's needs. Refuses a point
-    that is not builtin, a job name the point already has, from its
-    declaration or another extension, and an entry naming another point
-    or job.
+    would; a gating job joins the verdict's needs. A *job* that
+    ``joins`` names a job the point already has (`point_has_job`):
+    its entries follow that job's own, before any the job runs last,
+    and its plumbing renders on that job. Refuses a point that is not
+    builtin, a job name the point already has when the job does not
+    join, a join of a job the point does not have, a join that gates,
+    a name another extension contributed, and an entry naming another
+    point or job.
     """
     by_name = {declared.name: declared for declared in DECLARED}
     if point not in by_name:
@@ -651,6 +677,29 @@ def contribute_job(
             f"{extension} contributes the job {job.name!r} to {point!r}, which is not a"
             f" builtin point; the points are {', '.join(by_name)}"
         )
+    for entry in entries:
+        if entry.point != point or entry.job != job.name:
+            fail(
+                f"{extension} contributes the job {job.name!r} to the {point} point"
+                f" with an entry for {entry.point}/{entry.job}; an entry names"
+                " the job it runs in"
+            )
+    if job.joins:
+        if not point_has_job(point, job.name):
+            fail(
+                f"{extension} joins the job {job.name!r} of the {point} point,"
+                " which has no such job"
+            )
+        if gates:
+            fail(
+                f"{extension} joins the job {job.name!r} of the {point} point and"
+                " gates; a join adds entries and plumbing, and the verdict's"
+                " needs stay the job's own"
+            )
+        _JOINED_JOBS[(point, job.name, extension)] = JobContribution(
+            point, job, tuple(entries), False, extension
+        )
+        return
     declared_names = [declared.name for declared in by_name[point].jobs]
     if job.name in declared_names:
         fail(
@@ -663,26 +712,26 @@ def contribute_job(
             f"{extension} contributes the job {job.name!r} to the {point} point, which"
             f" {other.extension} contributed already"
         )
-    for entry in entries:
-        if entry.point != point or entry.job != job.name:
-            fail(
-                f"{extension} contributes the job {job.name!r} to the {point} point"
-                f" with an entry for {entry.point}/{entry.job}; an entry names"
-                " the job it runs in"
-            )
     _CONTRIBUTED_JOBS[(point, job.name)] = JobContribution(
         point, job, tuple(entries), gates, extension
     )
 
 
 def withdraw_job(point: str, name: str) -> None:
-    """Remove the contributed job *name* from *point*; nothing when there is none."""
+    """Remove the contributed job *name* from *point*, and every join of it."""
     _CONTRIBUTED_JOBS.pop((point, name), None)
+    for key in [key for key in _JOINED_JOBS if key[:2] == (point, name)]:
+        del _JOINED_JOBS[key]
 
 
 def contributed_jobs(point: str) -> tuple[JobContribution, ...]:
     """The jobs the extensions contributed to *point*, in contribution order."""
     return tuple(item for item in _CONTRIBUTED_JOBS.values() if item.point == point)
+
+
+def joined_jobs(point: str) -> tuple[JobContribution, ...]:
+    """The joins the extensions made to *point*'s jobs, in contribution order."""
+    return tuple(item for item in _JOINED_JOBS.values() if item.point == point)
 
 
 def contributor_of(point: str, job: str) -> str:
@@ -708,7 +757,8 @@ def composed_points() -> tuple[Point, ...]:
     composed: list[Point] = []
     for point in DECLARED:
         added = [item.job for item in contributed_jobs(point.name)]
-        if not added:
+        joined = [item.job for item in joined_jobs(point.name)]
+        if not added and not joined:
             composed.append(point)
             continue
         jobs = list(point.jobs)
@@ -720,6 +770,9 @@ def composed_points() -> tuple[Point, ...]:
             jobs[verdict + len(added)] = replace(
                 jobs[verdict + len(added)], needs=verdict_needs(point.name)
             )
+        # A join renders as no job: it rides the point's jobs so every
+        # reader of what a job installs, deploys and publishes sees it.
+        jobs.extend(joined)
         composed.append(replace(point, jobs=tuple(jobs)))
     return tuple(composed)
 
@@ -1014,6 +1067,9 @@ class Entry:
             it runs next.
         once: Whether the entry runs on a matrix job's first leg alone,
             the first runner and the first Python; every leg otherwise.
+        last: Whether the entry runs after every entry an extension
+            adds to the job, the janitor's shape; the added entries go
+            before the first such entry.
     """
 
     point: str
@@ -1023,6 +1079,7 @@ class Entry:
     source: str = "builtin"
     every: str = ""
     once: bool = False
+    last: bool = False
 
 
 #: The cadences an entry may declare, in days.
@@ -1096,11 +1153,17 @@ BUILTIN: tuple[Entry, ...] = (
     # records the tree, and the tree is green.
     Entry("gate", "gate", "workflow.release.check-fresh"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
-    Entry("merge", "dispatch", "workflow.release.dispatch"),
-    # The janitor after the stamp, on the merge point alone: every
-    # merge tidies the remote store, and a pull request's run writes
-    # nothing it does not own.
-    Entry("merge", "gate", "janitor"),
+    # The wave is dispatched from the gate job itself, right after
+    # main's own verdict: the verb reads the manifest at HEAD and the
+    # receipts on the remote, and is green unless a merged release is
+    # unpublished. A job of its own cost a runner's entry for a second
+    # of work.
+    Entry("merge", "gate", "workflow.release.dispatch"),
+    # The janitor after the stamp, on the merge point alone, and after
+    # whatever the extensions add to the job: every merge tidies the
+    # remote store, and a pull request's run writes nothing it does
+    # not own.
+    Entry("merge", "gate", "janitor", last=True),
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check"),
@@ -1190,7 +1253,28 @@ def builtin_schedule() -> tuple[Entry, ...]:
                 for entry in item.entries
                 if (entry.point, entry.job, entry.task) not in seen
             )
+    for point in DECLARED:
+        for item in joined_jobs(point.name):
+            _join_entries(composed, item)
     return tuple(composed)
+
+
+def _join_entries(composed: list[Entry], item: JobContribution) -> None:
+    """Put *item*'s entries into *composed* where its job runs what it adds.
+
+    Before the first entry of the job that runs last, else after the
+    job's last entry, else at the end: the join's entries run after
+    the job's own and before its sweep.
+    """
+    key = (item.point, item.job.name)
+    at = next(
+        (i for i, e in enumerate(composed) if (e.point, e.job) == key and e.last),
+        None,
+    )
+    if at is None:
+        owned = [i for i, e in enumerate(composed) if (e.point, e.job) == key]
+        at = owned[-1] + 1 if owned else len(composed)
+    composed[at:at] = list(item.entries)
 
 
 def schedule(root: Path) -> tuple[Entry, ...]:
@@ -1221,7 +1305,10 @@ def jobs_of(root: Path, point: str) -> tuple[str, ...]:
         fail(f"{point!r} is not a point; the points are {', '.join(by_name)}")
     declared_point = by_name[point]
     inherited = by_name[declared_point.inherits].jobs if declared_point.inherits else ()
-    names: list[str] = [job.name for job in (*inherited, *declared_point.jobs)]
+    names: list[str] = []
+    for job in (*inherited, *declared_point.jobs):
+        if job.name not in names:
+            names.append(job.name)
     for entry in schedule(root):
         if entry.point in (INHERITS.get(point), point) and entry.job not in names:
             names.append(entry.job)

@@ -564,7 +564,7 @@ def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None
     assert "matrix:" in native and "os: [ubuntu-latest, windows]" in native
     assert "ci.run --point=release --job=wheels" in native
     assert "needs: [wheels]" in native
-    assert "pattern: wheels-*" in native
+    assert "pattern: wheels*" in native
     # The wave decides prebuilt from the collected dist; the shell
     # spells nothing.
     assert "--prebuilt" not in native

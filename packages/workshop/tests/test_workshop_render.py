@@ -80,8 +80,14 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     assert set(triggers) == {"pull_request", "push", "workflow_dispatch"}
     assert triggers["push"] == {"branches": ["main"]}
     jobs = doc["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
-    # The one call per job, its point and its job.
+    # The release dispatch and the site's publish are the gate job's
+    # entries on a push; GitHub's pages seam alone adds the forge's
+    # pages deploy after it, and Gitea's container seam publishes from
+    # the gate job itself.
+    pages = ["pages"] if kind == "github" else []
+    assert list(jobs) == ["check", "docs", "gate", "govern", *pages]
+    # The one call per job, its point and its job; the pages deploy
+    # calls nothing.
     assert {name: _calls(job) for name, job in jobs.items()} == {
         "check": [
             'ci.run --point=gate --job=check --os="${{ matrix.os }}"'
@@ -89,9 +95,8 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
         ],
         "docs": ["ci.run --point=gate --job=docs"],
         "gate": ["ci.run --point=gate --job=gate"],
-        "deploy": ["ci.run --point=merge --job=deploy"],
         "govern": ["ci.run --point=merge --job=govern"],
-        "dispatch": ["ci.run --point=merge --job=dispatch"],
+        **{name: [] for name in pages},
     }
     # The needs and the only conditions: event filters and the
     # verdict job's always().
@@ -99,17 +104,15 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
         "check": [],
         "docs": [],
         "gate": ["check", "docs"],
-        "deploy": ["gate"],
         "govern": [],
-        "dispatch": ["gate"],
+        **{name: ["gate"] for name in pages},
     }
     assert {name: job.get("if", "") for name, job in jobs.items()} == {
         "check": "",
         "docs": "",
         "gate": "always()",
-        "deploy": "github.event_name == 'push'",
         "govern": "github.event_name == 'push'",
-        "dispatch": "github.event_name == 'push'",
+        **dict.fromkeys(pages, "github.event_name == 'push'"),
     }
     # The matrix: every runner by every gate Python, the docs and the
     # verdict on one runner.
@@ -118,20 +121,20 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
         "python": ["3.13", "3.14"],
     }
     assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
-    for name in ("docs", "gate", "govern", "dispatch", "deploy"):
+    for name in ("docs", "gate", "govern", *pages):
         assert jobs[name]["runs-on"] == "ubuntu-latest", name
     # The secrets each job names, and no other.
     assert {name: _secrets(job) for name, job in jobs.items()} == {
         "check": set(),
         "docs": set(),
         "gate": {"GITHUB_TOKEN"},
-        "deploy": {"GITHUB_TOKEN"},
         "govern": {"FORGE_ADMIN_TOKEN"},
-        "dispatch": {"GITHUB_TOKEN"},
+        **{name: set() for name in pages},
     }
     # The checkouts a job's verbs need: the legs and the verdict diff
-    # against a merge base, the deploy reads tags, govern reads the
-    # commit's parent, dispatch reads the stamping commit.
+    # against a merge base, the docs job reads tags for the release
+    # view, govern reads the commit's parent, the pages deploy checks
+    # nothing out.
     depth: dict[str, dict[str, Any]] = {
         name: next(
             (
@@ -145,45 +148,71 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     }
     assert depth["check"].get("fetch-depth") == 0
     assert depth["gate"].get("fetch-depth") == 0
-    assert depth["dispatch"].get("fetch-depth") == 0
     assert depth["govern"].get("fetch-depth") == 2
-    assert depth["docs"] == {}
-    # The deploy reads the receipt tags for the release view, on
-    # every forge: one declaration renders both.
-    assert depth["deploy"].get("fetch-tags") is True
-    # A leg's trace leaves through the verb that ran the leg, so no job
-    # of the gate workflow uploads an artifact at all. The wheels of a
-    # release are the one artifact an emitted job publishes, and they
-    # are the release workflow's.
-    assert [
-        step
-        for job in jobs.values()
+    assert depth["docs"].get("fetch-tags") is True
+    for name in pages:
+        assert not [s for s in jobs[name]["steps"] if "checkout" in str(s)], name
+    # A leg's trace leaves through the verb that ran the leg. The one
+    # artifact the gate workflow uploads is the built site, from the
+    # docs job on a push alone, and the gate job collects it on a push
+    # alone, into the directory the site was built in.
+    uploads = [
+        (name, step)
+        for name, job in jobs.items()
         for step in job["steps"]
         if "upload-artifact" in str(step.get("uses", ""))
-    ] == []
+    ]
+    assert [(n, s["if"], s["with"]["name"], s["with"]["path"]) for n, s in uploads] == [
+        ("docs", "github.event_name == 'push'", "site", "site\n")
+    ]
+    downloads = [
+        (name, step)
+        for name, job in jobs.items()
+        for step in job["steps"]
+        if "download-artifact" in str(step.get("uses", ""))
+    ]
+    assert [
+        (n, s["if"], s["with"]["pattern"], s["with"]["path"]) for n, s in downloads
+    ] == [("gate", "github.event_name == 'push'", "site*", "site")]
+    # A red docs job on main leaves no site; the verdict still runs.
+    assert downloads[0][1]["continue-on-error"] is True
 
 
 def test_the_github_gate_grants_the_store_writes_and_the_pages_deploy(
     tmp_path: Path,
 ) -> None:
     # The grants are GitHub's words: organisation defaults are
-    # read-only, so a job that pushes says so, and the pages seam is
-    # an environment and two actions after the verb.
+    # read-only, so a job that pushes says so. Starting the wave
+    # through the API needs the actions grant on the gate job, which
+    # dispatches it after its verdict; the workflow token answers 403
+    # without it, and the wave never starts.
     jobs = _doc(generate(_root(tmp_path, "github"))[".github/workflows/ci.yml"])["jobs"]
     assert jobs["check"]["permissions"] == {"contents": "write"}
-    assert jobs["gate"]["permissions"] == {"contents": "write"}
-    assert jobs["deploy"]["permissions"] == {
+    assert jobs["gate"]["permissions"] == {"contents": "write", "actions": "write"}
+    # The pages seam: the gate job uploads the site it collected and
+    # refreshed, on a push alone, and the pages job deploys it with
+    # the environment's grant and nothing else.
+    upload = next(
+        step
+        for step in jobs["gate"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/upload-pages-artifact")
+    )
+    assert upload["if"] == "github.event_name == 'push'"
+    assert upload["with"] == {"path": "site"}
+    assert jobs["pages"]["permissions"] == {
         "contents": "read",
         "pages": "write",
         "id-token": "write",
     }
-    assert jobs["deploy"]["environment"]["name"] == "github-pages"
-    uses = [str(step.get("uses", "")) for step in jobs["deploy"]["steps"]]
-    assert any(u.startswith("actions/upload-pages-artifact") for u in uses)
-    assert any(u.startswith("actions/deploy-pages") for u in uses)
-    # Starting the wave through the API needs the actions grant; the
-    # workflow token answers 403 without it, and the wave never starts.
-    assert jobs["dispatch"]["permissions"] == {"actions": "write"}
+    assert jobs["pages"]["environment"]["name"] == "github-pages"
+    assert jobs["pages"]["concurrency"] == {
+        "group": "pages",
+        "cancel-in-progress": False,
+    }
+    uses = [str(step.get("uses", "")) for step in jobs["pages"]["steps"]]
+    assert len(uses) == 1 and uses[0].startswith("actions/deploy-pages")
+    for name in ("docs", "govern", "pages"):
+        assert "actions" not in str(jobs[name].get("permissions")), name
     for name in ("docs", "govern"):
         assert "permissions" not in jobs[name], name
 
@@ -327,8 +356,11 @@ def test_a_gitlab_site_published_elsewhere_runs_no_pages_job(tmp_path: Path) -> 
     )
     jobs = _doc(generate(root)[".gitlab-ci.yml"])
     assert "pages" not in jobs
-    assert "artifacts" not in jobs["deploy"]
-    assert jobs["deploy"]["script"][-1].endswith("ci.run --point=merge --job=deploy")
+    # The gate job publishes through the seam from its own entries and
+    # keeps no artifact; the docs job keeps the site it built for it.
+    assert "artifacts" not in jobs["gate"]
+    assert jobs["gate"]["script"][-1].endswith("ci.run --point=gate --job=gate")
+    assert jobs["docs"]["artifacts"] == {"paths": ["site"], "expire_in": "1 day"}
 
 
 def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
@@ -353,15 +385,15 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         },
     ]
     jobs = {k: v for k, v in doc.items() if k not in ("workflow", "stages")}
-    # The declared jobs in order, the deploy as GitLab Pages' own job,
-    # and the wave as it is until its jobs are entries.
+    # The declared jobs in order, GitLab Pages' own job after the gate
+    # job whose site it publishes, and the wave as it is until its
+    # jobs are entries.
     assert list(jobs) == [
         "check",
         "docs",
         "gate",
-        "govern",
-        "dispatch",
         "pages",
+        "govern",
         "nightly",
         "publish",
     ]
@@ -376,9 +408,8 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         ],
         "docs": [f"{prog} ci.run --point=gate --job=docs"],
         "gate": [f"{prog} ci.run --point=gate --job=gate"],
-        "pages": [f"{prog} ci.run --point=merge --job=deploy"],
+        "pages": [],
         "govern": [f"{prog} ci.run --point=merge --job=govern"],
-        "dispatch": [f"{prog} ci.run --point=merge --job=dispatch"],
         "nightly": [f'{prog} ci.run --point=nightly --job=nightly --python="3.13"'],
         "publish": [
             f'{prog} release.driver --workshop="$workshop"',
@@ -391,12 +422,11 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         "gate": "check",
         "pages": "release",
         "govern": "release",
-        "dispatch": "release",
         "nightly": "check",
         "publish": "release",
     }
     assert jobs["gate"]["needs"] == ["check", "docs"]
-    assert jobs["dispatch"]["needs"] == ["gate"]
+    assert jobs["pages"]["needs"] == ["gate"]
 
     # The rules: a tag never; the gate's jobs on a merge request, a
     # dispatch and main's push (the merge point inherits them); the
@@ -429,12 +459,15 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"',
     ]
     # The pages seam and the wave's push, GitLab's own plumbing: the
-    # site moved to public/ as the artifact, and origin rewritten with
-    # the push token after the dispatched ref is checked out. The
-    # commit-title regex that once started the wave is gone: the merge
-    # point's dispatch job starts it through the API.
-    assert jobs["pages"]["script"][-1] == "mv site public"
+    # site the docs job kept and the gate job refreshed, moved to
+    # public/ as the pages artifact, and origin rewritten with the
+    # push token after the dispatched ref is checked out. The
+    # commit-title regex that once started the wave is gone: the gate
+    # job's dispatch entry starts it through the API.
+    assert jobs["pages"]["script"] == ["mv site public"]
     assert jobs["pages"]["artifacts"] == {"paths": ["public"]}
+    assert jobs["docs"]["artifacts"] == {"paths": ["site"], "expire_in": "1 day"}
+    assert jobs["gate"]["artifacts"] == {"paths": ["site"], "expire_in": "1 day"}
     publish_script = jobs["publish"]["script"]
     assert publish_script[0] == 'git checkout --quiet "$ref"'
     assert publish_script[1] == "git fetch --tags"
@@ -472,7 +505,8 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         "FORGE_ADMIN_TOKEN": "$FORGE_ADMIN_TOKEN",
     }
     assert jobs["check"]["variables"] == {"GIT_DEPTH": "0"}
-    assert "variables" not in jobs["docs"]
+    # The docs job reads the tags for the release view.
+    assert jobs["docs"]["variables"] == {"GIT_DEPTH": "0"}
 
 
 def _root_narrowing(tmp_path: Path, kind: str, declared: str) -> Path:

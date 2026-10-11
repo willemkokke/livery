@@ -568,18 +568,44 @@ class _Reader:
             for slot, values in data.get("contributions", {}).items()
             for value in values
         )
-        jobs = tuple(
-            self.job(str(point), str(name), entry, (*prefix, "ci", "jobs"))
-            for point, named in data.get("ci", {}).get("jobs", {}).items()
-            for name, entry in named.items()
-        )
-        return Additions(checks, contributions, jobs)
+        jobs: list[JobContribution] = []
+        for point, named in data.get("ci", {}).get("jobs", {}).items():
+            for name, entry in named.items():
+                jobs.append(
+                    self.job(
+                        str(point),
+                        str(name),
+                        entry,
+                        (*prefix, "ci", "jobs"),
+                        earlier=tuple(jobs),
+                    )
+                )
+        return Additions(checks, contributions, tuple(jobs))
 
     def job(
-        self, point: str, name: str, entry: dict[str, Any], prefix: tuple[str, ...]
+        self,
+        point: str,
+        name: str,
+        entry: dict[str, Any],
+        prefix: tuple[str, ...],
+        *,
+        earlier: tuple[JobContribution, ...] = (),
     ) -> JobContribution:
-        """The job *entry* adds to the builtin *point*, its functions resolved."""
-        from livery.workshop._points import DECLARED, Entry, Job, JobContribution
+        """The job *entry* adds to the builtin *point*, its functions resolved.
+
+        A table naming a job the point already has, declared,
+        inherited, contributed, or declared *earlier* in this file,
+        joins that job: its entries and plumbing become the job's on
+        this point. A join that ``gates`` refuses, since the verdict's
+        needs are the job's own.
+        """
+        from livery.workshop._points import (
+            DECLARED,
+            Entry,
+            Job,
+            JobContribution,
+            point_has_job,
+        )
 
         where = (*prefix, point, name)
         builtin = {declared.name: declared for declared in DECLARED}
@@ -589,8 +615,16 @@ class _Reader:
                 f"names the point {point!r}, which is not builtin; a job joins"
                 f" one of {', '.join(builtin)}",
             )
-        if name in {job.name for job in builtin[point].jobs}:
-            raise self.refuse(where, f"names a job the {point} point declares already")
+        lineage = (point, builtin[point].inherits)
+        joins = point_has_job(point, name) or any(
+            item.point in lineage and item.job.name == name for item in earlier
+        )
+        if joins and entry.get("gates"):
+            raise self.refuse(
+                (*where, "gates"),
+                f"joins the {point} point's {name} job and gates; a join adds"
+                " entries and plumbing, and the verdict's needs stay the job's own",
+            )
         job = Job(
             name,
             needs=tuple(str(need) for need in entry.get("needs", ())),
@@ -602,10 +636,14 @@ class _Reader:
             deploy=self.reference(entry["deploy"], (*where, "deploy"))
             if "deploy" in entry
             else None,
+            publishes=str(entry.get("publishes", "")),
+            paths=tuple(str(path) for path in entry.get("paths", ())),
+            collects=str(entry.get("collects", "")),
             inputs=self.inputs(entry["inputs"], (*where, "inputs"))
             if "inputs" in entry
             else None,
             note=str(entry.get("note", "")),
+            joins=joins,
         )
         return JobContribution(
             point,

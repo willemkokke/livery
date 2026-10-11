@@ -1111,7 +1111,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
     packages that declare an ``htmlcov`` report, and each gets its
     tree rendered from the workspace's measured data, scoped to its
     own files. In
-    the merge point's deploy job the data is main's coverage record,
+    the merge point's gate job the data is main's coverage record,
     every unit on every check leg, the union main's gate judged
     whatever its legs ran; anywhere else it is the local ``.coverage``
     a gate run left. With none, nothing renders and the coverage page
@@ -1191,12 +1191,13 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
 
 
 def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
-    """In the merge point's deploy job, main's recorded units for every check leg.
+    """In the merge point's gate job, main's recorded units for every check leg.
 
-    Returns the files and the misses. Anywhere else nothing is pulled:
-    a pull request's docs job builds without the legs' data by design,
-    and a machine's build renders the local data a gate run left, or
-    states the absence.
+    Returns the files and the misses. The gate job renders the trees
+    after its union wrote the record, for the site it publishes.
+    Anywhere else nothing is pulled: a pull request's docs job builds
+    without the legs' data by design, and a machine's build renders the
+    local data a gate run left, or states the absence.
     """
     import os
 
@@ -1205,7 +1206,7 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
 
     deploying = (
         os.environ.get(POINT_VARIABLE) == "merge"
-        and os.environ.get(LEG_VARIABLE) == "deploy"
+        and os.environ.get(LEG_VARIABLE) == "gate"
     )
     if run_context() is None or not deploying:
         return [], []

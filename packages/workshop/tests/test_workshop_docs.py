@@ -590,33 +590,39 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
         '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
-    # GitHub folds the deploy into ci.yml's merge point: the pages
-    # seam adds the pages actions after the verb; another seam runs
-    # the verb alone, which publishes through the seam or says why not.
+    # The site is published from the gate job's own entries on a push:
+    # the pages seam has the gate job upload the site and adds the
+    # forge's pages deploy after it; another seam publishes from the
+    # gate job alone, through the seam or saying why not.
     assert ".github/workflows/docs.yml" not in files
-    deploy = files[".github/workflows/ci.yml"].split("  deploy:")[1]
-    deploy = deploy.split("  govern:")[0]
-    assert "fm ci.run --point=merge --job=deploy" in deploy
-    assert "deploy-pages" in deploy and "github-pages" in deploy
+    text = files[".github/workflows/ci.yml"]
+    assert "--job=deploy" not in text and "  deploy:" not in text
+    gate = text.split("\n  gate:\n")[1].split("\n  govern:\n")[0]
+    assert "upload-pages-artifact" in gate
+    pages = text.split("\n  pages:\n")[1]
+    assert "deploy-pages" in pages and "github-pages" in pages
     (root / "workshop.toml").write_text(
         '[workspace]\nextensions = ["docs"]\n[docs]\npublish = "none"\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
     assert ".github/workflows/docs.yml" not in files
-    deploy = files[".github/workflows/ci.yml"].split("  deploy:")[1]
-    deploy = deploy.split("  govern:")[0]
-    assert "fm ci.run --point=merge --job=deploy" in deploy
-    assert "deploy-pages" not in deploy and "github-pages" not in deploy
+    text = files[".github/workflows/ci.yml"]
+    assert "\n  pages:\n" not in text
+    assert "deploy-pages" not in text and "github-pages" not in text
+    gate = text.split("\n  gate:\n")[1].split("\n  govern:\n")[0]
+    assert "download-artifact" in gate and "upload-pages-artifact" not in gate
     (root / "workshop.toml").write_text(
         '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     files = generate(root)
-    # The gitea lane folds the deploy into ci.yml's merge point: the
-    # deploy job runs whatever the seam, and the verb decides.
+    # The gitea lane publishes from the gate job whatever the seam, and
+    # the verb decides.
     assert ".gitea/workflows/docs.yml" not in files
-    deploy = files[".gitea/workflows/ci.yml"].split("  deploy:")[1]
-    assert "fm ci.run --point=merge --job=deploy" in deploy
+    text = files[".gitea/workflows/ci.yml"]
+    assert "\n  deploy:\n" not in text and "\n  pages:\n" not in text
+    gate = text.split("\n  gate:\n")[1].split("\n  govern:\n")[0]
+    assert "download-artifact" in gate
     (root / "workshop.toml").write_text(
         '[workspace]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
     )
@@ -1349,6 +1355,41 @@ def test_a_missing_report_states_the_absence_and_stays_green(
     assert "iframe" not in page
 
 
+def test_on_a_push_the_page_frames_a_tree_the_gate_job_renders_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from livery.extensions.docs._site import (
+        generate_coverage_pages,
+        refresh_site_coverage,
+    )
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    # No site built yet: nothing to refresh, and no tree to frame.
+    assert refresh_site_coverage(root) == []
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: SimpleNamespace(event="push"))
+    assert generate_coverage_pages(root) == ["core"]
+    page = (root / "packages/core/docs/_generated/coverage.md").read_text()
+    assert 'src="coverage/python/index.html"' in page
+    # The built site: a tree rendered after the build lands where the
+    # mount put it, and a report with no tree gets a page saying so.
+    site = root / "site"
+    (site / "packages" / "core" / "coverage").mkdir(parents=True)
+    (site / "index.html").write_text("<h1>site</h1>\n")
+    assert refresh_site_coverage(root) == ["core"]
+    placed = site / "packages/core/coverage/python/index.html"
+    assert "No measured data for core (Python)" in placed.read_text()
+    report = root / "packages/core/htmlcov"
+    report.mkdir()
+    (report / "index.html").write_text("<h1>report</h1>\n")
+    assert refresh_site_coverage(root) == ["core"]
+    assert placed.read_text() == "<h1>report</h1>\n"
+
+
 def test_a_kind_with_no_coverage_renderer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1543,14 +1584,19 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "deploy")
+    monkeypatch.setenv("WORKSHOP_LEG", "gate")
     assert _python._stored_legs(root) == ([], [])
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
     monkeypatch.setenv("WORKSHOP_POINT", "gate")
     monkeypatch.setenv("WORKSHOP_LEG", "docs")
     assert _python._stored_legs(root) == ([], [])
+    # The merge point's docs job builds the site without the trees:
+    # the gate job renders them after its union.
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "deploy")
+    monkeypatch.setenv("WORKSHOP_LEG", "docs")
+    assert _python._stored_legs(root) == ([], [])
+    monkeypatch.setenv("WORKSHOP_POINT", "merge")
+    monkeypatch.setenv("WORKSHOP_LEG", "gate")
     files, misses = _python._stored_legs(root)
     assert files == [root / "coverage-data" / "x.coverage"]
     assert misses == ["packages/bare on check-a"]
@@ -1651,11 +1697,11 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     docs_job = gate.split("  docs:")[1].split("  gate:")[0]
     # The pull request's docs job builds beside the legs and never
     # waits for their data: nobody reads a pull request's coverage
-    # page. The deploy on main renders the pages from main's coverage
+    # page. The gate job on main renders the trees from main's coverage
     # record on the store, so no job downloads coverage.
     assert "needs:" not in docs_job and "coverage-*" not in docs_job
-    deploy = gate.split("  deploy:")[1].split("  govern:")[0]
-    assert "coverage" not in deploy
+    gate_job = gate.split("\n  gate:\n")[1].split("\n  govern:\n")[0]
+    assert "coverage" not in gate_job
     assert "workflow_run" not in gate and "run-id:" not in gate
 
 

@@ -294,27 +294,29 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert ".gitea/workflows/docs.yml" not in files
     workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
+    assert list(jobs) == ["check", "docs", "gate", "govern"]
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         # One verb per job: the entry script, then ci.run, nothing else.
         verbs = [run for run in runs if "ci.run" in run]
         assert len(verbs) == 1, name
         assert all("setup.sh" in run or "ci.run" in run for run in runs), (name, runs)
+        # A step's only condition is the verdict's always() or the
+        # push a merge-point join adds its plumbing on.
         for step in job["steps"]:
             if "if" in step:
-                assert step["if"] == "always()", (name, step)
+                assert step["if"] in ("always()", "github.event_name == 'push'"), (
+                    name,
+                    step,
+                )
     check_step = next(s for s in jobs["check"]["steps"] if s.get("name") == "Check")
     assert "fm ci.run --point=gate --job=check" in check_step["run"]
     assert jobs["gate"]["if"] == "always()"
     assert jobs["gate"]["steps"][0]["with"]["fetch-depth"] == 0
-    assert jobs["deploy"]["if"] == "github.event_name == 'push'"
     assert jobs["govern"]["if"] == "github.event_name == 'push'"
     assert "if" not in jobs["check"] and "if" not in jobs["docs"]
     assert "needs" not in jobs["check"] and "needs" not in jobs["docs"]
     assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
-    assert jobs["dispatch"]["if"] == "github.event_name == 'push'"
-    assert jobs["dispatch"]["needs"] == ["gate"]
     # The wave is dispatch-only: no closed-pull-request trigger, no
     # decision expression, the ref an input the jobs check out.
     release = yaml.safe_load(files[".gitea/workflows/release.yml"])
@@ -353,7 +355,7 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     files = generate(_contract_root(tmp_path, "github"))
     workflow = yaml.safe_load(files[".github/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "govern", "dispatch", "deploy"]
+    assert list(jobs) == ["check", "docs", "gate", "govern", "pages"]
     assert ".github/workflows/governance.yml" not in files
     assert ".github/workflows/docs.yml" not in files
     # The nightly point's shell: the clock, a dispatch, one verb per
@@ -370,7 +372,8 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         verbs = [run for run in runs if "ci.run" in run]
-        assert len(verbs) == 1, name
+        # One verb per job; the pages deploy runs no verb at all.
+        assert len(verbs) == (0 if name == "pages" else 1), name
         assert all("setup.sh" in run or "ci.run" in run for run in runs), (name, runs)
         assert (
             "if" not in job
@@ -379,7 +382,10 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
         ), name
         for step in job["steps"]:
             if "if" in step:
-                assert step["if"] == "always()", (name, step)
+                assert step["if"] in ("always()", "github.event_name == 'push'"), (
+                    name,
+                    step,
+                )
     check = jobs["check"]
     # The legs start at once: the title check is the gate job's
     # first entry, and the docs build runs beside the legs.
@@ -407,38 +413,45 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     # which needs the merge base a shallow clone lacks.
     assert gate["steps"][0]["with"]["fetch-depth"] == 0
     names = [step.get("name", "") for step in gate["steps"]]
-    assert not [s for s in gate["steps"] if "artifact" in s.get("uses", "")]
+    # The gate job's artifact steps are the site's alone, on the push:
+    # the built site collected, and handed to the pages deploy.
+    carried = [s for s in gate["steps"] if "artifact" in s.get("uses", "")]
+    assert carried and all(s["if"] == "github.event_name == 'push'" for s in carried)
     verdict = gate["steps"][names.index("Verdict")]
     assert verdict["run"] == "fm ci.run --point=gate --job=gate"
     assert verdict["env"] == {"FORGE_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}
     # Organisation defaults are read-only; the pushes to the store's
     # namespace need the grant declared on both writers.
     assert check["permissions"] == {"contents": "write"}
-    assert gate["permissions"] == {"contents": "write"}
-    assert jobs["docs"]["steps"][-1]["run"] == "fm ci.run --point=gate --job=docs"
+    # The gate job also dispatches the wave after its verdict, which
+    # needs the actions grant.
+    assert gate["permissions"] == {"contents": "write", "actions": "write"}
+    docs_runs = [s for s in jobs["docs"]["steps"] if "run" in s]
+    assert docs_runs[-1]["run"] == "fm ci.run --point=gate --job=docs"
     # The merge point's jobs, on the push alone, as the Gitea shell
     # has them: the admin secret in govern and nowhere else, the
-    # pages grant and environment on deploy and nowhere else.
-    for name in ("govern", "dispatch", "deploy"):
+    # pages grant and environment on the pages deploy and nowhere
+    # else, which deploys the site the gate job uploaded.
+    for name in ("govern", "pages"):
         assert jobs[name]["if"] == "github.event_name == 'push'", name
-    assert jobs["deploy"]["needs"] == ["gate"]
-    assert jobs["dispatch"]["needs"] == ["gate"]
+    assert jobs["pages"]["needs"] == ["gate"]
     assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
     text = files[".github/workflows/ci.yml"]
-    govern = text.split("  govern:")[1].split("  dispatch:")[0]
+    govern = text.split("\n  govern:\n")[1].split("\n  pages:\n")[0]
     assert "FORGE_ADMIN_TOKEN" in govern
     assert "FORGE_ADMIN_TOKEN" not in text.replace(govern, "")
-    deploy = jobs["deploy"]
-    assert deploy["permissions"] == {
+    pages = jobs["pages"]
+    assert pages["permissions"] == {
         "contents": "read",
         "pages": "write",
         "id-token": "write",
     }
-    assert deploy["environment"]["name"] == "github-pages"
-    assert deploy["concurrency"] == {"group": "pages", "cancel-in-progress": False}
-    uses = [step.get("uses", "") for step in deploy["steps"]]
-    assert any(u.startswith("actions/upload-pages-artifact") for u in uses)
-    assert uses[-1].startswith("actions/deploy-pages")
+    assert pages["environment"]["name"] == "github-pages"
+    assert pages["concurrency"] == {"group": "pages", "cancel-in-progress": False}
+    uses = [step.get("uses", "") for step in pages["steps"]]
+    assert len(uses) == 1 and uses[0].startswith("actions/deploy-pages")
+    gate_uses = [step.get("uses", "") for step in gate["steps"]]
+    assert any(u.startswith("actions/upload-pages-artifact") for u in gate_uses)
     assert "pages" not in str(jobs["gate"].get("permissions"))
 
 
@@ -888,7 +901,11 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     # channel, and the gate job reads both from the store.
     assert not [step for step in check if "artifact" in step.get("uses", "")]
     gate = workflow["jobs"]["gate"]["steps"]
-    assert not [step for step in gate if "artifact" in step.get("uses", "")]
+    # The one artifact the gate job touches is the built site, on the push.
+    carried = [step for step in gate if "artifact" in step.get("uses", "")]
+    assert [(s["if"], s["with"]["pattern"]) for s in carried] == [
+        ("github.event_name == 'push'", "site*")
+    ]
     # The union is a gate entry, never a YAML line: the shell stays plumbing.
     assert "coverage combine" not in generate(root)[".gitea/workflows/ci.yml"]
 

@@ -418,7 +418,7 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     )
     broken.clear()
     # A job that declares no inputs always runs.
-    assert _points.unread_by_the_job(tmp_path, "merge", "deploy") == ""
+    assert _points.unread_by_the_job(tmp_path, "merge", "govern") == ""
     # A change to the sources of the extension that contributed the job
     # runs it, though it reads none of them.
     monkeypatch.setattr(

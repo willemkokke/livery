@@ -141,9 +141,17 @@ def generate_coverage_pages(root: Path) -> list[str]:
     One page per declaring package, one iframe per report, into the
     package's generated tree, which the mount merges. A declared tree
     that is missing renders its section saying so and the build stays
-    green: on a machine that has not measured, or a deploy without the
-    artifacts, the absence is stated rather than failing the site.
+    green: on a machine that has not measured, the absence is stated
+    rather than failing the site. On a push to main the page carries
+    its iframe whether or not the tree exists yet: the gate job
+    renders the trees after its union and puts them into the built
+    site (`refresh_site_coverage`), so a missing tree there is one the
+    gate job will have written, or one its page states the absence of.
     """
+    from livery.workshop import ci_run
+
+    run = ci_run()
+    deferred = run is not None and run.event == "push"
     written: list[str] = []
     for package in discover_packages(root):
         reports = package_coverage_reports(package)
@@ -157,10 +165,12 @@ def generate_coverage_pages(root: Path) -> list[str]:
             source = package.directory / path
             slug = _slug(label)
             lines += [f"## {label}", ""]
-            if (source / "index.html").is_file():
+            present = (source / "index.html").is_file()
+            if present:
                 target = mount / "coverage" / slug
                 shutil.rmtree(target, ignore_errors=True)
                 shutil.copytree(source, target)
+            if present or deferred:
                 lines += [
                     f'<iframe src="coverage/{slug}/index.html"'
                     f' title="{label}"'
@@ -179,6 +189,42 @@ def generate_coverage_pages(root: Path) -> list[str]:
         )
         written.append(name)
     return written
+
+
+def refresh_site_coverage(root: Path) -> list[str]:
+    """Put each package's coverage trees into the built site; the packages refreshed.
+
+    The site publishes a package's section at ``packages/<member>/``
+    and the trees its page frames under ``coverage/<slug>/`` beside
+    it, where the mount put them. A tree rendered after the build,
+    the merge point's from the union its gate judged, is copied over
+    the one the build carried; a declared report with no tree gets a
+    page stating the absence, so the section's iframe never points at
+    nothing. Nothing is done without a built site.
+    """
+    site = root / "site"
+    if not (site / "index.html").is_file():
+        return []
+    refreshed: list[str] = []
+    for package in discover_packages(root):
+        reports = package_coverage_reports(package)
+        if not reports:
+            continue
+        for label, path in reports:
+            source = package.directory / path
+            target = site / "packages" / package.member / "coverage" / _slug(label)
+            shutil.rmtree(target, ignore_errors=True)
+            if (source / "index.html").is_file():
+                shutil.copytree(source, target)
+                continue
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "index.html").write_text(
+                f"<p>No measured data for {package.member} ({label}) in this"
+                " run's record.</p>\n",
+                encoding="utf-8",
+            )
+        refreshed.append(package.member)
+    return refreshed
 
 
 def run_generators(root: Path) -> list[str]:
@@ -1938,8 +1984,10 @@ def docs_coverage_pages() -> None:
 
     The generator verb a package declares beside a coverage report
     its kind renders, such as a python package's ``htmlcov``. Each
-    package whose kind names a renderer is handed to it. Idempotent:
-    re-rendering from the same data rewrites the same tree.
+    package whose kind names a renderer is handed to it. A built site
+    at ``site/`` gets its copy of every tree refreshed as well, so a
+    tree rendered after the build is what the site publishes.
+    Idempotent: re-rendering from the same data rewrites the same tree.
     """
     root = _root()
     rendered = render_coverage_pages(root)
@@ -1947,6 +1995,9 @@ def docs_coverage_pages() -> None:
         print(f"  coverage pages for {', '.join(rendered)}")
     else:
         print("  no measured data: declared reports will state the absence")
+    refreshed = refresh_site_coverage(root)
+    if refreshed:
+        print(f"  site refreshed for {', '.join(refreshed)}")
 
 
 @docs_group.task(name="task-reference")

@@ -462,17 +462,25 @@ workspace whose pages live elsewhere sets a URL template in
 footman: `{path}` is the task's address joined by slashes, `{slug}`
 joined by dashes. That key comes before the site's, and footman's own
 configured `docs-url` before both.
-The site's two CI jobs come with the extension: its `extension.toml`
-declares the gate point's `docs` job, which the verdict waits for, and
-the merge point's `deploy` job, as `[ci.jobs.gate.docs]` and
-`[ci.jobs.merge.deploy]`, each with the tasks it runs; a workspace that
-does not list the extension renders neither job. Each job names the
-function that lists the system packages it installs, the deploy names
-the function that answers its publish seam, and the gate job declares
-the files the site reads, so the CI render and the shell's skip rule
-work without reading the `[docs]` table. A contributed
-job sits before the point's verdict job, or last on a point without
-one. The extension
+The site's CI comes with the extension: its `extension.toml` declares
+the gate point's `docs` job, which the verdict waits for, as
+`[ci.jobs.gate.docs]` with the task it runs; a workspace that does not
+list the extension renders no such job. The job names the function
+that lists the system packages it installs and declares the files the
+site reads, so the CI render and the shell's skip rule work without
+reading the `[docs]` table. A contributed job sits before the point's
+verdict job, or last on a point without one. A table naming a job the
+point already has, declared, inherited or contributed, joins it instead
+of adding one: `[ci.jobs.merge.docs]` keeps the built site as the run's
+artifact on a push, and `[ci.jobs.merge.gate]` collects it into the
+gate job, adds the coverage pages and the publish to the gate job's
+entries after its verdict, and names the function that answers the
+publish seam. So the site is built once per run, this run's coverage
+trees are rendered into it from the union the gate judged, and it is
+published from the gate job: through the container and ssh seams
+directly, and through the forge's pages by uploading it for the
+forge's own pages deploy, a job with no checkout and no entry. The
+extension
 renders the site's development section from the prose fragments
 the mounted extensions ship for a human reader, one page per section
 under `development/`, and renders each kind's API extractor from its

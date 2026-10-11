@@ -650,7 +650,11 @@ doc = "a builtin point, by its name: gate, merge, nightly or release"
 
 [contract.extension.ci.jobs."*"."*"]
 types = ["table"]
-doc = "a job the extension adds to the point, by a name the point does not declare"
+doc = "a job the extension adds to the point, by name; a name the point already has, declared, inherited or contributed, joins that job: its entries follow the job's own and its plumbing renders on the job under the point's event condition"
+
+[contract.extension.ci.jobs."*"."*".collects]
+types = ["str"]
+doc = "the artifact the job downloads before it enters, by the name a job of the point publishes it under, into the directory that job's paths start in; none when absent"
 
 [contract.extension.ci.jobs."*"."*".deploy]
 types = ["str"]
@@ -700,6 +704,14 @@ doc = "the function naming the system packages the job installs before it enters
 [contract.extension.ci.jobs."*"."*".needs]
 types = ["strs"]
 doc = "the jobs of the point this one waits for; none when absent"
+
+[contract.extension.ci.jobs."*"."*".paths]
+types = ["strs"]
+doc = "the paths the artifact the job publishes carries, as the forge globs them; required with publishes"
+
+[contract.extension.ci.jobs."*"."*".publishes]
+types = ["str"]
+doc = "the artifact the job uploads after its entries, by name, so a job of the point can collect it; none when absent"
 
 [contract.extension.ci.jobs."*"."*".note]
 types = ["str"]
