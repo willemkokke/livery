@@ -16,7 +16,13 @@ current-version = "livery.extensions.conan._answers:current_version"
 version-files = "livery.extensions.conan._answers:version_files"
 requirements = "livery.extensions.conan._answers:requirements"
 
-# The steps this extension adds to a package's lifecycle phases.
+# The steps this extension adds to a package's lifecycle phases. The
+# sync step runs before `uv sync` installs a member whose build goes
+# through the cmake-conan provider: conan's default profile names a
+# compiler first, or the provider writes one that names none.
+[phases.sync]
+main = "livery.extensions.conan._steps:profile"
+
 [phases.stamp]
 main = "livery.extensions.conan._steps:stamp"
 reads = ["version"]

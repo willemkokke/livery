@@ -833,3 +833,44 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     assert line.startswith("python -m venv /opt/workshop-conan && ")
     assert "pip install --quiet conan==2.32.0" in line
     assert line.endswith("ln -sf /opt/workshop-conan/bin/conan /usr/local/bin/conan")
+
+
+def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
+    tmp_path: Path,
+) -> None:
+    # A consumer first: its recipe names requirements and no reference,
+    # so it is left out, since conan cannot deduce one for it; a member
+    # with no recipe at all is left out the same way.
+    from livery.extensions.conan import _package as _conan
+    from livery.workshop._packages import Package
+
+    def member(name: str, *, recipe: bool) -> Package:
+        directory = tmp_path / "packages" / name
+        directory.mkdir(parents=True)
+        text = (
+            f'name = "{name}"\nversion = "0.1.0"\n'
+            if recipe
+            else 'requires = ("fmt/[>=11.0]",)\n'
+        )
+        (directory / "conanfile.py").write_text(text)
+        return Package(
+            directory=directory,
+            path=f"packages/{name}",
+            name=name,
+            kind="python-nanobind" if not recipe else "cpp-conan",
+            depends=(),
+            extensions=(),
+        )
+
+    consumer = member("ext", recipe=False)
+    assert not _conan.names_a_reference(consumer)
+    # Spelled as an empty list: conan's loader reads a bare key as
+    # nothing and fails on it.
+    assert _conan.workspace_file((consumer,)).endswith("packages: []\n")
+    (consumer.directory / "conanfile.py").unlink()
+    assert not _conan.names_a_reference(consumer)
+    library = member("geometry", recipe=True)
+    text = _conan.workspace_file((consumer, library))
+    assert text.endswith("packages:\n  - path: packages/geometry\n")
+    placed = _conan.workspace_file((library, consumer), root=tmp_path)
+    assert placed.endswith(f"  - path: {(tmp_path / 'packages/geometry').as_posix()}\n")
