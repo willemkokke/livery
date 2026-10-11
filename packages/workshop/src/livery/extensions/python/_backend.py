@@ -696,6 +696,26 @@ def _write_unit(
     return path
 
 
+#: The scope of a leg a pull request did not run: every suite carried.
+ABSENT = "absent"
+
+
+def expected_legs(root: Path, run: RunContext) -> tuple[list[str], list[str]]:
+    """The check legs the gate produces, and the ones *run*'s event runs.
+
+    A pull request runs the legs ``[ci] pull-request-runners`` names;
+    every other event runs them all. Both empty without a root
+    contract, as a test workspace may be.
+    """
+    from livery.workshop._points import check_legs, pull_request_legs
+
+    if not (root / "workshop.toml").is_file():
+        return [], []
+    every = check_legs(root)
+    due = pull_request_legs(root) if run.event == "pull_request" else every
+    return every, due
+
+
 def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
     """Union the run's legs' lines with the records; the packages it judges.
 
@@ -721,6 +741,12 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     prints why: the next run reruns what it cannot reuse, the safe
     direction.
 
+    A leg the contract names and a pull request did not run, one
+    outside ``[ci] pull-request-runners``, is carried whole from the
+    records, so the narrowed run judges the same global union and a
+    line only another platform reaches stays covered by main's
+    measurement of it.
+
     Refuses by name when no leg left its lines, when a leg's ref
     carries no readable file, when a leg names no scope the union
     reads, when a leg that ran a suite left its lines out, and when a
@@ -740,6 +766,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     from livery.workshop._coverage_store import (
         LINES,
         RUN_FILE,
+        Leg,
         Unit,
         closure_id,
         put_record,
@@ -771,6 +798,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             f" puts its scope and its lines there ({RUN_FILE}) at its end, and"
             " a missing put is a red leg, never a smaller union"
         )
+    every, due = expected_legs(root, run)
+    present = {leg.label for leg in legs}
+    for label in every:
+        if label in present or label in due:
+            continue
+        print(
+            f"  coverage: leg {label} did not run on this pull request"
+            " ([ci] pull-request-runners); every suite carried from the records"
+        )
+        legs.append(Leg(label, label, ABSENT, (), {}))
     scratch = root / COVERAGE_DATA
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir()
@@ -800,6 +837,8 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             )
         if leg.scope in (VERIFIED, NOTHING):
             print(f"  coverage: leg {leg.label} ran {leg.scope!r}: no suite, no data")
+        elif leg.scope == ABSENT:
+            pass
         elif leg.scope in (FULL, AFFECTED, MEASURED):
             marker = {"scope": leg.scope, "packages": list(leg.packages), "leg": ""}
             expected = suites_that_ran(marker, root, packages)

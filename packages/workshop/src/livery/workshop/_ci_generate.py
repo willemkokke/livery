@@ -35,6 +35,7 @@ from livery.workshop._points import (
     job_installs,
     job_seams,
     points,
+    pull_request_runners,
 )
 from livery.workshop._pythons import gate_pythons, python_matrix
 
@@ -106,34 +107,6 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
         "packages": member_roster(root),
         "wheel_runners": wheel_runners(root),
     }
-
-
-def pull_request_runners(ci: dict[str, Any]) -> list[str]:
-    """The runners a pull request's check legs fan out to.
-
-    ``[ci] pull-request-runners`` when the contract declares it, else
-    every runner ``[ci] runners`` names. A label the runners list does
-    not name refuses naming both lists, since a pull request's legs run
-    on runners every event runs on; an empty list refuses too.
-    """
-    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
-    declared: Any = ci.get("pull-request-runners")
-    if declared is None:
-        return runners
-    chosen = [str(runner) for runner in declared]
-    strangers = [runner for runner in chosen if runner not in runners]
-    if strangers:
-        footman.fail(
-            f"[ci] pull-request-runners names {', '.join(strangers)}, which [ci]"
-            f" runners does not list ({', '.join(runners)}); a pull request's"
-            " legs run on runners every event runs on"
-        )
-    if not chosen:
-        footman.fail(
-            "[ci] pull-request-runners is empty; name a runner [ci] runners"
-            " lists, or remove the key so every runner runs"
-        )
-    return chosen
 
 
 def _rung_step(answers: dict[str, Any]) -> str:

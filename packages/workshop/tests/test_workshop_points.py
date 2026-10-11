@@ -232,6 +232,21 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
     assert [argv[-1] for argv in seen] == ["check", "--submit"]
 
 
+def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.14"\n'
+    )
+    root = _root(tmp_path, '\n[ci]\nrunners = ["a", "b"]\n')
+    assert _points.pull_request_legs(root) == _points.check_legs(root)
+    (tmp_path / "workshop.toml").write_text(
+        (tmp_path / "workshop.toml").read_text() + 'pull-request-runners = ["b"]\n'
+    )
+    assert _points.check_legs(root) == ["check-a-3.14", "check-b-3.14"]
+    assert _points.pull_request_legs(root) == ["check-b-3.14"]
+
+
 def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
     # A pull request the refresh opens with the job token starts no
     # workflow; the secret, when present, is what makes it a real one.
