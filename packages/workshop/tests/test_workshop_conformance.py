@@ -194,16 +194,16 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
         " requires; did you mean 'levels'?; the mount refuses the extension"
     ]
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_extension._checks:judge"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_extension._checks:judge"\n'
     )
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:"
-        " checks.acme.lint.run names judge, which acme_kit_extension._checks does"
+        " phases.lint.acme.main names judge, which acme_kit_extension._checks does"
         " not define at its top level; did you mean 'judged'?; the mount refuses"
         " the extension"
     ]
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_extension._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_extension._checks:judged"\n'
     )
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == []
 
@@ -224,18 +224,18 @@ def test_a_reference_whose_module_registers_at_import_breaks_the_clause(
     (package / "_pure.py").write_text("def judged(ctx):\n    del ctx\n")
     declaration = package / "extension.toml"
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_registers._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_registers._checks:judged"\n'
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     clause = "references-register-nothing"
     assert _names(Subject("acme_kit_registers"), clause) == [
         "references-register-nothing: acme_kit_registers._checks, named by"
-        " checks.acme.lint.run: importing it registers a call to"
+        " phases.lint.acme.main: importing it registers a call to"
         " livery.workshop._checks.register_check; the mount registers what the"
         " declaration says, so a reference's module only defines"
     ]
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_registers._pure:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_registers._pure:judged"\n'
     )
     assert _names(Subject("acme_kit_registers"), clause) == []
 
@@ -277,20 +277,20 @@ def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
     (package / "_checks.py").write_text("def judged(ctx):\n    del ctx\n")
     declaration = package / "extension.toml"
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_claims._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_claims._checks:judged"\n'
         'claims = [{ category = "sources", suffixes = ["py"] }]\n'
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     clause = "claims-name-categories"
     assert _names(Subject("acme_kit_claims"), clause) == [
-        "claims-name-categories: checks.acme.lint.claims: names the category"
+        "claims-name-categories: phases.lint.acme.claims: names the category"
         " 'sources', which no extension registers; did you mean 'source'?; the"
         " check claims no file of it",
-        "claims-name-categories: checks.acme.lint.claims: names the suffix 'py';"
+        "claims-name-categories: phases.lint.acme.claims: names the suffix 'py';"
         " a suffix starts with a dot, '.py'",
     ]
     declaration.write_text(
-        '[checks.acme.lint]\nrun = "acme_kit_claims._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_claims._checks:judged"\n'
         'claims = [{ category = "source", suffixes = [".py"] }]\n'
     )
     assert _names(Subject("acme_kit_claims"), clause) == []
@@ -313,11 +313,11 @@ def test_an_unanswered_placeholder_fails_the_kit(
     subject = _words_subject(
         tmp_path,
         monkeypatch,
-        '[checks.acme.lint]\ntools = ["acme"]\n'
-        'judge = ["acme", "--cache={cache}", "--into={output}"]\n',
+        '[phases.lint.acme]\ntools = ["acme"]\n'
+        'main = ["acme", "--cache={cache}", "--into={output}"]\n',
     )
     assert _names(subject, clause) == [
-        "words-are-answerable: checks.acme.lint: names {output}, which neither the"
+        "words-are-answerable: phases.lint.acme: names {output}, which neither the"
         " engine nor its matrix answers; the engine answers cache, package,"
         " compile-commands, paths, arguments"
     ]
@@ -326,34 +326,24 @@ def test_an_unanswered_placeholder_fails_the_kit(
     subject = _words_subject(
         tmp_path,
         monkeypatch,
-        '[checks.acme.lint]\ntools = ["other"]\njudge = ["acme", "{package}"]\n',
+        '[phases.lint.acme]\ntools = ["other"]\nmain = ["acme", "{package}"]\n',
     )
     assert _names(subject, clause) == [
-        "words-are-answerable: checks.acme.lint: runs acme, which its tools do not"
+        "words-are-answerable: phases.lint.acme: runs acme, which its tools do not"
         " name (other); a check runs a tool it requires",
-        "words-are-answerable: checks.acme.lint: names {package}, which only a call"
+        "words-are-answerable: phases.lint.acme: names {package}, which only a call"
         " that judges one package answers, and the check judges the workspace"
         " whole",
     ]
     subject = _words_subject(
         tmp_path,
         monkeypatch,
-        '[checks.acme.lint]\ntools = ["acme"]\nscope = "package"\n'
-        'judge = ["acme", "--cache={cache}", "{package}"]\n',
+        '[phases.lint.acme]\ntools = ["acme"]\nscope = "package"\n'
+        'main = ["acme", "--cache={cache}", "{package}"]\n',
     )
     assert _names(subject, clause) == []
-    # A check table's words name neither {paths} nor {arguments}, which
-    # a step's main places; the step's own table names both.
-    subject = _words_subject(
-        tmp_path,
-        monkeypatch,
-        '[checks.acme.lint]\ntools = ["acme"]\njudge = ["acme", "{paths}"]\n',
-    )
-    assert _names(subject, clause) == [
-        "words-are-answerable: checks.acme.lint: names {paths}, which only a step's"
-        " main under [phases.<phase>.<step>] places; a check table's words have the"
-        " paths and the words after -- appended"
-    ]
+    # A step's main places {paths} and {arguments} itself: neither is
+    # a placeholder left for the engine to answer.
     subject = _words_subject(
         tmp_path,
         monkeypatch,
@@ -374,17 +364,17 @@ def test_a_matrix_key_absent_from_the_words_fails_the_kit(
     subject = _words_subject(
         tmp_path,
         monkeypatch,
-        '[checks.acme.typecheck]\ntools = ["acme"]\njudge = ["acme"]\n' + matrix,
+        '[phases.typecheck.acme]\ntools = ["acme"]\nmain = ["acme"]\n' + matrix,
     )
     assert _names(subject, clause) == [
-        "words-are-answerable: checks.acme.typecheck: varies platform in its"
+        "words-are-answerable: phases.typecheck.acme: varies platform in its"
         " matrix, which no word names; every call would run the same words"
     ]
     subject = _words_subject(
         tmp_path,
         monkeypatch,
-        '[checks.acme.typecheck]\ntools = ["acme"]\n'
-        'judge = ["acme", "--platform={platform}"]\n' + matrix,
+        '[phases.typecheck.acme]\ntools = ["acme"]\n'
+        'main = ["acme", "--platform={platform}"]\n' + matrix,
     )
     assert _names(subject, clause) == []
 

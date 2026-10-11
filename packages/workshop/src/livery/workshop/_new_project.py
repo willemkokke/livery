@@ -243,8 +243,7 @@ def new_project(
         str,
         doc(
             "the extensions the workspace lists, comma-separated in precedence"
-            " order, each as name or name[option,option]; the stock list by"
-            " default"
+            " order, each by name; the stock list by default"
         ),
     ] = "",
     resume: Annotated[bool, hidden] = False,
@@ -307,8 +306,7 @@ def new_project(
     # runtime accessor is footman#536's family).
     from livery.footman import builtins
 
-    # A comma inside an entry's brackets separates its options.
-    listed = [e.strip() for e in re.split(r",(?![^\[]*\])", stack) if e.strip()]
+    listed = [e.strip() for e in stack.split(",") if e.strip()]
     stack_list = listed or birth_extensions(builtins())
     contract = root / "workshop.toml"
     spelled = ", ".join(f'"{entry}"' for entry in stack_list)

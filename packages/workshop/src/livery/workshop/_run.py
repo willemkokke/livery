@@ -201,9 +201,7 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
     from livery.workshop._quality import run_on_packages
 
     builders = [
-        record
-        for record in checks_by_name().values()
-        if "build" in (record.role, *record.roles)
+        record for record in checks_by_name().values() if record.role == "build"
     ]
     closure = order_topologically(dependencies_closure(packages, {package.path}))
     git = GitOps(root)

@@ -216,10 +216,12 @@ def missing_list(root: Path) -> str:
 def listing(text: str) -> Spec:
     """An entry of an ``extensions`` list, as the requirement grammar reads it.
 
-    An entry is a name, or a name with the options it turns on,
-    ``<name>[<option>]``. A spelling the grammar does not
-    read is taken whole as a name: no distribution declares it, so
-    the mount names it, and the layering check refuses the spelling.
+    An entry is a name. A spelling the grammar does not read is taken
+    whole as a name: no distribution declares it, so the mount names
+    it, and the layering check refuses the spelling. One it reads with
+    brackets, a version or a scope is read as its name, and the
+    layering check refuses the spelling too
+    ([livery.workshop._extensions.listing_problems][]).
     """
     from livery.toolroom.store import Spec, SpecError
 
@@ -269,11 +271,9 @@ def _spelling(entry: Any) -> str:
 def workspace_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     """Each entry of ``[workspace] extensions`` as ``(name, distribution)``, in order.
 
-    An entry is a name, or a table ``{ name = "...", for = [...] }``;
-    either name may carry options, which
-    [livery.workshop._extensions.extension_options][] reads. Empty
-    outside a workspace and when the contract has no list: the mount
-    refuses that, and a reader has nothing to read.
+    An entry is a name, or a table ``{ name = "...", for = [...] }``.
+    Empty outside a workspace and when the contract has no list: the
+    mount refuses that, and a reader has nothing to read.
     """
     entries: list[tuple[str, str]] = []
     for entry in _listed(start):
@@ -326,7 +326,7 @@ def composed_set(listed: tuple[str, ...] | list[str]) -> tuple[str, ...]:
 
     The list and the package-level extensions it requires, as
     [livery.workshop._composition.package_set][] reads them from the
-    installed declarations; an entry's options are read past.
+    installed declarations.
     """
     return package_set([listing(entry).name for entry in listed], installed_declaration)
 
@@ -345,39 +345,22 @@ def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     return tuple(entries.items())
 
 
-def extension_options(start: Path | None = None) -> dict[str, tuple[str, ...]]:
-    """Each listed extension's options, as its entry spells them, in list order.
+def _bracketed(spelled: str) -> str:
+    """Why the entry *spelled* cannot carry brackets; empty for a name alone."""
+    from livery.toolroom.store import Spec, SpecError
 
-    ``<name>[<option>]`` lists ``<name>`` with ``<option>``; an entry
-    without brackets has none. Empty outside a workspace.
-    """
-    found: dict[str, tuple[str, ...]] = {}
-    for entry in _listed(start):
-        spec = listing(_spelling(entry))
-        found[spec.name] = spec.options
-    return found
-
-
-def declared_options(extension: str) -> dict[str, str]:
-    """The options *extension* declares, each name to what it turns on.
-
-    Empty for the base, for an extension that declares none, and for
-    one no installed distribution declares.
-    """
-    found = _readable(extension)
-    return {} if found is None else dict(found.options)
-
-
-def _undeclared(extension: str, options: tuple[str, ...]) -> str:
-    """Why *extension* cannot take *options*; empty when it declares every one."""
-    known = declared_options(extension)
-    unknown = [option for option in options if option not in known]
-    if not unknown:
+    try:
+        spec = Spec.parse(spelled, where="[workspace] extensions")
+    except SpecError:
         return ""
+    if not spec.options:
+        return ""
+    phase, _, step = next(iter(spec.options)).partition(".")
+    address = f"{phase}.{step}" if step else "<phase>.<step>"
     return (
-        f"[workspace] extensions lists {extension} with"
-        f" {', '.join(repr(option) for option in unknown)}, which it does not"
-        f" declare; its options are {', '.join(known) or 'none'}"
+        f"[workspace] extensions lists {spelled!r}; an entry is a name alone, and"
+        f" a step {spec.name} declares off is turned on with [phases.{address}]"
+        " enabled = true in this contract"
     )
 
 
@@ -518,9 +501,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     are named on stderr and skipped, never refused:
     the mount runs on every command, ``fm sync`` among them, which is
     what installs a missing declaration, so a refusal here would stop
-    the command that repairs it. An option the extension does not
-    declare is named the same way and left off. The gate's layering
-    check and ``fm extensions`` refuse the same problems. An extension
+    the command that repairs it. An entry with brackets is named the
+    same way and read as its name alone. The gate's layering check and
+    ``fm extensions`` refuse the same problems. An extension
     whose declaration names no ``plugin`` registers what it declares
     and mounts no verbs. A plugin a branded App already mounts as a
     builtin is not mounted again, since claiming its tasks again puts
@@ -542,13 +525,15 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     stale: list[str] = []
     declared = declared_targets(start)
     active = resolved_targets(start)
-    options = extension_options(start)
     enabled = enabled_steps(start)
+    for entry in _listed(start):
+        if why := _bracketed(_spelling(entry)):
+            _note(f"{why}; the mount reads the name alone")
     # The base is present before this walk; every extension joins once
     # its mount ran.
     present = [SELF]
     grafted: set[tuple[str, str]] = set()
-    _graft_contributions(present, declared, active, grafted, options, enabled)
+    _graft_contributions(present, declared, active, grafted, enabled)
     packaged = package_extensions(start)
     for extension, dist in extension_entries(start):
         level = PACKAGE if extension in packaged else WORKSPACE
@@ -564,18 +549,13 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 notes = declare_release_notes(extension, found.release_notes)
                 rules = declare_rules(extension, found.rules)
                 if (
-                    register_declared(
-                        extension,
-                        found.additions,
-                        options.get(extension, ()),
-                        enabled=enabled,
-                    )
+                    register_declared(extension, found.additions, enabled=enabled)
                     or notes
                     or rules
                 ):
                     mounted.append(extension)
             present.append(extension)
-            _graft_contributions(present, declared, active, grafted, options, enabled)
+            _graft_contributions(present, declared, active, grafted, enabled)
             continue
         package = extension_package(extension)
         if extension in _declared() and declaration_file(package) is None:
@@ -610,15 +590,12 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 " list it in each package's `extensions` instead"
             )
             continue
-        listed = options.get(extension, ())
-        if why := _undeclared(extension, listed):
-            _note(f"{why}; the mount leaves it off")
         check_phase_declarers(extension, found, present)
         declare_slots(extension, found.slots)
         notes = declare_release_notes(extension, found.release_notes)
         rules = declare_rules(extension, found.rules)
         if (
-            register_declared(extension, found.additions, listed, enabled=enabled)
+            register_declared(extension, found.additions, enabled=enabled)
             or notes
             or rules
         ):
@@ -637,7 +614,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 if extension not in mounted:
                     mounted.append(extension)
         present.append(extension)
-        _graft_contributions(present, declared, active, grafted, options, enabled)
+        _graft_contributions(present, declared, active, grafted, enabled)
     # An extension's checks registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
     from livery.workshop._checks import generate_verbs
@@ -733,7 +710,6 @@ def _graft_contributions(
     declared: dict[str, dict[str, Additions]],
     active: dict[str, tuple[str, ...]],
     grafted: set[tuple[str, str]],
-    options: dict[str, tuple[str, ...]],
     enabled: frozenset[str] = frozenset(),
 ) -> None:
     """Register every ``[for.<target>]`` table whose owner and target are both present.
@@ -741,9 +717,8 @@ def _graft_contributions(
     Called after each extension mounts, so a contribution lands whichever
     of the two mounts later. A ``for`` entry naming a target the owner
     declares nothing for registers nothing: the layering check names
-    that entry, and it can only run inside a mount that went on. A check
-    in the table registers under the options the owner's listing turns
-    on, *options*, and a step declared off under the steps the root
+    that entry, and it can only run inside a mount that went on. A step
+    in the table declared off registers under the steps the root
     contract turns on, *enabled*, as one at the file's top level does.
     """
     for owner in present:
@@ -753,7 +728,7 @@ def _graft_contributions(
             additions = declared.get(owner, {}).get(target)
             if additions is None:
                 continue
-            register_declared(owner, additions, options.get(owner, ()), enabled=enabled)
+            register_declared(owner, additions, enabled=enabled)
             grafted.add((owner, target))
 
 
@@ -773,11 +748,7 @@ def declare_rules(extension: str, rules: Mapping[str, DeclaredRule]) -> bool:
 
 
 def register_declared(
-    extension: str,
-    additions: Additions,
-    options: tuple[str, ...] = (),
-    *,
-    enabled: frozenset[str] = frozenset(),
+    extension: str, additions: Additions, *, enabled: frozenset[str] = frozenset()
 ) -> bool:
     """Register what *additions* declares for *extension*; whether it declares a check.
 
@@ -786,9 +757,7 @@ def register_declared(
     value goes into its slot and each job joins its point under the
     same name. A step declared ``enabled = false`` registers only when
     *enabled*, the steps the root contract turns on
-    ([livery.workshop._extensions.enabled_steps][]), names it; a check
-    that names an option in ``listed-with`` registers only when
-    *options*, the entry's, turn it on.
+    ([livery.workshop._extensions.enabled_steps][]), names it.
     """
     from dataclasses import replace
 
@@ -797,8 +766,6 @@ def register_declared(
 
     for record in additions.checks:
         if not record.enabled and record.name not in enabled:
-            continue
-        if record.listed_with and record.listed_with not in options:
             continue
         register_check(replace(record, extension=extension))
     for slot in {slot for slot, _ in additions.contributions}:
@@ -983,14 +950,13 @@ def describe_extensions(start: Path | None = None) -> list[str]:
 
     The base, then each extension in mount order: the package-level
     ones with the packages whose sets hold them, then the workspace
-    list; under each, its options and the steps it declares off, each
-    with whether it is on.
+    list; under each, the steps it declares off, each with whether it
+    is on.
     """
     names = extension_names(start)
     who = requirers(start)
     tools = extension_tools(start)
     targets = resolved_targets(start)
-    listed = extension_options(start)
     enabled = enabled_steps(start)
     holders = _holders(start)
     lines: list[str] = [f"  {SELF} (the base)"]
@@ -1004,9 +970,6 @@ def describe_extensions(start: Path | None = None) -> list[str]:
             lines.append(f"    tools: {', '.join(tools[name])}")
         if targets.get(name):
             lines.append(f"    for: {', '.join(targets[name])}")
-        for option, text in declared_options(name).items():
-            state = "on" if option in listed.get(name, ()) else "off"
-            lines.append(f"    option {option} ({state}): {text}")
         for step in _declared_off(name):
             state = "on" if step in enabled else "off"
             phase, _, name_in_phase = step.partition(".")
@@ -1232,12 +1195,14 @@ def _why(names: list[str], wanted: tuple[str, ...]) -> str:
 
 
 def listing_problems(root: Path) -> list[str]:
-    """Each ``[workspace] extensions`` entry spelled wrong or with an undeclared option.
+    """Each ``[workspace] extensions`` entry spelled as more than a name.
 
-    An entry is a name with the options it turns on. It takes no
-    version, ``?`` or scope: an extension's version comes from its
-    wheel's metadata, and the lock pins it. An extension no installed
-    distribution declares is
+    An entry is a name. It takes no version, ``?`` or scope: an
+    extension's version comes from its wheel's metadata, and the lock
+    pins it. It takes no brackets either: a step the extension declares
+    off is turned on at the step's address, ``[phases.<phase>.<step>]
+    enabled = true``, and the refusal names that spelling. An extension
+    no installed distribution declares is
     [livery.workshop._extensions.level_problems][]'s to name.
     """
     from livery.toolroom.store import Spec, SpecError
@@ -1251,15 +1216,12 @@ def listing_problems(root: Path) -> list[str]:
             spec = None
         if spec is None or spec.optional or spec.floor or spec.scope:
             problems.append(
-                f"[workspace] extensions lists {spelled!r}; an entry is a name with"
-                " the options it turns on, `name` or `name[option,option]`, and no"
-                " version or scope: the lock pins an extension's version from its"
-                " wheel"
+                f"[workspace] extensions lists {spelled!r}; an entry is a name alone,"
+                " with no version or scope: the lock pins an extension's version"
+                " from its wheel"
             )
             continue
-        if declaration(spec.name) is not None and (
-            why := _undeclared(spec.name, spec.options)
-        ):
+        if why := _bracketed(spelled):
             problems.append(why)
     return problems
 

@@ -9,8 +9,8 @@
 # named types, values or doc is a table like any other key; a list or a
 # string under those names is the key's own declaration.
 #
-# [for.<target>] in an extension.toml takes the checks, ci and
-# contributions keys of its top level again: the composer repeats them
+# [for.<target>] in an extension.toml takes every table of its top level
+# again but [extension], [for] and [contract]: the composer repeats them
 # under for.*, so they are written once, below.
 #
 # The base's phases are declared at the end, under [phases.<phase>], in
@@ -261,7 +261,7 @@ doc = "the extensions the workspace mounts, in precedence order"
 
 [contract.root.workspace."extensions[]"]
 types = ["str", "table"]
-doc = "one extension: its name with any options in brackets, or a table with its name and targets"
+doc = "one extension: its name, or a table with its name and targets"
 
 [contract.root.workspace."extensions[]".for]
 types = ["strs"]
@@ -269,7 +269,7 @@ doc = "the listed extensions this one contributes to; every listed one it declar
 
 [contract.root.workspace."extensions[]".name]
 types = ["str"]
-doc = "the extension's name, with any options in brackets"
+doc = "the extension's name"
 
 [contract.root.workspace.hosts]
 types = ["strs"]
@@ -296,22 +296,6 @@ doc = "categories the package gives its own paths, which win over its kind's rul
 [contract.package.categories."*"]
 types = ["strs"]
 doc = "a category, by its name, to the paths it takes, as patterns relative to the package"
-
-[contract.package.checks]
-types = ["table"]
-doc = "options the package sets on its checks, by tool"
-
-[contract.package.checks."*"]
-types = ["table"]
-doc = "a tool's options: a value for all its checks, or a table per role"
-
-[contract.package.checks."*"."*"]
-types = ["any"]
-doc = "an option for every check of the tool, or a table of options for its check in that role"
-
-[contract.package.checks."*"."*"."*"]
-types = ["any"]
-doc = "an option of the tool's check in that role; the option's default when absent"
 
 [contract.package.ci]
 types = ["table"]
@@ -433,11 +417,11 @@ doc = "options the package sets on the steps of its phases, by phase and step"
 
 [contract.package.phases."*"]
 types = ["table"]
-doc = "a phase, by its name, to the steps the package sets options on"
+doc = "a phase, by its name: a value for every step of the phase, or a table per step"
 
 [contract.package.phases."*"."*"]
-types = ["table"]
-doc = "a step's options, which win over the same step's [checks.<tool>.<role>] table key by key"
+types = ["any"]
+doc = "an option for every step of the phase, or a table of options for one step, which wins over the phase's value key by key"
 
 [contract.package.phases."*"."*"."*"]
 types = ["any"]
@@ -471,206 +455,11 @@ doc = "whether a release tests the package against the lowest versions its requi
 types = ["bool"]
 doc = "whether the release uploads the package to its registry; true when absent, and a package that does not is still versioned, built and tagged"
 
-[contract.package.roles]
-types = ["table"]
-doc = "options the package sets on its checks, by role"
-
-[contract.package.roles."*"]
-types = ["table"]
-doc = "a role's options, for every check of the role, which the tool's tables override"
-
-[contract.package.roles."*"."*"]
-types = ["any"]
-doc = "an option for every check of the role; the option's default when absent"
-
 [contract.package.template]
 types = ["str"]
 doc = "the seed the package was born from"
 
 # extension.toml beside an extension's package.
-
-[contract.extension.checks]
-types = ["table"]
-doc = "the checks the extension registers while it is listed, by tool and role"
-
-[contract.extension.checks."*"]
-types = ["table"]
-doc = "a tool, by the one-word name its checks' verbs give it: pytest in fm test.pytest"
-
-[contract.extension.checks."*"."*"]
-types = ["table"]
-doc = "a check of that tool, by the one-word role it fills; it answers to <role>.<tool>"
-
-[contract.extension.checks."*"."*".after]
-types = ["strs"]
-doc = "the checks this one runs after in a gate, by name; none when absent"
-
-[contract.extension.checks."*"."*".arguments]
-types = ["bool"]
-doc = "whether the check's own verb hands its tool the words after --; false when absent, and the verb refuses them"
-
-[contract.extension.checks."*"."*".claims]
-types = ["list"]
-doc = "the categories the check judges, each with the rules it leaves out there and the suffixes it reads; when absent, the check's own code decides what it reads"
-
-[contract.extension.checks."*"."*"."claims[]"]
-types = ["table"]
-doc = "one category the check judges, with the rules it leaves out and the suffixes it reads there"
-
-[contract.extension.checks."*"."*"."claims[]".category]
-types = ["str"]
-doc = "the category the check judges: source, test, test-support, configuration, example, or one an extension registers"
-
-[contract.extension.checks."*"."*"."claims[]".ignore]
-types = ["strs"]
-doc = "the rule codes the check does not apply in the category, written into the tool's per-file ignores; none when absent"
-
-[contract.extension.checks."*"."*"."claims[]".suffixes]
-types = ["strs"]
-doc = "the file suffixes the check reads in the category, each starting with a dot; every file when absent"
-
-[contract.extension.checks."*"."*".editor-extension]
-types = ["str"]
-doc = "the marketplace id of the editor extension the composed .vscode/extensions.json recommends for the check; none when absent"
-
-[contract.extension.checks."*"."*".env]
-types = ["table"]
-doc = "the variables every call of a check in words gets, over the run's own"
-
-[contract.extension.checks."*"."*".env."*"]
-types = ["str"]
-doc = "the variable's value; a placeholder in it is answered as in the words"
-
-[contract.extension.checks."*"."*".extensions]
-types = ["strs"]
-doc = "the package-level extensions whose packages the check judges: each package whose set holds one; every package when absent"
-
-[contract.extension.checks."*"."*".fix]
-types = ["str", "strs"]
-doc = "what rewrites what the check judges, run before any judge under --fix: the words of a check in words, or the function, module:function, of a check that runs code; the check only judges when absent"
-
-[contract.extension.checks."*"."*".flags]
-types = ["strs"]
-doc = "the command-line flags the check reads: point, to select a CI point's tests; none when absent"
-
-[contract.extension.checks."*"."*".fragments]
-types = ["table"]
-doc = "the configuration the composed files carry for the check, by file; none when absent"
-
-[contract.extension.checks."*"."*".fragments."*"]
-types = ["str", "table"]
-doc = "a file, by its name, to its text for a project file, or a table of its text and extensions for a file in each package"
-
-[contract.extension.checks."*"."*".fragments."*".extensions]
-types = ["strs"]
-doc = "the package-level extensions whose packages carry the file: each package whose set holds one"
-
-[contract.extension.checks."*"."*".fragments."*".text]
-types = ["str"]
-doc = "the fragment's Jinja text, rendered with each package's data"
-
-[contract.extension.checks."*"."*".inputs]
-types = ["table"]
-doc = "the files a workspace check reads, so a run that knows its changes judges it only when one of them changed; when absent, the check narrows by packages alone"
-
-[contract.extension.checks."*"."*".inputs.ignores]
-types = ["strs"]
-doc = "files whose change never counts, though a pattern of reads or widens names them; none when absent"
-
-[contract.extension.checks."*"."*".inputs.on-removal]
-types = ["bool"]
-doc = "whether a deleted or moved file anywhere runs the check over everything it reads; false when absent"
-
-[contract.extension.checks."*"."*".inputs.per-file]
-types = ["bool"]
-doc = "whether the check judges each changed file it reads on its own, rather than everything when one changes; true when absent"
-
-[contract.extension.checks."*"."*".inputs.reads]
-types = ["strs"]
-doc = "the files the check judges, as patterns relative to the root where ** spans directories"
-
-[contract.extension.checks."*"."*".inputs.widen]
-types = ["str"]
-doc = "the check's own further reason to run over everything, a function module:function given the changes; none when absent"
-
-[contract.extension.checks."*"."*".inputs.widens]
-types = ["strs"]
-doc = "files the check does not judge whose change runs it over everything it reads; none when absent"
-
-[contract.extension.checks."*"."*".judge]
-types = ["strs"]
-doc = "the words that judge: the tool's name as the check's tools name it, then its arguments; the engine appends the words after -- and the paths the run reaches, and the exit code is the verdict. Exclusive with run"
-
-[contract.extension.checks."*"."*".listed-with]
-types = ["str"]
-doc = "the option of [options] a workspace's listing turns on for the check to register; the check registers whenever the extension is listed when absent"
-
-[contract.extension.checks."*"."*".matrix]
-types = ["table"]
-doc = "the placeholders the calls of a check in words vary: one call per combination of values, in parallel, each its own verdict"
-
-[contract.extension.checks."*"."*".matrix."*"]
-types = ["strs"]
-doc = "the values the placeholder takes, one call each"
-
-[contract.extension.checks."*"."*".narrowing]
-types = ["str"]
-doc = "how the check's own code narrows a package-scoped gate: paths for the subset's directories, packages for its members, none for the whole each time; none when absent"
-values = ["paths", "packages", "none"]
-
-[contract.extension.checks."*"."*".options]
-types = ["table"]
-doc = "the options a package may set on the check in its [checks.<tool>.<role>] table; enabled alone when absent"
-
-[contract.extension.checks."*"."*".options."*"]
-types = ["table"]
-
-[contract.extension.checks."*"."*".options."*".default]
-types = ["any"]
-doc = "the value the check reads when no package sets the option; none when absent"
-
-[contract.extension.checks."*"."*".options."*".doc]
-types = ["str"]
-doc = "one line saying what the option changes"
-
-[contract.extension.checks."*"."*".options."*".type]
-types = ["str"]
-doc = "the option's type, which a package's value must have: bool, str or int"
-values = ["bool", "str", "int"]
-
-[contract.extension.checks."*"."*".roles]
-types = ["strs"]
-doc = "further roles the check fills, each answering to <role>.<tool>; none when absent"
-
-[contract.extension.checks."*"."*".run]
-types = ["str"]
-doc = "the function that judges, module:function in the extension's own package, for a check its tool's words cannot say. Exclusive with judge"
-
-[contract.extension.checks."*"."*".safe-fix]
-types = ["strs"]
-doc = "the words that rewrite under --safe-fix, removing no code; the fix words when absent"
-
-[contract.extension.checks."*"."*".scope]
-types = ["str"]
-doc = "what one run of the check judges: workspace for the whole workspace at once, package for one package at a time; workspace when absent"
-values = ["workspace", "package"]
-
-[contract.extension.checks."*"."*".tests-only]
-types = ["bool"]
-doc = "whether a package check also runs when a package's change is confined to its tests; false when absent"
-
-[contract.extension.checks."*"."*".threshold]
-types = ["number"]
-doc = "the share of affected units, above 0 and at most 1, from which a check narrowing by paths runs over its whole; 1 when absent"
-
-[contract.extension.checks."*"."*".tools]
-types = ["strs"]
-doc = "the tools the check runs, as the tool profile names them, each added to the profile of every kind the check judges; none when absent"
-
-[contract.extension.checks."*"."*".transport]
-types = ["str"]
-doc = "how a list of paths reaches the tool: argv, on its command line, the only one taken; argv when absent"
-values = ["argv", "file", "config"]
 
 [contract.extension.ci]
 types = ["table"]
@@ -817,7 +606,7 @@ doc = "what the extension adds to other listed extensions, by target"
 
 [contract.extension.for."*"]
 types = ["table"]
-doc = "a target extension, by its listed name, to the checks, CI jobs and contributions this one adds while both are listed"
+doc = "a target extension, by its listed name, to what this one adds while both are listed: every table the top level takes but [extension], [for] and [contract]"
 
 [contract.extension.fragments]
 types = ["table"]
@@ -834,14 +623,6 @@ doc = "module:name in the extension's own package, called with the workspace roo
 [contract.extension.fragments."*".local]
 types = ["bool"]
 doc = "whether the files belong to this checkout alone and are never committed; false when absent"
-
-[contract.extension.options]
-types = ["table"]
-doc = "the options a workspace may turn on when it lists the extension as <name>[<option>]"
-
-[contract.extension.options."*"]
-types = ["str"]
-doc = "an option, by its name in the listing's brackets, to a line saying what it turns on"
 
 [contract.extension.phases]
 types = ["table"]

@@ -1,9 +1,9 @@
 """The role verbs: a verb per role and a sub-task per check, from the registry.
 
-Refusals first: a flag no verb offers, a name that is no task address,
-two checks at one address. Then the tree the registry generates, the
-flags each verb offers, the addresses an existing verb serves, and the
-generation run again after the registry changed.
+Refusals first: a flag no verb offers, a name that is no task address.
+Then the tree the registry generates, the flags each verb offers, the
+addresses an existing verb serves, and the generation run again after
+the registry changed.
 """
 
 from __future__ import annotations
@@ -23,14 +23,12 @@ from livery.workshop._checks import (
     GateContext,
     check_for,
     generate_verbs,
-    option_problems,
     register_check,
     roles,
     unregister_check,
     verb_tree,
 )
 from livery.workshop._extensions import SELF
-from livery.workshop._packages import discover_packages
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -105,7 +103,6 @@ def test_a_name_that_is_no_task_address_refuses(registry: None) -> None:
         CheckRecord("odd", "lint.deep", _idle),
         CheckRecord("odd.one", "lint", _idle),
         CheckRecord("", "lint", _idle),
-        CheckRecord("odd", "lint", _idle, roles=("style.deep",)),
     ):
         with pytest.raises(_FAILURES, match="a role and a tool are one word each"):
             register_check(record)
@@ -113,45 +110,6 @@ def test_a_name_that_is_no_task_address_refuses(registry: None) -> None:
         _FAILURES, match=re.escape("lint.default is the address of the lint verb")
     ):
         register_check(CheckRecord("default", "lint", _idle))
-
-
-def test_two_checks_at_one_address_refuse(registry: None, fake_phases: None) -> None:
-    register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
-    with pytest.raises(
-        _FAILURES,
-        match=re.escape(
-            "check 'style.acme' answers to style.acme, which the check"
-            " 'lint.acme' answers to already: one address runs one check"
-        ),
-    ):
-        register_check(CheckRecord("acme", "style", _idle))
-    with pytest.raises(
-        _FAILURES,
-        match=re.escape(
-            "check 'format.acme' answers to style.acme, which the check"
-            " 'lint.acme' answers to already"
-        ),
-    ):
-        register_check(CheckRecord("acme", "format", _idle, roles=("style",)))
-    # Registering the same name again replaces the record, roles and all.
-    register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
-
-
-def test_a_further_roles_table_reaches_the_check(
-    tmp_path: Path, registry: None, fake_phases: None
-) -> None:
-    from livery.workshop._checks import check_for, option_value
-
-    register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
-    member = tmp_path / "packages" / "x"
-    member.mkdir(parents=True)
-    member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[checks.acme.style]\nenabled = false\n'
-    )
-    member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
-    packages = discover_packages(tmp_path)
-    assert option_problems(packages) == []
-    assert option_value(check_for("lint.acme"), packages[0], "enabled") is False
 
 
 def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
@@ -274,18 +232,17 @@ def test_the_gate_takes_no_words_after_the_dashes(
         _quality.check("-x")
 
 
-# A further role: the check answers under it, and leaves with it.
+# A check answers to its one address, and leaves with its role.
 
 
-def test_a_further_role_answers_and_leaves_with_its_check(
+def test_a_check_answers_to_its_address_and_leaves_with_its_role(
     registry: None, fake_phases: None
 ) -> None:
-    register_check(CheckRecord("acme", "lint", _idle, roles=("style",)))
-    record = check_for("lint.acme")
-    assert check_for("style.acme") is record
+    register_check(CheckRecord("acme", "style", _idle))
+    record = check_for("style.acme")
     assert "style" in roles()
     assert verb_tree()["style"] == {"acme": record}
-    unregister_check("lint.acme")
+    unregister_check("style.acme")
     assert "style" not in roles()
     with pytest.raises(
         _FAILURES, match=re.escape("'style.acme' is not a registered check")

@@ -80,18 +80,20 @@ class Declared:
 #: The base's declaration of every key it reads, beside this module.
 BASE_FILE = Path(__file__).with_name("contract.toml")
 
-#: The tables of ``extension.toml`` that ``[for.<target>]`` takes again.
-_MIRRORED = ("checks", "ci", "contributions")
+#: The top-level tables of ``extension.toml`` that ``[for.<target>]``
+#: does not take again: the extension's identity, the targets table
+#: itself, and the contract keys it owns, which no target changes.
+_UNMIRRORED = ("extension", "for", "contract")
 
 
 @functools.cache
 def base_keys() -> tuple[Declared, ...]:
     """The base's keys, read from its ``contract.toml``, in every contract.
 
-    ``[for.<target>]`` in an ``extension.toml`` takes the checks, CI
-    jobs and contributions of the file's top level again, so the file
-    declares each of those keys once and they are repeated here under
-    ``for.*``.
+    ``[for.<target>]`` in an ``extension.toml`` takes every table of
+    the file's top level again but ``[extension]``, ``[for]`` and
+    ``[contract]``, so the file declares each key once and they are
+    repeated here under ``for.*``.
 
     Raises:
         DeclarationError: when the file declares a key off the shape an
@@ -109,7 +111,7 @@ def base_keys() -> tuple[Declared, ...]:
     mirrored = tuple(
         replace(item, path=f"for.*.{item.path}")
         for item in found
-        if item.contract == "extension" and item.path.split(".")[0] in _MIRRORED
+        if item.contract == "extension" and item.path.split(".")[0] not in _UNMIRRORED
     )
     return found + mirrored
 
@@ -221,7 +223,8 @@ def judge(
 def listed_extensions(root_data: dict[str, Any]) -> frozenset[str]:
     """The extensions a root contract lists, by name, the base always among them.
 
-    A name is read without the options its entry turns on.
+    An entry is read as [livery.workshop._extensions.listing][] reads
+    it: its name, whatever else the entry carries.
     """
     names = {BASE}
     workspace = root_data.get("workspace")

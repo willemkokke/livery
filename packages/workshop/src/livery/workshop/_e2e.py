@@ -1924,10 +1924,9 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The stack a pass births to test extension *name*, and the member kinds it lands.
 
     The stack is what *name* requires, each before what needs it, then
-    *name* itself with every option it declares; the steps it declares
-    off are turned on in the newborn's contract
-    ([livery.workshop._e2e.steps_declared_off][]), so each of its
-    checks registers; the test extension
+    *name* itself; the steps it declares off are turned on in the
+    newborn's contract ([livery.workshop._e2e.steps_declared_off][]),
+    so each of its checks registers; the test extension
     ([livery.workshop._e2e.metering_extension][]) is listed before
     *name* unless *name* is it or requires it. The members are the
     loop's of the kinds *name*'s checks declare, so each check has
@@ -1939,12 +1938,7 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             the installed ones; when *name* registers no check; when its
             requirements form a cycle.
     """
-    from livery.toolroom.store import Spec
-    from livery.workshop._extensions import (
-        declaration,
-        declared_options,
-        installed_extensions,
-    )
+    from livery.workshop._extensions import declaration, installed_extensions
 
     found = declaration(name)
     if found is None:
@@ -1972,7 +1966,6 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         stack.append(extension)
 
     visit(name, ())
-    stack[-1] = str(Spec(name, tuple(declared_options(name))))
     from livery.workshop._kinds import kind_for
 
     named = {extension for record in checks for extension in record.extensions}
@@ -3241,16 +3234,12 @@ def loop_stack() -> tuple[str, ...]:
 
 
 def _listed_extensions(root: Path) -> tuple[str, ...]:
-    """The entries *root*'s contract lists, options spelled; empty with no contract."""
-    from livery.toolroom.store import Spec
-    from livery.workshop._extensions import extension_options, workspace_names
+    """The extensions *root*'s contract lists, by name; empty with no contract."""
+    from livery.workshop._extensions import workspace_names
 
     if not (root / "workshop.toml").is_file():
         return ()
-    options = extension_options(root)
-    return tuple(
-        str(Spec(name, options.get(name, ()))) for name in workspace_names(root)
-    )
+    return workspace_names(root)
 
 
 def _at(pass_: Pass) -> Path:

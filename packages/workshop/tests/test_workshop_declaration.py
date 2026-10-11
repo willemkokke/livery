@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import sys
 from collections.abc import Iterator
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -56,7 +55,10 @@ def _refusal(package: Path, text: str) -> str:
     return str(caught.value)
 
 
-CHECK = '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+STEP = '[phases.lint.acme]\nmain = "acme_declared._checks:judge"\n'
+WORDS_STEP = (
+    '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "check", "{paths}"]\n'
+)
 
 
 # The refusals first.
@@ -71,9 +73,46 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
         "  [extension] has no key 'level': it takes api-version, levels, plugin,"
         " requires; did you mean 'levels'?"
     )
-    refused = _refusal(package, CHECK + 'narowing = "paths"\n')
-    assert "[checks.acme.lint] has no key 'narowing'" in refused
-    assert "did you mean 'narrowing'?" in refused
+    refused = _refusal(package, STEP + "claim = []\n")
+    assert "[phases.lint.acme] has no key 'claim'" in refused
+    assert "did you mean 'claims'?" in refused
+
+
+def test_a_check_table_refuses_naming_the_step_spelling(package: Path) -> None:
+    where = package / "extension.toml"
+    body = (
+        " with main, its body: a template, the tool's name then its arguments, or"
+        " a reference to its code, module:function"
+    )
+    assert _refusal(
+        package, '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+    ) == (
+        f"{where}: checks.acme.lint is the check tables' spelling; a step is"
+        f" [phases.lint.acme]{body}"
+    )
+    # A tool's table with no check beneath it, and the table under a target.
+    assert _refusal(package, "[checks.acme]\nscope = 'workspace'\n") == (
+        f"{where}: checks.acme is the check tables' spelling; a step is"
+        f" [phases.<phase>.acme]{body}"
+    )
+    assert _refusal(package, "[checks]\n") == (
+        f"{where}: checks is the check tables' spelling; a step is"
+        f" [phases.<phase>.<step>]{body}"
+    )
+    assert _refusal(
+        package, '[for.docs.checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+    ) == (
+        f"{where}: for.docs.checks.acme.lint is the check tables' spelling; a step"
+        f" is [phases.lint.acme]{body}"
+    )
+    # An options table says what enabled says on the step.
+    assert _refusal(package, '[options]\ndeep = "judges deeper"\n') == (
+        f"{where}: options is not a table: a step a workspace turns on declares"
+        " enabled = false under [phases.<phase>.<step>], and the workspace turns"
+        " it on with [phases.<phase>.<step>] enabled = true in its root contract"
+    )
+    # The refusal comes before the contract's, which cannot name the spelling.
+    assert "has no key" not in _refusal(package, "[checks.acme.lint]\n")
 
 
 def test_the_old_tools_table_in_extension_toml_refuses_naming_toolroom(
@@ -88,13 +127,13 @@ def test_a_value_of_the_wrong_type_or_outside_its_set_refuses(package: Path) -> 
     assert "extension.api-version is a string ('1'); it takes an integer" in _refusal(
         package, '[extension]\napi-version = "1"\n'
     )
-    refused = _refusal(package, CHECK + 'scope = "packages"\n')
+    refused = _refusal(package, STEP + 'scope = "packages"\n')
     assert (
-        "checks.acme.lint.scope is 'packages'; it takes one of workspace, package"
+        "phases.lint.acme.scope is 'packages'; it takes one of workspace, package"
         in (refused)
     )
     assert "did you mean 'package'?" in refused
-    assert "checks.acme is a string" in _refusal(package, '[checks]\nacme = "lint"\n')
+    assert "phases.lint is a string" in _refusal(package, '[phases]\nlint = "acme"\n')
 
 
 def test_a_key_spelled_with_an_underscore_refuses_naming_its_spelling(
@@ -109,122 +148,86 @@ def test_a_key_spelled_with_an_underscore_refuses_naming_its_spelling(
     # shipped file's reference.
     _declare(
         package,
-        CHECK
-        + '[checks.acme.lint.fragments]\n".vscode/settings.json" = "{}"\n'
+        STEP
+        + '[phases.lint.acme.fragments]\n".vscode/settings.json" = "{}"\n'
         + '[replaces]\n"acme.base:root/my_file.txt" = "ours"\n',
     )
 
 
 def test_a_reference_that_does_not_import_refuses_at_mount(package: Path) -> None:
     where = package / "extension.toml"
-    assert _refusal(package, CHECK.replace(":judge", ":jduge")) == (
-        f"{where}: checks.acme.lint.run names jduge, which acme_declared._checks"
+    assert _refusal(package, STEP.replace(":judge", ":jduge")) == (
+        f"{where}: phases.lint.acme.main names jduge, which acme_declared._checks"
         " does not define at its top level; did you mean 'judge'?"
     )
-    assert _refusal(package, CHECK.replace("._checks:", "._chekcs:")) == (
-        f"{where}: checks.acme.lint.run names acme_declared._chekcs, which"
+    assert _refusal(package, STEP.replace("._checks:", "._chekcs:")) == (
+        f"{where}: phases.lint.acme.main names acme_declared._chekcs, which"
         " acme_declared does not contain"
     )
-    assert _refusal(package, CHECK.replace("acme_declared._checks", "json")) == (
-        f"{where}: checks.acme.lint.run names json, outside the extension's package"
+    assert _refusal(package, STEP.replace("acme_declared._checks", "json")) == (
+        f"{where}: phases.lint.acme.main names json, outside the extension's package"
         " acme_declared; a reference names the extension's own code"
     )
     assert "a reference is 'module:function'" in _refusal(
-        package, CHECK.replace(":judge", "")
+        package, STEP.replace(":judge", "")
     )
     # Read from the source: nothing of the extension was imported.
     assert "acme_declared._checks" not in sys.modules
 
 
-def test_a_check_with_both_judge_and_run_refuses_naming_the_check(
-    package: Path,
-) -> None:
+def test_words_name_one_tool_and_a_matrix_key_has_values(package: Path) -> None:
     where = package / "extension.toml"
-    assert _refusal(package, CHECK + 'judge = ["acme", "--check"]\n') == (
-        f"{where}: checks.acme.lint declares both judge and run: a check is its"
-        " tool's words or a reference to its code, never both"
-    )
-
-
-def test_words_and_code_do_not_mix_and_words_name_one_tool(package: Path) -> None:
-    where = package / "extension.toml"
-    words = '[checks.acme.lint]\ntools = ["acme"]\njudge = ["acme", "--check"]\n'
-    # A check in words fixes in words; one that runs code takes no words.
-    assert _refusal(package, words + 'fix = "acme_declared._checks:mend"\n') == (
-        f"{where}: checks.acme.lint.fix is 'acme_declared._checks:mend', a"
-        " reference to code; in a check in words, fix is words: the tool's name,"
-        " then its arguments"
-    )
-    assert _refusal(package, CHECK + 'fix = ["acme", "--fix"]\n') == (
-        f"{where}: checks.acme.lint.fix is words, and run is a reference to code:"
-        " a check that runs code fixes with code, module:function"
-    )
-    assert _refusal(package, CHECK + 'matrix = { platform = ["linux"] }\n') == (
-        f"{where}: checks.acme.lint.matrix belongs to a check in words, and this"
-        " one runs code; declare judge instead of run, or drop the key"
-    )
-    # Words name their tool first, every mode the same one.
-    assert _refusal(package, "[checks.acme.lint]\njudge = []\n") == (
-        f"{where}: checks.acme.lint.judge is empty: the tool's name comes first"
-    )
-    assert _refusal(package, words + 'fix = ["other", "--fix"]\n') == (
-        f"{where}: checks.acme.lint.fix runs other, and judge runs acme: a check"
+    # Every mode runs the tool main names first.
+    assert _refusal(package, WORDS_STEP + 'fix = ["other", "--fix"]\n') == (
+        f"{where}: phases.lint.acme.fix runs other, and main runs acme: a step"
         " runs one tool"
     )
-    assert _refusal(package, words + 'safe-fix = ["acme", "--safe"]\n') == (
-        f"{where}: checks.acme.lint.safe-fix is declared without fix: a check that"
+    assert _refusal(package, WORDS_STEP + 'safe-fix = ["acme", "--safe"]\n') == (
+        f"{where}: phases.lint.acme.safe-fix is declared without fix: a step that"
         " fixes safely fixes too"
     )
-    assert _refusal(package, words + "matrix = { platform = [] }\n") == (
-        f"{where}: checks.acme.lint.matrix.platform has no values: a matrix key"
+    assert _refusal(package, WORDS_STEP + "matrix = { platform = [] }\n") == (
+        f"{where}: phases.lint.acme.matrix.platform has no values: a matrix key"
         " runs one call per value"
+    )
+    assert _refusal(package, STEP + 'matrix = { platform = ["linux"] }\n') == (
+        f"{where}: phases.lint.acme.matrix belongs to a step in words, and this"
+        " one runs code; declare main as words, the tool's name then its"
+        " arguments, or drop the key"
     )
 
 
-def test_a_check_in_words_reads_its_words_and_imports_nothing(package: Path) -> None:
+def test_a_step_in_words_reads_its_words_and_imports_nothing(package: Path) -> None:
     found = _declare(
         package,
-        '[checks.acme.typecheck]\ntools = ["acme"]\narguments = true\n'
-        'judge = ["acme", "--platform={platform}"]\n'
+        '[phases.typecheck.acme]\ntools = ["acme"]\n'
+        'main = ["acme", "--platform={platform}", "{arguments}"]\n'
         'fix = ["acme", "--fix"]\nsafe-fix = ["acme", "--fix", "--safe"]\n'
         'env = { ACME_COLOR = "never" }\n'
         'matrix = { platform = ["linux", "win32"] }\n',
     )
     (record,) = found.additions.checks
     assert record.words is not None
-    assert record.words.judge == ("acme", "--platform={platform}")
+    assert record.words.judge == ("acme", "--platform={platform}", "{arguments}")
     assert record.words.env == (("ACME_COLOR", "never"),)
     assert record.words.matrix == (("platform", ("linux", "win32")),)
-    assert str(record.run) == "acme --platform={platform}"
+    assert str(record.run) == "acme --platform={platform} {arguments}"
     assert record.fix is not None and str(record.fix) == "acme --fix"
+    assert record.arguments is True
     assert "acme_declared._checks" not in sys.modules
 
 
-def test_a_check_without_run_or_with_an_undeclared_option_refuses(
+def test_a_claim_without_a_category_and_a_fragment_off_its_shape_refuse(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
-    assert _refusal(package, "[checks.acme.lint]\narguments = true\n") == (
-        f"{where}: checks.acme.lint names neither judge nor run: a check is its"
-        " tool's words, judge, or a reference to its code, run"
-    )
-    assert _refusal(package, CHECK + 'listed-with = "deep"\n') == (
-        f"{where}: checks.acme.lint.listed-with is 'deep', which [options] does not"
-        " declare; its options are none"
-    )
-    assert _refusal(package, CHECK + 'claims = [{ suffixes = [".py"] }]\n') == (
-        f"{where}: checks.acme.lint.claims[0] names no category: a claim has one"
+    assert _refusal(package, STEP + 'claims = [{ suffixes = [".py"] }]\n') == (
+        f"{where}: phases.lint.acme.claims[0] names no category: a claim has one"
     )
     assert "is a package file's fragment" in _refusal(
         package,
-        CHECK + '[checks.acme.lint.fragments.".clang-tidy"]\ntext = "x"\n',
+        STEP + '[phases.lint.acme.fragments.".clang-tidy"]\ntext = "x"\n',
     )
-
-
-STEP = '[phases.lint.acme]\nmain = "acme_declared._checks:judge"\n'
-WORDS_STEP = (
-    '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "check", "{paths}"]\n'
-)
 
 
 def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
@@ -296,12 +299,7 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
         'env = { ACME_COLOR = "never" }\nmatrix = { platform = ["linux", "win32"] }\n',
     )
     (record,) = found.additions.checks
-    assert (record.name, record.phase, record.step, record.placed) == (
-        "lint.acme",
-        "lint",
-        "acme",
-        True,
-    )
+    assert (record.name, record.phase, record.step) == ("lint.acme", "lint", "acme")
     assert record.words is not None
     assert record.words.judge == ("acme", "check", "{paths}")
     assert record.words.safe_fix == ("acme", "fix", "--safe", "{paths}")
@@ -327,11 +325,10 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
         'safe-fix = "acme_declared._checks:judge"\n',
     )
     (record,) = found.additions.checks
-    assert (str(record.run), record.words, record.narrowing, record.placed) == (
+    assert (str(record.run), record.words, record.narrowing) == (
         "acme_declared._checks:judge",
         None,
         "packages",
-        True,
     )
     assert isinstance(record.fix, CodedFix)
     assert (str(record.fix.fix), str(record.fix.safe_fix)) == (
@@ -427,11 +424,13 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     )
 
 
-def test_both_spellings_read_into_one_record(package: Path) -> None:
-    # Every key the two tables share, in one text each; the step's own
-    # keys beside them. The read judges the text against the contract,
-    # so the keys the step table declares pass it.
-    shared = (
+def test_a_step_reads_every_key_it_takes(package: Path) -> None:
+    # Every key a step table takes, in one text. The read judges the
+    # text against the contract, so the keys the step table declares
+    # pass it.
+    found = _declare(
+        package,
+        STEP + 'fix = "acme_declared._checks:mend"\n'
         'scope = "workspace"\nextensions = ["acme-kind"]\ntools = ["acme"]\n'
         'after = ["lint.other"]\ntests-only = true\nflags = ["point"]\n'
         'editor-extension = "acme.vscode"\n'
@@ -439,43 +438,55 @@ def test_both_spellings_read_into_one_record(package: Path) -> None:
         'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
         ' on-removal = true, widen = "acme_declared._checks:mend",'
         ' ignores = ["docs/README.md"], per-file = false }\n'
-    )
-    tables = (
-        '[{table}.options.strict]\ntype = "bool"\ndefault = false\n'
-        'doc = "refuses warnings too"\n'
-        '[{table}.fragments.".acme"]\nextensions = ["acme-kind"]\n'
-        'text = "strict: true\\n"\n'
-    )
-    # The check table says with arguments = true what the step table
-    # says by naming tools.
-    old = _declare(
-        package,
-        '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
-        'fix = "acme_declared._checks:mend"\narguments = true\n'
-        + shared
-        + tables.format(table="checks.acme.lint"),
-    )
-    new = _declare(
-        package,
-        STEP
-        + 'fix = "acme_declared._checks:mend"\n'
-        + shared
-        + 'enabled = false\nisolated = true\nreads = ["wheel"]\n'
+        'enabled = false\nisolated = true\nreads = ["wheel"]\n'
         'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
         'deletes = { "acme.base:lint.old" = "it reads nothing" }\n'
         '[phases.lint.acme.provides]\nreport = "path"\n'
-        + tables.format(table="phases.lint.acme"),
+        '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n'
+        'doc = "refuses warnings too"\n'
+        '[phases.lint.acme.fragments.".acme"]\nextensions = ["acme-kind"]\n'
+        'text = "strict: true\\n"\n',
     )
-    (before,) = old.additions.checks
-    (after,) = new.additions.checks
-    assert (after.name, after.placed, before.placed) == ("lint.acme", True, False)
+    (record,) = found.additions.checks
+    assert (record.name, str(record.run), str(record.fix)) == (
+        "lint.acme",
+        "acme_declared._checks:judge",
+        "acme_declared._checks:mend",
+    )
     assert (
-        after.enabled,
-        after.isolated,
-        after.reads,
-        after.provides,
-        after.replaces,
-        after.deletes,
+        record.scope,
+        record.extensions,
+        record.tools,
+        record.after,
+        record.tests_only,
+        record.flags,
+        record.editor_extension,
+    ) == (
+        "workspace",
+        ("acme-kind",),
+        ("acme",),
+        ("lint.other",),
+        True,
+        ("point",),
+        "acme.vscode",
+    )
+    assert [(c.category, c.ignore, c.suffixes) for c in record.claims] == [
+        ("source", ("X1",), (".py",))
+    ]
+    assert record.inputs is not None and record.inputs.per_file is False
+    assert [(o.name, o.kind, o.default, o.doc) for o in record.options] == [
+        ("strict", "bool", False, "refuses warnings too")
+    ]
+    assert [(f.file, f.extensions) for f in record.fragments] == [
+        (".acme", ("acme-kind",))
+    ]
+    assert (
+        record.enabled,
+        record.isolated,
+        record.reads,
+        record.provides,
+        record.replaces,
+        record.deletes,
     ) == (
         False,
         True,
@@ -484,20 +495,9 @@ def test_both_spellings_read_into_one_record(package: Path) -> None:
         (("acme.base:lint.acme", "it reads faster"),),
         (("acme.base:lint.old", "it reads nothing"),),
     )
-    assert after.inputs is not None and after.inputs.per_file is False
-    assert (
-        replace(
-            after,
-            placed=False,
-            enabled=True,
-            isolated=None,
-            reads=(),
-            provides=(),
-            replaces=(),
-            deletes=(),
-        )
-        == before
-    )
+    # A step in code with inputs is selected by them and judges the
+    # whole; one that names tools takes the words after --.
+    assert (record.narrowing, record.arguments) == ("none", True)
 
 
 def test_a_lifecycle_phases_step_reads_as_its_main_and_two_refuse(
@@ -563,18 +563,18 @@ def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
-    assert _refusal(package, CHECK + "inputs = { on-removal = true }\n") == (
-        f"{where}: checks.acme.lint.inputs names no reads: inputs name the files"
+    assert _refusal(package, STEP + "inputs = { on-removal = true }\n") == (
+        f"{where}: phases.lint.acme.inputs names no reads: inputs name the files"
         " it reads"
     )
     assert "names gone, which acme_declared._checks does not define" in _refusal(
         package,
-        CHECK
+        STEP
         + 'inputs = { reads = ["**/*.md"], widen = "acme_declared._checks:gone" }\n',
     )
     found = _declare(
         package,
-        CHECK + 'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
+        STEP + 'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
         ' on-removal = true, widen = "acme_declared._checks:mend",'
         ' ignores = ["docs/README.md"] }\n',
     )
@@ -722,15 +722,13 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         '[extension]\nlevels = ["workspace", "package"]\nplugin = "acme.tasks"\n'
         'requires = ["docs"]\n'
         '[toolroom]\nrequires = ["docker>=27"]\n'
-        '[options]\ndeep = "judges every file, not only the changed ones"\n'
-        + CHECK
-        + 'fix = "acme_declared._checks:mend"\nnarrowing = "paths"\n'
-        'extensions = ["python"]\ntools = ["acme"]\narguments = true\n'
-        'listed-with = "deep"\n'
+        + STEP
+        + 'fix = "acme_declared._checks:mend"\n'
+        'extensions = ["python"]\ntools = ["acme"]\n'
         'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
-        "[checks.acme.lint.options.strict]\n"
+        "[phases.lint.acme.options.strict]\n"
         'type = "bool"\ndefault = false\ndoc = "refuses warnings too"\n'
-        '[checks.acme.lint.fragments.".acme"]\nextensions = ["cpp", "cmake"]\n'
+        '[phases.lint.acme.fragments.".acme"]\nextensions = ["cpp", "cmake"]\n'
         'text = "strict: true\\n"\n'
         '[contributions]\n"python.dev-group" = ["acme>=1"]\n'
         '[contract.root.acme.mode]\ntypes = ["str"]\nvalues = ["fast", "slow"]\n'
@@ -743,13 +741,8 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         ("docs",),
         ("docker>=27",),
     )
-    assert found.options == {"deep": "judges every file, not only the changed ones"}
     (record,) = found.additions.checks
-    assert (record.name, record.extension, record.listed_with) == (
-        "lint.acme",
-        "acme",
-        "deep",
-    )
+    assert (record.name, record.extension) == ("lint.acme", "acme")
     assert (str(record.run), str(record.fix)) == (
         "acme_declared._checks:judge",
         "acme_declared._checks:mend",
@@ -804,7 +797,7 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
 
 
 def test_a_reference_imports_when_it_runs(package: Path) -> None:
-    found = _declare(package, CHECK)
+    found = _declare(package, STEP)
     (record,) = found.additions.checks
     assert "acme_declared._checks" not in sys.modules
     record.run(object())  # type: ignore[arg-type]
@@ -833,7 +826,7 @@ def test_declared_checks_register_under_the_listed_name(package: Path) -> None:
     from livery.workshop import _checks
     from livery.workshop._extensions import register_declared
 
-    found = _declare(package, CHECK)
+    found = _declare(package, STEP)
     state = _checks.snapshot()
     try:
         assert register_declared("acme.listed", found.additions) is True

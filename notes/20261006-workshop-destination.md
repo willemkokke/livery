@@ -1462,14 +1462,14 @@ the stack, which this design neither needs nor rules out).
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
-| `_Reader.check`, the check tables' reader, and `CheckRecord.placed`, which says which spelling a record came from | nothing: every declaration is a step table and every record places its own paths (#1377, part 4) |
 | one step per extension per lifecycle phase, read into `DeclaredPhase.main` | the one walk, every step a footman step (#1377, part 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
+| `[phases.<phase>]` with `pre`, `main` and `post`, `PHASES`, `ENGINE_KEYS`, the context's failure fields | `[phases.<phase>.<step>]` and declared phases (#1377) |
 | `[checks.<tool>.<role>]`, `[phases.<phase>]` with `pre`, `main` and `post`, the context's failure fields | `[phases.<phase>.<step>]` (#1377) |
 | a phase's level choosing its reader: a package-level phase's steps into `DeclaredPhase`, a workspace-level phase's into check records | the one walk, every step a footman step (#1377, part 6) |
 | the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
-| `[generators]`, `[slots]` and `[contributions]`, `[root-files]`, `[setup]`, `[rules]`, `release-notes`, `[options]` and `listed-with`, `transport`, `threshold`, `roles`, `editor-extension` | the docs phase's steps, declared queries, fragments, the configure phase, layering steps, a query, `enabled`, nothing, a contribution (#1377) |
+| `[generators]`, `[slots]` and `[contributions]`, `[root-files]`, `[setup]`, `[rules]`, `release-notes`, `editor-extension` | the docs phase's steps, declared queries, fragments, the configure phase, layering steps, a query, a contribution (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
 | `[release] prove-floors`, and the prove and replay phases | `[release] prove = [...]` on the test phase, and verify (#1377) |
 
@@ -2600,6 +2600,17 @@ the stack, which this design neither needs nor rules out).
   names tools. The loop's extension pass turns on, in the newborn's
   contract, each step the extension under test declares off. What
   still reads `[options]` in code goes with the check tables.
+
+- 2026-10-11, #1468, #1377 part 4: the check tables refuse naming the
+  step spelling, and the transition reader goes with `placed`,
+  `narrowing`, `transport`, `threshold`, `roles`, `listed-with`,
+  `[options]`, `judge`, `run` and `arguments` as keys, the transports
+  and the further roles; `[for.<target>]` carries every table. A
+  package's `[phases.<phase>]` is the phase-wide option table and
+  `[phases.<phase>.<step>]` the step's, the step's winning key by key;
+  an extension entry with brackets refuses naming `enabled`. Kept: the
+  rule that a scoped run reaching every unit a step judges runs its
+  configured whole, which is the engine's, not a declared threshold.
 
 ## Open
 

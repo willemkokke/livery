@@ -67,18 +67,19 @@ def test_an_unlisted_extensions_key_is_refused_naming_its_owner() -> None:
 
 def test_a_key_the_author_names_is_no_fixed_property() -> None:
     schema = compose("extension", None)
-    options = schema["properties"]["options"]
-    assert "properties" not in options
-    assert options["additionalProperties"]["type"] == "string"
-    assert problems(schema, {"options": {"deep": "judges deeper"}}) == []
-    assert problems(schema, {"options": {"deep": 3}}) == [
-        "options.deep is an integer (3); it takes a string"
+    queries = schema["properties"]["queries"]
+    assert "properties" not in queries
+    assert queries["additionalProperties"]["type"] == "string"
+    assert problems(schema, {"queries": {"executables": "acme._queries:answer"}}) == []
+    assert problems(schema, {"queries": {"executables": 3}}) == [
+        "queries.executables is an integer (3); it takes a string"
     ]
-    # Two named levels: a check's tool, then its role.
-    checks = schema["properties"]["checks"]
-    assert "properties" not in checks
-    role = checks["additionalProperties"]["additionalProperties"]
-    assert "run" in role["properties"]
+    # Two named levels: a step's phase, then its name; the phase's own
+    # keys stand beside its steps.
+    phases = schema["properties"]["phases"]
+    assert "properties" not in phases
+    step = phases["additionalProperties"]["additionalProperties"]
+    assert "main" in step["properties"]
 
 
 def test_a_list_of_strings_is_refused_whole_and_a_lists_entries_one_by_one() -> None:

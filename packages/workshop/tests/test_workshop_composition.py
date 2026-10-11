@@ -109,22 +109,6 @@ def test_a_requirement_no_list_holds_at_its_level_refuses_naming_it(
     ]
 
 
-def test_options_on_a_package_level_extension_refuse_naming_the_level(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path, monkeypatch, odd=PACKAGE + '\n[options]\ndeep = "judges deeper"\n'
-    )
-    with pytest.raises(DeclarationError) as raised:
-        _extensions.declaration("acme.odd")
-    path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
-    assert str(raised.value) == (
-        f"{path}: options is turned on by a [workspace] extensions entry, and this"
-        " extension's levels are package; a package's entry is the extension's"
-        " name alone"
-    )
-
-
 def test_an_order_with_no_start_refuses_naming_its_cycle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -374,7 +358,7 @@ def test_the_package_level_extensions_mount_first_in_composition_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
     def checked(tool: str, identity: str = "") -> str:
-        return f'{identity}\n[checks.{tool}.lint]\nrun = "{{package}}._checks:noop"\n'
+        return f'{identity}\n[phases.lint.{tool}]\nmain = "{{package}}._checks:noop"\n'
 
     fake_extensions(
         tmp_path,

@@ -7,36 +7,12 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed, fail
-from livery.workshop._checks import CheckRecord, GateContext, register_check, run_check
-from livery.workshop._invoke import batches, run_batched, runs_whole
+from livery.workshop._checks import GateContext, run_check
+from livery.workshop._invoke import batches, run_batched
 from livery.workshop._packages import Package
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
-
-
-def _idle(ctx: GateContext) -> None:
-    del ctx
-
-
-@pytest.fixture
-def restored_checks():
-    from livery.workshop import _checks
-
-    state = _checks.snapshot()
-    yield
-    _checks.restore(state)
-
-
-def test_a_transport_or_threshold_off_the_vocabulary_refuses(restored_checks) -> None:
-    del restored_checks
-    with pytest.raises(_FAILURES, match="transport is one of argv, file, config"):
-        register_check(CheckRecord("acme", "lint", _idle, transport="pipe"))
-    with pytest.raises(_FAILURES, match="passes paths by 'argv' alone so far"):
-        register_check(CheckRecord("acme", "lint", _idle, transport="file"))
-    for threshold in (0.0, 1.5):
-        with pytest.raises(_FAILURES, match="threshold is a share of the units"):
-            register_check(CheckRecord("acme", "lint", _idle, threshold=threshold))
 
 
 def test_every_failing_batch_runs_and_one_refusal_names_them_all() -> None:
@@ -64,18 +40,6 @@ def test_an_overflowing_path_list_splits_into_the_fewest_calls() -> None:
     # A path over the limit on its own still goes, in a call of its own.
     assert batches(["x" * 80, "y"], limit=50) == (("x" * 80,), ("y",))
     assert batches([], limit=50) == ()
-
-
-def test_above_the_threshold_the_check_runs_whole() -> None:
-    # The fallbacks first: nothing affected never runs whole, and no units
-    # at all never does either.
-    assert not runs_whole(0, 10, 0.5)
-    assert not runs_whole(3, 0, 0.5)
-    assert not runs_whole(4, 10, 0.5)
-    assert runs_whole(5, 10, 0.5)
-    # A threshold of 1 narrows until every unit is affected.
-    assert not runs_whole(9, 10, 1.0)
-    assert runs_whole(10, 10, 1.0)
 
 
 def _members(root: Path, count: int) -> tuple[Package, ...]:
@@ -118,9 +82,13 @@ def test_a_workspace_check_runs_once_for_two_hundred_packages(
     run_check("lint.fake", GateContext(root=tmp_path, packages=packages, subset=subset))
     assert len(calls) == 1
     assert len(calls[0]) == 300
-    # Every member affected: the configured whole, still one call.
+    # Every member affected: the configured whole, still one call, as
+    # an unscoped run has it.
     calls.clear()
     run_check(
         "lint.fake", GateContext(root=tmp_path, packages=packages, subset=packages)
     )
+    assert calls == [(".",)]
+    calls.clear()
+    run_check("lint.fake", GateContext(root=tmp_path, packages=packages))
     assert calls == [(".",)]
