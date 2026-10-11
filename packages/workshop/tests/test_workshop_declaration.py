@@ -351,13 +351,17 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
         f"{where}: phases.lint.acme.reads names wheel, which its provides names"
         " too; a step reads what another step provides"
     )
-    assert _refusal(package, STEP + 'replaces = ["lint.acme"]\n') == (
+    assert _refusal(package, STEP + 'replaces = { "lint.acme" = "faster" }\n') == (
         f"{where}: phases.lint.acme.replaces names 'lint.acme'; a step of another"
         " extension is <owner>:<phase>.<step>"
     )
-    assert _refusal(package, STEP + 'deletes = ["acme.base:lint"]\n') == (
+    assert _refusal(package, STEP + 'deletes = { "acme.base:lint" = "gone" }\n') == (
         f"{where}: phases.lint.acme.deletes names 'acme.base:lint'; a step of"
         " another extension is <owner>:<phase>.<step>"
+    )
+    assert _refusal(package, STEP + 'replaces = { "acme.base:lint.acme" = " " }\n') == (
+        f'{where}: phases.lint.acme.replaces."acme.base:lint.acme" states no reason;'
+        " a step names another with the reason it takes its place"
     )
     # A gate phase's table holds steps alone.
     assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
@@ -398,7 +402,8 @@ def test_both_spellings_read_into_one_record(package: Path) -> None:
         + 'fix = "acme_declared._checks:mend"\n'
         + shared
         + 'enabled = false\nisolated = true\nreads = ["wheel"]\n'
-        'replaces = ["acme.base:lint.acme"]\ndeletes = ["acme.base:lint.old"]\n'
+        'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
+        'deletes = { "acme.base:lint.old" = "it reads nothing" }\n'
         '[phases.lint.acme.provides]\nreport = "path"\n'
         + tables.format(table="phases.lint.acme"),
     )
@@ -417,8 +422,8 @@ def test_both_spellings_read_into_one_record(package: Path) -> None:
         True,
         ("wheel",),
         (("report", "path"),),
-        ("acme.base:lint.acme",),
-        ("acme.base:lint.old",),
+        (("acme.base:lint.acme", "it reads faster"),),
+        (("acme.base:lint.old", "it reads nothing"),),
     )
     assert after.inputs is not None and after.inputs.per_file is False
     assert (

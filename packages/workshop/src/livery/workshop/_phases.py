@@ -1,18 +1,29 @@
-"""Run a lifecycle phase over a package: each extension's pre, main and post steps.
+"""The declared phases, and the walk that runs a lifecycle phase over a package.
 
-A package-level extension adds steps to a package's lifecycle phases in
-its ``extension.toml``, ``[phases.<phase>]``: ``pre``, ``main`` and
-``post``, each a function called with the phase's
+A phase is declared, by the base in the ``[phases]`` section of its
+``contract.toml`` and by an extension under ``[phases.<phase>]`` in its
+``extension.toml``, in one grammar ([livery.workshop._phases.PhaseSpec][]):
+the keys the engine running it gives its steps, typed; its level,
+``package`` for a phase that runs over one package at a time and
+``workspace`` for one that runs over the workspace once; whether
+``fm check`` runs it; the phases it follows in the train's order; and
+whether a verb is generated for it.
+[livery.workshop._phases.declared_phases][] is every declared phase by
+name, the base's and then each installed extension's; a phase nobody
+declares refuses naming the declared ones, and two extensions
+declaring one phase refuse naming both.
+
+A package-level phase, a lifecycle phase, runs through
+[livery.workshop._phases.run_phase][]. A package-level extension adds
+its steps in its ``extension.toml``, ``[phases.<phase>]``: ``pre``,
+``main`` and ``post``, each a function called with the phase's
 [livery.workshop.PhaseContext][], and the context keys the steps
-``provides`` and ``reads``. [livery.workshop._phases.run_phase][] walks
-the extensions of a package's set that add steps to the phase: every
-``pre`` in order, then every ``main`` in order, then every ``post`` in
-reverse. A ``post`` runs once its extension's ``pre`` ran, whatever
-failed, and the context says what did.
-
-The engine that runs a phase provides keys of its own
-([livery.workshop._phases.ENGINE_KEYS][]): a step reads one like any
-key, and no extension provides one.
+``provides`` and ``reads``. The walk runs the extensions of a package's
+set that add steps to the phase: every ``pre`` in order, then every
+``main`` in order, then every ``post`` in reverse. A ``post`` runs once
+its extension's ``pre`` ran, whatever failed, and the context says
+what did. A step reads one of the phase's engine keys like any key, and
+no extension provides one.
 
 The order puts a reader after the provider of each key it reads, ties
 alphabetical ([livery.workshop._composition.order][]). Two providers of
@@ -22,6 +33,7 @@ before any step runs; the layering check names them for each package.
 
 from __future__ import annotations
 
+import functools
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,40 +46,47 @@ if TYPE_CHECKING:
     from livery.workshop._declaration import DeclaredPhase, Reference
     from livery.workshop._packages import Package
 
-#: The lifecycle phases, in the order a package lives through them.
-PHASES = (
-    "create",
-    "sync",
-    "stamp",
-    "build",
-    "prove",
-    "publish",
-    "replay",
-    "clean",
-    "run",
-)
+#: The levels a phase runs at: over one package at a time, or over the
+#: workspace once.
+PACKAGE_LEVEL = "package"
+WORKSPACE_LEVEL = "workspace"
+LEVELS = (PACKAGE_LEVEL, WORKSPACE_LEVEL)
+
+#: The types an engine key or a context key may take.
+TYPES = ("str", "int", "bool", "path", "strs", "paths", "table")
+
+#: The extension that declares the base's phases.
+BASE = "livery.workshop"
 
 
-#: The keys the engine that runs a phase provides, with their types:
-#: ``stamp`` the version to write, ``build`` the build's source date (0
-#: takes the build tool's own), ``prove`` the leg's resolution and the
-#: co-released set's dist directories, ``publish`` the version and the
-#: resolved registry target, a table of its fields, and ``replay`` the
-#: released version, the tree checked out at its receipt tag, the
-#: interpreter, the index to install from and the extras.
-ENGINE_KEYS: Mapping[str, Mapping[str, str]] = {
-    "stamp": {"version": "str"},
-    "build": {"epoch": "int"},
-    "prove": {"resolution": "str", "release-dirs": "paths"},
-    "publish": {"version": "str", "registry-target": "table"},
-    "replay": {
-        "version": "str",
-        "tree": "path",
-        "interpreter": "str",
-        "index": "str",
-        "extras": "str",
-    },
-}
+@dataclass(frozen=True)
+class PhaseSpec:
+    """A phase as its declarer declares it: one ``[phases.<phase>]`` table.
+
+    Attributes:
+        name: The phase's name, ``build``.
+        keys: The keys the engine running the phase gives its steps,
+            each to its type; a step reads one like any key, and no
+            step provides one.
+        level: ``package`` for a phase that runs over one package at a
+            time, through [livery.workshop._phases.run_phase][];
+            ``workspace`` for one that runs over the workspace once,
+            through the gate's walk.
+        gated: Whether ``fm check`` runs the phase.
+        after: The phases this one follows in the train's order.
+        verb: Whether a verb is generated for the phase, ``fm <phase>``
+            with a sub-task per step.
+        extension: The extension that declares the phase; the base for
+            its own.
+    """
+
+    name: str
+    keys: Mapping[str, str] = field(default_factory=dict[str, str])
+    level: str = PACKAGE_LEVEL
+    gated: bool = False
+    after: tuple[str, ...] = ()
+    verb: bool = False
+    extension: str = BASE
 
 
 class PhaseError(RuntimeError):
@@ -78,6 +97,115 @@ class PhaseError(RuntimeError):
     [livery.workshop.PhaseContext.read][] for a key the running step's
     extension does not declare, or a value of another type.
     """
+
+
+@functools.cache
+def base_phases() -> dict[str, PhaseSpec]:
+    """The base's phases, read from the ``[phases]`` section of its contract file.
+
+    In the file's order, each spec naming the base as its declarer.
+
+    Raises:
+        DeclarationError: when a section is off the shape a phase's
+            declaration has.
+    """
+    import tomllib
+
+    from livery.workshop._contract_keys import BASE_FILE
+    from livery.workshop._declaration import phase_specs_of
+
+    data = tomllib.loads(BASE_FILE.read_text("utf-8"))
+    return phase_specs_of(data, BASE_FILE, extension=BASE)
+
+
+@functools.cache
+def declared_phases() -> dict[str, PhaseSpec]:
+    """Every declared phase by name: the base's, then each installed extension's.
+
+    An installed extension's declaration is read whether the workspace
+    lists it or not, so a step into its phase reads the same anywhere;
+    the mount refuses the step while the declarer is not listed. Each
+    phase's ``after`` names declared phases, and the order they give
+    has a start.
+
+    Raises:
+        DeclarationError: when two extensions declare one phase, a
+            phase follows one nobody declares, or the order has no
+            start.
+    """
+    from livery.footman import installed_entry_points
+    from livery.workshop._declaration import DeclarationError, phase_declarations
+
+    found = dict(base_phases())
+    for entry in installed_entry_points("workshop.extensions"):
+        for spec in phase_declarations(entry.name, entry.value.partition(":")[0]):
+            held = found.get(spec.name)
+            if held is not None and held.extension != spec.extension:
+                both = " and ".join(sorted((held.extension, spec.extension)))
+                raise DeclarationError(
+                    f"the {spec.name} phase is declared by both {both}; one extension"
+                    " declares a phase"
+                )
+            found[spec.name] = spec
+    _judge_after(found)
+    return found
+
+
+def _judge_after(specs: Mapping[str, PhaseSpec]) -> None:
+    """Refuse an ``after`` naming no declared phase, and an order with no start."""
+    from livery.workshop._declaration import DeclarationError
+
+    for spec in specs.values():
+        for name in spec.after:
+            if name not in specs:
+                raise DeclarationError(
+                    f"{spec.extension} declares the {spec.name} phase after {name},"
+                    f" which no extension declares; the phases are"
+                    f" {', '.join(specs)}"
+                )
+    done: set[str] = set()
+    path: list[str] = []
+
+    def visit(name: str) -> None:
+        if name in done:
+            return
+        if name in path:
+            cycle = path[path.index(name) :]
+            raise DeclarationError(
+                "the phases' order has no start: "
+                + " after ".join((name, *reversed(cycle)))
+                + "; remove an after among them"
+            )
+        path.append(name)
+        for earlier in specs[name].after:
+            visit(earlier)
+        path.pop()
+        done.add(name)
+
+    for name in specs:
+        visit(name)
+
+
+def phase_spec(name: str) -> PhaseSpec:
+    """The declared phase *name*; refuses naming the declared ones.
+
+    Raises:
+        PhaseError: when no extension declares *name*.
+    """
+    specs = declared_phases()
+    found = specs.get(name)
+    if found is None:
+        raise PhaseError(
+            f"{name} is not a declared phase; the phases are {', '.join(specs)}"
+        )
+    return found
+
+
+def lifecycle_phases() -> tuple[str, ...]:
+    """The package-level phases, in declaration order: those the walk runs."""
+    return tuple(
+        name for name, spec in declared_phases().items() if spec.level == PACKAGE_LEVEL
+    )
 
 
 def _holds(kind: str, value: object) -> bool:
@@ -136,6 +264,7 @@ class PhaseContext:
     _steps: Mapping[str, DeclaredPhase] = field(
         default_factory=dict[str, "DeclaredPhase"], repr=False
     )
+    _engine: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
     _values: dict[str, object] = field(default_factory=dict[str, object], repr=False)
     _running: str = field(default="", repr=False)
 
@@ -174,7 +303,7 @@ class PhaseContext:
                 " [phases] table does not name it in reads"
             )
         if key not in self._values:
-            if key in ENGINE_KEYS.get(self.phase, {}):
+            if key in self._engine:
                 raise PhaseError(
                     f"{self._running} reads {key}, which the engine running the"
                     f" {self.phase} phase did not give it"
@@ -244,13 +373,17 @@ def phase_problems(
 ) -> list[str]:
     """Why *steps* cannot run as *phase*; empty when they can.
 
-    Two extensions providing one key, a key a step reads and nobody
-    provides, and an order with no start.
+    Two extensions providing one key, an extension providing a key the
+    phase's engine gives, a key a step reads and nobody provides, and
+    an order with no start.
+
+    Raises:
+        PhaseError: when no extension declares *phase*.
     """
     from livery.workshop._composition import OrderCycle
 
     problems: list[str] = []
-    engine = ENGINE_KEYS.get(phase, {})
+    engine = phase_spec(phase).keys
     providers = _providers(steps)
     for key, names in sorted(providers.items()):
         if key in engine:
@@ -302,20 +435,21 @@ def run_phase(
     the ``run`` phase's main is the one extension's that owns the
     executable. *executable* and *arguments* reach the steps on the
     context, and so do *inputs*, the keys the engine provides for the
-    phase ([livery.workshop._phases.ENGINE_KEYS][]); a key the engine
-    does not give refuses when a step reads it. A failing step stops
-    the pres or the mains; every post
-    whose extension's pre ran still runs, and reads the failure from
-    the context. A post that fails after another failure is named on
-    stderr.
+    phase, the ones its declaration names
+    ([livery.workshop._phases.PhaseSpec][]); a key the engine does not
+    give refuses when a step reads it. A failing step stops the pres or
+    the mains; every post whose extension's pre ran still runs, and
+    reads the failure from the context. A post that fails after another
+    failure is named on stderr.
 
     Returns:
         The context the steps shared.
 
     Raises:
-        PhaseError: when the phase's steps cannot run as declared, or
-            *inputs* holds a key the engine does not provide for the
-            phase or a value of another type, before any step runs.
+        PhaseError: when no extension declares *phase*, when the phase's
+            steps cannot run as declared, or when *inputs* holds a key
+            the engine does not provide for the phase or a value of
+            another type, before any step runs.
         Exception: the first step's exception, raised again after every
             post that was due ran.
     """
@@ -326,7 +460,7 @@ def run_phase(
 
         lookup = installed_declaration
     given = dict(inputs or {})
-    engine = ENGINE_KEYS.get(phase, {})
+    engine = phase_spec(phase).keys
     for key, value in given.items():
         if key not in engine:
             known = ", ".join(sorted(engine)) or "nothing"
@@ -352,6 +486,7 @@ def run_phase(
         executable=executable,
         arguments=arguments,
         _steps=steps,
+        _engine=engine,
         _values=given,
     )
     entered: list[str] = []

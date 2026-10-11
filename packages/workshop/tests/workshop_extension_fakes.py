@@ -16,7 +16,7 @@ from livery.footman import (
     _entries,  # pyright: ignore[reportPrivateUsage]
     installed_entry_points,
 )
-from livery.workshop import _contract_keys, _extensions
+from livery.workshop import _contract_keys, _extensions, _phases
 
 
 def fake_extensions(
@@ -88,6 +88,9 @@ def _fake(
     monkeypatch.setattr(_entries, "_SCAN", None)
     owners = _contract_keys.declarations.__wrapped__
     monkeypatch.setattr(_contract_keys, "declarations", functools.cache(owners))
+    # The declared phases are read from the same scan, once per test.
+    phases = _phases.declared_phases.__wrapped__
+    monkeypatch.setattr(_phases, "declared_phases", functools.cache(phases))
 
 
 def _real_package_level() -> set[str]:
