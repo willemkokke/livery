@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
@@ -282,8 +282,11 @@ def measured_coverage(
     Path(report).unlink(missing_ok=True)
     totals: dict[str, list[int]] = {package.path: [0, 0] for package in arcs_packages}
     for filename, entry in data.get("files", {}).items():
+        # coverage spells a relative path with the platform's separator;
+        # a package's path is spelled with slashes everywhere.
+        spelled = PurePath(filename).as_posix()
         for package in arcs_packages:
-            if filename.startswith(f"{package.path}/src/"):
+            if spelled.startswith(f"{package.path}/src/"):
                 summary = entry.get("summary", {})
                 totals[package.path][0] += int(summary.get("covered_lines", 0)) + int(
                     summary.get("covered_branches", 0)
