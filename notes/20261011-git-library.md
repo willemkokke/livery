@@ -58,15 +58,22 @@ the fetch and the sweep with the family rules it applies. All of it is
 the library's public interface, exported from `livery.git`; nothing a
 workshop module needs is an underscore name of the library.
 
-The store's CI policy, who may write, under which identity, and the
-name of the variable a published snapshot travels in, is handed to the
-library once, as the arguments of a `Store`. The workshop builds that
-`Store` in one place and declares its series beside it:
-`livery.workshop._records` holds the series (metrics, verified, the
-coverage record, marks, the gate record, diagnostics, traces, the
-loop's rows) and `store(root)`, which binds the run context's identity
-and the `ci_only` rule. Every importer calls the library's own names on that
-store; nothing wraps a library call to keep an old name alive.
+The store's CI policy is handed to the library once, as the arguments
+of a `StateStore`, named for what the docs already call it and not
+`Store`, which `livery.toolroom.store` and `livery.strongroom` both
+export. The policy is three values: whether a CI run is on, which a
+`put` to a `ci_only` series asks before it starts ("only a CI run
+writes this series; local runs read"); the committer's name and email,
+`<prog> ci state` and `ci-state@<prog>.invalid` from footman's program
+name; and the name of the variable a parent publishes its ref listing
+in, `WORKSHOP_SNAPSHOT`, so a child reads one listing instead of
+fetching again. The workshop builds the `StateStore` in one place and
+declares its series beside it: `livery.workshop._records` holds the
+series (metrics, verified, the coverage record, marks, the gate
+record, diagnostics, traces, the loop's rows) and `state_store(root)`,
+which binds the three from the run context and footman. Every importer
+calls the library's own names on that store; nothing wraps a library
+call to keep an old name alive.
 
 The workshop also keeps the CI run context (`run_context`, `ci_run`,
 the event payload, the dispatch inputs, the leg and point variables)
@@ -98,8 +105,8 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    lane of `run()` and the handle, and an in-process read returns the
    bytes git holds, with no end-of-line conversion.
 6. The library holds no state between calls. A function takes the root
-   and returns a fact; the one value type, `Store`, is frozen and
-   carries the root and the policy it was built with, nothing else.
+   and returns a fact; the one value type, `StateStore`, is frozen
+   and carries the root and the policy it was built with, nothing else.
 7. Every behaviour pin the state and helper tests hold today holds
    after each phase; the process-count pins move to the new counts, and
    in phase 4 to zero where a read is in-process.
@@ -139,19 +146,20 @@ the workshop.
 
 ## Phase 2: the store's transport and series model move
 
-`livery.git` exports the store as a public interface: `Store(root,
-identity=..., writes=..., published=...)` with the methods `read`,
-`list_refs`, `put`, `drop`, `remote_snapshot`, `fetched_snapshot`,
-`fetch` and `sweep`, and the types `Series`, `Keyed`, `Row`, `Rows`,
-`Read`, `Fetched`, `Skipped` beside it. The policy is construction
-data: `writes` is the rule a `put` asks before it starts (the reason it
-refuses, or nothing), `identity` is the committer, `published` the
-variable's name. `_state` is deleted. `livery.workshop._records` holds
-the series declarations and `store(root)`, which builds the `Store`
-from the run context; the CI run context moves to
+`livery.git` exports the store as a public interface:
+`StateStore(root, in_ci=..., identity=..., snapshot_variable=...)`
+with the methods `read`, `list_refs`, `put`, `drop`,
+`remote_snapshot`, `fetched_snapshot`, `fetch` and `sweep`, and the
+types `Series`, `Keyed`, `Row`, `Rows`, `Read`, `Fetched`, `Skipped`
+beside it. The policy is construction data: `in_ci` is what a `put` to
+a `ci_only` series asks, `identity` the committer's name and email,
+`snapshot_variable` the name a published listing travels in.
+`_state` is deleted. `livery.workshop._records` holds the series
+declarations and `state_store(root)`, which builds the `StateStore`
+from the run context and footman's program name; the CI run context moves to
 `livery.workshop._ci_context`. Each of the 40 importers is rewritten
 in this phase to import the types from `livery.git` and call the store
-it gets from `store(root)`; no name is kept for compatibility. The
+it gets from `state_store(root)`; no name is kept for compatibility. The
 store's tests move to the library with their pins on behaviour and
 process counts; the workshop's tests on the store shrink to the
 policy: a write from outside a run refuses with the run context's
@@ -175,18 +183,19 @@ reason, and a published snapshot reaches a child.
 
 The loop's 31 direct calls (`fetch`, `switch -C`, `clean`, `reset`,
 listings), `_new_project`'s five, the release driver's four and the
-rest go through the helper, which gains what they need: a pruning
-fetch, a switch that recreates, a clean, a hard reset named as such.
-Then the one-door test: a scan of `packages/workshop/src` refuses any
-call of the git handle, with an allowance table that must only fall,
-the vocabulary test's shape.
+rest go through the library, which gains what they need as named
+functions: a pruning fetch, a switch that recreates, a clean, a hard
+reset named as such. The loop is no exception: a function it alone
+calls still lives in the library. Then the one-door test: a scan of
+`packages/workshop/src` refuses any call of the git handle, with no
+allowance table.
 
 **Acceptance**
 
 - `grep -rn "tools\.git\.\|toolroom\.git\." packages/workshop/src`
   prints nothing.
 - `packages/workshop/tests/test_workshop_vocabulary.py` or its sibling
-  refuses a new direct call.
+  refuses a direct call, with no allowance.
 - `fm ci.e2e --scenario=release` is green.
 
 ## Phase 4: in-process reads
@@ -249,14 +258,17 @@ and the number recorded here.
 - 2026-10-11, Willem: no class and no memory. The helper's methods
   become functions taking the root; the `cached` flag and its memory
   go in phase 1, since they measured no gain and dulwich removes the
-  cost they were for. The store stays a frozen `Store` value because
-  forty callers must not each pass the policy.
+  cost they were for. The store stays a frozen value because forty
+  callers must not each pass the policy.
 - 2026-10-11, Willem: phases 1 to 3 land between the #1377 slices;
   sessions that would conflict are paused for them.
+- 2026-10-11, Willem: the store's value type is `StateStore`, the
+  docs' own name for it; `Store` is taken twice already, by the tool
+  store and the strongroom.
+- 2026-10-11, Willem: all git access goes through `livery.git`, the
+  loop's included. A function only the loop calls lives in the library
+  all the same; the one-door test carries no allowance table.
 
 ## Open
 
-1. Which loop-only porcelain (`switch -C`, `clean -fdx`, a hard reset)
-   the library exports as named functions, against the loop keeping a
-   small allowance in the one-door test's table. Owner: whoever starts
-   phase 3. Recommendation: export them; the table only falls.
+Nothing open. Every ruling the phases need is in the decision record.
