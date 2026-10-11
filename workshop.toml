@@ -24,9 +24,9 @@ extensions = [
     "docs",
     # The python formatter and linter, configured by the root ruff.toml.
     "ruff",
-    # The type checker, configured by the root pyrightconfig.json, and
-    # the check that every public API is type-complete.
-    "basedpyright[typecomplete]",
+    # The type checker, configured by the root pyrightconfig.json; its
+    # type-completeness step is turned on under [phases] below.
+    "basedpyright",
     # The type checker on every platform, configured by the root mypy.ini.
     "mypy",
     # The type checker over every platform at once, configured by the
@@ -43,6 +43,11 @@ extensions = [
     # The C and C++ linter, in each native package's .clang-tidy.
     "clang-tidy",
 ]
+
+# The steps the listed extensions declare off, turned on here at each
+# step's own address: every public API is type-complete.
+[phases.typecomplete.basedpyright]
+enabled = true
 
 [docs]
 # The site's home; the account-level domain serves every project.

@@ -128,9 +128,10 @@ This is the final form; there are no typing clean-up passes later.
   function a test hands to a spawned process lives in such a helper.
 - The type checkers the workspace lists gate, none advisory: pyrefly,
   ty, mypy strict on the namespace (linux, darwin, and win32), and
-  basedpyright with warnings as errors. Listed as
-  `basedpyright[typecomplete]`, basedpyright also requires every
-  public API to be 100% type-complete.
+  basedpyright with warnings as errors. With
+  `[phases.typecomplete.basedpyright] enabled = true` in the root
+  contract, basedpyright also requires every public API to be 100%
+  type-complete.
 - A suppression is narrow, inline with the code, and carries a reason:
   `# type: ignore[code]`. Pyright-only suppressions use
   `# pyright: ignore[...]` so mypy's unused-ignore check stays honest.

@@ -1,6 +1,6 @@
 # The pytest extension: each python package's suite, and its
-# documentation examples. Read at every mount; a check's code is imported
-# when the check runs.
+# documentation examples. Read at every mount; a step's code is imported
+# when the step runs.
 
 [extension]
 api-version = 1
@@ -10,13 +10,11 @@ levels = ["workspace"]
 # pytest is the record's tool in the store, for the typed handle the
 # runner calls, and its venv copy is the one that imports the project's
 # environment. A package's tests measure its source, so a source change
-# is one the test check reads, and runs the suite for.
-[checks.pytest.test]
-run = "livery.extensions.pytest._checks:judge_test"
-narrowing = "packages"
+# is one the test step reads, and runs the suite for.
+[phases.test.pytest]
+main = "livery.extensions.pytest._checks:judge_test"
 extensions = ["python"]
 tools = ["pytest"]
-arguments = true
 flags = ["point"]
 claims = [
     { category = "test" },
@@ -24,17 +22,15 @@ claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
 ]
 
-[checks.pytest.test.options.parallel]
+[phases.test.pytest.options.parallel]
 type = "bool"
 default = true
 doc = "run the package's suite across cores; false runs it under -n 0"
 
-[checks.pytest.examples]
-run = "livery.extensions.pytest._checks:judge_examples"
-narrowing = "packages"
+[phases.examples.pytest]
+main = "livery.extensions.pytest._checks:judge_examples"
 extensions = ["python"]
 tools = ["pytest"]
-arguments = true
 claims = [{ category = "example", suffixes = [".py", ".pyi"] }]
 
 # pytest and coverage import the project's environment, so they live in

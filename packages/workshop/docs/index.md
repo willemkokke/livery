@@ -71,10 +71,10 @@ spelling. Every key is optional:
   the root's list, each one before it; for a package-level extension,
   in the package's set, which takes them in. The layering check keeps
   them listed, and its `--fix` writes a missing workspace entry;
-- `[phases.<phase>]`, the steps a package-level extension adds to a
-  package's lifecycle phase: `pre`, `main` and `post`, each
+- `[phases.<phase>.<extension>]`, the step a package-level extension
+  adds to a package's lifecycle phase, named for the extension: `main`,
   `"module:function"` in its own package, and the context keys the
-  steps `provides`, each with its type, and `reads`;
+  step `provides`, each with its type, and `reads`;
 - `[queries]`, the questions about a package a package-level extension
   answers, each query's name to the `"module:function"` that answers it;
 - `[categories]`, the categories a package-level extension gives its
@@ -94,11 +94,11 @@ spelling. Every key is optional:
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
   table with its `types`, and its `values` and `doc` where it has them;
-- `[checks.<tool>.<role>]`, each check it adds to the gate, registered
-  under the listed name, which the gate prints beside each;
-- `[options]`, each option a workspace may turn on, to what it turns
-  on; a check whose `listed-with` names an option registers only when
-  the entry turns it on;
+- `[phases.<phase>.<step>]`, each step it adds to a phase of the gate,
+  `[phases.format.ruff]` for `fm format.ruff`, registered under the
+  listed name, which the gate prints beside each; a step declared
+  `enabled = false` registers only while the root contract turns it on
+  at the step's own address, `[phases.<phase>.<step>] enabled = true`;
 - `[contributions]`, the values it puts into slots, by slot;
 - `[for.<target>]`, the same tables, read only while the target is
   listed;
@@ -106,70 +106,80 @@ spelling. Every key is optional:
   `"<owner>:<name>"`, that its own file of that name replaces or that it
   deletes, to the reason.
 
-A check whose verdict is its tool's exit code is the tool's words, and
+A step whose verdict is its tool's exit code is the tool's words, and
 needs no code:
 
 ```toml
-[checks.ruff.format]
-judge = ["ruff", "format", "--check", "--force-exclude"]
-fix = ["ruff", "format", "--force-exclude"]
-narrowing = "paths"
+[phases.format.ruff]
+main = ["ruff", "format", "--check", "--force-exclude", "{arguments}", "{paths}"]
+fix = ["ruff", "format", "--force-exclude", "{arguments}", "{paths}"]
 extensions = ["python"]
 tools = ["ruff"]
-arguments = true
 claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
 ```
 
 `extensions` names the package-level extensions whose packages the
-check judges: a package whose set, its list and what the list
+step judges: a package whose set, its list and what the list
 requires, holds one of them. A package that lists no extension holds
 what its kind stands for, `python` for the python kind and `cmake`,
-`conan` and `cpp` for `cpp-conan`, until the kinds go. A check that
+`conan` and `cpp` for `cpp-conan`, until the kinds go. A step that
 names none judges the workspace.
 
-`judge` is the tool's name, as `tools` names it, and the arguments that
-judge; `fix` and `safe-fix` are the words that rewrite under `--fix` and
-`--safe-fix`, `safe-fix` falling back to `fix`. The workshop appends the
-words after `--` on the check's verb, then the paths the run reaches, or
-nothing when the run is whole, so the tool reads its own configuration;
-it splits a long list into the fewest calls under the command-line
-limit, runs the tool through its toolroom handle, and a non-zero exit
-refuses, every call's reason in one refusal. A package check is called
-from the package's directory with the package's files. `env` gives each
-call variables over the run's own, and a word may name a placeholder the
-workshop answers: `{cache}`, the check's directory under
-`.workshop/.cache/`; `{package}`, the package a call judges; and
-`{compile-commands}`, that package's compilation database, without which
-the call is skipped. `matrix` names a placeholder of its own and its
-values, one call per value in parallel, each its own verdict:
+`main` is the template: the tool's name, as `tools` names it, and the
+arguments that judge; `fix` and `safe-fix` are the templates that
+rewrite under `--fix` and `--safe-fix`, `safe-fix` falling back to
+`fix`. A template places what the workshop gives it: `{paths}` stands
+where the paths the run reaches go, and a template without it runs
+whole, once with no path, so the tool reads its own configuration;
+`{arguments}` stands where the words after `--` on the step's verb go,
+and a template without it takes none. Each stands alone as one word.
+The workshop splits a long path list into the fewest calls under the
+command-line limit, runs the tool through its toolroom handle, and a
+non-zero exit refuses, every call's reason in one refusal. A package
+step is called from the package's directory with the package's files.
+`env` gives each call variables over the run's own, and a word may
+name a placeholder the workshop answers: `{cache}`, the step's
+directory under `.workshop/.cache/`; `{package}`, the package a call
+judges; and `{compile-commands}`, that package's compilation database,
+without which the call is skipped. `matrix` names a placeholder of its
+own and its values, one call per value in parallel, each its own
+verdict:
 
 ```toml
-[checks.mypy.typecheck]
-judge = ["mypy", "--platform={platform}", "--cache-dir={cache}/{platform}"]
+[phases.typecheck.mypy]
+main = [
+    "mypy", "--platform={platform}", "--cache-dir={cache}/{platform}",
+    "{arguments}", "{paths}",
+]
 matrix = { platform = ["linux", "darwin", "win32"] }
 ```
 
-`fm explain typecheck.mypy` prints the command a check runs and what the
-workshop appends to it. The conformance kit's `words-are-answerable`
-clause refuses a placeholder nothing answers, a matrix key no word
-names, a tool the check does not require, and a package's placeholder
-in a check that judges the workspace whole.
+`fm explain typecheck.mypy` prints the template a step runs and what
+the workshop puts where `{paths}` and `{arguments}` stand. The
+conformance kit's `words-are-answerable` clause refuses a placeholder
+nothing answers, a matrix key no word names, a tool the step does not
+require, and a package's placeholder in a step that judges the
+workspace whole.
 
-A check the words cannot say, one whose verdict is not its tool's exit
+A step the words cannot say, one whose verdict is not its tool's exit
 code or whose paths need reshaping first, names the functions that run
-it instead, `run` and `fix` as `"module:function"` in the extension's
-own package, each imported when the check runs. A check declares
-`judge` or `run`, never both. The mount reads each reference from its
-module's source. A module outside the package, or a name the module
-does not define at its top level, refuses naming the file and the key
-before anything runs.
+it instead, `main` and `fix` as `"module:function"` in the extension's
+own package, each imported when the step runs, and `safe-fix` a
+function of its own where the fix has a safe mode. A workspace step in
+code that declares no `inputs` narrows by the packages the run
+reaches, which its code asks `scoped_packages` for, and one with
+`inputs` is selected by them; a step in code that names `tools` wraps
+them and takes the words after `--`. The mount reads each reference
+from its module's source. A module outside the package, or a name the
+module does not define at its top level, refuses naming the file and
+the key before anything runs.
 
-An entry names its extension, and the options it turns on in brackets:
-`"basedpyright[typecomplete]"`, either as the string or as a table
+An entry names its extension, either as the string or as a table
 entry's `name`. An entry takes no version, `?` or scope: an
-extension's version comes from its wheel, and the lock pins it. An
-option the extension does not declare refuses in the layering check,
-naming the ones it declares; the mount names it and leaves it off.
+extension's version comes from its wheel, and the lock pins it. A root
+`[phases.<phase>.<step>]` table that turns on a step no listed
+extension declares off refuses in the layering check, naming the steps
+declared off.
 
 A footman plugin that declares no extension is never offered as one.
 The mount registers a `[for.<target>]` table once both its owner and its
@@ -183,7 +193,8 @@ carry refuses. A name the extension declares no contribution for
 mounts nothing, and the layering check names the entry.
 `fm extensions` prints the base, then each extension in mount order,
 who requires it, the packages whose sets hold a package-level one, its
-tools, its targets, and each option with whether it is on.
+tools, its targets, and each step it declares off with whether the
+root contract turns it on.
 
 A package's `extensions` names the package-level extensions it is
 composed of. Its set is that list and every package-level extension
@@ -360,12 +371,12 @@ the packages' declared sheets and the workspace's own
 `docs/assets/site.css`, which loads last. A
 check an extension withdraws takes its lines with it.
 
-A check is named by its role and its tool, `test.pytest`, and that
-name is everything a person types: every role is a verb and every
-check a sub-task of it, generated from the registry. `fm test` runs
-every check of the test role and `fm test.pytest` the one, over the
-named paths or the workspace; a check with a second role answers
-under both. A verb offers exactly the flags its checks read:
+A check is named by its role and its tool, `test.pytest`, the step
+`pytest` of the phase `test`, and that name is everything a person
+types: every role is a verb and every check a sub-task of it,
+generated from the registry. `fm test` runs every check of the test
+role and `fm test.pytest` the one, over the named paths or the
+workspace. A verb offers exactly the flags its checks read:
 `--fix` and `--safe-fix` where a check can fix, `--point` where one
 selects tests by CI point, so `fm test --point=nightly` runs the
 nightly's tests and `fm test.ctest` offers no point at all. A role
@@ -379,27 +390,28 @@ ruff its flag. The words before `--` stay paths. A role verb runs
 several tools, so it refuses words after `--` and names the checks'
 own verbs that take them; `fm check` refuses them the same way. A
 check that wraps no tool, such as `fm drift.check`, refuses them too.
-A check says it takes them with `arguments = true` in its table, and
-its body reads them from the context's `arguments`.
+A step says it takes them with `{arguments}` in its template, or by
+naming `tools` when it runs code, and its code reads them from the
+context's `arguments`.
 
-A check's `options` are what a package may set in its own contract,
-each with a type and a default; every check carries `enabled`, and
-pytest's test check carries `parallel`. Three tables reach them:
+A step's `options` are what a package may set in its own contract,
+each with a type and a default; every step carries `enabled`, and
+pytest's test step carries `parallel`. The step's own table reaches
+them, and a role's table reaches every step of the role:
 
 ```toml
-[checks.basedpyright]              # every check of the tool
-[checks.basedpyright.typecomplete] # the tool's check of that role
+[phases.typecomplete.basedpyright] # the step, as the gate names it
 enabled = false                    # skipped by name in the gate's output
 
-[roles.test]                       # every check of the role, whatever its tool
+[roles.test]                       # every step of the role, whatever its tool
 parallel = false                   # the suites run under -n 0, each in a run of its own
 ```
 
-The deeper table wins key by key: a role's table, then the tool's,
-then the check's. An option no check the table reaches declares, a
-tool or role no registered check has, and a value of the wrong type
-each refuse, naming the vocabulary; a table spelled role first,
-`[checks.<role>.<tool>]`, names the address that replaces it.
+The deeper table wins key by key: a role's table, then the step's; a
+check table's spelling of the same step, `[checks.<tool>.<role>]`,
+sits between the two. An option no step the table reaches declares, a
+step or role no registered check has, and a value of the wrong type
+each refuse, naming the vocabulary.
 
 An extension's kinds and checks are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the extension registers,
@@ -492,11 +504,11 @@ The type checker basedpyright is an extension of its own too,
 `livery-extensions-basedpyright`, listed as `basedpyright`. Listed, it
 registers `typecheck.basedpyright`, and `fm sync` writes the root
 `pyrightconfig.json`, which the editor and a bare `basedpyright` read;
-the repository's own settings go in its region at the end. Listed as
-`basedpyright[typecomplete]`, it also registers
-`typecomplete.basedpyright`, which verifies that each package's public
-API is type-complete. `fm new.project` lists `docs`, `ruff` and
-`basedpyright`.
+the repository's own settings go in its region at the end. It declares
+`typecomplete.basedpyright` off, and a root contract with
+`[phases.typecomplete.basedpyright] enabled = true` registers it too; it
+verifies that each package's public API is type-complete.
+`fm new.project` lists `docs`, `ruff` and `basedpyright`.
 
 mypy is an extension of its own as well, `livery-extensions-mypy`,
 listed as `mypy`. Listed, it registers `typecheck.mypy`, which checks

@@ -1,5 +1,5 @@
 # The pyrefly extension: the type checker over every platform at once. The
-# check is pyrefly's words over what pyrefly.toml includes, whatever a run
+# step is pyrefly's words over what pyrefly.toml includes, whatever a run
 # reaches: a run costs seconds, and the file pins every platform at once.
 
 [extension]
@@ -7,11 +7,10 @@ api-version = 1
 # Listed in the workspace's list alone: one configuration for every member.
 levels = ["workspace"]
 
-[checks.pyrefly.typecheck]
-judge = ["pyrefly", "check"]
+[phases.typecheck.pyrefly]
+main = ["pyrefly", "check", "{arguments}"]
 extensions = ["python"]
 tools = ["pyrefly"]
-arguments = true
 claims = [
     { category = "source", suffixes = [".py", ".pyi"] },
     { category = "test", suffixes = [".py", ".pyi"] },

@@ -23,12 +23,12 @@ after `--`.
 
 ## Type completeness
 
-Listed with its option, the extension also registers
-`typecomplete.basedpyright`:
+The extension declares `typecomplete.basedpyright` off; a workspace
+turns it on at the step's address in its root contract:
 
 ```toml
-[workspace]
-extensions = ["basedpyright[typecomplete]"]
+[phases.typecomplete.basedpyright]
+enabled = true
 ```
 
 It verifies that each package's public API has a fully known type, through
@@ -42,7 +42,7 @@ distribution's root.
 A package turns either check off in its own contract:
 
 ```toml
-[checks.basedpyright.typecomplete]
+[phases.typecomplete.basedpyright]
 enabled = false
 ```
 

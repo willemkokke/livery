@@ -1,6 +1,6 @@
 # The clang-tidy extension: one set of checks for every native member,
 # judged per package against its compilation database. Read at every
-# mount; a check's code is imported when the check runs.
+# mount; the step's code is imported when the step runs.
 
 [extension]
 api-version = 1
@@ -10,13 +10,12 @@ levels = ["workspace"]
 # The C and C++ packages, each linted against the compilation database
 # its build writes: the lint reads it after the build configures, and
 # skips a package whose build writes none.
-[checks.clang-tidy.lint]
-run = "livery.extensions.clang.tidy._checks:judge_lint"
+[phases.lint.clang-tidy]
+main = "livery.extensions.clang.tidy._checks:judge_lint"
 scope = "package"
 extensions = ["cpp"]
 after = ["build.configure"]
 tools = ["clang_tidy"]
-arguments = true
 claims = [
     { category = "source", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
     { category = "test", suffixes = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".h", ".hxx"] },
@@ -24,7 +23,7 @@ claims = [
 
 # The checks each C or C++ package carries; a deeper file with
 # `InheritParentConfig: true` adds that directory's own lines.
-[checks.clang-tidy.lint.fragments.".clang-tidy"]
+[phases.lint.clang-tidy.fragments.".clang-tidy"]
 extensions = ["cpp"]
 text = '''
 # Rendered by the template channel for each C or C++ package; the gate

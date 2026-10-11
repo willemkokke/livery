@@ -5,8 +5,9 @@ the extension's ``extension.toml``. ``typecomplete.basedpyright`` runs
 one call per public module and reads the verifier's verdict for each,
 so it is code: it narrows by packages
 ([livery.workshop.scoped_packages][]) and verifies the modules each
-one declares public ([livery.workshop.public_modules][]); it
-registers only when the workspace lists ``basedpyright[typecomplete]``.
+one declares public ([livery.workshop.public_modules][]); declared
+off, it registers while the root contract turns it on at
+``[phases.typecomplete.basedpyright]``.
 It hands basedpyright the words after ``--`` on its own verb
 (``fm typecomplete.basedpyright -- --outputjson``). The body resolves
 its runner on this module when it runs, so a test that replaces

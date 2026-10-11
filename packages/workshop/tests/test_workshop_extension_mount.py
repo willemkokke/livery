@@ -356,26 +356,65 @@ def test_a_check_for_an_option_its_extension_does_not_declare_refuses(
         _extensions.declared_options("acme.odd")
 
 
-def test_an_option_registers_its_checks_and_fm_extensions_says_which_are_on(
+_DECLARED_OFF = """\
+[phases.lint.acme]
+main = "{package}._checks:noop"
+
+[phases.typecomplete.acme]
+main = "{package}._checks:noop"
+enabled = false
+"""
+
+
+def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, tool=_OPTIONED)
-    root_contract(tmp_path, '["acme.tool"]')
-    assert _extensions.extension_options(tmp_path) == {"acme.tool": ()}
-    described = _extensions.describe_extensions(tmp_path)
-    assert "    option deep (off): judges deeper" in described
-    # The table form spells its name the same way.
-    root_contract(tmp_path, '[{ name = "acme.tool[deep]" }]')
-    assert _extensions.extension_names(tmp_path) == ("acme.tool",)
-    assert _extensions.extension_options(tmp_path) == {"acme.tool": ("deep",)}
-    assert _extensions.closure_problems(tmp_path) == []
-    described = _extensions.describe_extensions(tmp_path)
-    assert "    option deep (on): judges deeper" in described
     from livery.footman import _registry as registry
 
+    fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
+    root_contract(tmp_path, '["acme.tool"]')
+    assert _extensions.enabled_steps(tmp_path) == frozenset()
+    described = _extensions.describe_extensions(tmp_path)
+    assert (
+        "    step typecomplete.acme (off): declared off; the root contract turns it"
+        " on with [phases.typecomplete.acme] enabled = true"
+    ) in described
+    with registry.capture():
+        _extensions.mount_extensions(tmp_path)
+    names = _checks.checks_by_name()
+    assert "lint.acme" in names
+    assert "typecomplete.acme" not in names
+    # Turned on at the step's address, it registers under the listed name.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.tool"]\n\n'
+        "[phases.typecomplete.acme]\nenabled = true\n"
+    )
+    assert _extensions.enabled_steps(tmp_path) == frozenset({"typecomplete.acme"})
+    assert _extensions.closure_problems(tmp_path) == []
+    described = _extensions.describe_extensions(tmp_path)
+    assert (
+        "    step typecomplete.acme (on): declared off; the root contract turns it"
+        " on with [phases.typecomplete.acme] enabled = true"
+    ) in described
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
     assert _checks.checks_by_name()["typecomplete.acme"].extension == "acme.tool"
+    # A table turning on a step no listed extension declares off, or one
+    # that is on already, refuses naming the steps declared off; a
+    # table that turns nothing on is no refusal.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.tool"]\n\n'
+        "[phases.lint.acme]\nenabled = true\n\n"
+        "[phases.lint.other]\nenabled = true\n\n"
+        "[phases.typecomplete.acme]\nenabled = false\n"
+    )
+    assert _extensions.enabled_steps(tmp_path) == frozenset({"lint.acme", "lint.other"})
+    assert _extensions.closure_problems(tmp_path) == [
+        "[phases.lint.acme] turns on lint.acme, which no listed extension declares"
+        " off; the steps declared off are typecomplete.acme (acme.tool)",
+        "[phases.lint.other] turns on lint.other, which no listed extension"
+        " declares off; the steps declared off are typecomplete.acme (acme.tool)",
+    ]
 
 
 _BRANDED = """\

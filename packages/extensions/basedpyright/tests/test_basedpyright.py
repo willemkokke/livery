@@ -27,13 +27,17 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Both checks registered, as the mount registers ``basedpyright[typecomplete]``."""
+    """Both checks registered, as the mount does once typecomplete is turned on."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
     found = declaration("basedpyright")
     assert found is not None
-    register_declared("basedpyright", found.additions, ("typecomplete",))
+    register_declared(
+        "basedpyright",
+        found.additions,
+        enabled=frozenset({"typecomplete.basedpyright"}),
+    )
     try:
         yield
     finally:
@@ -98,7 +102,8 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         assert "basedpyright" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "pyrightconfig.json").exists()
-        # Listed without its option, it type-checks and verifies nothing.
+        # Listed, it type-checks; type completeness is declared off and
+        # verifies nothing until the root contract turns it on.
         (root / "workshop.toml").write_text(
             CONTRACT + 'extensions = ["basedpyright"]\n'
         )
@@ -116,10 +121,11 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         # The editor answers with the checker this file configures alone.
         settings = (root / ".vscode" / "settings.json").read_text()
         assert '"python.languageServer": "None"' in settings
-        # Listed with it, the type-completeness check joins, under the
-        # listed name.
+        # Turned on at the step's address, the type-completeness check
+        # joins, under the listed name.
         (root / "workshop.toml").write_text(
-            CONTRACT + 'extensions = ["basedpyright[typecomplete]"]\n'
+            CONTRACT + 'extensions = ["basedpyright"]\n\n'
+            "[phases.typecomplete.basedpyright]\nenabled = true\n"
         )
         with footman_registry.capture():
             mount_extensions(root)
@@ -178,7 +184,7 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     )
     # A member that turned the check off is skipped by name, and the
     # workspace's own tests are no member: neither is verified.
-    off = _member(tmp_path, "off", checks="checks.basedpyright.typecomplete")
+    off = _member(tmp_path, "off", checks="phases.typecomplete.basedpyright")
     one = _member(tmp_path, "one")
     (tmp_path / "tests").mkdir()
     unit = workspace_suite(tmp_path)

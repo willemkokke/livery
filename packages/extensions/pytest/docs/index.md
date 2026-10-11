@@ -31,7 +31,7 @@ own `workshop.toml`, and its suite then runs in a pytest call of its own
 under one worker:
 
 ```toml
-[checks.pytest]
+[phases.test.pytest]
 parallel = false
 ```
 
