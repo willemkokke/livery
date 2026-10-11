@@ -99,8 +99,8 @@ _sync_args=()
 [ -f "$_root/uv.lock" ] && _sync_args+=(--locked)
 # A native member builds its extension at install against the tools
 # the store supplies below (the compiler's helpers, the conan
-# provider), so the first sync leaves it out and the second, after
-# the environment is entered here, builds it.
+# provider), so this sync leaves it out; the workshop's sync below
+# enters the environment itself and its own uv sync builds it.
 _native=(__NATIVE_SKIP__)
 _sync() { uv sync --project "$_root" "${_sync_args[@]}" "$@" >&2; }
 _sync "${_native[@]}" \\
@@ -123,15 +123,15 @@ _run() { uv run --project "$_root" --no-sync __PROG__ "$@"; }
 _run sync --locked >&2 \\
     || { echo "setup: __PROG__ sync --locked refused; its message names why" >&2; \\
          return 1 2>/dev/null || exit 1; }
-# Entered here, whether sourced or run: the native members build in
-# this shell, and a sourcing shell keeps it.
-eval "$(_run env.emit posix)"
-if [ ${#_native[@]} -gt 0 ]; then
-    _sync || { sleep 10; _sync; } \\
-        || { echo "setup: a native member did not build against the tools" >&2; \\
-             return 1 2>/dev/null || exit 1; }
+# Entered here, whether sourced or run, in one call: a sourcing shell
+# keeps it, and under `github` the same call persists the emission
+# for the steps after. Nothing installs after this line: the sync
+# above left the venv complete.
+if [ "${1:-}" = github ]; then
+    eval "$(_run env.emit posix --github)"
+else
+    eval "$(_run env.emit posix)"
 fi
-if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null; fi
 """
 
 
