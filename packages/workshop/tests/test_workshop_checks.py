@@ -193,6 +193,85 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     )
 
 
+def test_a_step_after_another_phases_step_runs_once_for_the_gate(
+    restored_registries, tmp_path: Path
+) -> None:
+    from livery.footman import Group, parallel
+    from livery.footman.testing import Runner
+    from livery.workshop._checks import current, task_for
+
+    ran: list[str] = []
+
+    def spy(ctx: GateContext) -> None:
+        ran.append(ctx.check)
+
+    # One earlier check, named in `after` by two later ones.
+    register_check(CheckRecord("probe", "build", spy))
+    register_check(CheckRecord("probe", "lint", spy, after=("build.probe",)))
+    register_check(CheckRecord("probe", "test", spy, after=("build.probe",)))
+    ctx = GateContext(root=tmp_path, packages=())
+    # Outside a run there is nothing to dedup against: a check run by hand
+    # runs its own body alone, and the caller orders the checks.
+    run_check("lint.probe", ctx)
+    assert ran == ["lint.probe"]
+    # Inside a run, the gate's block: each later check runs the earlier one
+    # through its task before its own body, and the run dedups the two
+    # calls, so the earlier check runs once, before either of them.
+    ran.clear()
+    tree = Group("root")
+
+    @tree.task
+    def gate() -> None:
+        with current(ctx), parallel():
+            task_for("lint.probe")()
+            task_for("test.probe")()
+
+    result = Runner().invoke("gate", tasks=tree)
+    assert result.ok, result.stderr
+    assert sorted(ran) == ["build.probe", "lint.probe", "test.probe"]
+    assert ran[0] == "build.probe"
+
+
+def test_a_tests_only_step_runs_when_a_packages_change_is_its_tests_alone(
+    restored_registries, tmp_path: Path
+) -> None:
+    ran: list[tuple[str, tuple[str, ...]]] = []
+
+    def spy(ctx: GateContext) -> None:
+        assert ctx.package is not None
+        ran.append((ctx.check, ctx.selection))
+
+    python = ("python",)
+    register_check(CheckRecord("probe", "lint", spy, scope=PACKAGE, extensions=python))
+    register_check(
+        CheckRecord(
+            "probe", "test", spy, scope=PACKAGE, extensions=python, tests_only=True
+        )
+    )
+    member = _package(tmp_path, "one", "python")
+    suite = {"packages/one": ("packages/one/tests/test_one.py",)}
+    confined = GateContext(
+        root=tmp_path, packages=(member,), subset=(member,), tests=suite
+    )
+    # The narrowing first: a change confined to the package's tests leaves
+    # a check that is not tests-only nothing to judge, by name and when run.
+    assert "lint.probe" not in judges(confined)
+    run_check("lint.probe", confined)
+    assert ran == []
+    # The tests-only check judges the package, handed the selection
+    # relative to it.
+    assert "test.probe" in judges(confined)
+    run_check("test.probe", confined)
+    assert ran == [("test.probe", ("tests/test_one.py",))]
+    # A scoped gate whose change reaches past the tests runs both.
+    ran.clear()
+    wider = GateContext(root=tmp_path, packages=(member,), subset=(member,))
+    assert {"lint.probe", "test.probe"} <= set(judges(wider))
+    run_check("lint.probe", wider)
+    run_check("test.probe", wider)
+    assert ran == [("lint.probe", ()), ("test.probe", ())]
+
+
 def test_the_constants_name_the_vocabulary() -> None:
     assert (WORKSPACE, PACKAGE) == ("workspace", "package")
     assert (PATHS, PACKAGES, NONE) == ("paths", "packages", "none")
@@ -317,3 +396,57 @@ def test_a_package_turns_a_check_off_and_is_skipped_by_name(
         capsys.readouterr().out
     )
     assert enabled("lint.fake", (package,)) == (package,)
+
+
+def test_a_code_step_and_a_words_step_share_one_option_table(
+    restored_registries, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._checks import Option, enabled, option_addresses, option_value
+    from livery.workshop._words import Command, Words
+
+    level = Option("level", "int", 1, "how far the probe reads")
+    words = Words(("acme", "judge"))
+    coded = CheckRecord(
+        "probe", "lint", _noop, scope=PACKAGE, extensions=("python",), options=(level,)
+    )
+    spoken = CheckRecord(
+        "probe",
+        "lint",
+        Command(words, "lint.probe"),
+        scope=PACKAGE,
+        extensions=("python",),
+        options=(level,),
+        tools=("acme",),
+        words=words,
+    )
+    # The refusals first: a value of the wrong type and a key the check does
+    # not declare refuse by the same line whichever way the check is written.
+    package = _member_with(tmp_path, '[checks.probe.lint]\nlevel = "deep"\n')
+    for record in (coded, spoken):
+        with pytest.raises(_FAILURES, match=r"\[checks\.probe\.lint\] level is int"):
+            option_value(record, package, "level")
+        with pytest.raises(_FAILURES, match="declares no option 'depth'"):
+            option_value(record, package, "depth")
+    # The table is addressed by the check's name, not by how the check runs:
+    # the same tables reach both, and one setting answers both.
+    assert (
+        option_addresses(coded)
+        == option_addresses(spoken)
+        == ("roles.lint", "checks.probe", "checks.probe.lint")
+    )
+    package = _member_with(
+        tmp_path, "[checks.probe.lint]\nlevel = 2\nenabled = false\n"
+    )
+    assert option_value(coded, package, "level") == 2
+    assert option_value(spoken, package, "level") == 2
+    # And `enabled` turns either off by the same line; the words check's
+    # tool is never called for a package that turned it off.
+    for record in (coded, spoken):
+        register_check(record)
+        assert enabled("lint.probe", (package,)) == ()
+        capsys.readouterr()
+        run_check("lint.probe", GateContext(root=tmp_path, packages=(package,)))
+        assert (
+            "lint.probe: packages/x skips (turned off in packages/x/workshop.toml)"
+            in capsys.readouterr().out
+        )
