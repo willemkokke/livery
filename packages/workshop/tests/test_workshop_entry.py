@@ -341,7 +341,9 @@ def test_a_sync_that_rewrites_entry_points_at_the_same_version_is_a_change(
 def test_record_receipt_writes_both_receipts(tmp_path: Path) -> None:
     from livery.workshop import _reconcile
 
-    (tmp_path / "uv.lock").write_text(LOCK)
+    # The lock as bytes: the receipt is the lock's bytes, and a text-mode
+    # write would give the lock Windows line ends the receipt then keeps.
+    (tmp_path / "uv.lock").write_bytes(LOCK.encode())
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "ws"\n')
     _venv_site(tmp_path, "something-1.0.0")
     _reconcile.record_receipt(tmp_path)
