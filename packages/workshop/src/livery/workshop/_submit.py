@@ -630,7 +630,7 @@ def _push(
             " record recovery reads, and the engine re-prepares instead."
             f" Re-run the workflow verb, or `{footman.prog()} workflow.abort` it."
         )
-    if git.remote_head(branch):
+    if git.remote_head(branch, cached=True):
         discards = git._run("log", "--format=%s", f"{branch}..origin/{branch}").strip()
         if discards:
             listed = "\n".join(f"    - {line}" for line in discards.splitlines())

@@ -198,10 +198,10 @@ def test_the_clean_heal_reships_and_lands(
         def integrate(self, base: str) -> None:
             calls["integrated"] = True
 
-        def head_sha(self) -> str:
+        def head_sha(self, *, cached: bool = False) -> str:
             return ("b" if calls.get("integrated") else "a") * 40
 
-        def current_branch(self) -> str:
+        def current_branch(self, *, cached: bool = False) -> str:
             return "feat/1-heal"
 
         def head_subject(self) -> str:
