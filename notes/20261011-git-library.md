@@ -152,7 +152,7 @@ the workshop.
   nothing.
 - `fm ci.e2e --scenario=develop` is green on the local Gitea.
 
-## Phase 2: one ssh connection per host, shared across verbs
+## Phase 2: the plugin, the environment every git spawn runs with
 
 Every network git call opens a fresh ssh connection, and the handshake
 is about half of a quiet fetch. Measured on 2026-10-11 on a macOS
@@ -206,7 +206,8 @@ idempotent, and the docs say so.
 
 The policy is a footman plugin the library ships, `livery.git._plugin`,
 registered as `"livery.git"` under the `footman.tasks` entry point the
-way `livery.forge._dev` is. A project lists `plugin("livery.git")` in
+way `livery.forge._dev` is. The ssh connection is one of the things
+the plugin puts in the environment; the others are below. A project lists `plugin("livery.git")` in
 its `tasks.py` to turn it on and drops the line to turn it off; the
 workshop's generated tasks list it; a project on bare footman gets it
 the same way. The plugin registers a `pre_task` hook: footman gives
@@ -233,8 +234,47 @@ leg runs a fetch through the built environment under a timeout; the
 probe is per socket directory, so a Windows host that fails it runs
 the normal path. `https` remotes need no special case.
 
+### The identity, the editor, and the decorators
+
+The workshop sets a git identity in three places with three names: the
+release driver writes "livery release" into a fresh checkout's config
+(`_publish.py:175`), the loop rides "livery loop" in the environment
+(`_e2e.py:190`), the store commits as "<prog> ci state"
+(`_state.py:691`); the scale fixture and toolroom-bench's colour probe
+set a fourth and a fifth in throwaway repositories. Ruled 2026-10-12:
+one identity for every commit the tools make, `<prog>` with the
+address `<prog>@<prog>.invalid`, which `livery.git.identity(prog)`
+returns and the store takes as its `identity` argument. The plugin
+writes it into `task.env` as `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+`GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` when `user.email`
+resolves to nothing, the same config read that decides the ssh
+command, so a person's own identity always stands and no verb writes
+a person's config. `ensure_git_identity` and the loop's identity
+environment go.
+
+The plugin exports task decorators for the cases where a task knows
+better than the default rule, each a marker on the task the way
+`@task(serial=True)` leaves `_footman_serial`, read by the plugin's
+one `pre_task` hook from the handle it receives:
+
+- `@git.identity(name, email)`: this task commits as the given
+  identity whatever the config says.
+- `@git.unsigned`: `commit.gpgsign=false` and `tag.gpgsign=false` for
+  this task's spawns, as `GIT_CONFIG_COUNT` pairs; the loop, the
+  scale fixture and the colour probe each set this by hand today.
+- `@git.no_editor`: `GIT_EDITOR=true`, so a rebase continue or a merge
+  commit never opens an editor; `_sync.py:117` and `:1012` pass
+  `-c core.editor=true` by hand today.
+
+The decorators stack. Footman gives a plugin hook the task's handle
+with its name, its environment and its per-plugin state; reading a
+marker off the handle needs one small public read on footman, since
+the handle's function is private.
+
 Tests, fallbacks first: `GIT_SSH_COMMAND` already set leaves it
-untouched; `core.sshCommand` set in the repository config the same; a
+untouched; a person's `user.email` set leaves the identity variables
+unset; a task without a marker gets the default rule; then a marked
+task gets its marker's environment, and two markers stack; `core.sshCommand` set in the repository config the same; a
 directory past the limit gives the reason with the directory and the
 limit; a failed probe gives ssh's words, with a fake `ssh` first on
 `PATH` that exits non-zero on `-O check`; a probe already written runs
@@ -253,6 +293,11 @@ the quoted path.
   decision record.
 - `fm doctor` names an existing `ControlMaster` entry in the user's
   ssh config and does nothing more.
+- `grep -rn "ensure_git_identity\|LOOP_IDENTITY\|core.editor=true"
+  packages/workshop/src` prints nothing.
+- `git log --format=%an origin/main` on the local loop's repository
+  after `fm ci.e2e --scenario=release` shows `<prog>` as the author of
+  the release commits.
 
 ## Phase 3: the store's transport and series model move
 
@@ -385,6 +430,12 @@ and the number recorded here.
   the socket directory; never an edit of the user's ssh config;
   support decided by a behaviour probe. It is phase 2, since it needs
   only the package and pays at once.
+- 2026-10-12, Willem: one identity for every commit the tools make,
+  `<prog>` at `<prog>@<prog>.invalid`, in place of the five the
+  repository invents; set through the environment when a person's is
+  absent, never by writing a person's config. The plugin exports task
+  decorators that force an identity, unsigned commits, or no editor
+  for one task.
 - 2026-10-11, Willem: the ssh policy is a footman plugin shipped by
   `livery.git`, on by listing `plugin("livery.git")` and off by not,
   so it works on bare footman too. The plugin's `pre_task` hook writes
@@ -398,3 +449,13 @@ and the number recorded here.
 1. The probe's verdict file against a per-process memory. Owner:
    Willem. Recommendation: the file, for contract 6 and so a verdict
    outlives the verb.
+2. Whether the plugin turns signing off by itself when no person is
+   there (`footman.attended()` false), beside the `@git.unsigned`
+   marker. The cost: `fm commit --no-input` on a desk with signing on
+   would commit unsigned where today it waits on the signer. Owner:
+   Willem. Recommendation: the marker alone; an unattended rule only
+   where a runner's variables say it is CI.
+3. Whether the workshop's 35 test files that each configure a
+   "tester" identity in the repositories they create move to one
+   conftest fixture that sets the identity variables for every test.
+   Test code only; nothing to do with the plugin. Owner: Willem.
