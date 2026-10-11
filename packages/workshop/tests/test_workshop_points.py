@@ -359,14 +359,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     root = _root(tmp_path)
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     # The merge point inherits the gate's jobs and adds its own.
-    assert _points.jobs_of(root, "merge") == (
-        "check",
-        "docs",
-        "gate",
-        "govern",
-        "dispatch",
-        "deploy",
-    )
+    assert _points.jobs_of(root, "merge") == ("check", "docs", "gate", "govern")
     # The nightly point runs the whole check, its own tests selected in.
     assert _points.jobs_of(root, "nightly") == ("nightly",)
     assert _points.entries_for(root, "nightly", "nightly") == (
@@ -654,11 +647,19 @@ def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(
 ) -> None:
     root = _root(tmp_path)
     merge = [entry.task for entry in _points.entries_for(root, "merge", "gate")]
-    assert merge[-3:] == [
-        "ci.verified.stamp",
-        "workflow.release.check-fresh",
-        "janitor",
+    # The stamp, the freshness check, then the merge point's own: the
+    # dispatch, what the extensions add, and the janitor last.
+    assert merge[-1] == "janitor"
+    order = [
+        merge.index(task)
+        for task in (
+            "ci.verified.stamp",
+            "workflow.release.check-fresh",
+            "workflow.release.dispatch",
+            "janitor",
+        )
     ]
+    assert order == sorted(order)
     gate = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
     # The freshness check last, so the merge it allows follows it as
     # closely as the forge can.

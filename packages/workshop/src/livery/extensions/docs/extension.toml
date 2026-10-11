@@ -95,14 +95,19 @@ inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = tr
 run = "livery.extensions.docs._checks:docstrings_run"
 narrowing = "packages"
 
-# The strict site build: the gate point's verdict waits for it.
+# The strict site build: the gate point's verdict waits for it. The
+# tags are fetched so the release view renders from the receipts; a
+# tagless clone renders its no-tags fallback page instead.
 [ci.jobs.gate.docs]
 entries = ["docs.build"]
 gates = true
+fetch = "tags"
 installs = "livery.extensions.docs._contract:docs_requirements"
 note = """\
 The strict site build: broken links and orphan pages go red here, \
-required through the gate context, never inside the local check."""
+required through the gate context, never inside the local check. On a \
+push the built site is kept for the gate job, which adds this run's \
+coverage trees and publishes it."""
 
 # What the site reads: the workspace's docs, its zensical.toml and
 # README, and each package's pages, nav, assets, examples and generated
@@ -119,19 +124,21 @@ reads = [
     "packages/**/docs/_generated/**",
 ]
 
-# The site's deploy, on the merge point: the build, then the publish
-# through the seam the root contract names.
-[ci.jobs.merge.deploy]
-entries = ["docs.build", "docs.publish"]
-needs = ["gate"]
-fetch = "tags"
-token = "job"
-installs = "livery.extensions.docs._contract:docs_requirements"
+# On the merge point the docs job keeps the site it built, so the
+# site is built once per run.
+[ci.jobs.merge.docs]
+publishes = "site"
+paths = ["site"]
+
+# On the merge point the gate job takes the built site after its
+# verdict, renders this run's coverage trees into it from the union it
+# just judged, and publishes it through the seam the root contract
+# names: the container and ssh seams and none from here, the forge's
+# pages by handing the site to the forge's own pages deploy.
+[ci.jobs.merge.gate]
+entries = ["docs.coverage-pages", "docs.publish"]
+collects = "site"
 deploy = "livery.extensions.docs._contract:publish_seam"
-note = """\
-The site's deploy through the contract's seam, on the push alone. The \
-release view reads the receipt tags; a shallow tagless clone renders \
-its no-tags fallback page instead."""
 
 # The private-members policy the API reference renders: the nearest
 # contract that sets one wins.

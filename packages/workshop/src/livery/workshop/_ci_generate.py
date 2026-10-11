@@ -21,6 +21,7 @@ member, so a tag is a receipt, never a trigger.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -215,9 +216,53 @@ def _conan_cache_step() -> str:
     )
 
 
-def _installs(answers: dict[str, Any], point: Point, job: Job) -> tuple[str, ...]:
-    """The system packages *job* of *point* installs before it enters."""
-    return tuple(answers.get("installs", {}).get((point.name, job.name), ()))
+def _installs(
+    answers: dict[str, Any],
+    point: Point,
+    job: Job,
+    joins: Sequence[tuple[Point, Job]] = (),
+) -> tuple[str, ...]:
+    """The system packages *job* of *point* installs before it enters, *joins* included."""
+    found = set(answers.get("installs", {}).get((point.name, job.name), ()))
+    for other, joined in joins:
+        found.update(answers.get("installs", {}).get((other.name, joined.name), ()))
+    return tuple(sorted(found))
+
+
+def _joins_of(
+    point: Point, job: Job, everything: tuple[Point, ...]
+) -> list[tuple[Point, Job]]:
+    """The joins of *job* of *point*: on the point itself and on the points inheriting it.
+
+    Each with the point it was contributed to, which conditions the
+    plumbing it adds: a join on the merge point of a job the gate
+    point declares renders on the gate point's job, on a push alone.
+    """
+    return [
+        (other, joined)
+        for other in everything
+        if other.name == point.name or other.inherits == point.name
+        for joined in other.jobs
+        if joined.joins and joined.name == job.name
+    ]
+
+
+def _condition(point: Point, other: Point) -> str:
+    """The event condition a step *other* adds to a job of *point* carries; none on its own point."""
+    return "" if other.name == point.name else _event_filter(other)
+
+
+def _if_line(condition: str) -> str:
+    return f"        if: {condition}\n" if condition else ""
+
+
+def _artifact_root(everything: tuple[Point, ...], name: str) -> str:
+    """The directory a collected artifact *name* unpacks into: its publisher's paths' root."""
+    for point in everything:
+        for job in point.jobs:
+            if job.publishes == name and job.paths:
+                return job.paths[0].split("/", 1)[0]
+    return "."
 
 
 def _seam(answers: dict[str, Any], point: Point, job: Job) -> str:
@@ -435,33 +480,47 @@ def _checkout_step(point: Point, job: Job, *, forge: str, lfs: bool = False) -> 
     return "".join(lines)
 
 
-def _collect_step(job: Job, *, forge: str) -> str:
-    """The artifacts *job* collects, merged into the packages tree."""
+def _collect_step(
+    job: Job, *, forge: str, everything: tuple[Point, ...], condition: str = ""
+) -> str:
+    """The artifact *job* collects, every leg's merged into its publisher's root.
+
+    *condition* is the event condition of the point that added the
+    collect to a job of another point, empty on the job's own. A
+    collect added that way never stops the job: the artifact is
+    missing when its publisher was red, and the job's own entries,
+    the verdict among them, still judge the run and say so.
+    """
     if not job.collects:
         return ""
     action = DOWNLOAD if forge == "github" else "actions/download-artifact@v4"
+    tolerant = "        continue-on-error: true\n" if condition else ""
     return (
-        f"      - uses: {action}\n"
-        "        with:\n"
-        f"          pattern: {job.collects}-*\n"
-        "          path: packages\n"
+        f"      - uses: {action}\n" + _if_line(condition) + tolerant + "        with:\n"
+        f"          pattern: {job.collects}*\n"
+        f"          path: {_artifact_root(everything, job.collects)}\n"
         "          merge-multiple: true\n"
     )
 
 
-def _publish_step(job: Job, *, forge: str) -> str:
-    """The artifact *job* publishes: this leg's built wheels."""
+def _publish_step(
+    job: Job, *, forge: str, matrix: bool = False, condition: str = ""
+) -> str:
+    """The artifact *job* publishes, its paths as declared, the leg's name on a *matrix*.
+
+    *condition* is the event condition of the point that added the
+    publish to a job of another point, empty on the job's own.
+    """
     if not job.publishes:
         return ""
     action = UPLOAD if forge == "github" else "actions/upload-artifact@v4"
+    name = job.publishes + ("-${{ matrix.os }}" if matrix else "")
     return (
-        f"      - uses: {action}\n"
-        "        with:\n"
-        f"          name: {job.publishes}-${{{{ matrix.os }}}}\n"
+        f"      - uses: {action}\n" + _if_line(condition) + "        with:\n"
+        f"          name: {name}\n"
         "          path: |\n"
-        "            packages/*/dist/*\n"
-        "            packages/*/*/dist/*\n"
-        "          if-no-files-found: ignore\n"
+        + "".join(f"            {path}\n" for path in job.paths)
+        + "          if-no-files-found: ignore\n"
     )
 
 
@@ -488,12 +547,39 @@ _PAGES_GRANT = """    permissions:
       cancel-in-progress: false
 """
 
-_PAGES_STEPS = """      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
-        with:
-          path: site
-      - id: deployment
+_PAGES_UPLOAD = "      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0\n"
+
+_PAGES_DEPLOY = """      - id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 """
+
+
+def _pages_upload_step(condition: str = "") -> str:
+    """The upload of the built site as the pages artifact, under *condition*."""
+    return _PAGES_UPLOAD + _if_line(condition) + "        with:\n          path: site\n"
+
+
+def _pages_job(answers: dict[str, Any], point: Point, job: Job, other: Point) -> str:
+    """The forge's own pages deploy of the site *job* of *point* uploaded, for *other*.
+
+    No checkout and no entry: the one step deploys the artifact the
+    joined job uploaded, in the pages environment, on *other*'s events.
+    """
+    first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
+    condition = _condition(point, other)
+    return (
+        _comment(
+            f"The forge's pages deploy of the site the {job.name} job uploaded:"
+            " no checkout and no entry, the pages environment alone.",
+            "  ",
+        )
+        + "  pages:\n"
+        + (f"    if: {condition}\n" if condition else "")
+        + f"    needs: [{job.name}]\n"
+        + _PAGES_GRANT
+        + f"    runs-on: {first}\n    steps:\n"
+        + _PAGES_DEPLOY
+    )
 
 
 def _grants(job: Job, *, pages: bool) -> str:
@@ -535,6 +621,7 @@ def _actions_job(
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
     first = runners[0]
     pages = forge == "github" and _seam(answers, point, job) == "pages"
+    joins = _joins_of(point, job, everything)
     lines = [_comment(job.note, "  "), f"  {job.name}:\n"]
     conditions = []
     if job.always:
@@ -596,9 +683,18 @@ def _actions_job(
     lines.append(_checkout_step(point, job, forge=forge, lfs=bool(answers.get("lfs"))))
     if forge == "github":
         lines.append(_setup_uv_step(answers))
-    lines.append(_collect_step(job, forge=forge))
+    lines.append(_collect_step(job, forge=forge, everything=everything))
+    for other, joined in joins:
+        lines.append(
+            _collect_step(
+                joined,
+                forge=forge,
+                everything=everything,
+                condition=_condition(point, other),
+            )
+        )
     lines.append(_rung_step(answers))
-    lines.append(_installs_step(_installs(answers, point, job)))
+    lines.append(_installs_step(_installs(answers, point, job, joins)))
     if forge == "github":
         lines.append(_store_cache_step())
         if job.conan_cache:
@@ -610,9 +706,18 @@ def _actions_job(
     lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
     lines.append(_call_env(job, forge=forge))
     lines.append(_call_step(prog, point, job))
-    lines.append(_publish_step(job, forge=forge))
+    lines.append(_publish_step(job, forge=forge, matrix=bool(job.matrix)))
+    for other, joined in joins:
+        condition = _condition(point, other)
+        lines.append(
+            _publish_step(
+                joined, forge=forge, matrix=bool(job.matrix), condition=condition
+            )
+        )
+        if forge == "github" and _seam(answers, other, joined) == "pages":
+            lines.append(_pages_upload_step(condition))
     if pages:
-        lines.append(_PAGES_STEPS)
+        lines.append(_pages_upload_step() + _PAGES_DEPLOY)
     return "".join(lines)
 
 
@@ -662,6 +767,8 @@ def _actions_workflow(
     lines.append("\njobs:\n")
     for point in owners_all:
         for job in point.jobs:
+            if job.joins:
+                continue
             if job.matrix == "legs" and _narrows(answers):
                 lines.append(_legs_job(answers))
             if _renders(job, answers):
@@ -670,6 +777,12 @@ def _actions_workflow(
                         answers, prog, point, job, forge=forge, everything=everything
                     )
                 )
+    if forge == "github":
+        for point in owners_all:
+            for job in point.jobs:
+                for other, joined in _joins_of(point, job, everything):
+                    if not job.joins and _seam(answers, other, joined) == "pages":
+                        lines.append(_pages_job(answers, point, job, other))
     return "".join(lines)
 
 
@@ -715,7 +828,8 @@ def _gitlab_job(
     pushes, or writes the store, rewrites origin with the push token
     first, since the job token cannot push.
     """
-    packages = " ".join(_installs(answers, point, job))
+    joins = _joins_of(point, job, everything)
+    packages = " ".join(_installs(answers, point, job, joins))
     first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
     stage = "release" if point.name in ("merge", "release") else "check"
     pages = _seam(answers, point, job) == "pages"
@@ -778,10 +892,22 @@ def _gitlab_job(
     lines.append(f"    - {call}\n")
     if pages:
         lines.append("    - mv site public\n  artifacts:\n    paths: [public]\n")
-    elif job.publishes:
-        lines.append(
-            '  artifacts:\n    paths: ["packages/*/dist/*", "packages/*/*/dist/*"]\n'
-        )
+        return "".join(lines) + "\n"
+    # The job's own artifact, then what the joins publish and the site
+    # a joined pages seam hands to the pages job; a join's artifact
+    # expires, since the deploy that reads it follows at once.
+    kept = list(job.paths) if job.publishes else []
+    joined_paths: list[str] = []
+    for other, joined in joins:
+        joined_paths += list(joined.paths) if joined.publishes else []
+        if _seam(answers, other, joined) == "pages":
+            joined_paths.append("site")
+    paths = kept + [path for path in joined_paths if path not in kept]
+    if paths:
+        spelled = ", ".join(f'"{path}"' for path in paths)
+        lines.append(f"  artifacts:\n    paths: [{spelled}]\n")
+        if joined_paths:
+            lines.append("    expire_in: 1 day\n")
     return "".join(lines) + "\n"
 
 
@@ -830,13 +956,36 @@ stages: [check, release]
     everything = everything if everything is not None else points(None)
     for point in everything:
         for job in point.jobs:
-            if _renders(job, answers):
-                lines.append(
-                    _gitlab_job(
-                        answers, prog, point, job, image=image, everything=everything
-                    )
+            if job.joins or not _renders(job, answers):
+                continue
+            lines.append(
+                _gitlab_job(
+                    answers, prog, point, job, image=image, everything=everything
                 )
+            )
+            for other, joined in _joins_of(point, job, everything):
+                if _seam(answers, other, joined) == "pages":
+                    lines.append(
+                        _gitlab_pages_job(
+                            job, other, image=image, everything=everything
+                        )
+                    )
     return "".join(lines)
+
+
+def _gitlab_pages_job(
+    job: Job, other: Point, *, image: str, everything: tuple[Point, ...]
+) -> str:
+    """GitLab Pages' own job, publishing the site *job* kept, on *other*'s events."""
+    return (
+        _comment(
+            f"GitLab Pages' deploy of the site the {job.name} job kept: no"
+            " entry, the artifact moved to public/."
+        )
+        + f"pages:\n  stage: release\n  image: {image}\n  needs: [{job.name}]\n"
+        + _gitlab_rules(other, everything)
+        + "  script:\n    - mv site public\n  artifacts:\n    paths: [public]\n\n"
+    )
 
 
 def generate(root: Path) -> dict[str, str]:

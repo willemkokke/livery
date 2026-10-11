@@ -34,11 +34,14 @@ def jobs_restored() -> Iterator[None]:
     from livery.workshop import _points
 
     before = dict(_points._CONTRIBUTED_JOBS)
+    joined = dict(_points._JOINED_JOBS)
     try:
         yield
     finally:
         _points._CONTRIBUTED_JOBS.clear()
         _points._CONTRIBUTED_JOBS.update(before)
+        _points._JOINED_JOBS.clear()
+        _points._JOINED_JOBS.update(joined)
 
 
 @pytest.fixture(autouse=True)

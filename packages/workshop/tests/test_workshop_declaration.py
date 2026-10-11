@@ -287,9 +287,32 @@ def test_a_job_joins_a_builtin_point_under_a_name_the_point_does_not_have(
         f"{where}: ci.jobs.weekly.prose names the point 'weekly', which is not"
         " builtin; a job joins one of gate, merge, nightly, release"
     )
-    assert _refusal(package, "[ci.jobs.gate.check]\n") == (
-        f"{where}: ci.jobs.gate.check names a job the gate point declares already"
+    # A table naming a job the point has joins it, and a join that
+    # gates refuses: the verdict's needs are the job's own.
+    assert _refusal(package, "[ci.jobs.gate.check]\ngates = true\n") == (
+        f"{where}: ci.jobs.gate.check.gates joins the gate point's check job and"
+        " gates; a join adds entries and plumbing, and the verdict's needs stay"
+        " the job's own"
     )
+
+
+def test_a_table_naming_a_job_the_point_has_joins_it(package: Path) -> None:
+    found = _declare(
+        package,
+        '[ci.jobs.gate.prose]\nentries = ["acme.prose"]\n'
+        '[ci.jobs.merge.prose]\npublishes = "book"\npaths = ["book"]\n'
+        '[ci.jobs.merge.gate]\nentries = ["acme.ship"]\ncollects = "book"\n',
+    )
+    jobs = {(item.point, item.job.name): item for item in found.additions.jobs}
+    assert not jobs[("gate", "prose")].job.joins
+    # Declared earlier in the same file, or inherited from the gate
+    # point: both read as joins, with the artifact keys they carry.
+    assert jobs[("merge", "prose")].job.joins
+    assert jobs[("merge", "prose")].job.publishes == "book"
+    assert jobs[("merge", "prose")].job.paths == ("book",)
+    assert jobs[("merge", "gate")].job.joins
+    assert jobs[("merge", "gate")].job.collects == "book"
+    assert [e.task for e in jobs[("merge", "gate")].entries] == ["acme.ship"]
 
 
 def test_an_unknown_key_or_a_grant_in_a_job_table_refuses_naming_the_file(

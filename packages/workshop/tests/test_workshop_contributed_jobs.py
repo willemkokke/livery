@@ -129,25 +129,81 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
     assert nightly.name == composed_points()[2].name
 
 
-def test_the_docs_extension_declares_the_build_and_the_deploy(tmp_path: Path) -> None:
+def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses(
+    acme_jobs: None,
+) -> None:
+    with pytest.raises(_FAILURES, match=r"joins the job 'book' of the merge point"):
+        contribute_job("merge", Job("book", joins=True), extension="acme.prose")
+    with pytest.raises(_FAILURES, match=r"joins the job 'gate' of the merge point and"):
+        contribute_job(
+            "merge", Job("gate", joins=True), gates=True, extension="acme.prose"
+        )
+
+
+def test_a_join_rides_the_point_and_its_entries_run_before_the_jobs_last(
+    acme_jobs: None,
+) -> None:
+    from workshop_docs_declared import jobs_restored
+
+    with jobs_restored():
+        contribute_job(
+            "merge",
+            Job("docs", joins=True, publishes="book", paths=("book",)),
+            extension="acme.prose",
+        )
+        contribute_job(
+            "merge",
+            Job("gate", joins=True, collects="book"),
+            entries=(Entry("merge", "gate", "acme.book.publish"),),
+            extension="acme.prose",
+        )
+        merge = point_by_name(None)["merge"]
+        joined = [job for job in merge.jobs if job.joins and job.name == "gate"]
+        assert [job.collects for job in joined][-1] == "book"
+        # The merge point still renders no job of that name of its own.
+        assert [job.name for job in merge.jobs if not job.joins] == ["govern"]
+        gate_entries = [
+            entry.task
+            for entry in builtin_schedule()
+            if (entry.point, entry.job) == ("merge", "gate")
+        ]
+        # The dispatch first, the joins' entries after it, the janitor last.
+        assert gate_entries[0] == "workflow.release.dispatch"
+        assert gate_entries[-1] == "janitor"
+        assert gate_entries.index("acme.book.publish") < gate_entries.index("janitor")
+    assert "acme.book.publish" not in [e.task for e in builtin_schedule()]
+
+
+def test_the_docs_extension_declares_the_build_and_joins_the_merge_points_jobs(
+    tmp_path: Path,
+) -> None:
     gate = point_by_name(None)["gate"]
     assert [job.name for job in gate.jobs] == ["check", "docs", "gate"]
     assert gate.jobs[-1].needs == ("check", "docs")
+    assert gate.jobs[1].fetch == "tags"
     merge = point_by_name(None)["merge"]
-    deploy = merge.jobs[-1]
-    assert deploy.name == "deploy"
-    assert (deploy.needs, deploy.fetch, deploy.token) == (("gate",), "tags", "job")
+    assert [job.name for job in merge.jobs if not job.joins] == ["govern"]
+    joins = {job.name: job for job in merge.jobs if job.joins}
+    assert joins["docs"].publishes == "site" and joins["docs"].paths == ("site",)
+    assert joins["gate"].collects == "site" and joins["gate"].deploy is not None
     # The functions the jobs name answer from the root contract.
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["docs"]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
-    assert job_seams(tmp_path) == {("merge", "deploy"): "container"}
-    assert job_installs(tmp_path) == {("gate", "docs"): (), ("merge", "deploy"): ()}
+    assert job_seams(tmp_path) == {("merge", "gate"): "container"}
+    assert job_installs(tmp_path) == {("gate", "docs"): ()}
     entries = builtin_schedule()
     tasks = [(entry.point, entry.job, entry.task) for entry in entries]
     assert ("gate", "docs", "docs.build") in tasks
-    assert ("merge", "deploy", "docs.build") in tasks
-    assert ("merge", "deploy", "docs.publish") in tasks
+    gate_tasks = [
+        task for point, job, task in tasks if (point, job) == ("merge", "gate")
+    ]
+    assert gate_tasks == [
+        "workflow.release.dispatch",
+        "docs.coverage-pages",
+        "docs.publish",
+        "janitor",
+    ]
     verdict = next(entry for entry in entries if entry.task == "ci.verdict")
     assert verdict.args == ("--needs=check,docs",)
     assert all(
