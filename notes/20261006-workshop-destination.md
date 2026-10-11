@@ -2331,6 +2331,19 @@ the stack, which this design neither needs nor rules out).
   and replace `narrowing`. Why: `judge` named what a check does and
   not what a build does, and one rule for the shape beats two names.
   #1377, in its thread.
+  entry 176 of 183 seconds.
+- 2026-10-11, #1379 built: `[ci] pull-request-runners` names the
+  runners a pull request's check legs fan out to, each one `[ci]
+  runners` names; absent, every runner. The render adds a legs job
+  whose environment holds the two literal matrices, the event picks
+  one, and the check job reads it with `fromJSON` from the job's
+  output, so the decision stays the contract's and the file carries
+  two literals and which event takes which. A matrix axis that is
+  itself an expression starts no run on GitHub, found on PR #1383's
+  first push. This repository names
+  ubuntu-latest. Not covered: a Gitea workspace that declares the key
+  relies on act evaluating an expression in a matrix, which no loop
+  member exercises, since the loop's runner set is one runner.
 
 ## Open
 

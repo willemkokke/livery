@@ -41,7 +41,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery.footman import Tasks, fail
@@ -1272,6 +1272,52 @@ def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
         for entry in schedule(root)
         if entry.point in (INHERITS.get(point), point) and entry.job == job
     )
+
+
+def pull_request_runners(ci: dict[str, Any]) -> list[str]:
+    """The runners a pull request's check legs fan out to.
+
+    ``[ci] pull-request-runners`` when the contract declares it, else
+    every runner ``[ci] runners`` names. A label the runners list does
+    not name refuses naming both lists, since a pull request's legs run
+    on runners every event runs on; an empty list refuses too.
+    """
+    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+    declared: Any = ci.get("pull-request-runners")
+    if declared is None:
+        return runners
+    chosen = [str(runner) for runner in declared]
+    strangers = [runner for runner in chosen if runner not in runners]
+    if strangers:
+        fail(
+            f"[ci] pull-request-runners names {', '.join(strangers)}, which [ci]"
+            f" runners does not list ({', '.join(runners)}); a pull request's"
+            " legs run on runners every event runs on"
+        )
+    if not chosen:
+        fail(
+            "[ci] pull-request-runners is empty; name a runner [ci] runners"
+            " lists, or remove the key so every runner runs"
+        )
+    return chosen
+
+
+def pull_request_legs(root: Path) -> list[str]:
+    """The check legs a pull request's run produces, ``check-<os>-<python>`` each.
+
+    ``[ci] pull-request-runners`` by the gate's Pythons; every leg of
+    `check_legs` when the key is absent.
+    """
+    from livery.workshop._pythons import gate_pythons
+
+    contract = load_contract(root / "workshop.toml")
+    ci = contract.get("ci") or {}
+    pythons = gate_pythons(root)
+    return [
+        f"check-{runner}-{python}"
+        for runner in pull_request_runners(ci)
+        for python in pythons
+    ]
 
 
 def check_legs(root: Path) -> list[str]:
