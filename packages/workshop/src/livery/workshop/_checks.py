@@ -371,12 +371,11 @@ def register_check(record: CheckRecord) -> None:
                 f" not {part!r}; the check answers to <role>.<tool>"
             )
     declared = _phases.declared_phases()
-    for role in (record.role, *record.roles):
-        if role not in declared:
-            fail(
-                f"check {record.name!r}: {role} is not a declared phase; the phases"
-                f" are {', '.join(declared)}"
-            )
+    if record.role not in declared:
+        fail(
+            f"check {record.name!r}: {record.role} is not a declared phase; the"
+            f" phases are {', '.join(declared)}"
+        )
     if record.tool == "default":
         fail(
             f"check {record.name!r}: {record.name} is the address of the"

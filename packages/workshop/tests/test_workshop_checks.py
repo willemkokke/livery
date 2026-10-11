@@ -306,9 +306,7 @@ def test_a_check_of_an_undeclared_phase_refuses_naming_the_declared_ones(
         f"check 'divination.acme': divination is not a declared phase; the phases"
         f" are {listed}"
     )
-    with pytest.raises(_FAILURES, match="sometimes is not a declared phase"):
-        register_check(CheckRecord("acme", "lint", _noop, roles=("sometimes",)))
-    assert "lint.acme" not in check_names()
+    assert "divination.acme" not in check_names()
 
 
 def test_two_extensions_declaring_one_step_refuse_unless_one_replaces_or_deletes_it(
