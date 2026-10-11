@@ -1,6 +1,6 @@
 # One home for every git access: the git library
 
-Status: planned, 2026-10-11, no phase started. The destination note
+Status: planned and ruled, 2026-10-11, no phase started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -40,13 +40,18 @@ test the flows.
 
 Today the workshop has two git seams and a scatter: the helper
 `livery.workshop._git_ops.GitOps`, 63 methods over the toolroom's
-pinned git handle, depending on nothing of the workshop; the state
+pinned git handle, depending on nothing of the workshop, with a memory
+of the branch and head behind a `cached=True` flag; the state
 store `livery.workshop._state`, JSON rows on git refs with its own
 one-door `_git`, remote series under `refs/workshop/` and local ones
 under `refs/workshop-local/`; and direct calls of the handle in twelve
 other modules, 31 of them in the loop.
 
-The library takes the helper whole and the store whole: the series
+The library takes the helper's methods as module functions, each
+taking the repository's `root: Path` as its first argument, with no
+class, no memory and no `cached` flag: the memory saved a few
+`rev-parse` processes per flow and measured no change, and phase 4
+makes those reads a file read. The library takes the store whole: the series
 model (`Series`, `Keyed`, `Row`, `Rows`, `Skipped`, `slug`), the
 snapshots (`Read`, `Fetched`), the reads, the compare-and-swap writes,
 the fetch and the sweep with the family rules it applies. All of it is
@@ -92,10 +97,9 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    read from disk as bytes, the import stream goes through the binary
    lane of `run()` and the handle, and an in-process read returns the
    bytes git holds, with no end-of-line conversion.
-6. The helper's memory of facts answers a reader called with
-   `cached=True` from the last live read and forgets on any call through
-   the helper that moves the repository; a move outside the helper is
-   invisible, and a caller passes the flag only where nothing else ran.
+6. The library holds no state between calls. A function takes the root
+   and returns a fact; the one value type, `Store`, is frozen and
+   carries the root and the policy it was built with, nothing else.
 7. Every behaviour pin the state and helper tests hold today holds
    after each phase; the process-count pins move to the new counts, and
    in phase 4 to zero where a read is in-process.
@@ -105,25 +109,32 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
 A new python package `packages/git`, distribution `livery-git`, import
 `livery.git`, born with `fm new.package git`, depending on
 `livery-toolroom` for the pinned handle and on nothing else. The
-helper moves whole as `livery.git.GitOps` with `GitError` and the
-move classifier; its public names are what the package's `__init__`
-exports. The stack stays behind: `livery.workshop._stack` holds
-`stack`, `record_stack` and `forget_stack` over a generic
-`config_regexp` reader the helper gains. The 60 import sites in the
-workshop's source and tests are rewritten; the helper's own tests move
-to `packages/git/tests`, the flow tests stay. The layering graph gains
-the edge workshop to git to toolroom.
+helper's 63 methods become functions of `livery.git`, each taking
+`root: Path` first (`current_branch(root)`, `head_sha(root)`,
+`push_with_lease(root, branch, expected)`), with `GitError` and the
+move classifier beside them; the class, its memory and the `cached`
+flag are deleted, and a caller that passed a `GitOps` down passes the
+root. The public names are what the package's `__init__` exports. The
+stack stays behind: `livery.workshop._stack` holds `stack`,
+`record_stack` and `forget_stack` over a generic `config_regexp`
+reader the library gains. The 60 import sites in the workshop's source
+and tests are rewritten; the helper's own tests move to
+`packages/git/tests`, the flow tests stay and fake module functions
+where they faked methods. The layering graph gains the edge workshop
+to git to toolroom.
 
 Deliverables: `packages/git/` with `workshop.toml`, `pyproject.toml`,
 `src/livery/git/__init__.py`, `_ops.py`, `docs/`, `tests/`;
-`livery.workshop._stack`; no `_git_ops` left in the workshop.
+`livery.workshop._stack`; no `_git_ops`, `GitOps` or `cached=` left in
+the workshop.
 
 **Acceptance**
 
 - `fm check` is green.
 - `fm layering.graph` shows `workshop -> git -> toolroom` and no edge
   from git to the workshop.
-- `grep -rn "_git_ops" packages/workshop` prints nothing.
+- `grep -rn "_git_ops\|GitOps\|cached=" packages/workshop` prints
+  nothing.
 - `fm ci.e2e --scenario=develop` is green on the local Gitea.
 
 ## Phase 2: the store's transport and series model move
@@ -180,7 +191,8 @@ the vocabulary test's shape.
 
 ## Phase 4: in-process reads
 
-The library takes dulwich as a dependency and answers reads without a
+The library takes dulwich as a dependency, ruled over pygit2 on
+2026-10-11, and answers reads without a
 process: the position, a branch's local and remote heads, refs and
 branches, config keys, log subjects and messages, tree ids, merge
 bases and ancestry, the store's tree reads, the janitor's commit times.
@@ -230,23 +242,21 @@ and the number recorded here.
 - 2026-10-11, Willem: no narrowing of a package's tests by reach while
   the workshop changes wholesale; the split takes the git suites out of
   a workshop change by the package rule instead.
+- 2026-10-11, Willem: the package is `git`: `packages/git`,
+  distribution `livery-git`, import `livery.git`. The theme names
+  (muniments, ledger, clerk) were weighed and the plain word won.
+- 2026-10-11, Willem: dulwich, not pygit2, for phase 4.
+- 2026-10-11, Willem: no class and no memory. The helper's methods
+  become functions taking the root; the `cached` flag and its memory
+  go in phase 1, since they measured no gain and dulwich removes the
+  cost they were for. The store stays a frozen `Store` value because
+  forty callers must not each pass the policy.
+- 2026-10-11, Willem: phases 1 to 3 land between the #1377 slices;
+  sessions that would conflict are paused for them.
 
 ## Open
 
-1. The package's name: `git` under `packages/`, distribution
-   `livery-git`, import `livery.git`. The alternative `repository`
-   says more and collides with the forge's `Repository`. Owner: Willem.
-   Recommendation: `git`.
-2. The helper's class name on the move: `GitOps` kept, which keeps the
-   diff mechanical, or `Repository`, which reads better and collides
-   with the forge's. Owner: Willem. Recommendation: keep `GitOps` in
-   phase 1, rename in phase 4 if at all.
-3. dulwich against pygit2 for phase 4: dulwich is pure Python and
-   models exactly what the store needs; pygit2 is faster per call and
-   brings libgit2's own filters and config reading, a second
-   implementation of the things that bit on Windows. Owner: Willem.
-   Recommendation: dulwich.
-4. Sequencing against the workshop's refactor slices (#1377): phases 1
-   to 3 are mechanical moves that touch many import lines and conflict
-   with any slice in flight; each should land in a quiet hour, synced
-   just before. Owner: whoever starts phase 1.
+1. Which loop-only porcelain (`switch -C`, `clean -fdx`, a hard reset)
+   the library exports as named functions, against the loop keeping a
+   small allowance in the one-door test's table. Owner: whoever starts
+   phase 3. Recommendation: export them; the table only falls.
