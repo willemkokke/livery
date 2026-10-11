@@ -2559,6 +2559,17 @@ the stack, which this design neither needs nor rules out).
   extensions that cannot share a package are refused by the phase's own
   rules. Gone with it: the union-of-all-packages order check, since a
   set closed under requires shows a cycle inside some package.
+- 2026-10-11, #1460, #1377 part 3: every extension declares its
+  steps as `[phases.<phase>.<step>]`, the lifecycle phases name their
+  extension, and basedpyright's typecomplete step is declared off and
+  turned on at its address in the root contract, which replaces the
+  `[options]` and `listed-with` spelling for it. Two derivations for a
+  step in code, which the ruling did not spell: it narrows by packages
+  when its scope is the workspace and it declares no inputs, the split
+  the gate already applies, and it takes the words after `--` when it
+  names tools. The loop's extension pass turns on, in the newborn's
+  contract, each step the extension under test declares off. What
+  still reads `[options]` in code goes with the check tables.
 
 ## Open
 
