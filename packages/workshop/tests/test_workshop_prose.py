@@ -9,7 +9,8 @@ import pytest
 
 import livery.workshop
 from livery.workshop import _checks, _prose, _tools
-from livery.workshop._checks import CheckRecord, GateContext, register_check
+from livery.workshop._checks import CheckRecord, register_check
+from livery.workshop._phases import PhaseContext
 from livery.workshop._prose import (
     AGENT,
     HUMAN,
@@ -78,7 +79,7 @@ def _names(root: Path, listed: list[_prose.Prose], audience: str | None) -> list
     return [p.name for p in fragments(root, listed, audience) if p.source is not None]
 
 
-def _noop(ctx: GateContext) -> None:
+def _noop(ctx: PhaseContext) -> None:
     del ctx
 
 

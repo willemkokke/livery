@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.workshop import GateContext, Package, Query, answer
+from livery.workshop import Package, PhaseContext, Query, answer
 from livery.workshop import _checks as registry
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -133,7 +133,7 @@ def test_a_platform_that_fails_fails_the_call_and_the_others_still_run(
     one = _member(tmp_path, "one")
     record = registry.check_for("typecheck.mypy")
     with pytest.raises(BaseException, match="win32"):
-        record.run(GateContext(root=tmp_path, packages=(one,)))
+        record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert sorted(ran) == ["darwin", "linux", "win32"]
 
 
@@ -164,12 +164,12 @@ def test_every_call_checks_each_platform_with_a_cache_of_its_own(
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.mypy")
-    record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two), subset=(one,)))
     assert sorted(calls) == _platforms("packages/one/src", "packages/one/tests")
     # The words after -- on the check's own verb reach every platform's call.
     calls.clear()
     record.run(
-        GateContext(
+        PhaseContext(
             root=tmp_path, packages=(one, two), subset=(one,), arguments=("--strict",)
         )
     )
@@ -186,10 +186,10 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     two = _member(tmp_path, "two")
     record = registry.check_for("typecheck.mypy")
     # Every member reached: mypy reads the files mypy.ini names.
-    record.run(GateContext(root=tmp_path, packages=(one, two)))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two)))
     assert sorted(calls) == _platforms()
     calls.clear()
-    record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two), subset=(one,)))
     assert sorted(calls) == _platforms("packages/one/src", "packages/one/tests")
 
 

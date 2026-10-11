@@ -17,7 +17,7 @@ import workshop_python_checks as fake_checks
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop import _ci_tasks, _graph, _quality
+from livery.workshop import _ci_tasks, _graph, _phases, _quality
 from livery.workshop._packages import Package
 
 # The site's jobs are the docs extension's, added as the mount adds them.
@@ -257,7 +257,13 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     )
     import contextlib
 
-    monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
+    @contextlib.contextmanager
+    def inline():
+        # The walk's block runs each step as it is handed over, so the
+        # calls land in one order.
+        yield lambda item: item()
+
+    monkeypatch.setattr(_phases, "parallel", inline)
     monkeypatch.delenv("CI", raising=False)  # the guard is its own test
     _quality.check(fix=True)
     # The rewriters run first, the base's (the render) and then a listed

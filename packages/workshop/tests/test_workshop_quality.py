@@ -13,7 +13,7 @@ import pytest
 
 import workshop_python_checks as fake_checks
 from livery.extensions.python import _backend as _python
-from livery.workshop import _quality
+from livery.workshop import _phases, _quality
 from livery.workshop._packages import Package
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
@@ -175,15 +175,16 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # fix and an extension's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
     from livery.workshop import _checks
-    from livery.workshop._checks import CheckRecord, GateContext, register_check
+    from livery.workshop._checks import CheckRecord, register_check
+    from livery.workshop._phases import PhaseContext
 
     state = _checks.snapshot()
 
-    def acme_fix(ctx: GateContext) -> None:
+    def acme_fix(ctx: PhaseContext) -> None:
         del ctx
         ran.append("acme-fix")
 
-    def acme_judge(ctx: GateContext) -> None:
+    def acme_judge(ctx: PhaseContext) -> None:
         del ctx
         ran.append("acme-judged")
 
@@ -405,8 +406,8 @@ def _whole_gate(
 
     import livery.toolroom.tools as tools
 
-    # The block from its owner, not through the gate's re-export: the
-    # name patched below is the gate's, the behaviour wrapped is
+    # The block from its owner, not through the walk's re-export: the
+    # name patched below is the walk's, the behaviour wrapped is
     # footman's own.
     from livery.footman import parallel as real_parallel
 
@@ -426,8 +427,8 @@ def _whole_gate(
     @contextlib.contextmanager
     def watched():
         ran.append("<parallel")
-        with real_parallel():
-            yield
+        with real_parallel() as block:
+            yield block
         # The members run as the real block exits, so they land
         # between the markers rather than after them.
         ran.append(">parallel")
@@ -437,7 +438,7 @@ def _whole_gate(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
-    monkeypatch.setattr(_quality, "parallel", watched)
+    monkeypatch.setattr(_phases, "parallel", watched)
     monkeypatch.setattr(_quality, "drift_check", named("drift.check"))
     monkeypatch.setattr(
         "livery.workshop._packages.verify_graph", named("layering.graph")
@@ -531,25 +532,37 @@ def test_a_workspace_without_python_starts_no_python_check(
         assert f"  {name}: no file it reads in the workspace; not run" in out
 
 
+def _blocks(ran: list[str]) -> list[list[str]]:
+    """What ran inside each parallel block, block by block."""
+    blocks: list[list[str]] = []
+    for item in ran:
+        if item == "<parallel":
+            blocks.append([])
+        elif item != ">parallel":
+            blocks[-1].append(item)
+    return blocks
+
+
 def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=True, base="")
-    opened = ran.index("<parallel")
-    # The rewriters, in order, before any block is opened: they write
-    # the files the judges then read, and none of them is a judge under
-    # --fix. The base's run first, then a listed extension's in its
-    # list order, the formatter before the linter.
-    assert ran[:opened] == [
-        "drift.check",
-        "provenance.check",
-        "layering.graph",
-        "layering.imports",
-        "format.fake",
-        "lint.fake",
+    blocks = _blocks(ran)
+    # The rewriters one at a time, each the one member of its own
+    # block, in order, before the judges' block: they write the files
+    # the judges then read, and none of them is a judge under --fix.
+    # The base's run first, then a listed extension's in its list
+    # order, the formatter before the linter.
+    assert blocks[:-1] == [
+        ["drift.check"],
+        ["provenance.check"],
+        ["layering.graph"],
+        ["layering.imports"],
+        ["format.fake"],
+        ["lint.fake"],
     ]
-    assert sorted(ran[opened + 1 : -1]) == sorted(PYTHON_JUDGES)
+    assert sorted(blocks[-1]) == sorted(PYTHON_JUDGES)
     assert ran[-1] == ">parallel"
 
 

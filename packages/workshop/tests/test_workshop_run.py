@@ -10,9 +10,10 @@ import pytest
 
 from livery.footman import Failed
 from livery.workshop import _checks, _extensions, _run
-from livery.workshop._checks import CheckRecord, GateContext, register_check
+from livery.workshop._checks import CheckRecord, register_check
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._phases import PhaseContext
 from livery.workshop._run import RECORD, start
 from workshop_extension_fakes import fake_extensions, fake_steps
 
@@ -25,7 +26,7 @@ levels = ["package"]
 [queries]
 executables = "{package}._steps:executables"
 
-[phases.run]
+[phases.run.native]
 main = "{package}._steps:main"
 """
 
@@ -36,7 +37,7 @@ def executables(package):
 
 def main(ctx):
     print("started", ctx.executable, list(ctx.arguments))
-    ctx.exit_code = 3
+    ctx.exit(3)
 """
 
 
@@ -86,7 +87,7 @@ def built() -> Iterator[list[str]]:
     state = _checks.snapshot()
     calls: list[str] = []
 
-    def count(ctx: GateContext) -> None:
+    def count(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         calls.append(ctx.package.path)
 
@@ -157,23 +158,21 @@ def test_a_target_naming_nothing_that_runs_refuses_naming_what_exists(
     assert built == []
 
 
-def test_executables_with_no_run_main_to_start_them_refuse(
+def test_executables_with_no_run_step_to_start_them_refuse(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
         tmp_path,
         monkeypatch,
-        odd=NATIVE.replace(
-            'main = "{package}._steps:main"', 'pre = "{package}._steps:main"'
-        ),
+        odd=NATIVE.replace('[phases.run.native]\nmain = "{package}._steps:main"\n', ""),
     )
     fake_steps(tmp_path, "odd", STEPS)
     with pytest.raises(DeclarationError) as raised:
         _extensions.declaration("acme.odd")
     path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
     assert str(raised.value) == (
-        f"{path}: queries.executables names the executables fm run starts, and"
-        " [phases.run] names no main to start them; add main to [phases.run]"
+        f"{path}: queries.executables names the executables fm run starts, and no"
+        " [phases.run.<step>] starts them; add a step to the run phase"
     )
 
 
@@ -183,7 +182,7 @@ def test_a_failed_build_records_nothing_and_the_next_run_builds_again(
     root = _workspace(tmp_path, monkeypatch)
     real = _checks.checks_by_name()["build.acme"].run
 
-    def refuse(ctx: GateContext) -> None:
+    def refuse(ctx: PhaseContext) -> None:
         real(ctx)
         raise Failed("the library does not compile")
 
@@ -328,29 +327,27 @@ def test_outside_a_workspace_the_verb_refuses_and_completion_offers_nothing(
     assert str(raised.value) == "no package is named app: the workspace has no packages"
 
 
-#: A second extension in the app's set: its run steps say when they run,
-#: and its main must not run.
+#: A second extension in the app's set, answering no executable: its run
+#: steps say when they run, the second after the owner's.
 EXTRA = """\
 [extension]
 levels = ["package"]
 
-[phases.run]
-pre = "{package}._steps:pre"
-main = "{package}._steps:main"
-post = "{package}._steps:post"
+[phases.run.setup]
+main = "{package}._steps:setup"
+
+[phases.run.teardown]
+main = "{package}._steps:teardown"
+after = ["run.native"]
 """
 
 EXTRA_STEPS = """\
-def pre(ctx):
-    print("extra.pre")
+def setup(ctx):
+    print("extra.setup")
 
 
-def main(ctx):
-    print("extra.main")
-
-
-def post(ctx):
-    print("extra.post")
+def teardown(ctx):
+    print("extra.teardown")
 """
 
 
@@ -368,7 +365,16 @@ def _with_extra(
     return root
 
 
-def test_the_owners_main_alone_runs_between_every_pre_and_post(
+def _started(out: str) -> list[str]:
+    """The lines the run steps printed, in order."""
+    return [
+        line
+        for line in out.splitlines()
+        if line.startswith(("extra", "started", "other"))
+    ]
+
+
+def test_every_run_step_of_the_set_runs_and_after_orders_them(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     built: list[str],
@@ -376,15 +382,44 @@ def test_the_owners_main_alone_runs_between_every_pre_and_post(
 ) -> None:
     root = _with_extra(tmp_path, monkeypatch, EXTRA, EXTRA_STEPS)
     assert start(root, "app:serve", (), root) == 3
-    lines = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if line.startswith(("extra", "started"))
-    ]
-    assert lines == ["extra.pre", "started serve []", "extra.post"]
+    lines = _started(capsys.readouterr().out)
+    # The setup and the owner's step are independent; the teardown
+    # names the owner's step in after, so it comes last.
+    assert sorted(lines[:-1]) == ["extra.setup", "started serve []"]
+    assert lines[-1] == "extra.teardown"
     # With one executable, the package alone names it.
     fake_steps(tmp_path, "native", STEPS.replace('("serve", "tool")', '("serve",)'))
     assert start(root, "app", (), root) == 3
+
+
+def test_the_owners_run_step_alone_runs_among_the_extensions_answering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    built: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = _with_extra(tmp_path, monkeypatch, EXTRA, EXTRA_STEPS)
+    # A third extension answers another executable, and its run step
+    # starts that one: `fm run app:serve` leaves it out, and runs the
+    # steps of an extension answering none.
+    other = NATIVE.replace("[phases.run.native]", "[phases.run.other]")
+    fake_extensions(tmp_path, monkeypatch, native=NATIVE, extra=EXTRA, other=other)
+    fake_steps(tmp_path, "native", STEPS)
+    fake_steps(tmp_path, "extra", EXTRA_STEPS)
+    fake_steps(
+        tmp_path,
+        "other",
+        STEPS.replace('("serve", "tool")', '("probe",)').replace(
+            '"started"', '"other started"'
+        ),
+    )
+    app = root / "packages" / "app" / "workshop.toml"
+    app.write_text(
+        app.read_text().replace('"acme.native"]', '"acme.native", "acme.other"]')
+    )
+    assert start(root, "app:serve", (), root) == 3
+    lines = _started(capsys.readouterr().out)
+    assert sorted(lines) == ["extra.setup", "extra.teardown", "started serve []"]
 
 
 def test_answers_or_a_run_phase_that_cannot_run_refuse_through_fm_run(
@@ -392,8 +427,8 @@ def test_answers_or_a_run_phase_that_cannot_run_refuse_through_fm_run(
 ) -> None:
     # Two extensions of the app's set answer one executable.
     twice = EXTRA.replace(
-        "[phases.run]",
-        '[queries]\nexecutables = "{package}._steps:executables"\n\n[phases.run]',
+        "[phases.run.setup]",
+        '[queries]\nexecutables = "{package}._steps:executables"\n\n[phases.run.setup]',
     )
     root = _with_extra(
         tmp_path,
@@ -409,13 +444,13 @@ def test_answers_or_a_run_phase_that_cannot_run_refuse_through_fm_run(
     )
     assert _run._targets() == []  # pyright: ignore[reportPrivateUsage]
     # The run phase reads a key nothing in the set provides.
-    reads = EXTRA.replace('post = "{package}._steps:post"', 'reads = ["port"]')
+    reads = EXTRA.replace('after = ["run.native"]', 'reads = ["port"]')
     (tmp_path / "again").mkdir()
     root = _with_extra(tmp_path / "again", monkeypatch, reads, EXTRA_STEPS)
     with pytest.raises(Failed) as raised:
         start(root, "app:serve", (), root)
     assert str(raised.value) == (
-        "packages/app: the run phase: acme.extra reads port, which no extension of"
+        "packages/app: the run phase: run.teardown reads port, which no step of"
         " the package provides"
     )
 

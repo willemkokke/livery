@@ -7,9 +7,10 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed, fail
-from livery.workshop._checks import GateContext, run_check
+from livery.workshop._checks import run_check
 from livery.workshop._invoke import batches, run_batched
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -79,16 +80,18 @@ def test_a_workspace_check_runs_once_for_two_hundred_packages(
     # A scoped gate over three quarters of the members: one call carries
     # every affected member's directories.
     subset = packages[:150]
-    run_check("lint.fake", GateContext(root=tmp_path, packages=packages, subset=subset))
+    run_check(
+        "lint.fake", PhaseContext(root=tmp_path, packages=packages, subset=subset)
+    )
     assert len(calls) == 1
     assert len(calls[0]) == 300
     # Every member affected: the configured whole, still one call, as
     # an unscoped run has it.
     calls.clear()
     run_check(
-        "lint.fake", GateContext(root=tmp_path, packages=packages, subset=packages)
+        "lint.fake", PhaseContext(root=tmp_path, packages=packages, subset=packages)
     )
     assert calls == [(".",)]
     calls.clear()
-    run_check("lint.fake", GateContext(root=tmp_path, packages=packages))
+    run_check("lint.fake", PhaseContext(root=tmp_path, packages=packages))
     assert calls == [(".",)]

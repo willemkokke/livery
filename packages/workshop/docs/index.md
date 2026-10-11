@@ -80,10 +80,12 @@ spelling. Every key is optional:
   steps, each with its type. A phase no declaration names refuses
   naming the declared ones, and two extensions declaring one phase
   refuse naming both.;
-- `[phases.<phase>.<extension>]`, the step a package-level extension
-  adds to a package's lifecycle phase, named for the extension: `main`,
-  `"module:function"` in its own package, and the context keys the
-  step `provides`, each with its type, and `reads`;
+- `[phases.<phase>.<step>]`, a step a package-level extension adds to
+  a package's lifecycle phase, with the keys every step takes: `main`,
+  `"module:function"` in its own package or the tool's words; `after`,
+  the steps it runs after; and the context keys it `provides`, each
+  with its type, and `reads`. The step runs once per package whose set
+  holds the extension, so it names no `scope` and no `extensions`;
 - `[queries.<name>]`, a query the extension declares, in the grammar
   the base declares its own in: `combine`, how the answers make one,
   `union`, `nearest`, `agreed` or a `"module:function"`; `level`,
@@ -242,34 +244,39 @@ and `run`. The gated ones, `build`, `format`, `lint`, `typecheck`,
 `typecomplete`, `examples`, `drift`, `provenance`, `layering` and
 `test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
 with a sub-task per step. A package-level phase, `sync`, `clean`,
-`build`, `prove`, `stamp`, `publish`, `replay` or `run`, runs over one
-package at a time, and each extension of the package's set may add
-steps to it:
+`build`, `prove`, `stamp`, `publish`, `replay` or `run`, runs its
+steps once per package, and each extension of the package's set may
+add steps to it, as many as it needs:
 
 ```toml
-[phases.build]
-pre = "acme.native._build:configure"
-main = "acme.native._build:compile"
-post = "acme.native._build:tidy"
-provides = { wheel = "path" }
+[phases.build.configure]
+main = "acme.native._build:configure"
 reads = ["abi"]
+
+[phases.build.compile]
+main = "acme.native._build:compile"
+after = ["build.configure"]
+provides = { wheel = "path" }
 ```
 
-A phase calls every `pre` in order, then every `main` in order, then
-every `post` in reverse order. A `post` runs once its extension's `pre`
-ran, whatever failed after it. A failing step stops the `pre` or `main`
-steps that follow it, and the phase raises its exception again once the
-due `post` steps ran. Each step receives a `PhaseContext`: it writes
-the keys its extension provides with `provide`, reads the ones it reads
-with `read`, and a `post` learns what failed from `failed`, `failure`
-and `failed_extension`. A value of another type than the declared one
+Every phase runs through one walk, the gate's phases included: each
+step is a footman step inside one `parallel()` block, so footman owns
+the concurrency, the record, the capture and the cancellation. A step
+of a package-level phase runs once per package in scope, a step of a
+workspace-level phase once. Independent steps run concurrently; a
+step starts once the steps it names in `after` and the providers of
+the keys it `reads` have run, for the same package. A step that fails
+is the walk's verdict, raised again once every step ran: the steps
+that depend on it are not run and say so, and the steps that depend
+on nothing failed still run. A step that needs cleanup on failure
+does it itself. Each step receives the one `PhaseContext`: it writes
+the keys its table provides with `provide` and reads the ones it
+reads with `read`. A value of another type than the declared one
 (`str`, `int`, `bool`, `path`, `strs`, `paths` or `table`), and a key
-the extension does not declare, refuse naming the extension. The order
-puts a reader after the provider of each key it reads, ties
-alphabetical; requirements order nothing within a phase. Two
-extensions providing one key, a key nobody provides, and an order with
-no start refuse before any step runs, and the layering check names
-them for each package.
+the step's table does not declare, refuse naming the step. Two steps
+providing one key, a key nobody provides, two extensions declaring
+one step, and an order with no start refuse before any step runs, and
+the layering check names them for each package.
 
 A phase's declaration names the keys the engine running it gives its
 steps, which a step reads like any other and no extension provides:
@@ -281,7 +288,7 @@ steps, which a step reads like any other and no extension provides:
 | `prove` | `resolution` (`str`), the leg's dependency resolution, and `release-dirs` (`paths`), the co-released set's `dist/` directories | `resolved` (`table`), each distribution the leg installed, to its version |
 | `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
 | `replay` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the replay's |
-| `run` | `executable` (`str`) and `arguments` (`strs`) are declared; the walk hands them to the steps as the context's `executable` and `arguments`, and the main sets `exit_code` | |
+| `run` | `executable` (`str`) and `arguments` (`strs`) are declared; the walk hands them to the steps as the context's `executable` and `arguments`, and the step that starts the executable records its exit code with `exit` | |
 | `test` | `isolated` (`bool`), `resolution` (`str`) and `release-dirs` (`paths`) are declared; the test phase runs through the gate, and no engine gives them | |
 
 The release train stamps, builds, proves and publishes a package, and
@@ -340,12 +347,13 @@ completion offers each `package:executable`. First the gate's `build`
 role runs over the package's dependency closure, dependencies first,
 and passes over each package whose files and dependencies are
 unchanged since its last good build in this checkout, so a second run
-with nothing changed starts at once. Then the `run` phase walks every
-extension's `pre`, the `main` of the extension that answers the
-executable alone, which starts it with the context's `executable` and
-`arguments` and sets `exit_code`, and every `post` in reverse. An
-extension that answers `executables` declares that `main`, or its
-declaration refuses.
+with nothing changed starts at once. Then the `run` phase runs every
+step the package's set adds to it, except that of the extensions
+answering `executables` only the owner's steps run: the step that
+starts the executable reads the context's `executable` and
+`arguments` and records the exit code with `exit`, which the verb
+exits with. An extension that answers `executables` adds a step to
+the `run` phase, or its declaration refuses.
 
 From any directory inside a workspace, a verb resolves the workspace
 at the directory that holds the root's `workshop.toml`: a package's own
@@ -789,9 +797,11 @@ absence.
   and is declared in the root's `__init__` as well, imported under
   `TYPE_CHECKING` and listed in `__all__`, and the verifier follows the
   declaration into it; `py.typed` sits at the distribution's root. Every gate walks the check registry the same way,
-  whole or narrowed, on a machine or on a leg: under `--fix` every
+  whole or narrowed, on a machine or on a leg, through the one walk
+  every phase runs through: under `--fix` every
   fixer that applies rewrites first, one at a time, then every judge
-  runs in one parallel block, a check that rewrote not judged again;
+  runs in one parallel block, each a footman step, the steps a judge
+  runs after among them, a check that rewrote not judged again;
   a check whose claims reach no file of its scope is named and no
   process starts for it. `fm check <paths>` checks exactly those files,
   or a directory's: every check whose claims reach one of them runs

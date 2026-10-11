@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from livery.extensions.clang.tidy import _checks
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 
 CONTRACT = (
@@ -194,7 +194,7 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
     monkeypatch.setattr(_checks, "run_lint", watched)
     package = _native(tmp_path)
     record = registry.check_for("lint.clang-tidy")
-    ctx = GateContext(root=tmp_path, packages=(package,), package=package)
+    ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     # Not configured yet: no database, nothing to lint against.
     record.run(ctx)
     assert calls == []
@@ -206,7 +206,7 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
     # The words after -- on the check's own verb reach the lint.
     words = ("--checks=-*,bugprone-*",)
     record.run(
-        GateContext(
+        PhaseContext(
             root=tmp_path, packages=(package,), package=package, arguments=words
         )
     )

@@ -50,8 +50,9 @@ def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
     from importlib.metadata import EntryPoint
 
     from livery.workshop import _extensions
-    from livery.workshop._checks import CheckRecord, GateContext, selected
+    from livery.workshop._checks import CheckRecord, selected
     from livery.workshop._packages import discover_packages
+    from livery.workshop._phases import PhaseContext
 
     member = tmp_path / "packages" / "site"
     (member / "src" / "acme_site").mkdir(parents=True)
@@ -69,7 +70,7 @@ def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
         "site", "lint", lambda ctx: None, inputs=PAGES, extension="site"
     )
     changes = _changes(tmp_path, "packages/site/src/acme_site/rule.py")
-    ctx = GateContext(root=tmp_path, packages=packages, changes=changes)
+    ctx = PhaseContext(root=tmp_path, packages=packages, changes=changes)
     assert selected(record, ctx) == WHOLE
 
 

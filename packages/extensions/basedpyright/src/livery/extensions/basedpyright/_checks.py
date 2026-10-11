@@ -17,7 +17,7 @@ its runner on this module when it runs, so a test that replaces
 from __future__ import annotations
 
 import livery.toolroom.tools as tools
-from livery.workshop import GateContext, public_modules, scoped_packages
+from livery.workshop import PhaseContext, public_modules, scoped_packages
 
 
 def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) -> None:
@@ -33,7 +33,7 @@ def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) 
         tools.basedpyright(*arguments, verifytypes=module, ignoreexternal=True)
 
 
-def judge_typecomplete(ctx: GateContext) -> None:
+def judge_typecomplete(ctx: PhaseContext) -> None:
     """Verify the public modules of each package the run reaches."""
     for package in scoped_packages(ctx, "typecomplete.basedpyright"):
         run_typecomplete(public_modules(package), ctx.arguments)

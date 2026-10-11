@@ -16,8 +16,9 @@ from livery.extensions.docs._checks import (
 )
 from livery.footman import Failed
 from livery.workshop import _checks as registry
-from livery.workshop._checks import GateContext, checks_by_name
+from livery.workshop._checks import checks_by_name
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -57,7 +58,7 @@ def test_a_broken_link_and_a_dead_anchor_are_named(tmp_path: Path) -> None:
     assert "docs/index.md: other.md#nowhere anchors nothing" in problems
     # The context names the check, as a run's does: the check asks it
     # which files it judges.
-    ctx = GateContext(root=tmp_path, packages=(), check="lint.doclinks")
+    ctx = PhaseContext(root=tmp_path, packages=(), check="lint.doclinks")
     with pytest.raises(Failed, match="links that resolve nothing"):
         doclinks_run(ctx)
     (docs / "index.md").write_text("# Home\n\n[good](other.md#a-real-heading)\n")
@@ -114,11 +115,11 @@ def test_an_undocumented_export_is_named(
         kind="python",
         depends=(),
     )
-    ctx = GateContext(root=tmp_path, packages=(package,))
+    ctx = PhaseContext(root=tmp_path, packages=(package,))
     with pytest.raises(Failed, match=r"exports without a docstring: acme\.thing\.bare"):
         docstrings_run(ctx)
     # A scoped gate judges its subset alone.
-    docstrings_run(GateContext(root=tmp_path, packages=(package,), subset=()))
+    docstrings_run(PhaseContext(root=tmp_path, packages=(package,), subset=()))
 
 
 def test_a_member_that_does_not_import_refuses_naming_the_error(

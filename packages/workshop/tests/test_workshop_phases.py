@@ -1,16 +1,17 @@
-"""Lifecycle phases: the refusals first, then the walk of pre, main and post."""
+"""Lifecycle phases: the refusals first, then the one walk over a package's steps."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
 
 from livery.workshop import _extensions
+from livery.workshop._composition import package_set
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package
-from livery.workshop._phases import PhaseContext, PhaseError, run_phase
+from livery.workshop._phases import PhaseContext, PhaseError, phase_steps, run_phase
 from workshop_extension_fakes import (
     fake_extensions,
     fake_steps,
@@ -21,30 +22,23 @@ from workshop_extension_fakes import (
 #: A package-level extension's identity, the start of every fake here.
 PACKAGE = '[extension]\nlevels = ["package"]\n'
 
-#: Steps that say when they run; a post says what failed before it.
+#: A step that says when it runs.
 SAYS = """\
-def pre(ctx):
-    print("{name}.pre")
-
-
 def main(ctx):
     print("{name}.main")
-
-
-def post(ctx):
-    print(f"{name}.post failed={{ctx.failed}} by={{ctx.failed_extension or '-'}}")
 """
 
 
-def _steps(name: str, *, provides: str = "", reads: str = "", only: str = "") -> str:
-    """A declaration adding *name*'s steps to the build phase."""
-    steps = (only,) if only else ("pre", "main", "post")
-    lines = [f'{step} = "{{package}}._steps:{step}"' for step in steps]
+def _steps(name: str, *, provides: str = "", reads: str = "", after: str = "") -> str:
+    """A declaration adding *name*'s one step, ``build.<name>``, to the build phase."""
+    lines = [f"[phases.build.{name}]", 'main = "{package}._steps:main"']
     if provides:
         lines.append(f"provides = {provides}")
     if reads:
         lines.append(f"reads = {reads}")
-    return PACKAGE + "\n[phases.build]\n" + "\n".join(lines) + "\n"
+    if after:
+        lines.append(f"after = {after}")
+    return PACKAGE + "\n" + "\n".join(lines) + "\n"
 
 
 def _package(root: Path, *extensions: str) -> Package:
@@ -72,30 +66,31 @@ def _workspace(
     return _package(tmp_path, *names)
 
 
+def _engine(root: Path, package: Package, phase: str) -> PhaseContext:
+    """The context an engine running *phase* over *package* hands the walk."""
+    return PhaseContext(root=root, packages=(package,), package=package, phase=phase)
+
+
+def _run(
+    root: Path,
+    package: Package,
+    phase: str = "build",
+    inputs: Mapping[str, object] | None = None,
+) -> PhaseContext:
+    """Run *phase* over *package* as the train does: the steps of its set."""
+    lookup = _extensions.installed_declaration
+    steps = phase_steps(phase, package_set(package.extensions, lookup), lookup)
+    return run_phase(_engine(root, package, phase), steps, inputs=inputs)
+
+
+def _said(out: str) -> list[str]:
+    """The lines the steps printed, the walk's own and footman's receipts left out."""
+    return [
+        line for line in out.splitlines() if not line.startswith(("  ", "ok", "FAIL"))
+    ]
+
+
 # The refusals first.
-
-
-def _engine_reader(provides: str = "") -> str:
-    """A declaration whose build main reads the engine's epoch."""
-    text = PACKAGE + '\n[phases.build]\nmain = "{package}._steps:main"\n'
-    text += 'reads = ["epoch"]\n'
-    return text + (f"provides = {provides}\n" if provides else "")
-
-
-def test_an_extension_providing_a_key_the_engine_gives_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    own = PACKAGE + '\n[phases.build]\nmain = "{package}._steps:main"\n'
-    fake_extensions(tmp_path, monkeypatch, own=own + 'provides = { epoch = "int" }\n')
-    fake_steps(tmp_path, "own", "def main(ctx):\n    ctx.provide('epoch', 1)\n")
-    with pytest.raises(PhaseError) as raised:
-        run_phase(
-            "build", _package(tmp_path, "acme.own"), tmp_path, inputs={"epoch": 0}
-        )
-    assert str(raised.value) == (
-        "packages/core: the build phase: acme.own provides epoch, which the engine"
-        " running the phase provides; an extension reads it"
-    )
 
 
 def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> None:
@@ -105,18 +100,22 @@ def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> 
         match="gives wheel to the build phase, which takes configuration, epoch,"
         " isolated from it",
     ):
-        run_phase("build", package, tmp_path, inputs={"wheel": "x"})
+        run_phase(_engine(tmp_path, package, "build"), (), inputs={"wheel": "x"})
     with pytest.raises(
         PhaseError,
         match="gives epoch to the build phase as str, which the phase takes as int",
     ):
-        run_phase("build", package, tmp_path, inputs={"epoch": "0"})
+        run_phase(_engine(tmp_path, package, "build"), (), inputs={"epoch": "0"})
     with pytest.raises(
         PhaseError, match="the run phase, which takes arguments, executable from it"
     ):
-        run_phase("run", package, tmp_path, inputs={"epoch": 0})
+        run_phase(_engine(tmp_path, package, "run"), (), inputs={"epoch": 0})
     with pytest.raises(PhaseError, match="the sync phase, which takes nothing from it"):
-        run_phase("sync", package, tmp_path, inputs={"epoch": 0})
+        run_phase(_engine(tmp_path, package, "sync"), (), inputs={"epoch": 0})
+    # A context naming no phase takes no input: nothing says whose
+    # keys they are.
+    with pytest.raises(PhaseError, match="gives epoch and names no phase"):
+        run_phase(PhaseContext(root=tmp_path), (), inputs={"epoch": 0})
 
 
 def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
@@ -146,29 +145,48 @@ def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
         ("run", {}),
     ]
     for phase, inputs in given:
-        ctx = run_phase(phase, package, tmp_path, inputs=inputs)
-        assert (ctx.phase, ctx.failed) == (phase, False)
+        ctx = run_phase(_engine(tmp_path, package, phase), (), inputs=inputs)
+        assert ctx.phase == phase
         for key, value in inputs.items():
             assert ctx.result(key) == value
+
+
+def test_a_step_providing_a_key_the_engine_gives_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(
+        tmp_path, monkeypatch, own=_steps("own", provides='{ epoch = "int" }')
+    )
+    fake_steps(tmp_path, "own", "def main(ctx):\n    ctx.provide('epoch', 1)\n")
+    with pytest.raises(PhaseError) as raised:
+        _run(tmp_path, _package(tmp_path, "acme.own"), inputs={"epoch": 0})
+    assert str(raised.value) == (
+        "packages/core: the build phase: build.own provides epoch, which the engine"
+        " running the phase provides; a step reads it"
+    )
 
 
 def test_a_step_reading_a_key_the_engine_did_not_give_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, reader=_engine_reader())
+    fake_extensions(tmp_path, monkeypatch, reader=_steps("reader", reads='["epoch"]'))
     fake_steps(tmp_path, "reader", "def main(ctx):\n    ctx.read('epoch')\n")
     with pytest.raises(
         PhaseError,
-        match=r"acme\.reader reads epoch, which the engine running the build phase"
+        match=r"build\.reader reads epoch, which the engine running the build phase"
         r" did not give it",
     ):
-        run_phase("build", _package(tmp_path, "acme.reader"), tmp_path)
+        _run(tmp_path, _package(tmp_path, "acme.reader"))
 
 
 def test_a_step_reads_the_engines_keys_and_the_engine_reads_back_its_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, builder=_engine_reader('{ dist = "path" }'))
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        builder=_steps("builder", provides='{ dist = "path" }', reads='["epoch"]'),
+    )
     fake_steps(
         tmp_path,
         "builder",
@@ -176,7 +194,7 @@ def test_a_step_reads_the_engines_keys_and_the_engine_reads_back_its_own(
         "def main(ctx):\n    ctx.provide('dist', Path(str(ctx.read('epoch'))))\n",
     )
     package = _package(tmp_path, "acme.builder")
-    ctx = run_phase("build", package, tmp_path, inputs={"epoch": 7})
+    ctx = _run(tmp_path, package, inputs={"epoch": 7})
     assert ctx.result("dist") == Path("7")
     assert ctx.result("epoch") == 7
     assert ctx.result("absent") is None
@@ -192,13 +210,28 @@ def test_two_providers_of_one_key_refuse(
         b=_steps("b", provides='{ wheel = "path" }'),
     )
     refusal = (
-        "the build phase: acme.a and acme.b both provide wheel; one extension of a"
+        "the build phase: build.a and build.b both provide wheel; one step of a"
         " package provides a key"
     )
     with pytest.raises(PhaseError) as raised:
-        run_phase("build", package, tmp_path)
+        _run(tmp_path, package)
     assert str(raised.value) == f"packages/core: {refusal}"
     assert capsys.readouterr().out == ""
+    assert _extensions.closure_problems(tmp_path) == [f"packages/core: {refusal}"]
+
+
+def test_two_extensions_declaring_one_step_refuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    same = PACKAGE + '\n[phases.build.compile]\nmain = "{package}._steps:main"\n'
+    package = _workspace(tmp_path, monkeypatch, a=same, b=same)
+    refusal = (
+        "the build phase: acme.a and acme.b both declare build.compile; one"
+        " extension of a package declares a step"
+    )
+    with pytest.raises(PhaseError) as raised:
+        _run(tmp_path, package)
+    assert str(raised.value) == f"packages/core: {refusal}"
     assert _extensions.closure_problems(tmp_path) == [f"packages/core: {refusal}"]
 
 
@@ -207,28 +240,37 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
 ) -> None:
     package = _workspace(tmp_path, monkeypatch, a=_steps("a", reads='["wheel"]'))
     with pytest.raises(PhaseError) as raised:
-        run_phase("build", package, tmp_path)
+        _run(tmp_path, package)
     assert str(raised.value) == (
-        "packages/core: the build phase: acme.a reads wheel, which no extension"
-        " of the package provides"
+        "packages/core: the build phase: build.a reads wheel, which no step of the"
+        " package provides"
     )
-    package = _workspace(
+    cycle = (
+        "packages/core: the build phase: its steps' order has no start: build.a"
+        " before build.b before build.a; remove a key read or an after among them"
+    )
+    _workspace(
         tmp_path,
         monkeypatch,
         a=_steps("a", provides='{ x = "str" }', reads='["y"]'),
         b=_steps("b", provides='{ y = "str" }', reads='["x"]'),
     )
-    assert _extensions.closure_problems(tmp_path) == [
-        "packages/core: the build phase: its steps' order has no start: acme.a"
-        " before acme.b before acme.a; remove a key read among them"
-    ]
+    assert _extensions.closure_problems(tmp_path) == [cycle]
+    # Two steps each after the other close the same way.
+    _workspace(
+        tmp_path,
+        monkeypatch,
+        a=_steps("a", after='["build.b"]'),
+        b=_steps("b", after='["build.a"]'),
+    )
+    assert _extensions.closure_problems(tmp_path) == [cycle]
 
 
 @pytest.mark.parametrize(
     ("declared", "refusal"),
     [
         (
-            PACKAGE + '\n[phases.biuld]\nmain = "{package}._steps:main"\n',
+            PACKAGE + '\n[phases.biuld.odd]\nmain = "{package}._steps:main"\n',
             "phases.biuld names no phase; the phases are sync, clean, build, format,"
             " lint, typecheck, typecomplete, examples, drift, provenance, layering,"
             " test, prove, stamp, publish, replay, configure, run; did you mean"
@@ -236,26 +278,54 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
         ),
         (
             PACKAGE + '\n[phases.build]\nreads = ["x"]\n',
-            "phases.build names no step: a phase's table takes pre, main or post",
+            "phases.build.reads belongs to a step: a phase's table holds steps,"
+            " [phases.build.<step>], each with main",
         ),
         (
-            '[phases.build]\nmain = "{package}._steps:main"\n',
+            PACKAGE + '\n[phases.build]\npre = "{package}._steps:main"\n',
+            "phases.build.pre goes: a step is named, and a step that runs after it"
+            " names it in after",
+        ),
+        (
+            PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
+            'post = "{package}._steps:main"\n',
+            "phases.build.odd.post goes: a step is named, runs after the steps it"
+            " names in after, and does its own cleanup on failure",
+        ),
+        (
+            '[phases.build.odd]\nmain = "{package}._steps:main"\n',
             "phases.build adds steps to a package's phase, and this extension's"
             " levels are workspace; add 'package' to levels, or drop the table",
         ),
         (
-            PACKAGE + '\n[phases.build]\nmain = "{package}._steps:main"\n'
+            PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
             'provides = { x = "str" }\nreads = ["x"]\n',
-            "phases.build.reads names x, which its provides names too; a step reads"
-            " what another extension provides",
+            "phases.build.odd.reads names x, which its provides names too; a step"
+            " reads what another step provides",
         ),
         (
-            PACKAGE + '\n[phases.build]\nmain = "{package}._steps:mian"\n',
-            "phases.build.main names mian, which acme.odd._steps does not define at"
-            " its top level; did you mean 'main'?",
+            PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:mian"\n',
+            "phases.build.odd.main names mian, which acme.odd._steps does not define"
+            " at its top level; did you mean 'main'?",
+        ),
+        (
+            PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
+            'scope = "workspace"\n',
+            "phases.build.odd.scope is not read on a step of the build phase, which"
+            " runs once per package whose set holds the extension, as the phase's"
+            " level says",
         ),
     ],
-    ids=["unknown-phase", "no-step", "workspace-level", "reads-its-own", "no-function"],
+    ids=[
+        "unknown-phase",
+        "key-of-a-step",
+        "pre",
+        "post",
+        "workspace-level",
+        "reads-its-own",
+        "no-function",
+        "scope",
+    ],
 )
 def test_a_phase_table_the_file_alone_shows_wrong_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared: str, refusal: str
@@ -268,105 +338,28 @@ def test_a_phase_table_the_file_alone_shows_wrong_refuses(
     assert str(raised.value) == f"{path}: {refusal}"
 
 
-def test_a_post_runs_after_a_failed_main_and_sees_the_failure(
+def test_a_failed_provider_stops_its_reader_and_is_the_verdict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    package = _workspace(tmp_path, monkeypatch, a=_steps("a"), b=_steps("b"))
-    fake_steps(
-        tmp_path,
-        "b",
-        SAYS.format(name="b").replace(
-            'print("b.main")', 'print("b.main")\n    raise RuntimeError("b broke")'
-        ),
-    )
-    with pytest.raises(RuntimeError, match=r"^b broke$"):
-        run_phase("build", package, tmp_path)
-    assert capsys.readouterr().out.splitlines() == [
-        "a.pre",
-        "b.pre",
-        "a.main",
-        "b.main",
-        "b.post failed=True by=acme.b",
-        "a.post failed=True by=acme.b",
-    ]
-
-
-def test_a_failed_pre_stops_the_walk_and_only_the_entered_posts_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    package = _workspace(
-        tmp_path, monkeypatch, a=_steps("a"), b=_steps("b"), c=_steps("c")
-    )
-    fake_steps(
-        tmp_path,
-        "b",
-        SAYS.format(name="b").replace(
-            'print("b.pre")', 'print("b.pre")\n    raise RuntimeError("b refused")'
-        ),
-    )
-    with pytest.raises(RuntimeError, match=r"^b refused$"):
-        run_phase("build", package, tmp_path)
-    assert capsys.readouterr().out.splitlines() == [
-        "a.pre",
-        "b.pre",
-        "b.post failed=True by=acme.b",
-        "a.post failed=True by=acme.b",
-    ]
-
-
-def test_a_post_failing_after_another_step_is_named_and_the_first_failure_wins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    package = _workspace(tmp_path, monkeypatch, a=_steps("a"), b=_steps("b"))
-    fake_steps(
-        tmp_path,
-        "a",
-        SAYS.format(name="a") + '\n\ndef post(ctx):\n    raise RuntimeError("a too")\n',
-    )
-    fake_steps(
-        tmp_path,
-        "b",
-        SAYS.format(name="b").replace(
-            'print("b.main")', 'raise RuntimeError("b broke")'
-        ),
-    )
-    with pytest.raises(RuntimeError, match=r"^b broke$"):
-        run_phase("build", package, tmp_path)
-    assert capsys.readouterr().err == (
-        "  note: acme.a's step acme.a._steps:post failed as well, after acme.b's:"
-        " a too\n"
-    )
-
-
-# The walk.
-
-
-def test_a_reader_runs_after_its_provider_and_reads_what_it_wrote(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+    # The reader is not run and says why; a step depending on nothing
+    # failed still runs, as footman runs a block; the provider's failure
+    # is what the walk raises.
     package = _workspace(
         tmp_path,
         monkeypatch,
-        a=_steps("a", reads='["wheel"]', only="main"),
-        z=_steps("z", provides='{ wheel = "path" }', only="main"),
+        a=_steps("a", reads='["wheel"]'),
+        c=_steps("c"),
+        z=_steps("z", provides='{ wheel = "path" }'),
     )
+    fake_steps(tmp_path, "z", "def main(ctx):\n    raise RuntimeError('z broke')\n")
     fake_steps(
-        tmp_path,
-        "z",
-        "from pathlib import Path\n\n\ndef main(ctx):\n"
-        '    ctx.provide("wheel", Path("dist") / "z.whl")\n',
+        tmp_path, "a", "def main(ctx):\n    print('a read', ctx.read('wheel'))\n"
     )
-    fake_steps(
-        tmp_path, "a", 'def main(ctx):\n    print("a read", ctx.read("wheel"))\n'
-    )
-    ctx = run_phase("build", package, tmp_path)
-    assert isinstance(ctx, PhaseContext)
-    assert capsys.readouterr().out == f"a read {Path('dist') / 'z.whl'}\n"
-    assert not ctx.failed and ctx.failure is None and ctx.failed_extension == ""
-    # A package whose set adds no step to a phase runs nothing, whoever
-    # answers for the declarations.
-    lookup = _extensions.installed_declaration
-    assert run_phase("stamp", package, tmp_path, lookup=lookup).failed is False
+    with pytest.raises(RuntimeError, match=r"^z broke$"):
+        _run(tmp_path, package)
+    out = capsys.readouterr().out
+    assert _said(out) == ["c.main"]
+    assert "build.a packages/core: not run, since build.z packages/core failed" in out
 
 
 @pytest.mark.parametrize(
@@ -374,32 +367,31 @@ def test_a_reader_runs_after_its_provider_and_reads_what_it_wrote(
     [
         (
             'ctx.provide("other", "x")',
-            "acme.z provides other in the build phase, and its [phases] table does"
-            " not name it in provides",
+            "build.z provides other, and its [phases.build.z] table does not name it"
+            " in provides",
         ),
         (
             'ctx.provide("wheel", "dist/z.whl")',
-            "acme.z provides wheel as str, and its [phases] table declares it path",
+            "build.z provides wheel as str, and its [phases.build.z] table declares"
+            " it path",
         ),
         (
             'ctx.read("wheel")',
-            "acme.z reads wheel in the build phase, and its [phases] table does not"
-            " name it in reads",
+            "build.z reads wheel, and its [phases.build.z] table does not name it in"
+            " reads",
         ),
     ],
     ids=["undeclared-provide", "wrong-type", "undeclared-read"],
 )
-def test_a_step_misusing_the_context_refuses_naming_its_extension(
+def test_a_step_misusing_the_context_refuses_naming_its_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str, refusal: str
 ) -> None:
     package = _workspace(
-        tmp_path,
-        monkeypatch,
-        z=_steps("z", provides='{ wheel = "path" }', only="main"),
+        tmp_path, monkeypatch, z=_steps("z", provides='{ wheel = "path" }')
     )
     fake_steps(tmp_path, "z", f"def main(ctx):\n    {body}\n")
     with pytest.raises(PhaseError) as raised:
-        run_phase("build", package, tmp_path)
+        _run(tmp_path, package)
     assert str(raised.value) == refusal
 
 
@@ -409,16 +401,31 @@ def test_a_read_its_provider_never_wrote_refuses_naming_the_provider(
     package = _workspace(
         tmp_path,
         monkeypatch,
-        a=_steps("a", reads='["wheel"]', only="main"),
-        z=_steps("z", provides='{ wheel = "path" }', only="main"),
+        a=_steps("a", reads='["wheel"]'),
+        z=_steps("z", provides='{ wheel = "path" }'),
     )
     fake_steps(tmp_path, "z", "def main(ctx):\n    del ctx\n")
     fake_steps(tmp_path, "a", 'def main(ctx):\n    ctx.read("wheel")\n')
     with pytest.raises(PhaseError) as raised:
-        run_phase("build", package, tmp_path)
+        _run(tmp_path, package)
     assert str(raised.value) == (
-        "acme.a reads wheel, which acme.z has not provided in the build phase"
+        "build.a reads wheel, which build.z has not provided in the build phase"
     )
+
+
+def test_a_context_outside_a_walk_refuses_its_keys_and_names_no_package(
+    tmp_path: Path,
+) -> None:
+    ctx = PhaseContext(root=tmp_path, check="build.x")
+    with pytest.raises(
+        PhaseError, match=r"build\.x is not a step of the walk that built this context"
+    ):
+        ctx.read("epoch")
+    with pytest.raises(
+        BaseException, match=r"build\.x runs over one package at a time, and this run"
+    ):
+        _ = ctx.member
+    assert ctx.exit_code == 0
 
 
 @pytest.mark.parametrize(
@@ -436,18 +443,98 @@ def test_each_context_type_takes_its_values_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, good: str, bad: str
 ) -> None:
     package = _workspace(
-        tmp_path,
-        monkeypatch,
-        z=_steps("z", provides=f'{{ value = "{kind}" }}', only="main"),
+        tmp_path, monkeypatch, z=_steps("z", provides=f'{{ value = "{kind}" }}')
     )
     source = (
         'from pathlib import Path\n\n\ndef main(ctx):\n    ctx.provide("value", {})\n'
     )
     fake_steps(tmp_path, "z", source.format(good))
-    run_phase("build", package, tmp_path)
+    _run(tmp_path, package)
     fake_steps(tmp_path, "z", source.format(bad))
     with pytest.raises(PhaseError, match=f"declares it {kind}$"):
-        run_phase("build", package, tmp_path)
+        _run(tmp_path, package)
+
+
+# The walk.
+
+
+def test_a_reader_runs_after_its_provider_and_reads_what_it_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    package = _workspace(
+        tmp_path,
+        monkeypatch,
+        a=_steps("a", reads='["wheel"]'),
+        z=_steps("z", provides='{ wheel = "path" }'),
+    )
+    fake_steps(
+        tmp_path,
+        "z",
+        "from pathlib import Path\n\n\ndef main(ctx):\n"
+        '    ctx.provide("wheel", Path("dist") / "z.whl")\n',
+    )
+    fake_steps(
+        tmp_path, "a", 'def main(ctx):\n    print("a read", ctx.read("wheel"))\n'
+    )
+    ctx = _run(tmp_path, package)
+    assert isinstance(ctx, PhaseContext)
+    assert _said(capsys.readouterr().out) == [f"a read {Path('dist') / 'z.whl'}"]
+    assert ctx.result("wheel") == Path("dist") / "z.whl"
+    # A package whose set adds no step to a phase runs nothing.
+    assert _run(tmp_path, package, "stamp").result("wheel") is None
+
+
+def test_after_orders_two_steps_and_independent_steps_run_concurrently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # One extension adds two steps, the second after the first; another
+    # extension's step depends on neither, and the first step waits for
+    # it at a barrier both sides must reach, so a walk that ran them one
+    # at a time would stop there.
+    two = (
+        PACKAGE + '\n[phases.build.first]\nmain = "{package}._steps:first"\n\n'
+        '[phases.build.second]\nmain = "{package}._steps:second"\n'
+        'after = ["build.first"]\n'
+    )
+    package = _workspace(tmp_path, monkeypatch, two=two, other=_steps("other"))
+    fake_steps(
+        tmp_path,
+        "two",
+        "import threading\n\nBARRIER = threading.Barrier(2, timeout=10)\n\n\n"
+        'def first(ctx):\n    BARRIER.wait()\n    print("two.first")\n\n\n'
+        'def second(ctx):\n    print("two.second")\n',
+    )
+    fake_steps(
+        tmp_path,
+        "other",
+        "from acme.two import _steps\n\n\n"
+        'def main(ctx):\n    _steps.BARRIER.wait()\n    print("other.main")\n',
+    )
+    _run(tmp_path, package)
+    said = _said(capsys.readouterr().out)
+    assert sorted(said) == ["other.main", "two.first", "two.second"]
+    assert said.index("two.first") < said.index("two.second")
+
+
+def test_a_frozen_view_records_the_exit_code_through_the_shared_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The run phase's step records the exit code with exit(); a write
+    # to an attribute of its view refuses, since a view is frozen.
+    package = _workspace(
+        tmp_path,
+        monkeypatch,
+        s=PACKAGE + '\n[phases.run.s]\nmain = "{package}._steps:main"\n',
+    )
+    fake_steps(
+        tmp_path,
+        "s",
+        "import dataclasses\n\n\ndef main(ctx):\n    try:\n"
+        '        ctx.executable = "x"\n    except dataclasses.FrozenInstanceError:\n'
+        "        ctx.exit(7)\n",
+    )
+    ctx = _run(tmp_path, package, "run")
+    assert ctx.exit_code == 7
 
 
 # The declared phases: the base's from its contract file, an extension's
@@ -607,7 +694,7 @@ def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
     )
     # The engine: a phase nobody declares cannot run.
     with pytest.raises(PhaseError) as refused:
-        run_phase("dcos", _package(tmp_path), tmp_path)
+        run_phase(_engine(tmp_path, _package(tmp_path), "dcos"), ())
     assert (
         str(refused.value) == f"dcos is not a declared phase; the phases are {listed}"
     )
@@ -641,7 +728,6 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
 ) -> None:
     from livery.footman import _registry as registry
     from livery.workshop import _checks, _phases
-    from livery.workshop._checks import GateContext
     from livery.workshop._phases import WORKSPACE_LEVEL, PhaseSpec, phase_spec
 
     # The declared phases are read through the module: each fake set
@@ -729,7 +815,8 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     assert declared_phases()["docs"] == docs and phase_spec("docs") == docs
     (record,) = found.additions.checks
     assert (record.name, record.phase, record.step) == ("docs.pages", "docs", "pages")
-    assert found.phases == {}
+    # The one record, by phase as well, whatever the phase's level.
+    assert found.phases == {"docs": (record,)}
     # Mounted, the step registers, the phase's verb is generated and the
     # gate runs the step.
     root_contract(tmp_path, '["acme.site"]')
@@ -738,7 +825,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     registered = _checks.checks_by_name()["docs.pages"]
     assert registered.extension == "acme.site"
     assert _checks.verb_tree()["docs"] == {"pages": registered}
-    assert "docs.pages" in _checks.judges(GateContext(root=tmp_path, packages=()))
+    assert "docs.pages" in _checks.judges(PhaseContext(root=tmp_path, packages=()))
     # Declared without a verb and outside the gate, the step keeps its
     # address and gets neither.
     quiet = DECLARES_DOCS.replace("gated = true", "gated = false").replace(
@@ -749,7 +836,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
         _extensions.mount_extensions(tmp_path)
     assert "docs.pages" in _checks.checks_by_name()
     assert "docs" not in _checks.verb_tree()
-    assert "docs.pages" not in _checks.judges(GateContext(root=tmp_path, packages=()))
+    assert "docs.pages" not in _checks.judges(PhaseContext(root=tmp_path, packages=()))
     # Two installed extensions declaring one phase refuse naming both; a
     # fake stays in the scan for the test, so this comes last.
     fake_extensions(tmp_path, monkeypatch, other=DECLARES_DOCS)

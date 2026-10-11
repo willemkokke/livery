@@ -26,13 +26,13 @@ from livery.workshop._checks import (
     BASE_EXTENSION,
     WORKSPACE,
     CheckRecord,
-    GateContext,
     answering,
     checks_by_name,
 )
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 
 if TYPE_CHECKING:
     from livery.workshop._declaration import Additions, Declaration, Reference
@@ -479,11 +479,13 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         (f"{shown(('fragments', output.target))}.render", output.render)
         for output in declared.fragments
     ]
-    found += [
-        (f"{shown(('phases', phase))}.{step}", getattr(steps, step))
-        for phase, steps in declared.phases.items()
-        for step in ("pre", "main", "post")
-    ]
+    registered = {id(record) for record in declared.additions.checks}
+    for phase, records in declared.phases.items():
+        for record in records:
+            if id(record) in registered:
+                continue  # named above, with the additions
+            where = shown(("phases", phase, record.tool))
+            found += [(f"{where}.main", record.run), (f"{where}.fix", record.fix)]
     found += [
         (shown(("queries", name)), reference)
         for name, reference in declared.queries.items()
@@ -933,8 +935,8 @@ class _Recorder:
         self.calls: list[tuple[str, str]] = []
         self._lock = threading.Lock()
 
-    def body(self, mode: str, name: str) -> Callable[[GateContext], None]:
-        def record(ctx: GateContext) -> None:
+    def body(self, mode: str, name: str) -> Callable[[PhaseContext], None]:
+        def record(ctx: PhaseContext) -> None:
             del ctx
             with self._lock:
                 self.calls.append((mode, name))
@@ -1012,7 +1014,7 @@ def _probe_walk(
             (root / _UNCLAIMED).parent.mkdir(parents=True)
             (root / _UNCLAIMED).write_text("probe\n")
             packages = _probe_packages(root)
-            ctx = GateContext(
+            ctx = PhaseContext(
                 root=root,
                 packages=packages,
                 fix=fix,

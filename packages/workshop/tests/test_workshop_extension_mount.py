@@ -10,10 +10,10 @@ import pytest
 from livery.workshop import _checks, _extensions
 from livery.workshop._checks import (
     CheckRecord,
-    GateContext,
     register_check,
     unregister_check,
 )
+from livery.workshop._phases import PhaseContext
 from workshop_extension_fakes import fake_extensions, root_contract
 
 _FAILURES = (BaseException,)
@@ -26,7 +26,7 @@ def restored_checks():
     _checks.restore(state)
 
 
-def _noop(ctx: GateContext) -> None:
+def _noop(ctx: PhaseContext) -> None:
     del ctx
 
 

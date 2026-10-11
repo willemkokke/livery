@@ -22,7 +22,7 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop import GateContext, Package, compile_commands, scoped_files
+from livery.workshop import Package, PhaseContext, compile_commands, scoped_files
 
 
 def _asked(argv: list[str]) -> str:
@@ -93,10 +93,9 @@ def run_lint(
         )
 
 
-def judge_lint(ctx: GateContext) -> None:
+def judge_lint(ctx: PhaseContext) -> None:
     """Run clang-tidy over the package's files the run reaches, against its database."""
-    package = ctx.package
-    assert package is not None  # the gate hands a package check its package
+    package = ctx.member
     database = compile_commands(package)
     if database is None or not database.is_file():
         print(

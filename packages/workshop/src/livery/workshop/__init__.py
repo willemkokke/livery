@@ -17,7 +17,7 @@ each with its body under ``main``, a template of its tool's words
 with ``{paths}`` where the paths the run reaches go and
 ``{arguments}`` where the words after ``--`` go, or the function that
 runs it as ``"module:function"``. A step in code takes a
-[livery.workshop.GateContext][]. One that narrows by paths reads them
+[livery.workshop.PhaseContext][]. One that narrows by paths reads them
 from [livery.workshop.scoped_paths][], which answers
 [livery.workshop.WHOLE][] for the tool's configured whole, and
 calls its tool through [livery.workshop.run_batched][]; a workspace
@@ -68,9 +68,10 @@ extensions declare for an extension is
 [livery.workshop.contributions_for][].
 
 A package-level extension adds steps to a package's lifecycle phases
-under ``[phases.<phase>]``; each step receives the phase's
-[livery.workshop.PhaseContext][], which carries the context keys the
-steps provide and read, and the failure a ``post`` step reads. It
+under ``[phases.<phase>.<step>]``, with the keys every step takes;
+each runs once per package whose set holds the extension and
+receives the same [livery.workshop.PhaseContext][], which carries the
+keys the steps provide and read. It
 answers questions about a package under ``[queries]``: each a
 [livery.workshop.Query][] the workshop defines, such as
 [livery.workshop.PUBLIC_MODULES][] or [livery.workshop.EXECUTABLES][],
@@ -92,7 +93,6 @@ if TYPE_CHECKING:
     from livery.workshop._checks import PACKAGES as PACKAGES
     from livery.workshop._checks import PATHS as PATHS
     from livery.workshop._checks import WHOLE as WHOLE
-    from livery.workshop._checks import GateContext as GateContext
     from livery.workshop._checks import check_option as check_option
     from livery.workshop._checks import scoped_files as scoped_files
     from livery.workshop._checks import scoped_packages as scoped_packages
@@ -163,7 +163,6 @@ __all__ = [
     "WHOLE",
     "Changes",
     "Edge",
-    "GateContext",
     "Package",
     "PhaseContext",
     "Prose",
@@ -220,7 +219,6 @@ _EXPORTS: dict[str, str] = {
     "AGENT": "livery.workshop._prose",
     "Changes": "livery.workshop._influence",
     "Edge": "livery.workshop._packages",
-    "GateContext": "livery.workshop._checks",
     "HUMAN": "livery.workshop._prose",
     "NONE": "livery.workshop._checks",
     "PACKAGE": "livery.workshop._checks",

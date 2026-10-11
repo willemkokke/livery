@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
 
+    from livery.workshop._checks import CheckRecord
     from livery.workshop._packages import Neighbours, Package
     from livery.workshop._phases import PhaseContext
     from livery.workshop._queries import Query
@@ -310,25 +311,34 @@ def _run_steps(
 
     None when no extension of the package's set adds steps to the phase,
     which leaves the call to the package's kind backend: the bridge
-    while package kinds remain.
+    while package kinds remain. The steps run through the one walk
+    ([livery.workshop._phases.run_phase][]), the context naming the
+    package and the phase.
     """
-    if not _adds_steps(package, phase):
+    steps = _phase_steps(package, phase)
+    if not steps:
         return None
-    from livery.workshop._phases import run_phase
+    from livery.workshop._phases import PhaseContext, run_phase
 
-    return run_phase(phase, package, root, inputs=inputs)
+    ctx = PhaseContext(root=root, packages=(package,), package=package, phase=phase)
+    return run_phase(ctx, steps, inputs=inputs)
 
 
 def _adds_steps(package: Package, phase: str) -> bool:
     """Whether an extension of *package*'s set adds steps to *phase*."""
+    return bool(_phase_steps(package, phase))
+
+
+def _phase_steps(package: Package, phase: str) -> tuple[CheckRecord, ...]:
+    """The steps *package*'s set adds to *phase*; empty for a package listing none."""
     if not package.extensions:
-        return False
+        return ()
     from livery.workshop._composition import package_set
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._phases import phase_steps
 
     members = package_set(package.extensions, installed_declaration)
-    return bool(phase_steps(phase, members, installed_declaration))
+    return phase_steps(phase, members, installed_declaration)
 
 
 def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> object:
@@ -338,7 +348,7 @@ def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> obj
     value = ctx.result(key)
     if not isinstance(value, kind):
         fail(
-            f"{ctx.package.path}: the {ctx.phase} phase's steps provide no {key},"
+            f"{ctx.member.path}: the {ctx.phase} phase's steps provide no {key},"
             " which the release train reads from the phase"
         )
     return value

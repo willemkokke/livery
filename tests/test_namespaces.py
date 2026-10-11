@@ -421,7 +421,6 @@ EXPORTS: dict[str, list[str]] = {
         "DISTRIBUTIONS",
         "EXECUTABLES",
         "Edge",
-        "GateContext",
         "HUMAN",
         "MODULE_ROOTS",
         "NONE",

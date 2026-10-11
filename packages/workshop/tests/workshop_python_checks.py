@@ -22,7 +22,6 @@ from livery.workshop._checks import (
     PATHS,
     CheckRecord,
     Claim,
-    GateContext,
     Option,
     register_check,
     restore,
@@ -33,6 +32,7 @@ from livery.workshop._checks import (
 from livery.workshop._coverage_store import workspace_suite
 from livery.workshop._invoke import run_batched
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 
 #: The suffixes the pair reads.
 SUFFIXES = (".py", ".pyi")
@@ -58,42 +58,42 @@ def run_test(*, packages: tuple[Package, ...], scoped: bool, point: str) -> None
     del packages, scoped, point
 
 
-def _format_run(ctx: GateContext) -> None:
+def _format_run(ctx: PhaseContext) -> None:
     run_batched(
         scoped_paths(ctx, "format.fake"),
         lambda batch: run_format(check=True, paths=batch),
     )
 
 
-def _format_fix(ctx: GateContext) -> None:
+def _format_fix(ctx: PhaseContext) -> None:
     run_batched(
         scoped_paths(ctx, "format.fake"),
         lambda batch: run_format(check=False, safe_fix=ctx.safe, paths=batch),
     )
 
 
-def _lint_run(ctx: GateContext) -> None:
+def _lint_run(ctx: PhaseContext) -> None:
     run_batched(
         scoped_paths(ctx, "lint.fake"),
         lambda batch: run_lint(fix=False, paths=batch),
     )
 
 
-def _lint_fix(ctx: GateContext) -> None:
+def _lint_fix(ctx: PhaseContext) -> None:
     run_batched(
         scoped_paths(ctx, "lint.fake"),
         lambda batch: run_lint(fix=not ctx.safe, safe_fix=ctx.safe, paths=batch),
     )
 
 
-def _typecheck_run(ctx: GateContext) -> None:
+def _typecheck_run(ctx: PhaseContext) -> None:
     run_batched(
         scoped_paths(ctx, "typecheck.fake"),
         lambda batch: run_typecheck(paths=batch),
     )
 
 
-def _test_run(ctx: GateContext) -> None:
+def _test_run(ctx: PhaseContext) -> None:
     # The workspace's own tests ride every run, as pytest's do.
     unit = workspace_suite(ctx.root)
     suites = scoped_packages(ctx, "test.fake") + ((unit,) if unit else ())
