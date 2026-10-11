@@ -749,7 +749,7 @@ class _Reader:
     ) -> CheckRecord:
         """The check ``[checks.<tool>.<role>]`` declares, in the check table's spelling.
 
-        The transition reader until part 4 of #1377: a step table,
+        The transition reader: a step table,
         ``[phases.<phase>.<step>]``, reads into the same record through
         ``step``, and this reader goes when the check tables go. It
         keeps the keys a step table drops, ``narrowing``, ``transport``,
@@ -1151,8 +1151,8 @@ class _Reader:
             raise self.refuse(
                 (*where, second),
                 f"is a second step of the {name} phase, beside {first}; an extension"
-                " declares one step per lifecycle phase until one walk runs every"
-                " step (part 6 of #1377)",
+                " declares one step per lifecycle phase, since the phase's walk runs"
+                " one main per extension",
             )
         if named:
             ((step, entry),) = named.items()

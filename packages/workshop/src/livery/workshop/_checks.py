@@ -303,9 +303,8 @@ class CheckRecord:
             run's paths and the words after ``--`` itself, where
             ``{paths}`` and ``{arguments}`` stand; False for a record
             from a ``[checks.<tool>.<role>]`` table, whose words have
-            both appended. A temporary marker of the transition between
-            the two spellings: it goes with the check tables, in part 4
-            of #1377.
+            both appended. A marker of the transition between the two
+            spellings: it goes with the check tables.
 
     """
 

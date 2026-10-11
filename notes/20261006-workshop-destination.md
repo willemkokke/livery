@@ -1463,6 +1463,8 @@ the stack, which this design neither needs nor rules out).
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
+| `_Reader.check`, the check tables' reader, and `CheckRecord.placed`, which says which spelling a record came from | nothing: every declaration is a step table and every record places its own paths (#1377, part 4) |
+| one step per extension per lifecycle phase, read into `DeclaredPhase.main` | the one walk, every step a footman step (#1377, part 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `[checks.<tool>.<role>]`, `[phases.<phase>]` with `pre`, `main` and `post`, `PHASES`, `ENGINE_KEYS`, the context's failure fields | `[phases.<phase>.<step>]` and declared phases (#1377) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |

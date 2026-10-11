@@ -459,8 +459,8 @@ def test_a_lifecycle_phases_step_reads_as_its_main_and_two_refuse(
         '[phases.build.other]\nmain = "acme_declared._checks:mend"\n',
     ) == (
         f"{where}: phases.build.other is a second step of the build phase, beside"
-        " acme; an extension declares one step per lifecycle phase until one walk"
-        " runs every step (part 6 of #1377)"
+        " acme; an extension declares one step per lifecycle phase, since the"
+        " phase's walk runs one main per extension"
     )
     assert _refusal(
         package,
