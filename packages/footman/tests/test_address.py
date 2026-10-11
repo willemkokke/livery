@@ -43,6 +43,8 @@ def test_step_items_and_blocks_join_the_same_tree():
         with step("prepare"):
             pass
     assert [s.address for s in ctx.steps] == ["release/clean", "release/prepare"]
+    # Both forms stamp their start, which is what places them on a trace.
+    assert all(s.started is not None for s in ctx.steps)
 
 
 def test_rows_and_body_calls_carry_the_request_path(tmp_path):

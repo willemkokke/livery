@@ -30,6 +30,13 @@ def _run(event: str, base: str, leg: str = "check-a") -> RunContext:
     return RunContext("gitea", "7", event, "refs/pull/3/merge", "a" * 40, base, leg=leg)
 
 
+def _push(branch: str, leg: str = "check-a") -> RunContext:
+    """A push of *branch*: the ref names the branch, the payload no base."""
+    return RunContext(
+        "gitea", "7", "push", f"refs/heads/{branch}", "a" * 40, "", leg=leg
+    )
+
+
 def _member(root: Path, name: str, *, suite: bool = True) -> Package:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
@@ -83,10 +90,77 @@ def test_the_full_gate_outside_ci_without_the_key_or_off_a_pull_request(
     undeclared = _root(tmp_path / "off", 'runners = ["ubuntu-latest"]\n')
     assert _quality.ci_affected_base(declared, None) == ""
     assert _quality.ci_affected_base(undeclared, _run("pull_request", "main")) == ""
+    # A push's legs take their plan from the record (`ci_push_base`),
+    # on a branch alone; a dispatch pays the whole gate and says so.
     assert _quality.ci_affected_base(declared, _run("push", "")) == ""
-    assert "a push run pays the full gate" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
+    assert _quality.ci_push_base(declared, _push("main")) == "main"
+    assert _quality.ci_push_base(undeclared, _push("main")) == ""
+    assert _quality.ci_push_base(declared, _run("push", "")) == ""
+    assert _quality.ci_push_base(declared, _run("pull_request", "main")) == ""
+    assert _quality.ci_affected_base(declared, _run("workflow_dispatch", "")) == ""
+    assert "a workflow_dispatch run pays the full gate" in capsys.readouterr().out
     assert _quality.ci_affected_base(declared, _run("pull_request", "")) == ""
     assert "names no base branch; full gate" in capsys.readouterr().out
+
+
+def test_a_push_with_no_proved_tree_in_reach_pays_the_whole_gate_never_the_merge_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _gate_record
+
+    root = _root(tmp_path, "affected-legs = true\n")
+    monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    plans = iter(
+        [
+            Plan(
+                _gate_record.MERGE_BASE,
+                "t" * 40,
+                base_tree="t" * 40,
+                paths=(),
+                why="CI's record proves no tree in reach",
+            ),
+            Plan(
+                "step",
+                "t" * 40,
+                base_tree="b" * 40,
+                paths=("a.py",),
+                why="proved by run 8",
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        _gate_record, "leg_plan", lambda root, git, *, base, branch: next(plans)
+    )
+    # The fallback first: on main the merge base is HEAD, so the step
+    # would be empty; the push pays the whole gate instead.
+    step = _quality._leg_plan(root, "main", _push("main"))
+    assert step.mode == "full" and _quality._affected(root, step) is None
+    assert (
+        "affected: CI's record proves no tree in reach; a push pays the whole gate;"
+        " everything runs" in capsys.readouterr().out
+    )
+    step = _quality._leg_plan(root, "main", _push("main"))
+    assert step.mode == "step" and step.base_tree == "b" * 40
+    assert "since tree bbbbbbbbbbbb (proved by run 8): 1 path(s) changed" in (
+        capsys.readouterr().out
+    )
+
+
+def test_a_push_narrows_from_the_records_nearest_proved_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: _push("main"))
+    bases = _stepping(monkeypatch)
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
+    _quality.check()
+    out = capsys.readouterr().out
+    assert bases == ["main"]
+    assert "affected-legs: the scoped gate from the record's nearest proved tree" in out
+    assert "nothing affected" in out
+    assert read_marker(root)["base_tree"] == "b" * 40
 
 
 def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(

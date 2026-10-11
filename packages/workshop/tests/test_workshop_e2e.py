@@ -1298,7 +1298,14 @@ def test_an_unknown_scenario_refuses_naming_the_sets_and_the_scenarios() -> None
 
 def test_a_choice_resolves_its_needs_once_in_the_registry_s_order() -> None:
     names = [scenario.name for scenario in _e2e.scenarios_for("develop")]
-    assert names == ["birth", "verified-skip", "members", "ratchet", "scoped-leg"]
+    assert names == [
+        "birth",
+        "verified-skip",
+        "members",
+        "ratchet",
+        "scoped-leg",
+        "unproven-push",
+    ]
     # A scenario alone brings what it builds on, whether or not it was named.
     assert [s.name for s in _e2e.scenarios_for("scoped-leg")] == [
         "birth",

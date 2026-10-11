@@ -47,8 +47,12 @@ What you see:
   what it was busy with.
 - **Lane waits at the head of the slot.** A claim that genuinely stalled
   shows as its own slice (`lane: cspell-cache`) before the body's time.
-- **Every `run()` step nested inside its task**, and the task's own
-  [sections](#timing-inside-a-task) beside them.
+- **Every `run()` step nested inside its task**, the `@step` items and
+  `with step("…")` blocks the same way, and the task's own
+  [sections](#timing-inside-a-task) beside them. A call made
+  `recorded=False` is off the record everywhere else, and here it is a
+  section named for its command: the trace shows where the time went, and
+  the receipt lines and `--json` still say nothing of it.
 - **A dependency arrow per plan edge**, so the critical path is traceable
   by eye.
 - Work that genuinely overlaps on one timeline (a `parallel()` block's

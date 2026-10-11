@@ -2460,6 +2460,22 @@ the stack, which this design neither needs nor rules out).
   on the desk under that load. A pull request's narrowed check leg on
   main's recent runs: 126 s at the median, the whole run about 5 min
   30 s to its merge.
+- 2026-10-11, Willem: a push to main narrows too. Measured on the
+  first main run of the folded shape: the Windows check leg at 843 s
+  was the run's critical path, 660 of them one pytest run, for a
+  change to one package. The pull request's leg already measures from
+  the nearest proved tree with the merge base as its fallback; a push
+  takes the same plan from the previous push's tree and pays the whole
+  gate when the record proves none in reach, since on main the merge
+  base is the push itself. The loop's `unproven-push` scenario lands a
+  member-only branch cut from behind main's tip, so its squash is a
+  tree no run proved, and reads main's run narrowing and composing.
+  Why: the code's own reason for the full gate on a push, "until the
+  verified-tree record exists", was past. What it replaced: nothing,
+  the push's full gate. #1431. Beside it, #1432 measured the git-driven
+  tests: 5824 processes over 298 tests, 83 percent the code under
+  test's; the first slice cut 4 percent, and the rest is the flows'
+  facts and the state store's design.
 
 - 2026-10-11, #1437, a loop default until slice 12e: an extension pass
   births with the test extension beside the extension under test and
@@ -2473,6 +2489,50 @@ the stack, which this design neither needs nor rules out).
   extension alone; that proof is 12e's. Proved by fresh passes for
   ruff and clang-tidy on the desk. Willem took the interim the same
   day.
+- 2026-10-11, Willem: no narrowing of a package's tests by what each
+  test module reaches, with the coverage union composing a package at
+  file level, while the workshop changes wholesale. Why: nearly every
+  change touches the workshop package, so package-level narrowing
+  (#1431 on a push, the pull request rule before it) keeps its suite,
+  1424 s of the Windows leg's 2141 s, on every leg; a finer selection
+  over a package in flux would be a mess to keep true. What stands:
+  the package rule, and the git-process cuts of #1432 (7 percent on
+  the git-driven files after three slices, the rest the flows' facts
+  and the state store's design).
+
+- 2026-10-11, #1377 planned in eleven parts, each mergeable alone and
+  gate-green, no part touching the CI generator, which another change
+  edits: (1) pins, in today's spelling, for what the code enforces and
+  no test names, a step's `after` running once, a tests-only step on a
+  tests-only change, one option table for a code and a words step, the
+  isolated legs' order and dist directories, a package-level root file
+  written once; (2) the step record and a transition reader, the
+  record gaining phase, step, provides, reads, isolated, enabled,
+  replaces and deletes, `[phases.<phase>.<step>]` read with `main`,
+  `fix` and `safe-fix` as a template or a reference, `{paths}` and
+  `{arguments}` placing the run's paths and the words after `--`, the
+  old spelling read into the same record by a reader named temporary;
+  (3) the fifteen declarations and the package option tables move to
+  the new spelling, `listed-with` becoming `enabled`; (4) the old
+  spelling refuses and the reader, `narrowing`, `transport`,
+  `threshold`, `roles`, `listed-with`, `[options]`, `judge`, `run` and
+  `arguments` go, `[for.<target>]` carrying every table; (5) phases are
+  declared, by the base in `contract.toml` and by extensions, with
+  engine keys, level, placement and whether a verb is generated, an
+  undeclared phase refusing and two steps at one address refusing
+  unless one replaces or deletes; (6) one walk, `pre` and `post` gone,
+  every step a footman step inside `parallel()`, the gate's walk and
+  the train's phases through one function, `GateContext` folding into
+  `PhaseContext`; (7) composition is requires alone, `compatible`,
+  `before` and `after`, the pair check and `--combinations` gone; (8)
+  slots, contributions, editor-extension and release-notes become
+  declared queries with a combine rule; (9) root files become
+  fragments and `[rules]` become layering steps; (10) the train takes
+  `isolated` and `configuration`, `[release] prove` replaces
+  `prove-floors`, replay is verify; (11) the names: `StepRecord`,
+  `_steps.py`, `register_step`, the allowance shrinking, the temporary
+  rows closing. Parts 2 and 5 rebase onto #1443's sync step. The
+  phases' first extension-declared consumer is 11c's docs phase.
 
 - 2026-10-11, #1443, phase 11b slice 4's first part: `fm sync` runs the
   sync phase, and conan's profile step there replaces

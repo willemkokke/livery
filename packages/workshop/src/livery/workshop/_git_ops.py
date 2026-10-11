@@ -201,6 +201,12 @@ class GitOps:
         """HEAD's commit body, without the subject."""
         return self._run("log", "-1", "--format=%b").strip()
 
+    def head_message(self) -> tuple[str, str]:
+        """HEAD's commit subject and its body, in one process."""
+        out = self._run("log", "-1", "--format=%s%x00%b")
+        subject, _, body = out.partition("\0")
+        return subject.strip(), body.strip()
+
     def fetch(self) -> None:
         """Freshen ``origin/*``."""
         self._run("fetch", "origin")

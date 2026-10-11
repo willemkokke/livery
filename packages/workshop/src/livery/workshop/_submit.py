@@ -332,6 +332,8 @@ class Plan:
             overwrite an existing pull request's.
         body_given: Whether the body came from the caller; the same
             rule for an existing pull request's body.
+        subjects: The subjects of the commits the branch carries beyond
+            ``origin/<base>``, read once for the checks that need them.
     """
 
     branch: str
@@ -340,6 +342,7 @@ class Plan:
     body: str
     title_given: bool
     body_given: bool = False
+    subjects: tuple[str, ...] = ()
 
 
 def prepare(
@@ -371,13 +374,10 @@ def prepare(
     # A merge commit (the engine's MERGE_DEFAULT, `fm integrate`) can
     # be HEAD, and "Merge branch ..." is never the intent: the last
     # real subject is. The squash erases the merge commits anyway.
-    default_title = git.head_subject()
+    default_title, default_body = git.head_message()
+    subjects = tuple(git.subjects_ahead(base))
     if not title and default_title.startswith("Merge "):
-        real = [
-            subject
-            for subject in git.subjects_ahead(base)
-            if not subject.startswith("Merge ")
-        ]
+        real = [subject for subject in subjects if not subject.startswith("Merge ")]
         if real:
             default_title = real[-1]
     resolved_title = title or default_title
@@ -390,9 +390,10 @@ def prepare(
         branch=branch,
         base=base,
         title=resolved_title,
-        body=body or git.head_body(),
+        body=body or default_body,
         title_given=bool(title),
         body_given=bool(body),
+        subjects=subjects,
     )
 
 
@@ -823,9 +824,7 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
     if plan.title_given:
         return
     subjects = [
-        subject
-        for subject in git.subjects_ahead(plan.base)
-        if not subject.startswith("Merge ")
+        subject for subject in plan.subjects if not subject.startswith("Merge ")
     ]
     if len(subjects) > 1:
         listed = "\n".join(f"    - {subject}" for subject in subjects)
@@ -837,7 +836,9 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
         )
 
 
-def _restack_before_push(git: GitOps, *, branch: str = "") -> bool:
+def _restack_before_push(
+    git: GitOps, *, branch: str = "", stack: tuple[str, str] | None = None
+) -> bool:
     """Move a stacked branch onto its moved or merged parent; whether it moved.
 
     The pull request of a branch whose parent merged is retargeted to
@@ -849,12 +850,13 @@ def _restack_before_push(git: GitOps, *, branch: str = "") -> bool:
     resolves it.
     """
     branch = branch or git.current_branch()
-    parent, _tip = git.stack(branch)
+    stack = stack if stack is not None else git.stack(branch)
+    parent, _tip = stack
     if not parent or not git.is_clean():
         return False
     from livery.workshop._sync import restack
 
-    moved = restack(git, branch, interactive=False)
+    moved = restack(git, branch, interactive=False, stack=stack)
     if moved is None:
         fail(
             f"{branch} could not follow its parent without conflicts: run"
@@ -896,13 +898,19 @@ def submit_flow(
     # branch as it is, before a fold adds a commit of its own.
     git.fetch()
     branch = git.current_branch()
-    force = _restack_before_push(git, branch=branch) or force
+    # The stack, read once for the flow: a restack that moved the branch
+    # may have forgotten it, so it is read again after one.
+    stack = git.stack(branch)
+    moved = _restack_before_push(git, branch=branch, stack=stack)
+    if moved:
+        stack = git.stack(branch)
+    force = moved or force
     plan = prepare(git, title=title, body=body, base=base, branch=branch)
     # A first open only: a pull request that exists, open, merged, or
     # closed, keeps its title, and the merged and closed cases get
     # their own refusals further on.
     if repo.pr.find_by_head(plan.branch, state="all") is None:
-        if not git.subjects_ahead(plan.base):
+        if not plan.subjects:
             fail(
                 f"{plan.branch} has no commits beyond origin/{plan.base}, so"
                 " there is nothing to submit: commit first"
@@ -933,7 +941,7 @@ def submit_flow(
         print(f"  Closes #{linked} on merge")
     elif not close:
         print("  closes nothing (--no-close): the branch's issue stays open")
-    parent, _tip = git.stack(plan.branch)
+    parent, _tip = stack
     if armed and parent and plan.base == parent:
         # The forge refuses to arm a pull request into a branch with no
         # required checks, and arming into the parent would land the

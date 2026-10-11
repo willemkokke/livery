@@ -1235,3 +1235,77 @@ def test_a_release_title_names_its_members_until_it_would_pass_the_limit() -> No
     assert release_title([(name + "y", "1.0.0")]) == (
         "chore(release): released 1 package"
     )
+
+
+def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directories(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._release_driver import _wheel_dists, validate_member
+
+    fake, _git_seam, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    core, tool = packages["core"], packages["tool"]
+    # The edge first: a member whose kind builds no wheel has no dist
+    # directory for a leg to search, so the set's directories are its
+    # wheel members' alone, in set order.
+    native = Package(
+        directory=root / "packages" / "native",
+        path="packages/native",
+        name="livery-native",
+        kind="cpp-conan",
+        depends=(),
+    )
+    dists = (core.directory / "dist", tool.directory / "dist")
+    plans = (
+        MemberPlan(core, "0.3.0"),
+        MemberPlan(native, "0.1.0"),
+        MemberPlan(tool, "0.3.0"),
+    )
+    assert _wheel_dists(plans) == dists
+    # One member's legs: the floor leg, then the latest leg, each handed
+    # the directories as given.
+    legs: list[tuple[str, str, tuple[Path, ...]]] = []
+
+    def _leg(
+        package: Package,
+        root: Path,
+        *,
+        resolution: str,
+        release_dirs: tuple[Path, ...],
+    ) -> dict[str, str]:
+        legs.append((package.name, resolution, release_dirs))
+        return {}
+
+    monkeypatch.setattr("livery.workshop._lifecycle.prove", _leg)
+    validate_member(root, MemberPlan(core, "0.3.0"), dists)
+    assert legs == [
+        ("livery-core", "lowest-direct", dists),
+        ("livery-core", "highest", dists),
+    ]
+    # The driver hands every member's legs the whole set's directories,
+    # member after member in set order.
+    legs.clear()
+    _grow(root, "core", "feat: core grows (#1)")
+    _grow(root, "tool", "feat: tool grows (#2)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
+    )
+    driver = ReleaseDriver(
+        root,
+        fake.repository(OWNER, NAME),
+        rig,
+        resolve_set(root, ("core", "tool")),
+        armed=False,
+    )
+    assert driver.prepare() is not None
+    assert legs == [
+        ("livery-core", "lowest-direct", dists),
+        ("livery-core", "highest", dists),
+        ("livery-tool", "lowest-direct", dists),
+        ("livery-tool", "highest", dists),
+    ]
