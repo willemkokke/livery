@@ -1118,7 +1118,11 @@ newer). A verb that reads several series takes one snapshot of the
 remote namespace: one listing of the store's refs and the branches
 together, then one fetch of the refs the checkout lacks, and every
 read inside answers from the local object store, so `fm store.ls`
-and `fm ci.timings` cost two round trips. The job runner takes one
+and `fm ci.timings` cost two round trips. A read inside the snapshot
+of a ref the verb did not name brings the ref's key group, every
+sibling at its depth, in one fetch, so a loop over a family's keys
+costs one round trip; a block opened inside another brings what it
+names against the shared listing. The job runner takes one
 snapshot for the whole job and publishes it to the entries it runs,
 so the gate job lists once for its union, collect, judge, stamp, and
 janitor. A write keeps its compare-and-swap on the listed sha, its

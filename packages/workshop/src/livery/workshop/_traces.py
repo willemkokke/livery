@@ -37,6 +37,7 @@ from livery.workshop._state import (
     Keyed,
     RunContext,
     put,
+    remote_snapshot,
     run_context,
     slug,
 )
@@ -355,7 +356,8 @@ def runs_about(
         Caused(str(run.id), run.event) for run in repo.checks.runs(head_sha=commit)
     ]
     known = {caused.run_id for caused in found}
-    rows = ABOUT.series(commit).rows(root)
+    with remote_snapshot(root, fetch=(ABOUT.series(commit).ref,)):
+        rows = ABOUT.series(commit).rows(root)
     lines = [f"{commit[:12]}: {rows.reason}"] if rows.reason else []
     for row in rows.rows:
         run_id = str(row.data.get("run") or "")
@@ -598,7 +600,9 @@ def assemble(
             "args": {"name": f"run {run_id}"},
         }
     ]
-    traced, refusals = _legs_of(root, run_id)
+    # One listing and one fetch for every leg's trace of the run.
+    with remote_snapshot(root, fetch=(f"{TRACES.prefix}{run_id}/",)):
+        traced, refusals = _legs_of(root, run_id)
     lines += refusals
     pids = itertools.count(LEG_PIDS)
     ordered = sorted(jobs, key=_job_order)
