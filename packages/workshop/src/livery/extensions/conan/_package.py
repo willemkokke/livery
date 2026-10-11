@@ -16,7 +16,7 @@ import os
 import platform
 import re
 import tempfile
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -704,6 +704,38 @@ def verify_digest(name: str, data: bytes, digest: str) -> None:
         )
 
 
+def profile_path(environ: Mapping[str, str]) -> Path:
+    """Conan's default profile file: under ``CONAN_HOME``, else ``~/.conan2``."""
+    home = environ.get("CONAN_HOME") or str(Path.home() / ".conan2")
+    return Path(home) / "profiles" / "default"
+
+
+def profile_names_compiler(path: Path) -> bool:
+    """Whether the profile file at *path* names a compiler under ``[settings]`` itself.
+
+    A plain read, no process: the answer a sync wants on every job
+    whose profile is already detected. False when the file is not
+    there or names no compiler in its own lines; an ``include`` may
+    name one, and conan is asked then.
+    """
+    try:
+        text = path.read_text("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    section = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if section != "settings" or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if key.strip() == "compiler" and value.strip():
+            return True
+    return False
+
+
 def ensure_profile(cwd: Path) -> list[str]:
     """Make conan's default profile name a compiler; a line when it was replaced.
 
@@ -713,7 +745,9 @@ def ensure_profile(cwd: Path) -> list[str]:
     finds no compiler, and every later conan call keeps that profile.
     So a missing profile is detected here before anything configures,
     and one that names no compiler is detected again, which replaces
-    it. A profile that names a compiler is kept as it is.
+    it. A profile that names a compiler is kept as it is, and when its
+    file says so no conan process starts: this runs before every
+    install, on every job.
 
     Returns:
         The line saying the profile was detected again; empty when it
@@ -723,6 +757,8 @@ def ensure_profile(cwd: Path) -> list[str]:
         Failed: when conan cannot detect or show the profile, in its
             own words, or when detection finds no compiler here.
     """
+    if profile_names_compiler(profile_path(os.environ)):
+        return []
     _detect_profile(cwd, "--exist-ok")
     if "compiler" in _host_settings(cwd):
         return []
