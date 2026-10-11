@@ -225,11 +225,11 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
         "toolroom.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
         in out
     )
-    assert [argv[-1] for argv in seen] == ["check"]
+    assert [argv[-1] for argv in seen] == ["doctor", "check"]
     monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
     seen.clear()
     _points.run_point(root, "nightly", "nightly", spawn=green)
-    assert [argv[-1] for argv in seen] == ["check", "--submit"]
+    assert [argv[-1] for argv in seen] == ["doctor", "check", "--submit"]
 
 
 def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
@@ -270,7 +270,7 @@ def test_an_entry_that_runs_once_runs_on_the_first_leg_alone(
     assert (
         f"ci.e2e (workshop.toml) runs once, on the first leg ({first}); skipped" in out
     )
-    assert [argv[-1] for argv in seen] == ["check"]
+    assert [argv[-1] for argv in seen] == ["doctor", "check"]
     seen.clear()
     _points.run_point(root, "nightly", "nightly", python=first, spawn=green)
     assert [argv[-3:] for argv in seen][-1] == [
@@ -363,6 +363,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     # The nightly point runs the whole check, its own tests selected in.
     assert _points.jobs_of(root, "nightly") == ("nightly",)
     assert _points.entries_for(root, "nightly", "nightly") == (
+        _points.Entry("nightly", "nightly", "doctor"),
         _points.Entry("nightly", "nightly", "check"),
     )
     # The release's jobs are declared, with nothing scheduled on them
@@ -390,7 +391,7 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     # declared ones.
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     entries = _points.entries_for(root, "nightly", "nightly")
-    assert [e.task for e in entries] == ["check", "release.replay"]
+    assert [e.task for e in entries] == ["doctor", "check", "release.replay"]
     assert entries[-1] == _points.Entry(
         "nightly", "nightly", "release.replay", ("--all",), source="workshop.toml"
     )
@@ -639,7 +640,11 @@ def test_the_nightly_point_runs_the_whole_check(
         return 0
 
     _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
-    assert seen == [(["hse", "--profile=fm-profile-check.json", "check"], "nightly")]
+    # The doctor opens the night's record, then the whole check.
+    assert seen == [
+        (["hse", "--profile=fm-profile-doctor.json", "doctor"], "nightly"),
+        (["hse", "--profile=fm-profile-check.json", "check"], "nightly"),
+    ]
 
 
 def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(

@@ -76,15 +76,16 @@ def rig(seeds: Seeds, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Path]
     return fake, root
 
 
-def test_status_and_doctor_answer(
+def test_status_answers_and_the_forge_doctor_reports(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.workshop import _doctor
+
     _, _root = rig
     _ci_tasks.status()  # no PR: exit 0, says so
-    _ci_tasks.doctor()
-    out = capsys.readouterr().out
-    assert "no pull request for feat/1-thing" in out
-    assert "fake-user on FakeForge" in out or "grants:" in out
+    assert "no pull request for feat/1-thing" in capsys.readouterr().out
+    whats = [finding.what for finding in _doctor.forge()]
+    assert any("fake-user on FakeForge" in w or w.startswith("grants:") for w in whats)
 
 
 def test_the_ci_group_reports_the_empty_head(

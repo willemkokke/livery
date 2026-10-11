@@ -1,4 +1,4 @@
-"""``fm status``, the ``ci`` group, and ``fm doctor``.
+"""``fm status`` and the ``ci`` group.
 
 ``status`` says where the current branch's pull request stands and
 exits that state's code (0 while nothing is wrong); ``--watch``
@@ -18,8 +18,7 @@ runs one job of a point
 ``ci.timings`` prints the timing rows the gate writes on
 that store (livery.workshop._metrics); the hidden ``ci.metrics.collect``
 is the gate job's writer ``ci.run`` schedules, and a check leg's row
-rides ``coverage.leg``'s one write. ``doctor`` says who you are,
-which server this is, and what it grants.
+rides ``coverage.leg``'s one write.
 """
 
 from __future__ import annotations
@@ -30,8 +29,6 @@ from typing import Annotated
 import livery.footman as footman
 from livery.footman import doc, fail, group, pre_tasks, task
 from livery.forge import (
-    Capability,
-    Forge,
     ForgeError,
     Job,
     RateLimited,
@@ -39,7 +36,6 @@ from livery.forge import (
     Run,
     Unsupported,
 )
-from livery.workshop._contract import load_contract
 from livery.workshop._extensions import workspace_root
 from livery.workshop._git_ops import GitOps
 from livery.workshop._verdict import (
@@ -68,15 +64,6 @@ def remember_mounted_tasks(inv: footman.Invocation) -> None:
     from livery.workshop import _points
 
     _points.MOUNTED = inv.tasks
-
-
-_CAPABILITIES: tuple[Capability, ...] = (
-    "auto_merge",
-    "force_cancel",
-    "required_contexts",
-    "ci_secrets",
-    "schedule_events",
-)
 
 
 def _resolved() -> tuple[Repository, GitOps]:
@@ -1029,83 +1016,3 @@ def ci_timings(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     timings_flow(root, since=since, base=base)
-
-
-def doctor_flow(forge: Forge) -> None:
-    """Print identity, server, and capabilities for *forge*."""
-    from livery.workshop._extensions import workspace_root
-
-    root = workspace_root()
-    if root is not None:
-        from livery.workshop._governance import unknown_owners
-        from livery.workshop._tokens import admin_token
-
-        contract = load_contract(root / "workshop.toml")
-        owner = str((contract.get("forge") or {}).get("owner", ""))
-        kind = str((contract.get("forge") or {}).get("kind", ""))
-        url = str((contract.get("forge") or {}).get("url", ""))
-        _, admin_var = admin_token(kind, url)
-        if admin_var.startswith("FORGE_ADMIN_TOKEN"):
-            print(f"  admin ladder: {admin_var} set")
-        elif admin_var:
-            print(
-                f"  admin ladder: FORGE_ADMIN_TOKEN unset ({admin_var} is the fallback)"
-            )
-        else:
-            print(
-                "  admin ladder: FORGE_ADMIN_TOKEN unset (everyday"
-                " token is the fallback)"
-            )
-        try:
-            unknown = unknown_owners(root, forge, owner)
-        except Exception as error:
-            print(f"  owners: not checked ({error})")
-        else:
-            if unknown:
-                for entry in unknown:
-                    print(f"  owners: unknown {entry}")
-            else:
-                print("  owners: every declared owner exists on the forge")
-
-    print(f"  {forge.whoami()} on {forge.server_version()}")
-    granted = [name for name in _CAPABILITIES if forge.supports(name)]
-    missing = [name for name in _CAPABILITIES if name not in granted]
-    if granted:
-        print(f"  grants: {', '.join(granted)}")
-    if missing:
-        print(f"  missing: {', '.join(missing)}")
-    else:
-        print("  every capability the workshop can use is granted")
-
-
-@task
-def doctor() -> None:
-    """Say who you are, which server this is, and what it grants."""
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no workshop.toml above the working directory")
-    from livery.workshop._env_tasks import missing_host_tools, served_by
-    from livery.workshop._forge_lane import this_forge
-    from livery.workshop._tools import receipts
-
-    for tool in missing_host_tools(root):
-        print(
-            f"  host: {tool} MISSING (a compiler the present package"
-            " kinds need; install the platform toolchain)"
-        )
-    hosted = [
-        f"{name} ({served_by(receipt)})"
-        for name, receipt in sorted(receipts(root).items())
-        if receipt.source == "host"
-    ]
-    if hosted:
-        print(f"  tools: served by the host: {', '.join(hosted)}")
-    from livery.workshop._extensions import available_extensions, extension_names
-
-    for module, dist in available_extensions(extension_names(root)):
-        named = f" ({dist})" if dist else ""
-        print(
-            f"  extensions: {module}{named} is installed and not listed; it does"
-            " nothing until [workspace] extensions names it"
-        )
-    doctor_flow(this_forge(root))

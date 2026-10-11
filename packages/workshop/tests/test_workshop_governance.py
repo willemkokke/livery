@@ -625,12 +625,10 @@ def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
     assert "governance-apply" not in gitlab[".gitlab-ci.yml"]
 
 
-def test_doctor_prints_the_ladder_and_the_owner_verdicts(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+def test_the_forge_doctor_names_the_ladder_and_the_owner_verdicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._ci_tasks import doctor_flow
+    from livery.workshop._doctor import forge_findings
 
     root = _workspace(tmp_path)
     monkeypatch.setattr(
@@ -639,27 +637,38 @@ def test_doctor_prints_the_ladder_and_the_owner_verdicts(
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ADMIN_TOKEN", raising=False)
     fake = FakeForge()
-    fake.set_members("acme", ("alice", "bob"))
-    fake.set_teams("acme", ("reviewers",))
-    doctor_flow(fake)
-    out = capsys.readouterr().out
-    assert "admin ladder: FORGE_ADMIN_TOKEN unset" in out
-    assert "every declared owner exists" in out
-
-    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "x")
-    fake.set_members("acme", ("alice",))  # bob becomes unknown
-    doctor_flow(fake)
-    out = capsys.readouterr().out
-    assert "admin ladder: FORGE_ADMIN_TOKEN set" in out
-    assert "unknown user bob" in out
 
     def _broken(owner: str) -> tuple[str, ...]:
         raise RuntimeError("boom")
 
+    # The check that cannot run fails open, named, and stands against
+    # nobody: a forge that cannot answer is not an unknown owner.
+    fake.set_members("acme", ("alice", "bob"))
+    fake.set_teams("acme", ("reviewers",))
     monkeypatch.setattr(fake, "members", _broken)
-    doctor_flow(fake)
-    out = capsys.readouterr().out
-    assert "owners: not checked (boom)" in out  # the check fails open
+    found = forge_findings(fake, root)
+    assert "owners: not checked (boom)" in [f.what for f in found]
+    assert all(not f.found for f in found if f.what.startswith("owners"))
+    fake = FakeForge()
+    fake.set_members("acme", ("alice", "bob"))
+    fake.set_teams("acme", ("reviewers",))
+    found = forge_findings(fake, root)
+    whats = [f.what for f in found]
+    assert (
+        "admin ladder: FORGE_ADMIN_TOKEN unset (everyday token is the fallback)"
+        in whats
+    )
+    assert "owners: every declared owner exists on the forge" in whats
+    assert not any(f.found for f in found)
+    # An unknown owner stands, with its fix; the ladder names the set token.
+    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "x")
+    fake.set_members("acme", ("alice",))  # bob becomes unknown
+    found = forge_findings(fake, root)
+    assert "admin ladder: FORGE_ADMIN_TOKEN set" in [f.what for f in found]
+    standing = [f for f in found if f.found]
+    assert [f.what for f in standing] == ["owners"]
+    assert standing[0].found.startswith("unknown user bob")
+    assert "drop it from the contract" in standing[0].fix and standing[0].repair is None
 
 
 def test_the_rung_step_carries_declared_keys_only(tmp_path: Path) -> None:

@@ -146,12 +146,13 @@ if TYPE_CHECKING:
     from livery.footman._registry import wrap_bind as wrap_bind
     from livery.footman._registry import wrap_task as wrap_task
     from livery.footman._step import step as step
+    from livery.footman._tasks.doctor import Finding as Finding
     from livery.footman.testing import Runner as Runner
     from livery.footman.testing import recording as recording
 
 __version__ = "0.59.0"
 
-BUILTIN = ("footman.self", "footman.janitor")
+BUILTIN = ("footman.self", "footman.janitor", "footman.doctor")
 """Stock footman's built-in task providers — what a project-less `fm` offers.
 
 Named here, beside `main()`, because BOTH doors need it: the `App` the
@@ -170,6 +171,7 @@ __all__ = [
     "Exists",
     "Failed",
     "FetchError",
+    "Finding",
     "Forward",
     "GlobalOption",
     "Group",
@@ -521,6 +523,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import _context as context
 
         return getattr(context, name)
+    if name == "Finding":
+        from livery.footman._tasks import doctor
+
+        return doctor.Finding
     if name == "alive":
         from livery.footman import _gc
 
