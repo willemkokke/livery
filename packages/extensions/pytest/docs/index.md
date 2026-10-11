@@ -46,8 +46,11 @@ tool looks for, so a bare `pytest` or `coverage` call reads the same
 settings as the gate:
 
 - `pytest.toml`: where the tests are, the import mode that names a test
-  module by its path, the options every run takes, and the cache, kept
-  under `.workshop/.cache/pytest/`.
+  module by its path, the options every run takes, the cache, kept under
+  `.workshop/.cache/pytest/`, and the `tmp_path` retention: a passing
+  test's directory goes at its teardown, a failing test's stays for
+  inspection, so a session ends when its last test ends instead of
+  deleting an older session's whole tree.
 - `.coveragerc`: what coverage measures (the project's namespace, with
   branches), and how the data of Windows and POSIX runs combine.
 

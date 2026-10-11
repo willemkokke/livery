@@ -14,6 +14,12 @@ pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endf
 addopts = [{% for word in slots['python.test.addopts'] | join(' ') | split %}"{{ word }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 # The cache lives with the workshop's state, never in the root.
 cache_dir = ".workshop/.cache/pytest"
+# A passing test's tmp_path goes at its teardown, on the worker that ran
+# it; a failing test's stays for inspection. Kept whole, every session's
+# directories stay until a later session, in any checkout on the machine,
+# deletes the oldest tree in its controller after its last test: a full
+# suite's tree runs to a hundred thousand files, a minute of deleting.
+tmp_path_retention_policy = "failed"
 
 # The repository's own settings: keys of the [pytest] table above that
 # the render does not write.

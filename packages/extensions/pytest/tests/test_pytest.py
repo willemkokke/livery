@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import configparser
+import subprocess
+import sys
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
@@ -165,6 +167,68 @@ def test_the_root_tests_directory_is_configured_only_while_it_exists(
         assert settings["pythonpath"] == ["tests"]
     finally:
         registry.restore(state)
+
+
+def test_a_failed_test_keeps_its_tmp_path_and_a_passed_test_s_goes_at_teardown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without the rendered policy every session's tmp_path directories
+    # stay until a later session, in any checkout on the machine,
+    # deletes the oldest tree whole in its controller after its last
+    # test; a full suite's tree runs to a hundred thousand files, and
+    # that delete took a minute. The failed test's directory is the
+    # fallback for inspection, so it is pinned first.
+    from livery.footman import _registry as footman_registry
+    from livery.workshop._extensions import mount_extensions
+    from livery.workshop._shipped_files import deliver
+
+    root = tmp_path / "ws"
+    (root / "tests").mkdir(parents=True)
+    (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["pytest"]\n')
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    state = registry.snapshot()
+    try:
+        with footman_registry.capture():
+            assert mount_extensions(root) == ("pytest",)
+        deliver(root)
+    finally:
+        registry.restore(state)
+    settings = tomllib.loads((root / "pytest.toml").read_text())["pytest"]
+    assert settings["tmp_path_retention_policy"] == "failed"
+    (root / "tests" / "test_dirs.py").write_text(
+        "from pathlib import Path\n\n\n"
+        "def test_red(tmp_path: Path) -> None:\n"
+        "    (tmp_path / 'evidence').write_text('red')\n"
+        "    raise AssertionError('kept for inspection')\n\n\n"
+        "def test_green(tmp_path: Path) -> None:\n"
+        "    (tmp_path / 'evidence').write_text('green')\n"
+    )
+    # A named base makes each test's directory a known path; -n 0 after
+    # the rendered addopts keeps them out of a worker's subdirectory.
+    base = tmp_path / "base"
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "-n",
+            "0",
+            f"--basetemp={base}",
+            "tests",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 1, run.stdout + run.stderr
+    assert "1 failed, 1 passed" in run.stdout, run.stdout
+    assert (base / "test_red0" / "evidence").read_text() == "red"
+    assert not (base / "test_green0").exists()
 
 
 def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
