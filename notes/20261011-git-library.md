@@ -94,7 +94,10 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    never touched; every failure is a printed reason, never a boolean.
 3. The library imports nothing of the workshop and no CI fact. What is
    CI's, allowed writers, identities, variable names, arrives as a
-   parameter.
+   parameter. The library's functions import nothing of footman
+   either; the one module that does is its footman plugin,
+   `livery.git._plugin`, loaded only through footman's own `plugin()`,
+   the shape `livery.forge._dev` has.
 4. Porcelain and the network stay with the git binary from the
    toolroom's pinned store: merge, rebase, stash, worktrees, fetch, push.
    The leased push is never emulated in-process: libgit2 has no lease
@@ -201,11 +204,20 @@ next call opens fresh instead of hanging to the TCP timeout; the first
 call after a wake may still fail once, every workflow verb is
 idempotent, and the docs say so.
 
-The workshop owns the policy: it passes footman's data directory,
-owner-only and durable, and the idle window, and applies the mapping
-once where a verb enters, to the environment the toolroom spawns with,
-so every git spawn inherits it and no call site changes. The library
-imports nothing of footman, so it cannot find the directory itself.
+The policy is a footman plugin the library ships, `livery.git._plugin`,
+registered as `"livery.git"` under the `footman.tasks` entry point the
+way `livery.forge._dev` is. A project lists `plugin("livery.git")` in
+its `tasks.py` to turn it on and drops the line to turn it off; the
+workshop's generated tasks list it; a project on bare footman gets it
+the same way. The plugin registers a `pre_task` hook: footman gives
+each task its own complete environment, `task.env`, which the task's
+subprocesses see, so the hook writes the mapping into every task's
+`task.env`, computing it once per process from `footman.data_dir()
+/ "ssh"` and the idle window. No call site changes, and nothing in the
+workshop knows the mechanism exists. The hook must write per task: a
+write into one task's environment does not reach the next task's. The
+`core.sshCommand` read is one git process per fm run until phase 5
+reads the config in-process.
 
 Facts that constrain it: the ssh agent is unaffected, since the
 program is still `ssh` reading `~/.ssh/config`, so an `IdentityAgent`
@@ -373,14 +385,16 @@ and the number recorded here.
   the socket directory; never an edit of the user's ssh config;
   support decided by a behaviour probe. It is phase 2, since it needs
   only the package and pays at once.
+- 2026-10-11, Willem: the ssh policy is a footman plugin shipped by
+  `livery.git`, on by listing `plugin("livery.git")` and off by not,
+  so it works on bare footman too. The plugin's `pre_task` hook writes
+  `GIT_SSH_COMMAND` into every task's own environment, the moment
+  footman already gives the workshop's `sync_first` hook. The plugin
+  module is the library's one footman import, the forge's `_dev`
+  shape; the functions stay footman-free.
 
 ## Open
 
-1. How the ssh environment reaches a spawn: applied once where a verb
-   enters, to the environment the toolroom spawns with, or a parameter
-   on each network function of the library. Owner: Willem.
-   Recommendation: the environment, since no call site changes and
-   the library holds no object to carry it.
-2. The probe's verdict file against a per-process memory. Owner:
+1. The probe's verdict file against a per-process memory. Owner:
    Willem. Recommendation: the file, for contract 6 and so a verdict
    outlives the verb.
