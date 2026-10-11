@@ -2498,9 +2498,16 @@ the stack, which this design neither needs nor rules out).
   (#1431 on a push, the pull request rule before it) keeps its suite,
   1424 s of the Windows leg's 2141 s, on every leg; a finer selection
   over a package in flux would be a mess to keep true. What stands:
-  the package rule, and the git-process cuts of #1432 (7 percent on
-  the git-driven files after three slices, the rest the flows' facts
-  and the state store's design).
+  the package rule, and the git-process cuts: #1432's three slices on
+  the flows and the fixtures, then the state store's transport
+  (#1456), one `git archive` into a file per read and one
+  `fast-import` per write through a binary lane of footman's `run`
+  and the toolroom's handle (a bytes stdin), and a memory of facts on
+  the git helper that a reader answers from under `cached=True` until
+  a call through the helper moves the repository. Measured on main at
+  eaf21300a over the seven slowest files: 5820 processes to 4813, 17
+  percent, the store's share 1981 to 1410; the rest is the flows'
+  facts, 1278 of them `rev-parse`.
 
 - 2026-10-11, #1377 planned in eleven parts, each mergeable alone and
   gate-green, no part touching the CI generator, which another change
