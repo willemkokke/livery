@@ -641,3 +641,18 @@ contract. Two ways in: store the install instructions with each tool
 record, `apt-get` lines and their kin, so an image assembles from the
 records; or let toolroom itself build the minimal image, since it
 already knows every tool the lock pins for a host.
+
+## 2026-10-11: a CI profiler that chooses the settings
+
+Willem, from memory, on 2026-10-11: the CI profile plan measures one
+run as one timeline; the thought behind it went further and was never
+written down. A profiler that finds the settings for setting up CI:
+runs with and without each cache (the tool store, uv's wheels), reads
+the setup step's time against the record, and keeps what pays. Extended
+with sharding of the test suites, so every platform's leg takes a
+balanced amount of time instead of macOS waiting on Windows. The answer
+differs by where the runner is: uv's cache pays on a self-hosted runner
+of a lodge, or on the workstation co-opted at work to host the
+permanent runners, where the archive is local, and may not on a hosted
+runner where the wheels download faster than the archive restores. Raw
+material: the measurement comes first, the chooser after.
