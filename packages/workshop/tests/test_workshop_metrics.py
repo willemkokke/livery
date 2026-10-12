@@ -14,12 +14,14 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.forge import Step
 from livery.forge.testing import FakeForge
-from livery.workshop import _metrics, _state
+from livery.workshop import _ci_context, _metrics
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
-RUN = _state.RunContext("gitea", "1013", "push", "refs/heads/main")
+RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 JOB = "check (ubuntu-latest, 3.14)"
 
 
@@ -141,7 +143,7 @@ def test_put_leg_writes_nothing_without_a_trace(work: Path, tmp_path: Path) -> N
         work, RUN, job=JOB, label="check-a", trace=tmp_path / "none.json"
     )
     assert "did not run under --profile" in why
-    assert _state.list_refs(work, _state.RUN_PREFIX) == {}
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
 
 def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
@@ -228,8 +230,8 @@ def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(
 
 
 def test_the_per_run_family_spells_the_janitors_prefix_and_safe_refs() -> None:
-    assert _metrics.RUNS.prefix == _state.RUN_PREFIX
-    run = _state.RunContext("github", "7", "push", "refs/heads/main")
+    assert _metrics.RUNS.prefix == git.RUN_PREFIX
+    run = _ci_context.RunContext("github", "7", "push", "refs/heads/main")
     assert (
         _metrics.run_ref(run, "check-ubuntu-3.14")
         == "refs/workshop/run/7/check-ubuntu-3-14"
@@ -242,7 +244,7 @@ def test_collect_says_so_when_no_leg_left_a_row(work: Path) -> None:
     repo = fake.repository("owner", "repo")
     lines = _metrics.collect(work, repo, RUN, sha="a" * 40)
     assert lines == [f"  run {RUN.run_id}: no leg left a row; nothing collected"]
-    assert _state.read(work, _metrics.SERIES.ref).files is None
+    assert git.read(state_store(work), _metrics.SERIES.ref).files is None
 
 
 def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
@@ -251,8 +253,8 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
     repo = fake.repository("owner", "repo")
     ref = _metrics.run_ref(RUN, "check-a")
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             ref,
             {_metrics.ROW_FILE: json.dumps({"schema": 99, "job": JOB})},
             message="m",
@@ -266,7 +268,7 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
     ) in lines
     assert lines[-1] == f"  run {RUN.run_id}: no leg left a row; nothing collected"
     # The skipped half is kept: nothing landed, so nothing is dropped.
-    assert _state.read(work, ref).files is not None
+    assert git.read(state_store(work), ref).files is not None
 
 
 def test_collect_names_a_job_the_forge_does_not_know(
@@ -280,13 +282,13 @@ def test_collect_names_a_job_the_forge_does_not_know(
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  run {RUN.run_id}: the forge lists no such run" in "\n".join(lines)
     assert f"  {JOB}: unknown to the forge; its trace half rides alone" in lines
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None and list(rows) == [_metrics.run_file(RUN.run_id)]
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
     assert entry["jobs"][JOB]["tasks"] == {"check": 100.0}
     assert "wall_ms" not in entry["jobs"][JOB]
     # Collected halves are dropped; the series file is the record now.
-    assert _state.list_refs(work, _state.RUN_PREFIX) == {}
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
 
 def test_collect_keeps_the_halves_while_a_completed_job_is_red(
@@ -301,7 +303,7 @@ def test_collect_keeps_the_halves_while_a_completed_job_is_red(
     from livery.forge._types import Job, Run
 
     sha = "e" * 40
-    run = _state.RunContext("gitea", "78", "push", "refs/heads/main")
+    run = _ci_context.RunContext("gitea", "78", "push", "refs/heads/main")
     forge_run = Run(
         id=78,
         workflow="ci.yml",
@@ -355,7 +357,7 @@ def test_collect_keeps_the_halves_while_a_completed_job_is_red(
     assert f"  {_metrics.SERIES.ref}: run 78 recorded, 5 job(s)" in lines
     assert "  the per-run refs stay for a re-run of the gate: docs: failure" in lines
     assert f"  {ref}: dropped" not in lines
-    assert _state.read(work, ref).files is not None
+    assert git.read(state_store(work), ref).files is not None
 
 
 def test_collect_joins_the_forge_times_and_drops_the_halves(
@@ -368,7 +370,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     fake.push("owner", "repo", "main", sha=sha)
     state = fake._repos[("owner", "repo")]
     run_state = next(iter(state.runs.values()))
-    run = _state.RunContext("gitea", str(run_state.id), "push", "refs/heads/main")
+    run = _ci_context.RunContext("gitea", str(run_state.id), "push", "refs/heads/main")
     run_state.created_at = "2026-09-09T00:49:13Z"
     run_state.started_at = "2026-09-09T00:49:16Z"
     run_state.completed_at = "2026-09-09T00:49:42Z"
@@ -386,7 +388,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
     assert f"  {_metrics.run_ref(run, 'gate')}: dropped" in lines
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(run.run_id)])
     job = entry["jobs"]["gate"]
@@ -397,7 +399,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     ]
     assert job["tasks"] == {"check": 4100.0}
     assert entry["created_at"] == "2026-09-09T00:49:13Z"
-    assert _state.list_refs(work, _state.RUN_PREFIX) == {}
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
 
 def test_collect_records_every_job_and_the_runs_wall(
@@ -409,7 +411,7 @@ def test_collect_records_every_job_and_the_runs_wall(
     from livery.forge._types import Job, Run
 
     sha = "d" * 40
-    run = _state.RunContext("gitea", "77", "push", "refs/heads/main")
+    run = _ci_context.RunContext("gitea", "77", "push", "refs/heads/main")
     forge_run = Run(
         id=77,
         workflow="ci.yml",
@@ -459,7 +461,7 @@ def test_collect_records_every_job_and_the_runs_wall(
     )
     lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run 77 recorded, 4 job(s)" in lines
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file("77")])
     # Refusals first: a job the forge has not started carries no times
@@ -505,7 +507,7 @@ def test_collect_finds_a_pull_requests_run_under_the_events_head(
     fake.settle("owner", "repo", head)
     state = fake._repos[("owner", "repo")]
     run_state = next(iter(state.runs.values()))
-    run = _state.RunContext(
+    run = _ci_context.RunContext(
         "github", str(run_state.id), "pull_request", "refs/pull/1/merge", head
     )
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
@@ -513,7 +515,7 @@ def test_collect_finds_a_pull_requests_run_under_the_events_head(
     merge_commit = "e" * 40
     lines = _metrics.collect(work, repo, run, sha=merge_commit)
     assert not any("lists no such run" in line for line in lines)
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(run.run_id)])
     assert entry["sha"] == head and entry["checkout"] == merge_commit
@@ -567,7 +569,7 @@ def test_render_skips_other_schemas_and_renders_percentiles_and_movers(
     }
     files[_metrics.run_file("11")] = json.dumps({"schema": 2, "run": "11"})
     files[_metrics.run_file("12")] = "{not json"
-    assert _state.put(work, _metrics.SERIES.ref, files, message="rows") == ""
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
     lines = _metrics.render(work, since=2, base=5)
     text = "\n".join(lines)
     eleven = _metrics.run_file("11")
@@ -597,7 +599,7 @@ def test_collect_measures_a_job_still_running_to_the_collection(
     fake.push("owner", "repo", "main", sha=sha)
     state = fake._repos[("owner", "repo")]
     run_state = next(iter(state.runs.values()))
-    run = _state.RunContext("gitea", str(run_state.id), "push", "refs/heads/main")
+    run = _ci_context.RunContext("gitea", str(run_state.id), "push", "refs/heads/main")
     run_state.created_at = "2026-10-11T03:18:09Z"
     run_state.started_at = "2026-10-11T03:18:12Z"
     run_state.completed_at = ""
@@ -615,7 +617,7 @@ def test_collect_measures_a_job_still_running_to_the_collection(
     assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(run.run_id)])
     job = entry["jobs"]["gate"]
@@ -670,12 +672,12 @@ def test_collect_drops_the_legs_measured_lines_with_its_half(
     )
     assert why == ""
     ref = _metrics.run_ref(RUN, "check-a")
-    held = _state.read(work, ref).files
+    held = git.read(state_store(work), ref).files
     assert held is not None
     assert set(held) == {_metrics.ROW_FILE, _coverage_store.RUN_FILE}
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {ref}: dropped" in lines
-    assert _state.read(work, ref).files is None
+    assert git.read(state_store(work), ref).files is None
     assert _coverage_store.run_legs(work, RUN) == ([], "")
 
 
@@ -699,7 +701,7 @@ def test_collect_folds_the_coverage_row_the_gate_left(
     assert line == "coverage row: 2 package(s) for the run's record"
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert "  coverage: 2 package(s) recorded on the run" in lines
-    rows = _state.read(work, _metrics.SERIES.ref).files
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
     assert entry["coverage"] == {"packages/x": 91.23, "packages/y": 100.0}
@@ -717,7 +719,7 @@ def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> 
         if n > 1:
             entry["coverage"] = {"packages/x": 90.0 + n, "packages/y": 100.0}
         files[_metrics.run_file(str(n))] = json.dumps(entry)
-    assert _state.put(work, _metrics.SERIES.ref, files, message="rows") == ""
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
     lines = _metrics.render(work)
     assert "  coverage" in lines
     x = next(line for line in lines if line.strip().startswith("packages/x"))
@@ -725,5 +727,5 @@ def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> 
     y = next(line for line in lines if line.strip().startswith("packages/y"))
     assert y.split() == ["packages/y", "100.0%", "100.0%", "100.0%"]
     bare = {_metrics.run_file("9"): json.dumps({"schema": _metrics.SCHEMA, "jobs": {}})}
-    assert _state.put(work, _metrics.SERIES.ref, bare, message="bare") == ""
+    assert git.put(state_store(work), _metrics.SERIES.ref, bare, message="bare") == ""
     assert "  coverage" in _metrics.render(work)  # older rows still carry it

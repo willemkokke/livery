@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _coverage_marks, _state
+from livery import git
+from livery.workshop import _coverage_marks
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
@@ -41,8 +43,8 @@ def test_an_unreadable_store_names_its_reason(work: Path, tmp_path: Path) -> Non
 def test_a_bad_row_is_skipped_and_the_others_stand(work: Path) -> None:
     ref = _coverage_marks.SERIES.ref
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             ref,
             {
                 "20260101T000000.000000Z--packages-x": "not json",

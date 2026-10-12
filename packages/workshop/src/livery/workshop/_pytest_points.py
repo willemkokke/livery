@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from livery.workshop._state import POINT_VARIABLE
+from livery.workshop._ci_context import POINT_VARIABLE
 
 __all__ = ["POINT_VARIABLE"]
 

@@ -44,15 +44,8 @@ from pathlib import Path
 from typing import Any
 
 from livery import git
+from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._packages import Package
-from livery.workshop._state import (
-    Keyed,
-    RunContext,
-    Series,
-    Skipped,
-    list_refs,
-    slug,
-)
 
 #: The rows' shape: 2 holds arcs, pairs of line numbers, so a package
 #: is judged on its statements and its branches together. A row of
@@ -101,7 +94,7 @@ def workspace_suite(root: Path) -> Package | None:
 
 def branches(root: Path) -> list[str] | None:
     """The branches origin holds, by name; ``None`` if origin cannot be listed."""
-    heads = list_refs(root, "refs/heads/")
+    heads = git.list_refs(state_store(root), "refs/heads/")
     if heads is None:
         return None
     return sorted(name[len("refs/heads/") :] for name in heads)
@@ -124,8 +117,8 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
     heads = branches(root)
     if heads is None:
         return None
-    bases = {MAIN, *(slug(branch) for branch in heads)}
-    return {(base, slug(leg)) for base in bases for leg in legs}
+    bases = {MAIN, *(git.slug(branch) for branch in heads)}
+    return {(base, git.slug(leg)) for base in bases for leg in legs}
 
 
 #: The family: one series per base and check leg, ``coverage/main/<leg>``
@@ -139,7 +132,7 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
 #: legs skipped from that record, and the merge deletes the branch
 #: minutes before that run's union reads, while another main run's
 #: janitor may be sweeping in between.
-RECORD = Keyed(
+RECORD = git.Keyed(
     "coverage",
     ("base", "leg"),
     schema=SCHEMA,
@@ -163,7 +156,7 @@ KEPT_FOR = timedelta(days=1)
 
 def kept_name(path: str, closure: str) -> str:
     """The record's file for a kept row: the unit at *path*, measured at *closure*."""
-    return f"{slug(path)}.{closure}.json"
+    return f"{git.slug(path)}.{closure}.json"
 
 
 @dataclass(frozen=True)
@@ -247,7 +240,7 @@ class Record:
     """
 
     units: dict[str, Unit]
-    skipped: tuple[Skipped, ...] = ()
+    skipped: tuple[git.Skipped, ...] = ()
     failed: bool = False
     reason: str = ""
     kept: tuple[Kept, ...] = ()
@@ -302,7 +295,7 @@ def record_ref(leg: str, base: str = MAIN) -> str:
 
 def row_name(path: str) -> str:
     """The record's file for the unit at *path*."""
-    return f"{slug(path)}.json"
+    return f"{git.slug(path)}.json"
 
 
 def closure(packages: tuple[Package, ...], package: Package) -> tuple[Package, ...]:
@@ -414,7 +407,7 @@ def _parse_unit(raw: Any, *, path: str = "") -> Unit | None:
     )
 
 
-def _per_run(run_id: str, leg: str) -> Series:
+def _per_run(run_id: str, leg: str) -> git.Series:
     """The per-run series *leg* of *run_id* writes, the timing half's."""
     from livery.workshop._metrics import RUNS
 
@@ -456,7 +449,7 @@ def put_run(
 
         files[ROW_FILE] = timing
     return _per_run(run.run_id, leg).put(
-        root, files, message=f"coverage: {leg} of run {run.run_id}"
+        state_store(root), files, message=f"coverage: {leg} of run {run.run_id}"
     )
 
 
@@ -470,13 +463,13 @@ def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
     """
     from livery.workshop._metrics import RUNS
 
-    keys = RUNS.listed(root, run.run_id)
+    keys = RUNS.listed(state_store(root), run.run_id)
     if keys is None:
         return [], f"{RUNS.prefix}{run.run_id}/*: the remote could not be listed"
     legs: list[Leg] = []
     for key in keys:
         series = RUNS.at(*key)
-        found, why = series.row(root, RUN_FILE)
+        found, why = series.row(state_store(root), RUN_FILE)
         if why:
             legs.append(Leg(key[-1], "", "", (), {}, why=f"{series.ref}: {why}"))
             continue
@@ -525,7 +518,7 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
         return Record({}, failed=True, reason="this leg has no label")
     if not base:
         return Record({}, failed=True, reason="no branch to read a record for")
-    found = RECORD.series(base, leg).rows(root)
+    found = RECORD.series(base, leg).rows(state_store(root))
     if found.failed:
         return Record({}, failed=True, reason=found.reason)
     units: dict[str, Unit] = {}
@@ -534,7 +527,7 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
     for row in found.rows:
         unit = _parse_unit(row.data)
         if unit is None:
-            skipped.append(Skipped(row.name, "carries no unit"))
+            skipped.append(git.Skipped(row.name, "carries no unit"))
             continue
         if row.name == kept_name(unit.path, unit.closure):
             kept.append(Kept(row.name, unit, row.when))
@@ -602,7 +595,7 @@ def put_record(
             rows[kept_name(path, unit.closure)] = _unit_fields(unit)
     removed += current.expired(now or datetime.now(UTC))
     return RECORD.series(base, leg).put(
-        root,
+        state_store(root),
         rows,
         message=f"coverage: {base}'s record on {leg} by run {run.run_id}",
         remove=removed,

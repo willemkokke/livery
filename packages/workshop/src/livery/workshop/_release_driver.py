@@ -1442,7 +1442,7 @@ def workflow_release_check_title(
         # The shell passes no title: the event payload names it, and
         # names the head branch too. An explicit --title is always
         # checked, whatever branch the runner is on.
-        from livery.workshop._state import event_payload
+        from livery.workshop._ci_context import event_payload
 
         pull = (event_payload() or {}).get("pull_request") or {}
         title = str(pull.get("title") or "")
@@ -1496,7 +1496,7 @@ def workflow_release_check_fresh(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     if not head:
-        from livery.workshop._state import event_payload
+        from livery.workshop._ci_context import event_payload
 
         pull = (event_payload() or {}).get("pull_request") or {}
         if not pull:
@@ -1627,9 +1627,9 @@ def collected_wheels(root: Path, ref: str) -> bool:
     were collected from the matrix's artifacts; outside CI a dist/
     may hold a stale local build, and the wave builds as asked.
     """
+    from livery.workshop._ci_context import run_context
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
-    from livery.workshop._state import run_context
 
     if run_context() is None:
         return False

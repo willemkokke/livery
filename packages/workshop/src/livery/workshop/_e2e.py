@@ -34,6 +34,7 @@ import livery.footman as footman
 from livery import git
 from livery.footman import fail
 from livery.forge import ForgeError
+from livery.workshop._ci_context import state_store
 from livery.workshop._ci_tasks import ci
 from livery.workshop._series import LOOP
 from livery.workshop._verdict import Transient
@@ -3314,7 +3315,9 @@ def record_pass(root: Path, pass_: Pass, asked: str) -> str:
         ],
     }
     why = LOOP_SERIES.put(
-        root, {f"pass-{when}.json": row}, message=f"loop: pass {when} ({asked})"
+        state_store(root),
+        {f"pass-{when}.json": row},
+        message=f"loop: pass {when} ({asked})",
     )
     if why:
         return f"  loop series: {why}; the pass is not recorded"

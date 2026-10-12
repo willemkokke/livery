@@ -1092,7 +1092,7 @@ def test_a_narrowed_leg_reuses_the_suite_it_skipped(
 def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._state import Skipped
+    from livery.git import Skipped
 
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")

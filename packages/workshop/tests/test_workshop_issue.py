@@ -265,15 +265,15 @@ def test_start_assigns_and_branches_from_the_fetched_base(
 def test_start_fails_when_origin_cannot_be_fetched(
     rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _state
+    from livery import git
 
     _root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("no network")
     monkeypatch.setattr(
-        _state,
+        git,
         "fetch_store",
-        lambda at, *, branches=False: _state.Fetched(0, "could not resolve host"),
+        lambda at, *, branches=False: git.Fetched(0, "could not resolve host"),
     )
     monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     with pytest.raises(_FAILURES, match="could not be fetched: could not resolve host"):
@@ -285,18 +285,18 @@ def test_start_fetches_origins_heads_and_the_store_in_one_round_trip(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from livery.workshop import _state
+    from livery import git
 
     root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("one trip")
     fetches: list[tuple[Path, bool]] = []
 
-    def fetch_store(at: Path, *, branches: bool = False) -> _state.Fetched:
-        fetches.append((at, branches))
-        return _state.Fetched(3, "", 1)
+    def fetch_store(at: git.StateStore, *, branches: bool = False) -> git.Fetched:
+        fetches.append((at.root, branches))
+        return git.Fetched(3, "", 1)
 
-    monkeypatch.setattr(_state, "fetch_store", fetch_store)
+    monkeypatch.setattr(git, "fetch_store", fetch_store)
     monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     start(str(created.number), worktree=False)
     assert fetches == [(root, True)]

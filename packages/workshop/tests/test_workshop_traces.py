@@ -22,7 +22,8 @@ from typing import Any
 import pytest
 
 from livery import git
-from livery.workshop import _state, _traces
+from livery.workshop import _ci_context, _traces
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 
@@ -187,7 +188,7 @@ def test_a_contract_that_wants_no_traces_pushes_nothing_and_says_nothing(
     _contract(work, profile=False)
     _in_ci(monkeypatch)
     assert _traces.push(work, _trace_file(work)) == ""
-    assert _state.list_refs(work, _traces.TRACES.prefix) == {}
+    assert git.list_refs(state_store(work), _traces.TRACES.prefix) == {}
 
 
 def test_a_run_that_is_not_ci_keeps_its_trace_on_the_machine(work: Path) -> None:
@@ -213,10 +214,11 @@ def test_the_leg_can_be_named_by_the_caller_that_spawned_it(
     only source.
     """
     _in_ci(monkeypatch, run="12", leg="")
-    monkeypatch.delenv(_state.LEG_VARIABLE, raising=False)
+    monkeypatch.delenv(_ci_context.LEG_VARIABLE, raising=False)
     line = _traces.push(work, _trace_file(work), job="check (ubuntu-latest, 3.14)")
     assert (
-        line == f"profile: {_state.LEG_VARIABLE} names no leg; the trace is not pushed"
+        line
+        == f"profile: {_ci_context.LEG_VARIABLE} names no leg; the trace is not pushed"
     )
     named = _traces.push(
         work,
@@ -274,13 +276,13 @@ def test_the_trace_lands_on_the_run_s_ref_and_no_mirror_brings_it(
     # python arrives as a dash.
     assert ref == "refs/workshop-trace/run/41/check-ubuntu-latest-3-14"
     assert ref in line
-    found = _state.read(work, ref)
+    found = git.read(state_store(work), ref)
     assert not found.failed and found.files is not None
     assert json.loads(found.files[_traces.TRACE_FILE])["originEpochUs"] == 1.0
     # The one refspec a sync mirrors is the store's own namespace, so a
     # fetch brings no trace and the gate reads none.
-    assert _state.fetch_store(work)[:2] == (0, "")
-    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) == {}
+    assert git.fetch_store(state_store(work))[:2] == (0, "")
+    assert git.list_refs(state_store(work), git.FETCHED_NAMESPACE) == {}
 
 
 def test_the_janitor_keeps_the_window_s_newest_runs_and_drops_the_rest(
@@ -297,15 +299,15 @@ def test_the_janitor_keeps_the_window_s_newest_runs_and_drops_the_rest(
         for leg in ("check", "docs"):
             _in_ci(monkeypatch, run=run, leg=leg)
             assert _traces.TRACES.series(run, leg).ref in _traces.push(work, trace)
-    lines = _state.sweep(work, (_traces.TRACES,), remote=True)
-    held = _state.list_refs(work, _traces.TRACES.prefix)
+    lines = git.sweep(state_store(work), (_traces.TRACES,), remote=True)
+    held = git.list_refs(state_store(work), _traces.TRACES.prefix)
     assert held is not None
     assert sorted(ref.split("/")[-2] for ref in held) == ["10", "10", "11", "11"]
     assert any("beyond the newest 2 run(s) kept" in line for line in lines)
     # And a second sweep finds nothing left to do.
     assert not [
         line
-        for line in _state.sweep(work, (_traces.TRACES,), remote=True)
+        for line in git.sweep(state_store(work), (_traces.TRACES,), remote=True)
         if "dropped" in line
     ]
 
@@ -326,7 +328,7 @@ def test_a_good_into_is_read_and_a_wrong_key_stops_the_push(
     _in_ci(monkeypatch)
     line = _traces.push(work, _trace_file(work))
     assert line == "profile: [ci] profile-window is -4; it is a whole number of runs"
-    assert _state.list_refs(work, _traces.TRACES.prefix) == {}
+    assert git.list_refs(state_store(work), _traces.TRACES.prefix) == {}
 
 
 # --- the assembler: one trace of a whole run ----------------------------------
@@ -612,7 +614,10 @@ def test_a_legs_ref_without_a_trace_on_it_is_named(
 
     _in_ci(monkeypatch, run="77", leg="check")
     ref = _traces.TRACES.series("77", "check").ref
-    assert _state.put(work, ref, {"something-else.json": "{}"}, message="odd") == ""
+    assert (
+        git.put(state_store(work), ref, {"something-else.json": "{}"}, message="odd")
+        == ""
+    )
     began = "2026-09-27T10:00:00Z"
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
     repo = cast(Repository, cast(Any, _forge(jobs)))
@@ -630,9 +635,9 @@ def test_a_ref_the_channel_cannot_read_names_the_job_it_belonged_to(
 
     _pushed(work, monkeypatch, leg="check", origin=1.0, tasks={"check": 1.0})
     monkeypatch.setattr(
-        _traces,
-        "state_read",
-        lambda root, ref: _state.Read(
+        git,
+        "read",
+        lambda store, ref: git.Read(
             None, None, failed=True, reason="the remote hung up"
         ),
     )
@@ -1107,12 +1112,12 @@ def test_a_contract_that_wants_no_traces_records_nothing_about_a_run(
 
     _contract(work, profile=False)
     _in_ci(monkeypatch, run="91", leg="publish")
-    context = _state.RunContext(
+    context = _ci_context.RunContext(
         "github", "91", "workflow_dispatch", "refs/heads/main", "f" * 40
     )
     _head(monkeypatch, "e" * 40)
     assert _traces.about(work, run=context) == ""
-    assert _state.read(work, _traces.ABOUT.series("e" * 40).ref).files is None
+    assert git.read(state_store(work), _traces.ABOUT.series("e" * 40).ref).files is None
 
 
 def test_a_run_the_forge_files_under_another_commit_records_what_it_ran_on(
@@ -1125,16 +1130,16 @@ def test_a_run_the_forge_files_under_another_commit_records_what_it_ran_on(
     """
     _in_ci(monkeypatch, run="91", leg="publish")
     ran_on, filed_under = "e" * 40, "f" * 40
-    same = _state.RunContext("github", "91", "push", "refs/heads/main", ran_on)
+    same = _ci_context.RunContext("github", "91", "push", "refs/heads/main", ran_on)
     _head(monkeypatch, ran_on)
     assert _traces.about(work, run=same) == ""
-    moved = _state.RunContext(
+    moved = _ci_context.RunContext(
         "github", "91", "workflow_dispatch", "refs/heads/main", filed_under
     )
     _head(monkeypatch, ran_on)
     line = _traces.about(work, run=moved)
     assert "run 91 recorded as the run of eeeeeeeeeeee" in line
-    rows = _traces.ABOUT.series(ran_on).rows(work)
+    rows = _traces.ABOUT.series(ran_on).rows(state_store(work))
     assert [row.data["run"] for row in rows.rows] == ["91"]
     assert rows.rows[0].data["event"] == "workflow_dispatch"
 
@@ -1172,7 +1177,7 @@ def test_a_release_walks_from_its_branch_into_the_wave_its_squash_dispatched(
     wave = _wave(repo, later)
     # The wave writes down the commit it checked out, as its job does.
     _in_ci(monkeypatch, run=str(wave.id), leg="publish")
-    context = _state.RunContext(
+    context = _ci_context.RunContext(
         "github", str(wave.id), wave.event, "refs/heads/main", later
     )
     _head(monkeypatch, squash)

@@ -1,7 +1,7 @@
 """``fm store.ls`` and ``fm store.show``: the state store, read by hand.
 
 Every row the workshop keeps is a declared series of the state store
-([livery.workshop._state][]), gathered in one place
+([livery.git][]), gathered in one place
 ([livery.workshop._series][]). ``store.ls`` names each series and
 family with its scope, its window, and what it holds; ``store.show``
 prints a series' rows newest first through the same reader the
@@ -15,9 +15,10 @@ import json as _json
 from pathlib import Path
 from typing import Annotated, Any
 
+from livery import git
 from livery.footman import doc, fail, group
+from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
-from livery.workshop._state import WHOLE, Keyed, Series, remote_snapshot
 
 store = group("store", help="The state store, read by hand")
 
@@ -29,13 +30,13 @@ def _root() -> Path:
     return root
 
 
-def _declared() -> tuple[Series | Keyed, ...]:
+def _declared() -> tuple[git.Series | git.Keyed, ...]:
     from livery.workshop._series import DECLARED
 
     return DECLARED
 
 
-def _scope(item: Series | Keyed) -> str:
+def _scope(item: git.Series | git.Keyed) -> str:
     window = "no window" if item.window is None else f"window {item.window}"
     return f"{'local' if item.local else 'remote'}, {window}"
 
@@ -47,15 +48,15 @@ def ls_flow(root: Path) -> list[str]:
     checkout lacks serve every series, so the call costs two round
     trips whatever the store holds.
     """
-    with remote_snapshot(root, fetch=WHOLE):
+    with git.remote_snapshot(state_store(root), fetch=git.WHOLE):
         return _ls_lines(root)
 
 
 def _ls_lines(root: Path) -> list[str]:
     lines: list[str] = []
     for item in _declared():
-        if isinstance(item, Series):
-            found = item.rows(root)
+        if isinstance(item, git.Series):
+            found = item.rows(state_store(root))
             if found.failed:
                 held = found.reason
             else:
@@ -64,7 +65,7 @@ def _ls_lines(root: Path) -> list[str]:
                     held += f", {len(found.skipped)} skipped"
             lines.append(f"  {item.name}: {_scope(item)}; {held}")
             continue
-        keys = item.listed(root)
+        keys = item.listed(state_store(root))
         held = "could not be listed" if keys is None else f"{len(keys)} key(s)"
         spelled = "/".join(f"<{part}>" for part in item.keys)
         lines.append(f"  {item.name}/{spelled}: {_scope(item)}; {held}")
@@ -94,7 +95,7 @@ def show_flow(
     a series the store cannot read (with the store's reason). The
     read goes through one listing of the remote namespace.
     """
-    with remote_snapshot(root, fetch=(name,)):
+    with git.remote_snapshot(state_store(root), fetch=(name,)):
         return _show_lines(root, name, key=key, as_json=as_json)
 
 
@@ -109,9 +110,9 @@ def _show_lines(
             f" {', '.join(each.name for each in declared)}"
         )
     parts = tuple(part for part in key.split(",") if part) if key else ()
-    if isinstance(item, Keyed):
+    if isinstance(item, git.Keyed):
         if not parts:
-            keys = item.listed(root)
+            keys = item.listed(state_store(root))
             if keys is None:
                 fail(f"{item.name}: its keys could not be listed")
             spelled = ",".join(f"<{part}>" for part in item.keys)
@@ -128,7 +129,7 @@ def _show_lines(
         fail(f"{item.name} is not keyed; drop --key")
     else:
         series = item
-    found = series.rows(root)
+    found = series.rows(state_store(root))
     if found.failed:
         fail(found.reason)
     if as_json:

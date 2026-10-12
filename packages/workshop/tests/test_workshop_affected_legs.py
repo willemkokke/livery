@@ -11,9 +11,9 @@ import pytest
 from livery import git
 from livery.extensions.python import _backend as _python
 from livery.workshop import _coverage_store, _quality, _verified
+from livery.workshop._ci_context import RunContext
 from livery.workshop._gate_record import Plan
 from livery.workshop._packages import Package
-from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
@@ -152,7 +152,9 @@ def test_a_push_narrows_from_the_records_nearest_proved_tree(
 ) -> None:
     root = _root(tmp_path, "affected-legs = true\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: _push("main"))
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda: _push("main")
+    )
     bases = _stepping(monkeypatch)
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
     _quality.check()
@@ -250,7 +252,7 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
 
     root = _root(tmp_path, "affected-legs = true\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     bases: list[str] = []
 
     def _plan(root: Path, *, base: str = "main") -> _gate_record.Plan:
@@ -294,7 +296,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     x, y = _member(root, "x"), _member(root, "y")
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.delenv("CI", raising=False)  # the fix guard is its own test
 
     def _plan(root: Path, *, base: str = "main") -> _gate_record.Plan:
@@ -366,7 +368,7 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     paths = ["packages/x/tests/test_a.py"]
     # The files are there: a changed test file that is gone runs its
     # package's suite instead of being handed to pytest.
@@ -429,7 +431,8 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     # The verb imports the run context from the state module at call time.
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda: _run("pull_request", "develop")
+        "livery.workshop._ci_context.run_context",
+        lambda: _run("pull_request", "develop"),
     )
     bases = _stepping(monkeypatch)
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
@@ -514,7 +517,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y, z))
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
     )
     _stepping(monkeypatch, "packages/x/a.py")
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: (x,))
@@ -634,7 +637,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
     )
     _stepping(monkeypatch, "tests/test_it.py")
     monkeypatch.setattr(
@@ -691,7 +694,7 @@ def _proved(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda: _run("push", "", "check-a")
+        "livery.workshop._ci_context.run_context", lambda: _run("push", "", "check-a")
     )
     proved = _verified.Verified(
         "t", "5", "a" * 40, "full", ("check-a",), branch="feat/x"
@@ -779,7 +782,7 @@ def test_a_prose_only_diff_says_so_and_skips(
     root = _root(tmp_path, "affected-legs = true\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
     )
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
     _stepping(monkeypatch, "notes/plan.md", "packages/x/README.md")

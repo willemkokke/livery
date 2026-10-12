@@ -29,6 +29,7 @@ from livery import git
 from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Issue, Repository
 from livery.workshop import _stack
+from livery.workshop._ci_context import state_store
 from livery.workshop._contract import load_contract
 from livery.workshop._submit import (
     merged_pull_request,
@@ -422,10 +423,10 @@ def start(
         started = branch
     # One round trip: origin's heads for the base and the store for the
     # worktree's first gate, the shape a sync's own fetch has.
-    from livery.workshop._state import fetch_store
+    from livery.git import fetch_store
     from livery.workshop._sync import store_lines
 
-    fetched = fetch_store(root, branches=True)
+    fetched = fetch_store(state_store(root), branches=True)
     if fetched.why:
         fail(f"origin could not be fetched: {fetched.why}")
     for line in store_lines(fetched):

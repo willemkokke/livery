@@ -98,6 +98,8 @@ if TYPE_CHECKING:
     from livery.workshop._checks import scoped_packages as scoped_packages
     from livery.workshop._checks import scoped_paths as scoped_paths
     from livery.workshop._checks import selected_files as selected_files
+    from livery.workshop._ci_context import RunContext as RunContext
+    from livery.workshop._ci_context import ci_run as ci_run
     from livery.workshop._contract import read_contract as read_contract
     from livery.workshop._coverage_store import workspace_suite as workspace_suite
     from livery.workshop._extensions import contributions_for as contributions_for
@@ -139,8 +141,6 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
-    from livery.workshop._state import RunContext as RunContext
-    from livery.workshop._state import ci_run as ci_run
     from livery.workshop._tokens import forge_token as forge_token
 
 __version__ = "0.8.0"
@@ -231,11 +231,11 @@ _EXPORTS: dict[str, str] = {
     "Prose": "livery.workshop._prose",
     "RegistryTarget": "livery.workshop._registries",
     "ReleaseNotes": "livery.workshop._release_notes",
-    "RunContext": "livery.workshop._state",
+    "RunContext": "livery.workshop._ci_context",
     "WHOLE": "livery.workshop._checks",
     "check_option": "livery.workshop._checks",
     "ci_changes": "livery.workshop._quality",
-    "ci_run": "livery.workshop._state",
+    "ci_run": "livery.workshop._ci_context",
     "compile_commands": "livery.workshop._lifecycle",
     "contributions_for": "livery.workshop._extensions",
     "discover_packages": "livery.workshop._packages",

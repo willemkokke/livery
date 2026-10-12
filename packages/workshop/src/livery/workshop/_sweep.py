@@ -33,7 +33,7 @@ The rules, each saying what went or why it stayed:
 - A file or folder no code writes any more (`LEFTOVERS`) goes when
   met.
 - Every declared series of the state store is bounded, windows,
-  ages, and orphans, as [livery.workshop._state.sweep][] says.
+  ages, and orphans, as [livery.git.sweep][] says.
 - The config directory is reported, never touched: anything beside the
   user's config, tasks file, and shared env file is named. The loop's
   workspace is reported by size and kept.
@@ -281,17 +281,20 @@ def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]
     """Bound every declared series of the state store in the run's scope; the lines."""
     from contextlib import nullcontext
 
+    from livery.git import WHOLE, remote_snapshot
+    from livery.git import sweep as sweep_series
+    from livery.workshop._ci_context import run_context, state_store
     from livery.workshop._series import DECLARED
-    from livery.workshop._state import WHOLE, remote_snapshot, run_context
-    from livery.workshop._state import sweep as sweep_series
 
     if root is None:
         return ["state store: no checkout here; nothing swept"]
     remote = run_context() is not None
     # The remote sweep reads every series: one listing and one fetch.
-    scope = remote_snapshot(root, fetch=WHOLE) if remote else nullcontext()
+    scope = remote_snapshot(state_store(root), fetch=WHOLE) if remote else nullcontext()
     with scope:
-        lines = sweep_series(root, DECLARED, remote=remote, dry_run=dry_run, now=now)
+        lines = sweep_series(
+            state_store(root), DECLARED, remote=remote, dry_run=dry_run, now=now
+        )
     return [f"state store: {line.strip()}" for line in lines]
 
 

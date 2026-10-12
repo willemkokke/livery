@@ -19,6 +19,7 @@ from livery import git
 from livery.footman import Failed
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
+from livery.workshop._ci_context import state_store
 from livery.workshop._diagnostics import gather_bundle, record
 from livery.workshop._verdict import EXIT_DISARMED, Verdict, follow
 from livery.workshop._workflow_decision import (
@@ -416,7 +417,9 @@ def test_record_writes_within_the_window_and_never_raises(
             branch=f"feat/{index}-x",
         )
         assert why == "" and name.endswith(f"-feat-{index}-x-stalled")
-    assert len(SERIES.rows(root).rows) == 20  # newest KEEP kept, older gone
+    assert (
+        len(SERIES.rows(state_store(root)).rows) == 20
+    )  # newest KEEP kept, older gone
     # Even writing failed: a root that is no repository is a reason, not a raise.
     nowhere = tmp_path / "nowhere"
     nowhere.mkdir()
@@ -464,7 +467,7 @@ def test_closed_is_definitive_on_a_single_read(
         follow(repo, "feat/1-x", root, interval=0, timeout=5)
     assert caught.value.code == 12
     # And the non-merged ending wrote its bundle to the local series.
-    (bundle,) = SERIES.rows(root).rows
+    (bundle,) = SERIES.rows(state_store(root)).rows
     assert bundle.name.endswith("-feat-1-x-closed")
 
 

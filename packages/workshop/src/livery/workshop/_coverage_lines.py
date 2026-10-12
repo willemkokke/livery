@@ -25,8 +25,8 @@ from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree
 
+from livery import git
 from livery.footman import fail
-from livery.workshop._state import slug
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
@@ -55,7 +55,7 @@ def measurer_for(compiler_id: str) -> str:
 
 def part_path(root: Path, package_path: str) -> Path:
     """Where *package_path*'s lines part lives under *root*."""
-    return root / f"{PART_PREFIX}{slug(package_path)}.json"
+    return root / f"{PART_PREFIX}{git.slug(package_path)}.json"
 
 
 def write_part(root: Path, package_path: str, lines: Lines) -> Path:

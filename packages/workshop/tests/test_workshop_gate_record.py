@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.workshop import _gate_record, _state
+from livery.workshop import _ci_context, _gate_record
+from livery.workshop._ci_context import state_store
 from livery.workshop._verified import tree_id
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 from workshop_spawns import counting_spawns
@@ -116,7 +117,9 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
         "b": json.dumps({"schema": 99}),
         "c": json.dumps({"schema": 1, "when": "2026-09-10T00:00:00+00:00"}),
     }
-    assert _state.put(work, _gate_record.SERIES.ref, junk, message="junk") == ""
+    assert (
+        git.put(state_store(work), _gate_record.SERIES.ref, junk, message="junk") == ""
+    )
     proof, why = _gate_record.covering(work)
     assert proof is None and "no chain of green gates" in why
     # A step whose base no row proves is not a proof either.
@@ -127,7 +130,10 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
             tree, when=fresh, scope="step", base_tree="0" * 40
         )
     }
-    assert _state.put(work, _gate_record.SERIES.ref, orphan, message="orphan") == ""
+    assert (
+        git.put(state_store(work), _gate_record.SERIES.ref, orphan, message="orphan")
+        == ""
+    )
     assert _gate_record.covering(work)[0] is None
     # Nor a cycle.
     loop = {
@@ -138,7 +144,9 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
             "1" * 40, when=fresh, scope="step", base_tree=tree
         ),
     }
-    assert _state.put(work, _gate_record.SERIES.ref, loop, message="loop") == ""
+    assert (
+        git.put(state_store(work), _gate_record.SERIES.ref, loop, message="loop") == ""
+    )
     assert _gate_record.covering(work)[0] is None
 
 
@@ -146,7 +154,7 @@ def test_the_record_never_reaches_the_remote(work: Path) -> None:
     assert "recorded" in _gate_record.remember(work, tree=tree_id(work), packages=None)
     _git(work, "push", "-q", "origin", "main")
     assert "workshop-local" not in _git(work, "ls-remote", "origin")
-    assert _gate_record.SERIES.ref.startswith(_state.LOCAL_NAMESPACE)
+    assert _gate_record.SERIES.ref.startswith(git.LOCAL_NAMESPACE)
 
 
 def test_rows_are_bounded_by_count_and_age(work: Path, unverified: None) -> None:
@@ -157,7 +165,9 @@ def test_rows_are_bounded_by_count_and_age(work: Path, unverified: None) -> None
         for n in range(_gate_record.KEEP + 5)
     }
     stale[f"{tree}--full"] = _raw(tree, when=old)
-    assert _state.put(work, _gate_record.SERIES.ref, stale, message="old") == ""
+    assert (
+        git.put(state_store(work), _gate_record.SERIES.ref, stale, message="old") == ""
+    )
     # Eight days old: the row proves nothing, however exact its tree.
     assert _gate_record.covering(work)[0] is None
     # A write keeps the newest KEEP rows, the new one among them.
@@ -195,7 +205,10 @@ def test_a_chain_of_steps_proves_its_tree_back_to_a_full_row(
             fourth, when=fresh, scope="affected", base_tree=third
         )
     }
-    assert _state.put(work, _gate_record.SERIES.ref, legacy, message="legacy") == ""
+    assert (
+        git.put(state_store(work), _gate_record.SERIES.ref, legacy, message="legacy")
+        == ""
+    )
     proof, _ = _gate_record.covering(work)
     assert proof is not None and proof.steps[0].tree == fourth
 
@@ -226,7 +239,7 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
     parent = _commit(work, "a.txt")
     tip = _commit(work, "b.txt")
     monkeypatch.setattr(
-        "livery.workshop._state.remote_snapshot",
+        "livery.git.remote_snapshot",
         lambda root, **kw: __import__("contextlib").nullcontext(),
     )
     # The record could not be read: rootless, and the line says why.
@@ -266,18 +279,21 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
     from livery.workshop import _verified
 
     base = tree_id(work)
-    run = _state.RunContext("github", "7", "push", "refs/heads/main")
-    monkeypatch.setattr(_state, "run_context", lambda environ=None: run)
-    assert _verified.SERIES.put(work, {base: {"scope": "full"}}, message="ci") == ""
-    monkeypatch.setattr(_state, "run_context", lambda environ=None: None)
-    assert _state.fetch_store(work)[:2] == (1, "")
+    run = _ci_context.RunContext("github", "7", "push", "refs/heads/main")
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: run)
+    assert (
+        _verified.SERIES.put(state_store(work), {base: {"scope": "full"}}, message="ci")
+        == ""
+    )
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: None)
+    assert git.fetch_store(state_store(work))[:2] == (1, "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    with counting_spawns() as spawned, _state.fetched_snapshot(work):
+    with counting_spawns() as spawned, git.fetched_snapshot(state_store(work)):
         assert _gate_record.verified_roots(work, "main") == ({base}, "")
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
     # Never fetched: rootless, and the line names the sync.
-    _git(work, "update-ref", "-d", _state.FETCHED.ref)
-    with _state.fetched_snapshot(work):
+    _git(work, "update-ref", "-d", git.FETCHED.ref)
+    with git.fetched_snapshot(state_store(work)):
         roots, why = _gate_record.verified_roots(work, "main")
     assert roots == set() and "has not been fetched" in why and "sync`" in why
 
@@ -364,7 +380,7 @@ def test_the_plan_is_proved_a_step_or_full(work: Path, unverified: None) -> None
 
 # --- a CI leg's plan: the reflex's rule over CI's record ---------------------------
 
-PULL = _state.RunContext(
+PULL = _ci_context.RunContext(
     "github",
     "8",
     "pull_request",
@@ -379,7 +395,7 @@ def _stamped(work: Path, tree: str, *, merged: tuple[str, str] | None = None) ->
     from livery.workshop import _verified
 
     with pytest.MonkeyPatch.context() as ci:
-        ci.setattr(_state, "run_context", lambda environ=None: PULL)
+        ci.setattr(_ci_context, "run_context", lambda environ=None: PULL)
         why = _verified.stamp(
             work,
             PULL,

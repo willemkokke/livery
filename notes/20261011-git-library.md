@@ -1,7 +1,7 @@
 # One home for every git access: the git library
 
-Status: phase 1 on main (PR #1501), phase 2 in review (#1502);
-phases 3 to 5 not started. The destination note
+Status: phases 1 and 2 on main (PRs #1501, #1503), phase 3 in review
+(#1504); phases 4 and 5 not started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -397,6 +397,21 @@ and the number recorded here.
 
 ## Decision record
 
+- 2026-10-12, phase 3 built. The store moved whole as
+  `livery.git.StateStore(root, in_ci, identity, snapshot_variable,
+  prog)`, frozen; `prog` is a fourth construction datum, for the words
+  a refusal gives a person. The ref namespaces (`refs/workshop/`, its
+  local, trace and origin siblings) stay as the library's constants:
+  they are the store's own vocabulary, not a CI fact, and every series
+  spells its ref through them. The workshop's declarations already
+  lived in `_series.py`, so no `_records` module was made; the CI run
+  context and the one `state_store(root)` factory are
+  `_ci_context.py`, and `_state.py` is gone. The workshop calls the
+  library through the module, `git.read(store, ref)`, as phase 1 does,
+  so a test patches `livery.git` and every caller sees it. The store's
+  60 tests moved to `packages/git/tests/test_git_store.py` with their
+  process-count pins; the 13 run-context and policy tests are
+  `test_workshop_ci_context.py`.
 - 2026-10-12, phase 2 built. Three departures from the phase's text,
   each decided while building: the editor is `GIT_EDITOR=true` for
   every task unless the person set one, with no `@git.no_editor` mark,

@@ -14,6 +14,7 @@ from livery import git
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
+from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -1308,7 +1309,7 @@ def test_a_pass_records_its_rows_on_the_local_loop_series(seeds: Seeds) -> None:
     pass_.timings.append(_e2e.Timing("birth", 12.34, 3))
     line = _e2e.record_pass(work, pass_, "develop")
     assert line.startswith("  loop series: pass ") and line.endswith("(1 scenario(s))")
-    found = _e2e.LOOP_SERIES.rows(work)
+    found = _e2e.LOOP_SERIES.rows(state_store(work))
     assert not found.failed and len(found.rows) == 1
     (row,) = found.rows
     assert row.name.startswith("pass-") and row.data["asked"] == "develop"

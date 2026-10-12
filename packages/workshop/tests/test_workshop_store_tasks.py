@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _metrics, _state, _store_tasks, _verified
+from livery import git
+from livery.workshop import _ci_context, _metrics, _store_tasks, _verified
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
@@ -54,7 +56,10 @@ def test_a_family_without_its_key_lists_its_keys_and_refuses_a_wrong_shape(
         "    (none yet)",
     ]
     half = {"row.json": json.dumps({"schema": _metrics.SCHEMA, "job": "check"})}
-    assert _state.put(work, _metrics.run_ref(_RUN, "check-a"), half, message="h") == ""
+    assert (
+        git.put(state_store(work), _metrics.run_ref(_RUN, "check-a"), half, message="h")
+        == ""
+    )
     assert _store_tasks.show_flow(work, "run")[1:] == ["    7,check-a"]
     with pytest.raises(_FAILURES, match="keyed by run, leg; --key names 1 part"):
         _store_tasks.show_flow(work, "run", key="7")
@@ -62,7 +67,7 @@ def test_a_family_without_its_key_lists_its_keys_and_refuses_a_wrong_shape(
         _store_tasks.show_flow(work, "metrics", key="7,check-a")
 
 
-_RUN = _state.RunContext("gitea", "7", "push", "refs/heads/main")
+_RUN = _ci_context.RunContext("gitea", "7", "push", "refs/heads/main")
 
 
 def test_an_unreadable_series_fails_with_the_stores_reason(
@@ -92,7 +97,7 @@ def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> No
 def test_show_prints_rows_newest_first_compactly_or_as_json(work: Path) -> None:
     assert _verified.stamp(work, _RUN, tree="a" * 40, sha="b" * 40, legs=("c",)) == ""
     junk = {"junk": "{not json"}
-    assert _state.put(work, _verified.SERIES.ref, junk, message="junk") == ""
+    assert git.put(state_store(work), _verified.SERIES.ref, junk, message="junk") == ""
     lines = _store_tasks.show_flow(work, "verified")
     assert lines[0] == f"  {_verified.SERIES.ref}: 1 row(s)"
     assert lines[1].startswith(f"  {'a' * 40}  2026")
@@ -105,7 +110,10 @@ def test_show_prints_rows_newest_first_compactly_or_as_json(work: Path) -> None:
     (row,) = json.loads(text)
     assert row["name"] == "a" * 40 and row["schema"] == 1 and row["legs"] == ["c"]
     half = {"row.json": json.dumps({"schema": _metrics.SCHEMA, "job": "check"})}
-    assert _state.put(work, _metrics.run_ref(_RUN, "check-a"), half, message="h") == ""
+    assert (
+        git.put(state_store(work), _metrics.run_ref(_RUN, "check-a"), half, message="h")
+        == ""
+    )
     shown = _store_tasks.show_flow(work, "run", key="7,check-a")
     assert shown[0] == f"  {_metrics.run_ref(_RUN, 'check-a')}: 1 row(s)"
     assert shown[2] == "    job: check"

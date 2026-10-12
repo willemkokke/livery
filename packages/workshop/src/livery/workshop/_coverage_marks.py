@@ -26,12 +26,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._state import Series, slug
+from livery import git
+from livery.workshop._ci_context import state_store
 
 #: The marks: one row per write, the newest kept by the window; anyone
 #: may write, since an accept is a person's act, and the ratchet's
 #: writer guards its own rule that only a CI run raises a mark.
-SERIES = Series("coverage/marks", window=400, ci_only=False)
+SERIES = git.Series("coverage/marks", window=400, ci_only=False)
 
 #: The floor value that selects the mode.
 AUTO_RATCHET = "auto-ratchet"
@@ -96,7 +97,7 @@ class Verdict:
 
 
 def _row_name(when: datetime, package: str) -> str:
-    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{slug(package)}"
+    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{git.slug(package)}"
 
 
 def marks(root: Path) -> tuple[dict[str, Mark] | None, str]:
@@ -108,7 +109,7 @@ def marks(root: Path) -> tuple[dict[str, Mark] | None, str]:
     another schema, or lacks a mark's fields is skipped, so one bad
     row disables nothing. The newest row per package is its mark.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return None, found.reason
     current: dict[str, Mark] = {}
@@ -152,7 +153,7 @@ def write_mark(
         "reason": reason,
     }
     return SERIES.put(
-        root,
+        state_store(root),
         {_row_name(datetime.now(UTC), package): row},
         message=f"coverage mark: {package} {kind} {value:.2f} by {by}",
     )

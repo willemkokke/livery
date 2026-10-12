@@ -57,6 +57,32 @@ Any process of the same user may reuse the open connection for its
 window, without the agent's consent: the same trust boundary as
 `SSH_AUTH_SOCK`.
 
+## The state store
+
+JSON rows on git refs, in a namespace a default clone or fetch never
+downloads: `refs/workshop/*` on the remote and `refs/workshop-local/*`
+in the checkout's git directory. A `StateStore` is a checkout and the
+policy its builder gave it: whether this process is a CI run, the
+identity every commit carries, and the variable a published listing
+travels in. A `Series` declares one ref's rows and reads and writes
+through the store; a `Keyed` family declares one series per key.
+
+```python
+from livery import git
+
+store = git.StateStore(
+    root, in_ci=False, identity=("fm", "fm@fm.invalid"), snapshot_variable="MY_SNAPSHOT"
+)
+rows = git.Series("metrics", window=300)
+print(rows.rows(store).rows[:3])
+```
+
+A write is a compare-and-swap on the sha the read returned, a read or a
+write is a fixed handful of git processes whatever the series holds,
+and a `remote_snapshot` block makes every read inside one listing and
+one fetch. `sweep` is the janitor. Every failure is a printed reason,
+never a boolean.
+
 ## What is not here
 
 Porcelain that waits on a person, a signer, is the caller's to arrange:
