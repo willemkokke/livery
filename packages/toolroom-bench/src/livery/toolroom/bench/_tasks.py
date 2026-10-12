@@ -1902,7 +1902,10 @@ def submit_refresh(
 ) -> list[str]:
     """Commit a refresh that moved something and open its pull request.
 
-    The branch is `chore/tools-refresh-<date>`. When origin already
+    The branch is `chore/tools-refresh-<date>`, cut from HEAD, and a
+    refresh submits only from the history of origin's default branch:
+    on another checkout it submits nothing and says so, and the files it
+    wrote stand. When origin already
     holds the day's branch, from an earlier refresh on another machine
     or in another job, the refresh compares and moves nothing: when
     that branch holds every file this refresh wrote, with the same
@@ -1968,6 +1971,12 @@ def submit_refresh(
     message = f"{title}\n\n{body}"
     tracking = f"refs/remotes/origin/{branch}"
     held = _origin_holds(run_git, branch)
+    if not _on_default_branch(run_git):
+        return [
+            "  the checkout is not on origin's default branch, so nothing is"
+            " submitted: a refresh submits from the default branch alone, and"
+            " the files it wrote stand in the checkout"
+        ]
     if held:
         _git_step(run_git, "fetch", "origin", f"+refs/heads/{branch}:{tracking}")
     _git_step(run_git, "switch", "-c", branch)
@@ -1996,6 +2005,22 @@ def submit_refresh(
         f"  refreshed {moved} on {branch}",
         f"  submitted {'armed' if found.armed else 'unarmed'}: {reason}",
     ]
+
+
+def _on_default_branch(run: Callable[..., Result]) -> bool:
+    """Whether HEAD is on the history of origin's default branch.
+
+    A refresh cuts the day's branch from HEAD, so a checkout of another
+    branch, a feature branch a dispatched nightly runs on among them,
+    would put that branch's commits into the refresh's pull request.
+    Origin's default branch is fetched as `HEAD`, so the check needs no
+    branch name and holds on a checkout a merge moved on since.
+    """
+    _git_step(run, "fetch", "origin", "HEAD")
+    answer = run("merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD")
+    if answer.code not in (0, 1):
+        _git_failed(("merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"), answer)
+    return answer.code == 0
 
 
 def _origin_holds(run: Callable[..., Result], branch: str) -> bool:
