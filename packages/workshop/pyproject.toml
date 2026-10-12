@@ -31,7 +31,7 @@ dependencies = [
     # act's lowest-direct leg installs the floor and proves it.
     "livery-toolroom>=0.11.0",
     # Every git call the workshop makes goes through livery.git.
-    "livery-git>=0.1.0",
+    "livery-git>=0.0.0",
     # The tool records, the catalogue and the lock: what `fm tools.*`
     # resolves against.
     "livery-toolroom-store>=0.3.0",
