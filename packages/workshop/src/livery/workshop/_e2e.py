@@ -1106,19 +1106,21 @@ def _rmtree(path: Path) -> None:
     shutil.rmtree(path)
 
 
+def _origin_main(root: Path) -> str:
+    """The commit origin's main is at, asked of origin; empty when it cannot say."""
+    try:
+        return git.ls_remote(root, "refs/heads/main").get("refs/heads/main", "")
+    except git.GitError:
+        return ""
+
+
 def _unpushed_commits(root: Path) -> list[str]:
     """The commits on any local branch of *root* that its origin does not hold."""
-    import livery.toolroom.tools as toolroom
-
-    fetched = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
-        "fetch", "--quiet", "origin"
-    )
-    if fetched.code != 0:
+    try:
+        git.fetch(root)
+    except git.GitError:
         return []  # no reachable origin: nothing there could hold them anyway
-    listed = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
-        "log", "--oneline", "--branches", "--not", "--remotes=origin"
-    )
-    return [line for line in listed.stdout.splitlines() if line.strip()]
+    return git.unpushed(root)
 
 
 def _birth(
@@ -1206,10 +1208,7 @@ def _enable_steps(contract_text: str, steps: tuple[str, ...]) -> str:
 
 def _has_remote(root: Path) -> bool:
     """Whether the loop's workspace at *root* has its forge remote."""
-    import livery.toolroom.tools as toolroom
-
-    probe = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
-    return probe("remote", "get-url", "origin").code == 0
+    return git.has_remote(root)
 
 
 def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
@@ -1222,15 +1221,12 @@ def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     validates the token and ignores the username (measured), and
     ``oauth2`` is the conventional stand-in.
     """
-    import livery.toolroom.tools as toolroom
-
     bare = _lane(kind).alias.removeprefix("http://")
     url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
-    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
-        "remote", "set-url", "origin", url
-    )
-    if result.code != 0:
-        fail(f"git remote set-url exited {result.code}")
+    try:
+        git.set_remote_url(root, "origin", url)
+    except git.GitError as error:
+        fail(str(error))
 
 
 def _lock_pins(root: Path, pins: dict[str, str]) -> None:
@@ -1653,17 +1649,12 @@ def _align_main(root: Path) -> None:
     squashes supersede, so a fast-forward regularly cannot. What
     goes is printed, never silently vanished.
     """
-    import livery.toolroom.tools as toolroom
-
-    toolroom.git.opts(cwd=root)("fetch", "origin")
-    gone = toolroom.git.opts(cwd=root, nofail=True)(
-        "log", "--oneline", "origin/main..main"
-    )
-    if gone.code == 0 and gone.stdout.strip():
-        for line in gone.stdout.strip().splitlines():
+    git.fetch(root)
+    with contextlib.suppress(git.GitError):
+        for line in git.oneline(root, "origin/main..main"):
             print(f"  superseded local commit: {line}")
-    toolroom.git.opts(cwd=root)("switch", "main")
-    toolroom.git.opts(cwd=root)("reset", "--hard", "origin/main")
+    git.switch(root, "main")
+    git.reset_hard(root, "origin/main")
     # Residue too: a failed pass's branch leaves untracked leftovers
     # (a member directory without its contract refuses discovery).
     # What `fm sync` materialises survives: the venv, the stubs under
@@ -1671,29 +1662,23 @@ def _align_main(root: Path) -> None:
     # the gate reads and no verb between two syncs rewrites (a member
     # is wired with `uv sync` alone); everything else is regenerable
     # by charter.
-    kept = [flag for name in KEPT_BY_SYNC for flag in ("-e", name)]
-    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", *kept)
-    if residue.code == 0 and residue.stdout.strip():
-        for line in residue.stdout.strip().splitlines():
-            print(f"  cleaned: {line.removeprefix('Would remove ')}")
-        toolroom.git.opts(cwd=root)("clean", "-fdx", *kept)
+    residue = git.clean(root, keep=KEPT_BY_SYNC, dry_run=True)
+    if residue:
+        for line in residue:
+            print(f"  cleaned: {line}")
+        git.clean(root, keep=KEPT_BY_SYNC)
     # Local branches too: main is the loop's only durable ref, and
     # every other local branch is a past pass's residue (a prepared
     # release branch whose PR already merged makes the driver refuse
     # as stale). What goes is printed, never silently vanished.
-    heads = toolroom.git.opts(cwd=root, nofail=True)(
-        "for-each-ref", "--format=%(refname:short)", "refs/heads/"
-    )
-    for name in heads.stdout.split() if heads.code == 0 else []:
+    for name in git.local_branches(root, ""):
         if name == "main":
             continue
-        stale = toolroom.git.opts(cwd=root, nofail=True)(
-            "log", "--oneline", f"main..{name}"
-        )
-        if stale.code == 0 and stale.stdout.strip():
-            for line in stale.stdout.strip().splitlines():
+        with contextlib.suppress(git.GitError):
+            for line in git.oneline(root, f"main..{name}"):
                 print(f"  superseded branch commit: {line} ({name})")
-        toolroom.git.opts(cwd=root, nofail=True)("branch", "-D", name)
+        with contextlib.suppress(git.GitError):
+            git.delete_branch(root, name)
         print(f"  pruned pass-owned branch: {name}")
 
 
@@ -1705,10 +1690,8 @@ def _fresh_branch(root: Path, name: str) -> None:
     a future edit can separate: the tree is reset to origin, cleaned,
     and swept of stale local branches before this one is recreated.
     """
-    import livery.toolroom.tools as toolroom
-
     _align_main(root)
-    toolroom.git.opts(cwd=root)("switch", "-C", name)
+    git.switch_new(root, name)
 
 
 def _render_with_the_pass(root: Path) -> None:
@@ -2194,8 +2177,6 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     finish already lowered) is printed and the mark stands; the proof
     reads the same lines either way.
     """
-    import livery.toolroom.tools as toolroom
-
     contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
     body = contract.read_text("utf-8")
     if 'coverage-floor = "auto-ratchet"' not in body:
@@ -2213,7 +2194,8 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
             " mark, and the loop proves the record, an accepted lowering,"
             " and the ratchet up on every pass.",
         )
-        toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+        with contextlib.suppress(git.GitError):
+            git.fetch(root, prune=True)
         _loop_fm(root, "submit", "--force", "--armed")
         _align_main(root)
         forge, _ = _dev_forge(kind)
@@ -2280,9 +2262,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     # with a lease on that ref, which git refuses as stale against a
     # branch that is gone. A pruning fetch drops the stale ref (or
     # refreshes it when a failed pass left the branch behind).
-    import livery.toolroom.tools as toolroom
-
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    with contextlib.suppress(git.GitError):
+        git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     from livery.workshop._coverage_store import workspace_suite
@@ -2396,11 +2377,9 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     its stamp on that tree. A push that paid the whole gate here, or
     skipped, is the failure this proof exists for.
     """
-    import livery.toolroom.tools as toolroom
-
     _align_main(root)
     before = git.head_sha(root)
-    toolroom.git.opts(cwd=root)("switch", "-C", "chore/unproven-push", f"{before}~1")
+    git.switch_new(root, "chore/unproven-push", f"{before}~1")
     probe = root / "packages" / "loop-native" / "tests" / "test_unproven_push.py"
     probe.write_text(
         '"""A member-only change behind main: the loop proves a push narrows."""\n'
@@ -2416,7 +2395,8 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
         "chore(loop-native): a member-only change behind main\n\nCut from the"
         " commit before main's tip, so its squash lands a tree no run proved.",
     )
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    with contextlib.suppress(git.GitError):
+        git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     landed = git.head_sha(root)
@@ -2487,9 +2467,8 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         " skips its gate.",
     )
     head = git.head_sha(root)
-    import livery.toolroom.tools as toolroom
-
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    with contextlib.suppress(git.GitError):
+        git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     forge, _ = _dev_forge(kind)
@@ -2570,9 +2549,8 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
         " workspace tests and says so.",
     )
     head = git.head_sha(root)
-    import livery.toolroom.tools as toolroom
-
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    with contextlib.suppress(git.GitError):
+        git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     forge, _ = _dev_forge(kind)
@@ -2761,21 +2739,17 @@ def _release_act(root: Path, kind: str) -> None:
     registry and cuts the receipt tag. Done means measured: the
     served version and the annotated tag, never the exit code alone.
     """
-    import livery.toolroom.tools as toolroom
     from livery.workshop._release_driver import release_name
 
     # Only the members without a receipt release: the driver refuses a
     # set with a member nothing unreleased touches, and a cut receipt
     # is exactly that. A fresh loop releases both in one set.
     all_tags = {name: f"packages/{name}/v0.1.0" for name, _kind in LOOP_MEMBERS}
-    listed = toolroom.git.opts(cwd=root, nofail=True)(
-        "ls-remote", "--tags", "origin", *all_tags.values()
-    )
-    cut = {
-        name
-        for name, tag in all_tags.items()
-        if listed.code == 0 and tag in listed.stdout
-    }
+    try:
+        on_origin = git.ls_remote(root, *all_tags.values(), tags=True)
+    except git.GitError:
+        on_origin = {}
+    cut = {name for name, tag in all_tags.items() if f"refs/tags/{tag}" in on_origin}
     for name in sorted(cut):
         _require_receipt_protected(root, all_tags[name], kind)
         print(f"  release: receipt {all_tags[name]} already on the loop")
@@ -2795,17 +2769,12 @@ def _release_act(root: Path, kind: str) -> None:
     forge, _ = _dev_forge(kind)
     survivor = forge.repository(E2E_OWNER, E2E_REPO).pr.find_by_head(release_branch)
     if survivor is not None and survivor.state == "open":
-        toolroom.git.opts(cwd=root)("fetch", "origin", release_branch)
-        fresh = toolroom.git.opts(cwd=root, nofail=True)(
-            "merge-base", "--is-ancestor", "origin/main", f"origin/{release_branch}"
-        )
-        if fresh.code == 0:
+        git.fetch(root, release_branch)
+        if git.is_ancestor(root, "origin/main", f"origin/{release_branch}"):
             print(f"  prepared release PR #{survivor.number} is fresh; recovering it")
         else:
             print(f"  abandoning stale prepared release PR #{survivor.number}")
-            toolroom.git.opts(cwd=root)(
-                "switch", "-C", release_branch, f"origin/{release_branch}"
-            )
+            git.switch_new(root, release_branch, f"origin/{release_branch}")
             _loop_fm(root, "abandon")
             _align_main(root)
     # Bounded self-heal for the forge's post-open window: right after
@@ -2817,10 +2786,7 @@ def _release_act(root: Path, kind: str) -> None:
     import time
 
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    before = toolroom.git.opts(cwd=root, nofail=True)(
-        "ls-remote", "origin", "refs/heads/main"
-    ).stdout.split()
-    before_sha = before[0] if before else ""
+    before_sha = _origin_main(root)
     for round_ in range(4):
         if round_:
             print("  waiting out the forge's post-open window (45s)")
@@ -2847,10 +2813,7 @@ def _release_act(root: Path, kind: str) -> None:
         if survivor is None or survivor.state != "open":
             fail("the armed release failed with no fresh PR to recover; see above")
         _align_main(root)
-        fresh = toolroom.git.opts(cwd=root, nofail=True)(
-            "merge-base", "--is-ancestor", "origin/main", f"origin/{release_branch}"
-        )
-        if fresh.code != 0:
+        if not git.is_ancestor(root, "origin/main", f"origin/{release_branch}"):
             fail("the armed release failed and its PR went stale; see above")
     else:
         fail("the forge's post-open window never closed across 4 rounds")
@@ -2862,11 +2825,9 @@ def _release_act(root: Path, kind: str) -> None:
     squash = ""
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
-        moved = toolroom.git.opts(cwd=root, nofail=True)(
-            "ls-remote", "origin", "refs/heads/main"
-        ).stdout.split()
-        if moved and moved[0] != before_sha:
-            squash = moved[0]
+        moved = _origin_main(root)
+        if moved and moved != before_sha:
+            squash = moved
             break
         time.sleep(3)
     if squash:
@@ -2896,11 +2857,9 @@ def _release_act(root: Path, kind: str) -> None:
     deadline = time.monotonic() + 120
     for tag in tags.values():
         while True:
-            listed = toolroom.git.opts(cwd=root, nofail=True)(
-                "ls-remote", "--tags", "origin", tag
-            )
-            if tag in listed.stdout:
-                break
+            with contextlib.suppress(git.GitError):
+                if f"refs/tags/{tag}" in git.ls_remote(root, tag, tags=True):
+                    break
             if time.monotonic() >= deadline:
                 fail(f"served, but the receipt tag {tag} is not on the loop")
             time.sleep(5)
@@ -2924,18 +2883,17 @@ def _require_receipt_protected(root: Path, tag: str, kind: str = "gitea") -> Non
     import json
     import urllib.request
 
-    import livery.toolroom.tools as toolroom
-
     # Forced: a receipt recut by a later wave is a new tag object, and
     # the workspace may still hold the one an earlier pass fetched.
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--force", "origin", "tag", tag)
-    denied = toolroom.git.opts(cwd=root, nofail=True)(
-        "push", "origin", f":refs/tags/{tag}"
-    )
-    if denied.code != 0:
+    with contextlib.suppress(git.GitError):
+        git.fetch_tag(root, tag)
+    try:
+        git.push_refspec(root, f":refs/tags/{tag}")
+    except git.GitError:
         print(f"  receipt {tag}: delete refused; protection holds")
         return
-    toolroom.git.opts(cwd=root, nofail=True)("push", "origin", f"refs/tags/{tag}")
+    with contextlib.suppress(git.GitError):
+        git.push_refspec(root, f"refs/tags/{tag}")
     if kind != "gitea":
         fail(
             f"the receipt tag {tag} was deletable on {kind}, whose protection"

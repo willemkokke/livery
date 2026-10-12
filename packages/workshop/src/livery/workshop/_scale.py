@@ -49,7 +49,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
 from livery import git
 from livery.footman import doc, fail
 from livery.workshop._ci_tasks import ci
@@ -116,11 +115,10 @@ def parent_of(index: int) -> int | None:
 
 def _git(root: Path, *args: str) -> str:
     """Run git under *root*; stdout, or fail with git's own words."""
-    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
-    if result.code != 0:
-        spelled = " ".join(args)
-        fail(f"git {spelled} exited {result.code}:\n{result.stdout}{result.stderr}")
-    return result.stdout
+    try:
+        return git.run(root, *args)
+    except git.GitError as error:
+        fail(str(error))
 
 
 def copy_tree(source: Path, destination: Path) -> None:

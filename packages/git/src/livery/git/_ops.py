@@ -233,9 +233,164 @@ def head_message(root: Path) -> tuple[str, str]:
     return subject.strip(), body.strip()
 
 
-def fetch(root: Path) -> None:
-    """Freshen ``origin/*``."""
-    run(root, "fetch", "origin")
+def fetch(root: Path, *refs: str, prune: bool = False, force: bool = False) -> None:
+    """Freshen ``origin/*``, or the *refs* named, from origin.
+
+    *prune* drops the remote-tracking refs origin no longer has, so a
+    branch the forge deleted does not linger; *force* takes a ref that
+    moved to an unrelated commit, a receipt tag recut by a later wave.
+    """
+    flags = [flag for flag, on in (("--prune", prune), ("--force", force)) if on]
+    run(root, "fetch", "--quiet", *flags, "origin", *refs)
+
+
+def fetch_tag(root: Path, tag: str) -> None:
+    """Take *tag* from origin as it is there, replacing the one held here."""
+    run(root, "fetch", "--quiet", "--force", "origin", "tag", tag)
+
+
+def switch_new(root: Path, name: str, start: str = "") -> None:
+    """Create or reset the branch *name* at *start* (HEAD when empty); switch to it."""
+    run(root, "switch", "-C", name, *([start] if start else []))
+
+
+def reset_hard(root: Path, ref: str) -> None:
+    """Move the branch, the index and the working tree to *ref*; every change goes."""
+    run(root, "reset", "--hard", ref)
+
+
+def clean(root: Path, *, keep: Sequence[str] = (), dry_run: bool = False) -> list[str]:
+    """Remove every untracked and ignored file but the patterns in *keep*; the paths.
+
+    Under *dry_run* nothing goes and the paths are what would.
+    """
+    kept = [flag for name in keep for flag in ("-e", name)]
+    out = run(root, "clean", "-ndx" if dry_run else "-fdx", *kept)
+    return [
+        line.removeprefix("Would remove ").removeprefix("Removing ").strip()
+        for line in out.splitlines()
+        if line.strip()
+    ]
+
+
+def oneline(root: Path, span: str) -> list[str]:
+    """The commits in *span* (``a..b``), one line each, newest first."""
+    out = run(root, "log", "--oneline", span)
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def unpushed(root: Path) -> list[str]:
+    """The commits on any local branch that origin holds on no branch, one line each."""
+    out = run(root, "log", "--oneline", "--branches", "--not", "--remotes=origin")
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def ls_remote(
+    root: Path, *refs: str, tags: bool = False, remote: str = "origin"
+) -> dict[str, str]:
+    """The refs *remote* holds among *refs* (every one when none is named), by sha.
+
+    *tags* lists the tags alone, the peeled entries left out; *remote*
+    is a name or a URL, and asking a URL needs no remote configured.
+    """
+    out = run(root, "ls-remote", *(["--tags"] if tags else []), remote, *refs)
+    found: dict[str, str] = {}
+    for line in out.splitlines():
+        sha, _, name = line.partition("\t")
+        if name.strip() and not name.endswith("^{}"):
+            found[name.strip()] = sha.strip()
+    return found
+
+
+def push_refspec(root: Path, refspec: str, *, remote: str = "origin") -> None:
+    """Push *refspec* to *remote* as given: a tag, or ``:refs/tags/x`` to delete one."""
+    run(root, "push", "--quiet", remote, refspec)
+
+
+def worktree_add(root: Path, path: Path, ref: str, *, detach: bool = False) -> None:
+    """Check *ref* out as a linked worktree at *path*, detached under *detach*."""
+    run(root, "worktree", "add", *(["--detach"] if detach else []), str(path), ref)
+
+
+def worktree_remove(root: Path, path: Path) -> None:
+    """Remove the linked worktree at *path*, its changes with it."""
+    run(root, "worktree", "remove", "--force", str(path))
+
+
+def restore(root: Path, *paths: str) -> str:
+    """Put *paths* back as HEAD has them; empty, or git's words when it could not.
+
+    A path HEAD lacks refuses the whole pathspec, so a caller restoring
+    several files it is unsure of restores them one by one.
+    """
+    result = call(root, "checkout", "HEAD", "--", *paths)
+    return "" if result.code == 0 else (result.stderr or result.stdout).strip()
+
+
+def tracks(root: Path, spec: str) -> bool:
+    """Whether the repository holds the object *spec* names: ``HEAD:uv.lock``, a sha."""
+    return call(root, "cat-file", "-e", spec).code == 0
+
+
+def unstage(root: Path, path: str) -> None:
+    """Take *path* out of the index and leave the file; an untracked path is fine."""
+    run(root, "rm", "--cached", "--quiet", "--ignore-unmatch", "--", path)
+
+
+def ls_files(
+    root: Path, *paths: str, others: bool = False, cached: bool = True
+) -> list[str]:
+    """The paths git lists under *paths* (the whole tree when none), sorted.
+
+    *cached* lists what the index holds, *others* the untracked files
+    the ignore rules do not cover; both together are what a check
+    reads. Names come back as written, through ``-z``.
+
+    Raises:
+        GitError: When git cannot list, with its words.
+    """
+    flags = [flag for flag, on in (("--cached", cached), ("--others", others)) if on]
+    if others:
+        flags.append("--exclude-standard")
+    out = run(root, "ls-files", "-z", *flags, "--", *paths)
+    return sorted({name for name in out.split("\0") if name})
+
+
+def remote_url(root: Path, name: str = "origin") -> str:
+    """The URL of the remote *name*.
+
+    Raises:
+        GitError: When *root* has no such remote.
+    """
+    return run(root, "remote", "get-url", name).strip()
+
+
+def set_remote_url(root: Path, name: str, url: str) -> None:
+    """Point the remote *name* at *url*."""
+    run(root, "remote", "set-url", name, url)
+
+
+def add_remote(root: Path, name: str, url: str) -> None:
+    """Add the remote *name* at *url*."""
+    run(root, "remote", "add", name, url)
+
+
+def remotes(root: Path) -> tuple[str, ...]:
+    """The names of the repository's remotes."""
+    return tuple(run(root, "remote").split())
+
+
+def tag_dates(root: Path, prefix: str) -> list[tuple[str, str]]:
+    """Every tag under *prefix* with the date it was made, ``YYYY-MM-DD``."""
+    out = run(
+        root, "for-each-ref", prefix, "--format=%(refname:short) %(creatordate:short)"
+    )
+    pairs: list[tuple[str, str]] = []
+    for line in out.splitlines():
+        tag, _, date = line.strip().partition(" ")
+        if tag:
+            pairs.append((tag, date))
+    return pairs
 
 
 def fetch_tags(root: Path) -> None:
@@ -268,9 +423,16 @@ def is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
     return result.code == 0
 
 
-def push(root: Path, branch: str) -> None:
-    """Push *branch* to origin, setting upstream."""
-    run(root, "push", "-u", "origin", branch)
+def push(
+    root: Path, branch: str, *, remote: str = "origin", force: bool = False
+) -> None:
+    """Push *branch* to *remote*, setting upstream; *force* replaces what is there.
+
+    A bare force, for a repository seconds old whose history this
+    checkout authored; a branch others may have moved takes
+    [livery.git.push_force][] and its lease.
+    """
+    run(root, "push", "--quiet", *(["--force"] if force else []), "-u", remote, branch)
 
 
 def push_force(root: Path, branch: str) -> None:

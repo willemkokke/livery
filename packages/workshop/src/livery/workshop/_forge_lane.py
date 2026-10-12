@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import fail
 from livery.forge import (
     Forge,
@@ -43,14 +43,13 @@ def forge_repository(root: Path) -> str:
         Failed: when *root* has no ``origin`` remote, or its URL names
             no owner and name.
     """
-    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "remote", "get-url", "origin"
-    )
-    if result.code != 0:
-        fail(f"no origin remote:\n{result.stdout}{result.stderr}")
-    match = _REMOTE_RE.search(result.stdout.strip())
+    try:
+        url = git.remote_url(root)
+    except git.GitError as error:
+        fail(f"no origin remote:\n{error}")
+    match = _REMOTE_RE.search(url)
     if match is None:
-        fail(f"cannot read owner/name from origin url {result.stdout.strip()!r}")
+        fail(f"cannot read owner/name from origin url {url!r}")
     return match.group("name")
 
 
