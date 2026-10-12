@@ -1108,12 +1108,20 @@ def _gone_within(lane: Forge, wait: float) -> bool:
 
 
 def _rmtree(path: Path) -> None:
-    """Remove *path* whole; git's pack files are read-only, which Windows honours."""
+    """Remove *path* whole; git's pack files are read-only, which Windows honours.
+
+    A file that goes between the walk and its chmod is left to the
+    removal: git's background maintenance drops its lock under
+    ``.git/objects`` while a fresh clone is being torn down.
+    """
     import stat
 
     for entry in path.rglob("*"):
         if entry.is_file() and not entry.is_symlink():
-            entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+            try:
+                entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+            except FileNotFoundError:
+                continue
     shutil.rmtree(path)
 
 
