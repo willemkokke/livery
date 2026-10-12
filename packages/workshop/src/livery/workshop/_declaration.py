@@ -41,7 +41,8 @@ or whose module does not define the name at its top level, refuses
 here, read from the module's source. A ``[checks]`` table or an
 ``[options]`` table refuses naming the step spelling, as does a key
 of a step table that the spelling dropped, ``pre`` and ``post`` among
-them.
+them; a ``[root-files]`` table refuses naming the fragments spelling,
+and a ``[rules]`` table the layering phase's steps.
 """
 
 from __future__ import annotations
@@ -162,6 +163,9 @@ class DeclaredValue:
 class DeclaredOutput:
     """A file an extension's code writes: a ``[fragments."<target>"]`` table.
 
+    A package-level extension's file is written while a package lists
+    the extension and withdrawn with the last package that did.
+
     Attributes:
         target: The file's path from the workspace root; a path ending
             in ``/`` is a directory whose files the render names.
@@ -176,36 +180,6 @@ class DeclaredOutput:
     target: str
     render: Reference
     local: bool = False
-
-
-@dataclass(frozen=True)
-class DeclaredRootFile:
-    """A file a package-level extension writes at the root: ``[root-files."<path>"]``.
-
-    Attributes:
-        path: The file's path from the workspace root.
-        render: The function the workshop calls with the packages whose
-            set holds the extension, in path order; it answers the
-            file's text.
-    """
-
-    path: str
-    render: Reference
-
-
-@dataclass(frozen=True)
-class DeclaredRule:
-    """A rule an extension adds to the layering check, over the parsed sources.
-
-    Attributes:
-        judge: Called with the parsed sources and the rule's context;
-            returns the problems, empty when the rule holds.
-        fix: Run inside the layering check's rewrite before the judge;
-            returns the lines it wrote. None for a rule with no fix.
-    """
-
-    judge: Reference
-    fix: Reference | None = None
 
 
 @dataclass(frozen=True)
@@ -243,9 +217,6 @@ class Declaration:
             function that answers it or to its literal answer.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
-        root_files: The files it writes at the workspace root while a
-            package lists it.
-        rules: The rules it adds to the layering check, by name.
     """
 
     extension: str
@@ -274,8 +245,6 @@ class Declaration:
         default_factory=dict[str, "Reference | DeclaredValue"]
     )
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    root_files: tuple[DeclaredRootFile, ...] = ()
-    rules: dict[str, DeclaredRule] = field(default_factory=dict[str, DeclaredRule])
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -488,14 +457,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
         ),
-        root_files=tuple(
-            reader.root_file(str(path), table, identity)
-            for path, table in data.get("root-files", {}).items()
-        ),
-        rules={
-            str(name): reader.rule(str(name), table)
-            for name, table in data.get("rules", {}).items()
-        },
     )
 
 
@@ -671,8 +632,10 @@ class _Reader:
 
         A ``[checks.<tool>.<role>]`` table is the step
         ``[phases.<role>.<tool>]``, an ``[options]`` table is
-        ``enabled`` on the step, and a key the step table dropped says
-        what says it now. Read before the contract judges the file,
+        ``enabled`` on the step, a ``[root-files."<path>"]`` table is
+        ``[fragments."<path>"]``, a ``[rules.<name>]`` table is
+        ``[phases.layering.<name>]``, and a key the step table dropped
+        says what says it now. Read before the contract judges the file,
         which would refuse the key as unknown without saying what
         replaced it. The tables under ``[for.<target>]`` are judged
         the same way.
@@ -719,6 +682,38 @@ class _Reader:
                 "is not a table: a step a workspace turns on declares enabled = false"
                 " under [phases.<phase>.<step>], and the workspace turns it on with"
                 " [phases.<phase>.<step>] enabled = true in its root contract",
+            )
+        if "root-files" in data:
+            # The first file names the fragment it is; a bare table
+            # names the shape.
+            where = [*prefix, "root-files"]
+            path = "<path>"
+            files = data["root-files"]
+            if isinstance(files, dict) and cast("dict[str, Any]", files):
+                path = next(iter(cast("dict[str, Any]", files)))
+                where.append(path)
+            raise self.refuse(
+                tuple(where),
+                f'is [fragments."{path}"]: a file the extension\'s code writes names'
+                " its render there, module:function called with the workspace root,"
+                " and a package-level extension's fragment lives while a package"
+                " lists it",
+            )
+        if "rules" in data:
+            # The first rule names the step it is; a bare table names
+            # the shape.
+            where = [*prefix, "rules"]
+            step = "<step>"
+            rules = data["rules"]
+            if isinstance(rules, dict) and cast("dict[str, Any]", rules):
+                step = next(iter(cast("dict[str, Any]", rules)))
+                where.append(step)
+            raise self.refuse(
+                tuple(where),
+                f"is [phases.layering.{step}]: a rule is a step of the layering"
+                " phase, its main a reference to its code, module:function called"
+                " with the gate's context over the one parse, and its fix the same"
+                " shape where it rewrites",
             )
         phases = data.get("phases")
         if not isinstance(phases, dict):
@@ -1184,45 +1179,6 @@ class _Reader:
             if "widen" in table
             else None,
             ignores=tuple(table.get("ignores", ())),
-        )
-
-    def root_file(
-        self, path: str, table: dict[str, Any], identity: dict[str, Any]
-    ) -> DeclaredRootFile:
-        """The root file *path* names, written by the render its table references.
-
-        A root file is written while a package lists the extension, so
-        one listed at the workspace alone declares none.
-        """
-        where = ("root-files", path)
-        if "package" not in identity.get("levels", ("workspace",)):
-            raise self.refuse(
-                where,
-                "is written while a package lists the extension, and this"
-                " extension's levels are workspace; add 'package' to levels, or"
-                " drop the file",
-            )
-        if "render" not in table:
-            raise self.refuse(
-                where,
-                "names no render; a root file's code is render = 'module:function'",
-            )
-        return DeclaredRootFile(
-            path, self.reference(table["render"], (*where, "render"))
-        )
-
-    def rule(self, name: str, table: Mapping[str, Any]) -> DeclaredRule:
-        """The rule ``[rules.<name>]`` declares; refuses one with no judge."""
-        if "judge" not in table:
-            raise self.refuse(
-                ("rules", name),
-                'names no judge; add judge = "module:function", the function'
-                " that returns the rule's problems",
-            )
-        fix = table.get("fix")
-        return DeclaredRule(
-            judge=self.reference(table["judge"], ("rules", name, "judge")),
-            fix=None if fix is None else self.reference(fix, ("rules", name, "fix")),
         )
 
     def reference(self, text: object, where: tuple[str, ...]) -> Reference:

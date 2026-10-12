@@ -26,7 +26,7 @@ from livery.workshop._categories import (
     channel_of,
     register_channels,
 )
-from livery.workshop._extensions import SELF, stack_names, workspace_root
+from livery.workshop._extensions import SELF, workspace_root
 from livery.workshop._packages import Package
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
@@ -194,10 +194,11 @@ def _computed(root: Path, relative: Path) -> Provenance | None:
     """
     from livery.workshop._extensions import declaration
     from livery.workshop._fragment_engine import local_receipts
+    from livery.workshop._shipped_files import delivery_order
 
     prog = footman.prog()
     path = relative.as_posix()
-    for extension in stack_names(root):
+    for extension in delivery_order(root):
         found = None if extension == SELF else declaration(extension)
         for fragment in found.fragments if found is not None else ():
             target = fragment.target

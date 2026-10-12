@@ -350,14 +350,12 @@ def container_workspace(root: Path) -> Path | None:
     the package the leg created.
     """
     from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import discover_packages
 
     if not (root / _cpp_conan.WORKSPACE_FILE).is_file():
         return None
-    members = _cpp_conan.workspace_members(discover_packages(root))
     path = root / ".workshop" / ".cache" / "conan" / _cpp_conan.WORKSPACE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_cpp_conan.workspace_file(members, root=root), encoding="utf-8")
+    path.write_text(_cpp_conan.workspace_file(root, absolute=True), encoding="utf-8")
     return path
 
 

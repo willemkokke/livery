@@ -101,15 +101,14 @@ spelling. Every key is optional:
   packages' paths, each category to the patterns it takes; a package
   whose extensions declare categories is answered by them and the base
   kind's rules, and its own `[categories]` wins over both;
-- `[root-files."<path>"]`, a file a package-level extension writes at
-  the workspace root while a package lists it: `render`, the
-  `"module:function"` called with those packages in path order, which
-  answers the file's text; two extensions writing one path refuse;
-- `[rules.<name>]`, a rule the extension adds to the layering check,
-  over the python sources the check parses once: `judge`, the
-  `"module:function"` that returns the problems, and an optional `fix`,
-  run inside the check's rewrite; a rule applies while the extension
-  is listed;
+- `[fragments."<target>"]`, a file the extension's code writes, or a
+  directory of them when the target ends in `/`: `render`, the
+  `"module:function"` called with the workspace root, which answers
+  the file's text, or nothing for no file, and for a directory each
+  file's path under it to its text or to the shipped file it links
+  to; `local` for files that belong to this checkout alone. A
+  package-level extension's fragment lives while a package lists it,
+  and two extensions writing one path refuse;
 - `[toolroom] requires`, the tools its own verbs need,
   `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -632,14 +631,17 @@ the repository's own `fragments/` last. The gate, verbs, kinds and
 tools sections render from the registries, so no fragment names a
 checker by hand.
 
-The layering check parses every python source once per gate and
-memoises the parse by the file's bytes, and a kind or an extension may
-register a rule over that parse beside the builtin three (the
-runner's one-answer rule, the forge's stdlib rule, the sibling
-references): `register_ast_rule(AstRule(name, judge, fix=...))` in
-`livery.workshop._ast_rules`. A rule's fix runs inside the check's
-rewrite and its judgment inside the check's judge, and each problem
-it reports carries the rule's name.
+The layering phase parses every python source once per gate and
+memoises the parse by the file's path, size and modification time.
+Each rule over the sources is a step of the phase: the base's four
+(the runner's one-answer rule, the base importing no extension, the
+forge's stdlib rule, and the sibling references, whose fix writes the
+edges the graph already reaches), and an extension's own, declared as
+`[phases.layering.<step>]` with `main = "module:function"`, called
+with the gate's context. A step asks for the parsed modules in its
+scope, the files a narrowed run reaches or every source, and the
+steps run in one process, so every one reads the one parse. A step's
+fix runs inside the gate's rewrite, before the judges.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into
@@ -648,8 +650,8 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
 While the workspace has a member that lists the `conan` extension,
-or whose kind packages with conan, `fm sync` also writes
-`conanws.yml` at the root, the conan extension's root file, listing
+or whose kind stands for conan, `fm sync` also writes
+`conanws.yml` at the root, the conan extension's fragment, listing
 each such member by its path. A conan command run inside the checkout
 resolves a member from its source tree through that file, and nothing
 is registered in the conan home. So each checkout of a repository, a
@@ -861,9 +863,9 @@ absence.
   the cross-references in the changed sources' docstrings, resolved as
   the API site resolves them, and every source's when a changed one
   lost a name; `layering.graph`
-  only when a contract or a manifest changed; `layering.imports`, the
-  rules over the python sources, the changed sources, and every one
-  when the graph changed; `drift.check` a tracked composed or
+  only when a contract or a manifest changed; the layering phase's
+  rule steps the changed sources, and every one when the graph
+  changed; `drift.check` a tracked composed or
   generated file when it, or what it is made from, changed;
   `provenance.check` the changed content files. A check whose own code
   changed reads everything. A diff that reaches no package and no

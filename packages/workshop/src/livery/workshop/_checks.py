@@ -1101,8 +1101,12 @@ def package_files(root: Path) -> tuple[str, ...]:
     )
 
 
-def _graph_files(root: Path) -> tuple[str, ...]:
-    """What the graph is made of: the contracts, the native manifests, a root src/."""
+def graph_files(root: Path) -> tuple[str, ...]:
+    """What the graph is made of: the contracts, the native manifests, a root src/.
+
+    The layering steps over the sources widen on them: a change there
+    moves what the rules read, so every source is judged again.
+    """
     return ("workshop.toml", "src/**", *package_files(root))
 
 
@@ -1538,6 +1542,7 @@ def _register_builtin() -> None:
     """
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs
+    from livery.workshop._packages import RULES
 
     def render_run(ctx: PhaseContext) -> None:
         from livery.workshop import _quality
@@ -1584,32 +1589,33 @@ def _register_builtin() -> None:
             print(line)
         verify_graph(ctx.root)
 
-    def imports_run(ctx: PhaseContext) -> None:
-        from livery.workshop._packages import verify_imports
+    def rule_run(step: str) -> Callable[[PhaseContext], None]:
+        """The judge of the base's layering step *step*, over the files it reaches."""
 
-        verify_imports(ctx.root, _selected_files(check_for("layering.imports"), ctx))
+        def run(ctx: PhaseContext) -> None:
+            from livery.workshop._packages import rule_problems
 
-    def imports_fix(ctx: PhaseContext) -> None:
-        from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
-        from livery.workshop._packages import verify_imports
+            files = _selected_files(check_for(f"layering.{step}"), ctx)
+            problems = rule_problems(step, ctx.root, ctx.packages, files)
+            if problems:
+                fail("the workspace breaks its layering:\n  " + "\n  ".join(problems))
+
+        return run
+
+    def sibling_fix(ctx: PhaseContext) -> None:
+        from livery.workshop._packages import write_edges
         from livery.workshop._uv import run_uv
 
-        files = _selected_files(check_for("layering.imports"), ctx)
-        # Every rule's fix runs here, inside the one rewrite and over
-        # the one parse; the judgments follow in the check's judge.
-        context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)
-        modules = parsed_modules(ctx.root, ctx.packages, files)
-        written: list[str] = []
-        for rule in ast_rules():
-            if rule.fix is not None:
-                written += rule.fix(modules, context)
+        written = write_edges(ctx.root)
         for line in written:
             print(line)
         if any("pyproject.toml" in line for line in written):
             # A new requirement moves the lock; the fix leaves the tree
             # consistent, as a person would after editing by hand.
             run_uv("lock", root=ctx.root)
-        verify_imports(ctx.root, files)
+        # A rewriter is not judged again under --fix, so the fix judges
+        # what it leaves.
+        rule_run("sibling-references")(ctx)
 
     def configure_run(ctx: PhaseContext) -> None:
         _cpp_conan.configure(ctx.member, ctx.arguments)
@@ -1642,18 +1648,23 @@ def _register_builtin() -> None:
             "layering",
             graph_run,
             fix=graph_fix,
-            inputs=Inputs(reads=_graph_files, per_file=False, ignores=NOT_INPUTS),
+            inputs=Inputs(reads=graph_files, per_file=False, ignores=NOT_INPUTS),
         ),
-        CheckRecord(
-            "imports",
-            "layering",
-            imports_run,
-            fix=imports_fix,
-            inputs=Inputs(
-                reads=("tasks.py", "packages/**/*.py"),
-                widens=_graph_files,
-                ignores=NOT_INPUTS,
-            ),
+        # The base's rules over the sources, one step each; the sibling
+        # step's fix is the one rewrite among them.
+        *(
+            CheckRecord(
+                step,
+                "layering",
+                rule_run(step),
+                fix=sibling_fix if step == "sibling-references" else None,
+                inputs=Inputs(
+                    reads=("tasks.py", "packages/**/*.py"),
+                    widens=graph_files,
+                    ignores=NOT_INPUTS,
+                ),
+            )
+            for step in RULES
         ),
         CheckRecord(
             "configure",

@@ -6,7 +6,8 @@ cache. A release saves the cache per host and uploads it to a conan
 remote, or attaches it to the member's release on a forge that hosts no
 conan registry, and a consumer restores it from there. The workspace's
 conan members resolve one another from their sources through the conan
-workspace file at the root (``WORKSPACE_FILE``).
+workspace file at the root (``WORKSPACE_FILE``), the fragment this
+extension declares.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import os
 import platform
 import re
 import tempfile
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -232,20 +233,19 @@ RECIPE_FILE = "conanfile.py"
 WORKSPACE_FILE = "conanws.yml"
 
 
-def workspace_members(packages: Iterable[Package]) -> tuple[Package, ...]:
-    """The members of *packages* whose kind packages them with conan, by path."""
-    from livery.workshop._kinds import kind_for
-
-    return tuple(
-        sorted(
-            (p for p in packages if kind_for(p.kind).artifact == "conan"),
-            key=lambda p: p.path,
-        )
-    )
+#: The name a package lists this extension by.
+EXTENSION = "conan"
 
 
-def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> str:
-    """The `WORKSPACE_FILE` that resolves *members* from their sources.
+def workspace_file(root: Path, *, absolute: bool = False) -> str:
+    """The `WORKSPACE_FILE` for *root*: each conan member, resolved from its source.
+
+    The fragment this extension declares: the workshop writes it at
+    the root while a package's set holds conan and withdraws it with
+    the last package that did. A package that lists conan, or an
+    extension that requires it, holds it; one that lists nothing holds
+    what its kind stands for ([livery.workshop._kinds.extension_set][]).
+    The members are listed in path order.
 
     Conan finds the file by walking up from the directory a command
     runs in, so a command inside the workspace resolves each member
@@ -264,21 +264,22 @@ def workspace_file(members: Iterable[Package], *, root: Path | None = None) -> s
     ([livery.extensions.conan._package.names_a_reference][]).
 
     Args:
-        members: The conan members, in the order the file lists them;
-            those whose recipe names no reference are passed over.
-        root: The workspace root, for a file placed outside it: each
-            path is then the member's absolute POSIX path. A Linux
-            build container mounts the root at its host path and reads
-            such a file beside the package it builds. None writes the
-            paths relative to the workspace root, for the file the
-            root holds.
+        root: The workspace root, whose members the file lists.
+        absolute: Whether each entry is the member's absolute POSIX
+            path, for a copy placed outside the root: a Linux build
+            container mounts the root at its host path and reads such
+            a copy beside the package it builds. False writes the
+            paths relative to the root, for the file the root holds.
     """
+    from livery.workshop._kinds import extension_set
+    from livery.workshop._packages import discover_packages
+
     entries = [
-        f"  - path: {member.path}"
-        if root is None
-        else f"  - path: {(root / member.path).as_posix()}"
-        for member in members
-        if names_a_reference(member)
+        f"  - path: {(root / member.path).as_posix()}"
+        if absolute
+        else f"  - path: {member.path}"
+        for member in discover_packages(root)
+        if EXTENSION in extension_set(member) and names_a_reference(member)
     ]
     # An empty list, spelled: a bare key reads as nothing, and conan's
     # loader fails iterating it, while a workspace of consumers alone

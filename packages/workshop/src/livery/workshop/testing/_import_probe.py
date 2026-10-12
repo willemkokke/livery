@@ -17,7 +17,6 @@ from typing import Any
 
 #: Each workshop module that registers, with its registration functions.
 REGISTRARS: dict[str, tuple[str, ...]] = {
-    "livery.workshop._ast_rules": ("register_ast_rule",),
     "livery.workshop._categories": ("register_categories", "register_channels"),
     "livery.workshop._checks": ("register_check",),
     "livery.workshop._kinds": ("register_kind",),

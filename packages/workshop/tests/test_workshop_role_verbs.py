@@ -116,10 +116,10 @@ def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with pytest.raises(_FAILURES, match="Pass one"):
-        _quality.run_checks(("layering.imports",), fix=True, safe_fix=True)
+        _quality.run_checks(("layering.sibling-references",), fix=True, safe_fix=True)
     monkeypatch.setenv("CI", "true")
     with pytest.raises(_FAILURES, match="a fix inside CI"):
-        _quality.run_checks(("layering.imports",), safe_fix=True)
+        _quality.run_checks(("layering.sibling-references",), safe_fix=True)
 
 
 def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
@@ -386,7 +386,13 @@ def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> No
     assert tree == {
         "build": {"compile", "configure"},
         "format": set(),
-        "layering": {"graph", "imports"},
+        "layering": {
+            "graph",
+            "runner-terminal",
+            "base-imports-no-extension",
+            "forge-stdlib-only",
+            "sibling-references",
+        },
         "lint": set(),
         "provenance": {"check"},
         "drift": {"check"},
@@ -400,7 +406,10 @@ def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> No
     assert _flags(test, "default") == {"point"}
     assert _flags(test, "fake") == {"point"}
     assert _flags(test, "ctest") == set()
-    assert _flags(root.groups["layering"], "imports") == {"fix", "safe_fix"}
+    assert _flags(root.groups["layering"], "sibling-references") == {
+        "fix",
+        "safe_fix",
+    }
 
 
 def test_a_role_with_no_listed_check_has_no_verb(

@@ -52,8 +52,13 @@ source = ["src/**"]
 
 # No package's source reaches another distribution's private names; the
 # root contract's [[python.private-reaches]] lists the reaches allowed.
-[rules.private-reaches]
-judge = "livery.extensions.python._reaches:private_reaches"
+# A step of the layering phase over the one parse of the python
+# sources: a narrowed run judges the changed sources, and every one
+# when a contract, a manifest or a root src/ changed, as the base's
+# layering steps do.
+[phases.layering.private-reaches]
+main = "livery.extensions.python._reaches:private_reaches"
+inputs = { reads = ["tasks.py", "packages/**/*.py"], widen = "livery.extensions.python._reaches:graph_changed", ignores = ["**/*.md", "LICENSE", "**/LICENSE"] }
 
 # The root contract's [python] table.
 [contract.root.python]

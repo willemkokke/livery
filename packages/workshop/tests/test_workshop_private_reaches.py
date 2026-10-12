@@ -1,4 +1,4 @@
-"""The python extension's private-reaches rule: refusals first, then the scan."""
+"""The python extension's private-reaches step: refusals first, then the scan."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.python._reaches import private_reaches, scan
+from livery.extensions.python._reaches import problems, scan
 from livery.workshop._ast_rules import RuleContext, parsed_modules
 from livery.workshop._packages import discover_packages
 
@@ -87,7 +87,7 @@ def _reaching(root: Path, *allowed: str) -> RuleContext:
 
 
 def _judged(context: RuleContext) -> list[str]:
-    return private_reaches(
+    return problems(
         parsed_modules(context.root, context.packages, context.files), context
     )
 
@@ -128,7 +128,7 @@ def test_an_allowance_no_source_uses_refuses_on_a_full_run_alone(
     assert _judged(narrowed) == []
 
 
-def test_a_declared_rule_with_no_judge_refuses(
+def test_a_rules_table_refuses_naming_the_layering_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._declaration import DeclarationError
@@ -138,10 +138,17 @@ def test_a_declared_rule_with_no_judge_refuses(
     fake_package_extensions(
         tmp_path,
         monkeypatch,
-        lint='[extension]\nlevels = ["package"]\n\n[rules.loud]\nfix = "x:y"\n',
+        lint='[extension]\nlevels = ["package"]\n\n[rules.loud]\njudge = "x:y"\n',
     )
-    with pytest.raises(DeclarationError, match="names no judge"):
+    with pytest.raises(DeclarationError) as raised:
         installed_declaration("acme.lint")
+    path = tmp_path / "site" / "acme" / "lint" / "extension.toml"
+    assert str(raised.value) == (
+        f"{path}: rules.loud is [phases.layering.loud]: a rule is a step of the"
+        " layering phase, its main a reference to its code, module:function"
+        " called with the gate's context over the one parse, and its fix the"
+        " same shape where it rewrites"
+    )
 
 
 # Then what the scan sees, and what the mount registers.
@@ -167,24 +174,95 @@ def test_a_distribution_reaches_its_own_privates_freely(tmp_path: Path) -> None:
     assert not any(name.startswith("acme.beta") for _, name in reaches)
 
 
-def test_the_python_extension_declares_the_rule_and_the_mount_registers_it() -> None:
-    from livery.workshop._ast_rules import ast_rules, unregister_ast_rule
-    from livery.workshop._extensions import declare_rules, installed_declaration
+def test_the_python_extension_declares_the_step_and_the_mount_registers_it() -> None:
+    from livery.workshop import _checks
+    from livery.workshop._checks import check_for
+    from livery.workshop._extensions import installed_declaration, register_declared
 
     declared = installed_declaration("python")
     assert declared is not None
-    assert set(declared.rules) == {"private-reaches"}
-    before = {rule.name: rule for rule in ast_rules()}
+    (step,) = [
+        record for record in declared.additions.checks if record.role == "layering"
+    ]
+    assert step.name == "layering.private-reaches"
+    assert step.fix is None
+    # The step reaches the files the base's layering steps reach.
+    assert step.inputs is not None
+    assert step.inputs.reads == ("tasks.py", "packages/**/*.py")
+    assert step.inputs.widen is not None
+    state = _checks.snapshot()
     try:
-        assert declare_rules("python", declared.rules)
-        registered = {rule.name: rule for rule in ast_rules()}["private-reaches"]
-        assert registered.extension == "python"
+        # A package-level extension's workspace-level step registers at
+        # the mount as its other checks do, while a package lists it.
+        assert register_declared("python", declared.additions)
+        assert check_for("layering.private-reaches").extension == "python"
     finally:
-        unregister_ast_rule("private-reaches")
-        if "private-reaches" in before:
-            from livery.workshop._ast_rules import register_ast_rule
+        _checks.restore(state)
 
-            register_ast_rule(before["private-reaches"])
+
+def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from livery.footman import Failed
+    from livery.workshop import Changes, PhaseContext, _checks
+    from livery.workshop._checks import check_for
+    from livery.workshop._extensions import installed_declaration, register_declared
+
+    every = _reaches(_reaching(tmp_path))
+    allowed = sorted(name for _, name in every if name != "acme.alpha._secret")
+    context = _reaching(_fresh(tmp_path), *allowed)
+    declared = installed_declaration("python")
+    assert declared is not None
+    state = _checks.snapshot()
+    register_declared("python", declared.additions)
+    refusal = (
+        "the sources break the private-reaches rule:\n"
+        "  packages/beta/src/acme/beta/__init__.py:19: acme-beta reaches"
+        " acme.alpha._secret, another distribution's private; make the name"
+        " public where it lives, or allow the reach in the root contract's"
+        " [[python.private-reaches]] with its reason"
+    )
+    try:
+        step = check_for("layering.private-reaches")
+        # The run names the step it hands the context to, as the gate does.
+        whole = PhaseContext(
+            root=context.root, packages=context.packages, check=step.name
+        )
+        # A run that knows nothing of what changed judges every source.
+        with pytest.raises(Failed) as raised:
+            step.run(whole)
+        assert str(raised.value) == refusal
+        # A run reaching the reaching source reports it; one reaching
+        # another file alone sees nothing of it.
+        reaching = Changes(context.root, ("packages/beta/src/acme/beta/__init__.py",))
+        with pytest.raises(Failed) as raised:
+            step.run(replace(whole, changes=reaching))
+        assert str(raised.value) == refusal
+        elsewhere = Changes(
+            context.root, ("packages/alpha/src/acme/alpha/__init__.py",)
+        )
+        step.run(replace(whole, changes=elsewhere))
+        # A changed contract widens the run to every source, so an
+        # unused entry is judged then.
+        (tmp_path / "widened").mkdir()
+        widened = _reaching(tmp_path / "widened", *allowed, "acme.alpha._gone")
+        contract = Changes(widened.root, ("workshop.toml",))
+        with pytest.raises(Failed) as raised:
+            step.run(
+                PhaseContext(
+                    root=widened.root,
+                    packages=widened.packages,
+                    check=step.name,
+                    changes=contract,
+                )
+            )
+        assert "acme.alpha._gone, and no source reaches it any more" in str(
+            raised.value
+        )
+    finally:
+        _checks.restore(state)
 
 
 def _reaches(context: RuleContext) -> dict[tuple[str, str], list[str]]:

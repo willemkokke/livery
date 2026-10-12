@@ -1,13 +1,15 @@
-"""The layering check's one source parse, and the rules that read it.
+"""The layering phase's one source parse, and what a rule step reads.
 
-Every python source the layering check judges is parsed once for a
+Every python source the layering phase judges is parsed once for a
 given content: the parse is memoised by the file's path, size and
-modification time, so the rules that walk their own file lists and a
-rule a kind or an extension registers all read the same tree. A registered
-rule receives every parsed module once and returns its problems; a
-rule may carry a fix, which the layering check runs inside its own
-rewrite, and the judgments run inside the check's judge, so the gate
-walk sees one check whatever an extension registers.
+modification time, so each step of the phase, the base's and an
+extension's alike, reads the same tree, and a rule that walks its own
+file list reads it too. The steps run in one process, so one memo
+serves them all. A step asks [livery.workshop._ast_rules.parsed_modules][]
+for the modules in its scope, every source or the files a narrowed
+run selects, and judges them with a
+[livery.workshop._ast_rules.RuleContext][]; a judge takes the modules
+and the context and returns its problems, empty when the rule holds.
 """
 
 from __future__ import annotations
@@ -178,51 +180,9 @@ class RuleContext:
         )
 
 
+#: A rule's judge: the parsed modules in scope and the context, to the
+#: problems, empty when the rule holds.
 Judge = Callable[[tuple[ParsedModule, ...], RuleContext], list[str]]
-
-
-@dataclass(frozen=True)
-class AstRule:
-    """One rule over the parsed sources.
-
-    Attributes:
-        name: The rule's name, which prefixes each problem it reports.
-        judge: Receives every parsed module once and the context;
-            returns the problems, empty when the rule holds.
-        fix: Runs inside the layering check's rewrite, before the
-            judge; returns the lines it wrote, printed as the check's.
-        extension: The extension that registered the rule; empty for a
-            builtin one.
-    """
-
-    name: str
-    judge: Judge
-    fix: Judge | None = None
-    extension: str = ""
-
-
-_RULES: dict[str, AstRule] = {}
-
-
-def register_ast_rule(rule: AstRule) -> None:
-    """Register *rule*; a name already registered is replaced.
-
-    Raises:
-        ValueError: when the rule has no name.
-    """
-    if not rule.name:
-        raise ValueError("an AST rule needs a name; it prefixes the rule's problems")
-    _RULES[rule.name] = rule
-
-
-def unregister_ast_rule(name: str) -> None:
-    """Withdraw the rule named *name*; nothing when there is none."""
-    _RULES.pop(name, None)
-
-
-def ast_rules() -> tuple[AstRule, ...]:
-    """Every registered rule, in registration order."""
-    return tuple(_RULES.values())
 
 
 def parsed_modules(
