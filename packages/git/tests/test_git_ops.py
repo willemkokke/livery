@@ -134,14 +134,34 @@ def test_a_conflict_probe_raises_on_any_failure_but_a_conflict(
 
 
 def test_a_local_branch_probe_raises_on_any_failure_but_absence(
-    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    repo: tuple[Path, Path], tmp_path: Path
 ) -> None:
     clone, _ = repo
     assert git.local_branch_exists(clone, "main")
     assert not git.local_branch_exists(clone, "nonesuch")
-    monkeypatch.setattr(tools, "git", _Failing(128, "fatal: broken"))
-    with pytest.raises(git.GitError, match="rev-parse exited 128"):
-        git.local_branch_exists(clone, "main")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    with pytest.raises(git.GitError, match="is not a git repository"):
+        git.local_branch_exists(elsewhere, "main")
+
+
+def test_an_object_the_checkout_lacks_raises_naming_it(
+    repo: tuple[Path, Path],
+) -> None:
+    clone, _ = repo
+    with pytest.raises(git.GitError, match=f"{'f' * 40} is not in the repository"):
+        git.tree_diff(clone, "f" * 40, git.head_sha(clone))
+    with pytest.raises(git.GitError, match="exited 128"):
+        git.commit_message(clone, "f" * 40)
+
+
+def test_a_rev_parse_answer_that_is_no_sha_is_a_failure(
+    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, _ = repo
+    monkeypatch.setattr(_ops, "run", lambda *_: "")
+    with pytest.raises(git.GitError, match="named no object"):
+        git.commit_message(clone, "main@{1}")
 
 
 def test_the_working_tree_id_raises_when_the_scratch_index_cannot_be_written(
@@ -161,24 +181,17 @@ def test_the_working_tree_id_raises_when_the_scratch_index_cannot_be_written(
         git.working_tree_id(clone)
 
 
-def test_readers_answer_empty_on_output_git_never_gives(
+def test_remote_listings_answer_empty_on_output_git_never_gives(
     repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     clone, _ = repo
     monkeypatch.setattr(_ops, "run", lambda *_: "")
-    assert git.position(clone) == ("", "")
-    assert git.merge_parents(clone) is None
-    assert git.recent_commits(clone, 3) == ()
     assert git.remote_tags(clone) == ()
     assert git.remote_branches(clone, "x/") == ()
-    assert git.first_parent_trees(clone, 2) == []
-    monkeypatch.setattr(_ops, "run", lambda *_: "entry without a tab\0")
-    assert git.object_ids(clone, "HEAD", ["seed.txt"]) == {}
-    # A listing line naming no ref, and a log line with no sha, are passed over.
+    # A listing line naming no ref is passed over.
     monkeypatch.setattr(_ops, "run", lambda *_: "abc\tHEAD\n\t\n")
     assert git.remote_tags(clone) == ()
     assert git.remote_branches(clone, "x/") == ()
-    assert git.recent_commits(clone, 3) == (("abc", "HEAD"),)
 
 
 # --- where the checkout stands ----------------------------------------------
@@ -190,7 +203,7 @@ def test_the_position_is_one_process_and_detached_has_no_branch(
     clone, _ = repo
     with _counting() as spawned:
         branch, head = git.position(clone)
-    assert spawned["git"] == 1
+    assert spawned["git"] == 0
     assert (branch, head) == (git.current_branch(clone), git.head_sha(clone))
     assert branch == "main" and len(head) == 40
     git.detach(clone, "HEAD")
@@ -206,6 +219,10 @@ def test_has_commits_is_false_before_the_first_commit(tmp_path: Path) -> None:
     _git(empty, "init", "-q", "--initial-branch=main")
     assert not git.has_commits(empty)
     assert not git.tags(empty)
+    assert git.unpushed(empty) == []
+    assert git.sha_of(empty, "HEAD") == ""
+    with pytest.raises(git.GitError, match="HEAD names no commit"):
+        git.head_sha(empty)
     _identify(empty)
     _commit(empty, "a.txt", "a\n", "chore: first")
     assert git.has_commits(empty)
@@ -288,6 +305,7 @@ def test_tree_diffs_and_first_parent_trees(repo: tuple[Path, Path]) -> None:
     assert git.files_in_commit(clone, "HEAD") == ["b.txt"]
     assert git.file_at(clone, "HEAD", "b.txt") == "b\n"
     assert git.file_at(clone, "HEAD", "nonesuch") == ""
+    assert git.file_at(clone, "HEAD", "") == ""  # the tree itself is no file
     assert git.last_commit_touching(clone, "b.txt") == git.head_sha(clone)
     assert git.last_commit_touching(clone, "nonesuch") == ""
     assert git.log_paths(clone, "HEAD~1..HEAD", ("b.txt",)) == ("feat: b",)
@@ -303,6 +321,20 @@ def test_sha_of_resolves_names_and_answers_empty_for_nothing(
     assert git.sha_of(clone, "main") == head
     assert git.sha_of(clone, "HEAD") == head
     assert git.sha_of(clone, "nonesuch") == ""
+    # The grammar's corners: a peel, an abbreviation, a reflog spelling.
+    assert git.sha_of(clone, "HEAD^{commit}") == head
+    assert git.sha_of(clone, head[:7]) == head
+    assert git.sha_of(clone, "main@{0}") == head
+    assert git.sha_of(clone, "0000000") == ""
+    assert git.sha_of(clone, "HEAD~99") == ""
+    assert git.sha_of(clone, "HEAD~x") == ""
+    assert git.sha_of(clone, "~1") == ""
+    assert git.sha_of(clone, git.object_id(clone, "HEAD^{tree}")) == ""
+    assert git.object_ids(clone, "main@{0}", ["seed.txt"]) == git.object_ids(
+        clone, "HEAD", ["seed.txt"]
+    )
+    with pytest.raises(git.GitError, match="names nothing"):
+        git.object_id(clone, "nonesuch")
 
 
 # --- the remote ---------------------------------------------------------------
@@ -342,6 +374,9 @@ def test_a_push_sets_upstream_and_a_leased_force_push_refuses_a_moved_origin(
     assert git.remote_branches(clone, "feat/") == ("feat/1-work",)
     assert git.tracking_branches(clone, "feat/") == ("feat/1-work",)
     assert git.local_branches(clone, "feat/") == ("feat/1-work",)
+    # A symbolic ref pointing at a branch that is gone lists nothing.
+    _git(clone, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
+    assert git.tracking_branches(clone, "") == ("feat/1-work", "main")
     other = _second_clone(tmp_path, origin)
     _git(other, "switch", "-q", "feat/1-work")
     _commit(other, "o.txt", "o\n", "feat: moved")
@@ -462,6 +497,8 @@ def test_branches_are_created_switched_and_deleted(repo: tuple[Path, Path]) -> N
 def test_config_reads_writes_lists_and_unsets(repo: tuple[Path, Path]) -> None:
     clone, _ = repo
     assert git.config_get(clone, "branch.main.workshop-parent") == ""
+    assert git.config_get(clone, "nodot") == ""
+    assert git.config_get(clone.parent, "user.name") == ""  # no repository there
     git.config_set(clone, "branch.main.workshop-parent", "feat/0")
     git.config_set(clone, "branch.main.workshop-parent-tip", "abc")
     assert git.config_get(clone, "branch.main.workshop-parent") == "feat/0"
@@ -606,6 +643,8 @@ def test_restore_tracks_and_unstage(repo: tuple[Path, Path]) -> None:
     assert "nonesuch" in git.restore(clone, "nonesuch")
     assert git.tracks(clone, "HEAD:seed.txt")
     assert not git.tracks(clone, "HEAD:nonesuch")
+    assert not git.tracks(clone, "nonesuch:seed.txt")
+    assert git.file_at(clone, "nonesuch", "seed.txt") == ""
     (clone / "new.txt").write_text("n\n")
     _git(clone, "add", "new.txt")
     git.unstage(clone, "new.txt")
@@ -644,15 +683,17 @@ def test_remotes_are_read_added_and_repointed(
     assert git.remotes(clone) == ("mirror", "origin")
 
 
-def test_tag_dates_pair_each_tag_with_its_day(
-    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_tag_dates_pair_each_tag_with_its_day(repo: tuple[Path, Path]) -> None:
     clone, _ = repo
     _git(clone, "tag", "-a", "packages/x/v0.1.0", "-m", "x")
     _git(clone, "tag", "packages/y/v0.2.0")
+    _git(clone, "tag", "packagesx/v0.3.0")
     dated = dict(git.tag_dates(clone, "refs/tags/packages"))
     assert set(dated) == {"packages/x/v0.1.0", "packages/y/v0.2.0"}
     assert all(len(day) == 10 for day in dated.values())
     assert git.tag_dates(clone, "refs/tags/nonesuch") == []
-    monkeypatch.setattr(_ops, "run", lambda *_: "\n  \n")
-    assert git.tag_dates(clone, "refs/tags/") == []
+    assert [tag for tag, _ in git.tag_dates(clone, "refs/tags/")] == [
+        "packages/x/v0.1.0",
+        "packages/y/v0.2.0",
+        "packagesx/v0.3.0",
+    ]

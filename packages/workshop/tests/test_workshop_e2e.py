@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -421,6 +422,9 @@ def test_the_tree_reset_keeps_what_sync_materialises(
 
         return _run
 
+    # The branch sweep reads the checkout's refs in-process, so the
+    # root is a repository with no branch beyond main.
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     monkeypatch.setattr(tools, "git", SimpleNamespace(opts=_opts))
     _e2e._align_main(tmp_path)
     cleans = [call for call in calls if call[0] == "clean"]

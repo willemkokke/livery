@@ -21,9 +21,15 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # The pinned git handle every call runs through; 0.11.0 is the
-    # floor the workshop already carries for the same namespace.
+    # The pinned git handle every network call and every porcelain
+    # call runs through; 0.11.0 is the floor the workshop already
+    # carries for the same namespace.
     "livery-toolroom>=0.11.0",
+    # The in-process reads and local writes: refs, objects and config
+    # read as files, a root commit written as objects, no process. A
+    # pure-Python wheel exists for every platform; 1.2.17 is the first
+    # version this package was proved against.
+    "dulwich>=1.2.17",
 ]
 
 [project.optional-dependencies]

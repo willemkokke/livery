@@ -1015,19 +1015,19 @@ def test_the_sync_sweeps_before_anything_discovers_packages(
     assert "packages/gone: removed 2 ignored file(s)" in capsys.readouterr().out
 
 
-def test_the_stack_is_read_in_one_process(seeds: Seeds) -> None:
+def test_the_stack_is_read_without_a_process(seeds: Seeds) -> None:
     from workshop_spawns import counting_spawns
 
     clone, _origin = _rig(seeds)
     head = git.head_sha(clone)
-    # A branch standing on main has no stack, and reading it is one
-    # process; a recorded stack reads both keys in one process too.
+    # A branch standing on main has no stack, and reading it starts no
+    # process; a recorded stack reads both keys in-process too.
     with counting_spawns() as spawned:
         assert _stack.stack(clone, "main") == ("", "")
-    assert spawned["git"] == 1
+    assert spawned["git"] == 0
     _stack.record_stack(clone, "main", "feat/0-parent", head)
     with counting_spawns() as spawned:
         assert _stack.stack(clone, "main") == ("feat/0-parent", head)
-    assert spawned["git"] == 1
+    assert spawned["git"] == 0
     _stack.forget_stack(clone, "main")
     assert _stack.stack(clone, "main") == ("", "")

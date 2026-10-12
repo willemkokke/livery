@@ -272,16 +272,16 @@ def test_the_closure_id_reads_the_tree_in_one_process(
 ) -> None:
     # The cost is the process, not the read: a call per path spent 28 git
     # processes on this workspace's own seven packages, and several times
-    # that in wall clock on Windows. One `ls-tree` answers the closure and
-    # the pins together, and nothing here may go back to a call per path.
+    # that in wall clock on Windows. One in-process read of the tree
+    # answers the closure and the pins together, and nothing here may go
+    # back to a process per path.
     from workshop_spawns import counting_spawns
 
     del monkeypatch
     base, top = _packages(work)
     with counting_spawns() as spawned:
         _coverage_store.closure_id(work, (base, top), top)
-    assert spawned["git"] == 1, spawned
-    assert spawned["git ls-tree"] == 1
+    assert spawned["git"] == 0, spawned
 
 
 # --- the identity -------------------------------------------------------------

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tarfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ import pytest
 import livery.toolroom.tools as tools
 from git_seeds import repos_fixture, run_git, store_of  # noqa: F401
 from livery import git
+from livery.git import _objects
 from livery.git import _store as store_module
 
 REF = git.NAMESPACE + "metrics"
@@ -22,11 +22,11 @@ def _failing(words: str, *, when: str | None = None, code: int = 1) -> Any:
     """A git door that fails calls whose first word is *when*, or every call."""
     real = store_module._git
 
-    def door(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
+    def door(root: Path, *args: str) -> tools.Result:
         first = next((a for a in args if not a.startswith("-")), "")
         if when is None or first == when:
             return tools.Result(code=code, stdout="", stderr=words)
-        return real(root, *args, stdin=stdin)
+        return real(root, *args)
 
     return door
 
@@ -81,8 +81,8 @@ def test_listings_skip_blank_lines_and_a_failed_object_probe_counts_everything_m
     store = store_of(work)
     real = store_module._git
 
-    def door(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
-        done = real(root, *args, stdin=stdin)
+    def door(root: Path, *args: str) -> tools.Result:
+        done = real(root, *args)
         if args[0] in ("ls-remote", "for-each-ref"):
             return tools.Result(code=0, stdout=done.stdout + "\n\n", stderr="")
         if args[0] == "cat-file":
@@ -187,70 +187,85 @@ def test_a_bring_names_a_failed_fetch_an_unlistable_remote_and_a_ref_that_keeps_
     assert found.failed and "could not be listed" in found.reason
 
 
-def test_an_archive_with_a_directory_a_junk_tar_and_a_blank_listing_line(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_nested_path_round_trips_through_the_tree(repos: tuple[Path, Path]) -> None:
     _, work = repos
     store = store_of(work)
     assert git.put(store, REF, {"nested/row.json": "{}"}, message="n") == ""
     assert git.read(store, REF).files == {"nested/row.json": "{}"}
-    real = store_module._git
 
-    def junk_archive(
-        root: Path, *args: str, stdin: str | bytes | None = None
-    ) -> tools.Result:
-        if args[0] == "-c" and "archive" in args:
-            Path(args[args.index("-o") + 1]).write_bytes(b"not a tar")
-            return tools.Result(code=0, stdout="", stderr="")
-        return real(root, *args, stdin=stdin)
 
-    monkeypatch.setattr(store_module, "_git", junk_archive)
-    found = git.read(store, REF)
-    assert found.failed and "the tree's archive" in found.reason
+def test_a_tree_read_names_what_it_cannot_decode_or_find(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    store = store_of(work)
+    with _objects.opened(work) as repo:
+        binary = _objects.root_commit(
+            repo, {"a": b"\xff"}, "m", identity=store.identity, when=datetime.now(UTC)
+        )
+    found = store_module._tree_files(store, binary.decode())
+    assert found.failed and found.reason.startswith("the tree's files:")
+    # A submodule entry is neither a tree nor a blob and is passed over.
+    head = git.head_sha(work)
+    run_git(work, "update-index", "--add", "--cacheinfo", f"160000,{head},sub")
+    tree = run_git(work, "write-tree").strip()
+    run_git(work, "rm", "-q", "--cached", "sub")
+    files = store_module._tree_files(store, tree).files
+    assert files is not None and "sub" not in files and files
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    outside = store_of(elsewhere)
+    assert store_module._tree_files(outside, "0" * 40).reason == (
+        f"{elsewhere} is not a git repository"
+    )
+    assert store_module._missing_locally(outside, ["a" * 40]) == {"a" * 40}
+    assert git.list_refs(outside, git.LOCAL_NAMESPACE) is None
+    assert store_module._commit_times(outside, [git.LOCAL_NAMESPACE + "x"]) == {
+        git.LOCAL_NAMESPACE + "x": None
+    }
+    assert git.drop(outside, git.LOCAL_NAMESPACE + "x") == (
+        f"delete refused: {elsewhere} is not a git repository"
+    )
+    assert (
+        store_module._parse_listing(tools.Result(code=0, stdout="abc\t\n\n", stderr=""))
+        == {}
+    )
 
 
 def test_the_committer_date_is_read_in_every_spelling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-02T03:04:05")
-    assert (
-        store_module._committer_when()
-        == f"{int(datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC).timestamp())} +0000"
-    )
+    assert store_module._committer_moment() == datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     monkeypatch.setenv("GIT_COMMITTER_DATE", "@1700000000 +0100")
-    assert store_module._committer_when() == "1700000000 +0000"
+    assert store_module._committer_moment() == datetime.fromtimestamp(
+        1700000000, tz=UTC
+    )
     monkeypatch.setenv("GIT_COMMITTER_DATE", "junk")
-    assert store_module._committer_when().endswith(" +0000")
+    assert abs(store_module._committer_moment() - datetime.now(UTC)) < timedelta(
+        minutes=1
+    )
 
 
-def test_an_import_whose_marks_are_missing_or_mute_is_refused(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+def test_a_commit_that_cannot_be_written_is_refused_naming_why(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    store = store_of(work)
-    real = store_module._git
-
-    def mute(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
-        if args[0] == "fast-import":
-            marks = next(a for a in args if a.startswith("--export-marks="))
-            Path(marks.removeprefix("--export-marks=")).write_text(":2 abc\n")
-            return tools.Result(code=0, stdout="", stderr="")
-        return real(root, *args, stdin=stdin)
-
-    monkeypatch.setattr(store_module, "_git", mute)
-    assert store_module._build_commit(store, {"a": "{}"}, "m") == (
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    assert store_module._build_commit(store_of(elsewhere), {"a": "{}"}, "m") == (
         "",
-        "fast-import exported no mark for the commit",
+        f"the commit could not be written: {elsewhere} is not a git repository",
     )
 
-    def gone(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
-        if args[0] == "fast-import":
-            return tools.Result(code=0, stdout="", stderr="")
-        return real(root, *args, stdin=stdin)
+    def no_space(*_: Any, **__: Any) -> bytes:
+        raise OSError("no space")
 
-    monkeypatch.setattr(store_module, "_git", gone)
-    sha, why = store_module._build_commit(store, {"a": "{}"}, "m")
-    assert sha == "" and why.startswith("fast-import exported no marks")
+    monkeypatch.setattr(_objects, "root_commit", no_space)
+    assert store_module._build_commit(store_of(work), {"a": "{}"}, "m") == (
+        "",
+        "the commit could not be written: no space",
+    )
 
 
 def test_a_refused_update_and_a_refused_push_carry_gits_words(
@@ -258,11 +273,16 @@ def test_a_refused_update_and_a_refused_push_carry_gits_words(
 ) -> None:
     _, work = repos
     store = store_of(work)
-    monkeypatch.setattr(
-        store_module, "_git", _failing("fatal: locked", when="update-ref")
-    )
+
+    def locked(*_: Any, **__: Any) -> bool:
+        raise OSError("locked")
+
+    monkeypatch.setattr(_objects, "set_ref", locked)
     why = git.put(store, git.LOCAL_NAMESPACE + "x", {"a": "{}"}, message="l")
-    assert why == "update refused: fatal: locked"
+    assert why == "update refused: locked"
+    monkeypatch.setattr(_objects, "drop_ref", locked)
+    assert git.drop(store, git.LOCAL_NAMESPACE + "x") == "delete refused: locked"
+    monkeypatch.undo()
     monkeypatch.setattr(
         store_module, "_git", _failing("fatal: no route to host", when="push")
     )
@@ -270,7 +290,7 @@ def test_a_refused_update_and_a_refused_push_carry_gits_words(
     assert why == "push refused: fatal: no route to host"
 
 
-def test_commit_times_outside_a_snapshot_with_junk_stamps_and_failed_brings(
+def test_commit_times_outside_a_snapshot_with_missing_objects_and_failed_brings(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
@@ -278,22 +298,20 @@ def test_commit_times_outside_a_snapshot_with_junk_stamps_and_failed_brings(
     local = git.LOCAL_NAMESPACE + "l"
     assert git.put(store, local, {"a": "{}"}, message="l") == ""
     assert git.put(store, REF, {"a": "{}"}, message="r") == ""
-    # Remote refs outside a snapshot are unknown; a local one is read.
-    times = store_module._commit_times(store, [local, REF])
+    # Remote refs outside a snapshot are unknown; a local one is read,
+    # and a local one that does not exist is unknown.
+    absent = git.LOCAL_NAMESPACE + "absent"
+    times = store_module._commit_times(store, [local, REF, absent])
     assert times[local] is not None and times[REF] is None
-    real = store_module._git
-
-    def junk(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
-        if args[0] == "for-each-ref":
-            return tools.Result(code=0, stdout=f"{local} soon\n", stderr="")
-        if args[0] == "log":
-            return tools.Result(code=0, stdout="abc soon\n", stderr="")
-        return real(root, *args, stdin=stdin)
-
-    monkeypatch.setattr(store_module, "_git", junk)
+    assert times[absent] is None
+    # A listed commit the bring reports present but the object store
+    # lacks is unknown too, never a crash.
+    monkeypatch.setattr(store_module, "_bring", lambda s, snap, wanted: {})
     with git.remote_snapshot(store):
-        times = store_module._commit_times(store, [local, REF])
-    assert times == {local: None, REF: None}
+        snapshot = store_module._snapshot(store)
+        assert snapshot is not None and snapshot.refs is not None
+        snapshot.refs[REF] = "f" * 40
+        assert store_module._commit_times(store, [local, REF])[REF] is None
     monkeypatch.setattr(
         store_module, "_bring", lambda s, snap, wanted: dict.fromkeys(wanted, "down")
     )
@@ -405,16 +423,6 @@ def test_a_reachable_commit_under_an_unlistable_snapshot_names_the_listing(
     snapshot = store_module._Snapshot(None, "offline")
     found, why = store_module._reachable(store, snapshot, REF, sha)
     assert found is None and why == "the remote could not be listed: offline"
-
-
-def test_an_archive_member_without_a_handle_is_passed_over(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, work = repos
-    store = store_of(work)
-    assert git.put(store, REF, {"a": "{}"}, message="a") == ""
-    monkeypatch.setattr(tarfile.TarFile, "extractfile", lambda self, member: None)
-    assert git.read(store, REF).files == {}
 
 
 def test_a_local_series_declared_ci_only_is_refused() -> None:

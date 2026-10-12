@@ -3,9 +3,12 @@
 Git access for the livery ecosystem. Every call is a function of the
 repository's root: `git.position(root)` says where a checkout stands,
 `git.fetch(root)` and `git.push_force(root, branch)` reach the network,
-`git.commit_all(root, message)` commits. The functions run the git the
-tool store pins, never one found on the path, and return strings or
-raise `GitError` with git's own words.
+`git.commit_all(root, message)` commits. A reader of refs, objects,
+history or config opens the repository's own files in-process, through
+dulwich, and starts no git; a mover, and a reader of the index, the
+working tree or the remote, runs the git the tool store pins, never one
+found on the path. Every function returns strings or raises `GitError`,
+with git's own words where git ran.
 
 ```python
 from pathlib import Path
@@ -77,11 +80,13 @@ rows = git.Series("metrics", window=300)
 print(rows.rows(store).rows[:3])
 ```
 
-A write is a compare-and-swap on the sha the read returned, a read or a
-write is a fixed handful of git processes whatever the series holds,
-and a `remote_snapshot` block makes every read inside one listing and
-one fetch. `sweep` is the janitor. Every failure is a printed reason,
-never a boolean.
+A write is a compare-and-swap on the sha the read returned. Only the
+wire is a git process: a remote read is one fetch, a remote write one
+fetch and one push, a local read or write none, whatever the series
+holds, since every tree is read and every commit written in the
+checkout's own object store. A `remote_snapshot` block makes every read
+inside one listing and one fetch. `sweep` is the janitor. Every failure
+is a printed reason, never a boolean.
 
 ## What is not here
 

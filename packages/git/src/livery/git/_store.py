@@ -31,8 +31,8 @@ names that namespace, so a fetch never brings it and a push never
 carries it, and a mirror push of ``refs/workshop/*`` cannot carry it
 either; the checkout's worktrees share it, and a fresh clone starts
 empty. Its rows are read and written the same way. Only the transport
-differs: git's own ``update-ref`` with the old value, in place of a
-push with a lease.
+differs: the ref moves by an in-process compare-and-swap on the old
+value, in place of a push with a lease.
 
 The gate reads the remote namespace without the network. `fetch_store`
 mirrors origin's namespace under ``refs/workshop-origin/`` and stamps
@@ -62,15 +62,15 @@ The rules, ported from hse's stamp transport:
   writer is a CI container with no global git config, and a push to
   this namespace must never start a workflow.
 
-Plumbing, never porcelain: ``fast-import``, ``push``, ``ls-remote``,
-``archive``, ``update-ref``. The working tree and the index are never
-touched, so a write is safe from the middle of any job. A read or a
-write is a fixed handful of git processes whatever the series holds:
-one ``archive`` into a file reads every blob of a tree, one
-``fast-import`` writes every blob, the tree and the commit. Both go
-as bytes, the archive read back from disk and the import stream fed
-through the binary lane of the tool handle, so no pipe's newline
-translation reaches a row or a file name on Windows.
+Only the wire goes through a git process: ``fetch``, ``push`` and
+``ls-remote``. Every tree is read, and every root commit written, in
+the checkout's own object store without a process, as bytes, so no
+newline translation reaches a row or a file name on Windows. The
+working tree and the index are never touched, so a write is safe
+from the middle of any job, and a read or a write costs a fixed
+handful of processes whatever the series holds: a remote read one
+fetch, a remote write one fetch and one push, a local read or write
+none.
 """
 
 from __future__ import annotations
@@ -87,6 +87,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import livery.toolroom.tools as tools
+from livery.git import _objects
 
 #: Every state ref lives under this prefix. A push here matches no
 #: push trigger on any forge, so a store write can never start a
@@ -606,21 +607,11 @@ def _missing_locally(store: StateStore, shas: Iterable[str]) -> set[str]:
     wanted = sorted(set(shas))
     if not wanted:
         return set()
-    checked = _git(
-        store.root,
-        "cat-file",
-        "--batch-check",
-        "-z",
-        stdin="".join(f"{sha}\0" for sha in wanted),
-    )
-    if checked.code != 0:
+    try:
+        with _objects.opened(store.root) as repo:
+            return {sha for sha in wanted if not _objects.holds(repo, sha.encode())}
+    except _objects.NotGitRepository:
         return set(wanted)
-    missing: set[str] = set()
-    for line in checked.stdout.splitlines():
-        words = line.split()
-        if len(words) >= 2 and words[1] == "missing":
-            missing.add(words[0])
-    return missing
 
 
 @contextmanager
@@ -937,11 +928,13 @@ def _reachable(
     return snapshot.refs.get(ref), ""
 
 
-def _git(root: Path, *args: str, stdin: str | bytes | None = None) -> tools.Result:
-    tool = tools.git.opts(cwd=root, nofail=True, recorded=False)
-    if stdin is not None:
-        tool = tool.opts(input=stdin)
-    return tool(*args)
+def _no_repository(store: StateStore) -> str:
+    """The reason a local read or write gives when the store's root is no repository."""
+    return f"{store.root} is not a git repository"
+
+
+def _git(root: Path, *args: str) -> tools.Result:
+    return tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
 
 
 def _words(result: tools.Result) -> str:
@@ -972,12 +965,14 @@ def read(store: StateStore, ref: str) -> Read:
     words.
     """
     if ref.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE)):
-        verified = _git(store.root, "rev-parse", "--verify", "--quiet", ref)
-        if verified.code == 1 and not verified.stderr.strip():
+        try:
+            with _objects.opened(store.root) as repo:
+                held = _objects.ref_value(repo, ref.encode())
+        except _objects.NotGitRepository:
+            return Read(None, None, failed=True, reason=_no_repository(store))
+        if held is None:
             return Read(None, None, failed=False)
-        if verified.code != 0:
-            return Read(None, None, failed=True, reason=_words(verified))
-        return _tree_files(store, verified.stdout.strip())
+        return _tree_files(store, held.decode())
     snapshot = _snapshot(store)
     if snapshot is not None:
         if snapshot.refs is None:
@@ -1002,54 +997,36 @@ def read(store: StateStore, ref: str) -> Read:
         if exists is False:
             return Read(None, None, failed=False)
         return Read(None, None, failed=True, reason=why or _words(fetched))
-    return _tree_files(
-        store, _git(store.root, "rev-parse", "FETCH_HEAD").stdout.strip()
-    )
+    return _tree_files(store, _fetch_head(store))
+
+
+def _fetch_head(store: StateStore) -> str:
+    """The commit the last fetch left in ``FETCH_HEAD``, read from the file."""
+    with _objects.opened(store.root) as repo:
+        text = Path(repo.controldir(), "FETCH_HEAD").read_text("utf-8", "replace")
+    return text.split()[0] if text.strip() else ""
 
 
 def _tree_files(store: StateStore, sha: str) -> Read:
-    """The files of the root commit *sha*, or a failure with git's words.
+    """The files of the root commit *sha*, read in-process as the bytes git holds.
 
-    One process whatever the tree holds: ``git archive`` writes the
-    tree as a tar into a temporary file, and the file is read back as
-    bytes, so no pipe's newline translation touches a row and the
-    blobs come back as they were written on any platform. A row a
-    Windows checkout once wrote with carriage returns reads back with
-    them, which the row's parser takes as whitespace. The archive
-    converts line ends the way a checkout would, which Git for Windows
-    turns on by default, so the conversion is switched off for the
-    call: the blobs are wanted as git holds them.
+    No process and no checkout conversion: each blob comes back as it
+    was written on any platform, and a row a Windows checkout once
+    wrote with carriage returns reads back with them, which the
+    row's parser takes as whitespace.
     """
-    import tarfile
-
-    with tempfile.TemporaryDirectory() as scratch:
-        out = Path(scratch) / "tree.tar"
-        archived = _git(
-            store.root,
-            "-c",
-            "core.autocrlf=false",
-            "-c",
-            "core.eol=lf",
-            "archive",
-            "--format=tar",
-            "-o",
-            str(out),
-            sha,
-        )
-        if archived.code != 0:
-            return Read(None, sha, failed=True, reason=_words(archived))
-        files: dict[str, str] = {}
-        try:
-            with tarfile.open(out) as tar:
-                for member in tar.getmembers():
-                    if not member.isfile():
-                        continue
-                    handle = tar.extractfile(member)
-                    if handle is None:
-                        continue
-                    files[member.name] = handle.read().decode("utf-8")
-        except (OSError, tarfile.TarError, UnicodeDecodeError) as error:
-            return Read(None, sha, failed=True, reason=f"the tree's archive: {error}")
+    try:
+        with _objects.opened(store.root) as repo:
+            blobs = _objects.tree_files(repo, sha.encode())
+    except _objects.NotGitRepository:
+        return Read(None, sha, failed=True, reason=_no_repository(store))
+    except (KeyError, _objects.Unresolved):
+        reason = f"the tree {sha[:12]} is not in the repository"
+        return Read(None, sha, failed=True, reason=reason)
+    try:
+        files = {name: data.decode("utf-8") for name, data in blobs.items()}
+    except UnicodeDecodeError as error:
+        return Read(None, sha, failed=True, reason=f"the tree's files: {error}")
     return Read(files, sha, failed=False)
 
 
@@ -1075,11 +1052,12 @@ def list_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
 
 
 def _local_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
-    """The checkout's own refs under *prefix* by sha; ``None`` when git refuses."""
-    listed = _git(
-        store.root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix
-    )
-    return _parse_listing(listed)
+    """The checkout's own refs under *prefix* by sha; ``None`` without a repository."""
+    try:
+        with _objects.opened(store.root) as repo:
+            return _objects.refs_under(repo, prefix.encode())
+    except _objects.NotGitRepository:
+        return None
 
 
 def _parse_listing(listed: tools.Result) -> dict[str, str] | None:
@@ -1100,28 +1078,25 @@ def _parse_listing(listed: tools.Result) -> dict[str, str] | None:
 IMPORT_REF = "refs/workshop-import/head"
 
 
-def _committer_when() -> str:
-    """The commit's time for the import stream: ``GIT_COMMITTER_DATE``, else now.
+def _committer_moment() -> datetime:
+    """The commit's time: ``GIT_COMMITTER_DATE``, else now.
 
     git's own override, which the janitor's tests use to write an old
-    row; fast-import takes the time from the stream alone, so the
-    variable is read here. An ISO 8601 stamp or git's raw ``<seconds>
-    <zone>`` form; anything else is now.
+    row. An ISO 8601 stamp or git's raw ``<seconds> <zone>`` form;
+    anything else is now.
     """
-    import time
-
     raw = os.environ.get("GIT_COMMITTER_DATE", "").strip()
     if raw:
         try:
             moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
             if moment.tzinfo is None:
                 moment = moment.replace(tzinfo=UTC)
-            return f"{int(moment.timestamp())} +0000"
+            return moment
         except ValueError:
             seconds = raw.split()[0].lstrip("@")
             if seconds.isdigit():
-                return f"{seconds} +0000"
-    return f"{int(time.time())} +0000"
+                return datetime.fromtimestamp(int(seconds), tz=UTC)
+    return datetime.now(UTC)
 
 
 def _build_commit(
@@ -1129,55 +1104,26 @@ def _build_commit(
 ) -> tuple[str, str]:
     """A root commit of *files*; ``(sha, "")`` or ``("", reason)``.
 
-    One ``fast-import`` whatever the files: the stream carries every
-    blob inline with its byte length, the tree and the commit, and goes
-    to git as bytes, so no platform's text mode can translate a newline
-    inside a row or a command. The commit lands on `IMPORT_REF`; the
-    caller moves the real ref to it under its own compare-and-swap. The
-    commit's id comes back through the marks file the import exports.
+    Written in-process: every blob, the tree and the commit go into
+    the checkout's object store, and the commit's id is returned for
+    the caller to move the real ref to under its own compare-and-swap.
+    `IMPORT_REF` is pointed at it so the objects stay reachable.
     """
-    name, email = store.identity
-    text = f"{message} [skip ci]".encode()
-    lines: list[bytes] = [
-        f"commit {IMPORT_REF}\n".encode(),
-        b"mark :1\n",
-        f"committer {name} <{email}> {_committer_when()}\n".encode(),
-        f"data {len(text)}\n".encode(),
-        text,
-        b"\n",
-        b"deleteall\n",
-    ]
-    for path in sorted(files):
-        body = files[path].encode("utf-8")
-        lines += [
-            f"M 100644 inline {path}\n".encode(),
-            f"data {len(body)}\n".encode(),
-            body,
-            b"\n",
-        ]
-    lines.append(b"done\n")
-    with tempfile.TemporaryDirectory() as scratch:
-        marks = Path(scratch) / "marks"
-        imported = _git(
-            store.root,
-            "fast-import",
-            "--quiet",
-            "--force",
-            "--done",
-            f"--export-marks={marks}",
-            stdin=b"".join(lines),
-        )
-        if imported.code != 0:
-            return "", f"fast-import failed: {_words(imported)}"
-        try:
-            exported = marks.read_text("utf-8")
-        except OSError as error:
-            return "", f"fast-import exported no marks ({error})"
-    for line in exported.splitlines():
-        mark, _, sha = line.partition(" ")
-        if mark == ":1" and sha.strip():
-            return sha.strip(), ""
-    return "", "fast-import exported no mark for the commit"
+    try:
+        with _objects.opened(store.root) as repo:
+            sha = _objects.root_commit(
+                repo,
+                {path: text.encode("utf-8") for path, text in files.items()},
+                f"{message} [skip ci]",
+                identity=store.identity,
+                when=_committer_moment(),
+            )
+            _objects.point(repo, IMPORT_REF.encode(), sha)
+    except _objects.NotGitRepository:
+        return "", f"the commit could not be written: {_no_repository(store)}"
+    except OSError as error:
+        return "", f"the commit could not be written: {error}"
+    return sha.decode(), ""
 
 
 def _stale(refused: tools.Result) -> bool:
@@ -1250,13 +1196,21 @@ def put(
         if why:
             return why
         if ref.startswith(LOCAL_NAMESPACE):
-            # git's own compare-and-swap: the old value is the sha the
-            # read returned, or empty for a ref that must not exist yet.
-            moved = _git(store.root, "update-ref", ref, commit, current.sha or "")
-            if moved.code != 0:
-                if _stale(moved):
-                    continue
-                return f"update refused: {_words(moved)}"
+            # The compare-and-swap in-process: the old value is the sha
+            # the read returned, or none for a ref that must not exist
+            # yet, and a lost swap costs a retry.
+            try:
+                with _objects.opened(store.root) as repo:
+                    moved = _objects.set_ref(
+                        repo,
+                        ref.encode(),
+                        commit.encode(),
+                        current.sha.encode() if current.sha else None,
+                    )
+            except OSError as error:
+                return f"update refused: {error}"
+            if not moved:
+                continue
             return ""
         lease = f"--force-with-lease={ref}:{current.sha or ''}"
         pushed = _git(store.root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
@@ -1297,8 +1251,14 @@ def drop(store: StateStore, ref: str) -> str:
             f" {LOCAL_NAMESPACE} and {TRACE_NAMESPACE}"
         )
     if ref.startswith(LOCAL_NAMESPACE):
-        deleted = _git(store.root, "update-ref", "-d", ref)
-        return "" if deleted.code == 0 else f"delete refused: {_words(deleted)}"
+        try:
+            with _objects.opened(store.root) as repo:
+                _objects.drop_ref(repo, ref.encode())
+        except _objects.NotGitRepository:
+            return f"delete refused: {_no_repository(store)}"
+        except OSError as error:
+            return f"delete refused: {error}"
+        return ""
     deleted = _git(store.root, "push", "--quiet", "origin", f":{ref}")
     words = deleted.stderr + deleted.stdout
     if deleted.code != 0 and "remote ref does not exist" not in words:
@@ -1313,60 +1273,42 @@ def drop(store: StateStore, ref: str) -> str:
 def _commit_times(store: StateStore, refs: Sequence[str]) -> dict[str, datetime | None]:
     """When each of *refs*' commits was made; ``None`` for one gone or unreadable.
 
-    As few processes as the refs allow, whatever their number: the
-    remote refs are brought local together through the open snapshot,
-    and every commit's time is read by one ``git log`` fed through
-    stdin, so a family of a thousand keys costs the janitor two calls
-    rather than two per key. A local ref is read from the checkout's
-    own refs in one call as well. Remote refs are read inside a
-    snapshot alone, which `sweep` opens; outside one they are unknown.
+    The remote refs are brought local together through the open
+    snapshot, one fetch for the family; every commit's time is then
+    read in-process, so a family of a thousand keys costs the janitor
+    one fetch. A local ref is read the same way with no fetch. Remote
+    refs are read inside a snapshot alone, which `sweep` opens;
+    outside one they are unknown.
     """
     found: dict[str, datetime | None] = dict.fromkeys(refs)
-    local = [ref for ref in refs if ref.startswith(LOCAL_NAMESPACE)]
-    remote = [ref for ref in refs if not ref.startswith(LOCAL_NAMESPACE)]
-    if local:
-        listed = _git(
-            store.root,
-            "for-each-ref",
-            "--format=%(refname) %(committerdate:unix)",
-            *local,
-        )
-        for line in listed.stdout.splitlines():
-            ref, _, stamp = line.partition(" ")
-            if ref in found and stamp.isdigit():
-                found[ref] = datetime.fromtimestamp(int(stamp), tz=UTC)
-    if not remote:
-        return found
-    snapshot = _snapshot(store)
-    if snapshot is None or snapshot.refs is None:
-        return found
-    wanted = {ref: snapshot.refs[ref] for ref in remote if ref in snapshot.refs}
-    failed = _bring(store, snapshot, wanted)
     at: dict[str, str] = {}
-    for ref in wanted:
-        # A ref another writer moved is listed again by the bring and
-        # read at its current commit; one it dropped is left unknown.
-        sha = snapshot.refs.get(ref) if snapshot.refs is not None else None
-        if ref not in failed and sha is not None:
-            at[ref] = sha
-    if not at:
+    remote = [ref for ref in refs if not ref.startswith(LOCAL_NAMESPACE)]
+    if remote:
+        snapshot = _snapshot(store)
+        if snapshot is not None and snapshot.refs is not None:
+            wanted = {ref: snapshot.refs[ref] for ref in remote if ref in snapshot.refs}
+            failed = _bring(store, snapshot, wanted)
+            for ref in wanted:
+                # A ref another writer moved is listed again by the bring
+                # and read at its current commit; one it dropped is left
+                # unknown.
+                sha = snapshot.refs.get(ref) if snapshot.refs is not None else None
+                if ref not in failed and sha is not None:
+                    at[ref] = sha
+    try:
+        with _objects.opened(store.root) as repo:
+            for ref in refs:
+                if ref.startswith(LOCAL_NAMESPACE):
+                    held = _objects.ref_value(repo, ref.encode())
+                    if held is not None:
+                        at[ref] = held.decode()
+            for ref, sha in at.items():
+                try:
+                    found[ref] = _objects.when_made(repo, sha.encode())
+                except (KeyError, _objects.Unresolved):
+                    found[ref] = None
+    except _objects.NotGitRepository:
         return found
-    logged = _git(
-        store.root,
-        "log",
-        "--no-walk=unsorted",
-        "--format=%H %ct",
-        "--stdin",
-        stdin="".join(f"{sha}\n" for sha in sorted(set(at.values()))),
-    )
-    stamps: dict[str, str] = {}
-    for line in logged.stdout.splitlines():
-        sha, _, stamp = line.partition(" ")
-        if stamp.isdigit():
-            stamps[sha] = stamp
-    for ref, sha in at.items():
-        if sha in stamps:
-            found[ref] = datetime.fromtimestamp(int(stamps[sha]), tz=UTC)
     return found
 
 

@@ -12,7 +12,6 @@ import json
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -32,6 +31,7 @@ from git_seeds import (
 )
 from git_spawns import counting_spawns
 from livery import git
+from livery.git import _objects
 from livery.git import _store as store_module
 
 REF = git.NAMESPACE + "metrics"
@@ -253,22 +253,22 @@ def test_a_file_that_is_not_a_row_is_skipped_and_named(
     assert ROWS.row(_store(work), "d") == (git.Row("d", {"schema": 2, "x": 1}), "")
 
 
-def test_a_tree_that_cannot_be_archived_fails_with_gits_words(
+def test_a_tree_the_checkout_lacks_fails_naming_it(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
     found = store_module._tree_files(_store(work), "0" * 40)
     assert found.failed and found.files is None
-    assert "fatal" in found.reason or "not a valid" in found.reason.lower()
+    assert found.reason == f"the tree {'0' * 12} is not in the repository"
 
 
 def test_a_row_written_with_carriage_returns_reads_back_as_written(
     repos: tuple[Path, Path],
 ) -> None:
     # A row a Windows checkout wrote with carriage returns, before blobs
-    # were written without newline translation: the archive is read
-    # from a file as bytes, so the row comes back as it is, in one
-    # process beside the ref's resolve.
+    # were written without newline translation: the blobs are read from
+    # the object store as bytes, so the row comes back as it is, and no
+    # process starts.
     _, work = repos
     ref = git.LOCAL_NAMESPACE + "legacy"
     crlf = work / "crlf.json"
@@ -297,26 +297,23 @@ def test_a_row_written_with_carriage_returns_reads_back_as_written(
     assert not found.failed and found.files is not None
     assert found.files["a"] == crlf.read_bytes().decode()
     assert found.files["b"] == plain.read_bytes().decode()
-    # The resolve, then the archive.
-    assert spawned["git"] == 2, spawned
+    assert spawned["git"] == 0, spawned
     rows = git.Series("legacy", local=True, ci_only=False, schema=2).rows(_store(work))
     assert [row.data["x"] for row in rows.rows] == [2, 1]
 
 
-def test_a_write_whose_import_fails_is_refused_with_gits_words(
+def test_a_write_whose_commit_cannot_be_written_is_refused_naming_why(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    real = store_module._git
 
-    def refused(root: Path, *args: str, stdin: str | bytes | None = None) -> Any:
-        if args[:1] == ("fast-import",):
-            return SimpleNamespace(code=128, stdout="", stderr="fatal: no space")
-        return real(root, *args, stdin=stdin)
+    def no_space(*_: Any, **__: Any) -> bytes:
+        raise OSError("no space")
 
-    monkeypatch.setattr(store_module, "_git", refused)
+    monkeypatch.setattr(_objects, "root_commit", no_space)
     why = ROWS.put(_store(work), {"a": {"x": 1}, "b": {"x": 2}}, message="two")
-    assert why == "fast-import failed: fatal: no space"
+    assert why == "the commit could not be written: no space"
+    monkeypatch.undo()
     assert ROWS.rows(_store(work)) == git.Rows(())
 
 
@@ -344,8 +341,8 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
     repos: tuple[Path, Path],
 ) -> None:
     # The pin: a series of sixty rows costs the same processes as one
-    # of six. A write is a read, one hash-object for every blob, the
-    # tree, the commit, the push, and the readback.
+    # of six. A write is a read (the fetch), the commit written
+    # in-process, and the push.
     _, work = repos
     wide = git.Series("wide", window=400, ci_only=False, schema=2)
     assert wide.put(_store(work), {"r000": {"x": 0}}, message="one") == ""
@@ -367,14 +364,13 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
             )
             == ""
         )
-    # fetch, rev-parse, archive; fast-import; push: five, whatever the
-    # size, and no readback.
-    assert six["git"] == sixty["git"] == 5, (six, sixty)
+    # The fetch and the push: two, whatever the size, and no readback.
+    assert six["git"] == sixty["git"] == 2, (six, sixty)
     assert sixty["git ls-remote"] == 0
     with counting_spawns() as reading:
         found = wide.rows(_store(work))
     assert len(found.rows) == 67 and not found.failed
-    assert reading["git"] == 3, reading
+    assert reading["git"] == 1, reading
 
 
 # --- the snapshot: refusals first, then one listing for a verb ----------------
@@ -1191,21 +1187,21 @@ def test_the_janitor_reads_a_familys_commit_times_in_one_fetch_and_one_log(
         assert family.series(*key).put(_store(other), {"r": {}}, message="m") == ""
     # The fallback first: no block open, the sweep opens its own, so
     # the keys are listed once, their commits brought in one fetch,
-    # their times read in one log, and their rows from the object store.
+    # and their times and rows read from the object store.
     with counting_spawns() as bare:
         lines = git.sweep(_store(work), (family,), remote=True, dry_run=True)
     assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
-    assert bare["git fetch"] == 1 and bare["git log"] == 1, bare
-    assert bare["git ls-remote"] == 1, bare
+    assert bare["git fetch"] == 1 and bare["git ls-remote"] == 1, bare
+    assert bare["git"] == 2, bare
     # Inside a caller's block, from a checkout holding none of the
     # commits (a clone over the wire brings the branches alone): one
-    # fetch and one log, and no listing beyond the block's own.
+    # fetch, and no listing beyond the block's own.
     cold = tmp_path / "cold"
     _git(tmp_path, "clone", "-q", "--no-local", str(tmp_path / "origin.git"), str(cold))
     with git.remote_snapshot(_store(cold)), counting_spawns() as snap:
         lines = git.sweep(_store(cold), (family,), remote=True, dry_run=True)
     assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
-    assert snap["git fetch"] == 1 and snap["git log"] == 1, snap
+    assert snap["git fetch"] == 1 and snap["git"] == 1, snap
     assert snap["git ls-remote"] == 0, snap
 
 
@@ -1228,9 +1224,8 @@ def test_a_local_familys_commit_times_are_read_in_one_call_and_no_fetch(
     assert family.series("2", "a").put(_store(work), {"r": {}}, message="young") == ""
     with counting_spawns() as spawned:
         lines = git.sweep(_store(work), (family,), remote=False)
-    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0, spawned
-    # One listing of the keys, one read of every key's commit time.
-    assert spawned["git for-each-ref"] == 2, spawned
+    # The keys are listed and every key's commit time read in-process.
+    assert spawned["git"] == 0, spawned
     old, young = family.series("1", "a").ref, family.series("2", "a").ref
     assert any(line.startswith(f"  {old}: ") and "dropped" in line for line in lines)
     assert f"  {young}: 1 row(s), within its bounds" in lines

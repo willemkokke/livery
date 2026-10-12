@@ -1,32 +1,87 @@
 """Local git operations for one repository, as functions of its root.
 
-Every function takes the repository's working directory first, runs
-git through the tool store's pinned handle in it, and returns strings
-or raises [livery.git.GitError][] with git's own words. Nothing is
-held between calls: a fact is read when it is asked for, and a
-function that moves the repository, a fetch, a push, a commit, a
-switch, says so in its name.
+Every function takes the repository's working directory first and
+returns strings or raises [livery.git.GitError][]. Nothing is held
+between calls: a fact is read when it is asked for, and a function
+that moves the repository, a fetch, a push, a commit, a switch, says
+so in its name.
 
-[livery.git.call][] is the one door every call takes and returns the
-result whatever the exit code; [livery.git.run][] raises on a non-zero
-exit. The named functions are the readers and movers a flow asks
-for, each one process, several of them one process where a caller
-asks two facts at once.
+A reader of refs, objects, history or config opens the repository's
+own files in-process and starts no git; a mover, and a reader of the
+index, the working tree or the remote, runs git through the tool
+store's pinned handle and carries git's own words in its error.
+[livery.git.call][] is the one door every such call takes and returns
+the result whatever the exit code; [livery.git.run][] raises on a
+non-zero exit.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import livery.toolroom.tools as tools
+from livery.git import _objects
+
+if TYPE_CHECKING:
+    from dulwich.objects import Commit
+    from dulwich.repo import Repo
+
+
+_FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 class GitError(RuntimeError):
     """A git command failed; the message carries git's words verbatim."""
+
+
+@contextmanager
+def _opened(root: Path) -> Generator[Repo]:
+    """The repository at *root* for the block; a `GitError` names what is not there.
+
+    No repository at *root*, and an object a reader in the block asks
+    for that the repository lacks, both raise `GitError`, as the git
+    process they replace exited non-zero.
+    """
+    try:
+        with _objects.opened(root) as repo:
+            yield repo
+    except _objects.NotGitRepository as error:
+        raise GitError(f"{root} is not a git repository") from error
+    except KeyError as error:
+        missing = error.args[0] if error.args else error
+        name = missing.decode() if isinstance(missing, bytes) else str(missing)
+        raise GitError(f"{name} is not in the repository at {root}") from error
+
+
+def _resolved(repo: Repo, rev: str, root: Path) -> bytes:
+    """*rev* as a commit sha: in-process in the common grammar, else through git."""
+    try:
+        return _objects.resolve(repo, rev)
+    except _objects.Unresolved:
+        return _parsed(root, f"{rev}^{{commit}}")
+
+
+def _named(repo: Repo, rev: str, root: Path) -> bytes:
+    """The object *rev* names, a tree or tag included: in-process, else through git."""
+    try:
+        return _objects.name_of(repo, rev)
+    except _objects.Unresolved:
+        return _parsed(root, rev)
+
+
+def _parsed(root: Path, rev: str) -> bytes:
+    """The sha ``rev-parse --verify`` gives *rev*; a `GitError` for any other answer."""
+    sha = run(root, "rev-parse", "--verify", rev).strip()
+    if not _FULL_SHA.match(sha):
+        raise GitError(f"git rev-parse --verify {rev} named no object: {sha!r}")
+    return sha.encode()
 
 
 def call(root: Path, *args: str) -> tools.Result:
@@ -61,8 +116,9 @@ def main_checkout(root: Path) -> Path:
     which git reports as the common directory; its parent is the
     main checkout.
     """
-    common = run(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    return Path(common.strip()).parent
+    with _opened(root) as repo:
+        common = os.path.normpath(os.path.abspath(repo.commondir()))
+    return Path(common).parent
 
 
 def unmerged_paths(root: Path) -> list[str]:
@@ -89,23 +145,35 @@ def add(root: Path, path: str) -> None:
 
 def current_branch(root: Path) -> str:
     """The checked-out branch name; empty when detached."""
-    out = run(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
-    return "" if out == "HEAD" else out
+    with _opened(root) as repo:
+        return _branch_of(repo)
+
+
+def _branch_of(repo: Repo) -> str:
+    target = _objects.head_target(repo)
+    if target.startswith(b"ref: refs/heads/"):
+        return target.removeprefix(b"ref: refs/heads/").decode()
+    return ""
 
 
 def position(root: Path) -> tuple[str, str]:
     """The checked-out branch name, empty when detached, and HEAD's commit.
 
-    One process for both: a flow that asks where it stands asks
-    for the branch and the head together, and every process costs
-    tens of milliseconds on a Windows runner. The head is asked
-    first: ``--abbrev-ref`` applies to every revision after it, so
-    the branch's name comes second.
+    Both read in-process from the checkout's own files, so a flow that
+    asks where it stands pays no process for either.
+
+    Raises:
+        GitError: When HEAD names no commit yet.
     """
-    out = run(root, "rev-parse", "HEAD", "--abbrev-ref", "HEAD").split()
-    head = out[0] if out else ""
-    branch = "" if len(out) < 2 or out[1] == "HEAD" else out[1]
-    return branch, head
+    with _opened(root) as repo:
+        return _branch_of(repo), _head_of(repo)
+
+
+def _head_of(repo: Repo) -> str:
+    try:
+        return repo.head().decode()
+    except KeyError as error:
+        raise GitError("HEAD names no commit") from error
 
 
 def object_id(root: Path, spec: str) -> str:
@@ -114,15 +182,18 @@ def object_id(root: Path, spec: str) -> str:
     Raises:
         GitError: When *spec* names nothing.
     """
-    return run(root, "rev-parse", "--verify", "--quiet", spec).strip()
+    with _opened(root) as repo:
+        try:
+            found = _objects.object_named(repo, spec)
+        except (_objects.Unresolved, KeyError):
+            found = None
+    if found is None:
+        raise GitError(f"{spec} names nothing in {root}")
+    return found.decode()
 
 
 def object_ids(root: Path, ref: str, paths: Sequence[str]) -> dict[str, str]:
-    """The object ids *ref* holds at *paths*, read in one process.
-
-    One ``ls-tree`` answers whatever the caller asks for, where a
-    read per path is a git process per path: the process is the
-    cost, several times over on Windows.
+    """The object ids *ref* holds at *paths*, read in-process.
 
     Args:
         root: The repository's working directory.
@@ -138,15 +209,13 @@ def object_ids(root: Path, ref: str, paths: Sequence[str]) -> dict[str, str]:
     """
     if not paths:
         return {}
-    # -z, so a name is never C-quoted and a path with a space or a
-    # backslash reads back as it was written.
-    out = run(root, "ls-tree", "-z", ref, "--", *paths)
-    found: dict[str, str] = {}
-    for record in out.split("\0"):
-        entry, _, name = record.partition("\t")
-        fields = entry.split()
-        if name and len(fields) == 3:
-            found[name] = fields[2]
+    with _opened(root) as repo:
+        tree = _objects.tree_at(repo, _named(repo, ref, root))
+        found: dict[str, str] = {}
+        for path in paths:
+            item = _objects.entry(repo, tree, path)
+            if item is not None:
+                found[path] = item[1].decode()
     return found
 
 
@@ -192,8 +261,8 @@ def tree_diff(root: Path, old: str, new: str) -> list[str]:
 
     A rename is both sides.
     """
-    out = run(root, "diff-tree", "-r", "--name-only", "--no-renames", old, new)
-    return sorted({line.strip() for line in out.splitlines() if line.strip()})
+    with _opened(root) as repo:
+        return _objects.changed_paths_between(repo, old.encode(), new.encode())
 
 
 def first_parent_trees(root: Path, count: int) -> list[str]:
@@ -201,36 +270,51 @@ def first_parent_trees(root: Path, count: int) -> list[str]:
 
     *count* commits deep at most.
     """
-    out = run(root, "log", "--first-parent", f"-{count}", "--format=%T", "HEAD")
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    trees: list[str] = []
+    with _opened(root) as repo:
+        sha: bytes | None = _resolved(repo, "HEAD", root)
+        while sha is not None and len(trees) < count:
+            commit = _objects.commit_of(repo, sha)
+            trees.append(commit.tree.decode())
+            sha = commit.parents[0] if commit.parents else None
+    return trees
 
 
 def head_sha(root: Path) -> str:
-    """The commit HEAD points at."""
-    return run(root, "rev-parse", "HEAD").strip()
+    """The commit HEAD points at.
+
+    Raises:
+        GitError: When HEAD names no commit yet.
+    """
+    with _opened(root) as repo:
+        return _head_of(repo)
 
 
 def has_commits(root: Path) -> bool:
     """Whether HEAD names a commit; false with no commit or no repository."""
-    result = call(root, "rev-parse", "--verify", "-q", "HEAD")
-    return result.code == 0
+    try:
+        with _objects.opened(root) as repo:
+            repo.head()
+    except (_objects.NotGitRepository, KeyError):
+        return False
+    return True
 
 
 def head_subject(root: Path) -> str:
     """HEAD's commit subject."""
-    return run(root, "log", "-1", "--format=%s").strip()
+    return head_message(root)[0]
 
 
 def head_body(root: Path) -> str:
     """HEAD's commit body, without the subject."""
-    return run(root, "log", "-1", "--format=%b").strip()
+    return head_message(root)[1]
 
 
 def head_message(root: Path) -> tuple[str, str]:
-    """HEAD's commit subject and its body, in one process."""
-    out = run(root, "log", "-1", "--format=%s%x00%b")
-    subject, _, body = out.partition("\0")
-    return subject.strip(), body.strip()
+    """HEAD's commit subject and its body, read in-process."""
+    with _opened(root) as repo:
+        commit = _objects.commit_of(repo, _resolved(repo, "HEAD", root))
+        return _objects.subject_and_body(commit.message)
 
 
 def fetch(root: Path, *refs: str, prune: bool = False, force: bool = False) -> None:
@@ -275,14 +359,42 @@ def clean(root: Path, *, keep: Sequence[str] = (), dry_run: bool = False) -> lis
 
 def oneline(root: Path, span: str) -> list[str]:
     """The commits in *span* (``a..b``), one line each, newest first."""
-    out = run(root, "log", "--oneline", span)
-    return [line for line in out.splitlines() if line.strip()]
+    with _opened(root) as repo:
+        return [
+            f"{commit.id.decode()[:7]} {_objects.subject_and_body(commit.message)[0]}"
+            for commit in _walk_span(repo, span, root)
+        ]
+
+
+def _walk_span(
+    repo: Repo, span: str, root: Path, paths: Sequence[str] = ()
+) -> list[Commit]:
+    """The commits of *span*, ``a..b`` or a single revision, newest first."""
+    left, sep, right = span.partition("..")
+    include = _resolved(repo, right if sep else left, root)
+    exclude = [_resolved(repo, left, root)] if sep else []
+    # "." and "" name the whole tree to git, and dulwich takes them as
+    # literal paths that match nothing: no filter is the same answer.
+    wanted = [path.encode() for path in paths if path not in (".", "")]
+    return list(_objects.walk(repo, [include], exclude=exclude, paths=wanted or None))
 
 
 def unpushed(root: Path) -> list[str]:
     """The commits on any local branch that origin holds on no branch, one line each."""
-    out = run(root, "log", "--oneline", "--branches", "--not", "--remotes=origin")
-    return [line for line in out.splitlines() if line.strip()]
+    with _opened(root) as repo:
+        heads = [
+            sha.encode() for sha in _objects.refs_under(repo, b"refs/heads/").values()
+        ]
+        remote = [
+            sha.encode()
+            for sha in _objects.refs_under(repo, b"refs/remotes/origin/").values()
+        ]
+        if not heads:
+            return []
+        return [
+            f"{commit.id.decode()[:7]} {_objects.subject_and_body(commit.message)[0]}"
+            for commit in _objects.walk(repo, heads, exclude=remote)
+        ]
 
 
 def ls_remote(
@@ -329,7 +441,13 @@ def restore(root: Path, *paths: str) -> str:
 
 def tracks(root: Path, spec: str) -> bool:
     """Whether the repository holds the object *spec* names: ``HEAD:uv.lock``, a sha."""
-    return call(root, "cat-file", "-e", spec).code == 0
+    with _opened(root) as repo:
+        try:
+            if len(spec) == 40 and all(c in "0123456789abcdef" for c in spec):
+                return _objects.holds(repo, spec.encode())
+            return _objects.object_named(repo, spec) is not None
+        except (_objects.Unresolved, KeyError):
+            return False
 
 
 def unstage(root: Path, path: str) -> None:
@@ -362,7 +480,11 @@ def remote_url(root: Path, name: str = "origin") -> str:
     Raises:
         GitError: When *root* has no such remote.
     """
-    return run(root, "remote", "get-url", name).strip()
+    with _opened(root) as repo:
+        url = _objects.config_value(repo, f"remote.{name}.url")
+    if not url:
+        raise GitError(f"{root} has no remote {name}")
+    return url
 
 
 def set_remote_url(root: Path, name: str, url: str) -> None:
@@ -377,20 +499,22 @@ def add_remote(root: Path, name: str, url: str) -> None:
 
 def remotes(root: Path) -> tuple[str, ...]:
     """The names of the repository's remotes."""
-    return tuple(run(root, "remote").split())
+    with _opened(root) as repo:
+        found = _objects.config_matching(repo, r"^remote\.[^.]+\.url$")
+    return tuple(sorted(key.split(".", 1)[1].rsplit(".", 1)[0] for key in found))
 
 
 def tag_dates(root: Path, prefix: str) -> list[tuple[str, str]]:
     """Every tag under *prefix* with the date it was made, ``YYYY-MM-DD``."""
-    out = run(
-        root, "for-each-ref", prefix, "--format=%(refname:short) %(creatordate:short)"
-    )
-    pairs: list[tuple[str, str]] = []
-    for line in out.splitlines():
-        tag, _, date = line.strip().partition(" ")
-        if tag:
-            pairs.append((tag, date))
-    return pairs
+    with _opened(root) as repo:
+        refs = _objects.refs_under(repo, prefix.encode(), whole=True)
+        return [
+            (
+                name.removeprefix("refs/tags/"),
+                _objects.when_made(repo, sha.encode()).date().isoformat(),
+            )
+            for name, sha in sorted(refs.items())
+        ]
 
 
 def fetch_tags(root: Path) -> None:
@@ -419,8 +543,13 @@ def is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
     A commit this clone does not know cannot be an ancestor, so
     an unknown *ancestor* answers False rather than raising.
     """
-    result = call(root, "merge-base", "--is-ancestor", ancestor, descendant)
-    return result.code == 0
+    with _opened(root) as repo:
+        try:
+            first = _resolved(repo, ancestor, root)
+            second = _resolved(repo, descendant, root)
+        except GitError:
+            return False
+        return _objects.is_ancestor(repo, first, second)
 
 
 def push(
@@ -448,14 +577,17 @@ def push_force(root: Path, branch: str) -> None:
 
 def subjects_ahead(root: Path, base: str) -> list[str]:
     """The subjects of the commits HEAD carries beyond ``origin/<base>``."""
-    out = run(root, "log", "--format=%s", f"origin/{base}..HEAD")
-    return [line for line in out.splitlines() if line]
+    with _opened(root) as repo:
+        return [
+            _objects.subject_and_body(commit.message)[0]
+            for commit in _walk_span(repo, f"origin/{base}..HEAD", root)
+        ]
 
 
 def behind_base(root: Path, base: str) -> int:
     """How many commits ``origin/<base>`` is ahead of HEAD."""
-    out = run(root, "rev-list", "--count", f"HEAD..origin/{base}").strip()
-    return int(out or "0")
+    with _opened(root) as repo:
+        return len(_walk_span(repo, f"HEAD..origin/{base}", root))
 
 
 def conflicts_with_base(root: Path, base: str) -> bool:
@@ -492,10 +624,24 @@ def changed_between(
     """The paths matching *patterns* that differ between *old* and *new*.
 
     Repo-relative, as git prints them; empty when nothing matching
-    changed.
+    changed. A pattern is a path or a glob as git reads one.
     """
-    out = run(root, "diff", "--name-only", old, new, "--", *patterns)
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    import fnmatch
+
+    with _opened(root) as repo:
+        changed = _objects.changed_paths_between(
+            repo, _resolved(repo, old, root), _resolved(repo, new, root)
+        )
+    return [
+        path
+        for path in changed
+        if any(
+            fnmatch.fnmatch(path, pattern)
+            or path.startswith(pattern.rstrip("/") + "/")
+            or path == pattern
+            for pattern in patterns
+        )
+    ]
 
 
 def is_clean(root: Path) -> bool:
@@ -511,8 +657,8 @@ def dirty_paths(root: Path) -> list[str]:
 
 def commits_since(root: Path, ref: str) -> int:
     """How many commits HEAD carries beyond *ref*."""
-    out = run(root, "rev-list", "--count", f"{ref}..HEAD").strip()
-    return int(out or "0")
+    with _opened(root) as repo:
+        return len(_walk_span(repo, f"{ref}..HEAD", root))
 
 
 def detach(root: Path, ref: str) -> None:
@@ -548,13 +694,9 @@ def amend_all(root: Path) -> None:
 
 
 def local_branch_exists(root: Path, branch: str) -> bool:
-    """Whether *branch* exists locally; any other failure raises."""
-    result = call(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
-    if result.code in (0, 1):
-        return result.code == 0
-    raise GitError(
-        f"git rev-parse exited {result.code}:\n{result.stdout}{result.stderr}"
-    )
+    """Whether *branch* exists locally."""
+    with _opened(root) as repo:
+        return _objects.ref_value(repo, b"refs/heads/" + branch.encode()) is not None
 
 
 def remote_head(root: Path, branch: str) -> str:
@@ -563,8 +705,9 @@ def remote_head(root: Path, branch: str) -> str:
     Reads the local remote-tracking ref, so call [livery.git.fetch][]
     first for a fresh answer.
     """
-    result = call(root, "rev-parse", f"origin/{branch}")
-    return result.stdout.strip() if result.code == 0 else ""
+    with _opened(root) as repo:
+        sha = _objects.ref_value(repo, b"refs/remotes/origin/" + branch.encode())
+    return sha.decode() if sha is not None else ""
 
 
 def author_email(root: Path) -> str:
@@ -581,9 +724,15 @@ def author_email(root: Path) -> str:
 
 
 def config_get(root: Path, key: str) -> str:
-    """The repository's git config value for *key*; empty when unset."""
-    result = call(root, "config", "--get", key)
-    return result.stdout.strip() if result.code == 0 else ""
+    """The repository's git config value for *key*; empty when unset or no repository.
+
+    Read in-process from the config files git itself reads.
+    """
+    try:
+        with _objects.opened(root) as repo:
+            return _objects.config_value(repo, key)
+    except _objects.NotGitRepository:
+        return ""
 
 
 def config_set(root: Path, key: str, value: str) -> None:
@@ -597,27 +746,31 @@ def config_unset(root: Path, key: str) -> None:
 
 
 def config_regexp(root: Path, pattern: str) -> dict[str, str]:
-    """Every config key matching *pattern*, with its value, in one process.
+    """Every config key matching *pattern*, with its value, read in-process.
 
-    Empty when nothing matches, which git reports as a non-zero
-    exit; a key set twice keeps its last value.
+    Empty when nothing matches or *root* is no repository; a key set
+    twice keeps its last value.
     """
-    result = call(root, "config", "--get-regexp", pattern)
-    found: dict[str, str] = {}
-    if result.code == 0:
-        for line in result.stdout.splitlines():
-            key, _, value = line.partition(" ")
-            found[key] = value.strip()
-    return found
+    try:
+        with _objects.opened(root) as repo:
+            return _objects.config_matching(repo, pattern)
+    except _objects.NotGitRepository:
+        return {}
 
 
 def sha_of(root: Path, ref: str) -> str:
     """The commit *ref* resolves to; empty when this checkout cannot.
 
     For a caller taking a commit-ish from a person: a sha, a branch,
-    a tag, ``HEAD``, ``HEAD~3``. Empty rather than raising, because
-    a name that resolves to nothing is an answer the caller reports.
+    a tag, ``HEAD``, ``HEAD~3``. The common grammar resolves in-process;
+    anything else is asked of git, and a name that resolves to nothing
+    is an empty answer the caller reports.
     """
+    with _opened(root) as repo:
+        try:
+            return _objects.resolve(repo, ref).decode()
+        except _objects.Unresolved:
+            pass
     # `~0` peels to the commit as `^{commit}` does. A caret never
     # reaches git on Windows: the store runs git through a `.cmd`
     # launcher, and cmd.exe takes `^` as its escape character.
@@ -633,7 +786,13 @@ def merge_base(root: Path, base: str) -> str:
     Raises:
         GitError: When HEAD and ``origin/<base>`` share no commit.
     """
-    return run(root, "merge-base", "HEAD", f"origin/{base}").strip()
+    with _opened(root) as repo:
+        found = _objects.merge_base(
+            repo, _resolved(repo, "HEAD", root), _resolved(repo, f"origin/{base}", root)
+        )
+    if found is None:
+        raise GitError(f"HEAD and origin/{base} share no commit")
+    return found.decode()
 
 
 def merge_parents(root: Path) -> tuple[str, str] | None:
@@ -643,8 +802,11 @@ def merge_parents(root: Path) -> tuple[str, str] | None:
     made of the pull request's head onto its base branch; any other
     checkout answers None.
     """
-    line = run(root, "rev-list", "--parents", "-n", "1", "HEAD").split()
-    return (line[1], line[2]) if len(line) == 3 else None
+    with _opened(root) as repo:
+        parents = _objects.commit_of(repo, _resolved(repo, "HEAD", root)).parents
+    if len(parents) != 2:
+        return None
+    return parents[0].decode(), parents[1].decode()
 
 
 def merge_tree(root: Path, base: str, head: str) -> str:
@@ -669,7 +831,10 @@ def changed_paths(root: Path, base: str) -> list[str]:
     prose nor package).
     """
     since = merge_base(root, base)
-    committed = run(root, "diff", "--name-only", since, "HEAD").splitlines()
+    with _opened(root) as repo:
+        committed = _objects.changed_paths_between(
+            repo, since.encode(), _resolved(repo, "HEAD", root)
+        )
     pending: list[str] = []
     for line in run(
         root, "status", "--porcelain", "--untracked-files=all"
@@ -680,7 +845,13 @@ def changed_paths(root: Path, base: str) -> list[str]:
 
 def tags(root: Path) -> tuple[str, ...]:
     """Every tag name the repository knows."""
-    return tuple(run(root, "tag", "-l").split())
+    with _opened(root) as repo:
+        return tuple(
+            sorted(
+                name.removeprefix("refs/tags/")
+                for name in _objects.refs_under(repo, b"refs/tags/")
+            )
+        )
 
 
 def remote_tags(root: Path) -> tuple[str, ...]:
@@ -703,19 +874,18 @@ def recent_commits(
     root: Path, count: int, ref: str = "HEAD"
 ) -> tuple[tuple[str, str], ...]:
     """(sha, subject) for the newest *count* commits reachable from *ref*."""
-    out = run(root, "log", f"-{count}", "--format=%H%x09%s", ref)
-    pairs: list[tuple[str, str]] = []
-    for line in out.splitlines():
-        sha, _, subject = line.partition("\t")
-        if sha.strip():
-            pairs.append((sha.strip(), subject.strip()))
-    return tuple(pairs)
+    with _opened(root) as repo:
+        return tuple(
+            (commit.id.decode(), _objects.subject_and_body(commit.message)[0])
+            for commit in _objects.walk(repo, [_resolved(repo, ref, root)], limit=count)
+        )
 
 
 def local_branches(root: Path, prefix: str) -> tuple[str, ...]:
     """Local branch names under *prefix* (``workflow/``), short form."""
-    out = run(root, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{prefix}")
-    return tuple(line.strip() for line in out.splitlines() if line.strip())
+    with _opened(root) as repo:
+        found = _objects.refs_under(repo, b"refs/heads/" + prefix.encode(), whole=True)
+    return tuple(sorted(name.removeprefix("refs/heads/") for name in found))
 
 
 def remote_branches(root: Path, prefix: str) -> tuple[str, ...]:
@@ -743,20 +913,28 @@ def tracking_branches(root: Path, prefix: str) -> tuple[str, ...]:
     names a branch takes that; one that deletes or protects asks
     origin through [livery.git.remote_branches][].
     """
-    out = run(
-        root, "for-each-ref", "--format=%(refname)", f"refs/remotes/origin/{prefix}"
-    )
-    names = (
-        line.strip().removeprefix("refs/remotes/origin/") for line in out.splitlines()
-    )
+    with _opened(root) as repo:
+        found = _objects.refs_under(
+            repo, b"refs/remotes/origin/" + prefix.encode(), whole=True
+        )
+    names = (name.removeprefix("refs/remotes/origin/") for name in sorted(found))
     return tuple(name for name in names if name and name != "HEAD")
 
 
 def any_head(root: Path, branch: str) -> str:
-    """*branch*'s head sha: local when present, else the remote's, else empty."""
-    result = call(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
-    if result.code == 0 and result.stdout.strip():
-        return result.stdout.strip()
+    """*branch*'s head sha: local when present, else the remote's, else empty.
+
+    A *root* that is no repository has no local branch, so the remote
+    is asked.
+    """
+    sha: bytes | None = None
+    try:
+        with _objects.opened(root) as repo:
+            sha = _objects.ref_value(repo, b"refs/heads/" + branch.encode())
+    except _objects.NotGitRepository:
+        pass
+    if sha is not None:
+        return sha.decode()
     result = call(root, "ls-remote", "origin", f"refs/heads/{branch}")
     if result.code == 0 and result.stdout.strip():
         return result.stdout.split()[0]
@@ -765,27 +943,46 @@ def any_head(root: Path, branch: str) -> str:
 
 def log_paths(root: Path, span: str, paths: tuple[str, ...]) -> tuple[str, ...]:
     """The subjects in *span* touching *paths* (``a..b`` git range)."""
-    out = run(root, "log", "--format=%s", span, "--", *paths)
-    return tuple(line for line in out.splitlines() if line.strip())
+    with _opened(root) as repo:
+        return tuple(
+            _objects.subject_and_body(commit.message)[0]
+            for commit in _walk_span(repo, span, root, paths)
+        )
 
 
 def last_commit_touching(root: Path, path: str, *, ref: str = "HEAD") -> str:
     """The newest commit at or before *ref* that changed *path*; empty if none."""
-    return run(root, "log", "-1", "--format=%H", ref, "--", path).strip()
+    with _opened(root) as repo:
+        for commit in _objects.walk(
+            repo, [_resolved(repo, ref, root)], paths=[path.encode()], limit=1
+        ):
+            return commit.id.decode()
+    return ""
 
 
 def files_in_commit(root: Path, ref: str) -> list[str]:
-    """The paths the commit at *ref* changed."""
-    listed = run(root, "show", "--pretty=", "--name-only", ref)
-    return [line for line in listed.splitlines() if line]
+    """The paths the commit at *ref* changed, against its first parent."""
+    with _opened(root) as repo:
+        sha = _resolved(repo, ref, root)
+        commit = _objects.commit_of(repo, sha)
+        parent = commit.parents[0] if commit.parents else None
+        return _objects.changed_paths_between(repo, parent, sha)
 
 
 def file_at(root: Path, ref: str, path: str) -> str:
     """The contents of *path* as committed at *ref*; empty when absent."""
-    result = call(root, "show", f"{ref}:{path}")
-    return result.stdout if result.code == 0 else ""
+    with _opened(root) as repo:
+        try:
+            found = _objects.object_named(repo, f"{ref}:{path}")
+        except (_objects.Unresolved, KeyError):
+            return ""
+        if found is None:
+            return ""
+        return _objects.blob_text(repo, found)
 
 
 def commit_message(root: Path, ref: str) -> str:
     """*ref*'s full commit message, subject and body."""
-    return run(root, "log", "-1", "--format=%B", ref)
+    with _opened(root) as repo:
+        commit = _objects.commit_of(repo, _resolved(repo, ref, root))
+    return _objects.message_of(commit)
