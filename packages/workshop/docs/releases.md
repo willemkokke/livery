@@ -19,34 +19,53 @@ extension answering releases without notes, and the train says so
 where it would have written them.
 
 `fm release.prepare` stamps the version into the three places that
-must agree, and `fm release.verify` refuses the tag when they do
-not, or when a dependency floor names an unreleased version.
+must agree, and `fm release.check-tag` refuses the tag when they do
+not, or when a dependency floor names an unreleased version; the
+release wave runs the same check for every member before anything
+uploads.
 
 An entry is written for review, never for trust: read it before the
 tag, and edit what a reader needs said differently.
 
-Before the tag, each member is validated in two isolated
-environments: at every direct dependency's floor, and at the newest
-each allows. The toolchain the tests need comes from the lock, minus
-whatever the leg resolved, so the floor leg proves the floor and the
-latest leg proves the newest, and the lock may sit anywhere between.
-A toolchain tool that needs another version of a dependency the
-member declares is refused by name.
+The train builds each member on the build phase's isolated side, in
+the `release` configuration, then runs its test phase on the isolated
+side once per resolution the release proves: the built wheel in a
+fresh environment, its own tests run against the installed copy.
+Three resolutions exist. `floor` puts every direct dependency at its
+declared floor, so a floor lying about compatibility fails there;
+`latest` resolves the newest each allows, the world a fresh consumer
+gets; `head` installs at the versions the workspace's `uv.lock` pins,
+read as it stands. The legs run in that order, the floor first. Each
+leg finds a sibling's unpublished wheel only in the co-released set's
+`dist/` directories, and reports what it resolved for each sibling.
+The toolchain the tests need comes from the lock, minus whatever the
+leg resolved, so the floor leg proves the floor and the latest leg
+proves the newest. A toolchain tool that needs another version of a
+dependency the member declares is refused by name.
 
-The floor leg runs while `prove-floors` is on, which it is unless a
-`[release]` table turns it off: the workspace's `workshop.toml` sets
-the default for every member, and a package's own `workshop.toml`
-overrides it for that package either way.
+`[release] prove` lists the resolutions: the workspace's
+`workshop.toml` sets the list for every member, and a package's own
+`workshop.toml` replaces it for that package. Without a list anywhere
+a release proves `floor` and `latest`.
 
 ```toml
 [release]
-prove-floors = false
+prove = ["head"]
 ```
 
-With it off, the member's floor leg is skipped and the release names
-the skip and the file that turned it off; the latest leg still runs.
-A sibling released in the same wave counts at its new version: its
-floor in every co-released member rises to that version first.
+A list from a contract is named with its file when the legs run. A
+word other than the three, or one listed twice, is refused when the
+contract is read. A sibling released in the same wave counts at its
+new version: its floor in every co-released member rises to that
+version first.
+
+After a release, `fm release.verify <member>` runs the member's verify
+phase: the newest released version the index serves, installed alone
+into a plain environment beside the tests checked out at its release
+tag, imported from site-packages. A red verification fails, and inside
+CI, or with `--report`, files the marker issue through the forge or
+comments on the one already open. The nightly point runs it when the
+contract schedules it under `[[ci.schedule]]`.
 
 The wave runs at the release squash with the squash's own workshop:
 the checkout, the wheel, the receipt and the driver are all the

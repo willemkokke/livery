@@ -408,7 +408,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     root = _root(
         tmp_path,
-        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "release.replay"\n'
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "release.verify"\n'
         'args = ["--all"]\n'
         '\n[[ci.schedule]]\npoint = "gate"\njob = "docs"\ntask = "docs.links"\n',
     )
@@ -417,9 +417,9 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     # declared ones.
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     entries = _points.entries_for(root, "nightly", "nightly")
-    assert [e.task for e in entries] == ["doctor", "check", "release.replay"]
+    assert [e.task for e in entries] == ["doctor", "check", "release.verify"]
     assert entries[-1] == _points.Entry(
-        "nightly", "nightly", "release.replay", ("--all",), source="workshop.toml"
+        "nightly", "nightly", "release.verify", ("--all",), source="workshop.toml"
     )
     docs = _points.entries_for(root, "gate", "docs")
     assert [e.task for e in docs] == ["docs.build", "docs.links"]

@@ -76,12 +76,27 @@ def _context(
     )
 
 
+#: What the gate gives its phases: the build phase's tree side, in the
+#: instrumented configuration.
+GATE_INPUTS: Mapping[str, Mapping[str, object]] = {
+    "build": {"isolated": False, "configuration": "instrumented"}
+}
+
+#: What a phase's own verb gives its phases: the build phase's tree side,
+#: in the debug configuration, so a bare ``fm build`` builds what
+#: ``fm run`` starts, and the gate alone instruments.
+VERB_INPUTS: Mapping[str, Mapping[str, object]] = {
+    "build": {"isolated": False, "configuration": "debug"}
+}
+
+
 def walk(
     ctx: PhaseContext,
     *,
     between: Callable[[], None] | None = None,
     judge: bool = True,
     only: frozenset[str] | None = None,
+    inputs: Mapping[str, Mapping[str, object]] = GATE_INPUTS,
 ) -> None:
     """Walk the registry: the one place the gate's order lives.
 
@@ -97,7 +112,10 @@ def walk(
     one refusal is the verdict. A check whose claims reach no file in
     scope is said and not started. Without *judge* the walk stops
     after the fixers, the post-edit hook's run. *only* keeps the named
-    checks alone, a generated verb's run.
+    checks alone, a generated verb's run. *inputs* are the keys the
+    walk gives each phase, the gate's own
+    ([livery.workshop._quality.GATE_INPUTS][]) unless another engine
+    names its.
     """
     for line in _checks.narrowings():
         print(line)
@@ -107,13 +125,13 @@ def walk(
         return names if only is None else tuple(n for n in names if n in only)
 
     for name in _checks.with_files(chosen(_checks.rewriters(ctx)), ctx):
-        run_phase(ctx, (_checks.check_for(name),), fixing=True)
+        run_phase(ctx, (_checks.check_for(name),), inputs=inputs, fixing=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
     names = _checks.with_files(chosen(_checks.judges(ctx)), ctx)
-    run_phase(ctx, _checks.with_earlier(names))
+    run_phase(ctx, _checks.with_earlier(names), inputs=inputs)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -411,6 +429,7 @@ def _check_files(
     judge: bool = True,
     only: frozenset[str] | None = None,
     arguments: tuple[str, ...] = (),
+    inputs: Mapping[str, Mapping[str, object]] = GATE_INPUTS,
 ) -> None:
     """The gate over the named files: the walk narrowed to them, nothing recorded.
 
@@ -461,7 +480,7 @@ def _check_files(
         point=point,
         arguments=arguments,
     )
-    walk(ctx, judge=judge, only=only)
+    walk(ctx, judge=judge, only=only, inputs=inputs)
 
 
 def run_checks(
@@ -477,7 +496,9 @@ def run_checks(
 
     Over the named paths, or the whole workspace; nothing is recorded
     as proved, since a part of the gate ran. *arguments*, the words
-    after ``--`` on a check's own verb, reach that check's tool.
+    after ``--`` on a check's own verb, reach that check's tool. The
+    phases take the verb's inputs
+    ([livery.workshop._quality.VERB_INPUTS][]), not the gate's.
     """
     import os
 
@@ -496,22 +517,29 @@ def run_checks(
             point=point,
             only=only,
             arguments=arguments,
+            inputs=VERB_INPUTS,
         )
         return
     context = _context(
         fix=fix or safe_fix, safe=safe_fix, point=point, arguments=arguments
     )
-    walk(context, only=only)
+    walk(context, only=only, inputs=VERB_INPUTS)
 
 
-def run_on_packages(names: tuple[str, ...], packages: tuple[Package, ...]) -> None:
+def run_on_packages(
+    names: tuple[str, ...],
+    packages: tuple[Package, ...],
+    *,
+    inputs: Mapping[str, Mapping[str, object]] = GATE_INPUTS,
+) -> None:
     """Run the checks *names* over *packages* whole; nothing recorded as proved.
 
     Each package check judges the packages it applies to, files and
     claims notwithstanding: the development build ``fm run`` starts
-    with ([livery.workshop._run.develop][]).
+    with ([livery.workshop._run.develop][]), which gives the phases its
+    own *inputs*.
     """
-    walk(_context(subset=packages), only=frozenset(names))
+    walk(_context(subset=packages), only=frozenset(names), inputs=inputs)
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:

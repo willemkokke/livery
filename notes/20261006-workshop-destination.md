@@ -1463,11 +1463,10 @@ the stack, which this design neither needs nor rules out).
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
-| the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
+| `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
 | `[generators]` | the docs phase's steps (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
-| `[release] prove-floors`, and the prove and replay phases | `[release] prove = [...]` on the test phase, and verify (#1377) |
 
 ## Decision record
 
@@ -2681,6 +2680,25 @@ the stack, which this design neither needs nor rules out).
   naming the step spelling. The steps share the parse through the
   per-file memo of one process, so no step provides it to another.
   `[setup]` had no reader and leaves the temporary table with them.
+
+- 2026-10-12, #1527, #1377 part 10: the train takes `isolated` and
+  `configuration`, `[release] prove` replaces `prove-floors`, and replay
+  is verify. A step serves the side of its phase it declares: `isolated
+  = true` only when the engine gives it, `false` only when it gives
+  `false` or nothing, neither on both; a phase without an `isolated` key
+  refuses a step that declares one. The prove phase is gone: python's
+  isolated test step runs once per resolution `[release] prove` lists,
+  `floor`, `latest` and `head` (the lock's pins, exported as
+  constraints), always in that order, a package's list over the
+  workspace's, `floor` and `latest` when none; this repository lists
+  `head`, and `prove-floors` refuses naming `prove`. The train builds
+  isolated in `release`, `fm run` and a phase's own verb build the tree
+  in `debug`, the gate in `instrumented`. The replay phase is the verify
+  phase and `fm release.verify` its verb; the tag check is
+  `fm release.check-tag`. The run phase's `executable` is an engine key;
+  `arguments` stays the context's words after `--` for every step. The
+  engine's inputs are keyed by phase, since one walk runs several
+  phases' steps. An isolated-only step registers no gate check.
 
 ## Open
 

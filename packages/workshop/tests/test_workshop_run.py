@@ -18,7 +18,7 @@ from livery.workshop._run import RECORD, start
 from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: The fixture's package-level extension: two executables, and a run main
-#: that starts the chosen one.
+#: that starts the chosen one, read as the run phase's engine key.
 NATIVE = """\
 [extension]
 levels = ["package"]
@@ -28,6 +28,7 @@ executables = "{package}._steps:executables"
 
 [phases.run.native]
 main = "{package}._steps:main"
+reads = ["executable"]
 """
 
 STEPS = """\
@@ -36,7 +37,7 @@ def executables(package):
 
 
 def main(ctx):
-    print("started", ctx.executable, list(ctx.arguments))
+    print("started", ctx.read("executable"), list(ctx.arguments))
     ctx.exit(3)
 """
 
@@ -164,7 +165,11 @@ def test_executables_with_no_run_step_to_start_them_refuse(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        odd=NATIVE.replace('[phases.run.native]\nmain = "{package}._steps:main"\n', ""),
+        odd=NATIVE.replace(
+            '[phases.run.native]\nmain = "{package}._steps:main"\n'
+            'reads = ["executable"]\n',
+            "",
+        ),
     )
     fake_steps(tmp_path, "odd", STEPS)
     with pytest.raises(DeclarationError) as raised:
@@ -266,6 +271,33 @@ def test_fm_run_builds_the_closure_dependencies_first_then_starts_the_executable
     # Inside the app's directory the package may be left out.
     assert start(root, "tool", (), root / "packages" / "app") == 3
     assert "started tool []\n" in capsys.readouterr().out
+
+
+def test_the_build_runs_before_the_owners_run_step_which_the_verb_exits_with(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    state = _checks.snapshot()
+
+    def say(ctx: PhaseContext) -> None:
+        assert ctx.package is not None
+        print(f"built {ctx.package.path}")
+
+    try:
+        register_check(
+            CheckRecord("acme", "build", say, scope=_checks.PACKAGE, extensions=BOTH)
+        )
+        assert start(root, "app:serve", (), root) == 3
+    finally:
+        _checks.restore(state)
+    out = capsys.readouterr().out
+    assert (
+        out.index("built packages/lib\n")
+        < out.index("built packages/app\n")
+        < out.index("started serve []\n")
+    )
 
 
 def test_a_member_no_build_check_judges_is_never_built(

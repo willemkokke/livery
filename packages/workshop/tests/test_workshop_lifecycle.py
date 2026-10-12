@@ -212,7 +212,9 @@ def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
     assert _lifecycle.publish(package, tmp_path, version="2", target=target) is True
 
 
-def test_a_package_its_kind_proves_nothing_for_refuses_a_leg(tmp_path: Path) -> None:
+def test_a_package_its_kind_tests_nothing_isolated_for_refuses_a_leg(
+    tmp_path: Path,
+) -> None:
     package = Package(
         directory=tmp_path / "packages" / "native",
         path="packages/native",
@@ -220,35 +222,68 @@ def test_a_package_its_kind_proves_nothing_for_refuses_a_leg(tmp_path: Path) -> 
         kind="cpp-conan",
         depends=(),
     )
-    assert _lifecycle.proves(package) is False
-    with pytest.raises(_FAILURES, match="nothing proves its release"):
-        _lifecycle.prove(package, tmp_path, resolution="highest", release_dirs=())
+    assert _lifecycle.has_isolated_test(package) is False
+    with pytest.raises(_FAILURES, match="nothing tests its release isolated"):
+        _lifecycle.isolated_test(
+            package, tmp_path, resolution="latest", release_dirs=()
+        )
 
 
-def test_a_package_whose_extensions_prove_and_replay_goes_through_them(
+def test_a_set_testing_on_the_tree_side_alone_has_no_isolated_test(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The fallback first: the set's one test step serves the tree side,
+    # so the release falls back to the kind, which the fixture's kind
+    # answers with nothing.
+    package = _stepping(
+        tmp_path,
+        monkeypatch,
+        "def main(ctx):\n    del ctx\n",
+        '\n[phases.test.tree]\nmain = "{package}._steps:main"\nisolated = false\n',
+    )
+    native = Package(
+        directory=package.directory,
+        path=package.path,
+        name=package.name,
+        kind="cpp-conan",
+        depends=(),
+        extensions=package.extensions,
+    )
+    assert _lifecycle.has_isolated_test(native) is False
+
+
+def test_a_package_whose_extensions_test_isolated_and_verify_goes_through_them(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     source = (
-        "def prove(ctx):\n"
+        "def tree(ctx):\n"
+        "    print('the tree side ran')\n\n\n"
+        "def isolated(ctx):\n"
         "    dirs = ctx.read('release-dirs')\n"
         "    ctx.provide('resolved', {'acme-base': ctx.read('resolution'),"
         " 'dirs': str(len(dirs))})\n\n\n"
-        "def replay(ctx):\n"
+        "def verify(ctx):\n"
         "    ctx.provide('exit-code', 0 if ctx.read('version') == '1.2.0' else 3)\n"
     )
     phases = (
-        '\n[phases.prove.step]\nmain = "{package}._steps:prove"\n'
-        'reads = ["resolution", "release-dirs"]\nprovides = { resolved = "table" }\n'
-        '\n[phases.replay.step]\nmain = "{package}._steps:replay"\n'
+        '\n[phases.test.tree]\nmain = "{package}._steps:tree"\nisolated = false\n'
+        '\n[phases.test.step]\nmain = "{package}._steps:isolated"\n'
+        'isolated = true\nreads = ["resolution", "release-dirs"]\n'
+        'provides = { resolved = "table" }\n'
+        '\n[phases.verify.step]\nmain = "{package}._steps:verify"\n'
         'reads = ["version"]\nprovides = { exit-code = "int" }\n'
     )
     package = _stepping(tmp_path, monkeypatch, source, phases)
-    assert _lifecycle.proves(package) is True
-    resolved = _lifecycle.prove(
-        package, tmp_path, resolution="lowest-direct", release_dirs=(tmp_path,)
+    assert _lifecycle.has_isolated_test(package) is True
+    resolved = _lifecycle.isolated_test(
+        package, tmp_path, resolution="floor", release_dirs=(tmp_path,)
     )
-    assert resolved == {"acme-base": "lowest-direct", "dirs": "1"}
-    code = _lifecycle.replay(
+    assert resolved == {"acme-base": "floor", "dirs": "1"}
+    # The isolated side runs the step serving it, and not the tree's.
+    assert "the tree side ran" not in capsys.readouterr().out
+    code = _lifecycle.verify(
         package,
         tmp_path,
         tree=tmp_path,

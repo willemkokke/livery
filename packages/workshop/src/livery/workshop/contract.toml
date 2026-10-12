@@ -217,9 +217,10 @@ doc = "the index the workspace resolves from first, which the release also probe
 types = ["table"]
 doc = "the release train's defaults for every member"
 
-[contract.root.release.prove-floors]
-types = ["bool"]
-doc = "whether a release tests each member against the lowest versions its requirements allow, a member's own setting winning; true when absent"
+[contract.root.release.prove]
+types = ["strs"]
+values = ["floor", "latest", "head"]
+doc = "the resolutions a release tests each member at, each at most once: floor at the lowest versions its requirements allow, latest at the newest, head at the workspace lock's; a member's own list wins; floor and latest when absent"
 
 [contract.root.workspace]
 types = ["table"]
@@ -451,9 +452,10 @@ doc = "how the release train releases the package"
 types = ["str"]
 doc = "the version the package's line continues from, for a package released elsewhere before; 0.0.0 when absent"
 
-[contract.package.release.prove-floors]
-types = ["bool"]
-doc = "whether a release tests the package against the lowest versions its requirements allow; the root's setting when absent"
+[contract.package.release.prove]
+types = ["strs"]
+values = ["floor", "latest", "head"]
+doc = "the resolutions a release tests the package at, each at most once: floor, latest and head; the root's list when absent"
 
 [contract.package.release.publish]
 types = ["bool"]
@@ -760,7 +762,7 @@ doc = "files the step does not judge whose change runs it over everything it rea
 
 [contract.extension.phases."*"."*".isolated]
 types = ["bool"]
-doc = "the side of the phase the step serves: true the isolated one, from a copy of the sources in a fresh environment, false the tree; both when absent"
+doc = "the side of the phase the step serves, in a phase whose engine gives isolated: true the isolated one, from a copy of the sources in a fresh environment, false the tree; both when absent"
 
 [contract.extension.phases."*"."*".main]
 types = ["str", "strs"]
@@ -883,8 +885,8 @@ doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this o
 # type; level, package for a phase run over one package at a time and
 # workspace for one run over the workspace once; gated, whether fm check
 # runs it; after, the phases it follows in the train's order; and verb,
-# whether a verb is generated for it. The train runs stamp, build, prove,
-# publish and replay in that order; fm sync, fm clean and fm run run
+# whether a verb is generated for it. The train runs stamp, build, test,
+# publish and verify in that order; fm sync, fm clean and fm run run
 # their phases; fm check runs the gated ones.
 
 [phases.sync]
@@ -969,16 +971,6 @@ isolated = "bool"
 resolution = "str"
 release-dirs = "paths"
 
-[phases.prove]
-level = "package"
-gated = false
-after = ["build"]
-verb = false
-
-[phases.prove.keys]
-resolution = "str"
-release-dirs = "paths"
-
 [phases.stamp]
 level = "package"
 gated = false
@@ -991,20 +983,20 @@ version = "str"
 [phases.publish]
 level = "package"
 gated = false
-after = ["prove"]
+after = ["test"]
 verb = false
 
 [phases.publish.keys]
 version = "str"
 registry-target = "table"
 
-[phases.replay]
+[phases.verify]
 level = "package"
 gated = false
 after = ["publish"]
 verb = false
 
-[phases.replay.keys]
+[phases.verify.keys]
 version = "str"
 tree = "path"
 interpreter = "str"
@@ -1025,7 +1017,6 @@ verb = false
 
 [phases.run.keys]
 executable = "str"
-arguments = "strs"
 
 # The base's queries, in the grammar an extension declares a query in
 # under the same table of its extension.toml. A package-level query is

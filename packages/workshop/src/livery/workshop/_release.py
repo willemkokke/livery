@@ -1,11 +1,13 @@
-"""The release train's verbs: prepare, verify, wheels, the driver, and replay.
+"""The release train's verbs: prepare, the tag check, wheels, the driver, and verify.
 
-``fm release.verify`` is the train's gate, run by the release
-workflow before anything builds: the tag, the ``pyproject`` version,
-the ``__version__``, and the changelog must all agree, and every
-``[[depends]]`` floor must resolve to a tag that has actually been
-released. ``fm release.prepare`` stamps a version into those same
-places, idempotently, so the human act is one command plus one tag.
+``fm release.check-tag`` checks a release tag against the tree: the
+tag, the ``pyproject`` version, the ``__version__``, and the changelog
+must all agree, and every ``[[depends]]`` floor must resolve to a tag
+that has actually been released; the release wave runs the same check
+for every member before anything uploads. ``fm release.prepare``
+stamps a version into those same places, idempotently.
+``fm release.verify`` runs a member's verify phase: its latest
+released version installed alone and tested at the release tag.
 """
 
 from __future__ import annotations
@@ -113,11 +115,11 @@ def verify_release(
     return ReleasePlan(package=package, version=version)
 
 
-@release.task(name="verify", hidden=True)
-def release_verify(
+@release.task(name="check-tag", hidden=True)
+def release_check_tag(
     tag: Annotated[str, doc("the release tag, packages/<member>/v<semver>")],
 ) -> None:
-    """Verify *tag* against the tree; the train's gate before building.
+    """Check *tag* against the tree: the release wave's check, run by hand.
 
     In GitHub Actions the verified package name is appended to
     ``$GITHUB_OUTPUT`` as ``package=<name>`` for the build step.
@@ -219,15 +221,15 @@ def release_prepare(
     release notes provider writes the entry they make, for review. A
     package with nothing unreleased is refused rather than given a new
     number. A given version wins and
-    leaves the entry for the human. ``fm release.verify`` is the
+    leaves the entry for the human. ``fm release.check-tag`` is the
     check that everything agrees before the tag is cut.
     """
     for name in prepare_release(_root(), path, version):
         print(f"  stamped: {name}")
 
 
-@release.task(name="replay")
-def release_replay(
+@release.task(name="verify")
+def release_verify(
     member: Annotated[str, doc("the member's directory under packages/")],
     *,
     python: Annotated[
@@ -238,21 +240,22 @@ def release_replay(
         bool, doc("file or extend the marker issue on red; the default inside CI")
     ] = False,
 ) -> None:
-    """Replay a member's latest released wheel against its own tests.
+    """Verify a member's latest released wheel against its own tests.
 
-    The pairing a consumer gets: the wheel the registry serves,
-    installed into a plain environment beside the tests at the
-    release tag, imported from site-packages. The nightly point
-    schedules it through ``[[ci.schedule]]``; by hand it answers the
-    same. A red replay fails, and inside CI (or with ``--report``)
-    files or extends the marker issue through the forge first.
+    The member's verify phase: the pairing a consumer gets, the wheel
+    the registry serves installed into a plain environment beside the
+    tests at the release tag, imported from site-packages. The nightly
+    point schedules it through ``[[ci.schedule]]``; by hand it answers
+    the same. A red verification fails, and inside CI (or with
+    ``--report``) files or extends the marker issue through the forge
+    first.
     """
     import sys
 
     from livery.forge import SimpleRegistry
     from livery.workshop._ci_context import run_context
     from livery.workshop._registries import resolve_registry
-    from livery.workshop._replay import replay_flow
+    from livery.workshop._verify import verify_flow
 
     root = _root()
     packages = {p.member: p for p in discover_packages(root)}
@@ -271,7 +274,7 @@ def release_replay(
         from livery.workshop._forge_lane import this_repository
 
         repo = this_repository(root)
-    replay_flow(
+    verify_flow(
         root,
         package,
         python=python or f"{sys.version_info.major}.{sys.version_info.minor}",

@@ -1,16 +1,16 @@
-"""The released-wheels replay: a member's published wheel against its own tests.
+"""The verify phase's flow: a member's published wheel against its own tests.
 
 The pairing under test is the one a consumer gets: the wheel the
 index serves, installed into a plain virtual environment beside the
 tests recorded for that same version, so the tree is checked out at
 the release tag, never at main, and the package must import from
-site-packages, never from the workspace. A red replay means a
+site-packages, never from the workspace. A red verification means a
 dependency release broke the installed configuration or the index
 artifact drifted; the failure path files or extends the marker
 issue through the forge, searching for the marker first, so a red
 night is one issue with one comment per failure, never a pile.
 
-Reach for [livery.workshop._replay.replay_flow][]; `fm release.replay`
+Reach for [livery.workshop._verify.verify_flow][]; `fm release.verify`
 is its verb, and the nightly point schedules it through the
 contract's ``[[ci.schedule]]`` seam.
 """
@@ -33,13 +33,13 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
 #: The issue the failure path files or extends; the search key.
-MARKER = "nightly: released-wheels replay failed"
+MARKER = "nightly: released-wheels verification failed"
 
 _RELEASE_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class Registry(Protocol):
-    """The one probe the replay needs; livery.forge.SimpleRegistry fits."""
+    """The one probe the verification needs; livery.forge.SimpleRegistry fits."""
 
     def versions(self, name: str) -> tuple[str, ...]:
         """The published versions of *name*."""
@@ -47,8 +47,8 @@ class Registry(Protocol):
 
 
 @dataclass(frozen=True)
-class Replay:
-    """What one replay is about.
+class Verification:
+    """What one verification is about.
 
     Attributes:
         member: The member's directory name under ``packages/``.
@@ -82,7 +82,7 @@ def latest_release(registry: Registry, dist: str) -> str:
     """
     finals = [v for v in registry.versions(dist) if _RELEASE_RE.match(v)]
     if not finals:
-        fail(f"the index serves no released version of {dist}: nothing to replay")
+        fail(f"the index serves no released version of {dist}: nothing to verify")
     return max(finals, key=lambda v: tuple(int(part) for part in v.split(".")))
 
 
@@ -96,11 +96,13 @@ def run_url() -> str:
     return ""
 
 
-def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
+def report_failure(repo: Repository, verification: Verification, *, url: str) -> str:
     """File or extend the marker issue; the line saying which, or the refusal."""
     from livery.forge import ForgeError
 
-    evidence = f"{replay.requirement} failed its replay" + (f": {url}" if url else "")
+    evidence = f"{verification.requirement} failed its verification" + (
+        f": {url}" if url else ""
+    )
     try:
         existing = repo.issue.search(MARKER)
         if existing:
@@ -109,14 +111,14 @@ def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
         created = repo.issue.create(
             MARKER,
             body=(
-                "The released-wheels replay is red: the wheel on the index no"
-                " longer passes its own recorded tests in the consumer"
-                f" configuration.\n\n{evidence}\n\nThe replay installs the"
-                " released wheel into a plain virtual environment and runs the"
-                " member's tests at the release tag. A red replay means a"
-                " dependency release broke the installed configuration, or the"
-                " index artifact drifted; the run's logs carry the failing"
-                " tests."
+                "The released-wheels verification is red: the wheel on the"
+                " index does not pass its own recorded tests in the consumer"
+                f" configuration.\n\n{evidence}\n\nThe verification installs"
+                " the released wheel into a plain virtual environment and runs"
+                " the member's tests at the release tag. A red verification"
+                " means a dependency release broke the installed configuration,"
+                " or the index artifact drifted; the run's logs carry the"
+                " failing tests."
             ),
         )
         return f"  filed #{created.number}: {MARKER}"
@@ -124,7 +126,7 @@ def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
         return f"  the forge refused the issue: {error}"
 
 
-def replay_flow(
+def verify_flow(
     root: Path,
     package: Package,
     *,
@@ -134,39 +136,42 @@ def replay_flow(
     extras: str = "",
     repo: Repository | None = None,
 ) -> None:
-    """Replay *package*'s latest release on *python*; red files the issue and fails.
+    """Verify *package*'s latest release on *python*; red files the issue and fails.
 
     The release is the newest final version *registry* serves; the
     tree is a temporary worktree at its receipt tag, refused when
     the checkout lacks the tag. The install and the test run are the
-    package's ``replay`` phase, through
-    [livery.workshop._lifecycle.replay][]. With *repo*, a red replay
-    files or extends the marker issue before failing.
+    package's ``verify`` phase, through
+    [livery.workshop._lifecycle.verify][]. With *repo*, a red
+    verification files or extends the marker issue before failing.
     """
     from livery.workshop import _lifecycle
 
     member = package.member
-    replay = Replay(
+    verification = Verification(
         member, package.name, latest_release(registry, package.name), extras
     )
-    if replay.tag not in git.tags(root):
+    if verification.tag not in git.tags(root):
         fail(
-            f"the checkout carries no tag {replay.tag}: fetch the tags"
+            f"the checkout carries no tag {verification.tag}: fetch the tags"
             " (git fetch --tags), or the release is not this repository's"
         )
-    print(f"  replaying {replay.requirement} at {replay.tag} on python {python}")
-    scratch = scratch_dir("replay")
+    print(
+        f"  verifying {verification.requirement} at {verification.tag} on python"
+        f" {python}"
+    )
+    scratch = scratch_dir("verify")
     tree = scratch / "tree"
     try:
-        git.worktree_add(root, tree, replay.tag, detach=True)
+        git.worktree_add(root, tree, verification.tag, detach=True)
     except git.GitError as error:
         fail(str(error))
     try:
-        code = _lifecycle.replay(
+        code = _lifecycle.verify(
             package,
             root,
             tree=tree,
-            version=replay.version,
+            version=verification.version,
             python=python,
             index=index,
             extras=extras,
@@ -176,8 +181,11 @@ def replay_flow(
             git.worktree_remove(root, tree)
         shutil.rmtree(scratch, ignore_errors=True)
     if code == 0:
-        print(f"  green: {replay.requirement} passes its own tests from site-packages")
+        print(
+            f"  green: {verification.requirement} passes its own tests from"
+            " site-packages"
+        )
         return
     if repo is not None:
-        print(report_failure(repo, replay, url=run_url()))
-    fail(f"the replay of {replay.requirement} is red (exit {code})")
+        print(report_failure(repo, verification, url=run_url()))
+    fail(f"the verification of {verification.requirement} is red (exit {code})")

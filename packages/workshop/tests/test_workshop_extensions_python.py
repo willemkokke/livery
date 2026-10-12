@@ -145,7 +145,59 @@ def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
     assert uploads == [("acme-core", "https://idx.example/", "t")]
 
 
-def _replayed_package(directory: Path) -> object:
+def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One package through the test phase's isolated side, its twin through the kind."""
+    from dataclasses import replace
+
+    from livery.workshop import _checks, _lifecycle
+    from livery.workshop._packages import Package
+
+    legs: list[tuple[str, str, tuple[Path, ...]]] = []
+
+    def _leg(
+        package: Package,
+        root: Path,
+        *,
+        release_dirs: tuple[Path, ...],
+        resolution: str,
+    ) -> dict[str, str]:
+        legs.append((package.path, resolution, release_dirs))
+        return {"acme-core": "1.0.0"}
+
+    monkeypatch.setattr("livery.extensions.python._backend.run_isolated_test", _leg)
+    listing = Package(
+        directory=tmp_path / "listing",
+        path="packages/listing",
+        name="acme-core",
+        kind="python",
+        depends=(),
+        extensions=("python",),
+    )
+    plain = replace(listing, path="packages/plain", extensions=())
+    dirs = (tmp_path / "dist",)
+    for package in (listing, plain):
+        assert _lifecycle.has_isolated_test(package)
+        resolved = _lifecycle.isolated_test(
+            package, tmp_path, resolution="head", release_dirs=dirs
+        )
+        assert resolved == {"acme-core": "1.0.0"}
+    assert legs == [
+        ("packages/listing", "head", dirs),
+        ("packages/plain", "head", dirs),
+    ]
+    # The listing package's leg is the extension's step in the walk; the
+    # gate, which runs the tree side, registers no check for it.
+    assert "test.python: packages/listing runs (a python package)" in (
+        capsys.readouterr().out
+    )
+    assert "test.python" not in _checks.checks_by_name()
+
+
+def _verified_package(directory: Path) -> object:
     from livery.workshop._packages import Package
 
     return Package(
@@ -157,23 +209,23 @@ def _replayed_package(directory: Path) -> object:
     )
 
 
-def test_a_tree_without_a_package_refuses_to_replay(tmp_path: Path) -> None:
-    from livery.extensions.python import _replay
+def test_a_tree_without_a_package_refuses_to_verify(tmp_path: Path) -> None:
+    from livery.extensions.python import _verify
     from livery.workshop._packages import Package
 
     (tmp_path / "src" / "empty").mkdir(parents=True)
-    package = _replayed_package(tmp_path)
+    package = _verified_package(tmp_path)
     assert isinstance(package, Package)
     with pytest.raises(BaseException, match="holds no package directory"):
-        _replay.import_name(package)
+        _verify.import_name(package)
 
 
-def test_a_namespace_rooted_package_replays_the_module_it_declares(
+def test_a_namespace_rooted_package_verifies_the_module_it_declares(
     tmp_path: Path,
 ) -> None:
     # Three levels of namespace and no __init__.py: what an extension's
     # wheel ships, named by its build backend's module-name.
-    from livery.extensions.python import _replay
+    from livery.extensions.python import _verify
     from livery.workshop._packages import Package
 
     (tmp_path / "src" / "acme" / "extensions" / "lint").mkdir(parents=True)
@@ -182,15 +234,15 @@ def test_a_namespace_rooted_package_replays_the_module_it_declares(
         '[tool.uv.build-backend]\nmodule-name = "acme.extensions.lint"\n'
         "namespace = true\n"
     )
-    package = _replayed_package(tmp_path)
+    package = _verified_package(tmp_path)
     assert isinstance(package, Package)
-    assert _replay.import_name(package) == "acme.extensions.lint"
+    assert _verify.import_name(package) == "acme.extensions.lint"
 
 
-def test_a_red_replay_install_runs_no_test(
+def test_a_red_verification_install_runs_no_test(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.python import _replay
+    from livery.extensions.python import _verify
     from livery.workshop._packages import Package
 
     tree = tmp_path / "scratch" / "tree"
@@ -207,8 +259,8 @@ def test_a_red_replay_install_runs_no_test(
         tested.append(module)
         return 0
 
-    monkeypatch.setattr(_replay, "install", _install)
-    monkeypatch.setattr(_replay, "run_tests", _test)
+    monkeypatch.setattr(_verify, "install", _install)
+    monkeypatch.setattr(_verify, "run_tests", _test)
     package = Package(
         directory=tree / "packages" / "core",
         path="packages/core",
@@ -216,14 +268,92 @@ def test_a_red_replay_install_runs_no_test(
         kind="python",
         depends=(),
     )
-    code = _replay.replay(
+    code = _verify.verify(
         package, tree=tree, version="1.2.0", python="3.14", index="idx", extras="x"
     )
     assert code == 1
     assert installs == [
-        (tmp_path / "scratch" / ".replay", "3.14", "acme-core[x]==1.2.0", "idx")
+        (tmp_path / "scratch" / ".verify", "3.14", "acme-core[x]==1.2.0", "idx")
     ]
     assert tested == []
+
+
+def test_a_module_outside_site_packages_runs_no_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The fallback first: the probe finds the module somewhere other than
+    # site-packages, so the tests would prove the workspace, and none runs.
+    from types import SimpleNamespace
+
+    import livery.footman
+    from livery.extensions.python import _verify
+
+    ran: list[list[str]] = []
+    codes = [1]
+
+    def _run(argv: list[str], **_kwargs: object) -> object:
+        ran.append(argv)
+        return SimpleNamespace(code=codes[0])
+
+    monkeypatch.setattr(livery.footman, "run", _run)
+    venv = tmp_path / ".verify"
+    code = _verify.run_tests(venv, tmp_path / "tree", "core", "acme.core")
+    assert code == 1
+    assert len(ran) == 1
+    assert ran[0][0] == str(venv / "bin" / "python")
+    assert "site-packages" in ran[0][2]
+    assert "acme.core does not import from site-packages" in capsys.readouterr().out
+    # Imported from site-packages, the member's tests run at the tree.
+    ran.clear()
+    codes[0] = 0
+    assert _verify.run_tests(venv, tmp_path / "tree", "core", "acme.core") == 0
+    assert ran[1] == [
+        str(venv / "bin" / "python"),
+        "-m",
+        "pytest",
+        "packages/core/tests",
+        "-p",
+        "no:cacheprovider",
+    ]
+
+
+def test_the_released_version_installs_alone_into_a_plain_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A plain venv from uv, then the released requirement from the index
+    # with the test runner: no lock, no workspace member, so the package
+    # can come from the index alone.
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _verify
+
+    commands: list[tuple[str, ...]] = []
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            return SimpleNamespace(code=0)
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    venv = tmp_path / ".verify"
+    assert _verify.install(venv, "3.14", "acme-core[x]==1.2.0", "idx") == 0
+    assert commands == [
+        ("venv", str(venv), "--python", "3.14"),
+        (
+            "pip",
+            "install",
+            "--python",
+            str(venv / "bin" / "python"),
+            "--index",
+            "idx",
+            "acme-core[x]==1.2.0",
+            "pytest",
+            "pytest-xdist",
+        ),
+    ]
 
 
 def test_a_python_package_is_categorised_alike_listing_the_extension_or_not() -> None:

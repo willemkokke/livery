@@ -296,15 +296,27 @@ def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
     )
 
 
-#: The setting that decides whether the floor leg runs, in `[release]`.
-PROVE_FLOORS = "prove-floors"
+#: The key of `[release]` listing the resolutions a release tests at.
+PROVE = "prove"
+
+#: The resolutions a release may test a member at, in the order the legs
+#: run: the floor first, since a floor lying about compatibility fails
+#: before anything else is spent, then the newest, then the lock's.
+RESOLUTIONS = ("floor", "latest", "head")
+
+#: The resolutions a release tests at when no contract lists any.
+DEFAULT_RESOLUTIONS = ("floor", "latest")
 
 
-def proves_floors(root: Path, package: Package) -> tuple[bool, str]:
-    """Whether *package*'s floors are proved, and the file that decided it.
+def proved_resolutions(root: Path, package: Package) -> tuple[tuple[str, ...], str]:
+    """The resolutions *package*'s release tests at, and the file that listed them.
 
-    The package's own `[release] prove-floors` wins; the workspace's
-    is the default; without either the floors are proved.
+    The package's own `[release] prove` wins; the workspace's is the
+    default; without either the release tests at
+    [livery.workshop._release_driver.DEFAULT_RESOLUTIONS][], and the
+    file is empty. The contract's judge refuses a word other than the
+    three and a word listed twice, so the list holds each at most
+    once, in the order the legs run.
     """
     from livery.workshop._contract import load_contract
 
@@ -312,28 +324,25 @@ def proves_floors(root: Path, package: Package) -> tuple[bool, str]:
         if not contract.is_file():
             continue
         release = load_contract(contract).get("release") or {}
-        if PROVE_FLOORS in release:
+        if PROVE in release:
+            listed = {str(word) for word in release[PROVE]}
             where = contract.relative_to(root).as_posix()
-            return bool(release[PROVE_FLOORS]), where
-    return True, ""
+            return tuple(word for word in RESOLUTIONS if word in listed), where
+    return DEFAULT_RESOLUTIONS, ""
 
 
 def validate_member(
-    root: Path,
-    plan: MemberPlan,
-    release_dirs: tuple[Path, ...],
-    *,
-    legs: tuple[str, ...] = ("lowest-direct", "highest"),
+    root: Path, plan: MemberPlan, release_dirs: tuple[Path, ...]
 ) -> None:
-    """Build and run the isolated legs for one member, reporting each.
+    """Run the member's test phase isolated once per resolution it proves; report each.
 
-    The floor leg first (a floor lying about compatibility fails
-    before anything else is spent), then the latest leg. The floor leg
-    runs while `[release] prove-floors` is on for the member
-    ([livery.workshop._release_driver.proves_floors][]); off, the leg
-    is skipped and the skip is named with the file that turned it off. The report
-    names what each leg resolved per co-member and sibling. The
-    caller builds every set member's wheel first: the legs'
+    One leg per resolution
+    ([livery.workshop._release_driver.proved_resolutions][]), in the
+    order of [livery.workshop._release_driver.RESOLUTIONS][], so the
+    floor leg runs before the latest leg; a list from a contract is
+    named with its file. The report names what each leg resolved per
+    co-member and sibling: every workspace member but the one under
+    test. The caller builds every set member's wheel first: the legs'
     find-links name each sibling's ``dist/``, so a later member's
     wheel must exist before an earlier member's floor leg resolves.
 
@@ -341,32 +350,35 @@ def validate_member(
     isolate: its own gate already built and ran ctest, so the legs
     skip saying why.
     """
-    if not _lifecycle.proves(plan.package):
+    if not _lifecycle.has_isolated_test(plan.package):
         print(
             f"  {plan.package.name}: isolated legs skip"
             f" ({plan.package.kind} kind publishes no wheels; its own"
             " gate builds and tests)"
         )
         return
-    proved, where = proves_floors(root, plan.package)
-    if not proved and "lowest-direct" in legs:
-        legs = tuple(leg for leg in legs if leg != "lowest-direct")
-        print(
-            f"  {plan.package.name} floor leg: skipped, `[release] {PROVE_FLOORS}"
-            f" = false` in {where}"
-        )
+    legs, where = proved_resolutions(root, plan.package)
+    if where:
+        listed = ", ".join(legs) or "nothing, so no leg runs"
+        print(f"  {plan.package.name}: [release] {PROVE} in {where} lists {listed}")
+    members = {_normalised(package.name) for package in discover_packages(root)}
+    own = _normalised(plan.package.name)
     for leg in legs:
-        resolved = _lifecycle.prove(
+        resolved = _lifecycle.isolated_test(
             plan.package, root, resolution=leg, release_dirs=release_dirs
         )
         siblings = {
             name: version
             for name, version in sorted(resolved.items())
-            if name.startswith("livery-") and name != plan.package.name
+            if _normalised(name) in members and _normalised(name) != own
         }
         listed = ", ".join(f"{n} {v}" for n, v in siblings.items()) or "no siblings"
-        label = "floor leg" if leg == "lowest-direct" else "latest leg"
-        print(f"  {plan.package.name} {label}: {listed}")
+        print(f"  {plan.package.name} {leg} leg: {listed}")
+
+
+def _normalised(name: str) -> str:
+    """A distribution's name as an index compares it: lower case, hyphens."""
+    return name.lower().replace("_", "-").replace(".", "-")
 
 
 def _base_tree_verified(root: Path, base: str) -> bool:
@@ -865,7 +877,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     """Everything that stays on this machine, then the stamps roll back.
 
     Derive, stamp (so the built wheels carry the would-be versions),
-    build, validate both legs, print the would-be release, restore
+    build, run the isolated legs, print the would-be release, restore
     the tree; ``dist/`` and the report remain. Publishing consent is
     never asked because nothing leaves the machine. The derivation
     reads origin's receipts, fetched first, so it names the versions

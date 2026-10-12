@@ -3,15 +3,18 @@
 ``fm run <package>[:<executable>] -- <arguments>`` names a package and
 one of the executables its extensions answer under ``executables``
 ([livery.workshop.EXECUTABLES][]). It first runs the gate's ``build``
-role over the package's dependency closure, dependencies first, and
-skips each package whose files and dependencies are unchanged since its
-last good build in this checkout; the record of those builds lives
-under ``.workshop/.cache/run/``. Then it runs the ``run`` phase
-through the one walk ([livery.workshop._phases.run_phase][]): every
-step the package's set adds to it, except that of the extensions
-answering ``executables`` only the owner's steps run, each handed the
-executable and the arguments on the context. The verb exits with the
-code the step that started the executable recorded.
+role over the package's dependency closure, dependencies first, on the
+build phase's tree side in the ``debug`` configuration, and skips each
+package whose files and dependencies are unchanged since its last good
+build in this checkout; the record of those builds lives under
+``.workshop/.cache/run/``. Then it runs the ``run`` phase through the
+one walk ([livery.workshop._phases.run_phase][]): every step the
+package's set adds to it, except that of the extensions answering
+``executables`` only the owner's steps run. The engine gives the phase
+the executable under ``executable``, which a step reads as it reads
+any engine key, and the words after ``--`` are the context's
+``arguments``. The verb exits with the code the step that started the
+executable recorded.
 """
 
 from __future__ import annotations
@@ -30,6 +33,12 @@ if TYPE_CHECKING:
 
 #: The record of the development builds, under the workspace root.
 RECORD = Path(".workshop") / ".cache" / "run" / "built.json"
+
+#: What the development build gives the build phase: the tree side, in
+#: the debug configuration.
+DEVELOP_INPUTS: dict[str, dict[str, object]] = {
+    "build": {"isolated": False, "configuration": "debug"}
+}
 
 
 def _targets() -> list[str]:
@@ -132,11 +141,10 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
         packages=(package,),
         package=package,
         phase="run",
-        executable=executable,
         arguments=arguments,
     )
     try:
-        ctx = run_phase(ctx, steps)
+        ctx = run_phase(ctx, steps, inputs={"run": {"executable": executable}})
     except PhaseError as error:
         fail(str(error))
     return ctx.exit_code
@@ -197,12 +205,13 @@ def _known(packages: tuple[Package, ...]) -> str:
 def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list[str]:
     """Build *package*'s dependency closure with the gate's build role; the paths built.
 
-    Dependencies come first. A member is built when its files, or the
-    fingerprint of a dependency, differ from its last good build in
-    this checkout, so a dependency that changed rebuilds what depends
-    on it; a member no build check judges is never built. With nothing
-    changed, no build check runs. A checkout git cannot read is built
-    whole, and says so.
+    Dependencies come first, each on the build phase's tree side in the
+    ``debug`` configuration ([livery.workshop._run.DEVELOP_INPUTS][]).
+    A member is built when its files, or the fingerprint of a
+    dependency, differ from its last good build in this checkout, so a
+    dependency that changed rebuilds what depends on it; a member no
+    build check judges is never built. With nothing changed, no build
+    check runs. A checkout git cannot read is built whole, and says so.
     """
     from livery.workshop._checks import checks_by_name, judges_extensions
     from livery.workshop._graph import dependencies_closure, order_topologically
@@ -236,7 +245,7 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
         names = tuple(r.name for r in builders if judges_extensions(r, held))
         if not names or (own and record.get(member.path) == fingerprint):
             continue
-        run_on_packages(names, (member,))
+        run_on_packages(names, (member,), inputs=DEVELOP_INPUTS)
         built.append(member.path)
         if own:
             record[member.path] = fingerprint

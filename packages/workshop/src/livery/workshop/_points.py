@@ -315,7 +315,7 @@ DECLARED: tuple[Point, ...] = (
                 token="repository",
                 writes=True,
                 note=(
-                    "A replay checks the tree out at a release tag. A pull"
+                    "A verification checks the tree out at a release tag. A pull"
                     " request a scheduled task opens with the job token starts"
                     " no workflow, so the repository's token carries the"
                     " nightly where there is one. The job's profile trace"
