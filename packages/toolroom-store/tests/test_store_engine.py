@@ -455,6 +455,19 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     assert store.objects.ref("tools", "tool@1.0.0") == ensured.tree
     with pytest.raises(StoreError, match="no view"):
         store.mend_view("tool", "9.9.9")
+    # A view whose record is gone, the directory with it, is absent to the
+    # probe although the ref still names the tree: the supply views the
+    # tree again and moves no ref.
+    for view in store.objects.views():
+        if view.at == str(ensured.tool_dir):
+            store.objects.drop_view(view.id)
+    assert store.probe(spec, spec.versions[-1]) is None
+    events.clear()
+    again = store.ensure(spec, spec.versions[-1])
+    assert again.installed and tool.exists()
+    assert store.objects.ref("tools", "tool@1.0.0") == ensured.tree
+    # The artifact landed already: nothing is fetched for it.
+    assert [e.action for e in events] == ["probe", "install"]
 
 
 def test_a_tar_archive_and_a_binary_install_too(
