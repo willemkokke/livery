@@ -115,6 +115,23 @@ breaking changes.
   already failed loudly — and the category filters or escalates like
   any warning.
 
+### Changed
+
+- **bun 1.4.3** adds `--bytecode-depth`, `--bytecode-order`, `--check`, `--compile-jit-policy`, `--min-chunk-size`, `--no-deprecated-namespace-object-setters`, `--no-ffi-cc`, `--no-module-preload`, `--no-optimize-bytecode`, `--no-split-require`, `--offline` and `--prefer-offline`, over 2 releases. It also rewords 4 descriptions.
+- **clang_tidy 22.1.0** adds `--experimental-custom-checks` and `--removed-arg`, over 2 releases. It also rewords 2 descriptions.
+- **coverage 7.16.2** rewords 1 description, over 3 releases. It also restates its own description.
+- **djlint 1.46.0** adds `--keep-br-inline`, `--name-endblocks`, `--no-entity-formatting`, `--no-indent-inner-html`, `--prefer-configuration`, `--quote-style`, `--sarif` and `--sort-attributes`, over 2 releases.
+- **docker 29.8.0** drops `--compress`, `--cpu-count`, `--cpu-percent`, `--cpu-period`, `--cpu-quota`, `--cpu-shares`, `--cpuset-cpus`, `--cpuset-mems`, `--force-rm`, `--io-maxbandwidth`, `--io-maxiops`, `--isolation`, `--memory`, `--memory-swap`, `--rm` and `--security-opt`. It also rewords 5 descriptions.
+- **gh 2.99.0** adds `--attach`.
+- **git 2.56.0** adds `--delete-merged`, `--dry-run`, `--forked`, `--no-graph-indent` and `--resolved`.
+- **git_changelog 2.10.0** adds `--latest-version`. It also rewords 2 descriptions.
+- **mypy 2.4.0** adds `--no-native-parser`. It also drops `--native-parser` and rewords 1 description.
+- **prek 0.5.4** adds `--hide-status` and `--no-hide-status`, over 2 releases.
+- **ruff 0.16.7** rewords 4 descriptions.
+- **ssh 10.6p1** rewords 1 description.
+- **tea 0.16.0** adds `--description-file`.
+- **zensical 0.0.60** changes its option surface, over 2 releases.
+
 ## [0.6.1] — 2026-08-21
 
 ### Added

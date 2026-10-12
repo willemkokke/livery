@@ -72,13 +72,21 @@
 {"verb": "", "option": "warn_uninitialized", "flags": ["--warn-uninitialized"], "negation": "", "help": "= Warn about uninitialized values", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "workflow", "flags": ["--workflow"], "negation": "", "help": "= Run a workflow preset", "type": "str", "default": null, "choices": []}
 {"version": "4.1.3", "date": "2025-11-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.1.5", "date": "2026-01-27", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
 {"version": "4.2.0", "date": "2025-11-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
 {"version": "4.2.1", "date": "2025-12-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
 {"version": "4.2.3", "date": "2026-02-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.2.4", "date": "2026-03-27", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "4.2.5", "date": "2026-04-21", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "4.2.6", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "4.2.7", "date": "2026-06-17", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "4.2.8", "date": "2026-09-04", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
 {"version": "4.3.0", "date": "2026-03-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
 {"version": "4.3.1", "date": "2026-03-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
 {"version": "4.3.2", "date": "2026-04-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.3", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
 {"version": "4.3.4", "date": "2026-06-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.5", "date": "2026-09-04", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
 {"version": "4.4.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
 {"verb": "", "option": "W", "flags": ["-W"], "negation": "", "help": "= Enable the specified category of warnings", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "Wdeprecated", "gone": true}
@@ -94,4 +102,7 @@
 {"verb": "", "option": "no_warn_unused_cli", "gone": true}
 {"verb": "", "option": "presets_file", "flags": ["--presets-file", "--presets-file"], "negation": "", "help": "= Specify the path to a presets file", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "warn_uninitialized", "gone": true}
+{"version": "4.4.1", "date": "2026-07-28", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
 {"version": "4.4.2", "date": "2026-08-04", "artifacts": {"macos-arm": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-macos-universal.tar.gz", "sha256": "800fc86838e913fff969b499886c80baeb4ccfd00f0e39906b34aa334f39ab6c"}, "macos-x64": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-macos-universal.tar.gz", "sha256": "800fc86838e913fff969b499886c80baeb4ccfd00f0e39906b34aa334f39ab6c"}, "linux-x64": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-linux-x86_64.tar.gz", "sha256": "3ada9a3f5d8a85413579bdd0ea6aa8e8da86efdd6d15c91a1afa517f2021956c"}, "linux-arm": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-linux-aarch64.tar.gz", "sha256": "9ca1aadb4451c5dcbdc67f9b4aff42dab52abbaebd8db9e2900026502dbed671"}, "windows-x64": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-windows-x86_64.zip", "sha256": "e8139d85b3813bc38833142ae1940472e9a587e9b5d2718ac1804c60f4e57a64"}, "windows-arm": {"url": "https://github.com/Kitware/CMake/releases/download/v4.4.2/cmake-4.4.2-windows-arm64.zip", "sha256": "8502cf1c5b1984e439d13df154c3c28d080d706efd52db4de1bb3cc7022db521"}}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.4.3", "date": "2026-08-25", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "4.4.4", "date": "2026-10-02", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}

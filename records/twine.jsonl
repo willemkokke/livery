@@ -1,5 +1,5 @@
 {"name": "twine", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "4.0.1", "date": "2022-06-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
+{"version": "4.0.1", "date": "2022-06-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "no_color", "flags": ["--no-color"], "negation": "", "help": "disable colored output", "type": "bool", "default": null, "choices": []}
 {"verb": "check", "help": "", "wraps": false, "positional": "required", "lead": "dist"}
@@ -20,13 +20,13 @@
 {"verb": "upload", "option": "skip_existing", "flags": ["--skip-existing"], "negation": "", "help": "Continue uploading files if one already exists", "type": "bool", "default": null, "choices": []}
 {"verb": "upload", "option": "username", "flags": ["--username", "-u"], "negation": "", "help": "The username to authenticate to the repository (package index) as", "type": "str", "default": null, "choices": []}
 {"verb": "upload", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "Show verbose output", "type": "bool", "default": null, "choices": []}
-{"version": "4.0.2", "date": "2022-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "5.0.0", "date": "2024-02-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "5.1.0", "date": "2024-05-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.0.2", "date": "2022-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "5.0.0", "date": "2024-02-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "5.1.0", "date": "2024-05-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "upload", "option": "attestations", "flags": ["--attestations"], "negation": "", "help": "Upload each file's associated attestations", "type": "bool", "default": null, "choices": []}
-{"version": "5.1.1", "date": "2024-06-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "6.0.0", "date": "2024-11-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "6.0.1", "date": "2024-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "6.1.0", "date": "2025-01-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "6.2.0", "date": "2025-09-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "7.0.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "5.1.1", "date": "2024-06-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "6.0.0", "date": "2024-11-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "6.0.1", "date": "2024-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "6.1.0", "date": "2025-01-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "6.2.0", "date": "2025-09-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "7.0.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}

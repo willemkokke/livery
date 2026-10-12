@@ -1,5 +1,5 @@
 {"name": "clang_tidy", "description": "Lint C and C++ sources against the project's .clang-tidy", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "20.1.0", "date": "2025-03-13", "artifacts": {}, "read": {"platforms": ["macOS"], "extractor": 4, "help": ""}}
+{"version": "20.1.0", "date": "2025-03-13", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "allow_no_checks", "flags": ["--allow-no-checks"], "negation": "", "help": "- Allow empty enabled checks", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "checks", "flags": ["--checks"], "negation": "", "help": "- Comma-separated list of globs with optional '-' prefix", "type": "str", "default": null, "choices": []}
@@ -30,3 +30,14 @@
 {"verb": "", "option": "verify_config", "flags": ["--verify-config"], "negation": "", "help": "- Check the config files to ensure each check and option is recognized", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "vfsoverlay", "flags": ["--vfsoverlay"], "negation": "", "help": "- Overlay the virtual filesystem described by file over the real file system", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "warnings_as_errors", "flags": ["--warnings-as-errors"], "negation": "", "help": "- Upgrades warnings to errors", "type": "str", "default": null, "choices": []}
+{"version": "21.1.0", "date": "2025-08-31", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "", "option": "verify_config", "flags": ["--verify-config"], "negation": "", "help": "- Check the config files to ensure each check and option is recognized without running any checks", "type": "bool", "default": null, "choices": []}
+{"version": "21.1.1", "date": "2025-09-25", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "21.1.6", "date": "2025-11-24", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "22.1.0", "date": "2026-03-06", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "", "option": "experimental_custom_checks", "flags": ["--experimental-custom-checks"], "negation": "", "help": "- Enable experimental clang-query based custom checks", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "line_filter", "flags": ["--line-filter"], "negation": "", "help": "- List of files and line ranges to output diagnostics from", "type": "list[str]", "default": null, "choices": []}
+{"verb": "", "option": "removed_arg", "flags": ["--removed-arg"], "negation": "", "help": "- List of arguments to remove from the command line sent to the compiler", "type": "str", "default": null, "choices": []}
+{"version": "22.1.0.1", "date": "2026-03-30", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "22.1.7", "date": "2026-06-14", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "22.1.8", "date": "2026-07-14", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}

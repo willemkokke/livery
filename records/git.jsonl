@@ -1,5 +1,5 @@
 {"name": "git", "description": "System git at the floor version; Windows vendors the pinned PortableGit when no suitable Git for Windows is present", "kind": "system-check", "min_version": "2.43.0", "hosts": ["windows-x64"], "layout": {"paths": ["cmd", "bin"], "env": {"CLAUDE_CODE_GIT_BASH_PATH": "$package/bin/bash.exe"}}}
-{"version": "2.49.1", "date": "2025-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3, "help": "the stupid content tracker"}}
+{"version": "2.49.1", "date": "2025-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4, "help": "the stupid content tracker"}}
 {"verb": "", "help": "the stupid content tracker", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "C", "flags": ["-C"], "negation": "", "help": "Run as if git was started in <path> instead of the current working directory", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "attr_source", "flags": ["--attr-source"], "negation": "", "help": "Read gitattributes from <tree-ish> instead of the worktree", "type": "str", "default": null, "choices": []}
@@ -672,7 +672,7 @@
 {"verb": "worktree", "option": "reason", "flags": ["--reason"], "negation": "", "help": "With lock or with add --lock, an explanation why the worktree is locked", "type": "str", "default": null, "choices": []}
 {"verb": "worktree", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "With prune, report all removals", "type": "bool", "default": null, "choices": []}
 {"verb": "worktree", "option": "z", "flags": ["-z"], "negation": "", "help": "Terminate each line with a NUL rather than a newline when --porcelain is specified with list", "type": "bool", "default": null, "choices": []}
-{"version": "2.50.0", "date": "2025-06-16", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.50.0", "date": "2025-06-16", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "branch", "option": "contains", "flags": ["--contains"], "negation": "", "help": "Only list branches which contain <commit> (HEAD if not specified)", "type": "str", "default": null, "choices": []}
 {"verb": "branch", "option": "force", "flags": ["--force", "-f"], "negation": "", "help": "Reset <branch-name> to <start-point>, even if <branch-name> exists already", "type": "bool", "default": null, "choices": []}
 {"verb": "branch", "option": "merged", "flags": ["--merged"], "negation": "", "help": "Only list branches whose tips are reachable from <commit> (HEAD if not specified)", "type": "str", "default": null, "choices": []}
@@ -686,8 +686,8 @@
 {"verb": "checkout", "option": "ignore_skip_worktree_bits", "flags": ["--ignore-skip-worktree-bits"], "negation": "", "help": "In sparse checkout mode, git checkout -- <path>..", "type": "bool", "default": null, "choices": []}
 {"verb": "switch", "option": "no_track", "gone": true}
 {"verb": "switch", "option": "track", "flags": ["--track", "-t"], "negation": "--no-track", "help": "When creating a new branch, set up \"upstream\" configuration", "type": "bool", "default": null, "choices": []}
-{"version": "2.50.1", "date": "2025-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
-{"version": "2.51.0", "date": "2025-08-18", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.50.1", "date": "2025-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
+{"version": "2.51.0", "date": "2025-08-18", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "add", "option": "inter_hunk_context", "flags": ["--inter-hunk-context"], "negation": "", "help": "Show the context between diff hunks, up to the specified <number> of lines, thereby fusing hunks that are close to each other", "type": "str", "default": null, "choices": []}
 {"verb": "add", "option": "unified", "flags": ["--unified", "-U"], "negation": "", "help": "Generate diffs with <n> lines of context", "type": "str", "default": null, "choices": []}
 {"verb": "checkout", "option": "inter_hunk_context", "flags": ["--inter-hunk-context"], "negation": "", "help": "Show the context between diff hunks, up to the specified <number> of lines, thereby fusing hunks that are close to each other", "type": "str", "default": null, "choices": []}
@@ -714,9 +714,9 @@
 {"verb": "stash", "option": "print", "flags": ["--print"], "negation": "", "help": "This option is only valid for the export command", "type": "bool", "default": null, "choices": []}
 {"verb": "stash", "option": "to_ref", "flags": ["--to-ref"], "negation": "", "help": "This option is only valid for the export command", "type": "bool", "default": null, "choices": []}
 {"verb": "stash", "option": "unified", "flags": ["--unified", "-U"], "negation": "", "help": "Generate diffs with <n> lines of context", "type": "str", "default": null, "choices": []}
-{"version": "2.51.1", "date": "2025-10-15", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
-{"version": "2.51.2", "date": "2025-10-27", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
-{"version": "2.52.0", "date": "2025-11-17", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.51.1", "date": "2025-10-15", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
+{"version": "2.51.2", "date": "2025-10-27", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
+{"version": "2.52.0", "date": "2025-11-17", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "checkout", "option": "B", "flags": ["-B"], "negation": "", "help": "The same as -b, except that if the branch already exists it resets <branch> to the start point instead of failing", "type": "str", "default": null, "choices": []}
 {"verb": "clone", "option": "remote_submodules", "flags": ["--no-remote-submodules", "--remote-submodules"], "negation": "", "help": "All submodules which are cloned will use the status of the submodule's remote-tracking branch to update the submodule, rather than the superproject's recorded SHA-1", "type": "bool", "default": null, "choices": []}
 {"verb": "clone", "option": "shallow_submodules", "flags": ["--no-shallow-submodules", "--shallow-submodules"], "negation": "", "help": "All submodules which are cloned will be shallow with a depth of 1", "type": "bool", "default": null, "choices": []}
@@ -759,7 +759,7 @@
 {"verb": "worktree", "option": "guess_remote", "flags": ["--no-guess-remote", "--guess-remote"], "negation": "", "help": "With worktree add <path>, without <commit-ish>, instead of creating a new branch from HEAD, if there exists a tracking branch in exactly one remote matching the basename of <path>, base the new branch on the remote-tracking branch, and mark the remote-tracking branch as \"upstream\" from the new branch", "type": "bool", "default": null, "choices": []}
 {"verb": "worktree", "option": "relative_paths", "flags": ["--no-relative-paths", "--relative-paths"], "negation": "", "help": "Link worktrees using relative paths or absolute paths (default)", "type": "bool", "default": null, "choices": []}
 {"verb": "worktree", "option": "track", "flags": ["--no-track", "--track"], "negation": "", "help": "When creating a new branch, if <commit-ish> is a branch, mark it as \"upstream\" from the new branch", "type": "bool", "default": null, "choices": []}
-{"version": "2.53.0", "date": "2026-02-02", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.53.0", "date": "2026-02-02", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "commit", "option": "null", "flags": ["--null", "-z"], "negation": "", "help": "When showing short or porcelain git-status(1) output, print the filename verbatim and terminate the entries with NUL, instead of LF", "type": "bool", "default": null, "choices": []}
 {"verb": "fetch", "option": "jobs", "flags": ["--jobs", "-j"], "negation": "", "help": "Parallelize all forms of fetching up to <n> jobs at a time", "type": "str", "default": null, "choices": []}
 {"verb": "fetch", "option": "negotiate_only", "flags": ["--negotiate-only"], "negation": "", "help": "Do not fetch anything from the server, and instead print the ancestors of the provided --negotiation-tip= arguments, which we have in common with the server", "type": "bool", "default": null, "choices": []}
@@ -773,7 +773,7 @@
 {"verb": "pull", "option": "rebase", "flags": ["--rebase", "-r"], "negation": "", "help": "true rebase the current branch on top of the upstream branch after fetching", "type": "optvalue", "default": null, "choices": []}
 {"verb": "pull", "option": "refmap", "flags": ["--refmap"], "negation": "", "help": "When fetching refs listed on the command line, use the specified refspec (can be given more than once) to map the refs to remote-tracking branches, instead of the values of remote.<name>.fetch configuration variables for the remote repository", "type": "list[str]", "default": null, "choices": []}
 {"verb": "push", "option": "force_with_lease", "flags": ["--no-force-with-lease", "--force-with-lease", "--force-with-lease", "--force-with-lease"], "negation": "", "help": "Usually, git push refuses to update a remote ref that is not an ancestor of the local ref used to overwrite it", "type": "str", "default": null, "choices": []}
-{"version": "2.54.0", "date": "2026-04-20", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.54.0", "date": "2026-04-20", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "clone", "option": "branch", "flags": ["--branch", "-b"], "negation": "", "help": "Point the newly created HEAD to <name> branch instead of the branch pointed to by the cloned repository's HEAD", "type": "str", "default": null, "choices": []}
 {"verb": "clone", "option": "no_checkout", "flags": ["--no-checkout", "-n"], "negation": "", "help": "Do not checkout HEAD after the clone is complete", "type": "bool", "default": null, "choices": []}
 {"verb": "clone", "option": "no_reject_shallow", "flags": ["--no-reject-shallow", "--reject-shallow"], "negation": "", "help": "Fail if the source repository is a shallow repository", "type": "bool", "default": null, "choices": []}
@@ -787,7 +787,7 @@
 {"verb": "pull", "option": "filter", "flags": ["--filter"], "negation": "", "help": "Use the partial clone feature and request that the server sends a subset of reachable objects according to a given object filter", "type": "str", "default": null, "choices": []}
 {"verb": "worktree", "option": "expire", "flags": ["--expire"], "negation": "", "help": "With prune, only prune missing worktrees if older than <time>", "type": "str", "default": null, "choices": []}
 {"version": "2.55.0.windows.2", "date": "", "artifacts": {"windows-x64": {"url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.2/PortableGit-2.55.0.2-64-bit.7z.exe", "sha256": "b20d42da3afa228e9fa6174480de820282667e799440d655e308f700dfa0d0df"}}}
-{"version": "2.55.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "2.55.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4}}
 {"verb": "fetch", "option": "all", "flags": ["--no-all", "--all"], "negation": "", "help": "Fetch all remotes, except for the ones that have the remote.<name>.skipFetchAll configuration variable set", "type": "bool", "default": null, "choices": []}
 {"verb": "fetch", "option": "negotiate_only", "flags": ["--negotiate-only"], "negation": "", "help": "Do not fetch anything from the server, and instead print the ancestors of the provided --negotiation-restrict= arguments, which we have in common with the server", "type": "bool", "default": null, "choices": []}
 {"verb": "fetch", "option": "negotiation_include", "flags": ["--negotiation-include"], "negation": "", "help": "Ensure that the commits at the given tips are always sent as \"have\" lines during fetch negotiation, regardless of what the negotiation algorithm selects", "type": "bool", "default": null, "choices": []}
@@ -801,3 +801,9 @@
 {"verb": "pull", "option": "negotiation_tip", "gone": true}
 {"verb": "stash", "option": "label_ours", "flags": ["--label-theirs", "--label-ours", "--label-base"], "negation": "", "help": "These options are only valid for the apply command", "type": "str", "default": null, "choices": []}
 {"verb": "switch", "option": "merge", "flags": ["--merge", "-m"], "negation": "", "help": "If you have local modifications to one or more files that are different between the current branch and the branch to which you are switching, the command normally refuses to switch branches in order to preserve your modifications in context", "type": "bool", "default": null, "choices": []}
+{"version": "2.56.0", "date": "2026-09-28", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "add", "option": "resolved", "flags": ["--resolved"], "negation": "", "help": "Update the index for unmerged paths matching <pathspec> where no conflict markers remain in the working tree", "type": "bool", "default": null, "choices": []}
+{"verb": "branch", "option": "delete_merged", "flags": ["--delete-merged"], "negation": "", "help": "Delete local branches whose configured upstream matches <pattern>, but only when their tip is reachable from that upstream", "type": "list[str]", "default": null, "choices": []}
+{"verb": "branch", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "With --delete-merged, print which branches would be deleted and exit without touching any ref", "type": "bool", "default": null, "choices": []}
+{"verb": "branch", "option": "forked", "flags": ["--forked"], "negation": "", "help": "Only list branches whose configured upstream matches <branch>", "type": "list[str]", "default": null, "choices": []}
+{"verb": "log", "option": "no_graph_indent", "flags": ["--no-graph-indent", "--graph-indent"], "negation": "", "help": "When used with --graph, indent visual roots (commits with no parents or whose parents are not shown) to differentiate them from commits that are vertically adjacent but unrelated", "type": "bool", "default": null, "choices": []}

@@ -534,3 +534,28 @@
 {"verb": "run", "option": "cpu_percent", "absent": ["Linux"]}
 {"verb": "run", "option": "io_maxbandwidth", "absent": ["Linux"]}
 {"verb": "run", "option": "io_maxiops", "absent": ["Linux"]}
+{"version": "29.8.0", "date": "2026-09-03", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "", "option": "config", "flags": ["--config"], "negation": "", "help": "Location of client config files", "type": "str", "default": "~/.docker", "choices": []}
+{"verb": "", "option": "tlscacert", "flags": ["--tlscacert"], "negation": "", "help": "Trust certs signed only by this CA", "type": "str", "default": "~/.docker/ca.pem", "choices": []}
+{"verb": "", "option": "tlscert", "flags": ["--tlscert"], "negation": "", "help": "Path to TLS certificate file", "type": "str", "default": "~/.docker/cert.pem", "choices": []}
+{"verb": "", "option": "tlskey", "flags": ["--tlskey"], "negation": "", "help": "Path to TLS key file", "type": "str", "default": "~/.docker/key.pem", "choices": []}
+{"verb": "build", "option": "compress", "gone": true}
+{"verb": "build", "option": "cpu_period", "gone": true}
+{"verb": "build", "option": "cpu_quota", "gone": true}
+{"verb": "build", "option": "cpu_shares", "gone": true}
+{"verb": "build", "option": "cpuset_cpus", "gone": true}
+{"verb": "build", "option": "cpuset_mems", "gone": true}
+{"verb": "build", "option": "force_rm", "gone": true}
+{"verb": "build", "option": "isolation", "gone": true}
+{"verb": "build", "option": "memory", "gone": true}
+{"verb": "build", "option": "memory_swap", "gone": true}
+{"verb": "build", "option": "rm", "gone": true}
+{"verb": "build", "option": "security_opt", "gone": true}
+{"verb": "compose.ps", "option": "format", "flags": ["--format"], "negation": "", "help": "Format output using a custom template: 'table': Print output in table format with column headers (default) 'table TEMPLATE': Print output in table format using the given Go template 'json': Print in JSON format 'TEMPLATE': Print output using the given Go template", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "cpu_count", "gone": true}
+{"verb": "run", "option": "cpu_percent", "gone": true}
+{"verb": "run", "option": "io_maxbandwidth", "gone": true}
+{"verb": "run", "option": "io_maxiops", "gone": true}
+{"version": "29.8.1", "date": "2026-09-15", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "29.8.2", "date": "2026-09-30", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "29.9.0", "date": "2026-10-08", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}

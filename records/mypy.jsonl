@@ -1,5 +1,5 @@
 {"name": "mypy", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "1.18.2", "date": "2025-09-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Mypy is a program that will type check your Python code."}}
+{"version": "1.18.2", "date": "2025-09-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Mypy is a program that will type check your Python code."}}
 {"verb": "", "help": "Mypy is a program that will type check your Python code.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "allow_redefinition", "flags": ["--allow-redefinition"], "negation": "", "help": "Allow restricted, unconditional variable redefinition with a new type (inverse: --disallow-redefinition)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "allow_redefinition_new", "flags": ["--allow-redefinition-new"], "negation": "", "help": "Allow more flexible variable redefinition semantics (experimental) (inverse: --disallow-redefinition-new)", "type": "bool", "default": null, "choices": []}
@@ -92,20 +92,20 @@
 {"verb": "", "option": "xml_report", "flags": ["--xml-report"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "xslt_html_report", "flags": ["--xslt-html-report"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "xslt_txt_report", "flags": ["--xslt-txt-report"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
-{"version": "1.19.0", "date": "2025-11-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.19.0", "date": "2025-11-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "fixed_format_cache", "flags": ["--fixed-format-cache"], "negation": "", "help": "Use new fast and compact fixed format cache", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "junit_xml", "flags": ["--junit-xml"], "negation": "", "help": "Write a JUnit XML test result document with type checking results to the given file", "type": "str", "default": null, "choices": []}
-{"version": "1.19.1", "date": "2025-12-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "1.20.0", "date": "2026-03-31", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.19.1", "date": "2025-12-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "1.20.0", "date": "2026-03-31", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "allow_redefinition", "flags": ["--allow-redefinition"], "negation": "", "help": "Alias to --allow-redefinition-old; will point to --allow-redefinition-new in v2.0 (inverse: --disallow-redefinition)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "allow_redefinition_new", "flags": ["--allow-redefinition-new"], "negation": "", "help": "Allow more flexible variable redefinition semantics (inverse: --disallow-redefinition-new)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "allow_redefinition_old", "flags": ["--allow-redefinition-old"], "negation": "", "help": "Allow restricted, unconditional variable redefinition with a new type (inverse: --disallow-redefinition-old)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "fixed_format_cache", "gone": true}
 {"verb": "", "option": "no_fixed_format_cache", "flags": ["--no-fixed-format-cache"], "negation": "", "help": "Do not use new fixed format cache (inverse: --fixed-format-cache)", "type": "bool", "default": null, "choices": []}
-{"version": "1.20.1", "date": "2026-04-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.20.1", "date": "2026-04-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "strict", "flags": ["--strict"], "negation": "", "help": "Strict mode; enables the following flags: --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete- defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --strict-bytes, --extra-checks", "type": "bool", "default": null, "choices": []}
-{"version": "1.20.2", "date": "2026-04-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "2.0.0", "date": "2026-05-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.20.2", "date": "2026-04-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "2.0.0", "date": "2026-05-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "allow_redefinition", "flags": ["--allow-redefinition"], "negation": "", "help": "Allow flexible variable redefinition with a new type (inverse: --disallow-redefinition)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "allow_redefinition_new", "flags": ["--allow-redefinition-new"], "negation": "", "help": "Deprecated alias for --allow-redefinition (inverse: --disallow-redefinition-new)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "native_parser", "flags": ["--native-parser"], "negation": "", "help": "Enable faster parser that parses directly to mypy AST (inverse: --no-native-parser)", "type": "bool", "default": null, "choices": []}
@@ -113,7 +113,11 @@
 {"verb": "", "option": "num_workers", "flags": ["--num-workers", "-n"], "negation": "", "help": "Number of separate mypy worker processes (experimental)", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "strict", "flags": ["--strict"], "negation": "", "help": "Strict mode; enables the following flags: --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete- defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --extra-checks", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "strict_bytes", "gone": true}
-{"version": "2.1.0", "date": "2026-05-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "2.2.0", "date": "2026-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "2.3.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "2.3.1", "date": "2026-08-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.0", "date": "2026-05-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "2.2.0", "date": "2026-07-08", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "2.3.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "2.3.1", "date": "2026-08-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "2.4.0", "date": "2026-10-01", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "", "option": "native_parser", "gone": true}
+{"verb": "", "option": "no_native_parser", "flags": ["--no-native-parser"], "negation": "", "help": "Do not use faster parser that parses directly to mypy AST (inverse: --native-parser)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "num_workers", "flags": ["--num-workers", "-n"], "negation": "", "help": "Number of separate mypy worker processes, or 'auto'", "type": "str", "default": null, "choices": []}

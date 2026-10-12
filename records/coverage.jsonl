@@ -1,5 +1,5 @@
 {"name": "coverage", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "7.13.3", "date": "2026-02-03", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.3 with C extension"}}
+{"version": "7.13.3", "date": "2026-02-03", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.13.3 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.13.3 with C extension", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "annotate", "help": "Make annotated copies of the given files, marking statements that are executed with > and statements that are missed with !.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "annotate", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
@@ -91,19 +91,19 @@
 {"verb": "xml", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Don't print messages about what is happening", "type": "bool", "default": null, "choices": []}
 {"verb": "xml", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
 {"verb": "xml", "option": "skip_empty", "flags": ["--skip-empty"], "negation": "", "help": "Skip files with no code", "type": "bool", "default": null, "choices": []}
-{"version": "7.13.4", "date": "2026-02-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.4 with C extension"}}
+{"version": "7.13.4", "date": "2026-02-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.13.4 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.13.4 with C extension"}
-{"version": "7.13.5", "date": "2026-03-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.5 with C extension"}}
+{"version": "7.13.5", "date": "2026-03-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.13.5 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.13.5 with C extension"}
-{"version": "7.14.0", "date": "2026-05-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.0 with C extension"}}
+{"version": "7.14.0", "date": "2026-05-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.14.0 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.14.0 with C extension"}
-{"version": "7.14.1", "date": "2026-05-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.1 with C extension"}}
+{"version": "7.14.1", "date": "2026-05-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.14.1 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.14.1 with C extension"}
-{"version": "7.14.2", "date": "2026-06-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.2 with C extension"}}
+{"version": "7.14.2", "date": "2026-06-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.14.2 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.14.2 with C extension"}
-{"version": "7.14.3", "date": "2026-06-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.3 with C extension"}}
+{"version": "7.14.3", "date": "2026-06-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.14.3 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.14.3 with C extension"}
-{"version": "7.15.0", "date": "2026-07-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.0 with C extension"}}
+{"version": "7.15.0", "date": "2026-07-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.15.0 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.15.0 with C extension"}
 {"verb": "annotate", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
 {"verb": "html", "help": "Create an HTML report of coverage results. Each file gets its own page, with the source decorated to show executed, excluded, and missed lines."}
@@ -111,11 +111,17 @@
 {"verb": "json", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
 {"verb": "report", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
 {"verb": "xml", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
-{"version": "7.15.1", "date": "2026-07-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.1 with C extension"}}
+{"version": "7.15.1", "date": "2026-07-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.15.1 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.15.1 with C extension"}
-{"version": "7.15.2", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.2 with C extension"}}
+{"version": "7.15.2", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.15.2 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.15.2 with C extension"}
-{"version": "7.15.3", "date": "2026-08-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.3 with C extension"}}
+{"version": "7.15.3", "date": "2026-08-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.15.3 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.15.3 with C extension"}
-{"version": "7.15.4", "date": "2026-08-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.4 with C extension"}}
+{"version": "7.15.4", "date": "2026-08-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Coverage.py, version 7.15.4 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.15.4 with C extension"}
+{"version": "7.16.0", "date": "2026-08-28", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4, "help": "Coverage.py, version 7.16.0 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.16.0 with C extension"}
+{"version": "7.16.1", "date": "2026-09-13", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4, "help": "Coverage.py, version 7.16.1 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.16.1 with C extension"}
+{"version": "7.16.2", "date": "2026-09-27", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4, "help": "Coverage.py, version 7.16.2 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.16.2 with C extension"}

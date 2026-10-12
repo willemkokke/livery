@@ -1,5 +1,5 @@
 {"name": "pytest", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "8.3.5", "date": "2025-03-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
+{"version": "8.3.5", "date": "2025-03-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "assert", "flags": ["--assert"], "negation": "", "help": "Control assertion debugging tools", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "basetemp", "flags": ["--basetemp"], "negation": "", "help": "Base temporary directory for this test run", "type": "str", "default": null, "choices": []}
@@ -59,6 +59,7 @@
 {"verb": "", "option": "log_file_mode", "flags": ["--log-file-mode"], "negation": "", "help": "Log file open mode", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "log_format", "flags": ["--log-format"], "negation": "", "help": "Log format used by the logging module", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "log_level", "flags": ["--log-level"], "negation": "", "help": "Level of messages to catch/display", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "lsof", "flags": ["--lsof"], "negation": "", "help": "Run FD checks if lsof is available", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "m", "flags": ["-m"], "negation": "", "help": "Only run tests matching given mark expression", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "markers", "flags": ["--markers"], "negation": "", "help": "show markers (builtin, plugin and per-project ones)", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "maxfail", "flags": ["--maxfail"], "negation": "", "help": "Exit after first num failures or errors", "type": "str", "default": null, "choices": []}
@@ -79,6 +80,7 @@
 {"verb": "", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Decrease verbosity", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "r", "flags": ["-r"], "negation": "", "help": "Show extra test summary info as specified by chars: (f)ailed, (E)rror, (s)kipped, (x)failed, (X)passed, (p)assed, (P)assed with output, (a)ll except passed (p/P), or (A)ll", "type": "list[str]", "default": "fE", "choices": []}
 {"verb": "", "option": "rootdir", "flags": ["--rootdir"], "negation": "", "help": "Define root directory for tests", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "runpytest", "flags": ["--runpytest"], "negation": "", "help": "Run pytest sub runs in tests using an 'inprocess' or 'subprocess' (python -m main) method", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "runxfail", "flags": ["--runxfail"], "negation": "", "help": "Report the results of xfail tests as if they were not marked", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "s", "flags": ["-s"], "negation": "", "help": "Shortcut for --capture=no", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "setup_only", "flags": ["--setup-only"], "negation": "", "help": "Only setup fixtures, do not execute tests", "type": "bool", "default": null, "choices": []}
@@ -97,23 +99,43 @@
 {"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Increase verbosity", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "verbosity", "flags": ["--verbosity"], "negation": "", "help": "Set verbosity", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "xfail_tb", "flags": ["--xfail-tb"], "negation": "", "help": "Show tracebacks for xfail (as long as --tb != no)", "type": "bool", "default": null, "choices": []}
-{"version": "8.4.0", "date": "2025-06-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "8.4.0", "date": "2025-06-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "disable_plugin_autoload", "flags": ["--disable-plugin-autoload"], "negation": "", "help": "Disable plugin auto-loading through entry point packaging metadata", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "force_short_summary", "flags": ["--force-short-summary"], "negation": "", "help": "Force condensed summary output regardless of verbosity level", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "sw_reset", "flags": ["--stepwise-reset", "--sw-reset"], "negation": "", "help": "Resets stepwise state, restarting the stepwise workflow", "type": "bool", "default": null, "choices": []}
-{"version": "8.4.1", "date": "2025-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "8.4.2", "date": "2025-09-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "9.0.0", "date": "2025-11-08", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "8.4.1", "date": "2025-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "8.4.2", "date": "2025-09-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.0.0", "date": "2025-11-08", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "cov_report", "flags": ["--cov-report"], "negation": "", "help": "Type of report to generate: term, term-missing, annotate, html, xml, json, markdown, markdown-append, lcov (multi-allowed)", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "override_ini", "flags": ["--override-ini", "-o"], "negation": "", "help": "Override configuration option with \"option=value\" style, e.g. `-o strict_xfail=True -o cache_dir=cache`", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "strict", "flags": ["--strict"], "negation": "", "help": "Enables the strict option", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "strict_config", "flags": ["--strict-config"], "negation": "", "help": "Enables the strict_config option", "type": "bool", "default": null, "choices": []}
 {"verb": "", "option": "strict_markers", "flags": ["--strict-markers"], "negation": "", "help": "Enables the strict_markers option", "type": "bool", "default": null, "choices": []}
-{"version": "9.0.1", "date": "2025-11-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "9.0.2", "date": "2025-12-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "9.0.3", "date": "2026-04-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "9.1.0", "date": "2026-06-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.0.1", "date": "2025-11-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.0.2", "date": "2025-12-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.0.3", "date": "2026-04-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.1.0", "date": "2026-06-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "max_warnings", "flags": ["--max-warnings"], "negation": "", "help": "Exit with error if all tests pass but the number of warnings exceeds this threshold", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "r", "gone": true}
 {"verb": "", "option": "report_chars", "flags": ["--report-chars", "-r"], "negation": "", "help": "Show extra test summary info as specified by chars: (f)ailed, (E)rror, (s)kipped, (x)failed, (X)passed, (p)assed, (P)assed with output, (a)ll except passed (p/P), or (A)ll", "type": "list[str]", "default": "fE", "choices": []}
-{"version": "9.1.1", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
+{"version": "9.1.1", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "", "option": "lsof", "absent": ["Windows", "macOS"]}
+{"verb": "", "option": "runpytest", "absent": ["Windows", "macOS"]}
