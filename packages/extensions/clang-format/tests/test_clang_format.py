@@ -11,7 +11,7 @@ import pytest
 import livery.toolroom.tools as tools
 from livery.footman import Failed
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 CONTRACT = (
     "[workspace]\n"
@@ -27,7 +27,7 @@ FORMATTED = "int main() { return 0; }\n"
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """clang-format's check registered, as the mount registers a listed extension's."""
+    """clang-format's step registered, as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -71,13 +71,13 @@ def _clang_format_runs() -> bool:
 # of style is named.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = tmp_path / "ws"
     _native(root)
@@ -89,11 +89,11 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "format.clang-format" not in checks_by_name()
+        assert "format.clang-format" not in steps_by_name()
         assert "clang_format" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         assert not (root / "packages" / "native" / ".clang-format").exists()
-        # Listed, the mount registers the check under the listed name, the
+        # Listed, the mount registers the step under the listed name, the
         # tool joins the profile of the packages holding cpp, and the sync
         # writes each such package's style.
         (root / "workshop.toml").write_text(
@@ -101,7 +101,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         )
         with footman_registry.capture():
             assert mount_extensions(root) == ("clang-format",)
-        assert checks_by_name()["format.clang-format"].extension == "clang-format"
+        assert steps_by_name()["format.clang-format"].extension == "clang-format"
         assert "clang_format" in {t for t, _ in tools_for(("python", "cpp"))}
         deliver(root)
         style = (root / "packages" / "native" / ".clang-format").read_text()
@@ -121,12 +121,12 @@ def test_a_source_out_of_style_refuses_and_the_fix_heals_it(
     found = declaration("clang-format")
     assert found is not None
     (fragment,) = (
-        f for f in found.additions.checks[0].fragments if "cpp" in f.extensions
+        f for f in found.additions.steps[0].fragments if "cpp" in f.extensions
     )
     style = fragment.text
     (package.directory / ".clang-format").write_text(style)
     source = package.directory / "src" / "native.cpp"
-    record = registry.check_for("format.clang-format")
+    record = registry.step_for("format.clang-format")
     ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     # The refusal names the command, and with it the file.
     with pytest.raises(Failed, match="exited 1") as caught:
@@ -146,13 +146,13 @@ def test_a_package_with_no_file_to_read_calls_nothing(
 
     package = _native(tmp_path)
     (package.directory / "src" / "native.cpp").unlink()
-    record = registry.check_for("format.clang-format")
+    record = registry.step_for("format.clang-format")
     with answers({("clang-format",): Result(0)}) as calls:
         record.run(PhaseContext(root=tmp_path, packages=(package,), package=package))
     assert [call for call in calls if call.argv[0] == "clang-format"] == []
 
 
-# The check: the package's files its claims reach, from the package's
+# The step: the package's files its claims reach, from the package's
 # directory, with the words after -- before them.
 
 
@@ -172,7 +172,7 @@ class _ClangFormat:
         self.calls.append((argv, self.cwd))
 
 
-def test_the_check_reads_the_package_s_sources_and_the_words_after_the_dashes(
+def test_the_step_reads_the_package_s_sources_and_the_words_after_the_dashes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls: list[tuple[tuple[str, ...], object]] = []
@@ -180,7 +180,7 @@ def test_the_check_reads_the_package_s_sources_and_the_words_after_the_dashes(
     package = _native(tmp_path)
     (package.directory / "conanfile.py").write_text("")
     source = str(package.directory / "src" / "native.cpp")
-    record = registry.check_for("format.clang-format")
+    record = registry.step_for("format.clang-format")
     assert record.fix is not None
     ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     words = ("--verbose",)

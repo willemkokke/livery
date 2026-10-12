@@ -31,7 +31,7 @@ def public_modules(package: Package) -> tuple[str, ...]:
 
 
 def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
-    """Nothing: the layering check reads no C or C++ source for references.
+    """Nothing: the layering phase reads no C or C++ source for references.
 
     A header of another member, included with no requirement on that
     member, goes unseen: the empty answer is no verdict.
@@ -45,5 +45,5 @@ TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
 
 
 #: The extensions of a C or C++ source or header: what clang-format
-#: walks, and what a native check's claims admit.
+#: walks, and what a native step's claims admit.
 SOURCE_SUFFIXES = (*TEST_SOURCES, ".hpp", ".h", ".hxx")

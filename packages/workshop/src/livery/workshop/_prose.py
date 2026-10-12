@@ -408,29 +408,29 @@ def fragments(
 
 
 def render_gate(root: Path, audience: str | None) -> str:
-    """The gate's checks for the extensions the members hold.
+    """The gate's steps for the extensions the members hold.
 
     A list for the agent, a table for a reader.
     """
-    from livery.workshop._checks import checks_by_name
+    from livery.workshop._steps import steps_by_name
 
     present = present_extensions(root)
     records = [
         record
-        for record in checks_by_name().values()
+        for record in steps_by_name().values()
         if not record.extensions or present & set(record.extensions)
     ]
     if not records:
         return ""
     held = ", ".join(sorted(present)) or "none"
     prog = footman.prog()
-    lines = ["# The gate's checks", ""]
+    lines = ["# The gate's steps", ""]
     if audience == HUMAN:
         lines += [
-            f"`{prog} check` runs every check below, each registered by a"
+            f"`{prog} check` runs every step below, each registered by an"
             f" extension; the members hold the package-level extensions {held}.",
             "",
-            "| check | tools | packages | rewrites under `--fix` |",
+            "| step | tools | packages | rewrites under `--fix` |",
             "| --- | --- | --- | --- |",
         ]
         for record in records:
@@ -440,7 +440,7 @@ def render_gate(root: Path, audience: str | None) -> str:
             lines.append(f"| {record.name} | {tools} | {scope} | {fix} |")
     else:
         lines += [
-            f"`{prog} check` runs these checks in parallel, the rewriters first"
+            f"`{prog} check` runs these steps in parallel, the rewriters first"
             f" and one at a time under `--fix`; the members hold the"
             f" package-level extensions {held}.",
             "",
@@ -450,7 +450,7 @@ def render_gate(root: Path, audience: str | None) -> str:
             # only where they are more than it.
             tools = (
                 f" ({', '.join(record.tools)})"
-                if record.tools and record.tools != (record.tool,)
+                if record.tools and record.tools != (record.step,)
                 else ""
             )
             where = "the workspace"
@@ -589,10 +589,10 @@ def render_verbs(root: Path, audience: str | None) -> str:
 
 
 def render_kinds(root: Path, audience: str | None) -> str:
-    """The kinds the present packages are, what each derives from, its gate roles."""
-    from livery.workshop._checks import checks_by_name, judges_extensions
+    """The kinds the present packages are, what each derives from, its gate phases."""
     from livery.workshop._kinds import extension_set, kind_chain, kind_names
     from livery.workshop._packages import discover_packages
+    from livery.workshop._steps import judges_extensions, steps_by_name
 
     names = set(kind_names())
     members: dict[str, list[str]] = {}
@@ -606,13 +606,13 @@ def render_kinds(root: Path, audience: str | None) -> str:
     lines = ["# The kinds present", ""]
     if audience == HUMAN:
         lines += [
-            "| kind | derives from | packages | gate roles |",
+            "| kind | derives from | packages | gate phases |",
             "| --- | --- | --- | --- |",
         ]
     else:
         lines += [
             "A package's kind, declared in its workshop.toml, decides its template,"
-            " its tools and the gate roles that apply to it:",
+            " its tools and the gate phases that apply to it:",
             "",
         ]
     for kind in sorted(members):
@@ -623,23 +623,23 @@ def render_kinds(root: Path, audience: str | None) -> str:
             or "nothing"
         )
         paths = ", ".join(sorted(members[kind]))
-        # A kind's roles are those of the checks that judge its members,
-        # by the extensions they hold; a check naming no extensions
+        # A kind's phases are those of the steps that judge its members,
+        # by the extensions they hold; a step naming no extensions
         # judges the workspace, never one kind.
-        roles = ", ".join(
+        phases = ", ".join(
             sorted(
                 {
-                    r.role
-                    for r in checks_by_name().values()
+                    r.phase
+                    for r in steps_by_name().values()
                     if r.extensions and judges_extensions(r, held[kind])
                 }
             )
         )
         if audience == HUMAN:
-            lines.append(f"| {kind} | {parents} | {paths} | {roles} |")
+            lines.append(f"| {kind} | {parents} | {paths} | {phases} |")
         else:
             lines.append(
-                f"- {kind} ({paths}): derives from {parents}; gate roles {roles}"
+                f"- {kind} ({paths}): derives from {parents}; gate phases {phases}"
             )
     return "\n".join(lines) + "\n"
 

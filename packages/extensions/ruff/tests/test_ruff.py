@@ -11,7 +11,7 @@ import pytest
 import livery.toolroom.tools as tools
 from livery.footman import Failed
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -26,7 +26,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Ruff's checks registered as the mount registers a listed extension's."""
+    """Ruff's steps registered as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -48,13 +48,13 @@ def _workspace(root: Path, extensions: str) -> Path:
 # The refusal first: installed and not listed, the extension does nothing.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr(
@@ -64,17 +64,17 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "format.ruff" not in checks_by_name()
+        assert "format.ruff" not in steps_by_name()
         assert "ruff" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "ruff.toml").exists()
-        # Listed, the mount registers both checks under the listed name,
+        # Listed, the mount registers both steps under the listed name,
         # the tool joins the profile, and the sync writes the file.
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["ruff"]\n')
         with footman_registry.capture():
             assert mount_extensions(root) == ("ruff",)
-        checks = checks_by_name()
-        assert {checks[name].extension for name in ("format.ruff", "lint.ruff")} == {
+        steps = steps_by_name()
+        assert {steps[name].extension for name in ("format.ruff", "lint.ruff")} == {
             "ruff"
         }
         assert "ruff" in {tool for tool, _ in tools_for(("python",))}
@@ -86,7 +86,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         registry.restore(state)
 
 
-# The checks: ruff's words, which the workshop runs over the paths a run reaches.
+# The steps: ruff's words, which the workshop runs over the paths a run reaches.
 
 
 class _Ruff:
@@ -109,15 +109,15 @@ def _run(
     safe: bool = False,
     arguments: tuple[str, ...] = (),
 ) -> None:
-    """Run the check *name* over *paths* through the workshop, judging or fixing."""
-    monkeypatch.setattr(registry, "scoped_paths", lambda ctx, check: paths)
-    record = registry.check_for(name)
+    """Run the step *name* over *paths* through the workshop, judging or fixing."""
+    monkeypatch.setattr(registry, "scoped_paths", lambda ctx, step: paths)
+    record = registry.step_for(name)
     body = record.fix if fix else record.run
     assert body is not None
     body(PhaseContext(root=root, packages=(), safe=safe, arguments=arguments))
 
 
-def test_each_check_hands_ruff_its_words_in_each_mode(
+def test_each_step_hands_ruff_its_words_in_each_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     ruff = _Ruff()
@@ -132,7 +132,7 @@ def test_each_check_hands_ruff_its_words_in_each_mode(
     (member.directory / "src").mkdir(parents=True)
     ctx = PhaseContext(root=tmp_path, packages=(member,))
     for name in ("format.ruff", "lint.ruff"):
-        record = registry.check_for(name)
+        record = registry.step_for(name)
         record.run(ctx)
         assert record.fix is not None
         record.fix(ctx)
@@ -146,11 +146,11 @@ def test_each_check_hands_ruff_its_words_in_each_mode(
         ("check", "--fix", "--force-exclude"),
         ("check", "--fix", "--unfixable=F401", "--force-exclude"),
     ]
-    # The words after -- on a check's own verb reach its call, in each mode.
+    # The words after -- on a step's own verb reach its call, in each mode.
     ruff.calls.clear()
     ctx = PhaseContext(root=tmp_path, packages=(member,), arguments=("--statistics",))
     for name in ("format.ruff", "lint.ruff"):
-        record = registry.check_for(name)
+        record = registry.step_for(name)
         record.run(ctx)
         assert record.fix is not None
         record.fix(ctx)
@@ -191,7 +191,7 @@ def test_the_words_after_the_dashes_reach_ruff_before_the_paths(
 def test_a_foreign_file_a_run_names_reaches_no_call(
     tmp_path: Path, registered: None
 ) -> None:
-    # The run names a markdown file and a python file; the check's claims
+    # The run names a markdown file and a python file; the step's claims
     # take the python file alone, so ruff never reads the markdown one.
     notes = tmp_path / "notes.md"
     notes.write_text("#Heading\n")
@@ -203,7 +203,7 @@ def test_a_foreign_file_a_run_names_reaches_no_call(
         files=("notes.md", "mod.py"),
         catalogue={".": (("notes.md", "documentation"), ("mod.py", "source"))},
     )
-    record = registry.check_for("format.ruff")
+    record = registry.step_for("format.ruff")
     assert record.fix is not None
     record.fix(ctx)
     assert module.read_text() == "x = 1\n"

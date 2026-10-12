@@ -17,7 +17,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Neighbours, Package
 from livery.workshop._registries import RegistryTarget
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -221,7 +221,7 @@ def test_a_registered_kind_dispatches_and_chains(
 
 
 def test_tools_union_along_the_chain_only_when_present(
-    restored_registry, python_checks: object
+    restored_registry, python_steps: object
 ) -> None:
     fake = _FakeBackend()
     register_kind(KindRecord(name="cpp-fake", backend=fake, tools=("cmake", "ninja")))
@@ -231,10 +231,10 @@ def test_tools_union_along_the_chain_only_when_present(
         )
     )
     # The kinds carry what operates them; the checkers, the formatter
-    # and the test runner ride their check records.
+    # and the test runner ride their step records.
     assert kind_tools({"python"}) == ("uv",)
-    from livery.workshop._checks import tools_for
     from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._steps import tools_for
 
     assert {tool for tool, _ in tools_for(kind_stands_for("python"))} == {"fake"}
     # A kind registered without the base as its parent gets none of it.

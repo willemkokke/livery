@@ -6,7 +6,7 @@ An extension ships a workspace file as a template in its wheel, under
 extension; a `.jinja` suffix on the source is dropped for the
 target. `fm sync` composes them with
 [livery.workshop._fragment_engine.plan][] and writes them with
-[livery.workshop._fragment_engine.apply][]; the gate's template check
+[livery.workshop._fragment_engine.apply][]; the gate's ``drift.check``
 judges them with [livery.workshop._fragment_engine.drift][].
 
 A later extension takes the place of an earlier one's shipped file by
@@ -172,16 +172,16 @@ def declared(
 
 
 def _editor_contributions(order: list[str], root: Path) -> list[Fragment]:
-    """What the checks and the listed extensions say to the editor, as contributed data.
+    """What the steps and the listed extensions say to the editor, as contributed data.
 
-    A check's settings land in `.vscode/settings.json`, a fragment of
-    its own, so a check that is unregistered takes its lines with it;
+    A step's settings land in `.vscode/settings.json`, a fragment of
+    its own, so a step that is unregistered takes its lines with it;
     each listed extension's answer to the ``editor-extensions`` query
     lands in `.vscode/extensions.json`, so an extension taken off the
     list takes its recommendations with it.
     """
-    from livery.workshop._checks import checks_by_name
     from livery.workshop._queries import EDITOR_EXTENSIONS, answers
+    from livery.workshop._steps import steps_by_name
 
     found: list[Fragment] = []
     for extension, ids in answers(root, EDITOR_EXTENSIONS).items():
@@ -195,7 +195,7 @@ def _editor_contributions(order: list[str], root: Path) -> list[Fragment]:
                     contributes=True,
                 )
             )
-    for name, record in sorted(checks_by_name().items()):
+    for name, record in sorted(steps_by_name().items()):
         if record.extension not in order:
             continue
         for fragment in record.fragments:
@@ -203,7 +203,7 @@ def _editor_contributions(order: list[str], root: Path) -> list[Fragment]:
                 found.append(
                     Fragment(
                         record.extension,
-                        f"check {name} tables",
+                        f"step {name} tables",
                         PROJECT_FILE,
                         fragment.text,
                     )
@@ -212,7 +212,7 @@ def _editor_contributions(order: list[str], root: Path) -> list[Fragment]:
                 found.append(
                     Fragment(
                         record.extension,
-                        f"check {name} settings",
+                        f"step {name} settings",
                         fragment.file,
                         fragment.text,
                         contributes=True,
@@ -245,13 +245,13 @@ def _packaged(
     """Each package's per-package files, with the package map and its data.
 
     A package's own files, its native tools' configuration, come from the
-    first check by name whose fragment names an extension the package
+    first step by name whose fragment names an extension the package
     holds ([livery.workshop._kinds.extension_set][]).
     """
-    from livery.workshop._checks import checks_by_name
     from livery.workshop._fragments import package_files, package_fragment
     from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
+    from livery.workshop._steps import steps_by_name
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     fragments: list[Fragment] = []
@@ -261,13 +261,13 @@ def _packaged(
             found = package_fragment(extension_set(package), file)
             if found is None:
                 continue
-            text, check = found
-            owner = checks_by_name()[check].extension
+            text, step = found
+            owner = steps_by_name()[step].extension
             if owner in order:
                 fragments.append(
                     Fragment(
                         owner,
-                        f"check {check} {package.path}",
+                        f"step {step} {package.path}",
                         f"{package.path}/{file}",
                         text,
                     )
@@ -422,7 +422,7 @@ def relocate(root: Path) -> list[str]:
     is the repository's: it moves into the file's first region, and the
     file is written as the render with that region. A key the render does
     produce, set here to another value, is an override of an extension's
-    or a check's setting; it refuses, naming the key and both values,
+    or a step's setting; it refuses, naming the key and both values,
     since which one should stand is a person's call.
 
     Returns:
@@ -492,8 +492,8 @@ def _jsonc(text: str) -> dict[str, Any] | None:
 
 def _package_outputs(member: Path, extensions: tuple[str, ...]) -> tuple[Output, ...]:
     """The per-package files a package holding *extensions* renders, under *member*."""
-    from livery.workshop._checks import checks_by_name
     from livery.workshop._fragments import package_files, package_fragment
+    from livery.workshop._steps import steps_by_name
 
     fragments: list[Fragment] = []
     owners: list[str] = []
@@ -501,10 +501,10 @@ def _package_outputs(member: Path, extensions: tuple[str, ...]) -> tuple[Output,
         found = package_fragment(extensions, file)
         if found is None:
             continue
-        text, check = found
-        owner = checks_by_name()[check].extension
+        text, step = found
+        owner = steps_by_name()[step].extension
         owners.append(owner)
-        fragments.append(Fragment(owner, f"check {check}", file, text))
+        fragments.append(Fragment(owner, f"step {step}", file, text))
     return plan(member, fragments, list(dict.fromkeys(owners)), {})
 
 

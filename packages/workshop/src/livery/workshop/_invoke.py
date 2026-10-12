@@ -1,4 +1,4 @@
-"""How a check's path list reaches its tool: in how many calls.
+"""How a step's path list reaches its tool: in how many calls.
 
 The paths go on the tool's command line, where a step's template puts
 them ([livery.workshop._words.run_words][]). `batches` splits a path

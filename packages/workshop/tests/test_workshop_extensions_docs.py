@@ -166,7 +166,7 @@ def test_the_root_docs_table_is_the_extensions_to_read() -> None:
 #: the workshop's public ones instead.
 _REPLACED = frozenset(
     {
-        "_checks",
+        "_steps",
         "_contract",
         "_forge_lane",
         "_influence",

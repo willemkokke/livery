@@ -11,7 +11,7 @@ levels = ["workspace"]
 # its build writes: the lint reads it after the build configures, and
 # skips a package whose build writes none.
 [phases.lint.clang-tidy]
-main = "livery.extensions.clang.tidy._checks:judge_lint"
+main = "livery.extensions.clang.tidy._steps:judge_lint"
 scope = "package"
 extensions = ["cpp"]
 after = ["build.configure"]

@@ -247,8 +247,8 @@ def test_an_entry_point_whose_metadata_moved_is_taken_at_the_convention(
 
 @pytest.fixture
 def registry_state():
-    from livery.workshop import _checks
+    from livery.workshop import _steps
 
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)

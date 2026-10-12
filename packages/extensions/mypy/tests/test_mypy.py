@@ -10,7 +10,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.workshop import Package, PhaseContext, Query, answer
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -25,7 +25,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Mypy's check registered, as the mount registers a listed extension's."""
+    """Mypy's step registered, as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -48,7 +48,7 @@ def _member(root: Path, name: str) -> Package:
     directory = root / "packages" / name
     (directory / "src").mkdir(parents=True)
     (directory / "tests").mkdir()
-    # A file in each: a check never names a directory with none to judge.
+    # A file in each: a step never names a directory with none to judge.
     (directory / "src" / f"{name}.py").write_text("")
     (directory / "tests" / f"test_{name}.py").write_text("")
     return Package(
@@ -79,13 +79,13 @@ def _read(path: Path) -> configparser.ConfigParser:
 # that fails fails the call.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr(
@@ -95,18 +95,18 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "typecheck.mypy" not in checks_by_name()
+        assert "typecheck.mypy" not in steps_by_name()
         assert "mypy" not in {tool for tool, _ in tools_for(("python",))}
         assert "mypy>=1.14" not in _dev_group(root)
         deliver(root)
         assert not (root / "mypy.ini").exists()
-        # Listed, the mount registers the check under the listed name,
+        # Listed, the mount registers the step under the listed name,
         # the tool joins the profile, mypy rides the dev group, and the
         # sync writes the file.
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["mypy"]\n')
         with footman_registry.capture():
             assert mount_extensions(root) == ("mypy",)
-        assert checks_by_name()["typecheck.mypy"].extension == "mypy"
+        assert steps_by_name()["typecheck.mypy"].extension == "mypy"
         assert "mypy" in {tool for tool, _ in tools_for(("python",))}
         assert "mypy>=1.14" in _dev_group(root)
         deliver(root)
@@ -131,13 +131,13 @@ def test_a_platform_that_fails_fails_the_call_and_the_others_still_run(
 
     monkeypatch.setattr(tools, "mypy", mypy)
     one = _member(tmp_path, "one")
-    record = registry.check_for("typecheck.mypy")
+    record = registry.step_for("typecheck.mypy")
     with pytest.raises(BaseException, match="win32"):
         record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert sorted(ran) == ["darwin", "linux", "win32"]
 
 
-# The check: mypy's words, a call per platform over the paths a run reaches.
+# The step: mypy's words, a call per platform over the paths a run reaches.
 
 
 def _calls(
@@ -163,10 +163,10 @@ def test_every_call_checks_each_platform_with_a_cache_of_its_own(
     calls = _calls(monkeypatch)
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
-    record = registry.check_for("typecheck.mypy")
+    record = registry.step_for("typecheck.mypy")
     record.run(PhaseContext(root=tmp_path, packages=(one, two), subset=(one,)))
     assert sorted(calls) == _platforms("packages/one/src", "packages/one/tests")
-    # The words after -- on the check's own verb reach every platform's call.
+    # The words after -- on the step's own verb reach every platform's call.
     calls.clear()
     record.run(
         PhaseContext(
@@ -184,7 +184,7 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     calls = _calls(monkeypatch)
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
-    record = registry.check_for("typecheck.mypy")
+    record = registry.step_for("typecheck.mypy")
     # Every member reached: mypy reads the files mypy.ini names.
     record.run(PhaseContext(root=tmp_path, packages=(one, two)))
     assert sorted(calls) == _platforms()

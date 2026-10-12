@@ -4,7 +4,7 @@
 -->
 # livery-extensions-ty
 
-ty as a check of the workshop: `typecheck.ty` type-checks the python
+ty as a step of the workshop: `typecheck.ty` type-checks the python
 packages' sources on every platform at once. A workspace turns it on by
 listing the extension:
 
@@ -22,7 +22,7 @@ after `--`.
 ## The configuration
 
 `fm sync` writes the root `ty.toml`, and a bare `ty` in the repository
-reads the same file the check does. It includes each python member's
+reads the same file the step does. It includes each python member's
 `src` directory, or `tasks.py` in a workspace without one, checks every
 platform at the python version the workspace supports, and reads the
 tool stubs in `typings/`.

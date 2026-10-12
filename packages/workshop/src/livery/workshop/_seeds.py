@@ -8,7 +8,7 @@ listed extension into a destination: a `.jinja` file rendered with
 minijinja and its suffix dropped, any other file copied byte for byte,
 and path names rendered too (`src/{{ source_path }}/...`). A file that
 exists is never touched, and nothing is receipted: once written, a seed
-belongs to the workspace, and no check judges it.
+belongs to the workspace, and no step judges it.
 
 Within one extension, a later tree of the chain wins over an earlier
 one for the same path (a kind's tree over `package-base`). Two

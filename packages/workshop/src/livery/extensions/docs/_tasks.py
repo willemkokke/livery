@@ -3,7 +3,7 @@
 Importing this module registers the ``docs`` group under the extension's
 identity, declares the site's override template as a file the CI render
 writes, and registers the ``pre_tasks`` hook that links task names to
-their pages on the site. The extension's checks, queries and CI jobs are
+their pages on the site. The extension's steps, queries and CI jobs are
 declared in its ``extension.toml``. The base's plugin never imports it.
 """
 

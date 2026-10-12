@@ -4,7 +4,7 @@
 -->
 # livery-extensions-clang-tidy
 
-clang-tidy as a check of the workshop: `lint.clang-tidy` judges one
+clang-tidy as a step of the workshop: `lint.clang-tidy` judges one
 `cpp-conan` package at a time, after its build is configured, and a finding
 refuses with clang-tidy's own words. A workspace turns it on by listing the
 extension:

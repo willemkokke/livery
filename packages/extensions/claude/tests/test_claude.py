@@ -39,14 +39,14 @@ def _workspace(tmp_path: Path, extensions: str = '["claude"]') -> Path:
 
 @pytest.fixture
 def restored() -> Iterator[None]:
-    """The prose and check registries, put back after the test."""
-    from livery.workshop import _checks, _prose
+    """The prose and step registries, put back after the test."""
+    from livery.workshop import _prose, _steps
 
     prose = _prose.snapshot()
-    checks = _checks.snapshot()
+    steps = _steps.snapshot()
     yield
     _prose.restore(prose)
-    _checks.restore(checks)
+    _steps.restore(steps)
 
 
 # The refusals first: unlisted, the extension writes nothing.

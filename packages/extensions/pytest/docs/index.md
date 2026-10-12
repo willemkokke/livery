@@ -4,7 +4,7 @@
 -->
 # livery-extensions-pytest
 
-pytest as a check of the workshop. A workspace turns it on by listing the
+pytest as steps of the workshop. A workspace turns it on by listing the
 extension:
 
 ```toml

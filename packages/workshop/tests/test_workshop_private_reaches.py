@@ -80,7 +80,7 @@ def _reaching(root: Path, *allowed: str) -> RuleContext:
         {
             "acme/beta/__init__.py": REACHING,
             "acme/beta/_own.py": "",
-            "acme/extensions/gamma/_checks.py": "from acme.beta import _own\n",
+            "acme/extensions/gamma/_steps.py": "from acme.beta import _own\n",
         },
     )
     return RuleContext(root, discover_packages(root))
@@ -175,14 +175,14 @@ def test_a_distribution_reaches_its_own_privates_freely(tmp_path: Path) -> None:
 
 
 def test_the_python_extension_declares_the_step_and_the_mount_registers_it() -> None:
-    from livery.workshop import _checks
-    from livery.workshop._checks import check_for
+    from livery.workshop import _steps
     from livery.workshop._extensions import installed_declaration, register_declared
+    from livery.workshop._steps import step_for
 
     declared = installed_declaration("python")
     assert declared is not None
     (step,) = [
-        record for record in declared.additions.checks if record.role == "layering"
+        record for record in declared.additions.steps if record.phase == "layering"
     ]
     assert step.name == "layering.private-reaches"
     assert step.fix is None
@@ -190,14 +190,14 @@ def test_the_python_extension_declares_the_step_and_the_mount_registers_it() -> 
     assert step.inputs is not None
     assert step.inputs.reads == ("tasks.py", "packages/**/*.py")
     assert step.inputs.widen is not None
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     try:
         # A package-level extension's workspace-level step registers at
-        # the mount as its other checks do, while a package lists it.
+        # the mount as its other steps do, while a package lists it.
         assert register_declared("python", declared.additions)
-        assert check_for("layering.private-reaches").extension == "python"
+        assert step_for("layering.private-reaches").extension == "python"
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
 
 
 def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
@@ -206,16 +206,16 @@ def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
     from dataclasses import replace
 
     from livery.footman import Failed
-    from livery.workshop import Changes, PhaseContext, _checks
-    from livery.workshop._checks import check_for
+    from livery.workshop import Changes, PhaseContext, _steps
     from livery.workshop._extensions import installed_declaration, register_declared
+    from livery.workshop._steps import step_for
 
     every = _reaches(_reaching(tmp_path))
     allowed = sorted(name for _, name in every if name != "acme.alpha._secret")
     context = _reaching(_fresh(tmp_path), *allowed)
     declared = installed_declaration("python")
     assert declared is not None
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     register_declared("python", declared.additions)
     refusal = (
         "the sources break the private-reaches rule:\n"
@@ -225,10 +225,10 @@ def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
         " [[python.private-reaches]] with its reason"
     )
     try:
-        step = check_for("layering.private-reaches")
+        step = step_for("layering.private-reaches")
         # The run names the step it hands the context to, as the gate does.
         whole = PhaseContext(
-            root=context.root, packages=context.packages, check=step.name
+            root=context.root, packages=context.packages, step=step.name
         )
         # A run that knows nothing of what changed judges every source.
         with pytest.raises(Failed) as raised:
@@ -254,7 +254,7 @@ def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
                 PhaseContext(
                     root=widened.root,
                     packages=widened.packages,
-                    check=step.name,
+                    step=step.name,
                     changes=contract,
                 )
             )
@@ -262,7 +262,7 @@ def test_the_layering_step_refuses_a_reach_over_the_files_a_run_reaches(
             raised.value
         )
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
 
 
 def _reaches(context: RuleContext) -> dict[tuple[str, str], list[str]]:

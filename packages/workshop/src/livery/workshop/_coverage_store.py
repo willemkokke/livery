@@ -77,8 +77,8 @@ def workspace_suite(root: Path) -> Package | None:
     """The workspace's own tests, the ``tests`` directory at its root, as a unit.
 
     ``None`` when the workspace has none. The unit's kind,
-    ``workspace``, is no registered kind, so no check judges it by
-    kind; a test check runs it beside the members it judges.
+    ``workspace``, is no registered kind, so no step judges it by
+    kind; a test step runs it beside the members it judges.
     """
     directory = root / WORKSPACE_TESTS
     if not directory.is_dir():

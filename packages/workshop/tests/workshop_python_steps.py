@@ -2,11 +2,11 @@
 
 The base registers no python formatter, linter, type checker or test
 runner: listed extensions do (ruff, the type checkers and pytest, in
-this repository). The gate's tests need such checks to walk, scope,
-order and claim, so `python_checks` registers four with ruff's, mypy's
+this repository). The gate's tests need such steps to walk, scope,
+order and claim, so `python_steps` registers four with ruff's, mypy's
 and pytest's shapes under the extension ``fake``, after the base's
-checks as a mount would, and puts the registry back after the test; a
-test module imports `python_checks_fixture` and names ``python_checks``
+steps as a mount would, and puts the registry back after the test; a
+test module imports `python_steps_fixture` and names ``python_steps``
 as a parameter. Each body calls this module's `run_format`, `run_lint`,
 `run_typecheck` or `run_test`, which a test replaces to watch them.
 """
@@ -17,22 +17,22 @@ from collections.abc import Iterator
 
 import pytest
 
-from livery.workshop._checks import (
+from livery.workshop._coverage_store import workspace_suite
+from livery.workshop._invoke import run_batched
+from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
+from livery.workshop._steps import (
     PACKAGES,
     PATHS,
-    CheckRecord,
     Claim,
     Option,
-    register_check,
+    StepRecord,
+    register_step,
     restore,
     scoped_packages,
     scoped_paths,
     snapshot,
 )
-from livery.workshop._coverage_store import workspace_suite
-from livery.workshop._invoke import run_batched
-from livery.workshop._packages import Package
-from livery.workshop._phases import PhaseContext
 
 #: The suffixes the pair reads.
 SUFFIXES = (".py", ".pyi")
@@ -101,12 +101,12 @@ def _test_run(ctx: PhaseContext) -> None:
         run_test(packages=suites, scoped=ctx.scoped, point=ctx.point)
 
 
-def records() -> tuple[CheckRecord, ...]:
+def records() -> tuple[StepRecord, ...]:
     """A formatter and a linter as ruff claims and judges, a type checker, tests."""
     extensions = ("python", "conan")
     example = ("D", "E", "I", "UP", "B", "SIM", "C4", "RUF", "F401", "F811", "F841")
     return (
-        CheckRecord(
+        StepRecord(
             "fake",
             "format",
             _format_run,
@@ -120,7 +120,7 @@ def records() -> tuple[CheckRecord, ...]:
                 for category in ("source", "test", "test-support", "configuration")
             ),
         ),
-        CheckRecord(
+        StepRecord(
             "fake",
             "lint",
             _lint_run,
@@ -137,7 +137,7 @@ def records() -> tuple[CheckRecord, ...]:
                 Claim("configuration", suffixes=SUFFIXES),
             ),
         ),
-        CheckRecord(
+        StepRecord(
             "fake",
             "typecheck",
             _typecheck_run,
@@ -150,7 +150,7 @@ def records() -> tuple[CheckRecord, ...]:
                 for category in ("source", "test", "test-support")
             ),
         ),
-        CheckRecord(
+        StepRecord(
             "fake",
             "test",
             _test_run,
@@ -169,13 +169,13 @@ def records() -> tuple[CheckRecord, ...]:
     )
 
 
-@pytest.fixture(name="python_checks")
-def python_checks_fixture() -> Iterator[tuple[CheckRecord, ...]]:
+@pytest.fixture(name="python_steps")
+def python_steps_fixture() -> Iterator[tuple[StepRecord, ...]]:
     """Register the four for the test; the registry is put back after it."""
     state = snapshot()
     pair = records()
     for record in pair:
-        register_check(record)
+        register_step(record)
     try:
         yield pair
     finally:

@@ -11,18 +11,18 @@ from typing import cast
 import pytest
 
 import livery.workshop.testing
-from livery.workshop import _categories, _checks, _kinds
-from livery.workshop._checks import (
-    PACKAGE,
-    CheckRecord,
-    Claim,
-    check_for,
-    register_check,
-)
+from livery.workshop import _categories, _kinds, _steps
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
+from livery.workshop._steps import (
+    PACKAGE,
+    Claim,
+    StepRecord,
+    register_step,
+    step_for,
+)
 from livery.workshop.testing import CLAUSES, Subject, builtin_subject, judge
 
 EXTENSION = "acme.extension"
@@ -30,13 +30,13 @@ EXTENSION = "acme.extension"
 
 @pytest.fixture
 def acme() -> Iterator[None]:
-    """Restore the kinds, checks and category tables a test registers into."""
+    """Restore the kinds, steps and category tables a test registers into."""
     kinds = dict(_kinds._KINDS)  # pyright: ignore[reportPrivateUsage]
-    checks = _checks.snapshot()
+    steps = _steps.snapshot()
     yield
     _kinds._KINDS.clear()  # pyright: ignore[reportPrivateUsage]
     _kinds._KINDS.update(kinds)  # pyright: ignore[reportPrivateUsage]
-    _checks.restore(checks)
+    _steps.restore(steps)
     for kind in ("acme-parent", "acme-child"):
         _categories.unregister_categories(kind, extension=EXTENSION)
 
@@ -113,12 +113,12 @@ def test_a_backend_missing_a_method_or_taking_the_wrong_call_breaks_the_protocol
     )
 
 
-def test_two_checks_carrying_one_file_for_one_extension_break_the_fragment_owner(
+def test_two_steps_carrying_one_file_for_one_extension_break_the_fragment_owner(
     acme: None,
 ) -> None:
     for name in ("acme-tidy", "acme-tidy-too"):
-        register_check(
-            CheckRecord(
+        register_step(
+            StepRecord(
                 name,
                 "lint",
                 _idle,
@@ -130,7 +130,7 @@ def test_two_checks_carrying_one_file_for_one_extension_break_the_fragment_owner
                 ),
             )
         )
-    subject = Subject(EXTENSION, checks=(check_for("lint.acme-tidy"),))
+    subject = Subject(EXTENSION, steps=(step_for("lint.acme-tidy"),))
     assert _names(subject, "fragment-owner") == [
         "fragment-owner: extension acme.cpp .clang-tidy: lint.acme-tidy and"
         " lint.acme-tidy-too both carry it for the extension's packages; the render"
@@ -155,26 +155,26 @@ def test_two_rules_of_one_kind_at_one_specificity_break_the_category_table(
     )
 
 
-def test_a_check_after_nothing_or_after_itself_breaks_the_check_order(
+def test_a_step_after_nothing_or_after_itself_breaks_the_step_order(
     acme: None,
 ) -> None:
-    register_check(
-        CheckRecord("late", "lint", _idle, after=("lint.gone",), extension=EXTENSION)
+    register_step(
+        StepRecord("late", "lint", _idle, after=("lint.gone",), extension=EXTENSION)
     )
-    register_check(
-        CheckRecord("a", "lint", _idle, after=("lint.b",), extension=EXTENSION)
+    register_step(
+        StepRecord("a", "lint", _idle, after=("lint.b",), extension=EXTENSION)
     )
-    register_check(
-        CheckRecord("b", "lint", _idle, after=("lint.a",), extension=EXTENSION)
+    register_step(
+        StepRecord("b", "lint", _idle, after=("lint.a",), extension=EXTENSION)
     )
-    checks = tuple(check_for(name) for name in ("lint.late", "lint.a", "lint.b"))
-    found = _names(Subject(EXTENSION, checks=checks), "check-order")
+    steps = tuple(step_for(name) for name in ("lint.late", "lint.a", "lint.b"))
+    found = _names(Subject(EXTENSION, steps=steps), "step-order")
     assert found == [
-        "check-order: check lint.late: runs after lint.gone, which no registered"
-        " check answers to; the gate stops there",
-        "check-order: check lint.a: runs after itself through lint.b, lint.a;"
+        "step-order: step lint.late: runs after lint.gone, which no registered"
+        " step answers to; the gate stops there",
+        "step-order: step lint.a: runs after itself through lint.b, lint.a;"
         " the gate would wait on it for ever",
-        "check-order: check lint.b: runs after itself through lint.a, lint.b;"
+        "step-order: step lint.b: runs after itself through lint.a, lint.b;"
         " the gate would wait on it for ever",
     ]
 
@@ -184,7 +184,7 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
 ) -> None:
     package = tmp_path / "acme_kit_extension"
     package.mkdir()
-    (package / "_checks.py").write_text("def judged(ctx):\n    del ctx\n")
+    (package / "_steps.py").write_text("def judged(ctx):\n    del ctx\n")
     declaration = package / "extension.toml"
     declaration.write_text('[extension]\napi-version = 1\nlevel = ["workspace"]\n')
     monkeypatch.syspath_prepend(str(tmp_path))
@@ -194,16 +194,16 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
         " requires; did you mean 'levels'?; the mount refuses the extension"
     ]
     declaration.write_text(
-        '[phases.lint.acme]\nmain = "acme_kit_extension._checks:judge"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_extension._steps:judge"\n'
     )
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:"
-        " phases.lint.acme.main names judge, which acme_kit_extension._checks does"
+        " phases.lint.acme.main names judge, which acme_kit_extension._steps does"
         " not define at its top level; did you mean 'judged'?; the mount refuses"
         " the extension"
     ]
     declaration.write_text(
-        '[phases.lint.acme]\nmain = "acme_kit_extension._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_extension._steps:judged"\n'
     )
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == []
 
@@ -213,25 +213,25 @@ def test_a_reference_whose_module_registers_at_import_breaks_the_clause(
 ) -> None:
     package = tmp_path / "acme_kit_registers"
     package.mkdir()
-    (package / "_checks.py").write_text(
-        "from livery.workshop._checks import CheckRecord, register_check\n"
+    (package / "_steps.py").write_text(
+        "from livery.workshop._steps import StepRecord, register_step\n"
         "\n\n"
         "def judged(ctx):\n"
         "    del ctx\n"
         "\n\n"
-        'register_check(CheckRecord("acme", "lint", judged))\n'
+        'register_step(StepRecord("acme", "lint", judged))\n'
     )
     (package / "_pure.py").write_text("def judged(ctx):\n    del ctx\n")
     declaration = package / "extension.toml"
     declaration.write_text(
-        '[phases.lint.acme]\nmain = "acme_kit_registers._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_registers._steps:judged"\n'
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     clause = "references-register-nothing"
     assert _names(Subject("acme_kit_registers"), clause) == [
-        "references-register-nothing: acme_kit_registers._checks, named by"
+        "references-register-nothing: acme_kit_registers._steps, named by"
         " phases.lint.acme.main: importing it registers a call to"
-        " livery.workshop._checks.register_check; the mount registers what the"
+        " livery.workshop._steps.register_step; the mount registers what the"
         " declaration says, so a reference's module only defines"
     ]
     declaration.write_text(
@@ -274,10 +274,10 @@ def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
 ) -> None:
     package = tmp_path / "acme_kit_claims"
     package.mkdir()
-    (package / "_checks.py").write_text("def judged(ctx):\n    del ctx\n")
+    (package / "_steps.py").write_text("def judged(ctx):\n    del ctx\n")
     declaration = package / "extension.toml"
     declaration.write_text(
-        '[phases.lint.acme]\nmain = "acme_kit_claims._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_claims._steps:judged"\n'
         'claims = [{ category = "sources", suffixes = ["py"] }]\n'
     )
     monkeypatch.syspath_prepend(str(tmp_path))
@@ -285,12 +285,12 @@ def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
     assert _names(Subject("acme_kit_claims"), clause) == [
         "claims-name-categories: phases.lint.acme.claims: names the category"
         " 'sources', which no extension registers; did you mean 'source'?; the"
-        " check claims no file of it",
+        " step claims no file of it",
         "claims-name-categories: phases.lint.acme.claims: names the suffix 'py';"
         " a suffix starts with a dot, '.py'",
     ]
     declaration.write_text(
-        '[phases.lint.acme]\nmain = "acme_kit_claims._checks:judged"\n'
+        '[phases.lint.acme]\nmain = "acme_kit_claims._steps:judged"\n'
         'claims = [{ category = "source", suffixes = [".py"] }]\n'
     )
     assert _names(Subject("acme_kit_claims"), clause) == []
@@ -321,8 +321,8 @@ def test_an_unanswered_placeholder_fails_the_kit(
         " engine nor its matrix answers; the engine answers cache, package,"
         " compile-commands, paths, arguments"
     ]
-    # A tool the check does not require, and a package's placeholder in a
-    # check that judges the workspace whole, fail it as well.
+    # A tool the step does not require, and a package's placeholder in a
+    # step that judges the workspace whole, fail it as well.
     subject = _words_subject(
         tmp_path,
         monkeypatch,
@@ -330,9 +330,9 @@ def test_an_unanswered_placeholder_fails_the_kit(
     )
     assert _names(subject, clause) == [
         "words-are-answerable: phases.lint.acme: runs acme, which its tools do not"
-        " name (other); a check runs a tool it requires",
+        " name (other); a step runs a tool it requires",
         "words-are-answerable: phases.lint.acme: names {package}, which only a call"
-        " that judges one package answers, and the check judges the workspace"
+        " that judges one package answers, and the step judges the workspace"
         " whole",
     ]
     subject = _words_subject(
@@ -352,7 +352,7 @@ def test_an_unanswered_placeholder_fails_the_kit(
     )
     assert _names(subject, clause) == [
         "words-are-answerable: phases.lint.acme: runs acme, which its tools do not"
-        " name (other); a check runs a tool it requires"
+        " name (other); a step runs a tool it requires"
     ]
 
 
@@ -446,9 +446,9 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
 
 
 def _tidy(text: str = "Checks: acme-*\n") -> Subject:
-    """An extension whose check carries a .clang-tidy for its packages."""
-    register_check(
-        CheckRecord(
+    """An extension whose step carries a .clang-tidy for its packages."""
+    register_step(
+        StepRecord(
             "acme-tidy",
             "lint",
             _idle,
@@ -458,18 +458,18 @@ def _tidy(text: str = "Checks: acme-*\n") -> Subject:
             fragments=(Fragment(".clang-tidy", text, extensions=("acme.cpp",)),),
         )
     )
-    return Subject(EXTENSION, checks=(check_for("lint.acme-tidy"),))
+    return Subject(EXTENSION, steps=(step_for("lint.acme-tidy"),))
 
 
-TIDY = "check lint.acme-tidy .clang-tidy for acme.cpp"
+TIDY = "step lint.acme-tidy .clang-tidy for acme.cpp"
 
 
 def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_drift(
     acme: None,
 ) -> None:
     subject = _tidy("{% if %}\n")
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-table",
             "lint",
             _idle,
@@ -481,7 +481,7 @@ def test_a_fragment_that_breaks_the_composed_file_or_does_not_render_breaks_the_
             ),
         )
     )
-    subject = replace(subject, checks=(*subject.checks, check_for("lint.acme-table")))
+    subject = replace(subject, steps=(*subject.steps, step_for("lint.acme-table")))
     found = _names(subject, "fragment-drift")
     assert len(found) == 2, found
     assert found[0].startswith(
@@ -513,7 +513,7 @@ def test_a_file_that_drifts_from_its_render_or_hides_an_edit_breaks_the_drift(
     ]
 
 
-def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract_11(
+def test_a_withdrawn_steps_file_kept_unedited_or_removed_edited_breaks_contract_11(
     acme: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _shipped_files
@@ -523,7 +523,7 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
     real = _shipped_files.settle_package
 
     def written(directory: Path) -> list[Path]:
-        # The subject's own file, which its withdrawn check no longer names.
+        # The subject's own file, which its withdrawn step no longer names.
         return [p for p in directory.iterdir() if p.name == ".clang-tidy"]
 
     def never_again(directory: Path, extensions: tuple[str, ...]) -> list[str]:
@@ -533,7 +533,7 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
 
     monkeypatch.setattr(_shipped_files, "settle_package", never_again)
     assert _names(subject, "withdrawn-file") == [
-        f"withdrawn-file: {TIDY}: an unedited copy stays once the check is"
+        f"withdrawn-file: {TIDY}: an unedited copy stays once the step is"
         " withdrawn; contract 11 removes it"
     ]
 
@@ -545,15 +545,15 @@ def test_a_withdrawn_checks_file_kept_unedited_or_removed_edited_breaks_contract
 
     monkeypatch.setattr(_shipped_files, "settle_package", always_removes)
     assert _names(subject, "withdrawn-file") == [
-        f"withdrawn-file: {TIDY}: an edited copy is removed once the check is"
+        f"withdrawn-file: {TIDY}: an edited copy is removed once the step is"
         " withdrawn; contract 11 keeps it as a local override"
     ]
 
 
 def _walkers() -> Subject:
-    """An extension with a check that fixes and one that judges, both reading python."""
-    register_check(
-        CheckRecord(
+    """An extension with a step that fixes and one that judges, both reading python."""
+    register_step(
+        StepRecord(
             "acme-fixer",
             "format",
             _idle,
@@ -562,8 +562,8 @@ def _walkers() -> Subject:
             claims=(Claim("source", suffixes=(".py",)),),
         )
     )
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-judge",
             "lint",
             _idle,
@@ -573,25 +573,25 @@ def _walkers() -> Subject:
             claims=(Claim("source", suffixes=(".py",)),),
         )
     )
-    checks = (check_for("format.acme-fixer"), check_for("lint.acme-judge"))
-    return Subject(EXTENSION, checks=checks)
+    steps = (step_for("format.acme-fixer"), step_for("lint.acme-judge"))
+    return Subject(EXTENSION, steps=steps)
 
 
-def test_a_check_registered_without_its_extension_breaks_the_gate_lines(
+def test_a_step_registered_without_its_extension_breaks_the_gate_lines(
     acme: None,
 ) -> None:
-    register_check(CheckRecord("acme-quiet", "lint", _idle))
+    register_step(StepRecord("acme-quiet", "lint", _idle))
     found = _names(
-        Subject(EXTENSION, checks=(check_for("lint.acme-quiet"),)), "gate-lines"
+        Subject(EXTENSION, steps=(step_for("lint.acme-quiet"),)), "gate-lines"
     )
     assert found == [
-        "gate-lines: check lint.acme-quiet: names livery.workshop as its extension; the"
-        " gate says who registered a check by it, and acme.extension registered this"
+        "gate-lines: step lint.acme-quiet: names livery.workshop as its extension; the"
+        " gate says who registered a step by it, and acme.extension registered this"
         " one"
     ]
 
 
-def test_a_walk_that_starts_a_check_with_nothing_to_read_breaks_the_gate_lines(
+def test_a_walk_that_starts_a_step_with_nothing_to_read_breaks_the_gate_lines(
     acme: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _quality
@@ -602,20 +602,20 @@ def test_a_walk_that_starts_a_check_with_nothing_to_read_breaks_the_gate_lines(
     def careless(ctx: PhaseContext, **kwargs: object) -> None:
         only = cast("frozenset[str]", kwargs["only"])
         for name in sorted(only):
-            _checks.check_for(name).run(ctx)
+            _steps.step_for(name).run(ctx)
 
     monkeypatch.setattr(_quality, "walk", careless)
     assert _names(subject, "gate-lines") == [
-        "gate-lines: check format.acme-fixer: the gate does not name acme.extension as"
+        "gate-lines: step format.acme-fixer: the gate does not name acme.extension as"
         " the extension that registered it",
-        "gate-lines: check format.acme-fixer: not named when it had no file to"
+        "gate-lines: step format.acme-fixer: not named when it had no file to"
         ' read; the gate says "no file it reads" and starts nothing',
-        "gate-lines: check format.acme-fixer: started with no file to read",
-        "gate-lines: check lint.acme-judge: the gate does not name acme.extension as"
+        "gate-lines: step format.acme-fixer: started with no file to read",
+        "gate-lines: step lint.acme-judge: the gate does not name acme.extension as"
         " the extension that registered it",
-        "gate-lines: check lint.acme-judge: not named when it had no file to read;"
+        "gate-lines: step lint.acme-judge: not named when it had no file to read;"
         ' the gate says "no file it reads" and starts nothing',
-        "gate-lines: check lint.acme-judge: started with no file to read",
+        "gate-lines: step lint.acme-judge: started with no file to read",
     ]
 
 
@@ -630,18 +630,18 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
     def backwards(ctx: PhaseContext, **kwargs: object) -> None:
         only = cast("frozenset[str]", kwargs["only"])
         for name in sorted(only):
-            record = _checks.check_for(name)
+            record = _steps.step_for(name)
             record.run(ctx)
         for name in sorted(only):
-            record = _checks.check_for(name)
+            record = _steps.step_for(name)
             if record.fix is not None:
                 record.fix(ctx)
 
     monkeypatch.setattr(_quality, "walk", backwards)
     assert _names(subject, "walk-order") == [
-        "walk-order: check format.acme-fixer: rewrote after a judge started; every"
+        "walk-order: step format.acme-fixer: rewrote after a judge started; every"
         " fixer runs before any judge",
-        "walk-order: check format.acme-fixer: judged after it rewrote; a check that"
+        "walk-order: step format.acme-fixer: judged after it rewrote; a step that"
         " rewrote is not judged again",
     ]
 
@@ -650,8 +650,8 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
 
     monkeypatch.setattr(_quality, "walk", idle)
     assert _names(subject, "walk-order") == [
-        "walk-order: check format.acme-fixer: never rewrote under --fix",
-        "walk-order: check lint.acme-judge: never judged under --fix",
+        "walk-order: step format.acme-fixer: never rewrote under --fix",
+        "walk-order: step lint.acme-judge: never judged under --fix",
     ]
 
 
@@ -662,8 +662,8 @@ def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
     acme: None,
 ) -> None:
     for name, extension in (("acme-c-tidy", "acme.c"), ("acme-cpp-tidy", "acme.cpp")):
-        register_check(
-            CheckRecord(
+        register_step(
+            StepRecord(
                 name,
                 "lint",
                 _idle,
@@ -681,14 +681,14 @@ def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
         "# acme.cpp\n",
         "lint.acme-cpp-tidy",
     )
-    # A package holding both takes the first check by name.
+    # A package holding both takes the first step by name.
     assert package_fragment(("acme.c", "acme.cpp"), ".clang-tidy") == (
         "# acme.c\n",
         "lint.acme-c-tidy",
     )
     assert package_fragment(("acme.rust",), ".clang-tidy") is None
-    checks = (check_for("lint.acme-c-tidy"), check_for("lint.acme-cpp-tidy"))
-    assert _names(Subject(EXTENSION, checks=checks), "fragment-owner") == []
+    steps = (step_for("lint.acme-c-tidy"), step_for("lint.acme-cpp-tidy"))
+    assert _names(Subject(EXTENSION, steps=steps), "fragment-owner") == []
 
 
 def test_the_nearer_kinds_rule_wins_a_tie_between_kinds(acme: None) -> None:
@@ -717,14 +717,14 @@ def _checks_package(kind: str) -> Package:
 # Then the builtins, and the kit's own shape.
 
 
-def test_the_builtin_kinds_and_checks_pass_every_clause() -> None:
+def test_the_builtin_kinds_and_steps_pass_every_clause() -> None:
     subject = builtin_subject()
     assert {kind.name for kind in subject.kinds} >= {
         "python",
         "python-nanobind",
         "cpp-conan",
     }
-    assert {record.name for record in subject.checks} >= {
+    assert {record.name for record in subject.steps} >= {
         "build.compile",
         "test.ctest",
     }
@@ -737,7 +737,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "backend-protocol",
         "fragment-owner",
         "category-table",
-        "check-order",
+        "step-order",
         "declaration-validates",
         "references-register-nothing",
         "entries-name-defined-tasks",

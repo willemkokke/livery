@@ -118,8 +118,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     assert (grouped / "src" / "acme" / "extensions" / "demo").is_dir()
     assert '"packages/extensions/demo"' in (project / "pyproject.toml").read_text()
     gate = _run([fm, "check"], project, env)
-    for check in ("lint-doclinks", "lint-docstrings", "test-ctest", "drift-check"):
-        assert f"ok   {check}" in gate, gate
+    for step in ("lint-doclinks", "lint-docstrings", "test-ctest", "drift-check"):
+        assert f"ok   {step}" in gate, gate
     # Removing a member is deleting its directory and syncing: the
     # handoff enters the environment as it is, the sync composes the
     # project file without the member, and the gate is green again.
@@ -138,5 +138,5 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     assert "packages/thing" not in (project / "pyproject.toml").read_text()
     # What removal owns: every composed and generated file follows. The
     # whole gate waits on issue #1111: with the last python member gone,
-    # the python checks still run over the root without their tools.
+    # the python steps still run over the root without their tools.
     _run([fm, "drift.check"], project, env)

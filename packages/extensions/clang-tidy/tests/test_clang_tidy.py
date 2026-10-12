@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.clang.tidy import _checks
+from livery.extensions.clang.tidy import _steps
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 CONTRACT = (
     "[workspace]\n"
@@ -23,7 +23,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """clang-tidy's check registered, as the mount registers a listed extension's."""
+    """clang-tidy's step registered, as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -58,13 +58,13 @@ def _native(root: Path) -> Package:
 # cannot give the binary its headers skips, saying why; a finding refuses.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = tmp_path / "ws"
     _native(root)
@@ -76,14 +76,14 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "lint.clang-tidy" not in checks_by_name()
+        assert "lint.clang-tidy" not in steps_by_name()
         assert "clang_tidy" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         assert not (root / "packages" / "native" / ".clang-tidy").exists()
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["clang-tidy"]\n')
         with footman_registry.capture():
             assert mount_extensions(root) == ("clang-tidy",)
-        record = checks_by_name()["lint.clang-tidy"]
+        record = steps_by_name()["lint.clang-tidy"]
         assert record.extension == "clang-tidy"
         assert record.after == ("build.configure",)
         assert "clang_tidy" in {t for t, _ in tools_for(("cpp",))}
@@ -101,41 +101,41 @@ def test_a_host_without_the_headers_skips_saying_why(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     package = _native(tmp_path)
-    monkeypatch.setattr(_checks, "_asked", lambda argv: "")
-    assert _checks.toolchain_arguments() == (
+    monkeypatch.setattr(_steps, "_asked", lambda argv: "")
+    assert _steps.toolchain_arguments() == (
         [],
         "no compiler here answers where its builtin headers are",
     )
     source = package.directory / "src" / "native.cpp"
-    _checks.run_lint(package, (source,), tmp_path / "compile_commands.json")
+    _steps.run_lint(package, (source,), tmp_path / "compile_commands.json")
     assert "acme-native: clang-tidy skips, no compiler here" in capsys.readouterr().out
     # On macOS the SDK is a second question, and a missing one skips too.
     monkeypatch.setattr("sys.platform", "darwin")
     monkeypatch.setattr(
-        _checks, "_asked", lambda argv: "/opt/clang/include" if "clang" in argv else ""
+        _steps, "_asked", lambda argv: "/opt/clang/include" if "clang" in argv else ""
     )
-    assert _checks.toolchain_arguments() == (
+    assert _steps.toolchain_arguments() == (
         [],
         "xcrun names no SDK, where this platform keeps its headers",
     )
     monkeypatch.setattr(
-        _checks, "_asked", lambda argv: "/sdk" if argv[0] == "xcrun" else "/res"
+        _steps, "_asked", lambda argv: "/sdk" if argv[0] == "xcrun" else "/res"
     )
-    assert _checks.toolchain_arguments() == (
+    assert _steps.toolchain_arguments() == (
         ["--extra-arg=-resource-dir=/res", "--extra-arg=-isysroot/sdk"],
         "",
     )
     # Elsewhere the compiler's headers are the whole answer.
     monkeypatch.setattr("sys.platform", "linux")
-    assert _checks.toolchain_arguments() == (["--extra-arg=-resource-dir=/res"], "")
+    assert _steps.toolchain_arguments() == (["--extra-arg=-resource-dir=/res"], "")
 
 
 def test_a_question_no_program_answers_reads_as_no_answer() -> None:
     import sys
 
-    assert _checks._asked(["no-such-program-anywhere"]) == ""  # pyright: ignore[reportPrivateUsage]
+    assert _steps._asked(["no-such-program-anywhere"]) == ""  # pyright: ignore[reportPrivateUsage]
     asked = [sys.executable, "-c", "print('first'); print('second')"]
-    assert _checks._asked(asked) == "first"  # pyright: ignore[reportPrivateUsage]
+    assert _steps._asked(asked) == "first"  # pyright: ignore[reportPrivateUsage]
 
 
 def test_a_finding_refuses_with_clang_tidy_s_own_words(
@@ -145,7 +145,7 @@ def test_a_finding_refuses_with_clang_tidy_s_own_words(
     from livery.toolroom.tools.testing import answers
 
     package = _native(tmp_path)
-    monkeypatch.setattr(_checks, "toolchain_arguments", lambda: (["--extra"], ""))
+    monkeypatch.setattr(_steps, "toolchain_arguments", lambda: (["--extra"], ""))
     source = package.directory / "src" / "native.cpp"
     found = Result(1, stdout="native.cpp:1:1: error: bugprone-branch-clone\n")
     database = tmp_path / "build" / "compile_commands.json"
@@ -153,16 +153,16 @@ def test_a_finding_refuses_with_clang_tidy_s_own_words(
         answers({("clang-tidy",): found}) as calls,
         pytest.raises(BaseException, match="clang-tidy found something"),
     ):
-        _checks.run_lint(package, (source,), database)
+        _steps.run_lint(package, (source,), database)
     assert list(calls[0].argv[1:4]) == ["-p", str(database.parent), "--extra"]
     # Nothing found: the lint passes; nothing to read: no call at all.
     with answers({("clang-tidy",): Result(0)}) as calls:
-        _checks.run_lint(package, (source,), database)
+        _steps.run_lint(package, (source,), database)
     assert len(calls) == 1
-    _checks.run_lint(package, (), database)
-    # The words after -- on the check's own verb go before the files.
+    _steps.run_lint(package, (), database)
+    # The words after -- on the step's own verb go before the files.
     with answers({("clang-tidy",): Result(0)}) as calls:
-        _checks.run_lint(package, (source,), database, ("--checks=-*,bugprone-*",))
+        _steps.run_lint(package, (source,), database, ("--checks=-*,bugprone-*",))
     assert list(calls[0].argv[1:]) == [
         "-p",
         str(database.parent),
@@ -172,10 +172,10 @@ def test_a_finding_refuses_with_clang_tidy_s_own_words(
     ]
 
 
-# The check: the package's files against the database its kind's build writes.
+# The step: the package's files against the database its kind's build writes.
 
 
-def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
+def test_the_step_waits_for_the_database_then_reads_the_package_s_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls: list[tuple[tuple[str, ...], Path]] = []
@@ -191,9 +191,9 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
         calls.append((names, database))
         handed.append(arguments)
 
-    monkeypatch.setattr(_checks, "run_lint", watched)
+    monkeypatch.setattr(_steps, "run_lint", watched)
     package = _native(tmp_path)
-    record = registry.check_for("lint.clang-tidy")
+    record = registry.step_for("lint.clang-tidy")
     ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     # Not configured yet: no database, nothing to lint against.
     record.run(ctx)
@@ -203,7 +203,7 @@ def test_the_check_waits_for_the_database_then_reads_the_package_s_sources(
     database.write_text("[]")
     record.run(ctx)
     assert calls == [(("src/native.cpp",), database)]
-    # The words after -- on the check's own verb reach the lint.
+    # The words after -- on the step's own verb reach the lint.
     words = ("--checks=-*,bugprone-*",)
     record.run(
         PhaseContext(

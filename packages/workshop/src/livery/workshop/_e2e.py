@@ -1826,9 +1826,9 @@ def members_for(kinds: Sequence[str] = ()) -> tuple[tuple[str, str], ...]:
 
 
 def metering_extension() -> str:
-    """The installed extension whose check runs the tests; empty when none does.
+    """The installed extension whose step runs the tests; empty when none does.
 
-    Found through its registration, the check of the test role, since
+    Found through its registration, the step of the test phase, since
     the base names no extension's tool. A gate that meters no suite is
     refused by the coverage leg and the union (#1225), so until coverage
     is its own extension an extension pass lists this extension beside
@@ -1840,7 +1840,7 @@ def metering_extension() -> str:
     for candidate in installed_extensions():
         found = declaration(candidate)
         if found is not None and any(
-            check.role == "test" for check in found.additions.checks
+            record.phase == "test" for record in found.additions.steps
         ):
             return candidate
     return ""
@@ -1857,7 +1857,7 @@ def steps_declared_off(name: str) -> tuple[str, ...]:
     found = declaration(name)
     if found is None:
         return ()
-    return tuple(record.name for record in found.additions.checks if not record.enabled)
+    return tuple(record.name for record in found.additions.steps if not record.enabled)
 
 
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1866,16 +1866,16 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     The stack is what *name* requires, each before what needs it, then
     *name* itself; the steps it declares off are turned on in the
     newborn's contract ([livery.workshop._e2e.steps_declared_off][]),
-    so each of its checks registers; the test extension
+    so each of its steps registers; the test extension
     ([livery.workshop._e2e.metering_extension][]) is listed before
     *name* unless *name* is it or requires it. The members are the
-    loop's of the kinds *name*'s checks declare, so each check has
+    loop's of the kinds *name*'s steps declare, so each step has
     something of its own to judge, and the loop's first member besides,
     which the test extension meters.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
-            the installed ones; when *name* registers no check; when its
+            the installed ones; when *name* registers no step; when its
             requirements form a cycle.
     """
     from livery.workshop._extensions import declaration, installed_extensions
@@ -1887,10 +1887,10 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             f"extension {name!r}: no installed distribution declares it;"
             f" the installed ones are {installed}"
         )
-    checks = found.additions.checks
-    if not checks:
+    steps = found.additions.steps
+    if not steps:
         fail(
-            f"extension {name!r} registers no check: a pass would have"
+            f"extension {name!r} registers no step: a pass would have"
             " nothing of its own to run"
         )
     stack: list[str] = []
@@ -1908,10 +1908,10 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     visit(name, ())
     from livery.workshop._kinds import kind_for
 
-    named = {extension for record in checks for extension in record.extensions}
-    # A member counts when its own kind stands for an extension a check
+    named = {extension for record in steps for extension in record.extensions}
+    # A member counts when its own kind stands for an extension a step
     # names, never through a parent kind: a pass carries the members its
-    # checks were written for, and no slower one besides.
+    # steps were written for, and no slower one besides.
     kinds = tuple(
         member_kind(seed)
         for _member, seed in LOOP_MEMBERS
@@ -3343,7 +3343,7 @@ if _WORKSHOP_TESTS.is_dir():
         needs run first, once. ``--extension`` tests one extension in
         isolation, ``extension`` the default set: the birth lists that
         extension and what it requires instead of the loop's stack, and
-        the members are those of the kinds its checks declare, the test
+        the members are those of the kinds its steps declare, the test
         extension and the loop's first member beside them so each gate
         meters a suite (#1225). ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a

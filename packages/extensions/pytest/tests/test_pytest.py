@@ -12,9 +12,9 @@ from typing import cast
 
 import pytest
 
-from livery.extensions.pytest import _checks
+from livery.extensions.pytest import _steps
 from livery.workshop import Package, PhaseContext, Query, answer
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 CONTRACT = (
     "[workspace]\n"
@@ -27,7 +27,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Pytest's checks registered, as the mount registers a listed extension's."""
+    """Pytest's steps registered, as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -45,16 +45,16 @@ def _member(root: Path, name: str, *, serial: bool = False) -> Package:
     directory = root / "packages" / name
     (directory / "tests").mkdir(parents=True)
     (directory / "docs" / "examples").mkdir(parents=True)
-    checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
+    options: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
     if serial:
-        checks = (("phases.test.pytest", (("parallel", False),)),)
+        options = (("phases.test.pytest", (("parallel", False),)),)
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
         kind="python",
         depends=(),
-        checks=checks,
+        step_options=options,
     )
 
 
@@ -71,14 +71,14 @@ Call = tuple[tuple[str, ...], dict[str, object]]
 
 
 def _watch(monkeypatch: pytest.MonkeyPatch) -> list[Call]:
-    """Each call the test check makes of the kind's suite runner."""
+    """Each call the test step makes of the kind's suite runner."""
     calls: list[Call] = []
 
     def run_suites(kind: str, *arguments: str, **options: object) -> None:
         assert kind == "python"
         calls.append((arguments, options))
 
-    monkeypatch.setattr(_checks, "run_suites", run_suites)
+    monkeypatch.setattr(_steps, "run_suites", run_suites)
     return calls
 
 
@@ -92,13 +92,13 @@ def _paths(call: Call) -> tuple[str, ...]:
 # nothing to collect starts no pytest.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = tmp_path / "ws"
     root.mkdir()
@@ -110,21 +110,21 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "test.pytest" not in checks_by_name()
-        assert "examples.pytest" not in checks_by_name()
+        assert "test.pytest" not in steps_by_name()
+        assert "examples.pytest" not in steps_by_name()
         assert "pytest" not in {tool for tool, _ in tools_for(("python",))}
         assert "pytest>=9.0" not in _dev_group(root)
         deliver(root)
         assert not (root / "pytest.toml").exists()
         assert not (root / ".coveragerc").exists()
-        # Listed, the mount registers both checks under the listed name,
+        # Listed, the mount registers both steps under the listed name,
         # the tool joins the profile, pytest rides the dev group, and the
         # sync writes both files.
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["pytest"]\n')
         with footman_registry.capture():
             assert mount_extensions(root) == ("pytest",)
-        assert checks_by_name()["test.pytest"].extension == "pytest"
-        assert checks_by_name()["examples.pytest"].extension == "pytest"
+        assert steps_by_name()["test.pytest"].extension == "pytest"
+        assert steps_by_name()["examples.pytest"].extension == "pytest"
         assert "pytest" in {tool for tool, _ in tools_for(("python",))}
         assert "pytest>=9.0" in _dev_group(root)
         deliver(root)
@@ -236,7 +236,7 @@ def test_a_failed_test_keeps_its_tmp_path_and_a_passed_test_s_goes_at_teardown(
     assert not (base / "test_green0").exists()
 
 
-def test_the_test_check_asks_for_the_coverage_that_installs_its_own_hook() -> None:
+def test_the_test_step_asks_for_the_coverage_that_installs_its_own_hook() -> None:
     from livery.workshop._declaration import DeclaredValue
     from livery.workshop._extensions import declaration
 
@@ -260,14 +260,14 @@ def test_with_no_suite_to_run_no_pytest_starts(
     registered: None,
 ) -> None:
     calls = _watch(monkeypatch)
-    registry.check_for("test.pytest").run(PhaseContext(root=tmp_path, packages=()))
+    registry.step_for("test.pytest").run(PhaseContext(root=tmp_path, packages=()))
     assert calls == []
     assert "test.pytest: no python package and no workspace tests" in (
         capsys.readouterr().out
     )
 
 
-# The test check: one call for the suites, the workspace's own tests
+# The test step: one call for the suites, the workspace's own tests
 # among them, and a call of its own for a suite that is not worker-safe.
 
 
@@ -278,7 +278,7 @@ def test_a_whole_run_runs_every_suite_in_one_call(
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     (tmp_path / "tests").mkdir()
     ctx = PhaseContext(root=tmp_path, packages=(one, two), point="nightly")
-    registry.check_for("test.pytest").run(ctx)
+    registry.step_for("test.pytest").run(ctx)
     assert len(calls) == 1
     arguments, options = calls[0]
     assert arguments == ()
@@ -293,18 +293,18 @@ def test_a_suite_that_is_not_worker_safe_runs_alone_under_one_worker(
     calls = _watch(monkeypatch)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two", serial=True)
     ctx = PhaseContext(root=tmp_path, packages=(one, two))
-    registry.check_for("test.pytest").run(ctx)
+    registry.step_for("test.pytest").run(ctx)
     # Each call collects its own packages, so neither runs the other's.
     assert [(_paths(call), call[0]) for call in calls] == [
         (("packages/one",), ()),
         (("packages/two",), ("-n", "0")),
     ]
-    # The words after -- on the check's own verb reach both calls, and
+    # The words after -- on the step's own verb reach both calls, and
     # the serial call's -n 0 comes after them, so they cannot undo it.
     calls.clear()
     words = ("-k", "name", "-n", "4")
     ctx = PhaseContext(root=tmp_path, packages=(one, two), arguments=words)
-    registry.check_for("test.pytest").run(ctx)
+    registry.step_for("test.pytest").run(ctx)
     assert [(_paths(call), call[0]) for call in calls] == [
         (("packages/one",), words),
         (("packages/two",), (*words, "-n", "0")),
@@ -324,7 +324,7 @@ def test_a_scoped_run_skips_a_suite_whose_examples_alone_changed(
         tests=tests,
         examples=("packages/two",),
     )
-    registry.check_for("test.pytest").run(ctx)
+    registry.step_for("test.pytest").run(ctx)
     assert [_paths(call) for call in calls] == [("packages/one",)]
     assert calls[0][1]["selection"] == tests
 
@@ -346,11 +346,11 @@ def test_a_run_over_named_files_runs_the_suites_holding_one_it_claims(
         files=named,
         catalogue=catalogue,
     )
-    registry.check_for("test.pytest").run(ctx)
+    registry.step_for("test.pytest").run(ctx)
     assert [_paths(call) for call in calls] == [("packages/one",)]
 
 
-# The examples check: each member's examples, by its kind's runner.
+# The examples step: each member's examples, by its kind's runner.
 
 
 def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
@@ -369,10 +369,10 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
         ran.append((package.path, files))
         handed.append(arguments)
 
-    monkeypatch.setattr(_checks, "kind_examples", lambda kind: runner)
+    monkeypatch.setattr(_steps, "kind_examples", lambda kind: runner)
     one = _member(tmp_path, "one")
-    record = registry.check_for("examples.pytest")
-    assert record.role == "examples" and record.extensions == ("python",)
+    record = registry.step_for("examples.pytest")
+    assert record.phase == "examples" and record.extensions == ("python",)
     assert [claim.category for claim in record.claims] == ["example"]
     record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert ran == [("packages/one", ())]
@@ -399,11 +399,11 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     )
     record.run(ctx)
     assert ran == [("packages/one", (str(tmp_path / example),))]
-    # The words after -- on the check's own verb reach the runner.
+    # The words after -- on the step's own verb reach the runner.
     assert set(handed) == {()}
     record.run(PhaseContext(root=tmp_path, packages=(one,), arguments=("-x",)))
     assert handed[-1] == ("-x",)
-    monkeypatch.setattr(_checks, "kind_examples", lambda kind: None)
+    monkeypatch.setattr(_steps, "kind_examples", lambda kind: None)
 
     record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert "examples: packages/one skips (python kind runs none)" in (

@@ -4,7 +4,7 @@
 -->
 # livery-extensions-ruff
 
-Ruff as a check of the workshop: `format.ruff` formats the python files a
+Ruff as steps of the workshop: `format.ruff` formats the python files a
 run reaches and `lint.ruff` lints them. A workspace turns them on by
 listing the extension:
 
@@ -25,9 +25,9 @@ judged for its names alone, and a test needs no docstrings.
 ## The configuration
 
 `fm sync` writes the root `ruff.toml`, and a bare `ruff` in the repository
-reads the same file the checks do. It sets the line length, the python
+reads the same file the steps do. It sets the line length, the python
 version the workspace supports, the rules, and the per-file ignores the
-checks' claims render. Ruff's cache is `.workshop/.cache/ruff/`.
+steps' claims render. Ruff's cache is `.workshop/.cache/ruff/`.
 
 The file is the extension's: an edit outside its region is drift, which
 `fm check --fix` puts back. The repository's own settings go inside the

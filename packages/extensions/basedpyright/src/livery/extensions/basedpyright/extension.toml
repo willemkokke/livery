@@ -35,7 +35,7 @@ value = ["detachhead.basedpyright"]
 # Off unless the workspace turns it on in its root contract:
 # [phases.typecomplete.basedpyright] enabled = true.
 [phases.typecomplete.basedpyright]
-main = "livery.extensions.basedpyright._checks:judge_typecomplete"
+main = "livery.extensions.basedpyright._steps:judge_typecomplete"
 enabled = false
 extensions = ["python"]
 tools = ["basedpyright"]

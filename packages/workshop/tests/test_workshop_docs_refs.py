@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.docs._checks import names_removed
 from livery.extensions.docs._refs import (
     defined_names,
     docstring_references,
     reference_problems,
 )
+from livery.extensions.docs._steps import names_removed
 from livery.workshop._influence import Changes
 
 IMPL = '''"""The widget's home."""

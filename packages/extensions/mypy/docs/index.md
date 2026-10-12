@@ -4,7 +4,7 @@
 -->
 # livery-extensions-mypy
 
-mypy as a check of the workshop: `typecheck.mypy` type-checks the python
+mypy as a step of the workshop: `typecheck.mypy` type-checks the python
 files a run reaches on linux, darwin and win32, since mypy has no
 all-platforms mode. A workspace turns it on by listing the extension:
 
@@ -30,7 +30,7 @@ return annotation on every function.
 ## The configuration
 
 `fm sync` writes the root `mypy.ini`, and a bare `mypy` in the repository
-reads the same file the check does: it checks linux and shares the check's
+reads the same file the step does: it checks linux and shares the step's
 linux cache. The file names each python member's `src` and `tests` in
 `files` and in `mypy_path`: in a namespace package without an
 `__init__.py`, mypy derives a module's name from the `mypy_path` entries.

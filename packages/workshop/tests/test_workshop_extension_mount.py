@@ -7,23 +7,23 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _checks, _extensions
-from livery.workshop._checks import (
-    CheckRecord,
-    register_check,
-    unregister_check,
-)
+from livery.workshop import _extensions, _steps
 from livery.workshop._phases import PhaseContext
+from livery.workshop._steps import (
+    StepRecord,
+    register_step,
+    unregister_step,
+)
 from workshop_extension_fakes import fake_extensions, root_contract
 
 _FAILURES = (BaseException,)
 
 
 @pytest.fixture
-def restored_checks():
-    state = _checks.snapshot()
+def restored_steps():
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 def _noop(ctx: PhaseContext) -> None:
@@ -160,26 +160,26 @@ def test_a_declaration_without_an_api_version_is_taken_at_the_current_version() 
 
 
 def test_the_gate_names_what_a_extension_registered_and_withdrew(
-    restored_checks,
+    restored_steps,
 ) -> None:
     # An extension mounted earlier in this process (the docs extension's
-    # checks) is already named; the lines below are this test's own.
-    before = set(_checks.narrowings())
+    # steps) is already named; the lines below are this test's own.
+    before = set(_steps.narrowings())
 
     def added() -> set[str]:
-        return set(_checks.narrowings()) - before
+        return set(_steps.narrowings()) - before
 
-    register_check(CheckRecord("brand", "lint", _noop, extension="acme.brand"))
-    unregister_check("test.ctest", by="acme.brand")
+    register_step(StepRecord("brand", "lint", _noop, extension="acme.brand"))
+    unregister_step("test.ctest", by="acme.brand")
     assert added() == {
         "  lint.brand: registered by acme.brand",
         "  test.ctest: withdrawn by acme.brand",
     }
-    # An extension withdrawing its own check narrows nothing the base owned.
-    unregister_check("lint.brand", by="acme.brand")
+    # An extension withdrawing its own step narrows nothing the base owned.
+    unregister_step("lint.brand", by="acme.brand")
     assert added() == {"  test.ctest: withdrawn by acme.brand"}
     # Registering the name again clears the withdrawal.
-    register_check(CheckRecord("ctest", "test", _noop))
+    register_step(StepRecord("ctest", "test", _noop))
     assert added() == set()
 
 
@@ -210,7 +210,7 @@ def test_a_footman_plugin_is_not_offered_as_an_extension() -> None:
 
 
 def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     # Listed and installed by nothing: the mount names it, skips it, and
     # remembers it; nothing is declared since, so nothing is new.
@@ -283,10 +283,10 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
 
 _DECLARED_OFF = """\
 [phases.lint.acme]
-main = "{package}._checks:noop"
+main = "{package}._steps:noop"
 
 [phases.typecomplete.acme]
-main = "{package}._checks:noop"
+main = "{package}._steps:noop"
 enabled = false
 """
 
@@ -317,7 +317,7 @@ def test_an_extension_entry_with_brackets_refuses_naming_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    restored_checks: None,
+    restored_steps: None,
 ) -> None:
     fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
     root_contract(tmp_path, '["acme.tool[typecomplete.acme]"]')
@@ -344,13 +344,13 @@ def test_an_extension_entry_with_brackets_refuses_naming_enabled(
         "[workspace] extensions lists 'acme.tool[deep]'; an entry is a name alone"
         in capsys.readouterr().err
     )
-    names = _checks.checks_by_name()
+    names = _steps.steps_by_name()
     assert "lint.acme" in names
     assert "typecomplete.acme" not in names
 
 
 def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     from livery.footman import _registry as registry
 
@@ -364,7 +364,7 @@ def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(
     ) in described
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
-    names = _checks.checks_by_name()
+    names = _steps.steps_by_name()
     assert "lint.acme" in names
     assert "typecomplete.acme" not in names
     # Turned on at the step's address, it registers under the listed name.
@@ -381,7 +381,7 @@ def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(
     ) in described
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
-    assert _checks.checks_by_name()["typecomplete.acme"].extension == "acme.tool"
+    assert _steps.steps_by_name()["typecomplete.acme"].extension == "acme.tool"
     # A table turning on a step no listed extension declares off, or one
     # that is on already, refuses naming the steps declared off; a
     # table that turns nothing on is no refusal.
@@ -405,7 +405,7 @@ _BRANDED = """\
 plugin = "{package}"
 
 [phases.lint.brand]
-main = "{package}._checks:noop"
+main = "{package}._steps:noop"
 
 [ci.jobs.gate.brand]
 entries = ["lint.brand"]
@@ -417,7 +417,7 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    restored_checks: None,
+    restored_steps: None,
 ) -> None:
     # A branded App mounts its own extension's plugin before the mount
     # runs: the mount leaves the plugin alone, and registers what the
@@ -430,7 +430,7 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     monkeypatch.setattr(_paths, "_builtin", ("acme.brand",))
     try:
         _mount(tmp_path)
-        assert _checks.checks_by_name()["lint.brand"].extension == "acme.brand"
+        assert _steps.steps_by_name()["lint.brand"].extension == "acme.brand"
         assert "brand" in verdict_needs("gate")
     finally:
         withdraw_job("gate", "brand")
@@ -515,7 +515,7 @@ def test_a_extension_declaring_contributions_off_the_shape_refuses_naming_it(
 #: A house's step for a python extension, registered while both are listed.
 _HOUSE = """\
 [for."acme.python".phases.lint.house]
-main = "{package}._checks:noop"
+main = "{package}._steps:noop"
 """
 
 
@@ -525,7 +525,7 @@ def _house(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _grafted() -> bool:
-    return "lint.house" in _checks.checks_by_name()
+    return "lint.house" in _steps.steps_by_name()
 
 
 def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
@@ -540,7 +540,7 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
         cpp="",
         needy=(
             '[extension]\nrequires = ["acme.python"]\n\n'
-            '[phases.lint.needy]\nmain = "{package}._checks:noop"\n'
+            '[phases.lint.needy]\nmain = "{package}._steps:noop"\n'
         ),
     )
     # The empty answers first: a target the workspace does not list, and
@@ -557,10 +557,10 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
     root_contract(tmp_path, '["acme.python", "acme.house", "acme.needy"]')
     assert contributions_for("acme.python", tmp_path) == {
         "acme.house": {
-            "phases": {"lint": {"house": {"main": "acme.house._checks:noop"}}}
+            "phases": {"lint": {"house": {"main": "acme.house._steps:noop"}}}
         },
         "acme.needy": {
-            "phases": {"lint": {"needy": {"main": "acme.needy._checks:noop"}}}
+            "phases": {"lint": {"needy": {"main": "acme.needy._steps:noop"}}}
         },
     }
 
@@ -573,9 +573,9 @@ def _mount(root: Path) -> None:
 
 
 def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_named(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
-    # The mount goes on without the target, and the layering check,
+    # The mount goes on without the target, and `layering.graph`,
     # which runs inside a working fm, names the entry.
     _house(tmp_path, monkeypatch)
     fake_extensions(tmp_path, monkeypatch, cpp="")
@@ -593,7 +593,7 @@ def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_
 
 
 def test_a_contribution_for_an_unlisted_target_never_mounts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     _house(tmp_path, monkeypatch)
     root_contract(tmp_path, '["acme.house"]')
@@ -604,7 +604,7 @@ def test_a_contribution_for_an_unlisted_target_never_mounts(
 
 
 def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     _house(tmp_path, monkeypatch)
     for listed in (
@@ -612,23 +612,23 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
         '["acme.house", "acme.python"]',
     ):
         if _grafted():
-            _checks.unregister_check("lint.house")
+            _steps.unregister_step("lint.house")
         root_contract(tmp_path, listed)
         _mount(tmp_path)
-        assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
+        assert _steps.steps_by_name()["lint.house"].extension == "acme.house"
         assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
 
 
 _HOUSE_OFF = """\
 [for."acme.python".phases.lint.house]
-main = "{package}._checks:noop"
+main = "{package}._steps:noop"
 enabled = false
 """
 
 
 def test_a_grafted_step_declared_off_registers_where_the_root_contract_enables_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     fake_extensions(tmp_path, monkeypatch, house=_HOUSE_OFF, python="")
     # The fallback first: listed without the table, the step stays off.
@@ -642,13 +642,13 @@ def test_a_grafted_step_declared_off_registers_where_the_root_contract_enables_i
         '["acme.house", "acme.python"]',
     ):
         if _grafted():
-            _checks.unregister_check("lint.house")
+            _steps.unregister_step("lint.house")
         (tmp_path / "workshop.toml").write_text(
             f"[workspace]\nextensions = {listed}\n\n"
             "[phases.lint.house]\nenabled = true\n"
         )
         _mount(tmp_path)
-        assert _checks.checks_by_name()["lint.house"].extension == "acme.house"
+        assert _steps.steps_by_name()["lint.house"].extension == "acme.house"
 
 
 def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(

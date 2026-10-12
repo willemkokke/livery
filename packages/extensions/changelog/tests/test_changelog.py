@@ -87,7 +87,7 @@ def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
 ) -> None:
     from livery.extensions.changelog import _cliff
     from livery.footman import _registry as footman_registry
-    from livery.workshop import _checks as registry
+    from livery.workshop import _steps as registry
     from livery.workshop import release_notes
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver, shipped_drift

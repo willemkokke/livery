@@ -1,4 +1,4 @@
-"""The gate's one walk: a check with no file to read in scope starts no process."""
+"""The gate's one walk: a step with no file to read in scope starts no process."""
 
 from __future__ import annotations
 
@@ -8,22 +8,22 @@ from pathlib import Path
 
 import pytest
 
-import workshop_python_checks as fake_checks
-from livery.workshop import _checks
-from livery.workshop._checks import (
-    PACKAGE,
-    ROOT_UNIT,
-    CheckRecord,
-    Claim,
-    catalogue,
-    reads_files,
-    register_check,
-    run_check,
-    with_files,
-)
+import workshop_python_steps as fake_steps
+from livery.workshop import _steps
 from livery.workshop._packages import discover_packages
 from livery.workshop._phases import PhaseContext
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from livery.workshop._steps import (
+    PACKAGE,
+    ROOT_UNIT,
+    Claim,
+    StepRecord,
+    catalogue,
+    reads_files,
+    register_step,
+    run_step,
+    with_files,
+)
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
 def _repository(tmp_path: Path) -> Path:
@@ -42,16 +42,16 @@ def _repository(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def registry() -> Iterator[None]:
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 
-def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
+def test_a_scope_holding_no_package_runs_no_step_that_narrows_by_packages(
     tmp_path: Path, registry: None
 ) -> None:
     # The refusal that matters most first: an empty scope read as the
@@ -60,9 +60,9 @@ def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
     from livery.workshop._influence import Changes, Inputs
 
     root = _repository(tmp_path)
-    register_check(CheckRecord("whole", "lint", _idle))
-    register_check(
-        CheckRecord("pages", "lint", _idle, inputs=Inputs(reads=("docs/**/*.md",)))
+    register_step(StepRecord("whole", "lint", _idle))
+    register_step(
+        StepRecord("pages", "lint", _idle, inputs=Inputs(reads=("docs/**/*.md",)))
     )
     ctx = PhaseContext(
         root=root,
@@ -70,19 +70,19 @@ def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
         subset=(),
         changes=Changes(root, ("docs/a.md",)),
     )
-    names = _checks.judges(ctx)
+    names = _steps.judges(ctx)
     assert "lint.whole" not in names
     assert "lint.pages" in names
     assert "lint.pages" in with_files(names, ctx)
 
 
-# The fallback first: without a listing, every check that applies runs.
+# The fallback first: without a listing, every step that applies runs.
 
 
-def test_without_a_git_listing_every_check_reads_files(tmp_path: Path) -> None:
+def test_without_a_git_listing_every_step_reads_files(tmp_path: Path) -> None:
     ctx = PhaseContext(root=tmp_path, packages=())
     assert catalogue(ctx) is None
-    record = CheckRecord(
+    record = StepRecord(
         "acme", "lint", _idle, claims=(Claim("source", suffixes=(".xyz",)),)
     )
     assert reads_files(record, ctx)
@@ -91,7 +91,7 @@ def test_without_a_git_listing_every_check_reads_files(tmp_path: Path) -> None:
 # Then the filter: the claims decide, per scope.
 
 
-def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
+def test_a_step_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
     tmp_path: Path, registry: None, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from dataclasses import replace
@@ -104,17 +104,17 @@ def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
     assert ("src/one/__init__.py", "source") in listed["packages/one"]
     assert ("tasks.py", "configuration") in listed[ROOT_UNIT]
     ctx = replace(ctx, catalogue=listed)
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-xyz", "lint", _idle, claims=(Claim("source", suffixes=(".xyz",)),)
         )
     )
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-py", "lint", _idle, claims=(Claim("source", suffixes=(".py",)),)
         )
     )
-    register_check(CheckRecord("acme-tree", "lint", _idle))
+    register_step(StepRecord("acme-tree", "lint", _idle))
     assert with_files(("lint.acme-xyz", "lint.acme-py", "lint.acme-tree"), ctx) == (
         "lint.acme-py",
         "lint.acme-tree",
@@ -124,22 +124,22 @@ def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
         in capsys.readouterr().out
     )
     # The root's own files count: tasks.py is configuration there.
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-conf",
             "lint",
             _idle,
             claims=(Claim("configuration", suffixes=(".py",)),),
         )
     )
-    assert reads_files(_checks.check_for("lint.acme-conf"), ctx)
+    assert reads_files(_steps.step_for("lint.acme-conf"), ctx)
     # A scoped run reads its subset and the root's files.
     scoped = replace(ctx, subset=packages)
     assert with_files(("lint.acme-xyz",), scoped) == ()
     assert "in the affected packages; not run" in capsys.readouterr().out
 
 
-def test_a_package_check_skips_a_package_with_none_of_its_files(
+def test_a_package_step_skips_a_package_with_none_of_its_files(
     tmp_path: Path, registry: None, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from dataclasses import replace
@@ -154,8 +154,8 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
         assert ctx.package is not None
         ran.append(ctx.package.path)
 
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-cpp",
             "format",
             body,
@@ -164,14 +164,14 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
             claims=(Claim("source", suffixes=(".cpp",)),),
         )
     )
-    run_check("format.acme-cpp", ctx)
+    run_step("format.acme-cpp", ctx)
     assert ran == []
     assert "format.acme-cpp: packages/one has no file it reads; not run" in (
         capsys.readouterr().out
     )
     (root / "packages" / "one" / "src" / "one" / "native.cpp").write_text("int x;\n")
     ctx = replace(ctx, catalogue=catalogue(ctx))
-    run_check("format.acme-cpp", ctx)
+    run_step("format.acme-cpp", ctx)
     assert ran == ["packages/one"]
 
 
@@ -198,10 +198,10 @@ def test_named_paths_become_the_files_they_name(tmp_path: Path) -> None:
     assert found == ("packages/one/tests/test_a.py", "tasks.py")
 
 
-def test_named_files_reach_only_the_checks_whose_claims_reach_them(
+def test_named_files_reach_only_the_steps_whose_claims_reach_them(
     tmp_path: Path,
     registry: None,
-    python_checks: object,
+    python_steps: object,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -221,10 +221,10 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
         return body
 
     for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
-        monkeypatch.setattr(fake_checks, name, spy(name))
+        monkeypatch.setattr(fake_steps, name, spy(name))
     monkeypatch.setattr("livery.workshop._packages.verify_graph", spy("graph"))
     monkeypatch.setattr("livery.workshop._packages.rule_problems", spy("rules"))
-    # A source file: the style and type checks take it, the layering
+    # A source file: the style and typecheck steps take it, the layering
     # steps over the sources judge it, and the package's whole suite
     # runs, since its tests measure that source. The graph is not made
     # of sources.
@@ -254,7 +254,7 @@ def test_named_files_reach_only_the_checks_whose_claims_reach_them(
 def test_the_fixers_only_walk_judges_nothing(
     tmp_path: Path,
     registry: None,
-    python_checks: object,
+    python_steps: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop import _quality
@@ -272,7 +272,7 @@ def test_the_fixers_only_walk_judges_nothing(
         return body
 
     for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
-        monkeypatch.setattr(fake_checks, name, spy(name))
+        monkeypatch.setattr(fake_steps, name, spy(name))
 
     def fix(ctx: PhaseContext) -> None:
         assert ctx.safe and ctx.files == ("tasks.py",)
@@ -282,8 +282,8 @@ def test_the_fixers_only_walk_judges_nothing(
         del ctx
         ran.append("acme-judged")
 
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-fix",
             "format",
             judge,
@@ -294,7 +294,7 @@ def test_the_fixers_only_walk_judges_nothing(
     )
     _quality.fix_files((str(root / "tasks.py"),))
     # Every fixer the file's claims reach ran, in its in-flight mode, and
-    # nothing judged: no type check, no test, not the extension's judge.
+    # nothing judged: no typecheck step, no test, not the extension's judge.
     assert "run_format:True" in ran and "run_lint:True" in ran
     assert "acme-fixed" in ran
     assert "acme-judged" not in ran

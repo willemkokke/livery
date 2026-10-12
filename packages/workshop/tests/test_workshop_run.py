@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
-from livery.workshop import _checks, _extensions, _run
-from livery.workshop._checks import CheckRecord, register_check
+from livery.workshop import _extensions, _run, _steps
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext
 from livery.workshop._run import RECORD, start
+from livery.workshop._steps import StepRecord, register_step
 from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: The fixture's package-level extension: two executables, and a run main
@@ -42,7 +42,7 @@ def main(ctx):
 """
 
 
-#: What the build checks here judge: the library holds python through its
+#: What the build steps here judge: the library holds python through its
 #: kind, and the app lists the fixture extension.
 BOTH = ("python", "acme.native")
 
@@ -80,23 +80,23 @@ def _workspace(
 
 @pytest.fixture
 def built() -> Iterator[list[str]]:
-    """A counting build check over the fixture's packages: the paths it built.
+    """A counting build step over the fixture's packages: the paths it built.
 
     The library lists nothing, so it holds python through its kind; the
     app lists the fixture extension alone.
     """
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     calls: list[str] = []
 
     def count(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         calls.append(ctx.package.path)
 
-    register_check(
-        CheckRecord("acme", "build", count, scope=_checks.PACKAGE, extensions=BOTH)
+    register_step(
+        StepRecord("acme", "build", count, scope=_steps.PACKAGE, extensions=BOTH)
     )
     yield calls
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 # The refusals first.
@@ -185,21 +185,21 @@ def test_a_failed_build_records_nothing_and_the_next_run_builds_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: list[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    real = _checks.checks_by_name()["build.acme"].run
+    real = _steps.steps_by_name()["build.acme"].run
 
     def refuse(ctx: PhaseContext) -> None:
         real(ctx)
         raise Failed("the library does not compile")
 
-    register_check(
-        CheckRecord("acme", "build", refuse, scope=_checks.PACKAGE, extensions=BOTH)
+    register_step(
+        StepRecord("acme", "build", refuse, scope=_steps.PACKAGE, extensions=BOTH)
     )
     with pytest.raises(Failed):
         start(root, "app:serve", (), root)
     assert built == ["packages/lib"]
     assert not (root / RECORD).exists()
-    register_check(
-        CheckRecord("acme", "build", real, scope=_checks.PACKAGE, extensions=BOTH)
+    register_step(
+        StepRecord("acme", "build", real, scope=_steps.PACKAGE, extensions=BOTH)
     )
     assert start(root, "app:serve", (), root) == 3
     assert built == ["packages/lib", "packages/lib", "packages/app"]
@@ -255,7 +255,7 @@ def test_fm_run_builds_the_closure_dependencies_first_then_starts_the_executable
     assert start(root, "app:serve", ("--port", "8"), root) == 3
     assert built == ["packages/lib", "packages/app"]
     assert "started serve ['--port', '8']\n" in capsys.readouterr().out
-    # Nothing changed: it starts at once and no build check runs.
+    # Nothing changed: it starts at once and no build step runs.
     built.clear()
     assert start(root, "app:serve", (), root) == 3
     assert built == []
@@ -279,19 +279,19 @@ def test_the_build_runs_before_the_owners_run_step_which_the_verb_exits_with(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    state = _checks.snapshot()
+    state = _steps.snapshot()
 
     def say(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         print(f"built {ctx.package.path}")
 
     try:
-        register_check(
-            CheckRecord("acme", "build", say, scope=_checks.PACKAGE, extensions=BOTH)
+        register_step(
+            StepRecord("acme", "build", say, scope=_steps.PACKAGE, extensions=BOTH)
         )
         assert start(root, "app:serve", (), root) == 3
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
     out = capsys.readouterr().out
     assert (
         out.index("built packages/lib\n")
@@ -300,16 +300,16 @@ def test_the_build_runs_before_the_owners_run_step_which_the_verb_exits_with(
     )
 
 
-def test_a_member_no_build_check_judges_is_never_built(
+def test_a_member_no_build_step_judges_is_never_built(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: list[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme",
             "build",
             lambda ctx: None,
-            scope=_checks.PACKAGE,
+            scope=_steps.PACKAGE,
             extensions=("cmake",),
         )
     )

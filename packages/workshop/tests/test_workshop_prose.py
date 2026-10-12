@@ -8,8 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import livery.workshop
-from livery.workshop import _checks, _prose, _tools
-from livery.workshop._checks import CheckRecord, register_check
+from livery.workshop import _prose, _steps, _tools
 from livery.workshop._phases import PhaseContext
 from livery.workshop._prose import (
     AGENT,
@@ -29,7 +28,8 @@ from livery.workshop._prose import (
     unregister_fragment,
     unregister_section,
 )
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from livery.workshop._steps import StepRecord, register_step
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
 
@@ -37,10 +37,10 @@ WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
 @pytest.fixture
 def restored():
     prose = _prose.snapshot()
-    checks = _checks.snapshot()
+    steps = _steps.snapshot()
     yield
     _prose.restore(prose)
-    _checks.restore(checks)
+    _steps.restore(steps)
 
 
 def _workspace(tmp_path: Path, *extensions: str) -> Path:
@@ -372,16 +372,16 @@ def test_guidance_is_one_readers_set_of_every_fragment_in_play(
     assert human == fragments(root, _prose.in_play(root), HUMAN)
 
 
-def test_the_gate_fragment_renders_the_checks_for_the_extensions_held_and_the_reader(
-    tmp_path: Path, restored, python_checks: object
+def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_reader(
+    tmp_path: Path, restored, python_steps: object
 ) -> None:
     root = _workspace(tmp_path)
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-native", "lint", _noop, extensions=("cpp",), extension="acme.test"
         )
     )
-    # Without a package only the workspace's own checks are in the gate:
+    # Without a package only the workspace's own steps are in the gate:
     # neither the test extension's nor the python formatter, which judges
     # no package present.
     agent = render_gate(root, AGENT)
@@ -454,9 +454,9 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     agent = render_kinds(root, AGENT)
     assert (
         "- cpp-conan (packages/cpp): derives from nothing;"
-        " gate roles build, test" in agent
+        " gate phases build, test" in agent
     )
-    assert "- python-nanobind (packages/nb): derives from python; gate roles" in agent
+    assert "- python-nanobind (packages/nb): derives from python; gate phases" in agent
     assert "| python-nanobind | python | packages/nb |" in render_kinds(root, HUMAN)
     assert render_tools(root, AGENT) == ""
     lock = SimpleNamespace(
@@ -472,13 +472,13 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
         _tools,
         "requirements",
         lambda root: (
-            SimpleNamespace(name="ruff", site="check format"),
-            SimpleNamespace(name="ruff", site="check lint"),
+            SimpleNamespace(name="ruff", site="step format"),
+            SimpleNamespace(name="ruff", site="step lint"),
         ),
     )
     agent = render_tools(root, AGENT)
     assert "pinned by `toolroom.lock` for macos-arm, linux-x64, windows-x64" in agent
-    assert "- ruff 0.6.0: check format, check lint\n- uv 0.4.0\n" in agent
+    assert "- ruff 0.6.0: step format, step lint\n- uv 0.4.0\n" in agent
     # A tool locked for some hosts alone says so.
     assert "- dotnet_coverage 18.11.2 (windows-x64 only)\n" in agent
     assert render_tools(root, HUMAN) != agent

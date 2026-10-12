@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from livery.workshop._kinds import Extractor
     from livery.workshop._registries import RegistryTarget
 
-#: The python suffixes a python check's claims admit; a foreign file
+#: The python suffixes a python step's claims admit; a foreign file
 #: an explicit path names passes through untouched.
 PY_SUFFIXES = (".py", ".pyi")
 
@@ -1405,7 +1405,7 @@ def runner_shaped(env: Mapping[str, str]) -> dict[str, str]:
     return {**env, **dict.fromkeys(RUNNER_VARIABLES, "true")}
 
 
-#: coverage.py's own configuration file, which the test check's
+#: coverage.py's own configuration file, which the test step's
 #: extension writes at the root: the meter armed in every process the
 #: tests start reads it, and the coverage CLI finds it first.
 COVERAGE_CONFIG = ".coveragerc"
@@ -1649,7 +1649,7 @@ def _extra_distributions(package: Package) -> frozenset[str]:
 def _references_in(source: Path) -> list[str]:
     """The dotted names *source* imports, guarded ones left out.
 
-    Read through the layering check's one parse, so a file another
+    Read through the layering phase's one parse, so a file another
     rule also reads is parsed once per gate; a file that does not
     parse contributes nothing, since the syntax gate names it.
     """

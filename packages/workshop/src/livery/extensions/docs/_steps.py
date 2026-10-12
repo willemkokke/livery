@@ -1,4 +1,4 @@
-"""The docs extension's checks: links resolve, and every export has a docstring.
+"""The docs extension's steps: links resolve, and every export has a docstring.
 
 `lint.doclinks` reads the authored markdown of the workspace's `docs/`
 and of every member's `docs/`, and refuses a link to a file that does
@@ -215,7 +215,7 @@ def undocumented_exports(root: Path, members: list[Path]) -> list[str]:
 def headings_removed(changes: Changes) -> bool:
     """Whether a changed markdown file lost a heading, an anchor a link may name.
 
-    A link in an unchanged page may point at it, so the link check
+    A link in an unchanged page may point at it, so ``lint.doclinks``
     then judges every page.
     """
     for path in changes.paths:
@@ -236,8 +236,8 @@ def headings_removed(changes: Changes) -> bool:
 def names_removed(changes: Changes) -> bool:
     """Whether a changed python source lost a name a cross-reference may point at.
 
-    A reference in an unchanged docstring may name it, so the
-    reference check then reads every source.
+    A reference in an unchanged docstring may name it, so
+    ``lint.docrefs`` then reads every source.
     """
     from livery.extensions.docs._refs import defined_names
 

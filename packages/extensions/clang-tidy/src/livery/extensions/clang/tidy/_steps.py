@@ -1,4 +1,4 @@
-"""clang-tidy's check: each cpp package's sources, over its compilation database.
+"""clang-tidy's step: each cpp package's sources, over its compilation database.
 
 The extension's ``extension.toml`` declares it and names the body here.
 ``lint.clang-tidy`` judges one package at a time, after the package's
@@ -7,7 +7,7 @@ files a run names ([livery.workshop.scoped_files][]), against the
 compilation database the package's build writes
 ([livery.workshop.compile_commands][]); a package whose build writes
 none skips, saying so. The checks are the
-package's own ``.clang-tidy``, which the extension writes. The check
+package's own ``.clang-tidy``, which the extension writes. The step
 hands clang-tidy the words after ``--`` on its own verb
 (``fm lint.clang-tidy -- --checks=-*,bugprone-*``). A body resolves its
 runner on this module when it runs, so a test that replaces `run_lint`

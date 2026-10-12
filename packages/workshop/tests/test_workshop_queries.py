@@ -337,8 +337,8 @@ def test_a_question_asked_at_the_other_level_refuses(tmp_path: Path) -> None:
             " answers by 'union', 'nearest', 'agreed', or a function 'module:name'",
         ),
         (
-            DECLARES_STYLE + 'combine = "{package}._checks:gone"\n',
-            'queries."acme.style".combine names gone, which acme.site._checks does'
+            DECLARES_STYLE + 'combine = "{package}._steps:gone"\n',
+            'queries."acme.style".combine names gone, which acme.site._steps does'
             " not define at its top level",
         ),
         (
@@ -563,7 +563,7 @@ def test_a_set_whose_order_has_no_start_is_asked_alphabetically(
             "def mods(package):\n    return ('a.api',)\n",
         ),
     )
-    # The layering check names the cycle; the answer is still asked.
+    # `layering.graph` names the cycle; the answer is still asked.
     assert answer(package, PUBLIC_MODULES) == ("a.api", "b.api")
 
 

@@ -1,4 +1,4 @@
-"""How a check's paths reach its tool: the refusals first, then the engine's counts."""
+"""How a step's paths reach its tool: the refusals first, then the engine's counts."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed, fail
-from livery.workshop._checks import run_check
 from livery.workshop._invoke import batches, run_batched
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from livery.workshop._steps import run_step
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -49,7 +49,7 @@ def _members(root: Path, count: int) -> tuple[Package, ...]:
         directory = root / "packages" / f"m{index:03d}"
         (directory / "src").mkdir(parents=True)
         (directory / "tests").mkdir()
-        # A file in each: a check never names a directory with none to judge.
+        # A file in each: a step never names a directory with none to judge.
         (directory / "src" / "module.py").write_text("")
         (directory / "tests" / "test_module.py").write_text("")
         packages.append(
@@ -64,34 +64,32 @@ def _members(root: Path, count: int) -> tuple[Package, ...]:
     return tuple(packages)
 
 
-def test_a_workspace_check_runs_once_for_two_hundred_packages(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+def test_a_workspace_step_runs_once_for_two_hundred_packages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
-    import workshop_python_checks as fake_checks
+    import workshop_python_steps as fake_steps
 
     monkeypatch.chdir(tmp_path)
     packages = _members(tmp_path, 200)
     calls: list[tuple[str, ...]] = []
     monkeypatch.setattr(
-        fake_checks,
+        fake_steps,
         "run_lint",
         lambda fix=False, safe_fix=False, paths=(): calls.append(paths),
     )
     # A scoped gate over three quarters of the members: one call carries
     # every affected member's directories.
     subset = packages[:150]
-    run_check(
-        "lint.fake", PhaseContext(root=tmp_path, packages=packages, subset=subset)
-    )
+    run_step("lint.fake", PhaseContext(root=tmp_path, packages=packages, subset=subset))
     assert len(calls) == 1
     assert len(calls[0]) == 300
     # Every member affected: the configured whole, still one call, as
     # an unscoped run has it.
     calls.clear()
-    run_check(
+    run_step(
         "lint.fake", PhaseContext(root=tmp_path, packages=packages, subset=packages)
     )
     assert calls == [(".",)]
     calls.clear()
-    run_check("lint.fake", PhaseContext(root=tmp_path, packages=packages))
+    run_step("lint.fake", PhaseContext(root=tmp_path, packages=packages))
     assert calls == [(".",)]

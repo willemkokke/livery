@@ -1,4 +1,4 @@
-"""Each workspace check runs when the files it reads change, on those files."""
+"""Each workspace step runs when the files it reads change, on those files."""
 
 from __future__ import annotations
 
@@ -23,26 +23,26 @@ def _changes(root: Path, *paths: str) -> Changes:
     return Changes(root, paths)
 
 
-# What widens a check to every file comes first: a wrong answer there
-# lets a change slip past the check that should have read it.
+# What widens a step to every file comes first: a wrong answer there
+# lets a change slip past the step that should have read it.
 
 
 def test_a_run_that_knows_nothing_of_the_change_judges_everything() -> None:
     assert select(PAGES, None) == WHOLE
 
 
-def test_a_change_to_the_checks_own_code_judges_everything(tmp_path: Path) -> None:
+def test_a_change_to_the_steps_own_code_judges_everything(tmp_path: Path) -> None:
     changes = _changes(tmp_path, "packages/workshop/src/livery/workshop/_x.py")
     assert select(PAGES, changes, provider="packages/workshop") == WHOLE
-    # The member's tests are not the check's code.
+    # The member's tests are not the step's code.
     tests = _changes(tmp_path, "packages/workshop/tests/test_x.py")
     assert not select(PAGES, tests, provider="packages/workshop").runs
 
 
-def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
+def test_a_steps_own_code_is_found_through_the_name_it_is_listed_by(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A declared check registers under its extension's listed name, which
+    # A declared step registers under its extension's listed name, which
     # is no module: "docs" finds the root's docs directory and "pytest" the
     # index's pytest. The member that ships it is found through the
     # package its entry point names, so a change to its sources still
@@ -50,9 +50,9 @@ def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
     from importlib.metadata import EntryPoint
 
     from livery.workshop import _extensions
-    from livery.workshop._checks import CheckRecord, selected
     from livery.workshop._packages import discover_packages
     from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import StepRecord, selected
 
     member = tmp_path / "packages" / "site"
     (member / "src" / "acme_site").mkdir(parents=True)
@@ -66,7 +66,7 @@ def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
     packages = discover_packages(tmp_path)
     assert _extensions.extension_provider("site", packages) == "packages/site"
     assert _extensions.extension_provider("absent", packages) == ""
-    record = CheckRecord(
+    record = StepRecord(
         "site", "lint", lambda ctx: None, inputs=PAGES, extension="site"
     )
     changes = _changes(tmp_path, "packages/site/src/acme_site/rule.py")
@@ -74,11 +74,11 @@ def test_a_checks_own_code_is_found_through_the_name_it_is_listed_by(
     assert selected(record, ctx) == WHOLE
 
 
-def test_an_installed_check_reads_everything_when_the_lock_moves(
+def test_an_installed_step_reads_everything_when_the_lock_moves(
     tmp_path: Path,
 ) -> None:
     assert select(PAGES, _changes(tmp_path, "uv.lock")) == WHOLE
-    # A member's check moves with its sources, not with the lock.
+    # A member's step moves with its sources, not with the lock.
     assert not select(PAGES, _changes(tmp_path, "uv.lock"), provider="p").runs
 
 
@@ -87,13 +87,13 @@ def test_a_widening_input_judges_everything(tmp_path: Path) -> None:
     assert select(inputs, _changes(tmp_path, "workshop.toml")) == WHOLE
 
 
-def test_a_removed_file_widens_a_check_that_asks(tmp_path: Path) -> None:
+def test_a_removed_file_widens_a_step_that_asks(tmp_path: Path) -> None:
     removed = Changes(tmp_path, ("gone/elsewhere.txt",))
     assert select(Inputs(reads=PAGES.reads, on_removal=True), removed) == WHOLE
     assert not select(PAGES, removed).runs
 
 
-def test_the_checks_own_reason_widens_it(tmp_path: Path) -> None:
+def test_the_steps_own_reason_widens_it(tmp_path: Path) -> None:
     inputs = Inputs(reads=PAGES.reads, widen=lambda changes: True)
     assert select(inputs, _changes(tmp_path, "notes/a.md")) == WHOLE
 
@@ -104,7 +104,7 @@ def test_an_ignored_file_never_counts(tmp_path: Path) -> None:
     assert select(inputs, _changes(tmp_path, "pkg/pyproject.toml")) == WHOLE
 
 
-def test_the_changed_files_a_check_reads_are_judged_alone(tmp_path: Path) -> None:
+def test_the_changed_files_a_step_reads_are_judged_alone(tmp_path: Path) -> None:
     changes = _changes(tmp_path, "docs/a.md", "notes/b.md", "docs/c.txt")
     assert select(PAGES, changes) == Selection(whole=False, files=("docs/a.md",))
     whole = Inputs(reads=PAGES.reads, per_file=False)
@@ -112,7 +112,7 @@ def test_the_changed_files_a_check_reads_are_judged_alone(tmp_path: Path) -> Non
     assert not select(PAGES, _changes(tmp_path, "notes/b.md")).runs
 
 
-# --- the root files no package's checks read ----------------------------------
+# --- the root files no package's steps read ----------------------------------
 
 
 @pytest.mark.parametrize(
@@ -143,11 +143,11 @@ def test_a_root_file_every_gate_reads_still_reaches_them(path: str) -> None:
     assert not reaches_no_package(path)
 
 
-# --- each check judges what it was handed -------------------------------------
+# --- each step judges what it was handed -------------------------------------
 
 
 def test_a_removed_heading_has_every_page_judged(tmp_path: Path) -> None:
-    from livery.extensions.docs._checks import headings_removed
+    from livery.extensions.docs._steps import headings_removed
 
     root = tmp_path / "ws"
     root.mkdir()
@@ -180,8 +180,8 @@ def test_a_removed_heading_has_every_page_judged(tmp_path: Path) -> None:
     assert headings_removed(Changes(root, ("docs/guide.md",), head))
 
 
-def test_the_link_check_judges_the_pages_it_was_handed(tmp_path: Path) -> None:
-    from livery.extensions.docs._checks import link_problems
+def test_the_link_step_judges_the_pages_it_was_handed(tmp_path: Path) -> None:
+    from livery.extensions.docs._steps import link_problems
 
     docs = tmp_path / "docs"
     docs.mkdir()

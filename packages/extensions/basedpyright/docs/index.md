@@ -4,7 +4,7 @@
 -->
 # livery-extensions-basedpyright
 
-basedpyright as a check of the workshop: `typecheck.basedpyright`
+basedpyright as a step of the workshop: `typecheck.basedpyright`
 type-checks the python files a run reaches, its warnings gating as errors.
 A workspace turns it on by listing the extension:
 
@@ -39,7 +39,7 @@ its public packages too (imported under `TYPE_CHECKING` and listed in
 and verifies nothing. The verifier reads the `py.typed` at the
 distribution's root.
 
-A package turns either check off in its own contract:
+A package turns either step off in its own contract:
 
 ```toml
 [phases.typecomplete.basedpyright]
@@ -50,7 +50,7 @@ enabled = false
 
 `fm sync` writes the root `pyrightconfig.json`, and a bare `basedpyright`
 in the repository, and the editor's language server, read the same file
-the check does. It names what the whole includes and excludes, the
+the step does. It names what the whole includes and excludes, the
 environment in `.venv`, the stubs in `typings/`, the python version the
 workspace supports, and the checking mode.
 

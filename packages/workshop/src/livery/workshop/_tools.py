@@ -2,7 +2,7 @@
 
 A tool requirement is a name with a floor, `git` or `git>=2.40`, and
 four sites declare them: a package kind, in its record, for the tools
-its checks run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
+its steps run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
 module, for what its own verbs need; a package instance, in its
 `workshop.toml` under `[toolroom] requires`, for what its kind cannot
 know; and the project, in the root contract's `[toolroom] requires`,
@@ -83,8 +83,8 @@ DEFAULT_HOSTS: tuple[str, ...] = ()
 """The hosts supported when `[workspace] hosts` is absent; empty for
 every host key, which the store names and which is read only then."""
 
-VERDICT_ROLES = ("format", "lint", "typecheck", "typecomplete", "test")
-"""The check roles whose tools take no host allowance: the version is the verdict."""
+VERDICT_PHASES = ("format", "lint", "typecheck", "typecomplete", "test")
+"""The phases whose tools take no host allowance: the version is the verdict."""
 
 PINNED_TOOLS = ("uv",)
 """The tools no allowance reaches by name: the entry pins uv."""
@@ -93,7 +93,7 @@ ROOT_KIND = "python"
 """The kind of the workspace's own files, whatever its members are.
 
 `tasks.py` and the root's tests run on the base's runtime, and the
-checks of that kind judge them, so the tools those checks run are
+steps of that kind judge them, so the tools those steps run are
 required with no member of the kind present.
 """
 
@@ -128,8 +128,8 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
 
     A workspace requires what `ROOT_KIND` does with or without a
     member of it: its own `tasks.py` and tests run on it, and the
-    checks of that kind judge them. A kind's checks bring the tools
-    they run, each requirement naming `check <name>` as its site. An
+    steps of that kind judge them. A kind's steps bring the tools
+    they run, each requirement naming `step <name>` as its site. An
     extension's site is `extension <name>`, read from its
     ``extension.toml``'s ``[toolroom] requires``; an unlisted extension declares nothing
     here, since listing is the only activation channel. A plugin the
@@ -147,12 +147,12 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         for record in kind_chain(kind_name):
             for text in record.tools:
                 found.append(Requirement.parse(text, site=f"kind {record.name}"))
-    # The checks that judge a present package bring their tools, each
-    # naming its check: unregistering a check removes its tool.
-    from livery.workshop._checks import tools_for
+    # The steps that judge a present package bring their tools, each
+    # naming its step: unregistering a step removes its tool.
+    from livery.workshop._steps import tools_for
 
-    for tool, check in tools_for(_held(packages)):
-        found.append(Requirement.parse(tool, site=f"check {check}"))
+    for tool, step in tools_for(_held(packages)):
+        found.append(Requirement.parse(tool, site=f"step {step}"))
     try:
         declared_by_extension = extension_tools(root)
     except RuntimeError as error:
@@ -241,8 +241,8 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     requires yet is kept and named by the lock as an allowance ahead
     of its requirement: a workspace may allow `cmake` before its first
     C++ package arrives, and the lock's line is where a misspelling
-    shows. A tool a check reads its verdict
-    from refuses, naming the checks that read it: a linter that varies
+    shows. A tool a step reads its verdict
+    from refuses, naming the steps that read it: a linter that varies
     by machine makes the gate disagree with CI. `uv` refuses by name,
     since the entry pins it. A tool an extension that writes release
     notes requires refuses, naming the extension: a release's entries
@@ -251,9 +251,9 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     allowance finds the tool on PATH by its name.
     """
     from livery.toolroom.store import LockError, Requirement
-    from livery.workshop._checks import check_for, tools_for
     from livery.workshop._extensions import notes_tools
     from livery.workshop._kinds import kind_host_allowed
+    from livery.workshop._steps import step_for, tools_for
 
     declared = cast(
         "list[str]", tools_table(root / "workshop.toml").get("host-allowed", [])
@@ -264,9 +264,9 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     if not names:
         return ()
     verdicts: dict[str, set[str]] = {}
-    for tool, check in tools_for(_held(packages)):
-        if check_for(check).role in VERDICT_ROLES:
-            verdicts.setdefault(tool, set()).add(check)
+    for tool, step in tools_for(_held(packages)):
+        if step_for(step).phase in VERDICT_PHASES:
+            verdicts.setdefault(tool, set()).add(step)
     writers: dict[str, str] = {}
     for extension, requires in notes_tools(root).items():
         for line in requires:

@@ -75,11 +75,11 @@ NOTES = "notes/"
 SITE_CONFIG = "zensical.toml"
 SITE_DOCS = "docs/"
 
-#: Files at the root that configure no package's checks: the licence,
+#: Files at the root that configure no package's steps: the licence,
 #: the CI files and the code-owners file the forge reads, the editor's
 #: and the agent's settings, git's own files, the entry script, the
 #: release's member list, the site's theme and the render's receipt.
-#: A workspace check that reads one still judges it.
+#: A workspace step that reads one still judges it.
 NO_PACKAGE = (
     "LICENSE",
     ".github/**",
@@ -100,10 +100,10 @@ NO_PACKAGE = (
 
 
 def reaches_no_package(path: str) -> bool:
-    """Whether *path* is a root file no package's checks read.
+    """Whether *path* is a root file no package's steps read.
 
-    A change to one gates no package; the workspace checks that read it
-    still judge it ([livery.workshop._checks.selected][]).
+    A change to one gates no package; the workspace steps that read it
+    still judge it ([livery.workshop._steps.selected][]).
     """
     from livery.workshop._categories import matches
 
@@ -225,7 +225,7 @@ def affected_from_paths(
     reach the package's dependents and run the suites. A change under
     the workspace's own tests runs that unit whole. A docs page
     reaches nothing: the site build reads it. An example file reaches
-    its package's examples check
+    its package's examples step
     and no suite, unless source of the package changed too. A file
     outside every package reaches everything, unless *before* (the
     commit or tree the paths were taken from) shows the change is

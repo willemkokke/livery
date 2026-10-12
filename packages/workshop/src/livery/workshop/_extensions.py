@@ -113,8 +113,8 @@ def declaration(extension: str) -> Declaration | None:
     """*extension*'s declaration file, read and judged; None when none is installed.
 
     Read without importing anything of the extension: footman's
-    ``plugin()`` stays a plugin's first importer, and a check's code
-    is imported when the check runs.
+    ``plugin()`` stays a plugin's first importer, and a step's code
+    is imported when the step runs.
 
     Raises:
         DeclarationError: when the package the entry point names ships
@@ -218,9 +218,9 @@ def listing(text: str) -> Spec:
 
     An entry is a name. A spelling the grammar does not read is taken
     whole as a name: no distribution declares it, so the mount names
-    it, and the layering check refuses the spelling. One it reads with
-    brackets, a version or a scope is read as its name, and the
-    layering check refuses the spelling too
+    it, and ``layering.graph`` refuses the spelling. One it reads with
+    brackets, a version or a scope is read as its name, and
+    ``layering.graph`` refuses the spelling too
     ([livery.workshop._extensions.listing_problems][]).
     """
     from livery.toolroom.store import Spec, SpecError
@@ -303,7 +303,7 @@ def package_extensions(start: Path | None = None) -> tuple[str, ...]:
     the list requires; this is their union, ordered as
     [livery.workshop._composition.order][] orders it. A declared order
     with no start falls back to alphabetical here, so a sync still
-    runs, and the layering check names the cycle. Empty outside a
+    runs, and ``layering.graph`` names the cycle. Empty outside a
     workspace.
     """
     root = workspace_root(start)
@@ -456,7 +456,7 @@ def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | 
     """Each listed extension's ``for`` list from its contract entry; None without one.
 
     A table entry may carry ``for = [...]``, the targets the extension
-    contributes to, written once by the layering check's fix and a
+    contributes to, written once by the fix of ``layering.graph`` and a
     person's to edit from then on: a name deleted from it stays
     deleted, which is a project's opt-out from that target's
     opinions.
@@ -523,7 +523,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     the mount runs on every command, ``fm sync`` among them, which is
     what installs a missing declaration, so a refusal here would stop
     the command that repairs it. An entry with brackets is named the
-    same way and read as its name alone. The gate's layering check and
+    same way and read as its name alone. The gate's ``layering.graph`` and
     ``fm extensions`` refuse the same problems. An extension
     whose declaration names no ``plugin`` registers what it declares
     and mounts no verbs, and one that declares nothing but answers to
@@ -630,9 +630,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                     mounted.append(extension)
         present.append(extension)
         _graft_contributions(present, declared, active, grafted, enabled)
-    # An extension's checks registered as it mounted; their verbs join the
+    # An extension's steps registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
-    from livery.workshop._checks import generate_verbs
+    from livery.workshop._steps import generate_verbs
 
     generate_verbs()
     UNDECLARED = tuple(undeclared)
@@ -702,11 +702,11 @@ def check_phase_declarers(
     from livery.workshop import _phases
 
     mounted = {SELF, extension, *present}
-    added = {record.role for record in found.additions.checks}
+    added = {record.phase for record in found.additions.steps}
     added |= {
-        record.role
+        record.phase
         for additions in found.targets.values()
-        for record in additions.checks
+        for record in additions.steps
     }
     added |= set(found.phases)
     specs = _phases.declared_phases()
@@ -731,7 +731,7 @@ def _graft_contributions(
 
     Called after each extension mounts, so a contribution lands whichever
     of the two mounts later. A ``for`` entry naming a target the owner
-    declares nothing for registers nothing: the layering check names
+    declares nothing for registers nothing: ``layering.graph`` names
     that entry, and it can only run inside a mount that went on. A step
     in the table declared off registers under the steps the root
     contract turns on, *enabled*, as one at the file's top level does.
@@ -750,10 +750,10 @@ def _graft_contributions(
 def register_declared(
     extension: str, additions: Additions, *, enabled: frozenset[str] = frozenset()
 ) -> bool:
-    """Register what *additions* declares for *extension*; whether it declares a check.
+    """Register what *additions* declares for *extension*; whether it declares a step.
 
-    Each check registers under the extension's listed name, since the
-    list is what decides which extension a check belongs to, and each
+    Each step registers under the extension's listed name, since the
+    list is what decides which extension a step belongs to, and each
     job joins its point under the same name. A step declared
     ``enabled = false`` registers only when
     *enabled*, the steps the root contract turns on
@@ -761,14 +761,14 @@ def register_declared(
     """
     from dataclasses import replace
 
-    from livery.workshop._checks import register_check
+    from livery.workshop._steps import register_step
 
-    for record in additions.checks:
+    for record in additions.steps:
         if not record.enabled and record.name not in enabled:
             continue
-        register_check(replace(record, extension=extension))
+        register_step(replace(record, extension=extension))
     register_jobs(extension, additions.jobs)
-    return bool(additions.checks)
+    return bool(additions.steps)
 
 
 def register_jobs(extension: str, jobs: tuple[JobContribution, ...]) -> None:
@@ -956,10 +956,10 @@ def _declared_off(extension: str) -> tuple[str, ...]:
     found = _readable(extension)
     if found is None:
         return ()
-    checks = [*found.additions.checks]
+    steps = [*found.additions.steps]
     for additions in found.targets.values():
-        checks += additions.checks
-    return tuple(record.name for record in checks if not record.enabled)
+        steps += additions.steps
+    return tuple(record.name for record in steps if not record.enabled)
 
 
 def enabled_problems(root: Path) -> list[str]:

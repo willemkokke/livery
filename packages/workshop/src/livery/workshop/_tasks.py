@@ -14,9 +14,6 @@ invoked there.
 from __future__ import annotations
 
 from livery.footman import Invocation, fail, pre_tasks, task
-
-# Importing registers each module's tasks with footman.
-from livery.workshop import _checks as _checks_module
 from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _clean,
@@ -44,6 +41,9 @@ from livery.workshop import (  # noqa: F401
     _update_driver,
     _workflow_tasks,
 )
+
+# Importing registers each module's tasks with footman.
+from livery.workshop import _steps as _steps_module
 
 
 @task
@@ -108,6 +108,6 @@ def link_task_names(inv: Invocation) -> None:
         _note(f"workshop.toml [workspace] docs-url: {error}; no task links")
 
 
-# The role verbs, generated from the checks registered above: every
-# module that registers a check was imported first.
-_checks_module.generate_verbs()
+# The phase verbs, generated from the steps registered above: every
+# module that registers a step was imported first.
+_steps_module.generate_verbs()

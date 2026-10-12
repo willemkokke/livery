@@ -1,6 +1,6 @@
 """The render gate: byte-honest, drift-naming, namespace-clean.
 
-The monorepo's own render is judged by the gate's render check on every
+The monorepo's own render is judged by the gate's `drift.check` on every
 leg, never here: a second render of the whole workspace per leg bought
 nothing but time.
 """
@@ -472,7 +472,7 @@ def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) ->
     assert not any("retired" in name for name in apply_generated(root))
     # The GitHub fold retires its governance and docs workflows, and
     # the release legs the release redesign left behind; a retired
-    # file still present is drift the render check names.
+    # file still present is drift `drift.check` names.
     from livery.workshop._templates import project_drift
 
     root = _template_instance(tmp_path)

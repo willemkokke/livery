@@ -25,7 +25,7 @@ def fake_extensions(
     """Packages ``acme.<name>``, each declaring the given ``extension.toml``.
 
     ``{package}`` in a declaration stands for the package's import path,
-    and each package's ``_checks`` defines ``noop`` for a check to run.
+    and each package's ``_steps`` defines ``noop`` for a step to run.
     Each fake declares itself as the extension named by its import path,
     beside every extension installed for real, in footman's scan of the
     installed entry points, which every reader of the extensions asks.
@@ -60,7 +60,7 @@ def _fake(
         package = site / "acme" / name
         package.mkdir(exist_ok=True)
         (package / "__init__.py").write_text("")
-        (package / "_checks.py").write_text("def noop(ctx):\n    del ctx\n")
+        (package / "_steps.py").write_text("def noop(ctx):\n    del ctx\n")
         (package / "extension.toml").write_text(
             textwrap.dedent(text).replace("{package}", f"acme.{name}")
         )

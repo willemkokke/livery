@@ -69,7 +69,7 @@ spelling. Every key is optional:
   in list order;
 - `[extension] requires`, the extensions it cannot work without: in
   the root's list, each one before it; for a package-level extension,
-  in the package's set, which takes them in. The layering check keeps
+  in the package's set, which takes them in. `layering.graph` keeps
   them listed, and its `--fix` writes a missing workspace entry;
 - `[phases.<phase>]`, a phase the extension declares, in the grammar
   the base declares its own in: `level`, `package` for a phase run
@@ -196,19 +196,19 @@ An entry names its extension, either as the string or as a table
 entry's `name`. An entry takes no version, `?` or scope: an
 extension's version comes from its wheel, and the lock pins it. A root
 `[phases.<phase>.<step>]` table that turns on a step no listed
-extension declares off refuses in the layering check, naming the steps
+extension declares off refuses in `layering.graph`, naming the steps
 declared off.
 
 A footman plugin that declares no extension is never offered as one.
 The mount registers a `[for.<target>]` table once both its owner and its
 target are listed, so a house with opinions on several languages
-contributes to each only where the language is listed. The layering
-check's `--fix` writes the resolved targets into the entry once,
+contributes to each only where the language is listed. The `--fix`
+of `layering.graph` writes the resolved targets into the entry once,
 `{ name = "acme.house", for = ["python"] }`; from then on `for` is
 the truth: a name deleted from it stays deleted, which is a project's
 opt-out from that target's opinions, and a name the list does not
 carry refuses. A name the extension declares no contribution for
-mounts nothing, and the layering check names the entry.
+mounts nothing, and `layering.graph` names the entry.
 `fm extensions` prints the base, then each extension in mount order,
 who requires it, the packages whose sets hold a package-level one, its
 tools, its targets, and each step it declares off with whether the
@@ -217,14 +217,14 @@ root contract turns it on.
 A package's `extensions` names the package-level extensions it is
 composed of. Its set is that list and every package-level extension
 the list requires, transitively: requires alone composes a package,
-and the layering check refuses a requirement that no list holds at
+and `layering.graph` refuses a requirement that no list holds at
 its level. Two extensions that cannot share a package are refused by
 the rules of the phase they both add steps to, two providers of one
 context key or two owners of one executable, never by a rule over the
 pair. A package writes its set as its canonical list, the minimal
 one: no extension another listed one requires, in composition order.
 In that order an extension comes after what it requires; ties go
-alphabetically. The layering check names a list in any other form,
+alphabetically. `layering.graph` names a list in any other form,
 and its `--fix` rewrites it. A package's entry is the extension's name
 alone: a package-level extension takes no options.
 
@@ -275,7 +275,7 @@ reads with `read`. A value of another type than the declared one
 the step's table does not declare, refuse naming the step. Two steps
 providing one key, a key nobody provides, two extensions declaring
 one step, and an order with no start refuse before any step runs, and
-the layering check names them for each package.
+`layering.graph` names them for each package.
 
 A phase's declaration names the keys the engine running it gives its
 steps, which a step reads like any other and no extension provides.
@@ -297,7 +297,7 @@ step declares `isolated = true` to serve the isolated side alone,
 `isolated = false` for the tree alone, and neither for both; the walk
 runs it on the side the engine gives. `isolated` on a step of a phase
 without the key refuses. `fm check` runs the tree side, so a step
-serving the isolated side alone is none of the gate's checks: the
+serving the isolated side alone is none of the gate's steps: the
 release train runs it, once per resolution `[release] prove` lists
 ([Releases](releases.md)).
 
@@ -354,7 +354,7 @@ executables a package's extensions answer under `executables`, and
 exits with its exit code. A package with one executable needs no name,
 and inside a package's directory the package may be left out;
 completion offers each `package:executable`. First the gate's `build`
-role runs over the package's dependency closure, dependencies first,
+phase runs over the package's dependency closure, dependencies first,
 on the build phase's tree side in the `debug` configuration, and
 passes over each package whose files and dependencies are unchanged
 since its last good build in this checkout, so a second run with
@@ -398,9 +398,9 @@ vendored = ["docs/assets/vendor/**"]
 Its **channel** says who wrote the file and where to edit it,
 answered by ranked rules an extension may add to. The workspace root is a
 unit of its own, with `notes/`, the site's files and `README.md`
-categorised beside its tests, and a `src/` at the root refuses in the
-layering check, since the root is never a package. A CI job may
-declare the files its entries read as `inputs`, the table a check
+categorised beside its tests, and a `src/` at the root refuses in
+`layering.graph`, since the root is never a package. A CI job may
+declare the files its entries read as `inputs`, the table a step
 declares: a pull request's run that changed none of them, nor the
 sources of the extension that contributed the job, skips the job's
 entries with a line saying so. The docs extension's gate job reads the
@@ -411,10 +411,10 @@ prints `claimed by: gate/docs` on a file the build reads. On a
 contract it also names the schema the contract is judged by, and the
 owners whose keys that schema holds.
 
-A check also says what its tool needs of the workspace. Its `tools`
+A step also says what its tool needs of the workspace. Its `tools`
 reach the tool profile while a package it judges exists, each
-requirement naming `check <name>` as its site, so unregistering a
-check removes its tool. What the base template leaves to the listed
+requirement naming `step <name>` as its site, so unregistering a
+step removes its tool. What the base template leaves to the listed
 extensions, they answer through workspace-level queries: the `dev`
 dependency group's tool lines and pytest's `addopts` are the union of
 the answers in list order, and a rendered template reads any
@@ -431,27 +431,27 @@ its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before
 the packages' declared sheets and the workspace's own
 `docs/assets/site.css`, which loads last. A
-check an extension withdraws takes its lines with it.
+step an extension withdraws takes its lines with it.
 
-A check is named by its role and its tool, `test.pytest`, the step
-`pytest` of the phase `test`, and that name is everything a person
-types: every role is a verb and every check a sub-task of it,
-generated from the registry. `fm test` runs every check of the test
-role and `fm test.pytest` the one, over the named paths or the
-workspace. A verb offers exactly the flags its checks read:
-`--fix` and `--safe-fix` where a check can fix, `--point` where one
-selects tests by CI point, so `fm test --point=nightly` runs the
-nightly's tests and `fm test.ctest` offers no point at all. A role
-whose verb already exists is served by it: the provenance check is
-`fm provenance`.
+A step is named by its phase and its own name, `test.pytest` for the
+step `pytest` of the phase `test`, and that name is everything a
+person types: a phase's verb runs its steps and each step is a
+sub-task of it, generated from the registry. `fm test` runs every
+step of the test phase and `fm test.pytest` the one, over the named
+paths or the workspace. A verb offers exactly the flags its steps
+read: `--fix` and `--safe-fix` where a step can fix, `--point` where
+one selects tests by CI point, so `fm test --point=nightly` runs the
+nightly's tests and `fm test.ctest` offers no point at all. A phase
+whose verb already exists is served by it: `fm provenance` is the
+provenance phase's verb.
 
-A check's own verb hands the tool it wraps the words after `--`:
+A step's own verb hands the tool it wraps the words after `--`:
 `fm test.pytest packages/strongroom -- -k slow` runs that package's
 suite with pytest's `-k slow`, and `fm lint.ruff -- --statistics` gives
-ruff its flag. The words before `--` stay paths. A role verb runs
-several tools, so it refuses words after `--` and names the checks'
+ruff its flag. The words before `--` stay paths. A phase's verb runs
+several tools, so it refuses words after `--` and names the steps'
 own verbs that take them; `fm check` refuses them the same way. A
-check that wraps no tool, such as `fm drift.check`, refuses them too.
+step that wraps no tool, such as `fm drift.check`, refuses them too.
 A step says it takes them with `{arguments}` in its template, or by
 naming `tools` when it runs code, and its code reads them from the
 context's `arguments`.
@@ -474,36 +474,36 @@ An option no step the table reaches declares, a step or phase no
 registered step has, and a value of the wrong type each refuse, naming
 the vocabulary.
 
-An extension's kinds and checks are judged by the conformance kit,
+An extension's kinds and steps are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the extension registers,
 each clause in `CLAUSES` returns the violations the subject commits,
 each naming its clause, and an extension's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
 call of the backend protocol; a per-package configuration file has one
-owner among the checks whose fragments name an extension; a path's
+owner among the steps whose fragments name an extension; a path's
 category is the most specific rule's, the nearer kind winning a tie
-between kinds and two rules of one kind never tying; every check a
-check runs `after` is registered, and following them never leads back
+between kinds and two rules of one kind never tying; every step a
+step runs `after` is registered, and following them never leads back
 to it; an extension's `extension.toml` holds only declared keys, each of
 its type, and every reference in it names a function its module
 defines; importing a module a reference names registers nothing, which
 the kit proves by importing each in a process of its own; every task a
 CI job's entries name is one the extension defines, read from its
-sources; every category a check's claims name is one an extension
+sources; every category a step's claims name is one an extension
 registers, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
-every contract key an extension declares carries a doc; a check's
+every contract key an extension declares carries a doc; a step's
 fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
-once a check is withdrawn and no other check renders its per-package
+once a step is withdrawn and no other step renders its per-package
 file for the kind, an unedited copy is removed and an edited one kept;
-and in the gate's walk over a probe workspace, with the check bodies
-recording instead of running, every check that can fix rewrites
-before any judge starts and is not judged again, every check names the
-extension that registered it, which the gate prints, and a check with no
+and in the gate's walk over a probe workspace, with the step bodies
+recording instead of running, every step that can fix rewrites
+before any judge starts and is not judged again, every step names the
+extension that registered it, which the gate prints, and a step with no
 file to read is named and never started. The workshop's own kinds and
-checks pass the same clauses in its test suite.
+steps pass the same clauses in its test suite.
 
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
@@ -514,8 +514,9 @@ seam the site publishes through, and it arrives through its own task
 entry point. The base keeps what it reads of a package's docs for its
 own reasons (a package's `[docs] api` and the layout of the `docs/`
 tree) and the nav blocks generators write; it imports no extension,
-which the layering check enforces. It lives under `livery.extensions`,
-a namespace any distribution can add an extension to.
+which `layering.base-imports-no-extension` enforces. It lives under
+`livery.extensions`, a namespace any distribution can add an extension
+to.
 The root contract's `[docs]` table is the extension's, `site-url`
 among its keys. A `pre_tasks` hook of the extension links each task
 name in `--help`, `--list` and `--json` rows to the task's page on the
@@ -554,7 +555,7 @@ inventories, and the handler's options as a table.
 The formatter and the linter are an extension with a distribution of
 its own, `livery-extensions-ruff`, listed as `ruff`. Listed, it
 registers `format.ruff` and `lint.ruff`, which join the `format` and
-`lint` roles, and `fm sync` writes the root `ruff.toml` they read,
+`lint` phases, and `fm sync` writes the root `ruff.toml` they read,
 which a bare `ruff` reads too. A package's own settings go in its own
 `ruff.toml`, which extends the root one with `extend = "../../ruff.toml"`;
 its per-file ignores go under `[lint.extend-per-file-ignores]`, because
@@ -583,7 +584,7 @@ snippets extension: a fence whose one line is the snippet marker
 followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
-pytest extension's `examples.pytest` check runs each file as one test
+pytest extension's `examples.pytest` step runs each file as one test
 through the kind's runner, pytest for python, from the workspace root;
 a failure reports the example's own file and line. An example is
 never a test module: pytest's own collector leaves it alone, named or
@@ -595,22 +596,22 @@ example item through the `example` marker, as footman's does to run
 each inside a captured registry, and naming it runs every example.
 The `example` category is claimed by the ruff extension's `lint.ruff`,
 for names only, by `examples.pytest` and by the site; a page's prose reaches the site
-build and no test, and an example file reaches the examples check and
+build and no test, and an example file reaches the examples step and
 the site.
 
-A check record also owns its configuration. Its `fragments`, one per
+A step record also owns its configuration. Its `fragments`, one per
 rendered file, are what the render writes for it: a `[tool.*]` table
-of the root `pyproject.toml`, composed in check-name order, which a
-check an extension withdraws takes with it. A tool that reads one
+of the root `pyproject.toml`, composed in step-name order, which a
+step an extension withdraws takes with it. A tool that reads one
 file per project gets a file of its own instead, written by its
 extension under the name the tool looks for: ruff's `ruff.toml`,
 pytest's `pytest.toml` and coverage's `.coveragerc`. A tool that
 searches upward from each file, clang-format and clang-tidy in a
 C or C++ package, gets a managed file where it looks,
 rendered from the fragment of the record whose `extensions` the
-package holds, the first check by name when two have one, and judged
+package holds, the first step by name when two have one, and judged
 by the drift gate, with a `.workshop-rendered` receipt beside it so a
-withdrawn check's file goes only when nobody edited it and an edited
+withdrawn step's file goes only when nobody edited it and an edited
 one is kept as a local override. A package's own lines ride the tool's
 inheritance, a deeper file with `InheritParentConfig`. The editor
 follows the same set: `.vscode/settings.json` takes each record's
@@ -618,14 +619,14 @@ lines, and `.vscode/extensions.json` recommends the extension ids the
 records carry and nothing else, with a region for the repository's
 own.
 
-A check record also says which files it judges: its `claims`, named
-in categories rather than as globs, each with the rules the check
-withholds there and the suffixes it reads. A category is a role, not
-a language, so ruff claims a native package's configuration and
-reaches its `conanfile.py` alone, which a scoped gate hands it by
-name. `fm explain` prints the checks whose claims reach a file, and
-the per-file ignores in `ruff.toml` render from the claims over the
-present kinds' tables, so the docstring rules stop at
+A step record also says which files it judges: its `claims`, named
+in categories rather than as globs, each with the rules the step
+withholds there and the suffixes it reads. A category names what a
+file is for, not its language, so ruff claims a native package's
+configuration and reaches its `conanfile.py` alone, which a scoped
+gate hands it by name. `fm explain` prints the steps whose claims
+reach a file, and the per-file ignores in `ruff.toml` render from the
+claims over the present kinds' tables, so the docstring rules stop at
 the tests of every kind without a table typed by hand.
 
 An extension's prose, its voice, its standards, its rules, is a set of
@@ -699,7 +700,7 @@ marks a tool optional: the lock takes it where the catalogue can serve
 it and never refuses it, its entry says `optional`, and what it left
 out is printed when the lock is written; `fm toolroom.sync` names an
 optional tool its host lacks. The sites: a package kind, in its record,
-for what operates it, uv for the python kind; the checks that judge a
+for what operates it, uv for the python kind; the steps that judge a
 present package, each naming its tools, which is how ruff, pytest and
 the checkers reach a python workspace; a listed extension, as `[toolroom] requires`
 in its `extension.toml`, for what its own verbs need; a plugin the project mounts
@@ -770,7 +771,7 @@ machine: `fm sync` looks on PATH first, and a copy that satisfies the
 floor (the requirement's, else the record's minimum, else any
 version) serves with nothing installed, while one that is absent or
 below the floor is passed over with a note and the locked version
-serves. A tool a check reads its verdict from (format, lint,
+serves. A tool a step reads its verdict from (format, lint,
 typecheck, typecomplete, test), `uv`, and a tool an extension writes
 the release notes with take no allowance, and the lock refuses one
 by name: a linter that varies by machine makes the gate disagree with
@@ -821,20 +822,20 @@ absence.
   nothing. A public package beneath a root keeps its own import path
   and is declared in the root's `__init__` as well, imported under
   `TYPE_CHECKING` and listed in `__all__`, and the verifier follows the
-  declaration into it; `py.typed` sits at the distribution's root. Every gate walks the check registry the same way,
+  declaration into it; `py.typed` sits at the distribution's root. Every gate walks the step registry the same way,
   whole or narrowed, on a machine or on a leg, through the one walk
   every phase runs through: under `--fix` every
   fixer that applies rewrites first, one at a time, then every judge
   runs in one parallel block, each a footman step, the steps a judge
-  runs after among them, a check that rewrote not judged again;
-  a check whose claims reach no file of its scope is named and no
+  runs after among them, a step that rewrote not judged again;
+  a step whose claims reach no file of its scope is named and no
   process starts for it. `fm check <paths>` checks exactly those files,
-  or a directory's: every check whose claims reach one of them runs
+  or a directory's: every step whose claims reach one of them runs
   over them alone, and nothing is recorded as proved; `--safe-fix`
   fixes without removing code, the post-edit hook's mode; `--point`
   selects a CI point's tests. A named path that is no file or
   directory in the workspace refuses, since checking nothing there
-  would pass; the checks pass nothing through to a tool, so a tool's
+  would pass; the steps pass nothing through to a tool, so a tool's
   own arguments after `--` refuse the same way. On a machine the gate
   is the reflex:
   it runs what the working tree changed since the nearest tree this
@@ -860,7 +861,7 @@ absence.
   runs everything and roots a new chain, with exceptions. Prose and
   the site's own files, a file under `notes/`, a markdown file
   anywhere, the root `docs/` tree, or the root `zensical.toml`, affect
-  no package, and neither do the root files no package's checks read:
+  no package, and neither do the root files no package's steps read:
   the licence, the CI files and the code-owners file, the editor's
   and the agent's settings, git's own files, `setup.sh`, the release's
   member list, `overrides/`, and the render's receipt. A change that
@@ -869,7 +870,7 @@ absence.
   The workspace's own `tests/` directory is a unit of its own: a
   change under it formats, lints, type-checks, and runs those tests
   alone, and the record supplies every package's suite.
-  Each workspace check runs when a file it reads changed, and judges
+  Each workspace step runs when a file it reads changed, and judges
   those files: `lint.doclinks` the changed pages, and every page when
   a file is deleted or moved or a heading is removed; `lint.docrefs`
   the cross-references in the changed sources' docstrings, resolved as
@@ -879,9 +880,9 @@ absence.
   rule steps the changed sources, and every one when the graph
   changed; `drift.check` a tracked composed or
   generated file when it, or what it is made from, changed;
-  `provenance.check` the changed content files. A check whose own code
+  `provenance.check` the changed content files. A step whose own code
   changed reads everything. A diff that reaches no package and no
-  file a check reads runs nothing. A workspace that declares
+  file a step reads runs nothing. A workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
   gate, measured by the same rule from CI's own record: from the
   proved tree nearest the checkout's, or from the merge base with the
@@ -892,7 +893,7 @@ absence.
   request's run on GitHub tests the merge of its head onto the base
   branch, so its row names the two commits merged, and the next push's
   run rebuilds that merge and gates only what changed since it. The
-  workspace checks are selected the same way, and the gate job after
+  workspace steps are selected the same way, and the gate job after
   a green verdict stamps the tree it proved on the `workshop/verified`
   record, so a later run of the same tree, such as main's run after
   a squash of a branch on its tip, skips the gate in seconds. A
@@ -901,11 +902,11 @@ absence.
   that base tree's, so their verdicts carry over, and the row names
   the base. Without such a base a narrowed run stamps nothing. The
   release train reads the same record before it waits on main's run.
-- `fm <role>` and `fm <role>.<tool>`: one role's checks, or one
-  check, generated from the check registry and run over the named
+- `fm <phase>` and `fm <phase>.<step>`: one phase's steps, or one
+  step, generated from the step registry and run over the named
   paths or the workspace the way `fm check <paths>` runs them, with
   nothing recorded as proved; each offers exactly the flags its
-  checks read. `fm test.pytest packages/strongroom` runs one package's
+  steps read. `fm test.pytest packages/strongroom` runs one package's
   suite, and `fm test.pytest packages/strongroom -- -k slow` hands
   pytest the words after `--`.
 

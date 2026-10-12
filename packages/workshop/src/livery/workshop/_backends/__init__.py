@@ -8,7 +8,7 @@ gate silently skips is a package the gate lies about.
 Adding a kind means: a backend module exposing the build callables
 (livery.extensions.python._backend is the shape), a
 livery.workshop._kinds.KindRecord registering it with its template,
-parent and tools, and checks naming the kind, and nothing else: the dispatch
+parent and tools, and steps naming the kind, and nothing else: the dispatch
 extension absorbs the new kind automatically.
 """
 

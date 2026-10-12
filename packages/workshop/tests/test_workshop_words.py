@@ -1,4 +1,4 @@
-"""A check in words: the engine runs the tool's words over what the run reaches."""
+"""A step in words: the engine runs the tool's words over what the run reaches."""
 
 from __future__ import annotations
 
@@ -10,17 +10,17 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.footman import Failed, RunFailed
-from livery.workshop import Package, PhaseContext, _checks
-from livery.workshop._checks import WHOLE, CheckRecord, register_check
+from livery.workshop import Package, PhaseContext, _steps
 from livery.workshop._declaration import Reference
+from livery.workshop._steps import WHOLE, StepRecord, register_step
 from livery.workshop._words import Command, Words, explained
 
 
 @pytest.fixture(autouse=True)
 def restored() -> Iterator[None]:
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 class _Refused(RunFailed):
@@ -52,7 +52,7 @@ class _Tool:
             raise _Refused(f"`acme {' '.join(argv)}` exited with code 1")
 
 
-def _check(
+def _step(
     words: Words,
     *,
     scope: str = "workspace",
@@ -60,8 +60,8 @@ def _check(
     arguments: bool = False,
     extension: str = "acme",
     extensions: tuple[str, ...] = (),
-) -> CheckRecord:
-    record = CheckRecord(
+) -> StepRecord:
+    record = StepRecord(
         "acme",
         "lint",
         Command(words, "lint.acme"),
@@ -74,7 +74,7 @@ def _check(
         arguments=arguments,
         words=words,
     )
-    register_check(record)
+    register_step(record)
     return record
 
 
@@ -98,7 +98,7 @@ def _member(root: Path, name: str) -> Package:
 
 
 def _paths(monkeypatch: pytest.MonkeyPatch, chosen: tuple[str, ...]) -> None:
-    monkeypatch.setattr(_checks, "scoped_paths", lambda ctx, name: chosen)
+    monkeypatch.setattr(_steps, "scoped_paths", lambda ctx, name: chosen)
 
 
 # The refusals first: a failed call, an unanswered word, a package's word
@@ -114,44 +114,44 @@ def test_a_call_that_exits_non_zero_refuses_and_every_other_call_still_runs(
         ("acme", "--platform={platform}"),
         matrix=(("platform", ("linux", "darwin", "win32")),),
     )
-    record = _check(words)
+    record = _step(words)
     with pytest.raises(BaseException, match="win32"):
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     ran = sorted(argv[0] for argv, _chosen in tool.calls)
     assert ran == ["--platform=darwin", "--platform=linux", "--platform=win32"]
 
 
-def test_a_refused_call_is_a_check_s_refusal(
+def test_a_refused_call_is_a_step_s_refusal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(tools, "acme", _Tool(refusing=("--check",)), raising=False)
-    record = _check(Words(("acme", "--check")))
+    record = _step(Words(("acme", "--check")))
     with pytest.raises(Failed, match=r"`acme --check` exited with code 1"):
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
 
 
-def test_a_placeholder_nothing_answers_refuses_naming_the_check(
+def test_a_placeholder_nothing_answers_refuses_naming_the_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(tools, "acme", _Tool(), raising=False)
-    record = _check(Words(("acme", "--into={output}")))
+    record = _step(Words(("acme", "--into={output}")))
     with pytest.raises(
         Failed,
         match=r"lint\.acme names \{output\}, which neither the engine nor its"
         r" matrix answers; the engine answers cache, package, compile-commands",
     ):
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
 
 
 def test_a_package_s_placeholder_in_a_workspace_call_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(tools, "acme", _Tool(), raising=False)
-    record = _check(Words(("acme", "{package}")))
+    record = _step(Words(("acme", "{package}")))
     with pytest.raises(
         Failed, match=r"lint\.acme names \{package\}, which only a call that judges"
     ):
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
 
 
 def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
@@ -159,17 +159,17 @@ def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
 ) -> None:
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    record = _check(Words(("acme", "--files={paths}")))
+    record = _step(Words(("acme", "--files={paths}")))
     with pytest.raises(Failed) as caught:
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert str(caught.value) == (
         "lint.acme names {paths} in '--files={paths}', which stands alone as one"
         " word of a step's main under [phases.<phase>.<step>], where the run's"
         " paths, or the words after --, go"
     )
-    record = _check(Words(("acme", "--args={arguments}")))
+    record = _step(Words(("acme", "--args={arguments}")))
     with pytest.raises(Failed, match=r"names \{arguments\} in '--args=\{arguments\}'"):
-        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert tool.calls == []
 
 
@@ -178,17 +178,17 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
 ) -> None:
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    monkeypatch.setattr(_checks, "scoped_files", _one_file)
+    monkeypatch.setattr(_steps, "scoped_files", _one_file)
     monkeypatch.setattr(
         "livery.workshop._lifecycle.compile_commands", lambda package: None
     )
     member = _member(tmp_path, "one")
-    record = _check(
+    record = _step(
         Words(("acme", "-p", "{compile-commands}")),
         scope="package",
         extensions=("python",),
     )
-    ctx = PhaseContext(root=tmp_path, packages=(member,), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(member,), step=record.name)
     record.run(ctx.for_package(member))
     assert tool.calls == []
     assert (
@@ -197,26 +197,26 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
     )
 
 
-def test_a_run_that_reaches_nothing_the_check_reads_calls_nothing(
+def test_a_run_that_reaches_nothing_the_step_reads_calls_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    record = _check(Words(("acme", "check")), narrowing="paths")
+    record = _step(Words(("acme", "check")), narrowing="paths")
     _paths(monkeypatch, ())
-    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert tool.calls == []
 
 
 def test_a_directory_with_no_file_the_claims_read_is_never_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._checks import Claim
+    from livery.workshop._steps import Claim
 
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     words = Words(("acme", "check", "{paths}"))
-    record = CheckRecord(
+    record = StepRecord(
         "acme",
         "lint",
         Command(words, "lint.acme"),
@@ -226,7 +226,7 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
         claims=(Claim("source", suffixes=(".py",)), Claim("test", suffixes=(".py",))),
         words=words,
     )
-    register_check(record)
+    register_step(record)
     # One member ships data alone under src, its tests in python; the
     # other member keeps the run from reaching the whole.
     one = _member(tmp_path, "one")
@@ -236,11 +236,11 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
     (one.directory / "tests" / "test_one.py").write_text("")
     two = _member(tmp_path, "two")
     ctx = PhaseContext(
-        root=tmp_path, packages=(one, two), subset=(one,), check=record.name
+        root=tmp_path, packages=(one, two), subset=(one,), step=record.name
     )
     record.run(ctx)
     assert tool.calls == [(("check", "packages/one/tests"), {})]
-    # A member with nothing the check reads at all is not called.
+    # A member with nothing the step reads at all is not called.
     (one.directory / "tests" / "test_one.py").unlink()
     tool.calls.clear()
     record.run(ctx)
@@ -257,7 +257,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
 
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    record = _check(
+    record = _step(
         Words(("acme", "check", "{arguments}", "--strict", "{paths}", "--end")),
         narrowing="paths",
         arguments=True,
@@ -273,7 +273,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
     monkeypatch.setattr(_invoke, "run_batched", one_path_per_batch)
     record.run(
         PhaseContext(
-            root=tmp_path, packages=(), check=record.name, arguments=("-v", "-x")
+            root=tmp_path, packages=(), step=record.name, arguments=("-v", "-x")
         )
     )
     # Each batch goes where {paths} stands, the words after -- where
@@ -284,7 +284,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
     ]
     # No words after --: {arguments} stands for nothing.
     tool.calls.clear()
-    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert [argv for argv, _chosen in tool.calls] == [
         ("check", "--strict", "packages/one/src", "--end"),
         ("check", "--strict", "packages/one/tests", "--end"),
@@ -292,7 +292,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
     # The whole is a call with no path where {paths} stands.
     tool.calls.clear()
     _paths(monkeypatch, WHOLE)
-    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert tool.calls == [(("check", "--strict", "--end"), {})]
 
 
@@ -303,27 +303,27 @@ def test_a_template_without_paths_runs_whole(
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     # A workspace step without {paths} narrows by nothing: one call, no
     # path, and the words after -- dropped without {arguments}.
-    record = _check(Words(("acme", "check", "--all")))
+    record = _step(Words(("acme", "check", "--all")))
     _paths(monkeypatch, ("packages/one/src",))
     record.run(
-        PhaseContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
+        PhaseContext(root=tmp_path, packages=(), step=record.name, arguments=("-v",))
     )
     assert tool.calls == [(("check", "--all"), {})]
     # A package step without {paths} runs once from the package, and
     # none of the files the run reaches is named.
     tool.calls.clear()
-    record = _check(Words(("acme", "build")), scope="package", extensions=("acme",))
-    monkeypatch.setattr(_checks, "scoped_files", _one_file)
+    record = _step(Words(("acme", "build")), scope="package", extensions=("acme",))
+    monkeypatch.setattr(_steps, "scoped_files", _one_file)
     package = _member(tmp_path, "one")
     record.run(
         PhaseContext(
-            root=tmp_path, packages=(package,), package=package, check=record.name
+            root=tmp_path, packages=(package,), package=package, step=record.name
         )
     )
     assert tool.calls == [(("build",), {"cwd": package.directory})]
 
 
-def test_a_package_check_calls_from_the_package_with_its_files(
+def test_a_package_step_calls_from_the_package_with_its_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool = _Tool()
@@ -332,16 +332,16 @@ def test_a_package_check_calls_from_the_package_with_its_files(
     database = member.directory / "build" / "compile_commands.json"
     database.parent.mkdir()
     database.write_text("[]\n")
-    monkeypatch.setattr(_checks, "scoped_files", _one_file)
+    monkeypatch.setattr(_steps, "scoped_files", _one_file)
     monkeypatch.setattr(
         "livery.workshop._lifecycle.compile_commands", lambda package: database
     )
-    record = _check(
+    record = _step(
         Words(("acme", "-p", "{compile-commands}", "--root={package}", "{paths}")),
         scope="package",
         extensions=("python",),
     )
-    ctx = PhaseContext(root=tmp_path, packages=(member,), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(member,), step=record.name)
     record.run(ctx.for_package(member))
     assert tool.calls == [
         (
@@ -364,14 +364,14 @@ def test_fix_runs_the_fix_words_and_safe_fix_its_own_or_the_fix_words(
     words = Words(
         ("acme", "--check"), fix=("acme", "--fix"), safe_fix=("acme", "--safe")
     )
-    record = _check(words)
+    record = _step(words)
     assert record.fix is not None
-    ctx = PhaseContext(root=tmp_path, packages=(), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(), step=record.name)
     record.fix(ctx)
-    record.fix(PhaseContext(root=tmp_path, packages=(), check=record.name, safe=True))
-    plain = _check(Words(("acme", "--check"), fix=("acme", "--fix")))
+    record.fix(PhaseContext(root=tmp_path, packages=(), step=record.name, safe=True))
+    plain = _step(Words(("acme", "--check"), fix=("acme", "--fix")))
     assert plain.fix is not None
-    plain.fix(PhaseContext(root=tmp_path, packages=(), check=plain.name, safe=True))
+    plain.fix(PhaseContext(root=tmp_path, packages=(), step=plain.name, safe=True))
     assert [argv for argv, _chosen in tool.calls] == [
         ("--fix",),
         ("--safe",),
@@ -385,8 +385,8 @@ def test_env_reaches_the_call_over_the_run_s_own_environment(
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     monkeypatch.setenv("ACME_KEPT", "yes")
-    record = _check(Words(("acme",), env=(("ACME_HOME", "{cache}"),)))
-    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+    record = _step(Words(("acme",), env=(("ACME_HOME", "{cache}"),)))
+    record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     ((argv, chosen),) = tool.calls
     assert argv == ()
     env = chosen["env"]
@@ -405,15 +405,15 @@ def test_the_matrix_calls_once_per_value_with_a_cache_of_its_own(
         ("acme", "--platform={platform}", "--cache-dir={cache}/{platform}"),
         matrix=(("platform", ("linux", "win32")),),
     )
-    record = _check(words)
-    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
+    record = _step(words)
+    record.run(PhaseContext(root=tmp_path, packages=(), step=record.name))
     assert sorted(argv for argv, _chosen in tool.calls) == [
         ("--platform=linux", "--cache-dir=.workshop/.cache/acme/linux"),
         ("--platform=win32", "--cache-dir=.workshop/.cache/acme/win32"),
     ]
 
 
-# What fm explain prints for a check.
+# What fm explain prints for a step.
 
 
 def test_explain_shows_the_words_the_matrix_and_what_the_engine_places() -> None:
@@ -422,7 +422,7 @@ def test_explain_shows_the_words_the_matrix_and_what_the_engine_places() -> None
         fix=("ruff", "check", "--fix", "--force-exclude", "{arguments}", "{paths}"),
         matrix=(("platform", ("linux", "win32")),),
     )
-    record = _check(words, narrowing="paths", arguments=True, extension="ruff")
+    record = _step(words, narrowing="paths", arguments=True, extension="ruff")
     assert explained(record) == [
         "  lint.acme",
         "    extension: ruff",
@@ -433,8 +433,8 @@ def test_explain_shows_the_words_the_matrix_and_what_the_engine_places() -> None
         "    {paths}: the paths the run reaches, a batch per call",
         "    {arguments}: the words after --",
     ]
-    coded = CheckRecord("acme", "test", Reference("acme._checks", "judge"))
+    coded = StepRecord("acme", "test", Reference("acme._steps", "judge"))
     assert explained(coded)[2:] == [
         "    scope: the workspace, whole every run",
-        "    main: acme._checks:judge (code)",
+        "    main: acme._steps:judge (code)",
     ]

@@ -123,22 +123,22 @@ def _extension_requirements(
 
 
 def compose_fragments(data: dict[str, Any]) -> dict[str, str]:
-    """The check records' fragments composed per rendered file over *data*."""
+    """The step records' fragments composed per rendered file over *data*."""
     from livery.workshop._fragments import compose_project
 
     return compose_project(fragment_data(data))
 
 
 def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
-    """*data* with what the check records' fragments read beside it.
+    """*data* with what the step records' fragments read beside it.
 
     The roster is split the way the project file splits it, ``py`` for
     the members with a dev entry and ``native`` for the rest, and the
     per-file ignores the claims render are added for the kinds present.
-    The fragment engine reads the check records' fragments through this.
+    The fragment engine reads the step records' fragments through this.
     """
-    from livery.workshop._checks import per_file_ignores
     from livery.workshop._kinds import kind_names, record_for_template
+    from livery.workshop._steps import per_file_ignores
 
     roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
     kinds = []
@@ -368,7 +368,7 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     run_uv("lock", root=root)
     run_uv("sync", root=root)
     # A kind brings tools of its own (a native kind's build tools and
-    # the checks that judge it), so the tool lock moves with the
+    # the steps that judge it), so the tool lock moves with the
     # member and the store supplies what it names: the gate that
     # follows finds them, as it does after a birth.
     sync_tools(root)

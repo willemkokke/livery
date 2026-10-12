@@ -10,7 +10,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -25,7 +25,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Pyrefly's check registered, as the mount registers a listed extension's."""
+    """Pyrefly's step registered, as the mount registers a listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -47,13 +47,13 @@ def _workspace(root: Path, extensions: str) -> Path:
 # The refusal first: installed and not listed, the extension does nothing.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr(
@@ -63,16 +63,16 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "typecheck.pyrefly" not in checks_by_name()
+        assert "typecheck.pyrefly" not in steps_by_name()
         assert "pyrefly" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "pyrefly.toml").exists()
-        # Listed, the mount registers the check under the listed name,
+        # Listed, the mount registers the step under the listed name,
         # the tool joins the profile, and the sync writes the file.
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["pyrefly"]\n')
         with footman_registry.capture():
             assert mount_extensions(root) == ("pyrefly",)
-        assert checks_by_name()["typecheck.pyrefly"].extension == "pyrefly"
+        assert steps_by_name()["typecheck.pyrefly"].extension == "pyrefly"
         assert "pyrefly" in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         written = tomllib.loads((root / "pyrefly.toml").read_text())
@@ -81,7 +81,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         registry.restore(state)
 
 
-# The check: the configured whole, whatever a run reaches.
+# The step: the configured whole, whatever a run reaches.
 
 
 def test_a_run_checks_the_configured_whole_whatever_it_reaches(
@@ -96,10 +96,10 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
         kind="python",
         depends=(),
     )
-    record = registry.check_for("typecheck.pyrefly")
+    record = registry.step_for("typecheck.pyrefly")
     record.run(PhaseContext(root=tmp_path, packages=(member,)))
     record.run(PhaseContext(root=tmp_path, packages=(member,), subset=(member,)))
-    # The words after -- on the check's own verb reach pyrefly's check.
+    # The words after -- on the step's own verb reach pyrefly's check.
     words = ("--summarize-errors",)
     record.run(PhaseContext(root=tmp_path, packages=(member,), arguments=words))
     assert calls == [("check",), ("check",), ("check", *words)]

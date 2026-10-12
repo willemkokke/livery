@@ -12,7 +12,7 @@ from livery.footman import (
     Failed,
     _entries,  # pyright: ignore[reportPrivateUsage]
 )
-from livery.workshop import _checks, _extensions
+from livery.workshop import _extensions, _steps
 from livery.workshop._composition import (
     OrderCycle,
     canonical,
@@ -50,10 +50,10 @@ def _lookup(*declared: Declaration) -> Callable[[str], Declaration | None]:
 
 
 @pytest.fixture
-def restored_checks():
-    state = _checks.snapshot()
+def restored_steps():
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 # The refusals first.
@@ -124,7 +124,7 @@ def test_an_order_with_no_start_refuses_naming_its_cycle(
         "the extensions' declared order has no start: a before b before a;"
         " remove one requires among them"
     )
-    # The layering check names it per package, and never twice: a set is
+    # `layering.graph` names it per package, and never twice: a set is
     # closed under requires, so a package listing one member holds both.
     fake_extensions(
         tmp_path,
@@ -355,10 +355,10 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
 
 
 def test_the_package_level_extensions_mount_first_in_composition_order(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     def checked(tool: str, identity: str = "") -> str:
-        return f'{identity}\n[phases.lint.{tool}]\nmain = "{{package}}._checks:noop"\n'
+        return f'{identity}\n[phases.lint.{tool}]\nmain = "{{package}}._steps:noop"\n'
 
     fake_extensions(
         tmp_path,
@@ -383,7 +383,7 @@ def test_the_package_level_extensions_mount_first_in_composition_order(
     with registry.capture():
         mounted = _extensions.mount_extensions(tmp_path)
     assert mounted == ("acme.base", "acme.native", "acme.site")
-    assert _checks.checks_by_name()["lint.native"].extension == "acme.native"
+    assert _steps.steps_by_name()["lint.native"].extension == "acme.native"
     assert _extensions.describe_extensions(tmp_path)[1:5] == [
         "  acme.base (required by acme.native)",
         "    packages: packages/app, packages/core",

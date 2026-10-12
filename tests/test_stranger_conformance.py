@@ -311,8 +311,8 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
         ["uv", "run", "fm", "check"], cwd=root, env=env, capture_output=True, text=True
     )
     assert gate.returncode == 0, f"{gate.stdout}\n{gate.stderr}"
-    for check in ("build.configure", "build.compile", "test.ctest"):
-        assert f"  {check}: packages/geometry runs (a cmake package)" in gate.stdout
+    for step in ("build.configure", "build.compile", "test.ctest"):
+        assert f"  {step}: packages/geometry runs (a cmake package)" in gate.stdout
     rehearsed = subprocess.run(
         ["uv", "run", "fm", "workflow.release", "geometry", "ext", "--local"],
         cwd=root,

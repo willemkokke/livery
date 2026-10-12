@@ -153,7 +153,7 @@ def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
     """One package through the test phase's isolated side, its twin through the kind."""
     from dataclasses import replace
 
-    from livery.workshop import _checks, _lifecycle
+    from livery.workshop import _lifecycle, _steps
     from livery.workshop._packages import Package
 
     legs: list[tuple[str, str, tuple[Path, ...]]] = []
@@ -190,11 +190,11 @@ def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
         ("packages/plain", "head", dirs),
     ]
     # The listing package's leg is the extension's step in the walk; the
-    # gate, which runs the tree side, registers no check for it.
+    # gate, which runs the tree side, registers no step for it.
     assert "test.python: packages/listing runs (a python package)" in (
         capsys.readouterr().out
     )
-    assert "test.python" not in _checks.checks_by_name()
+    assert "test.python" not in _steps.steps_by_name()
 
 
 def _verified_package(directory: Path) -> object:
