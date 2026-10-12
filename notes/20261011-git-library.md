@@ -1,8 +1,9 @@
 # One home for every git access: the git library
 
 Status: complete. Phases 1 to 5 on main (PRs #1501, #1503, #1505,
-#1508, #1511), the set release of footman, git and workshop is the
-one act outstanding. The destination note
+#1508, #1511); the set release (PR #1522) cut livery-footman 0.60.0,
+livery-git 0.1.0, livery-toolroom-store 0.4.0 and livery-workshop
+0.9.0 on 2026-10-12. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -397,6 +398,13 @@ and the number recorded here.
 | nothing scaffolded: each phase rewrites imports in the same change, no re-export shim | | |
 
 ## Decision record
+
+- 2026-10-12, the set release: livery-toolroom-store joined the set,
+  since the workshop reads its `Home.under` and `index_source`, which
+  were unreleased; floors moved within the set. The wave's first
+  publish of livery-git met a 500 from PyPI; `fm
+  workflow.release.dispatch` re-dispatched the wave and every receipt
+  was cut.
 
 - 2026-10-12, phase 5 built: dulwich 1.2.17 is the in-process door,
   one `Repo` opened and closed per call, in `livery.git._objects`.
