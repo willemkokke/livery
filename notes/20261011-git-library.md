@@ -1,8 +1,8 @@
 # One home for every git access: the git library
 
-Status: phases 1 to 4 on main (PRs #1501, #1503, #1505, #1508), phase
-5 in review (#1510); the Windows leg's time after phase 5 is owed in
-the decision record. The destination note
+Status: complete. Phases 1 to 5 on main (PRs #1501, #1503, #1505,
+#1508, #1511), the set release of footman, git and workshop is the
+one act outstanding. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -415,10 +415,12 @@ and the number recorded here.
   the reachability anchor of the last commit written. The process
   pins: a read 0 (remote: the one fetch), a local write 0, a remote
   write 2, the janitor's remote family 2 (listing and fetch), local
-  family 0. The Windows check leg of the phase's pull request
-  (#1511) ran 652 s, against the 843 s measured on main on
-  2026-10-11; the release loop proved seven scenarios in 822 s of
-  runs.
+  family 0. The Windows check task of the phase's tree, on pull
+  request #1511, ran 478.5 s (the job's Check step 512 s), against
+  the 843 s measured on main on 2026-10-11; main's own push run after
+  the merge (38209539957) narrowed to the tree the pull request had
+  already proved and ran the check task in 6.1 s on Windows. The
+  release loop proved seven scenarios in 822 s of runs.
 
 - 2026-10-12, phase 4 built. The library gained the named functions
   the direct calls needed: a fetch with prune and force and a tag
@@ -541,6 +543,4 @@ and the number recorded here.
 
 ## Open
 
-1. (the merger of #1511) Main's push run after phase 5 merges: record
-   its Windows check leg's time in the decision record beside the
-   652 s of the pull request and the 843 s of 2026-10-11.
+Nothing open. Every ruling the phases need is in the decision record.
