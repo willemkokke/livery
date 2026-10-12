@@ -46,9 +46,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated
 
-import livery.footman as footman
 from livery import git
-from livery.footman import Group, doc, fail, group, prog, root_group
+from livery.footman import Group, doc, fail, prog, root_group
 from livery.workshop import _fragments
 from livery.workshop._fragments import Fragment
 

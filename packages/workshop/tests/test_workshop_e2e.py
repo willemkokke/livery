@@ -939,6 +939,32 @@ def test_the_birth_reads_the_dev_index_before_any_other(
     assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
 
 
+def test_a_child_the_pass_starts_by_hand_takes_the_task_s_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The git plugin writes the tools' identity into the task's
+    # environment alone; a hosted runner has no identity of its own, so
+    # a child spawned from the process environment commits nothing.
+    import os
+    from types import SimpleNamespace
+
+    from livery.footman._context import Context, use_context
+
+    seen: list[dict[str, str]] = []
+
+    def _run(argv: list[str], *, env: dict[str, str], **kwargs: object) -> object:
+        seen.append(dict(env))
+        return SimpleNamespace(code=0, stdout="", stderr="")
+
+    monkeypatch.setattr("livery.footman.run", _run)
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.delenv("GIT_AUTHOR_NAME", raising=False)
+    task = Context(env={**os.environ, "GIT_AUTHOR_NAME": "the tools"})
+    with use_context(task):
+        _e2e._birth("gitea", "http://localhost:1")
+    assert seen[-1]["GIT_AUTHOR_NAME"] == "the tools"
+
+
 def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -> None:
     from livery.workshop._packages import Package
 

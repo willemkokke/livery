@@ -2654,6 +2654,10 @@ the stack, which this design neither needs nor rules out).
   hung the loop's dev act for 38 minutes on the desk and past 50 on
   GitHub's runner. The gate now exempts a block inside the owner's own
   body, and the branch's rehearsal runs on GitHub's runner by default.
+  The same rehearsal found that the pass's hand-started children (the
+  birth, the dev act, the render) began from the process environment,
+  which on a runner lacks the tools' identity the git plugin writes
+  into the task's; they now begin from the task's environment.
 
 ## Open
 
