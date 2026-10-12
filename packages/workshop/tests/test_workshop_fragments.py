@@ -35,6 +35,19 @@ def restored_checks():
     _checks._WITHDRAWN.update(withdrawn)
 
 
+def _this_checkout_or_skip(root: Path) -> None:
+    """Skip unless the workshop under test is this checkout's, with its dev group.
+
+    The release train's isolated leg installs the workshop's wheel alone,
+    beside no extension, so a test that answers this workspace's listed
+    extensions has nothing to answer there.
+    """
+    import livery.workshop
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(root):
+        pytest.skip("the test reads this checkout's listed extensions")
+
+
 def _noop(ctx: PhaseContext) -> None:
     del ctx
 
@@ -270,6 +283,7 @@ def test_the_extension_ids_come_from_the_listed_extensions_and_are_well_formed()
     import re
 
     root = Path(__file__).resolve().parents[3]
+    _this_checkout_or_skip(root)
     ids = answer(root, EDITOR_EXTENSIONS)
     assert ids, "this workspace lists extensions that recommend one"
     assert all(re.fullmatch(r"[a-z0-9-]+\.[a-z0-9-]+", name) for name in ids)
