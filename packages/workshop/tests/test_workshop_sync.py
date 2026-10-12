@@ -65,6 +65,79 @@ def _recorded_steps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return steps
 
 
+# The receipts decide what a sync does: the off cases first, then the
+# current one, then the plain sync that renders regardless.
+
+
+def test_a_frozen_sync_with_a_receipt_off_runs_its_steps_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _sync
+    from workshop_receipts import LOCK, synced
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    synced(root, "something-1.0.0")
+    (root / "uv.lock").write_text(LOCK + "\n[[package]]\n")
+    steps = _recorded_steps(monkeypatch)
+    assert _sync.sync(frozen=True, offline=True) is True
+    assert {"content", "tools", "uv", "deliver", "receipt"} <= set(steps)
+    out = capsys.readouterr().out
+    assert "uv.lock moved past the environment; syncing from what the machine" in out
+
+
+def test_a_frozen_sync_whose_receipts_cannot_be_read_runs_its_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _reconcile, _sync
+    from workshop_receipts import synced
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    synced(root, "something-1.0.0")
+    steps = _recorded_steps(monkeypatch)
+
+    def unreadable(root: Path) -> str:
+        raise OSError("locked")
+
+    monkeypatch.setattr(_reconcile, "current", unreadable)
+    assert _sync.sync(frozen=True, offline=True) is True
+    assert "uv" in steps and "receipt" in steps
+    assert "the receipts could not be read (locked); syncing" in capsys.readouterr().out
+
+
+def test_a_frozen_sync_of_a_current_checkout_runs_no_local_step_and_says_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _sync
+    from workshop_receipts import synced
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    synced(root, "something-1.0.0")
+    steps = _recorded_steps(monkeypatch)
+    assert _sync.sync(frozen=True, offline=True) is False
+    # The mount and the sweep still run: they are what a listed extension
+    # and a removed package need, and cost no step.
+    assert steps == ["mounted", "sweep"]
+    assert capsys.readouterr().out == ""
+
+
+def test_a_plain_sync_of_a_current_checkout_still_renders_and_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A fragment edit is in no receipt, so a plain sync renders again.
+    from livery.workshop import _sync
+    from workshop_receipts import synced
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    synced(root, "something-1.0.0")
+    steps = _recorded_steps(monkeypatch)
+    assert _sync.sync() is True
+    assert {"content", "tools", "uv", "deliver", "receipt"} <= set(steps)
+
+
 def test_the_sync_phase_runs_after_the_tools_and_before_uv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
+from livery import git
 from livery.footman import Arg, doc, fail
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._extensions import workspace_root
-from livery.workshop._git_ops import GitError, GitOps
 
 
 def scope_of(root: Path, paths: list[str]) -> str:
@@ -39,14 +39,13 @@ def scope_of(root: Path, paths: list[str]) -> str:
     )
     from livery.workshop._packages import discover_packages
 
-    git = GitOps(root)
     names: set[str] = set()
     for package in discover_packages(root):
         prefix = package.path + "/"
         touched = [path[len(prefix) :] for path in paths if path.startswith(prefix)]
         if not touched:
             continue
-        before = git.file_at("HEAD", f"{package.path}/{RENDERED_MANIFEST}")
+        before = git.file_at(root, "HEAD", f"{package.path}/{RENDERED_MANIFEST}")
         composed = {
             RENDERED_MANIFEST,
             *read_rendered(package.directory),
@@ -106,8 +105,7 @@ def commit(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    git = GitOps(root)
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     if not branch:
         fail("HEAD is detached: check out a branch first")
     if branch == "main":
@@ -120,12 +118,12 @@ def commit(
     if check:
         _run_check()
     if only:
-        git._run("add", "--", *[p.strip() for p in only.split(",") if p.strip()])
+        git.run(root, "add", "--", *[p.strip() for p in only.split(",") if p.strip()])
     else:
-        git._run("add", "-A")
+        git.run(root, "add", "-A")
     staged = [
         line
-        for line in git._run("diff", "--cached", "--name-only").splitlines()
+        for line in git.run(root, "diff", "--cached", "--name-only").splitlines()
         if line
     ]
     if not staged:
@@ -143,8 +141,8 @@ def commit(
     if body.strip():
         args += ["-m", body.strip()]
     try:
-        git._run(*args)
-    except GitError as exc:
+        git.run(root, *args)
+    except git.GitError as exc:
         fail(
             "git refused the commit; the change is still staged, so fix the"
             f" cause and re-run:\n{exc}"
@@ -152,4 +150,4 @@ def commit(
     print(
         f"  scope: {scope or 'none'} ({'given' if given else 'from the changed paths'})"
     )
-    print(f"  committed {git.head_sha()[:8]}: {title}")
+    print(f"  committed {git.head_sha(root)[:8]}: {title}")

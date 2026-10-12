@@ -37,11 +37,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._state import RunContext, Series
+from livery import git
+from livery.workshop._ci_context import RunContext, state_store
 
 #: The series: one row per tree id, the newest kept.
-SERIES = Series("verified", window=200)
+SERIES = git.Series("verified", window=200)
 
 #: The marker a check leg leaves beside its trace, naming the scope
 #: its gate ran, for the leg's metrics row and the gate job's stamp.
@@ -101,11 +101,11 @@ class Verified:
     base_sha: str = ""
 
 
-def tree_id(git: GitOps, ref: str = "HEAD") -> str:
+def tree_id(root: Path, ref: str = "HEAD") -> str:
     """The tree id *ref* points at."""
     # `<ref>:` names the root tree, as `^{tree}` does without a caret,
     # which cmd.exe drops on its way to a git run through a `.cmd` launcher.
-    return git._run("rev-parse", f"{ref}:").strip()
+    return git.run(root, "rev-parse", f"{ref}:").strip()
 
 
 def write_marker(
@@ -170,7 +170,7 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
     and so does an entry that is not a row of the record's schema:
     the gate runs, and the line says why the record did not decide.
     """
-    row, why = SERIES.row(root, tree)
+    row, why = SERIES.row(state_store(root), tree)
     if row is None:
         return None, why
     return _entry(tree, row.data), ""
@@ -198,7 +198,7 @@ def proved(root: Path) -> tuple[dict[str, Verified], str]:
     A row of a narrowed scope proves nothing and is left out, as a
     file that is not a row of the record's schema is.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return {}, found.reason
     rows = (_entry(row.name, row.data) for row in found.rows)
@@ -213,7 +213,7 @@ def held(root: Path, trees: Iterable[str]) -> tuple[set[str], str]:
     skips it, so its tree reads as not held; an absent record holds
     nothing, without a reason.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return set(), found.reason
     names = {row.name for row in found.rows}
@@ -259,7 +259,7 @@ def stamp(
         entry["base_run"] = base.run
         basis = f" on top of {base.tree[:12]}"
     return SERIES.put(
-        root,
+        state_store(root),
         {tree: entry},
         message=f"verified: tree {tree[:12]} by run {run.run_id}{basis}",
     )
@@ -281,7 +281,7 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     from livery.workshop._metrics import SERIES as METRICS
     from livery.workshop._metrics import run_file
 
-    row, why = METRICS.row(root, run_file(run.run_id))
+    row, why = METRICS.row(state_store(root), run_file(run.run_id))
     if why:
         return f"  verified: no stamp, {why}"
     if row is None:
@@ -299,13 +299,12 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     unknown = [name for name, scope in scopes.items() if scope not in KNOWN]
     if unknown:
         return f"  verified: no stamp, {', '.join(unknown)} left no scope"
-    git = GitOps(root)
-    tree = tree_id(git)
+    tree = tree_id(root)
     if all(scope in PROVED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
     try:
-        merged = git.merge_parents()
-    except GitError as error:
+        merged = git.merge_parents(root)
+    except git.GitError as error:
         return f"  verified: no stamp, HEAD's parents could not be read ({error})"
     if all(scope in (FULL, *PROVED) for scope in scopes.values()):
         why = stamp(

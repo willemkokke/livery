@@ -1,7 +1,9 @@
-"""The CI state store: refusals first, then the compare-and-swap path.
+"""The state store: refusals first, then the compare-and-swap path.
 
 Every test drives real git against a bare repository standing in for
 origin, so the refusals are the transport's own words, not a fake's.
+The store under test is built with a desk's policy: no CI run, the
+tests' own identity, the default snapshot variable.
 """
 
 from __future__ import annotations
@@ -15,68 +17,27 @@ from typing import Any
 
 import pytest
 
-from livery.workshop import _state
-from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
-from workshop_spawns import counting_spawns
+from git_seeds import (
+    IDENTITY,
+    repos_fixture,  # noqa: F401
+)
+from git_seeds import (
+    clone as _clone,
+)
+from git_seeds import (
+    run_git as _git,
+)
+from git_seeds import (
+    store_of as _store,
+)
+from git_spawns import counting_spawns
+from livery import git
+from livery.git import _store as store_module
 
-REF = _state.NAMESPACE + "metrics"
-
-
-def _git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
-    done = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True, env=env
-    )
-    return done.stdout
-
-
-def _clone(tmp_path: Path, name: str, origin: Path) -> Path:
-    work = tmp_path / name
-    _git(
-        tmp_path,
-        "clone",
-        "-q",
-        "--config",
-        "user.name=tester",
-        "--config",
-        "user.email=tester@example.invalid",
-        str(origin),
-        str(work),
-    )
-    return work
+REF = git.NAMESPACE + "metrics"
 
 
-def _seed(base: Path) -> None:
-    """A bare origin with one commit on main and a clone, built once per session."""
-    origin = base / "origin.git"
-    _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    work = _clone(base, "work", origin)
-    (work / "README.md").write_text("the repository\n")
-    _git(work, "add", "README.md")
-    _git(work, "commit", "-qm", "init")
-    _git(work, "push", "-q", "-u", "origin", "main")
-
-
-@pytest.fixture
-def repos(seeds: Seeds, tmp_path: Path) -> tuple[Path, Path]:
-    """A bare origin with one commit on main, and a working clone of it."""
-    seeds("state", _seed)
-    return tmp_path / "origin.git", tmp_path / "work"
-
-
-@pytest.fixture(autouse=True)
-def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (
-        "GITHUB_ACTIONS",
-        "GITEA_ACTIONS",
-        "GITLAB_CI",
-        "GITHUB_EVENT_NAME",
-        "GITHUB_EVENT_PATH",
-        "GITHUB_SHA",
-        "GITHUB_RUN_ID",
-        "GITHUB_REF",
-        "GITHUB_JOB",
-    ):
-        monkeypatch.delenv(name, raising=False)
+ROWS = git.Series("rows", window=3, ci_only=False, schema=2)
 
 
 # --- refusals ----------------------------------------------------------------
@@ -84,36 +45,27 @@ def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_put_refuses_a_ref_outside_the_namespace(repos: tuple[Path, Path]) -> None:
     _, work = repos
-    why = _state.put(work, "refs/heads/main", {"a.json": "{}"}, message="m")
+    why = git.put(_store(work), "refs/heads/main", {"a.json": "{}"}, message="m")
     assert why.startswith("refusing refs/heads/main")
-    assert _state.NAMESPACE in why
+    assert git.NAMESPACE in why
     assert (
         _git(work, "ls-remote", "origin", "refs/heads/main").split()[0]
         == _git(work, "rev-parse", "HEAD").strip()
     )
 
 
-def test_put_refuses_a_ci_only_write_from_a_local_run(
-    repos: tuple[Path, Path],
-) -> None:
-    _, work = repos
-    why = _state.put(work, REF, {"a.json": "{}"}, message="m", ci_only=True)
-    assert "only a CI run writes this series" in why
-    assert _git(work, "ls-remote", "origin", REF) == ""
-
-
 def test_put_refuses_without_an_origin(tmp_path: Path) -> None:
     lonely = tmp_path / "lonely"
     _git(tmp_path, "init", "-q", str(lonely))
-    why = _state.put(lonely, REF, {"a.json": "{}"}, message="m")
+    why = git.put(_store(lonely), REF, {"a.json": "{}"}, message="m")
     assert "could not be read" in why
     assert "origin" in why
 
 
 def test_read_calls_a_missing_ref_absent(repos: tuple[Path, Path]) -> None:
     _, work = repos
-    found = _state.read(work, REF)
-    assert found == _state.Read(None, None, failed=False)
+    found = git.read(_store(work), REF)
+    assert found == git.Read(None, None, failed=False)
 
 
 def test_read_calls_an_unreachable_remote_a_failure(
@@ -121,7 +73,7 @@ def test_read_calls_an_unreachable_remote_a_failure(
 ) -> None:
     _, work = repos
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    found = _state.read(work, REF)
+    found = git.read(_store(work), REF)
     assert found.files is None and found.failed
     assert found.reason
 
@@ -132,12 +84,12 @@ def test_put_refuses_to_rewrite_from_an_unread_state(
     # The rule that protects every file the writer did not know
     # about: an unreachable ref blocks the whole-tree rewrite.
     origin, work = repos
-    assert _state.put(work, REF, {"a.json": "1"}, message="first") == ""
+    assert git.put(_store(work), REF, {"a.json": "1"}, message="first") == ""
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    why = _state.put(work, REF, {"b.json": "2"}, message="second")
+    why = git.put(_store(work), REF, {"b.json": "2"}, message="second")
     assert "could not be read" in why and "would erase" in why
     survivor = _clone(tmp_path, "survivor", origin)
-    assert _state.read(survivor, REF).files == {"a.json": "1"}
+    assert git.read(_store(survivor), REF).files == {"a.json": "1"}
 
 
 def test_a_stale_lease_re_reads_merges_and_wins(
@@ -148,20 +100,24 @@ def test_a_stale_lease_re_reads_merges_and_wins(
     # retry re-reads and merges, so both files survive.
     origin, work = repos
     other = _clone(tmp_path, "other", origin)
-    assert _state.put(work, REF, {"a.json": "1"}, message="a") == ""
-    real_read = _state.read
+    assert git.put(_store(work), REF, {"a.json": "1"}, message="a") == ""
+    real_read = git.read
     raced = {"done": False}
 
-    def read_then_race(root: Path, ref: str) -> _state.Read:
+    def read_then_race(root: git.StateStore, ref: str) -> git.Read:
         found = real_read(root, ref)
-        if root == other and not raced["done"]:
+        if root.root == other and not raced["done"]:
             raced["done"] = True
-            assert _state.put(work, REF, {"b.json": "2"}, message="b") == ""
+            assert git.put(_store(work), REF, {"b.json": "2"}, message="b") == ""
         return found
 
-    monkeypatch.setattr(_state, "read", read_then_race)
-    assert _state.put(other, REF, {"c.json": "3"}, message="c") == ""
-    assert real_read(work, REF).files == {"a.json": "1", "b.json": "2", "c.json": "3"}
+    monkeypatch.setattr(store_module, "read", read_then_race)
+    assert git.put(_store(other), REF, {"c.json": "3"}, message="c") == ""
+    assert real_read(_store(work), REF).files == {
+        "a.json": "1",
+        "b.json": "2",
+        "c.json": "3",
+    }
 
 
 def test_an_exhausted_lease_names_the_other_writer(
@@ -169,29 +125,30 @@ def test_an_exhausted_lease_names_the_other_writer(
 ) -> None:
     origin, work = repos
     other = _clone(tmp_path, "other", origin)
-    assert _state.put(work, REF, {"a.json": "1"}, message="a") == ""
-    real_read = _state.read
+    assert git.put(_store(work), REF, {"a.json": "1"}, message="a") == ""
+    real_read = git.read
     counter = {"n": 0}
 
-    def always_raced(root: Path, ref: str) -> _state.Read:
+    def always_raced(root: git.StateStore, ref: str) -> git.Read:
         found = real_read(root, ref)
-        if root == other:
+        if root.root == other:
             counter["n"] += 1
             assert (
-                _state.put(work, REF, {f"x{counter['n']}.json": "x"}, message="x") == ""
+                git.put(_store(work), REF, {f"x{counter['n']}.json": "x"}, message="x")
+                == ""
             )
         return found
 
-    monkeypatch.setattr(_state, "read", always_raced)
-    why = _state.put(other, REF, {"c.json": "3"}, message="c", attempts=2)
+    monkeypatch.setattr(store_module, "read", always_raced)
+    why = git.put(_store(other), REF, {"c.json": "3"}, message="c", attempts=2)
     assert "gave up" in why and "2 attempts" in why
-    assert "c.json" not in (real_read(work, REF).files or {})
+    assert "c.json" not in (real_read(_store(work), REF).files or {})
 
 
 def test_drop_of_a_missing_ref_is_already_done(repos: tuple[Path, Path]) -> None:
     _, work = repos
-    assert _state.drop(work, REF) == ""
-    assert _state.drop(work, "refs/heads/main").startswith("refusing")
+    assert git.drop(_store(work), REF) == ""
+    assert git.drop(_store(work), "refs/heads/main").startswith("refusing")
 
 
 # --- the happy path, and the properties every write keeps --------------------
@@ -199,9 +156,13 @@ def test_drop_of_a_missing_ref_is_already_done(repos: tuple[Path, Path]) -> None
 
 def test_put_lays_files_over_the_kept_tree(repos: tuple[Path, Path]) -> None:
     _, work = repos
-    assert _state.put(work, REF, {"a.json": "1", "b.json": "2"}, message="one") == ""
-    assert _state.put(work, REF, {"b.json": "22", "c.json": "3"}, message="two") == ""
-    found = _state.read(work, REF)
+    assert (
+        git.put(_store(work), REF, {"a.json": "1", "b.json": "2"}, message="one") == ""
+    )
+    assert (
+        git.put(_store(work), REF, {"b.json": "22", "c.json": "3"}, message="two") == ""
+    )
+    found = git.read(_store(work), REF)
     assert found.files == {"a.json": "1", "b.json": "22", "c.json": "3"}
     assert found.sha == _git(work, "ls-remote", "origin", REF).split()[0]
     assert not found.failed
@@ -210,8 +171,8 @@ def test_put_lays_files_over_the_kept_tree(repos: tuple[Path, Path]) -> None:
 def test_a_window_keeps_the_newest_names(repos: tuple[Path, Path]) -> None:
     _, work = repos
     rows = {f"run-{n:04d}.json": str(n) for n in range(5)}
-    assert _state.put(work, REF, rows, message="five", window=3) == ""
-    assert _state.read(work, REF).files == {
+    assert git.put(_store(work), REF, rows, message="five", window=3) == ""
+    assert git.read(_store(work), REF).files == {
         "run-0002.json": "2",
         "run-0003.json": "3",
         "run-0004.json": "4",
@@ -221,18 +182,16 @@ def test_a_window_keeps_the_newest_names(repos: tuple[Path, Path]) -> None:
 def test_the_commit_is_a_root_with_identity_and_skip_ci(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman as footman
 
-    monkeypatch.setattr(footman, "prog", lambda: "hse")
     _, work = repos
-    assert _state.put(work, REF, {"a.json": "1"}, message="one") == ""
-    assert _state.put(work, REF, {"b.json": "2"}, message="two") == ""
+    assert git.put(_store(work), REF, {"a.json": "1"}, message="one") == ""
+    assert git.put(_store(work), REF, {"b.json": "2"}, message="two") == ""
     _git(work, "fetch", "-q", "origin", REF)
     parents, author, email, subject = _git(
         work, "log", "-1", "--format=%P%n%an%n%ae%n%s", "FETCH_HEAD"
     ).splitlines()
     assert parents == ""  # replace-only: depth one, no history
-    assert (author, email) == ("hse ci state", "ci-state@hse.invalid")
+    assert (author, email) == IDENTITY
     assert subject == "two [skip ci]"
 
 
@@ -240,8 +199,8 @@ def test_a_read_creates_no_local_ref_and_a_default_fetch_never_sees_the_namespac
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
     origin, work = repos
-    assert _state.put(work, REF, {"a.json": "1"}, message="one") == ""
-    assert _state.read(work, REF).files == {"a.json": "1"}
+    assert git.put(_store(work), REF, {"a.json": "1"}, message="one") == ""
+    assert git.read(_store(work), REF).files == {"a.json": "1"}
     assert _git(work, "for-each-ref", "refs/workshop") == ""
     fresh = _clone(tmp_path, "fresh", origin)
     _git(fresh, "fetch", "-q", "origin")
@@ -250,176 +209,12 @@ def test_a_read_creates_no_local_ref_and_a_default_fetch_never_sees_the_namespac
     assert "refs/remotes/origin/main" in listed
 
 
-def test_run_context_reads_each_forge_and_is_none_locally() -> None:
-    assert _state.run_context({}) is None
-    github = _state.run_context(
-        {
-            "GITHUB_ACTIONS": "true",
-            "GITHUB_RUN_ID": "7",
-            "GITHUB_EVENT_NAME": "push",
-            "GITHUB_REF": "refs/heads/main",
-        }
-    )
-    assert github is not None
-    assert github == _state.RunContext("github", "7", "push", "refs/heads/main")
-    gitea = _state.run_context(
-        {"GITHUB_ACTIONS": "true", "GITEA_ACTIONS": "true", "GITHUB_RUN_ID": "9"}
-    )
-    assert gitea is not None and gitea.forge == "gitea" and gitea.run_id == "9"
-    gitlab = _state.run_context(
-        {
-            "GITLAB_CI": "true",
-            "CI_PIPELINE_ID": "42",
-            "CI_PIPELINE_SOURCE": "push",
-            "CI_COMMIT_REF_NAME": "main",
-        }
-    )
-    assert gitlab == _state.RunContext("gitlab", "42", "push", "main")
-
-
-def test_ci_run_is_the_public_answer_and_none_at_a_desk() -> None:
-    from livery.workshop import RunContext, ci_run
-
-    assert ci_run({}) is None
-    environ = {"GITLAB_CI": "true", "CI_PIPELINE_ID": "42"}
-    found = ci_run(environ)
-    assert isinstance(found, RunContext) and found == _state.run_context(environ)
-
-
-def test_the_run_context_head_falls_back_when_the_payload_is_missing_or_junk(
-    tmp_path: Path,
-) -> None:
-    base = {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_SHA": "a" * 40}
-    missing = _state.run_context({**base, "GITHUB_EVENT_PATH": str(tmp_path / "none")})
-    assert missing is not None and missing.head_sha == "a" * 40
-    junk = tmp_path / "event.json"
-    junk.write_text("{not json")
-    broken = _state.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
-    assert broken is not None and broken.head_sha == "a" * 40
-    junk.write_text(json.dumps({"pull_request": {"head": {}}}))
-    headless = _state.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
-    assert headless is not None and headless.head_sha == "a" * 40
-
-
-def test_the_run_context_head_is_the_pull_requests_on_a_pull_request(
-    tmp_path: Path,
-) -> None:
-    # The checkout is the merge commit; the run is filed under the
-    # pull request's head, which only the payload names.
-    event = tmp_path / "event.json"
-    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
-    env = {
-        "GITHUB_ACTIONS": "true",
-        "GITHUB_RUN_ID": "7",
-        "GITHUB_EVENT_NAME": "pull_request",
-        "GITHUB_SHA": "a" * 40,
-        "GITHUB_EVENT_PATH": str(event),
-    }
-    run = _state.run_context(env)
-    assert run is not None and run.head_sha == "b" * 40
-    event.write_text(json.dumps({"after": "a" * 40}))
-    push = _state.run_context({**env, "GITHUB_EVENT_NAME": "push"})
-    assert push is not None and push.head_sha == "a" * 40
-    gitlab = _state.run_context({"GITLAB_CI": "true", "CI_COMMIT_SHA": "c" * 40})
-    assert gitlab is not None and gitlab.head_sha == "c" * 40
-
-
-def test_the_run_context_head_branch_is_the_pull_requests_and_empty_otherwise(
-    tmp_path: Path,
-) -> None:
-    event = tmp_path / "event.json"
-    base = {
-        "GITHUB_ACTIONS": "true",
-        "GITHUB_RUN_ID": "7",
-        "GITHUB_EVENT_NAME": "pull_request",
-        "GITHUB_EVENT_PATH": str(event),
-    }
-    # Fallbacks first: a payload without the head names no branch, the
-    # runner's own variable stands in, and a push names none.
-    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
-    bare = _state.run_context(base)
-    assert bare is not None and bare.head_ref == ""
-    named = _state.run_context({**base, "GITHUB_HEAD_REF": "feat/x"})
-    assert named is not None and named.head_ref == "feat/x"
-    event.write_text(json.dumps({"after": "a" * 40}))
-    push = _state.run_context({**base, "GITHUB_EVENT_NAME": "push"})
-    assert push is not None and push.head_ref == ""
-    # The payload names the branch, and wins over the variable.
-    event.write_text(
-        json.dumps({"pull_request": {"head": {"sha": "b" * 40, "ref": "feat/y"}}})
-    )
-    run = _state.run_context({**base, "GITHUB_HEAD_REF": "feat/x"})
-    assert run is not None and run.head_ref == "feat/y"
-    gitlab = _state.run_context(
-        {"GITLAB_CI": "true", "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "feat/z"}
-    )
-    assert gitlab is not None and gitlab.head_ref == "feat/z"
-
-
-def test_a_gitlab_merge_request_pipeline_answers_the_pull_request_payload() -> None:
-    # The fallbacks first: a GitLab pipeline that no merge request
-    # started has no payload, and a merge request pipeline builds the
-    # pull request shape GitHub and Gitea write, from the variables.
-    assert (
-        _state.event_payload({"GITLAB_CI": "true", "CI_PIPELINE_SOURCE": "push"})
-        is None
-    )
-    payload = _state.event_payload(
-        {
-            "GITLAB_CI": "true",
-            "CI_MERGE_REQUEST_IID": "7",
-            "CI_MERGE_REQUEST_TITLE": "chore: a member-only change",
-            "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "chore/scoped-leg",
-            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
-            "CI_COMMIT_SHA": "d" * 40,
-        }
-    )
-    assert payload == {
-        "pull_request": {
-            "number": 7,
-            "title": "chore: a member-only change",
-            "head": {"ref": "chore/scoped-leg", "sha": "d" * 40},
-            "base": {"ref": "main"},
-        }
-    }
-
-
-def test_the_event_payload_is_none_when_missing_junk_or_not_an_object(
-    tmp_path: Path,
-) -> None:
-    assert _state.event_payload({}) is None
-    assert _state.event_payload({"GITHUB_EVENT_PATH": str(tmp_path / "none")}) is None
-    junk = tmp_path / "event.json"
-    junk.write_text("{not json")
-    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) is None
-    junk.write_text("[1, 2]")
-    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) is None
-    junk.write_text(json.dumps({"action": "opened"}))
-    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) == {
-        "action": "opened"
-    }
-
-
-def test_a_ci_run_may_write_a_ci_only_series(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, work = repos
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("GITHUB_RUN_ID", "7")
-    assert _state.put(work, REF, {"a.json": "1"}, message="one", ci_only=True) == ""
-
-
-# --- the row extension: refusals first --------------------------------------------
-
-ROWS = _state.Series("rows", window=3, ci_only=False, schema=2)
-
-
 def test_an_absent_series_reads_as_no_rows_and_no_failure(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    assert ROWS.rows(work) == _state.Rows(())
-    assert ROWS.row(work, "any") == (None, "")
+    assert ROWS.rows(_store(work)) == git.Rows(())
+    assert ROWS.row(_store(work), "any") == (None, "")
 
 
 def test_an_unreachable_series_names_itself_and_the_reason(
@@ -427,10 +222,10 @@ def test_an_unreachable_series_names_itself_and_the_reason(
 ) -> None:
     _, work = repos
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    found = ROWS.rows(work)
+    found = ROWS.rows(_store(work))
     assert found.failed and found.rows == () and found.skipped == ()
     assert found.reason.startswith("the rows series could not be read: ")
-    assert ROWS.row(work, "any") == (None, found.reason)
+    assert ROWS.row(_store(work), "any") == (None, found.reason)
 
 
 def test_a_file_that_is_not_a_row_is_skipped_and_named(
@@ -443,36 +238,26 @@ def test_a_file_that_is_not_a_row_is_skipped_and_named(
         "c": json.dumps([1, 2]),
         "d": json.dumps({"schema": 2, "x": 1}),
     }
-    assert _state.put(work, ROWS.ref, files, message="junk") == ""
-    found = ROWS.rows(work)
-    assert found.skipped[0] == _state.Skipped("a", "does not parse")
+    assert git.put(_store(work), ROWS.ref, files, message="junk") == ""
+    found = ROWS.rows(_store(work))
+    assert found.skipped[0] == git.Skipped("a", "does not parse")
     assert tuple(str(item) for item in found.skipped) == (
         "a: does not parse; skipped",
         "b: schema 1, this reader speaks 2; skipped",
         "c: schema none, this reader speaks 2; skipped",
     )
-    assert found.rows == (_state.Row("d", {"schema": 2, "x": 1}),)
+    assert found.rows == (git.Row("d", {"schema": 2, "x": 1}),)
     assert not found.failed and found.reason == ""
-    assert ROWS.row(work, "a") == (None, "a: does not parse")
-    assert ROWS.row(work, "b") == (None, "b: schema 1, this reader speaks 2")
-    assert ROWS.row(work, "d") == (_state.Row("d", {"schema": 2, "x": 1}), "")
-
-
-def test_a_ci_only_series_refuses_a_local_put_by_its_rule(
-    repos: tuple[Path, Path],
-) -> None:
-    _, work = repos
-    guarded = _state.Series("guarded")
-    why = guarded.put(work, {"a": {}}, message="a")
-    assert "only a CI run writes this series; local runs read" in why
-    assert guarded.rows(work) == _state.Rows(())
+    assert ROWS.row(_store(work), "a") == (None, "a: does not parse")
+    assert ROWS.row(_store(work), "b") == (None, "b: schema 1, this reader speaks 2")
+    assert ROWS.row(_store(work), "d") == (git.Row("d", {"schema": 2, "x": 1}), "")
 
 
 def test_a_tree_that_cannot_be_archived_fails_with_gits_words(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    found = _state._tree_files(work, "0" * 40)
+    found = store_module._tree_files(_store(work), "0" * 40)
     assert found.failed and found.files is None
     assert "fatal" in found.reason or "not a valid" in found.reason.lower()
 
@@ -485,7 +270,7 @@ def test_a_row_written_with_carriage_returns_reads_back_as_written(
     # from a file as bytes, so the row comes back as it is, in one
     # process beside the ref's resolve.
     _, work = repos
-    ref = _state.LOCAL_NAMESPACE + "legacy"
+    ref = git.LOCAL_NAMESPACE + "legacy"
     crlf = work / "crlf.json"
     crlf.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:00+00:00", "x": 1}\r\n')
     # As written: hash-object given a path applies core.autocrlf, which
@@ -508,13 +293,13 @@ def test_a_row_written_with_carriage_returns_reads_back_as_written(
     commit = _git(work, "commit-tree", tree, "-m", "legacy").strip()
     _git(work, "update-ref", ref, commit)
     with counting_spawns() as spawned:
-        found = _state.read(work, ref)
+        found = git.read(_store(work), ref)
     assert not found.failed and found.files is not None
     assert found.files["a"] == crlf.read_bytes().decode()
     assert found.files["b"] == plain.read_bytes().decode()
     # The resolve, then the archive.
     assert spawned["git"] == 2, spawned
-    rows = _state.Series("legacy", local=True, ci_only=False, schema=2).rows(work)
+    rows = git.Series("legacy", local=True, ci_only=False, schema=2).rows(_store(work))
     assert [row.data["x"] for row in rows.rows] == [2, 1]
 
 
@@ -522,17 +307,17 @@ def test_a_write_whose_import_fails_is_refused_with_gits_words(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    real = _state._git
+    real = store_module._git
 
     def refused(root: Path, *args: str, stdin: str | bytes | None = None) -> Any:
         if args[:1] == ("fast-import",):
             return SimpleNamespace(code=128, stdout="", stderr="fatal: no space")
         return real(root, *args, stdin=stdin)
 
-    monkeypatch.setattr(_state, "_git", refused)
-    why = ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}}, message="two")
+    monkeypatch.setattr(store_module, "_git", refused)
+    why = ROWS.put(_store(work), {"a": {"x": 1}, "b": {"x": 2}}, message="two")
     assert why == "fast-import failed: fatal: no space"
-    assert ROWS.rows(work) == _state.Rows(())
+    assert ROWS.rows(_store(work)) == git.Rows(())
 
 
 def test_a_written_row_carries_no_platform_line_ends(
@@ -542,8 +327,11 @@ def test_a_written_row_carries_no_platform_line_ends(
     # UTF-8 exactly, whatever platform wrote it, so a reader on another
     # platform finds the same bytes and the same blob id.
     _, work = repos
-    assert ROWS.put(work, {"a": {"x": "caf\u00e9", "n": [1, 2]}}, message="one") == ""
-    found = _state.read(work, ROWS.ref)
+    assert (
+        ROWS.put(_store(work), {"a": {"x": "caf\u00e9", "n": [1, 2]}}, message="one")
+        == ""
+    )
+    found = git.read(_store(work), ROWS.ref)
     assert found.files is not None and found.sha is not None
     blob = subprocess.run(
         ["git", "show", f"{found.sha}:a"], cwd=work, capture_output=True, check=True
@@ -559,17 +347,23 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
     # of six. A write is a read, one hash-object for every blob, the
     # tree, the commit, the push, and the readback.
     _, work = repos
-    wide = _state.Series("wide", window=400, ci_only=False, schema=2)
-    assert wide.put(work, {"r000": {"x": 0}}, message="one") == ""
+    wide = git.Series("wide", window=400, ci_only=False, schema=2)
+    assert wide.put(_store(work), {"r000": {"x": 0}}, message="one") == ""
     with counting_spawns() as six:
         assert (
-            wide.put(work, {f"r{n:03d}": {"x": n} for n in range(1, 7)}, message="six")
+            wide.put(
+                _store(work),
+                {f"r{n:03d}": {"x": n} for n in range(1, 7)},
+                message="six",
+            )
             == ""
         )
     with counting_spawns() as sixty:
         assert (
             wide.put(
-                work, {f"r{n:03d}": {"x": n} for n in range(7, 67)}, message="sixty"
+                _store(work),
+                {f"r{n:03d}": {"x": n} for n in range(7, 67)},
+                message="sixty",
             )
             == ""
         )
@@ -578,7 +372,7 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
     assert six["git"] == sixty["git"] == 5, (six, sixty)
     assert sixty["git ls-remote"] == 0
     with counting_spawns() as reading:
-        found = wide.rows(work)
+        found = wide.rows(_store(work))
     assert len(found.rows) == 67 and not found.failed
     assert reading["git"] == 3, reading
 
@@ -590,29 +384,29 @@ def test_a_snapshot_whose_listing_failed_fails_every_read_and_listing(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
     _, work = repos
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    with _state.remote_snapshot(work, fetch=("rows",)):
-        found = _state.read(work, ROWS.ref)
+    with git.remote_snapshot(_store(work), fetch=("rows",)):
+        found = git.read(_store(work), ROWS.ref)
         assert found.failed and found.reason.startswith(
             "the remote could not be listed"
         )
-        assert _state.list_refs(work, _state.NAMESPACE) is None
-        why = ROWS.put(work, {"b": {"x": 2}}, message="two")
+        assert git.list_refs(_store(work), git.NAMESPACE) is None
+        why = ROWS.put(_store(work), {"b": {"x": 2}}, message="two")
         assert "could not be read" in why and "the remote could not be listed" in why
-        assert _state.drop(work, ROWS.ref).startswith("delete refused")
+        assert git.drop(_store(work), ROWS.ref).startswith("delete refused")
 
 
 def test_a_snapshot_reads_an_absent_ref_as_absence_without_a_fetch(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    with _state.remote_snapshot(work):
+    with git.remote_snapshot(_store(work)):
         with counting_spawns() as spawned:
-            found = _state.read(work, ROWS.ref)
-        assert found == _state.Read(None, None, failed=False)
+            found = git.read(_store(work), ROWS.ref)
+        assert found == git.Read(None, None, failed=False)
         assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
-        assert _state.list_refs(work, _state.NAMESPACE) == {}
+        assert git.list_refs(_store(work), git.NAMESPACE) == {}
 
 
 def test_a_snapshot_lists_once_and_fetches_the_named_series_together(
@@ -621,31 +415,31 @@ def test_a_snapshot_lists_once_and_fetches_the_named_series_together(
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     series = [
-        _state.Series(name, window=50, ci_only=False, schema=2)
+        git.Series(name, window=50, ci_only=False, schema=2)
         for name in ("alpha", "beta", "gamma")
     ]
     for item in series:
-        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
+        assert item.put(_store(other), {"r": {"x": item.name}}, message=item.name) == ""
     # A checkout that holds none of the commits: one listing, one fetch.
     with (
         counting_spawns() as cold,
-        _state.remote_snapshot(work, fetch=("alpha", "beta", "gamma")),
+        git.remote_snapshot(_store(work), fetch=("alpha", "beta", "gamma")),
     ):
         for item in series:
-            found = item.rows(work)
+            found = item.rows(_store(work))
             assert [row.data["x"] for row in found.rows] == [item.name]
-        listed = _state.list_refs(work, _state.NAMESPACE)
+        listed = git.list_refs(_store(work), git.NAMESPACE)
         assert listed is not None and set(listed) >= {item.ref for item in series}
     assert cold["git ls-remote"] == 1 and cold["git fetch"] == 1, cold
     # The commits are local now: one listing and no fetch at all.
-    with counting_spawns() as warm, _state.remote_snapshot(work, fetch=("alpha",)):
+    with counting_spawns() as warm, git.remote_snapshot(_store(work), fetch=("alpha",)):
         for item in series:
-            assert not item.rows(work).failed
+            assert not item.rows(_store(work)).failed
     assert warm["git ls-remote"] == 1 and warm["git fetch"] == 0, warm
     # Outside a snapshot every read fetches on its own, as before.
     with counting_spawns() as bare:
         for item in series:
-            assert not item.rows(work).failed
+            assert not item.rows(_store(work)).failed
     assert bare["git fetch"] == 3
 
 
@@ -654,21 +448,22 @@ def test_a_write_inside_a_snapshot_re_lists_on_a_stale_lease_and_records_its_sha
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    with _state.remote_snapshot(work, fetch=("rows",)):
-        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
+    with git.remote_snapshot(_store(work), fetch=("rows",)):
+        assert [row.name for row in ROWS.rows(_store(work)).rows] == ["a"]
         # Another writer moves the ref after the listing.
-        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
+        assert ROWS.put(_store(other), {"b": {"x": 2}}, message="two") == ""
         with counting_spawns() as spawned:
-            assert ROWS.put(work, {"c": {"x": 3}}, message="three") == ""
+            assert ROWS.put(_store(work), {"c": {"x": 3}}, message="three") == ""
         assert spawned["git ls-remote"] == 1  # the re-listing alone, no readback
         # The write merged the other writer's row and recorded its own sha.
-        found = ROWS.rows(work)
+        found = ROWS.rows(_store(work))
         assert sorted(row.name for row in found.rows) == ["a", "b", "c"]
         assert found.rows[0].name == "c"
-        listed = _state.list_refs(work, ROWS.ref)
+        listed = git.list_refs(_store(work), ROWS.ref)
         assert (
-            listed is not None and listed[ROWS.ref] == _state.read(work, ROWS.ref).sha
+            listed is not None
+            and listed[ROWS.ref] == git.read(_store(work), ROWS.ref).sha
         )
 
 
@@ -682,23 +477,23 @@ def test_a_read_of_a_ref_the_remote_moved_past_the_listing_takes_the_current_com
     # order matters): the listing names the ref's commit, and the
     # read has to fetch it.
     fresh = _clone(tmp_path, "fresh", tmp_path / "origin.git")
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    with _state.remote_snapshot(fresh):
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
+    with git.remote_snapshot(_store(fresh)):
         # Another writer moves the ref between the listing and the read,
         # so a fetch by the ref's name brings the new commit and not
         # the listed one; a read of the listed sha would fail with
         # git's "not a tree object".
-        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
+        assert ROWS.put(_store(other), {"b": {"x": 2}}, message="two") == ""
         with counting_spawns() as spawned:
-            found = ROWS.rows(fresh)
+            found = ROWS.rows(_store(fresh))
         assert not found.failed, found.reason
         assert sorted(row.name for row in found.rows) == ["a", "b"]
         assert found.rows[0].name == "b"
         # One fetch, and one listing again for the moved ref.
         assert spawned["git fetch"] == 1 and spawned["git ls-remote"] == 1, spawned
         # A write inside leases on the current commit and lands.
-        assert ROWS.put(fresh, {"c": {"x": 3}}, message="three") == ""
-    assert sorted(row.name for row in ROWS.rows(fresh).rows) == ["a", "b", "c"]
+        assert ROWS.put(_store(fresh), {"c": {"x": 3}}, message="three") == ""
+    assert sorted(row.name for row in ROWS.rows(_store(fresh)).rows) == ["a", "b", "c"]
 
 
 def test_a_published_listing_opened_after_a_move_reads_the_current_rows(
@@ -710,30 +505,30 @@ def test_a_published_listing_opened_after_a_move_reads_the_current_rows(
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     fresh = _clone(tmp_path, "fresh", tmp_path / "origin.git")
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE, raising=False)
-    with _state.remote_snapshot(fresh, publish=True) as named:
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
+    monkeypatch.delenv("WORKSHOP_SNAPSHOT", raising=False)
+    with git.remote_snapshot(_store(fresh), publish=True) as named:
         assert named is not None
-        monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, named)
-        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
-        _state._SNAPSHOTS.clear()
-        with _state.remote_snapshot(fresh, fetch=("rows",)):
-            found = ROWS.rows(fresh)
+        monkeypatch.setenv("WORKSHOP_SNAPSHOT", named)
+        assert ROWS.put(_store(other), {"b": {"x": 2}}, message="two") == ""
+        store_module._SNAPSHOTS.clear()
+        with git.remote_snapshot(_store(fresh), fetch=("rows",)):
+            found = ROWS.rows(_store(fresh))
             assert not found.failed, found.reason
             assert found.rows[0].name == "b"
-        monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+        monkeypatch.delenv("WORKSHOP_SNAPSHOT")
 
 
 def test_the_listing_carries_the_branches_and_only_them_beside_the_store(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    with counting_spawns() as spawned, _state.remote_snapshot(work):
-        heads = _state.list_refs(work, "refs/heads/")
+    with counting_spawns() as spawned, git.remote_snapshot(_store(work)):
+        heads = git.list_refs(_store(work), "refs/heads/")
         assert heads is not None and "refs/heads/main" in heads
-        assert _state.list_refs(work, "refs/heads/nowhere") == {}
+        assert git.list_refs(_store(work), "refs/heads/nowhere") == {}
         # A namespace the listing did not take is asked for on its own.
-        assert _state.list_refs(work, "refs/tags/") == {}
+        assert git.list_refs(_store(work), "refs/tags/") == {}
     assert spawned["git ls-remote"] == 2  # the snapshot's, and the tags'
 
 
@@ -743,33 +538,36 @@ def test_a_published_snapshot_serves_the_children_and_carries_their_writes(
     import json as _json
 
     _, work = repos
-    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE, raising=False)
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    with _state.remote_snapshot(work, publish=True) as named:
+    monkeypatch.delenv("WORKSHOP_SNAPSHOT", raising=False)
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
+    with git.remote_snapshot(_store(work), publish=True) as named:
         assert named is not None
         # The parent hands the path to its children; a child is
         # its own process in truth, so here the variable is set by
         # hand for the blocks below.
-        monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, named)
+        monkeypatch.setenv("WORKSHOP_SNAPSHOT", named)
         published = _json.loads(Path(named).read_text("utf-8"))
         assert (
             published["root"] == str(work.resolve()) and ROWS.ref in published["refs"]
         )
         # A child: the same checkout, its own process in truth, its own
         # block here; it lists nothing and reads what the file says.
-        _state._SNAPSHOTS.clear()
-        with counting_spawns() as child, _state.remote_snapshot(work, fetch=("rows",)):
-            assert [row.name for row in ROWS.rows(work).rows] == ["a"]
-            assert ROWS.put(work, {"b": {"x": 2}}, message="two") == ""
+        store_module._SNAPSHOTS.clear()
+        with (
+            counting_spawns() as child,
+            git.remote_snapshot(_store(work), fetch=("rows",)),
+        ):
+            assert [row.name for row in ROWS.rows(_store(work)).rows] == ["a"]
+            assert ROWS.put(_store(work), {"b": {"x": 2}}, message="two") == ""
         assert child["git ls-remote"] == 0, child
         # The child's write reached the file for the entries after it.
         after = _json.loads(Path(named).read_text("utf-8"))
         assert after["refs"][ROWS.ref] != published["refs"][ROWS.ref]
-        _state._SNAPSHOTS.clear()
-        with counting_spawns() as next_child, _state.remote_snapshot(work):
-            assert [row.name for row in ROWS.rows(work).rows] == ["b", "a"]
+        store_module._SNAPSHOTS.clear()
+        with counting_spawns() as next_child, git.remote_snapshot(_store(work)):
+            assert [row.name for row in ROWS.rows(_store(work)).rows] == ["b", "a"]
         assert next_child["git ls-remote"] == 0 and next_child["git fetch"] == 0
-        monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+        monkeypatch.delenv("WORKSHOP_SNAPSHOT")
     assert not Path(named).exists()
 
 
@@ -777,23 +575,23 @@ def test_a_published_snapshot_that_cannot_be_read_or_is_anothers_counts_as_none(
     repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
     corrupt = tmp_path / "snapshot.json"
     corrupt.write_text("{not json")
-    monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, str(corrupt))
-    with counting_spawns() as spawned, _state.remote_snapshot(work):
-        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+    monkeypatch.setenv("WORKSHOP_SNAPSHOT", str(corrupt))
+    with counting_spawns() as spawned, git.remote_snapshot(_store(work)):
+        assert [row.name for row in ROWS.rows(_store(work)).rows] == ["a"]
     assert spawned["git ls-remote"] == 1
     other = tmp_path / "other.json"
     other.write_text('{"root": "/elsewhere", "refs": {}, "local": []}')
-    monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, str(other))
-    with counting_spawns() as spawned, _state.remote_snapshot(work):
-        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+    monkeypatch.setenv("WORKSHOP_SNAPSHOT", str(other))
+    with counting_spawns() as spawned, git.remote_snapshot(_store(work)):
+        assert [row.name for row in ROWS.rows(_store(work)).rows] == ["a"]
     assert spawned["git ls-remote"] == 1
     # A parent whose listing failed publishes nothing.
-    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+    monkeypatch.delenv("WORKSHOP_SNAPSHOT")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    with _state.remote_snapshot(work, publish=True) as named:
+    with git.remote_snapshot(_store(work), publish=True) as named:
         assert named is None
 
 
@@ -801,26 +599,26 @@ def test_a_drop_inside_a_snapshot_forgets_the_ref_and_nesting_shares_the_listing
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    with counting_spawns() as spawned, _state.remote_snapshot(work):
-        with _state.remote_snapshot(work):  # nested: the outer listing serves
-            assert _state.list_refs(work, ROWS.ref) is not None
-        assert _state.drop(work, ROWS.ref) == ""
-        assert _state.list_refs(work, ROWS.ref) == {}
-        assert _state.read(work, ROWS.ref) == _state.Read(None, None, failed=False)
+    assert ROWS.put(_store(work), {"a": {"x": 1}}, message="one") == ""
+    with counting_spawns() as spawned, git.remote_snapshot(_store(work)):
+        with git.remote_snapshot(_store(work)):  # nested: the outer listing serves
+            assert git.list_refs(_store(work), ROWS.ref) is not None
+        assert git.drop(_store(work), ROWS.ref) == ""
+        assert git.list_refs(_store(work), ROWS.ref) == {}
+        assert git.read(_store(work), ROWS.ref) == git.Read(None, None, failed=False)
     assert spawned["git ls-remote"] == 1
     # The block is closed: the direct path again, and the ref is gone.
-    assert _state.read(work, ROWS.ref) == _state.Read(None, None, failed=False)
+    assert git.read(_store(work), ROWS.ref) == git.Read(None, None, failed=False)
 
 
 def test_put_stamps_the_schema_and_the_time_over_what_a_row_carries(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    assert ROWS.put(work, {"first": {"x": 1}}, message="one") == ""
+    assert ROWS.put(_store(work), {"first": {"x": 1}}, message="one") == ""
     late = {"second": {"schema": 99, "when": "never"}}
-    assert ROWS.put(work, late, message="two") == ""
-    found = ROWS.rows(work)
+    assert ROWS.put(_store(work), late, message="two") == ""
+    found = ROWS.rows(_store(work))
     assert [row.name for row in found.rows] == ["second", "first"]
     assert all(row.data["schema"] == 2 for row in found.rows)
     assert found.rows[0].when > found.rows[1].when > "2026"
@@ -831,14 +629,19 @@ def test_put_removes_the_named_rows_and_keeps_the_rest(
 ) -> None:
     _, work = repos
     assert (
-        ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}, "c": {"x": 3}}, message="three")
+        ROWS.put(
+            _store(work), {"a": {"x": 1}, "b": {"x": 2}, "c": {"x": 3}}, message="three"
+        )
         == ""
     )
     # A record replaced in place: one row fresh, one removed, one
     # standing with the stamp it had.
-    before = {row.name: row.when for row in ROWS.rows(work).rows}
-    assert ROWS.put(work, {"a": {"x": 11}}, message="again", remove=["b", "gone"]) == ""
-    found = ROWS.rows(work)
+    before = {row.name: row.when for row in ROWS.rows(_store(work)).rows}
+    assert (
+        ROWS.put(_store(work), {"a": {"x": 11}}, message="again", remove=["b", "gone"])
+        == ""
+    )
+    found = ROWS.rows(_store(work))
     assert {row.name: row.data["x"] for row in found.rows} == {"a": 11, "c": 3}
     stamps = {row.name: row.when for row in found.rows}
     assert stamps["c"] == before["c"] and stamps["a"] > before["a"]
@@ -850,13 +653,13 @@ def test_the_window_keeps_the_newest_rows_by_their_stamps_not_their_names(
     _, work = repos
     # The newest row has the smallest name: a name order would evict it.
     for name in ("zz", "mm", "aa", "00"):
-        assert ROWS.put(work, {name: {}}, message=name) == ""
-    assert [row.name for row in ROWS.rows(work).rows] == ["00", "aa", "mm"]
+        assert ROWS.put(_store(work), {name: {}}, message=name) == ""
+    assert [row.name for row in ROWS.rows(_store(work)).rows] == ["00", "aa", "mm"]
 
 
 # --- keyed families: refusals first -------------------------------------------
 
-FAMILY = _state.Keyed("family", ("leg", "package"), window=2, ci_only=False)
+FAMILY = git.Keyed("family", ("leg", "package"), window=2, ci_only=False)
 
 
 def test_a_family_refuses_a_key_of_the_wrong_arity_and_makes_safe_refs() -> None:
@@ -872,41 +675,36 @@ def test_a_family_that_cannot_be_listed_says_so(
 ) -> None:
     _, work = repos
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    assert FAMILY.listed(work) is None
+    assert FAMILY.listed(_store(work)) is None
 
 
 def test_a_family_lists_its_keys_and_leaves_other_refs_out(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    assert FAMILY.listed(work) == []
+    assert FAMILY.listed(_store(work)) == []
     for leg, package in (("b", "y"), ("a", "x"), ("a", "y")):
-        assert FAMILY.series(leg, package).put(work, {"r": {}}, message="m") == ""
+        assert (
+            FAMILY.series(leg, package).put(_store(work), {"r": {}}, message="m") == ""
+        )
     # A ref of another arity under the prefix (the marks beside the
     # coverage families) is not the family's.
-    assert _state.put(work, FAMILY.prefix + "marks", {"m": "1"}, message="s") == ""
-    assert FAMILY.listed(work) == [("a", "x"), ("a", "y"), ("b", "y")]
-    assert FAMILY.listed(work, "a") == [("a", "x"), ("a", "y")]
+    assert git.put(_store(work), FAMILY.prefix + "marks", {"m": "1"}, message="s") == ""
+    assert FAMILY.listed(_store(work)) == [("a", "x"), ("a", "y"), ("b", "y")]
+    assert FAMILY.listed(_store(work), "a") == [("a", "x"), ("a", "y")]
 
 
 # --- the local scope: refusals first ------------------------------------------
 
-LOCAL = _state.Series("local-rows", window=2, ci_only=False, local=True)
-
-
-def test_a_local_series_declared_ci_only_is_refused() -> None:
-    with pytest.raises(ValueError, match="written by local runs"):
-        _state.Series("x", local=True)
-    with pytest.raises(ValueError, match="written by local runs"):
-        _state.Keyed("x", ("k",), local=True)
+LOCAL = git.Series("local-rows", window=2, ci_only=False, local=True)
 
 
 def test_a_local_read_outside_a_repository_is_a_failure_with_git_words(
     tmp_path: Path,
 ) -> None:
-    found = LOCAL.rows(tmp_path)
+    found = LOCAL.rows(_store(tmp_path))
     assert found.failed and "not a git repository" in found.reason
-    assert "could not be read" in LOCAL.put(tmp_path, {"r": {}}, message="m")
+    assert "could not be read" in LOCAL.put(_store(tmp_path), {"r": {}}, message="m")
 
 
 def test_a_local_put_never_reaches_the_remote_and_a_fresh_clone_starts_empty(
@@ -914,11 +712,11 @@ def test_a_local_put_never_reaches_the_remote_and_a_fresh_clone_starts_empty(
 ) -> None:
     origin, work = repos
     assert LOCAL.ref == "refs/workshop-local/local-rows"
-    assert LOCAL.put(work, {"r": {"x": 1}}, message="local") == ""
+    assert LOCAL.put(_store(work), {"r": {"x": 1}}, message="local") == ""
     _git(work, "push", "-q", "origin", "main")
     assert "workshop-local" not in _git(work, "ls-remote", "origin")
-    assert LOCAL.rows(_clone(tmp_path, "fresh", origin)) == _state.Rows(())
-    assert [row.name for row in LOCAL.rows(work).rows] == ["r"]
+    assert LOCAL.rows(_store(_clone(tmp_path, "fresh", origin))) == git.Rows(())
+    assert [row.name for row in LOCAL.rows(_store(work)).rows] == ["r"]
 
 
 def test_worktrees_share_the_local_series_and_the_window_holds(
@@ -927,55 +725,58 @@ def test_worktrees_share_the_local_series_and_the_window_holds(
     _, work = repos
     tree = tmp_path / "tree"
     _git(work, "worktree", "add", "-q", "-b", "side", str(tree))
-    assert LOCAL.put(tree, {"from-tree": {}}, message="t") == ""
-    assert [row.name for row in LOCAL.rows(work).rows] == ["from-tree"]
-    assert LOCAL.put(work, {"from-work": {}}, message="w") == ""
-    assert LOCAL.put(work, {"newest": {}}, message="n") == ""
-    assert [row.name for row in LOCAL.rows(tree).rows] == ["newest", "from-work"]
+    assert LOCAL.put(_store(tree), {"from-tree": {}}, message="t") == ""
+    assert [row.name for row in LOCAL.rows(_store(work)).rows] == ["from-tree"]
+    assert LOCAL.put(_store(work), {"from-work": {}}, message="w") == ""
+    assert LOCAL.put(_store(work), {"newest": {}}, message="n") == ""
+    assert [row.name for row in LOCAL.rows(_store(tree)).rows] == [
+        "newest",
+        "from-work",
+    ]
 
 
 def test_a_local_write_that_lost_the_race_re_reads_and_wins(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    ref = _state.LOCAL_NAMESPACE + "race"
-    assert _state.put(work, ref, {"a": "{}"}, message="a") == ""
-    real_read = _state.read
+    ref = git.LOCAL_NAMESPACE + "race"
+    assert git.put(_store(work), ref, {"a": "{}"}, message="a") == ""
+    real_read = git.read
     raced = {"done": False}
 
-    def read_then_race(root: Path, name: str) -> _state.Read:
+    def read_then_race(root: git.StateStore, name: str) -> git.Read:
         found = real_read(root, name)
         if not raced["done"]:
             raced["done"] = True
-            assert _state.put(work, ref, {"b": "{}"}, message="b") == ""
+            assert git.put(_store(work), ref, {"b": "{}"}, message="b") == ""
         return found
 
-    monkeypatch.setattr(_state, "read", read_then_race)
-    assert _state.put(work, ref, {"c": "{}"}, message="c") == ""
-    assert set(real_read(work, ref).files or {}) == {"a", "b", "c"}
+    monkeypatch.setattr(store_module, "read", read_then_race)
+    assert git.put(_store(work), ref, {"c": "{}"}, message="c") == ""
+    assert set(real_read(_store(work), ref).files or {}) == {"a", "b", "c"}
 
 
 def test_a_local_drop_is_idempotent_and_a_local_family_lists_its_keys(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    family = _state.Keyed("local-family", ("a", "b"), ci_only=False, local=True)
-    assert family.listed(work) == []
+    family = git.Keyed("local-family", ("a", "b"), ci_only=False, local=True)
+    assert family.listed(_store(work)) == []
     for key in (("x", "y"), ("x", "z")):
-        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
-    assert family.listed(work) == [("x", "y"), ("x", "z")]
-    assert family.listed(work, "x") == [("x", "y"), ("x", "z")]
+        assert family.series(*key).put(_store(work), {"r": {}}, message="m") == ""
+    assert family.listed(_store(work)) == [("x", "y"), ("x", "z")]
+    assert family.listed(_store(work), "x") == [("x", "y"), ("x", "z")]
     ref = family.series("x", "y").ref
     assert ref == "refs/workshop-local/local-family/x/y"
-    assert _state.drop(work, ref) == ""
-    assert _state.drop(work, ref) == ""
-    assert family.listed(work) == [("x", "z")]
+    assert git.drop(_store(work), ref) == ""
+    assert git.drop(_store(work), ref) == ""
+    assert family.listed(_store(work)) == [("x", "z")]
 
 
 # --- the janitor: refusals first ------------------------------------------------
 
-HALVES = _state.Keyed("run", ("run", "leg"), stale_after=timedelta(hours=6))
-BOUNDED = _state.Series(
+HALVES = git.Keyed("run", ("run", "leg"), stale_after=timedelta(hours=6))
+BOUNDED = git.Series(
     "bounded", window=3, ci_only=False, local=True, age=timedelta(days=7)
 )
 
@@ -997,12 +798,12 @@ def test_the_janitor_never_touches_a_remote_series_from_a_machine(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    remote = _state.Series("remote-rows", window=1, ci_only=False)
+    remote = git.Series("remote-rows", window=1, ci_only=False)
     files = {f"r{n}": _stamped(datetime(2026, 1, n, tzinfo=UTC)) for n in range(1, 4)}
-    assert _state.put(work, remote.ref, files, message="three") == ""
-    lines = _state.sweep(work, (remote, HALVES), remote=False)
+    assert git.put(_store(work), remote.ref, files, message="three") == ""
+    lines = git.sweep(_store(work), (remote, HALVES), remote=False)
     assert lines == ["  remote series: swept inside CI, never from a machine"]
-    assert len(_state.read(work, remote.ref).files or {}) == 3
+    assert len(git.read(_store(work), remote.ref).files or {}) == 3
 
 
 def test_a_family_that_cannot_be_listed_drops_nothing_and_says_so(
@@ -1010,21 +811,21 @@ def test_a_family_that_cannot_be_listed_drops_nothing_and_says_so(
 ) -> None:
     _, work = repos
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    lines = _state.sweep(work, (HALVES,), remote=True)
-    assert lines == [f"  {_state.RUN_PREFIX}*: could not be listed; nothing swept"]
+    lines = git.sweep(_store(work), (HALVES,), remote=True)
+    assert lines == [f"  {git.RUN_PREFIX}*: could not be listed; nothing swept"]
 
 
 def test_a_family_whose_current_keys_cannot_be_told_drops_no_orphan(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    family = _state.Keyed("fam", ("leg", "unit"), ci_only=False, current=_unknown)
-    assert family.series("a", "x").put(work, {"r": {}}, message="m") == ""
-    lines = _state.sweep(work, (family,), remote=True)
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False, current=_unknown)
+    assert family.series("a", "x").put(_store(work), {"r": {}}, message="m") == ""
+    lines = git.sweep(_store(work), (family,), remote=True)
     assert lines[0] == (
         f"  {family.prefix}*: the current keys could not be told; no orphan dropped"
     )
-    assert family.listed(work) == [("a", "x")]
+    assert family.listed(_store(work)) == [("a", "x")]
 
 
 def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
@@ -1035,20 +836,20 @@ def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
     half = json.dumps({"schema": 1, "job": "check"})
     monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
     monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-    assert _state.put(work, old.ref, {"row.json": half}, message="old") == ""
+    assert git.put(_store(work), old.ref, {"row.json": half}, message="old") == ""
     monkeypatch.delenv("GIT_COMMITTER_DATE")
     monkeypatch.delenv("GIT_AUTHOR_DATE")
-    assert _state.put(work, young.ref, {"row.json": half}, message="young") == ""
+    assert git.put(_store(work), young.ref, {"row.json": half}, message="young") == ""
     # A half spelled before the family made its parts ref-safe is
     # listed as its ref spells it and dropped by that ref.
-    dotted = _state.RUN_PREFIX + "10/check-a-3.14"
+    dotted = git.RUN_PREFIX + "10/check-a-3.14"
     monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
     monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-    assert _state.put(work, dotted, {"row.json": half}, message="dotted") == ""
+    assert git.put(_store(work), dotted, {"row.json": half}, message="dotted") == ""
     monkeypatch.delenv("GIT_COMMITTER_DATE")
     monkeypatch.delenv("GIT_AUTHOR_DATE")
     assert HALVES.at("10", "check-a-3.14").ref == dotted
-    said = _state.sweep(work, (HALVES,), remote=True, dry_run=True)
+    said = git.sweep(_store(work), (HALVES,), remote=True, dry_run=True)
     assert any(
         line.startswith(f"  {dotted}: ") and "would drop" in line for line in said
     )
@@ -1057,18 +858,18 @@ def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
         and line.endswith("old, past 6.0h; would drop")
         for line in said
     )
-    assert _state.read(work, old.ref).files == {"row.json": half}
-    lines = _state.sweep(work, (HALVES,), remote=True)
+    assert git.read(_store(work), old.ref).files == {"row.json": half}
+    lines = git.sweep(_store(work), (HALVES,), remote=True)
     assert any(
         line.startswith(f"  {old.ref}: ") and line.endswith("; dropped")
         for line in lines
     )
     assert f"  {young.ref}: 1 row(s), within its bounds" in lines
-    assert _state.read(work, old.ref).files is None
-    assert _state.read(work, dotted).files is None
-    assert _state.read(work, young.ref).files == {"row.json": half}
+    assert git.read(_store(work), old.ref).files is None
+    assert git.read(_store(work), dotted).files is None
+    assert git.read(_store(work), young.ref).files == {"row.json": half}
     # Re-running is the recovery procedure: the second sweep drops nothing.
-    again = _state.sweep(work, (HALVES,), remote=True)
+    again = git.sweep(_store(work), (HALVES,), remote=True)
     assert not any(line.endswith("dropped") for line in again)
 
 
@@ -1085,20 +886,20 @@ def test_the_janitor_trims_a_window_and_ages_rows_and_a_dry_run_only_says(
         "n2": _stamped(now - timedelta(hours=2)),
         "n1": _stamped(now - timedelta(hours=1)),
     }
-    assert _state.put(work, BOUNDED.ref, files, message="six") == ""
-    said = _state.sweep(work, (BOUNDED,), remote=False, dry_run=True)
+    assert git.put(_store(work), BOUNDED.ref, files, message="six") == ""
+    said = git.sweep(_store(work), (BOUNDED,), remote=False, dry_run=True)
     assert said == [
         f"  {BOUNDED.ref}: would drop 2 row(s) older than 7 day(s)",
         f"  {BOUNDED.ref}: would drop 1 file(s) beyond its window of 3",
     ]
-    assert set(_state.read(work, BOUNDED.ref).files or {}) == set(files)
-    done = _state.sweep(work, (BOUNDED,), remote=False)
+    assert set(git.read(_store(work), BOUNDED.ref).files or {}) == set(files)
+    done = git.sweep(_store(work), (BOUNDED,), remote=False)
     assert done == [
         f"  {BOUNDED.ref}: dropped 2 row(s) older than 7 day(s)",
         f"  {BOUNDED.ref}: dropped 1 file(s) beyond its window of 3",
     ]
-    assert set(_state.read(work, BOUNDED.ref).files or {}) == {"n1", "n2", "n3"}
-    assert _state.sweep(work, (BOUNDED,), remote=False) == [
+    assert set(git.read(_store(work), BOUNDED.ref).files or {}) == {"n1", "n2", "n3"}
+    assert git.sweep(_store(work), (BOUNDED,), remote=False) == [
         f"  {BOUNDED.ref}: 3 row(s), within its bounds"
     ]
 
@@ -1111,7 +912,7 @@ def test_a_lingering_family_keeps_a_gone_key_for_a_run_in_flight_then_drops_it(
     # so a key the world no longer produces stays for the family's linger
     # and goes only once it is older than that.
     _, work = repos
-    family = _state.Keyed(
+    family = git.Keyed(
         "cov",
         ("leg", "unit"),
         window=2,
@@ -1120,118 +921,38 @@ def test_a_lingering_family_keeps_a_gone_key_for_a_run_in_flight_then_drops_it(
         linger=timedelta(hours=1),
     )
     for key in (("a", "x"), ("b", "x")):
-        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
+        assert family.series(*key).put(_store(work), {"r": {}}, message="m") == ""
     gone = family.series("b", "x").ref
-    kept = _state.sweep(work, (family,), remote=True)
+    kept = git.sweep(_store(work), (family,), remote=True)
     assert any(
         line.startswith(f"  {gone}: no current leg and unit produces it; kept ")
         and "into the 1.0h a run in flight may still need it" in line
         for line in kept
     )
-    assert family.listed(work) == [("a", "x"), ("b", "x")]
+    assert family.listed(_store(work)) == [("a", "x"), ("b", "x")]
     later = datetime.now(UTC) + timedelta(hours=2)
-    done = _state.sweep(work, (family,), remote=True, now=later)
+    done = git.sweep(_store(work), (family,), remote=True, now=later)
     assert f"  {gone}: no current leg and unit produces it; dropped" in done
-    assert family.listed(work) == [("a", "x")]
+    assert family.listed(_store(work)) == [("a", "x")]
 
 
 def test_the_janitor_drops_a_key_no_current_producer_makes_and_keeps_the_rest(
     repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    family = _state.Keyed(
+    family = git.Keyed(
         "cov", ("leg", "unit"), window=2, ci_only=False, current=_only_a_x
     )
     for key in (("a", "x"), ("b", "x")):
-        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
+        assert family.series(*key).put(_store(work), {"r": {}}, message="m") == ""
     gone = family.series("b", "x").ref
-    said = _state.sweep(work, (family,), remote=True, dry_run=True)
+    said = git.sweep(_store(work), (family,), remote=True, dry_run=True)
     assert f"  {gone}: no current leg and unit produces it; would drop" in said
-    assert family.listed(work) == [("a", "x"), ("b", "x")]
-    done = _state.sweep(work, (family,), remote=True)
+    assert family.listed(_store(work)) == [("a", "x"), ("b", "x")]
+    done = git.sweep(_store(work), (family,), remote=True)
     assert f"  {gone}: no current leg and unit produces it; dropped" in done
     assert f"  {family.series('a', 'x').ref}: 1 row(s), within its bounds" in done
-    assert family.listed(work) == [("a", "x")]
-
-
-def test_the_run_context_base_is_the_pull_requests_and_empty_otherwise(
-    tmp_path: Path,
-) -> None:
-    event = tmp_path / "event.json"
-    env = {
-        "GITHUB_ACTIONS": "true",
-        "GITHUB_RUN_ID": "7",
-        "GITHUB_EVENT_NAME": "pull_request",
-        "GITHUB_REF": "refs/pull/3/merge",
-        "GITHUB_SHA": "a" * 40,
-        "GITHUB_EVENT_PATH": str(event),
-    }
-    # Fallbacks first: no base in the payload, a push, a missing payload.
-    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
-    run = _state.run_context(env)
-    assert run is not None and run.base_ref == ""
-    pushed = _state.run_context({**env, "GITHUB_EVENT_NAME": "push"})
-    assert pushed is not None and pushed.base_ref == ""
-    missing = _state.run_context({**env, "GITHUB_EVENT_PATH": str(tmp_path / "none")})
-    assert missing is not None and missing.base_ref == ""
-    event.write_text(
-        json.dumps(
-            {"pull_request": {"head": {"sha": "b" * 40}, "base": {"ref": "main"}}}
-        )
-    )
-    run = _state.run_context(env)
-    assert run is not None and run.base_ref == "main"
-    gitlab = _state.run_context(
-        {
-            "GITLAB_CI": "true",
-            "CI_PIPELINE_ID": "9",
-            "CI_PIPELINE_SOURCE": "merge_request_event",
-            "CI_COMMIT_REF_NAME": "feat/x",
-            "CI_COMMIT_SHA": "c" * 40,
-            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
-        }
-    )
-    assert gitlab is not None and gitlab.base_ref == "main"
-
-
-def test_a_gitlab_pipeline_source_reads_in_the_one_event_vocabulary(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # A source the map does not name stays its own word, and a
-    # GitHub run is untouched: the map is GitLab's alone.
-    from livery.workshop._state import run_context
-
-    def event(env: dict[str, str]) -> str:
-        run = run_context(env)
-        assert run is not None
-        return run.event
-
-    base = {"GITLAB_CI": "true", "CI_PIPELINE_ID": "7", "CI_COMMIT_SHA": "abc"}
-    assert event({**base, "CI_PIPELINE_SOURCE": "push"}) == "push"
-    assert event({**base, "CI_PIPELINE_SOURCE": "schedule"}) == "schedule"
-    assert event({**base, "CI_PIPELINE_SOURCE": "pipeline"}) == "pipeline"
-    assert (
-        event({"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "merge_request_event"})
-        == "merge_request_event"
-    )
-    # A merge request pipeline is a pull request run, with its head and
-    # base as the runner names them; a created pipeline is a dispatch.
-    merge = run_context(
-        {
-            **base,
-            "CI_PIPELINE_SOURCE": "merge_request_event",
-            "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "feat/1-work",
-            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
-        }
-    )
-    assert merge is not None
-    assert merge.event == "pull_request"
-    assert merge.head_ref == "feat/1-work" and merge.base_ref == "main"
-    for source in ("api", "web", "trigger"):
-        assert event({**base, "CI_PIPELINE_SOURCE": source}) == "workflow_dispatch"
-
-
-# --- the fetched mirror: what a machine's gate reads ----------------------------
+    assert family.listed(_store(work)) == [("a", "x")]
 
 
 def test_the_fetched_snapshot_fails_every_read_until_the_store_was_fetched(
@@ -1239,12 +960,12 @@ def test_the_fetched_snapshot_fails_every_read_until_the_store_was_fetched(
 ) -> None:
     """Never fetched reads as unreachable, naming the sync, and never as absence."""
     _, work = repos
-    with counting_spawns() as spawned, _state.fetched_snapshot(work):
-        found = _state.read(work, REF)
+    with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
+        found = git.read(_store(work), REF)
         assert found.failed
         assert "has not been fetched" in found.reason and "sync`" in found.reason
-        assert _state.list_refs(work, _state.NAMESPACE) is None
-        rows = _state.Series("metrics", window=50, ci_only=False).rows(work)
+        assert git.list_refs(_store(work), git.NAMESPACE) is None
+        rows = git.Series("metrics", window=50, ci_only=False).rows(_store(work))
         assert rows.failed and "has not been fetched" in rows.reason
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
 
@@ -1254,34 +975,34 @@ def test_fetch_store_mirrors_origins_namespace_prunes_and_stamps(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    alpha = _state.Series("alpha", window=50, ci_only=False)
-    beta = _state.Series("beta", window=50, ci_only=False)
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    beta = git.Series("beta", window=50, ci_only=False)
     for item in (alpha, beta):
-        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
-    assert _state.fetch_store(work)[:2] == (2, "")
-    mirrored = _state.list_refs(work, _state.FETCHED_NAMESPACE)
+        assert item.put(_store(other), {"r": {"x": item.name}}, message=item.name) == ""
+    assert git.fetch_store(_store(work))[:2] == (2, "")
+    mirrored = git.list_refs(_store(work), git.FETCHED_NAMESPACE)
     assert mirrored is not None and set(mirrored) == {
-        _state.FETCHED_NAMESPACE + "alpha",
-        _state.FETCHED_NAMESPACE + "beta",
+        git.FETCHED_NAMESPACE + "alpha",
+        git.FETCHED_NAMESPACE + "beta",
     }
-    stamped, why = _state.FETCHED.row(work, "origin")
+    stamped, why = git.FETCHED.row(_store(work), "origin")
     assert why == "" and stamped is not None and stamped.data["refs"] == 2
     # A ref origin dropped goes from the mirror on the next fetch.
-    assert _state.drop(other, beta.ref) == ""
-    assert _state.fetch_store(work)[:2] == (1, "")
-    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) == {
-        _state.FETCHED_NAMESPACE + "alpha": mirrored[_state.FETCHED_NAMESPACE + "alpha"]
+    assert git.drop(_store(other), beta.ref) == ""
+    assert git.fetch_store(_store(work))[:2] == (1, "")
+    assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) == {
+        git.FETCHED_NAMESPACE + "alpha": mirrored[git.FETCHED_NAMESPACE + "alpha"]
     }
     # The mirror is never pushed and never written by hand.
     assert "workshop-origin" not in _git(work, "ls-remote", "origin")
-    assert "writes only under" in _state.put(
-        work, _state.FETCHED_NAMESPACE + "alpha", {"r": "{}"}, message="no"
+    assert "writes only under" in git.put(
+        _store(work), git.FETCHED_NAMESPACE + "alpha", {"r": "{}"}, message="no"
     )
     # An origin that cannot answer is the reason, and the last mirror stands.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    fetched = _state.fetch_store(work)
+    fetched = git.fetch_store(_store(work))
     assert fetched.held == 0 and fetched.why and fetched.changed == 0
-    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) is not None
+    assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) is not None
 
 
 def test_fetch_store_brings_origins_branches_in_the_same_fetch_when_asked(
@@ -1289,26 +1010,26 @@ def test_fetch_store_brings_origins_branches_in_the_same_fetch_when_asked(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    alpha = _state.Series("alpha", window=50, ci_only=False)
-    assert alpha.put(other, {"r": {"x": "alpha"}}, message="alpha") == ""
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
     _git(other, "checkout", "-b", "feat/9-theirs")
     (other / "theirs.txt").write_text("t\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: theirs")
     _git(other, "push", "-u", "origin", "feat/9-theirs")
     # The narrow fetch first: the store alone, no branch comes with it.
-    assert _state.fetch_store(work)[:2] == (1, "")
+    assert git.fetch_store(_store(work))[:2] == (1, "")
     assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
     # Asked for the branches, one fetch brings the store and origin's
     # heads, and a branch origin dropped goes from the remote-tracking
     # refs the way a dropped ref goes from the mirror.
     with counting_spawns() as spawned:
-        assert _state.fetch_store(work, branches=True)[:2] == (1, "")
+        assert git.fetch_store(_store(work), branches=True)[:2] == (1, "")
     assert spawned["git fetch"] == 1
     assert "origin/feat/9-theirs" in _git(work, "branch", "-r")
-    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) is not None
+    assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) is not None
     _git(other, "push", "origin", "--delete", "feat/9-theirs")
-    assert _state.fetch_store(work, branches=True)[:2] == (1, "")
+    assert git.fetch_store(_store(work), branches=True)[:2] == (1, "")
     assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
 
 
@@ -1319,19 +1040,19 @@ def test_fetch_store_counts_what_moved_and_a_quiet_origin_moves_nothing(
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     # A failed fetch first: nothing held, nothing changed, the reason.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    failed = _state.fetch_store(work)
+    failed = git.fetch_store(_store(work))
     assert failed.held == 0 and failed.changed == 0 and failed.why
     _git(work, "remote", "set-url", "origin", str(tmp_path / "origin.git"))
-    alpha = _state.Series("alpha", window=50, ci_only=False)
-    assert alpha.put(other, {"r": {"x": "one"}}, message="one") == ""
-    assert _state.fetch_store(work) == _state.Fetched(1, "", 1)
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    assert alpha.put(_store(other), {"r": {"x": "one"}}, message="one") == ""
+    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 1)
     # Quiet origin: the round trip is the whole cost and nothing moves.
-    assert _state.fetch_store(work) == _state.Fetched(1, "", 0)
+    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 0)
     # A moved ref and a pruned one each count once.
-    assert alpha.put(other, {"r": {"x": "two"}}, message="two") == ""
-    assert _state.fetch_store(work) == _state.Fetched(1, "", 1)
-    assert _state.drop(other, alpha.ref) == ""
-    assert _state.fetch_store(work) == _state.Fetched(0, "", 1)
+    assert alpha.put(_store(other), {"r": {"x": "two"}}, message="two") == ""
+    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 1)
+    assert git.drop(_store(other), alpha.ref) == ""
+    assert git.fetch_store(_store(work)) == git.Fetched(0, "", 1)
 
 
 def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
@@ -1339,45 +1060,32 @@ def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    alpha = _state.Series("alpha", window=50, ci_only=False)
-    assert alpha.put(other, {"r": {"x": "alpha"}}, message="alpha") == ""
-    assert _state.fetch_store(work)[:2] == (1, "")
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
+    assert git.fetch_store(_store(work))[:2] == (1, "")
     # A ref written after the fetch is not in the mirror: the snapshot
     # is what the last sync saw, by design.
-    beta = _state.Series("beta", window=50, ci_only=False)
-    assert beta.put(other, {"r": {"x": "beta"}}, message="beta") == ""
+    beta = git.Series("beta", window=50, ci_only=False)
+    assert beta.put(_store(other), {"r": {"x": "beta"}}, message="beta") == ""
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    local = _state.Series("scratch", window=5, ci_only=False, local=True)
-    with counting_spawns() as spawned, _state.fetched_snapshot(work):
-        assert [row.data["x"] for row in alpha.rows(work).rows] == ["alpha"]
-        assert _state.read(work, beta.ref) == _state.Read(None, None, failed=False)
-        listed = _state.list_refs(work, _state.NAMESPACE)
+    local = git.Series("scratch", window=5, ci_only=False, local=True)
+    with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
+        assert [row.data["x"] for row in alpha.rows(_store(work)).rows] == ["alpha"]
+        assert git.read(_store(work), beta.ref) == git.Read(None, None, failed=False)
+        listed = git.list_refs(_store(work), git.NAMESPACE)
         assert listed is not None and set(listed) == {alpha.ref}
-        heads = _state.list_refs(work, "refs/heads/")
+        heads = git.list_refs(_store(work), "refs/heads/")
         assert heads is not None and set(heads) == {"refs/heads/main"}
         # A remote snapshot opened inside shares the mirror.
-        with _state.remote_snapshot(work, fetch=("alpha", "beta")):
-            assert not alpha.rows(work).failed
+        with git.remote_snapshot(_store(work), fetch=("alpha", "beta")):
+            assert not alpha.rows(_store(work)).failed
         # A remote series is refused; a local one writes as ever.
-        why = alpha.put(work, {"r": {"x": "changed"}}, message="no")
+        why = alpha.put(_store(work), {"r": {"x": "changed"}}, message="no")
         assert "writes nothing to origin" in why
-        assert local.put(work, {"r": {"x": "local"}}, message="yes") == ""
-        assert [row.data["x"] for row in local.rows(work).rows] == ["local"]
+        assert local.put(_store(work), {"r": {"x": "local"}}, message="yes") == ""
+        assert [row.data["x"] for row in local.rows(_store(work)).rows] == ["local"]
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
     assert spawned["git push"] == 0
-
-
-def test_the_sync_line_says_what_the_fetch_did(
-    repos: tuple[Path, Path], tmp_path: Path
-) -> None:
-    from livery.workshop._sync import fetch_store_lines
-
-    _, work = repos
-    assert fetch_store_lines(work) == ["  store: up to date"]
-    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    (line,) = fetch_store_lines(work)
-    assert line.startswith("  store: origin's state store not fetched (")
-    assert line.endswith("); the last snapshot stands")
 
 
 def test_the_mirror_that_cannot_be_listed_and_a_stamp_that_is_not_a_row_are_reasons(
@@ -1385,18 +1093,18 @@ def test_the_mirror_that_cannot_be_listed_and_a_stamp_that_is_not_a_row_are_reas
 ) -> None:
     """Every fallback is a printed reason, never an absence."""
     _, work = repos
-    assert _state.fetch_store(work)[:2] == (0, "")
+    assert git.fetch_store(_store(work))[:2] == (0, "")
     # A stamp that is not a row of the schema: the reason names it.
-    assert _state.put(work, _state.FETCHED.ref, {"origin": "junk"}, message="x") == ""
-    with _state.fetched_snapshot(work):
-        found = _state.read(work, REF)
+    assert git.put(_store(work), git.FETCHED.ref, {"origin": "junk"}, message="x") == ""
+    with git.fetched_snapshot(_store(work)):
+        found = git.read(_store(work), REF)
     assert found.failed and "origin:" in found.reason
-    assert _state.fetch_store(work)[:2] == (0, "")  # the stamp is a row again
+    assert git.fetch_store(_store(work))[:2] == (0, "")  # the stamp is a row again
     # git refusing the listing, on the fetch and under the snapshot.
-    monkeypatch.setattr(_state, "_local_refs", lambda root, prefix: None)
-    assert _state.fetch_store(work)[:2] == (0, "the mirror could not be listed")
-    with _state.fetched_snapshot(work):
-        found = _state.read(work, REF)
+    monkeypatch.setattr(store_module, "_local_refs", lambda root, prefix: None)
+    assert git.fetch_store(_store(work))[:2] == (0, "the mirror could not be listed")
+    with git.fetched_snapshot(_store(work)):
+        found = git.read(_store(work), REF)
     assert found.failed and found.reason.endswith("the mirror could not be listed")
 
 
@@ -1408,21 +1116,23 @@ def test_a_read_inside_a_snapshot_brings_the_refs_key_group_in_one_fetch(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    family = _state.Keyed("fam", ("leg", "unit"), ci_only=False)
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False)
     keys = [("a", "x"), ("a", "y"), ("b", "x"), ("b", "y")]
     for key in keys:
-        assert family.series(*key).put(other, {"r": {"k": key}}, message="m") == ""
+        assert (
+            family.series(*key).put(_store(other), {"r": {"k": key}}, message="m") == ""
+        )
     # A single series beside the keys, one level up: its own group.
-    marks = _state.Series("fam/marks", ci_only=False)
-    assert marks.put(other, {"r": {"m": 1}}, message="marks") == ""
-    with _state.remote_snapshot(work), counting_spawns() as spawned:
-        assert [row.name for row in marks.rows(work).rows] == ["r"]
+    marks = git.Series("fam/marks", ci_only=False)
+    assert marks.put(_store(other), {"r": {"m": 1}}, message="marks") == ""
+    with git.remote_snapshot(_store(work)), counting_spawns() as spawned:
+        assert [row.name for row in marks.rows(_store(work)).rows] == ["r"]
         assert spawned["git fetch"] == 1
         # A key's read brings its siblings under the same parent; the
         # sibling's read then answers from the object store.
         expected = {("a", "x"): 2, ("a", "y"): 2, ("b", "x"): 3, ("b", "y"): 3}
         for key in keys:
-            found = family.series(*key).rows(work)
+            found = family.series(*key).rows(_store(work))
             assert [row.data["k"] for row in found.rows] == [list(key)], key
             assert spawned["git fetch"] == expected[key], (key, spawned)
 
@@ -1432,18 +1142,18 @@ def test_a_snapshot_names_a_prefix_of_another_namespace_in_full(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    traces = _state.Keyed(
-        "tr", ("run", "leg"), ci_only=False, namespace=_state.TRACE_NAMESPACE
+    traces = git.Keyed(
+        "tr", ("run", "leg"), ci_only=False, namespace=git.TRACE_NAMESPACE
     )
     for key in (("1", "a"), ("1", "b"), ("2", "a")):
-        assert traces.series(*key).put(other, {"r": {}}, message="m") == ""
+        assert traces.series(*key).put(_store(other), {"r": {}}, message="m") == ""
     with (
         counting_spawns() as spawned,
-        _state.remote_snapshot(work, fetch=(traces.prefix,)),
+        git.remote_snapshot(_store(work), fetch=(traces.prefix,)),
     ):
         assert spawned["git fetch"] == 1
         for key in (("1", "a"), ("1", "b"), ("2", "a")):
-            assert not traces.series(*key).rows(work).failed
+            assert not traces.series(*key).rows(_store(work)).failed
         assert spawned["git fetch"] == 1, spawned
 
 
@@ -1452,14 +1162,19 @@ def test_a_block_inside_another_brings_what_it_names(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    series = [_state.Series(name, ci_only=False) for name in ("alpha", "beta", "gamma")]
+    series = [git.Series(name, ci_only=False) for name in ("alpha", "beta", "gamma")]
     for item in series:
-        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
-    with _state.remote_snapshot(work, fetch=("alpha",)), counting_spawns() as inner:
-        with _state.remote_snapshot(work, fetch=("beta", "gamma")):
+        assert item.put(_store(other), {"r": {"x": item.name}}, message=item.name) == ""
+    with (
+        git.remote_snapshot(_store(work), fetch=("alpha",)),
+        counting_spawns() as inner,
+    ):
+        with git.remote_snapshot(_store(work), fetch=("beta", "gamma")):
             assert inner["git fetch"] == 1
             for item in series[1:]:
-                assert [row.data["x"] for row in item.rows(work).rows] == [item.name]
+                assert [row.data["x"] for row in item.rows(_store(work)).rows] == [
+                    item.name
+                ]
         assert inner["git fetch"] == 1 and inner["git ls-remote"] == 0, inner
 
 
@@ -1468,17 +1183,17 @@ def test_the_janitor_reads_a_familys_commit_times_in_one_fetch_and_one_log(
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
-    family = _state.Keyed(
+    family = git.Keyed(
         "halves", ("run", "leg"), ci_only=False, stale_after=timedelta(hours=6)
     )
     keys = [(str(run), leg) for run in (1, 2, 3) for leg in ("a", "b")]
     for key in keys:
-        assert family.series(*key).put(other, {"r": {}}, message="m") == ""
+        assert family.series(*key).put(_store(other), {"r": {}}, message="m") == ""
     # The fallback first: no block open, the sweep opens its own, so
     # the keys are listed once, their commits brought in one fetch,
     # their times read in one log, and their rows from the object store.
     with counting_spawns() as bare:
-        lines = _state.sweep(work, (family,), remote=True, dry_run=True)
+        lines = git.sweep(_store(work), (family,), remote=True, dry_run=True)
     assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
     assert bare["git fetch"] == 1 and bare["git log"] == 1, bare
     assert bare["git ls-remote"] == 1, bare
@@ -1487,8 +1202,8 @@ def test_the_janitor_reads_a_familys_commit_times_in_one_fetch_and_one_log(
     # fetch and one log, and no listing beyond the block's own.
     cold = tmp_path / "cold"
     _git(tmp_path, "clone", "-q", "--no-local", str(tmp_path / "origin.git"), str(cold))
-    with _state.remote_snapshot(cold), counting_spawns() as snap:
-        lines = _state.sweep(cold, (family,), remote=True, dry_run=True)
+    with git.remote_snapshot(_store(cold)), counting_spawns() as snap:
+        lines = git.sweep(_store(cold), (family,), remote=True, dry_run=True)
     assert len(lines) == len(keys) and all("within its bounds" in x for x in lines)
     assert snap["git fetch"] == 1 and snap["git log"] == 1, snap
     assert snap["git ls-remote"] == 0, snap
@@ -1498,7 +1213,7 @@ def test_a_local_familys_commit_times_are_read_in_one_call_and_no_fetch(
     repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, work = repos
-    family = _state.Keyed(
+    family = git.Keyed(
         "aged",
         ("run", "leg"),
         ci_only=False,
@@ -1507,12 +1222,12 @@ def test_a_local_familys_commit_times_are_read_in_one_call_and_no_fetch(
     )
     monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
     monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-    assert family.series("1", "a").put(work, {"r": {}}, message="old") == ""
+    assert family.series("1", "a").put(_store(work), {"r": {}}, message="old") == ""
     monkeypatch.delenv("GIT_COMMITTER_DATE")
     monkeypatch.delenv("GIT_AUTHOR_DATE")
-    assert family.series("2", "a").put(work, {"r": {}}, message="young") == ""
+    assert family.series("2", "a").put(_store(work), {"r": {}}, message="young") == ""
     with counting_spawns() as spawned:
-        lines = _state.sweep(work, (family,), remote=False)
+        lines = git.sweep(_store(work), (family,), remote=False)
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0, spawned
     # One listing of the keys, one read of every key's commit time.
     assert spawned["git for-each-ref"] == 2, spawned

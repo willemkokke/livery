@@ -13,7 +13,6 @@ import pytest
 from livery.footman import Failed
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._publish import MANIFEST
 from livery.workshop._release_driver import (
@@ -57,8 +56,6 @@ def _rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, s
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = tmp_path / "ws"
     _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     member(root, "core")
     member(root, "tool")
@@ -104,9 +101,7 @@ def test_a_base_moved_under_the_set_refuses_naming_the_commits(
 
 
 def test_off_a_release_branch_the_freshness_check_is_green(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _root, other, _mined = _rig(tmp_path, monkeypatch)
     _move(other, "packages/core/x.txt", "feat(core): moved")
@@ -115,9 +110,7 @@ def test_off_a_release_branch_the_freshness_check_is_green(
 
 
 def test_a_manifest_without_a_mining_point_is_green(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root, other, _mined = _rig(tmp_path, monkeypatch)
     (root / MANIFEST).write_text(_manifest("", ("core", "0.3.0")))
@@ -128,9 +121,7 @@ def test_a_manifest_without_a_mining_point_is_green(
 
 
 def test_a_base_moved_elsewhere_stays_fresh(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _root, other, _mined = _rig(tmp_path, monkeypatch)
     _move(other, "packages/tool/x.txt", "feat(tool): elsewhere")
@@ -146,10 +137,6 @@ def test_a_release_tip_this_clone_lacks_reads_unmoved(tmp_path: Path) -> None:
     clone = tmp_path / "c"
     _git(
         clone,
-        "-c",
-        "user.email=t@x",
-        "-c",
-        "user.name=T",
         "commit",
         "--allow-empty",
         "-m",
@@ -157,9 +144,7 @@ def test_a_release_tip_this_clone_lacks_reads_unmoved(tmp_path: Path) -> None:
     )
     _git(clone, "push", "origin", "main")
     _git(clone, "fetch")
-    assert not base_moved_in_paths(
-        GitOps(clone), "main", ("packages/core",), head="0" * 40
-    )
+    assert not base_moved_in_paths(clone, "main", ("packages/core",), head="0" * 40)
 
 
 def test_a_failed_commits_staged_stamp_and_manifest_roll_back(
@@ -202,7 +187,6 @@ def _driver(root: Path) -> ReleaseDriver:
     return ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),
-        GitOps(root),
         (_core(root).package,),
         armed=True,
     )
@@ -255,7 +239,7 @@ def _release(*, armed: bool) -> None:
     run_release(
         cast("Callable[[], ReleaseDriver]", _Driver),
         cast("Repository", None),
-        cast("GitOps", None),
+        cast("Path", None),
         armed=armed,
     )
 

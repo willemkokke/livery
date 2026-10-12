@@ -1,7 +1,7 @@
 """Diagnostic bundles: the classifier's raw inputs, kept for reading.
 
 Every non-merged watch outcome writes one bundle as a row of a local
-series of the state store ([livery.workshop._state][]): in the
+series of the state store ([livery.git][]): in the
 checkout's git directory, never in its working tree (it would get
 committed) and never on the forge (it would get published). The
 premise: a predicate vector nobody has seen before IS an uncovered
@@ -22,8 +22,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from livery import git
 from livery.forge import Repository
-from livery.workshop._state import Series
+from livery.workshop._ci_context import state_store
 from livery.workshop._verdict import Verdict
 
 #: Bundle format version; bump on any structural change.
@@ -33,7 +34,9 @@ SCHEMA = 1
 KEEP = 20
 
 #: The bundles: a local series, one row per non-merged ending.
-SERIES = Series("diagnostics", window=KEEP, ci_only=False, local=True, schema=SCHEMA)
+SERIES = git.Series(
+    "diagnostics", window=KEEP, ci_only=False, local=True, schema=SCHEMA
+)
 
 
 def _safely(section: Callable[[], Any]) -> Any:
@@ -112,7 +115,7 @@ def record(
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         name = f"{stamp}-{branch.replace('/', '-')}-{verdict.state}"
         why = SERIES.put(
-            root,
+            state_store(root),
             {name: gather_bundle(repo, verdict, branch=branch)},
             message=f"diagnostics: {branch} {verdict.state}",
         )

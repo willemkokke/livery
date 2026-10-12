@@ -24,9 +24,10 @@ import re
 import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, cast
 
-from livery.workshop._git_ops import GitOps
+from livery import git
 from livery.workshop._packages import PACKAGES_DIR, Package
 
 #: The lock every python member resolves through.
@@ -60,14 +61,14 @@ class Delta:
         return any(path.startswith(f"{removed}/") for removed, _ in self.removed)
 
 
-def package_delta(git: GitOps, before: str, packages: Iterable[Package]) -> Delta:
+def package_delta(root: Path, before: str, packages: Iterable[Package]) -> Delta:
     """The packages added and removed between *before* and the working tree.
 
     One listing of *before*'s tree answers which contracts existed
     then; a package's contract is ``packages/<name>/workshop.toml`` or,
     in a group directory, ``packages/<group>/<name>/workshop.toml``.
     """
-    listed = git._run("ls-tree", "-r", "--name-only", before, "--", PACKAGES_DIR)
+    listed = git.run(root, "ls-tree", "-r", "--name-only", before, "--", PACKAGES_DIR)
     contracts = {
         line.removesuffix("/workshop.toml")
         for line in listed.splitlines()
@@ -79,7 +80,7 @@ def package_delta(git: GitOps, before: str, packages: Iterable[Package]) -> Delt
     removed: list[tuple[str, str]] = []
     for path in sorted(contracts - present):
         try:
-            contract = tomllib.loads(git.file_at(before, f"{path}/workshop.toml"))
+            contract = tomllib.loads(git.file_at(root, before, f"{path}/workshop.toml"))
         except tomllib.TOMLDecodeError:
             contract = {}
         removed.append((path, str(contract.get("name") or "")))

@@ -25,10 +25,12 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Issue, Repository
+from livery.workshop import _stack
+from livery.workshop._ci_context import state_store
 from livery.workshop._contract import load_contract
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._submit import (
     merged_pull_request,
     only_local_work,
@@ -105,7 +107,7 @@ def worktree_home(root: Path) -> Path:
     """
     name = root.name
     if (root / ".git").exists():
-        name = GitOps(root).main_checkout().name
+        name = git.main_checkout(root).name
     return footman.data_dir() / "worktrees" / name
 
 
@@ -144,7 +146,7 @@ def _issue_kind(labels: tuple[str, ...], override: str) -> str:
     return "feat"
 
 
-def _find_branch(git: GitOps, number: int, *, ask_origin: bool = True) -> str:
+def _find_branch(root: Path, number: int, *, ask_origin: bool = True) -> str:
     """The issue's branch, from the local listing, then origin's.
 
     With *ask_origin* false, origin's branches are the remote-tracking
@@ -152,10 +154,12 @@ def _find_branch(git: GitOps, number: int, *, ask_origin: bool = True) -> str:
     only names the branch.
     """
     needle = f"/{number}-"
-    for name in git.local_branches(""):
+    for name in git.local_branches(root, ""):
         if _BRANCH_RE.match(name) and needle in name:
             return name
-    remote = git.remote_branches("") if ask_origin else git.tracking_branches("")
+    remote = (
+        git.remote_branches(root, "") if ask_origin else git.tracking_branches(root, "")
+    )
     for name in remote:
         if _BRANCH_RE.match(name) and needle in name:
             return name
@@ -208,8 +212,8 @@ def issue_show(
     print(f"  #{found.number}  {found.title}{holders}{labels}")
     print(f"  {found.state}  {found.url}".rstrip())
     try:
-        branch = _find_branch(GitOps(root), number, ask_origin=False)
-    except GitError as error:
+        branch = _find_branch(root, number, ask_origin=False)
+    except git.GitError as error:
         print(f"  the issue's branch could not be looked up: {error}")
         branch = ""
     pull = repo.pr.find_by_head(branch) if branch else None
@@ -392,7 +396,6 @@ def start(
         )
     root = _workspace()
     repo = _repo(root)
-    git = GitOps(root)
     if agent:
         worktree = True
     if type and type not in _KINDS:
@@ -418,28 +421,33 @@ def start(
         path = worktree_path(root, work.number, work.title)
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
-    git.fetch()
+    # One round trip: origin's heads for the base and the store for the
+    # worktree's first gate, the shape a sync's own fetch has.
+    from livery.git import fetch_store
+    from livery.workshop._sync import store_lines
+
+    fetched = fetch_store(state_store(root), branches=True)
+    if fetched.why:
+        fail(f"origin could not be fetched: {fetched.why}")
+    for line in store_lines(fetched):
+        print(line)
     base = "main"
     if from_:
         if from_ == branch:
             fail(f"--from={from_} names the branch being started")
-        if not git.remote_head(from_):
+        if not git.remote_head(root, from_):
             fail(
                 f"origin has no branch {from_!r} to start on: push the parent"
                 f" first (`{footman.prog()} submit` in its worktree), then"
                 " start on it"
             )
         base = from_
-    from livery.workshop._sync import fetch_store_lines
-
-    for line in fetch_store_lines(root):
-        print(line)
     if worktree:
         from livery.workshop._sweep import sweep_worktrees
 
         for line in sweep_worktrees(worktree_home(root).parent, dry_run=False):
             print(f"  {line}")
-        held = _started_at(git, root, branch, path)
+        held = _started_at(root, branch, path)
         if held is not None:
             print(f"  already started: {branch} at {held}")
             if held == path:
@@ -453,24 +461,24 @@ def start(
             _open_work(held, open)
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        if _kept(repo, git, root, branch):
+        if _kept(repo, root, branch):
             # The branch outlived its worktree and is not finished work:
             # a worktree on its own tip re-enters it, its commits kept.
-            git._run("worktree", "add", str(path), branch)
+            git.run(root, "worktree", "add", str(path), branch)
             print(f"  worktree {path} on {branch}, its own commits kept")
         else:
-            git._run("worktree", "add", str(path), "-b", branch, f"origin/{base}")
+            git.run(root, "worktree", "add", str(path), "-b", branch, f"origin/{base}")
             print(f"  worktree {path} on {started}")
-            _record_parent(git, branch, from_)
+            _record_parent(root, branch, from_)
         _provision(path)
         if agent:
             _launch_agent(agent, path, briefing, branch, prompt)
             return
         _open_work(path, open)
         return
-    if not git.is_clean():
+    if not git.is_clean(root):
         if wip:
-            git.commit_all(f"chore(wip): parked by start ({branch})")
+            git.commit_all(root, f"chore(wip): parked by start ({branch})")
             print("  parked the working tree (squash-only merging evaporates it)")
         else:
             fail(
@@ -480,16 +488,16 @@ def start(
                 "  Or work in a linked worktree:       "
                 f"{footman.prog()} start {ref}"
             )
-    if _kept(repo, git, root, branch):
-        git.switch(branch)
+    if _kept(repo, root, branch):
+        git.switch(root, branch)
         print(f"  already started: back on {branch}")
         return
-    git._run("checkout", "-b", branch, f"origin/{base}")
+    git.run(root, "checkout", "-b", branch, f"origin/{base}")
     print(f"  on {started}")
-    _record_parent(git, branch, from_)
+    _record_parent(root, branch, from_)
 
 
-def _started_at(git: GitOps, root: Path, branch: str, path: Path) -> Path | None:
+def _started_at(root: Path, branch: str, path: Path) -> Path | None:
     """Where *branch*'s started work is: its worktree, another tree, or this checkout.
 
     None when no tree holds the branch. The branch alone is not started
@@ -499,14 +507,14 @@ def _started_at(git: GitOps, root: Path, branch: str, path: Path) -> Path | None
 
     if path.is_dir():
         return path
-    if tree := worktree_for(git, root, branch):
+    if tree := worktree_for(root, branch):
         return Path(tree)
-    if git.current_branch() == branch:
+    if git.current_branch(root) == branch:
         return root
     return None
 
 
-def _kept(repo: Repository, git: GitOps, root: Path, branch: str) -> bool:
+def _kept(repo: Repository, root: Path, branch: str) -> bool:
     """Whether *branch* exists and stays to be re-entered; the line says why.
 
     A branch whose pull request merged and took its tip is finished
@@ -514,15 +522,14 @@ def _kept(repo: Repository, git: GitOps, root: Path, branch: str) -> bool:
     drops it here, and the start begins fresh from the base. Any other
     branch keeps its commits.
     """
-    if not git.local_branch_exists(branch):
+    if not git.local_branch_exists(root, branch):
         return False
     from livery.workshop._sweep import sweep_branch
 
     went, line = sweep_branch(
         root,
-        git,
         branch,
-        current=git.current_branch(cached=True),
+        current=git.current_branch(root),
         dry_run=False,
         repo=repo,
     )
@@ -530,7 +537,7 @@ def _kept(repo: Repository, git: GitOps, root: Path, branch: str) -> bool:
     return not went
 
 
-def _record_parent(git: GitOps, branch: str, parent: str) -> None:
+def _record_parent(root: Path, branch: str, parent: str) -> None:
     """Record *parent* as the base ``fm submit`` targets for *branch*; none, nothing.
 
     The parent's pushed tip is recorded beside it: *branch* starts
@@ -539,7 +546,7 @@ def _record_parent(git: GitOps, branch: str, parent: str) -> None:
     """
     if not parent:
         return
-    git.record_stack(branch, parent, git.sha_of(f"origin/{parent}"))
+    _stack.record_stack(root, branch, parent, git.sha_of(root, f"origin/{parent}"))
     print(f"  parent: {parent} (`{footman.prog()} submit` targets it until it merges)")
 
 
@@ -596,11 +603,7 @@ def _me(repo: Repository) -> str:
 
 
 def _launch_agent(
-    name: str,
-    path: Path,
-    briefing: str,
-    branch: str,
-    prompt: str,
+    name: str, path: Path, briefing: str, branch: str, prompt: str
 ) -> None:
     """Hand the work to the agent in its worktree; a terminal handoff.
 
@@ -663,36 +666,35 @@ def issue_stop(
     """
     root = _workspace()
     repo = _repo(root)
-    git = GitOps(root)
     number = 0
     if ref:
         number, _title = parse_ref(ref)
         if not number:
             fail("issue.stop takes a number; a title names nothing to stop")
     else:
-        match = _BRANCH_RE.match(git.current_branch())
+        match = _BRANCH_RE.match(git.current_branch(root))
         if match is None:
             fail(
                 "not on an issue branch: name the issue"
                 f" (`{footman.prog()} issue.stop 123`) or run it from the branch."
             )
         number = int(match.group(1))
-    branch = _find_branch(git, number)
+    branch = _find_branch(root, number)
     if not branch:
         fail(f"no branch for issue #{number} exists locally or on the remote")
 
     work = repo.issue.get(number)
     state = work.state if work is not None else "unknown"
-    remote_exists = branch in git.remote_branches("")
+    remote_exists = branch in git.remote_branches(root, "")
     merged_head = ""
     try:
-        landed = merged_pull_request(repo, git, branch)
+        landed = merged_pull_request(repo, root, branch)
         merged_head = landed.head_sha if landed is not None else ""
     except ForgeError:
         merged_head = ""
     only_local = (
-        only_local_work(git, root, branch, merged_head=merged_head)
-        if git.local_branch_exists(branch)
+        only_local_work(root, branch, merged_head=merged_head)
+        if git.local_branch_exists(root, branch)
         else ""
     )
     if only_local and not discard:
@@ -723,23 +725,23 @@ def issue_stop(
         except ForgeError as error:
             print(f"  Note: could not unassign ({error}); continuing")
 
-    removed = _remove_local(root, git, branch)
+    removed = _remove_local(root, branch)
     what = " and ".join(removed) if removed else "nothing local to remove"
     print(f"  stopped #{number}: {what}; the remote branch stays")
 
 
-def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
+def _remove_local(root: Path, branch: str) -> list[str]:
     """Remove the branch's worktree and local branch; what was removed."""
     removed: list[str] = []
-    tree = worktree_for(git, root, branch)
+    tree = worktree_for(root, branch)
     if tree:
-        git._run("worktree", "remove", "--force", tree)
+        git.run(root, "worktree", "remove", "--force", tree)
         print(f"  removed worktree {tree}")
         removed.append("the worktree")
-    elif git.current_branch() == branch:
-        git.switch("main")
-    if git.local_branch_exists(branch):
-        git.delete_local_branch(branch)
+    elif git.current_branch(root) == branch:
+        git.switch(root, "main")
+    if git.local_branch_exists(root, branch):
+        git.delete_branch(root, branch)
         removed.append("the local branch")
     return removed
 
@@ -774,7 +776,6 @@ def issue_close(
         )
     root = _workspace()
     repo = _repo(root)
-    git = GitOps(root)
     number, _title = parse_ref(ref)
     if not number:
         fail("issue.close takes a number; a title names nothing to close")
@@ -782,9 +783,9 @@ def issue_close(
     if work is None:
         fail(f"issue #{number} does not exist in this repository")
 
-    git.fetch()
-    branch = _find_branch(git, number)
-    tip = git.any_head(branch) if branch else ""
+    git.fetch(root)
+    branch = _find_branch(root, number)
+    tip = git.any_head(root, branch) if branch else ""
 
     # The destruction rule runs before anything is torn down: the
     # teardown deletes branches, and a refusal that checks afterwards
@@ -796,31 +797,29 @@ def issue_close(
     if branch:
         try:
             live = repo.pr.find_by_head(branch, state="all")
-            landed = merged_pull_request(repo, git, branch)
+            landed = merged_pull_request(repo, root, branch)
         except ForgeError:
             live = None
             landed = None
         if landed is not None:
             merged = True
     only_local = (
-        only_local_work(
-            git, root, branch, merged_head=landed.head_sha if landed else ""
-        )
-        if branch and git.local_branch_exists(branch)
+        only_local_work(root, branch, merged_head=landed.head_sha if landed else "")
+        if branch and git.local_branch_exists(root, branch)
         else ""
     )
 
     if merged:
         if reason:
             print("  Note: the PR merged, so the supplied reason does not apply")
-        if git.local_branch_exists(branch):
+        if git.local_branch_exists(root, branch):
             if only_local and not discard:
                 print(
                     f"  kept {branch}: it holds {only_local}; pass --discard"
                     " to remove it"
                 )
             else:
-                _remove_local(root, git, branch)
+                _remove_local(root, branch)
         if work.state == "open":
             repo.issue.comment(number, "closed: resolved by the merged PR")
             repo.issue.close(number)
@@ -839,16 +838,16 @@ def issue_close(
         from livery.workshop._submit import teardown_branch
 
         print(f"  ending PR #{live.number} through the shared teardown")
-        teardown_branch(repo, git, branch, "main", keep_branches=keep_branch)
+        teardown_branch(repo, root, branch, "main", keep_branches=keep_branch)
 
     removed_sha = ""
     if branch and not keep_branch:
         # The tip was read before the teardown deleted the branch:
         # the close comment records where the work got to.
         removed_sha = tip
-        _remove_local(root, git, branch)
-        if branch in git.remote_branches(""):
-            git._run("push", "origin", "--delete", branch)
+        _remove_local(root, branch)
+        if branch in git.remote_branches(root, ""):
+            git.run(root, "push", "origin", "--delete", branch)
             print(f"  removed the remote branch {branch}")
 
     note = f"closed: {reason}"

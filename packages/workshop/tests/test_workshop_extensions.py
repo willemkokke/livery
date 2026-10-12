@@ -104,6 +104,29 @@ def test_outside_a_workspace_there_are_no_extensions(tmp_path: Path) -> None:
     assert mount_extensions(tmp_path) == ()
 
 
+def test_the_git_plugin_mount_tolerates_a_missing_entry_point_and_mounts_otherwise(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import livery.footman as footman
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_git_plugin
+
+    # A checkout that just moved past the plugin's arrival has no entry
+    # point until it syncs: the mount says so and lets the sync run.
+    def refuse(source: str) -> None:
+        raise ValueError(f"plugin({source!r}): no 'footman.tasks' entry point matches")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(footman, "plugin", refuse)
+        why = mount_git_plugin()
+    assert "the git plugin is not mounted (plugin('livery.git')" in why
+    assert "sync` installs it" in why
+    assert "note: the git plugin is not mounted" in capsys.readouterr().err
+    # Installed, it mounts into the captured tree with nothing to say.
+    with registry.capture():
+        assert mount_git_plugin() == ""
+
+
 def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> None:
     from livery.footman import _registry as registry
 

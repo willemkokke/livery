@@ -31,9 +31,9 @@ from typing import Protocol
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import fail
 from livery.workshop import _lifecycle
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
 #: The release set's own record, committed on the release branch by
@@ -84,9 +84,7 @@ class Receipt:
     published: bool  # False when the duplicate tolerance skipped it
 
 
-def discover_release(
-    root: Path, git: GitOps, ref: str
-) -> tuple[tuple[Package, str], ...]:
+def discover_release(root: Path, ref: str) -> tuple[tuple[Package, str], ...]:
     """What the squash at *ref* releases, in topological order.
 
     The members and their versions are the release's member list,
@@ -99,7 +97,7 @@ def discover_release(
     """
     from livery.workshop._graph import order_topologically
 
-    pairs = read_manifest(git.file_at(ref, MANIFEST))
+    pairs = read_manifest(git.file_at(root, ref, MANIFEST))
     if pairs is None:
         fail(
             f"this commit is not a release squash: it carries no readable"
@@ -139,7 +137,7 @@ def mined_at(message: str) -> str:
     return match.group(1) if match else ""
 
 
-def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
+def movement_check(root: Path, package: Package, ref: str) -> None:
     """Refuse when commits the entry never saw ride in this squash.
 
     The movement analysis's backstop. The driver records the mining
@@ -149,7 +147,7 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
     does not cover. A squash without the line is not the driver's,
     and publishing it is refused for the same reason.
     """
-    point = mined_at(git.commit_message(ref))
+    point = mined_at(git.commit_message(root, ref))
     if not point:
         fail(
             f"{package.name}: the squash at {ref[:10]} carries no Mined-At"
@@ -160,7 +158,7 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
     # The squash's first parent, spelled without a caret, which cmd.exe
     # drops on its way to a git run through a `.cmd` launcher on Windows.
     span = f"{point}..{ref}~1"
-    moved = git.log_paths(span, (f"packages/{package.member}",))
+    moved = git.log_paths(root, span, (f"packages/{package.member}",))
     if moved:
         listed = "\n".join(f"    {s}" for s in moved)
         fail(
@@ -170,24 +168,6 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
             " moved base; publishing this squash would ship code the"
             " changelog does not cover."
         )
-
-
-def ensure_git_identity(git: GitOps) -> None:
-    """Give a fresh CI checkout an identity, a developer's kept.
-
-    Only when ``user.email`` is unset: the environment's GIT_* wins
-    anyway, and a person's own configuration is never touched.
-    """
-    probe = tools.git.opts(cwd=git.root, nofail=True, recorded=False)(
-        "config", "user.email"
-    )
-    if probe.code == 0 and probe.stdout.strip():
-        return
-    for key, value in (
-        ("user.email", "release@livery.local"),
-        ("user.name", "livery release"),
-    ):
-        tools.git.opts(cwd=git.root, nofail=True, recorded=False)("config", key, value)
 
 
 def assert_wheel_identity(package: Package) -> None:
@@ -344,12 +324,12 @@ def floor_probe(
             )
 
 
-def cut_tag(git: GitOps, tag: str, ref: str) -> None:
+def cut_tag(root: Path, tag: str, ref: str) -> None:
     """Cut and push the receipt, annotated, by name, idempotent."""
-    existing = git.tags()
+    existing = git.tags(root)
     if tag not in existing:
-        git._run("tag", "-a", tag, ref, "-m", tag)
-    git._run("push", "origin", tag)
+        git.run(root, "tag", "-a", tag, ref, "-m", tag)
+    git.run(root, "push", "origin", tag)
 
 
 #: The words PyPI answers a new project's first upload with once one
@@ -362,7 +342,6 @@ NEW_PROJECT_LIMIT = "Too many new projects created"
 
 def publish_release(
     root: Path,
-    git: GitOps,
     registry_for: Callable[[Package], Registry],
     *,
     ref: str = "",
@@ -386,12 +365,11 @@ def publish_release(
     """
     from livery.workshop._release import verify_release
 
-    ensure_git_identity(git)
-    resolved_ref = ref or git.head_sha()
-    discovered = discover_release(root, git, resolved_ref)
+    resolved_ref = ref or git.head_sha(root)
+    discovered = discover_release(root, resolved_ref)
     ordered = tuple(package for package, _version in discovered)
     manifest = {package.name: version for package, version in discovered}
-    epoch = int(git._run("log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
 
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
@@ -413,7 +391,7 @@ def publish_release(
     for package in ordered:
         tag = f"{package.path}/v{manifest[package.name]}"
         verify_release(root, tag, coreleased=coreleased)
-        movement_check(root, git, package, resolved_ref)
+        movement_check(root, package, resolved_ref)
         floor_probe(package, by_path, registry_for, coreleased=coreleased)
 
     chosen = {p.path for p in ordered}
@@ -506,14 +484,14 @@ def publish_release(
             # re-run walks past its tag the way it walks past a
             # served version. The kind's backend never learns of it.
             if not package.publish:
-                if tag in git.tags():
+                if tag in git.tags(root):
                     print(
                         f"  {package.name} v{version}: already tagged;"
                         " publish = false, done"
                     )
                 else:
                     _build_member(package, version)
-                    cut_tag(git, tag, resolved_ref)
+                    cut_tag(root, tag, resolved_ref)
                     print(
                         f"  {package.name} v{version}: publish = false; the"
                         " registry upload skips, the tag and the changelog stand"
@@ -530,7 +508,7 @@ def publish_release(
             # at the upload stays as the second net for two waves
             # racing.
             served = version in registry_for(package).versions(package.name)
-            if tag in git.tags() and served:
+            if tag in git.tags(root) and served:
                 print(f"  {package.name} v{version}: already tagged and served; done")
                 with lock:
                     receipts[package.path] = Receipt(
@@ -555,13 +533,13 @@ def publish_release(
                 )
                 published = False
             else:
-                if target.releases and tag not in git.tags():
+                if target.releases and tag not in git.tags(root):
                     # A release is addressed by its tag, so the tag
                     # exists before the assets do. The receipt is
                     # complete only once the probe sees them, which
                     # is why a tag alone no longer ends the member:
                     # a re-run finishes the upload.
-                    cut_tag(git, tag, resolved_ref)
+                    cut_tag(root, tag, resolved_ref)
                 if package.name in new_projects:
                     with first_upload:
                         published = _first_upload(package, version, target)
@@ -576,7 +554,7 @@ def publish_release(
                 timeout=probe_timeout,
                 poll=probe_poll,
             )
-            cut_tag(git, tag, resolved_ref)
+            cut_tag(root, tag, resolved_ref)
             with lock:
                 receipts[package.path] = Receipt(
                     package, version, tag, published=published

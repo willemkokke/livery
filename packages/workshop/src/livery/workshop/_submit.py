@@ -33,12 +33,13 @@ from pathlib import Path
 from typing import Annotated, ParamSpec
 
 import livery.footman as footman
+from livery import git
 from livery.footman import Arg, doc, fail, group
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
+from livery.workshop import _stack
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._extensions import workspace_root
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._traces import drop_run
 from livery.workshop._verdict import (
     EXIT_BEHIND,
@@ -346,7 +347,7 @@ class Plan:
 
 
 def prepare(
-    git: GitOps,
+    root: Path,
     *,
     title: str = "",
     body: str = "",
@@ -358,7 +359,7 @@ def prepare(
     *branch* is the checked-out branch when the caller read it already;
     read here otherwise.
     """
-    branch = branch or git.current_branch()
+    branch = branch or git.current_branch(root)
     if not branch or branch == base:
         fail(
             f"not on a feature branch (on {branch or '(detached)'!r}, base is"
@@ -374,8 +375,8 @@ def prepare(
     # A merge commit (the engine's MERGE_DEFAULT, `fm integrate`) can
     # be HEAD, and "Merge branch ..." is never the intent: the last
     # real subject is. The squash erases the merge commits anyway.
-    default_title, default_body = git.head_message()
-    subjects = tuple(git.subjects_ahead(base))
+    default_title, default_body = git.head_message(root)
+    subjects = tuple(git.subjects_ahead(root, base))
     if not title and default_title.startswith("Merge "):
         real = [subject for subject in subjects if not subject.startswith("Merge ")]
         if real:
@@ -397,7 +398,7 @@ def prepare(
     )
 
 
-def resolve_base(git: GitOps, base: str, *, given: bool, branch: str = "") -> str:
+def resolve_base(root: Path, base: str, *, given: bool, branch: str = "") -> str:
     """The branch the pull request targets.
 
     A ``--base`` flag wins. Otherwise the parent ``fm start --from``
@@ -414,17 +415,17 @@ def resolve_base(git: GitOps, base: str, *, given: bool, branch: str = "") -> st
     """
     if given:
         return base
-    parent, _tip = git.stack(branch or git.current_branch())
+    parent, _tip = _stack.stack(root, branch or git.current_branch(root))
     if not parent:
         return base
-    if parent in git.remote_branches(parent):
+    if parent in git.remote_branches(root, parent):
         print(f"  base: {parent}, the parent `{footman.prog()} start --from` recorded")
         return parent
     print(f"  base: {base}; the recorded parent {parent} is gone from origin (merged)")
     return base
 
 
-def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
+def abort_if_merged(repo: Repository, root: Path, branch: str) -> int | None:
     """Stop before pushing into a pull request that already merged.
 
     The merge took the pre-push head, so pushing on would open a
@@ -442,12 +443,12 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
     report the merge. None when no merged pull request claims the
     branch or the branch is a fresh cycle.
     """
-    pr = merged_pull_request(repo, git, branch)
+    pr = merged_pull_request(repo, root, branch)
     if pr is None:
         return None
-    if pr.head_sha and not git.is_ancestor(pr.head_sha, "HEAD"):
+    if pr.head_sha and not git.is_ancestor(root, pr.head_sha, "HEAD"):
         return None
-    if pr.head_sha and pr.head_sha == git.head_sha():
+    if pr.head_sha and pr.head_sha == git.head_sha(root):
         return pr.number
     fail(
         f"PR #{pr.number} for {branch} has already merged.\n"
@@ -458,7 +459,7 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
     )
 
 
-def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> int | None:
+def disarm_before_push(repo: Repository, root: Path, branch: str) -> int | None:
     """Disarm an armed pull request before pushing to it.
 
     A push to an armed pull request races auto-merge: the merge can
@@ -476,7 +477,7 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> int | None
             print(f"  disarmed PR #{pr.number} before pushing (the race)")
     except ForgeError as exc:
         print(f"  note: could not read the arming state before pushing ({exc})")
-    return abort_if_merged(repo, git, branch)
+    return abort_if_merged(repo, root, branch)
 
 
 def _arm_verified(
@@ -581,7 +582,7 @@ def _behind_origin(refusal: str) -> bool:
 
 
 def _push(
-    git: GitOps, branch: str, *, force: bool, repo: Repository | None = None
+    root: Path, branch: str, *, force: bool, repo: Repository | None = None
 ) -> None:
     """Push *branch*, or force it with a lease and full disclosure.
 
@@ -601,13 +602,13 @@ def _push(
     previous = ""
     if repo is not None:
         try:
-            previous = git.remote_head(branch)
-        except GitError:
+            previous = git.remote_head(root, branch)
+        except git.GitError:
             previous = ""
     if not force:
         try:
-            git.push(branch)
-        except GitError as error:
+            git.push(root, branch)
+        except git.GitError as error:
             if not _behind_origin(str(error)):
                 # The forge refused or failed the push for a reason of
                 # its own (a server error, a rule): its words, verbatim.
@@ -630,16 +631,18 @@ def _push(
             " record recovery reads, and the engine re-prepares instead."
             f" Re-run the workflow verb, or `{footman.prog()} workflow.abort` it."
         )
-    if git.remote_head(branch, cached=True):
-        discards = git._run("log", "--format=%s", f"{branch}..origin/{branch}").strip()
+    if git.remote_head(root, branch):
+        discards = git.run(
+            root, "log", "--format=%s", f"{branch}..origin/{branch}"
+        ).strip()
         if discards:
             listed = "\n".join(f"    - {line}" for line in discards.splitlines())
             print(f"  forcing discards these commits on origin/{branch}:\n{listed}")
         else:
             print("  forcing; origin holds nothing this branch does not")
     try:
-        git.push_force(branch)
-    except GitError as error:
+        git.push_force(root, branch)
+    except git.GitError as error:
         if "stale info" not in str(error) and "rejected" not in str(error):
             raise
         fail(
@@ -647,18 +650,18 @@ def _push(
             f" this clone last saw.\n{error}\n  Fetch to see what arrived"
             " (`git fetch origin`), then decide again and re-run."
         )
-    if repo is not None and previous and previous != git.head_sha():
+    if repo is not None and previous and previous != git.head_sha(root):
         from livery.workshop._ci_tasks import cancel_superseded_runs
 
         for line in cancel_superseded_runs(repo, previous):
             print(line)
 
 
-def _required_context_at(git: GitOps, ref: str) -> str:
+def _required_context_at(root: Path, ref: str) -> str:
     """The contract's required context at *ref*; "" when unreadable."""
     try:
-        text = git._run("show", f"{ref}:workshop.toml")
-    except GitError:
+        text = git.run(root, "show", f"{ref}:workshop.toml")
+    except git.GitError:
         return ""
     # History is read, never rewritten: a contract from before the
     # kebab-case keys is normalised instead of refused.
@@ -667,7 +670,7 @@ def _required_context_at(git: GitOps, ref: str) -> str:
 
 
 def _heal_context_rename(
-    repo: Repository, git: GitOps, plan: Plan, *, fix: bool
+    repo: Repository, root: Path, plan: Plan, *, fix: bool
 ) -> None:
     """The one order-sensitive transition: a renamed required context.
 
@@ -683,8 +686,8 @@ def _heal_context_rename(
     teaching recommends `fm submit --fix --armed` to close that
     window at CI speed; --fix never implies --armed.
     """
-    ours = _required_context_at(git, plan.branch)
-    theirs = _required_context_at(git, f"origin/{plan.base}")
+    ours = _required_context_at(root, plan.branch)
+    theirs = _required_context_at(root, f"origin/{plan.base}")
     if not ours or not theirs or ours == theirs:
         return
     from livery.workshop._extensions import workspace_root
@@ -703,16 +706,8 @@ def _heal_context_rename(
         )
         return
     if fix:
-        from livery.workshop._extensions import workspace_root
         from livery.workshop._forge_lane import admin_repository
 
-        root = workspace_root()
-        if root is None:
-            fail(
-                "the context rename needs the workspace contract and no"
-                " workshop.toml is above the working directory; run"
-                f" `{footman.prog()} submit --fix` from inside the workspace"
-            )
         admin_repo, admin_var = admin_repository(root)
         try:
             # Read through the admin ladder too: GitHub gates the
@@ -761,7 +756,7 @@ def _heal_context_rename(
 
 def push_and_pr(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     plan: Plan,
     *,
     closes: int | None,
@@ -770,7 +765,7 @@ def push_and_pr(
 ) -> int:
     """Disarm, push, find-or-open the pull request, arm per *armed*."""
     body = with_closes(plan.body, closes) if closes is not None else plan.body
-    merged = disarm_before_push(repo, git, plan.branch)
+    merged = disarm_before_push(repo, root, plan.branch)
     if merged is not None:
         # Re-running the submit is its recovery procedure: a head the
         # pull request already merged has nothing to push, open, or
@@ -783,11 +778,11 @@ def push_and_pr(
     # fail non-fast-forward.
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
-        _push(git, plan.branch, force=force, repo=repo)
+        _push(root, plan.branch, force=force, repo=repo)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
-        _push(git, plan.branch, force=force, repo=repo)
+        _push(root, plan.branch, force=force, repo=repo)
         print(f"  reusing PR #{pr.number}")
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)
@@ -801,7 +796,7 @@ def push_and_pr(
             pr.number,
             title=_merge_title(repo, plan),
             message=body,
-            kind=_contract_forge_kind(git.root),
+            kind=_contract_forge_kind(root),
         )
         print(
             f"  merged: PR #{pr.number}"
@@ -811,7 +806,7 @@ def push_and_pr(
     return pr.number
 
 
-def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
+def refuse_ambiguous_title(root: Path, plan: Plan) -> None:
     """Refuse a defaulted title on a branch more than one commit ahead.
 
     A defaulted title is trustworthy only when it is unambiguous: one
@@ -837,7 +832,7 @@ def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
 
 
 def _restack_before_push(
-    git: GitOps, *, branch: str = "", stack: tuple[str, str] | None = None
+    root: Path, *, branch: str = "", stack: tuple[str, str] | None = None
 ) -> bool:
     """Move a stacked branch onto its moved or merged parent; whether it moved.
 
@@ -849,14 +844,14 @@ def _restack_before_push(
     fold, and a restack with conflicts refuses naming the verb that
     resolves it.
     """
-    branch = branch or git.current_branch()
-    stack = stack if stack is not None else git.stack(branch)
+    branch = branch or git.current_branch(root)
+    stack = stack if stack is not None else _stack.stack(root, branch)
     parent, _tip = stack
-    if not parent or not git.is_clean():
+    if not parent or not git.is_clean(root):
         return False
     from livery.workshop._sync import restack
 
-    moved = restack(git, branch, interactive=False, stack=stack)
+    moved = restack(root, branch, interactive=False, stack=stack)
     if moved is None:
         fail(
             f"{branch} could not follow its parent without conflicts: run"
@@ -868,7 +863,7 @@ def _restack_before_push(
 
 def submit_flow(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     title: str = "",
     body: str = "",
@@ -896,16 +891,16 @@ def submit_flow(
     # default at all. A person never pays minutes of gate for a flag
     # they could have passed, and the title is decided from the
     # branch as it is, before a fold adds a commit of its own.
-    git.fetch()
-    branch = git.current_branch()
+    git.fetch(root)
+    branch = git.current_branch(root)
     # The stack, read once for the flow: a restack that moved the branch
     # may have forgotten it, so it is read again after one.
-    stack = git.stack(branch)
-    moved = _restack_before_push(git, branch=branch, stack=stack)
+    stack = _stack.stack(root, branch)
+    moved = _restack_before_push(root, branch=branch, stack=stack)
     if moved:
-        stack = git.stack(branch)
+        stack = _stack.stack(root, branch)
     force = moved or force
-    plan = prepare(git, title=title, body=body, base=base, branch=branch)
+    plan = prepare(root, title=title, body=body, base=base, branch=branch)
     # A first open only: a pull request that exists, open, merged, or
     # closed, keeps its title, and the merged and closed cases get
     # their own refusals further on.
@@ -917,25 +912,25 @@ def submit_flow(
                 f' (`{footman.prog()} commit <type> "<subject>"`), then re-run'
                 f" `{footman.prog()} submit`"
             )
-        refuse_ambiguous_title(git, plan)
+        refuse_ambiguous_title(root, plan)
     # The check CI's setup makes with `sync --locked`, made before the
     # push and before the gate's minutes: a lock that is not current
     # refuses here, on this machine.
     from livery.workshop._sync import stale_locks
 
-    for problem in stale_locks(git.root):
+    for problem in stale_locks(root):
         fail(
             f"{problem}. CI's setup refuses a lock that is not current:"
             f" `{footman.prog()} sync` writes it; commit it, then re-run"
             f" `{footman.prog()} submit`"
         )
     if gate:
-        _gate(fix, root=git.root, base=base)
-        if fix and not git.is_clean():
-            _fold_fixes(git, base)
+        _gate(fix, root=root, base=base)
+        if fix and not git.is_clean(root):
+            _fold_fixes(root, base)
     else:
         print("  gate skipped (--no-gate): CI is now the first verifier")
-    _heal_context_rename(repo, git, plan, fix=fix)
+    _heal_context_rename(repo, root, plan, fix=fix)
     linked = resolve_closes(repo, plan.branch, closes) if close else None
     if linked is not None:
         print(f"  Closes #{linked} on merge")
@@ -953,7 +948,7 @@ def submit_flow(
         )
     elif armed_reason:
         print(f"  arming: {'on' if armed else 'off'} - decided by {armed_reason}")
-    number = push_and_pr(repo, git, plan, closes=linked, armed=armed, force=force)
+    number = push_and_pr(repo, root, plan, closes=linked, armed=armed, force=force)
     if not follow_to_verdict:
         return number
     heals = 0
@@ -965,12 +960,12 @@ def submit_flow(
         is wanted most where something went wrong. Nothing is kept in the
         ordinary case, and nothing here can fail the submit.
         """
-        if traced := drop_run(repo, git):
+        if traced := drop_run(repo, root):
             print(f"  {traced}")
 
     while True:
         try:
-            follow(repo, plan.branch, git, interval=interval, timeout=timeout)
+            follow(repo, plan.branch, root, interval=interval, timeout=timeout)
         except SystemExit as exc:
             code = exc.code if isinstance(exc.code, int) else 1
             if code == EXIT_DISARMED and not armed:
@@ -988,11 +983,11 @@ def submit_flow(
                     f"  exit {code}: integrating origin/{plan.base} and"
                     f" re-submitting (self-heal {heals}/{_MAX_HEALS})"
                 )
-                disarm_before_push(repo, git, plan.branch)
-                before = git.head_sha()
+                disarm_before_push(repo, root, plan.branch)
+                before = git.head_sha(root)
                 try:
-                    git.integrate(plan.base)
-                except GitError as exc2:
+                    git.integrate(root, plan.base)
+                except git.GitError as exc2:
                     fail(
                         f"the merge stopped on a conflict; resolve it, commit,"
                         f" and re-run `{footman.prog()} submit`:\n{exc2}"
@@ -1003,11 +998,11 @@ def submit_flow(
                 # verb is the recovery, so nothing is lost by the handoff.
                 from livery.workshop._sync import continue_on_moved_code
 
-                continue_on_moved_code(git.root, before, git.head_sha(), verb="submit")
+                continue_on_moved_code(root, before, git.head_sha(root), verb="submit")
                 if gate:
-                    _gate(root=git.root, base=plan.base)
+                    _gate(root=root, base=plan.base)
                 number = push_and_pr(
-                    repo, git, plan, closes=linked, armed=armed, force=force
+                    repo, root, plan, closes=linked, armed=armed, force=force
                 )
                 continue
             trace_the_run()
@@ -1015,7 +1010,7 @@ def submit_flow(
         # Before the tidy moves this checkout off the branch, whose head is
         # how the run is found.
         trace_the_run()
-        _tidy_after_merge(repo, git, plan.branch, plan.base, number)
+        _tidy_after_merge(repo, root, plan.branch, plan.base, number)
         return number
 
 
@@ -1035,10 +1030,9 @@ def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     from livery.workshop._gate_record import covering
     from livery.workshop._quality import check, say_skipped
 
-    git = GitOps(root)
-    with contextlib.suppress(GitError):
-        git.fetch()
-    proof, why = covering(git, base=base)
+    with contextlib.suppress(git.GitError):
+        git.fetch(root)
+    proof, why = covering(root, base=base)
     if proof is not None:
         by = " by fm check" if proof.steps else ""
         say_skipped(
@@ -1050,7 +1044,7 @@ def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     check(fix=fix, base=base)
 
 
-def _fold_fixes(git: GitOps, base: str) -> None:
+def _fold_fixes(root: Path, base: str) -> None:
     """Put the gate's rewrites into the branch, consented by ``--fix``.
 
     Amended into HEAD while the commit is still the branch's own and
@@ -1059,14 +1053,14 @@ def _fold_fixes(git: GitOps, base: str) -> None:
     commit: rewriting either would force-push or rewrite history the
     remote already trusts.
     """
-    git.fetch()
-    branch, head = git.position()
-    pushed = git.remote_head(branch) == head
-    if pushed or not git.subjects_ahead(base):
-        git.commit_all("chore: apply gate fixes")
+    git.fetch(root)
+    branch, head = git.position(root)
+    pushed = git.remote_head(root, branch) == head
+    if pushed or not git.subjects_ahead(root, base):
+        git.commit_all(root, "chore: apply gate fixes")
         print("  gate fixes committed (the squash merge collapses this)")
     else:
-        git.amend_all()
+        git.amend_all(root)
         print("  gate fixes amended into HEAD")
 
 
@@ -1108,12 +1102,11 @@ def submit_default(
 
     repo = this_repository(root)
     reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
-    git = GitOps(root)
-    base = resolve_base(git, base, given=footman.given("base"))
+    base = resolve_base(root, base, given=footman.given("base"))
     with forge_failures_named():
         submit_flow(
             repo,
-            git,
+            root,
             title=title,
             body=body,
             base=base,
@@ -1147,9 +1140,9 @@ def forge_failures_named() -> Generator[None]:
         )
 
 
-def worktree_for(git: GitOps, root: Path, branch: str) -> str:
+def worktree_for(root: Path, branch: str) -> str:
     """The linked worktree holding *branch*; "" when none does or *root* does."""
-    listing = git._run("worktree", "list", "--porcelain")
+    listing = git.run(root, "worktree", "list", "--porcelain")
     tree = ""
     current: dict[str, str] = {}
     for line in [*listing.splitlines(), ""]:
@@ -1165,9 +1158,7 @@ def worktree_for(git: GitOps, root: Path, branch: str) -> str:
     return tree
 
 
-def only_local_work(
-    git: GitOps, root: Path, branch: str, *, merged_head: str = ""
-) -> str:
+def only_local_work(root: Path, branch: str, *, merged_head: str = "") -> str:
     """Why *branch* holds work that exists nowhere else; "" when safe.
 
     The one keep-or-drop rule: ``fm issue.close``, ``fm issue.stop``,
@@ -1187,23 +1178,25 @@ def only_local_work(
     against the remote branch when one exists, and against the base
     when none does.
     """
-    if git.current_branch() == branch and not git.is_clean():
+    if git.current_branch(root) == branch and not git.is_clean(root):
         return "uncommitted changes"
-    tree = worktree_for(git, root, branch)
+    tree = worktree_for(root, branch)
     if tree:
-        status = git._run("-C", tree, "status", "--porcelain").strip()
+        status = git.run(root, "-C", tree, "status", "--porcelain").strip()
         if status:
             return f"uncommitted changes in the worktree {tree}"
     if merged_head:
-        tip = git.object_id(f"refs/heads/{branch}")
+        tip = git.object_id(root, f"refs/heads/{branch}")
         if tip == merged_head:
             return ""
-        if git.is_ancestor(merged_head, tip):
-            count = git._run("rev-list", "--count", f"{merged_head}..{tip}").strip()
+        if git.is_ancestor(root, merged_head, tip):
+            count = git.run(
+                root, "rev-list", "--count", f"{merged_head}..{tip}"
+            ).strip()
             return f"{count} commit(s) past the merged head"
     remote = f"origin/{branch}"
-    upstream = remote if branch in git.remote_branches("") else "origin/main"
-    count = git._run("rev-list", "--count", f"{upstream}..{branch}").strip()
+    upstream = remote if branch in git.remote_branches(root, "") else "origin/main"
+    count = git.run(root, "rev-list", "--count", f"{upstream}..{branch}").strip()
     if count.isdigit() and int(count) > 0:
         where = "the remote branch" if upstream == remote else "any remote"
         return f"{count} commit(s) not on {where}"
@@ -1211,7 +1204,7 @@ def only_local_work(
 
 
 def merged_pull_request(
-    repo: Repository, git: GitOps, branch: str
+    repo: Repository, root: Path, branch: str
 ) -> PullRequest | None:
     """The merged pull request *branch* was the head of, or None.
 
@@ -1222,13 +1215,13 @@ def merged_pull_request(
     """
     pr = repo.pr.find_by_head(branch, state="all")
     if pr is None:
-        sha = git.any_head(branch)
+        sha = git.any_head(root, branch)
         pr = repo.pr.find_by_head_sha(sha) if sha else None
     return pr if pr is not None and pr.merged else None
 
 
 def _tidy_after_merge(
-    repo: Repository, git: GitOps, branch: str, base: str, number: int
+    repo: Repository, root: Path, branch: str, base: str, number: int
 ) -> None:
     """Remove the linked worktree a merged submission stood in.
 
@@ -1247,13 +1240,13 @@ def _tidy_after_merge(
     that, and still raises.
     """
     try:
-        _tidy_tree(repo, git, branch, base, number)
+        _tidy_tree(repo, root, branch, base, number)
     except (FileNotFoundError, NotADirectoryError):
         # A process started in a directory that is gone raises
         # FileNotFoundError on POSIX and NotADirectoryError on Windows.
-        if git.root.is_dir():
+        if root.is_dir():
             raise
-        _swept(git.root)
+        _swept(root)
 
 
 def _swept(root: Path) -> None:
@@ -1266,35 +1259,35 @@ def _swept(root: Path) -> None:
 
 
 def _tidy_tree(
-    repo: Repository, git: GitOps, branch: str, base: str, number: int
+    repo: Repository, root: Path, branch: str, base: str, number: int
 ) -> None:
     """The tidy itself, for a tree that may vanish under it."""
-    if not git.root.is_dir():
-        _swept(git.root)
+    if not root.is_dir():
+        _swept(root)
         return
     try:
-        git_dir = git._run("rev-parse", "--git-dir").strip()
-        common_dir = git._run("rev-parse", "--git-common-dir").strip()
-    except GitError:
+        git_dir = git.run(root, "rev-parse", "--git-dir").strip()
+        common_dir = git.run(root, "rev-parse", "--git-common-dir").strip()
+    except git.GitError:
         return  # no checkout to speak of, so no linked worktree to remove
     if git_dir == common_dir:
         return
     pr = repo.pr.get(number)
     merged_head = pr.head_sha if pr is not None and pr.merged else ""
-    why = only_local_work(git, git.root, branch, merged_head=merged_head)
+    why = only_local_work(root, branch, merged_head=merged_head)
     if why:
         print(
-            f"  kept the worktree {git.root}: it holds {why};"
+            f"  kept the worktree {root}: it holds {why};"
             f" `{footman.prog()} issue.close --discard` or"
             f" `{footman.prog()} abandon` removes it"
         )
         return
-    teardown_branch(repo, git, branch, base)
+    teardown_branch(repo, root, branch, base)
 
 
 def teardown_branch(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     branch: str,
     base: str,
     *,
@@ -1329,9 +1322,9 @@ def teardown_branch(
     if repo.branch_exists(branch):
         repo.delete_branch(branch)
         print(f"  deleted origin/{branch}")
-    git_dir = git._run("rev-parse", "--git-dir").strip()
-    common_dir = git._run("rev-parse", "--git-common-dir").strip()
-    standing = git.current_branch() == branch
+    git_dir = git.run(root, "rev-parse", "--git-dir").strip()
+    common_dir = git.run(root, "rev-parse", "--git-common-dir").strip()
+    standing = git.current_branch(root) == branch
     if standing and git_dir != common_dir:
         # A linked worktree cannot switch to *base*: the main
         # checkout holds it. The worktree itself is the leftover, so
@@ -1340,30 +1333,29 @@ def teardown_branch(
         # and is told where to go.
         import os
 
-        main_root = git.main_checkout()
+        main_root = git.main_checkout(root)
         os.chdir(main_root)
-        main_git = GitOps(main_root)
-        main_git._run("worktree", "remove", "--force", str(git.root))
-        if main_git.local_branch_exists(branch):
-            main_git.delete_local_branch(branch)
-        print(f"  removed the worktree {git.root} and deleted {branch}")
+        git.run(main_root, "worktree", "remove", "--force", str(root))
+        if git.local_branch_exists(main_root, branch):
+            git.delete_branch(main_root, branch)
+        print(f"  removed the worktree {root} and deleted {branch}")
         print(f"  this shell's directory is gone: cd {main_root}")
         return
     if standing:
-        git.switch(base)
-        git.integrate(base)
+        git.switch(root, base)
+        git.integrate(root, base)
     else:
-        tree = worktree_for(git, git.root, branch)
+        tree = worktree_for(root, branch)
         if tree:
-            git._run("worktree", "remove", "--force", tree)
+            git.run(root, "worktree", "remove", "--force", tree)
             print(f"  removed the worktree {tree}")
-    if git.local_branch_exists(branch):
-        git.delete_local_branch(branch)
+    if git.local_branch_exists(root, branch):
+        git.delete_branch(root, branch)
         # Only a checkout that stood on the branch moved to the base.
         print(f"  deleted {branch}" + (f"; back on {base}" if standing else ""))
 
 
-def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
+def abandon_flow(repo: Repository, root: Path, branch: str, base: str) -> None:
     """Give the feature up: close the PR, delete both branches; idempotent.
 
     A dirty tree refuses before anything else moves: abandoning
@@ -1372,15 +1364,15 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     """
     if not branch or branch == base:
         fail(f"not on a feature branch (on {branch or '(detached)'!r})")
-    if branch == git.current_branch():
-        if not git.is_clean():
+    if branch == git.current_branch(root):
+        if not git.is_clean(root):
             fail(
                 "the working tree has uncommitted changes; commit or discard"
                 " them before abandoning"
             )
     else:
-        tree = worktree_for(git, git.root, branch)
-        if tree and git._run("-C", tree, "status", "--porcelain").strip():
+        tree = worktree_for(root, branch)
+        if tree and git.run(root, "-C", tree, "status", "--porcelain").strip():
             fail(
                 f"the worktree {tree} has uncommitted changes; commit or"
                 " discard them before abandoning"
@@ -1390,7 +1382,7 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
         fail(f"PR #{pr.number} already merged: nothing to abandon")
     if pr is None:
         print(f"  no open pull request for {branch}")
-    teardown_branch(repo, git, branch, base)
+    teardown_branch(repo, root, branch, base)
 
 
 @footman.task(serial=True)
@@ -1409,11 +1401,12 @@ def abandon(
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
-    git = GitOps(root)
-    abandon_flow(this_repository(root), git, branch or git.current_branch(), "main")
+    abandon_flow(
+        this_repository(root), root, branch or git.current_branch(root), "main"
+    )
 
 
-def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -> None:
+def merge_flow(repo: Repository, root: Path, branch: str, *, title: str = "") -> None:
     """Merge the branch's pull request as soon as possible.
 
     Merge means merge asap, never merge-if-instant-else-fail: checks
@@ -1427,15 +1420,15 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     pr = repo.pr.find_by_head(branch)
     if pr is None:
         fail(f"no open pull request for {branch}")
-    _wait_for_verdict(repo, pr.number, local_head=git.head_sha())
+    _wait_for_verdict(repo, pr.number, local_head=git.head_sha(root))
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         fail(
             f"CI is red for PR #{pr.number}: fix it and `{footman.prog()} submit`."
             " This verb never merges red."
         )
-    git.fetch()
-    if git.behind_base(pr.base_branch):
+    git.fetch(root)
+    if git.behind_base(root, pr.base_branch):
         fail(
             f"PR #{pr.number} is behind {pr.base_branch}:"
             f" `{footman.prog()} integrate`, then `{footman.prog()} submit`,"
@@ -1444,7 +1437,7 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     subject = title or pr.title
     _follow_merge_state(
         repo,
-        _contract_forge_kind(git.root),
+        _contract_forge_kind(root),
         pr.number,
         repo.pr.merge_now,
         pr.number,
@@ -1466,5 +1459,4 @@ def submit_merge(
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
-    git = GitOps(root)
-    merge_flow(this_repository(root), git, git.current_branch(), title=title)
+    merge_flow(this_repository(root), root, git.current_branch(root), title=title)

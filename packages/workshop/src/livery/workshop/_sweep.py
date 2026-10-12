@@ -33,7 +33,7 @@ The rules, each saying what went or why it stayed:
 - A file or folder no code writes any more (`LEFTOVERS`) goes when
   met.
 - Every declared series of the state store is bounded, windows,
-  ages, and orphans, as [livery.workshop._state.sweep][] says.
+  ages, and orphans, as [livery.git.sweep][] says.
 - The config directory is reported, never touched: anything beside the
   user's config, tasks file, and shared env file is named. The loop's
   workspace is reported by size and kept.
@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 import livery.footman as footman
-from livery.workshop._git_ops import GitError, GitOps
+from livery import git
 
 #: The workshop's homes under the data directory.
 WORKTREES = "worktrees"
@@ -62,12 +62,7 @@ CONFIG_OWN = ("config.toml", ".repo.shared.env", "__pycache__")
 
 
 def sweep(
-    *,
-    data_dir: Path,
-    config_dir: Path,
-    dry_run: bool,
-    now: datetime,
-    **facts: Any,
+    *, data_dir: Path, config_dir: Path, dry_run: bool, now: datetime, **facts: Any
 ) -> list[str]:
     """The workshop's sweep, footman's sweeper contract; the lines to print.
 
@@ -107,14 +102,14 @@ def _remove_worktree(tree: Path, gitdir: Path | None) -> None:
         # <checkout>/.git/worktrees/<name>: the checkout is three up.
         checkout = gitdir.parent.parent.parent
         try:
-            GitOps(checkout)._run("worktree", "remove", "--force", str(tree))
+            git.run(checkout, "worktree", "remove", "--force", str(tree))
             return
-        except GitError:
+        except git.GitError:
             pass
     shutil.rmtree(tree, ignore_errors=True)
     if gitdir is not None and gitdir.exists():
         with _quiet():
-            GitOps(gitdir.parent.parent.parent)._run("worktree", "prune")
+            git.run(gitdir.parent.parent.parent, "worktree", "prune")
 
 
 class _quiet:
@@ -132,7 +127,7 @@ def _repository(tree: Path) -> Any:
 
 
 def _done(
-    tree: Path, number: int | None, branch: str, git: GitOps
+    tree: Path, number: int | None, branch: str, root: Path
 ) -> tuple[bool, str, str]:
     """Whether the work landed, why or why not, and the merged pull request's head.
 
@@ -144,7 +139,7 @@ def _done(
 
     try:
         repo = _repository(tree)
-        pull = merged_pull_request(repo, git, branch)
+        pull = merged_pull_request(repo, root, branch)
         head = pull.head_sha if pull is not None else ""
         if number is not None:
             work = repo.issue.get(number)
@@ -181,19 +176,18 @@ def sweep_worktrees(home: Path, *, dry_run: bool) -> list[str]:
                 continue
             head, _, _rest = tree.name.partition("-")
             number = int(head) if head.isdigit() else None
-            git = GitOps(tree)
             try:
-                branch = git.current_branch()
-            except GitError as error:
+                branch = git.current_branch(tree)
+            except git.GitError as error:
                 lines.append(f"worktree {name}: git could not answer ({error}); kept")
                 continue
-            done, why, merged_head = _done(tree, number, branch, git)
+            done, why, merged_head = _done(tree, number, branch, tree)
             if not done:
                 lines.append(f"worktree {name}: {why}; kept")
                 continue
             try:
-                only_local = only_local_work(git, tree, branch, merged_head=merged_head)
-            except GitError as error:
+                only_local = only_local_work(tree, branch, merged_head=merged_head)
+            except git.GitError as error:
                 lines.append(f"worktree {name}: git could not answer ({error}); kept")
                 continue
             if only_local:
@@ -218,24 +212,22 @@ def sweep_branches(root: Path | None, *, dry_run: bool) -> list[str]:
         return []
     from livery.workshop._submit import worktree_for
 
-    git = GitOps(root)
     try:
-        current = git.current_branch()
-        branches = git.local_branches("")
-    except GitError as error:
+        current = git.current_branch(root)
+        branches = git.local_branches(root, "")
+    except git.GitError as error:
         return [f"branches: git could not answer ({error}); kept"]
     lines: list[str] = []
     for branch in branches:
-        if branch == "main" or worktree_for(git, root, branch):
+        if branch == "main" or worktree_for(root, branch):
             continue
-        _went, line = sweep_branch(root, git, branch, current=current, dry_run=dry_run)
+        _went, line = sweep_branch(root, branch, current=current, dry_run=dry_run)
         lines.append(line)
     return lines
 
 
 def sweep_branch(
     root: Path,
-    git: GitOps,
     branch: str,
     *,
     current: str,
@@ -256,13 +248,13 @@ def sweep_branch(
 
     try:
         found = merged_pull_request(
-            repo if repo is not None else _repository(root), git, branch
+            repo if repo is not None else _repository(root), root, branch
         )
     except Exception as error:
         return False, f"branch {branch}: the forge could not be asked ({error}); kept"
     if found is None:
         return False, f"branch {branch}: no merged pull request; kept"
-    only_local = only_local_work(git, root, branch, merged_head=found.head_sha)
+    only_local = only_local_work(root, branch, merged_head=found.head_sha)
     if only_local:
         return False, (
             f"branch {branch}: PR #{found.number} merged, but it holds"
@@ -274,7 +266,7 @@ def sweep_branch(
             f" stands on it; `{footman.prog()} sync` steps off it"
         )
     if not dry_run:
-        git.delete_local_branch(branch)
+        git.delete_branch(root, branch)
     verb = "would remove" if dry_run else "removed"
     return (
         True,
@@ -289,17 +281,20 @@ def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]
     """Bound every declared series of the state store in the run's scope; the lines."""
     from contextlib import nullcontext
 
+    from livery.git import WHOLE, remote_snapshot
+    from livery.git import sweep as sweep_series
+    from livery.workshop._ci_context import run_context, state_store
     from livery.workshop._series import DECLARED
-    from livery.workshop._state import WHOLE, remote_snapshot, run_context
-    from livery.workshop._state import sweep as sweep_series
 
     if root is None:
         return ["state store: no checkout here; nothing swept"]
     remote = run_context() is not None
     # The remote sweep reads every series: one listing and one fetch.
-    scope = remote_snapshot(root, fetch=WHOLE) if remote else nullcontext()
+    scope = remote_snapshot(state_store(root), fetch=WHOLE) if remote else nullcontext()
     with scope:
-        lines = sweep_series(root, DECLARED, remote=remote, dry_run=dry_run, now=now)
+        lines = sweep_series(
+            state_store(root), DECLARED, remote=remote, dry_run=dry_run, now=now
+        )
     return [f"state store: {line.strip()}" for line in lines]
 
 

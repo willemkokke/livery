@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.forge import RepoConfig, Repository
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._governance import (
     codeowners_file,
     governance_config,
@@ -62,9 +62,7 @@ def test_owner_declarations_parse_with_their_defaults() -> None:
     assert users == () and teams == () and approvals == 0
 
 
-def test_entries_guard_the_governance_files_and_qualify_teams(
-    tmp_path: Path,
-) -> None:
+def test_entries_guard_the_governance_files_and_qualify_teams(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     entries = governance_entries(root)
     paths = [entry.path for entry in entries]
@@ -77,9 +75,7 @@ def test_entries_guard_the_governance_files_and_qualify_teams(
     assert guard.min_approvals == 2
 
 
-def test_no_declarations_means_no_file_and_no_requirement(
-    tmp_path: Path,
-) -> None:
+def test_no_declarations_means_no_file_and_no_requirement(tmp_path: Path) -> None:
     root = tmp_path / "bare"
     (root / "packages").mkdir(parents=True)
     (root / "workshop.toml").write_text(
@@ -116,9 +112,7 @@ def test_the_rendered_file_is_the_forges_dialect(tmp_path: Path) -> None:
     assert "@acme/reviewers" in rendered.content
 
 
-def test_unknown_owners_are_named_with_where_they_are_declared(
-    tmp_path: Path,
-) -> None:
+def test_unknown_owners_are_named_with_where_they_are_declared(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     fake = FakeForge()
     fake.set_members("acme", ("alice", "fake-user"))
@@ -159,10 +153,10 @@ def _build(base: Path) -> None:
     pushed(base, clone="clone", fill=_contract)
 
 
-def _reconcile_rig(seeds: Seeds) -> tuple[Path, GitOps]:
+def _reconcile_rig(seeds: Seeds) -> Path:
     """The clone whose contract names a forge, copied for this test."""
     clone = seeds("contract", _build) / "clone"
-    return clone, GitOps(clone)
+    return clone
 
 
 def test_the_reconcile_is_silent_when_provably_unneeded(
@@ -170,7 +164,7 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
 ) -> None:
     from livery.workshop import _workflow_tasks
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -180,7 +174,7 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
     (root / "plain.txt").write_text("p\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: plain")
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     _git(root, "checkout", "main")
     from types import SimpleNamespace
 
@@ -191,20 +185,18 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
         return SimpleNamespace(code=0, stdout="", stderr="")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _spawn)
-    _workflow_tasks._reconcile_configuration(git, sha)
+    _workflow_tasks._reconcile_configuration(root, sha)
     assert ran == []  # untouched: provably unneeded, so silent
 
 
 def test_the_reconcile_runs_when_governance_paths_moved(
-    seeds: Seeds,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    seeds: Seeds, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from types import SimpleNamespace
 
     from livery.workshop import _workflow_tasks
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -215,7 +207,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
         '[owners]\nusers = ["alice"]\n'
     )
     _git(root, "commit", "-am", "feat: owners")
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     _git(root, "checkout", "main")
     ran: list[str] = []
 
@@ -224,7 +216,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
         return SimpleNamespace(code=1, stdout="", stderr="refused: ADMIN_TOKEN")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _refusing)
-    _workflow_tasks._reconcile_configuration(git, sha)
+    _workflow_tasks._reconcile_configuration(root, sha)
     out = capsys.readouterr().out
     assert ran == ["ran"]
     # The reason arrives verbatim, never summarised away.
@@ -237,19 +229,17 @@ def test_the_reconcile_runs_when_governance_paths_moved(
         return SimpleNamespace(code=1, stdout="", stderr="connection reset")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _soft)
-    _workflow_tasks._reconcile_configuration(git, sha)
+    _workflow_tasks._reconcile_configuration(root, sha)
     out = capsys.readouterr().out
     assert "connection reset" in out and "workflow.configure" in out
 
 
 def test_the_check_title_task_refuses_a_drifted_title(
-    seeds: Seeds,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    seeds: Seeds, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._release_driver import workflow_release_check_title
 
-    root, _git_seam = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -280,7 +270,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     from livery.forge import Protection
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         '[owners]\nusers = ["alice", "author"]\n'
@@ -302,7 +292,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     )
     _git(root, "commit", "-am", "feat: touch governance")
     _git(root, "push", "-u", "origin", "feat/1-work")
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     fake.push("acme", "ws", "feat/1-work", sha=sha)
     fake.settle("acme", "ws", sha)
     repo.pr.open("feat/1-work", "main", "feat: touch governance")
@@ -312,7 +302,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     repo.pr.arm(1, title="feat: touch governance")
     # Green, armed, unmerged, with protection demanding a review the
     # PR does not have: nobody's error, exit 0's territory.
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "awaiting-approvals"
     assert verdict.exit_code == 0
     assert "1 approval" in verdict.detail
@@ -322,7 +312,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     # because the fake never merges without its own trigger).
     fake.review("acme", "ws", 1, "alice", "approved")
     fake.settle("acme", "ws", sha)  # the review was the last gate
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "merged"
 
 
@@ -331,7 +321,7 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
 ) -> None:
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -344,7 +334,7 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: work")
     _git(root, "push", "-u", "origin", "feat/2-work")
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     fake.push("acme", "ws", "feat/2-work", sha=sha)
     fake.settle("acme", "ws", sha)
     repo.pr.open("feat/2-work", "main", "feat: work")
@@ -363,7 +353,7 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
     # Protection exists but cannot be read: the softer stalled
     # wording holds, a blocker is never asserted from a state that
     # could not be read.
-    verdict = classify(repo, "feat/2-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/2-work", root, grace_spent=True)
     assert verdict.state == "stalled"
 
 
@@ -393,9 +383,7 @@ def _configure_rig(
 
 
 def test_the_clock_is_reconciled_only_where_the_forge_keeps_it(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._workflow_tasks import reconcile_schedules, workflow_configure
 
@@ -450,9 +438,7 @@ def test_configure_refuses_unknown_owners_before_applying(
 
 
 def test_configure_degrades_the_approval_count_with_a_note(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._workflow_tasks import workflow_configure
 
@@ -472,9 +458,7 @@ def test_configure_degrades_the_approval_count_with_a_note(
 
 
 def test_configure_degrades_required_contexts_like_gitlab(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._workflow_tasks import workflow_configure
 
@@ -722,7 +706,7 @@ def test_a_lagging_pr_head_stays_in_flight(
     # from the stale run, and a fresh red green).
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -735,7 +719,7 @@ def test_a_lagging_pr_head_stays_in_flight(
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: work")
     _git(root, "push", "-u", "origin", "feat/1-work")
-    old_sha = git.head_sha()
+    old_sha = git.head_sha(root)
     fake.push("acme", "ws", "feat/1-work", sha=old_sha)
     fake.settle("acme", "ws", old_sha)
     repo.pr.open("feat/1-work", "main", "feat: work")
@@ -744,20 +728,20 @@ def test_a_lagging_pr_head_stays_in_flight(
     (root / "work.txt").write_text("w2\n")
     _git(root, "commit", "-am", "fix: the fix")
     _git(root, "push", "origin", "feat/1-work")
-    new_sha = git.head_sha()
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    new_sha = git.head_sha(root)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "in-flight"
     assert old_sha[:10] in verdict.detail
     assert new_sha[:10] in verdict.detail
     # The forge catches up green: the verdict moves on.
     fake.push("acme", "ws", "feat/1-work", sha=new_sha)
     fake.settle("acme", "ws", new_sha)
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "disarmed"
     # From another checkout (a watcher not on the branch) the guard
     # never engages: the forge's head is the only truth in reach.
     _git(root, "checkout", "main")
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "disarmed"
 
 
@@ -769,7 +753,7 @@ def test_a_disarmed_behind_pr_teaches_integrate(
     # other with no exit.
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(seeds)
+    root = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -782,11 +766,11 @@ def test_a_disarmed_behind_pr_teaches_integrate(
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: work")
     _git(root, "push", "-u", "origin", "feat/1-work")
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     fake.push("acme", "ws", "feat/1-work", sha=sha)
     fake.settle("acme", "ws", sha)
     repo.pr.open("feat/1-work", "main", "feat: work")
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "disarmed"
     assert "submit --armed" in verdict.detail
     # Main advances; the parked answer now teaches the way out.
@@ -798,7 +782,7 @@ def test_a_disarmed_behind_pr_teaches_integrate(
     _git(other, "add", "-A")
     _git(other, "commit", "-m", "feat: main moves")
     _git(other, "push", "origin", "main")
-    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    verdict = classify(repo, "feat/1-work", root, grace_spent=True)
     assert verdict.state == "disarmed"
     assert "behind" in verdict.detail
     assert "integrate" in verdict.detail

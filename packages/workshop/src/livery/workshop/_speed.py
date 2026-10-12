@@ -31,14 +31,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from livery import git
 from livery.footman import fail
-from livery.workshop._state import RunContext, Series, slug
+from livery.workshop._ci_context import RunContext, state_store
 
 #: The marks: one row per write, the newest per package and leg the
 #: mark; anyone may write, since an accept is a person's act, and the
 #: gate job's writer guards its own rule that only a run records or
 #: ratchets.
-SERIES = Series("speed/marks", window=400, ci_only=False)
+SERIES = git.Series("speed/marks", window=400, ci_only=False)
 
 #: The green runs behind a mark: the median of this many is the mark.
 SAMPLE = 5
@@ -94,14 +95,14 @@ def drop_marks(root: Path) -> list[str]:
     delete the remote refuses, prints its reason and drops nothing.
     Nothing to print when the series is already gone.
     """
-    from livery.workshop._state import drop
+    from livery.git import drop
 
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return [f"  speed marks: not dropped: {found.reason}"]
     if not found.rows and not found.skipped:
         return []
-    why = drop(root, SERIES.ref)
+    why = drop(state_store(root), SERIES.ref)
     if why:
         return [f"  speed marks: not dropped: {why}"]
     count = len(found.rows) + len(found.skipped)
@@ -255,7 +256,7 @@ class Verdict:
 
 
 def _row_name(when: datetime, package: str, leg: str) -> str:
-    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{slug(package)}--{slug(leg)}"
+    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{git.slug(package)}--{git.slug(leg)}"
 
 
 def marks(root: Path) -> tuple[dict[tuple[str, str], Mark] | None, str]:
@@ -266,7 +267,7 @@ def marks(root: Path) -> tuple[dict[tuple[str, str], Mark] | None, str]:
     row disables nothing. The newest row per package and leg is its
     mark.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return None, found.reason
     current: dict[tuple[str, str], Mark] = {}
@@ -312,7 +313,7 @@ def write_mark(
         "reason": reason,
     }
     return SERIES.put(
-        root,
+        state_store(root),
         {_row_name(datetime.now(UTC), package, leg): row},
         message=f"speed mark: {package} on {leg} {kind} {seconds:.1f}s by {by}",
     )
@@ -487,7 +488,7 @@ def judge_run(root: Path, run: RunContext) -> tuple[list[Verdict], list[str]]:
     """
     from livery.workshop._metrics import SERIES as METRICS
 
-    rows = METRICS.rows(root)
+    rows = METRICS.rows(state_store(root))
     if rows.failed:
         return [], [f"  speed: not judged ({rows.reason})"]
     current, why = marks(root)
@@ -588,7 +589,7 @@ def render_marks(root: Path) -> list[str]:
     if not current:
         return ["  speed marks: none yet; the gate job records one per package and leg"]
     latest: dict[tuple[str, str], float] = {}
-    rows = METRICS.rows(root)
+    rows = METRICS.rows(state_store(root))
     if not rows.failed and rows.rows:
         newest = rows.rows[0].data
         for job, row in (newest.get("jobs") or {}).items():

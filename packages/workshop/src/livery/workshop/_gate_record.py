@@ -23,7 +23,7 @@ A CI check leg chooses where to measure from by the same rule
 (`leg_plan`), over CI's own record alone.
 
 The record is a local series of the state store
-([livery.workshop._state][]): it lives in the checkout's git
+([livery.git][]): it lives in the checkout's git
 directory, shared by its worktrees, is written only by a green local
 gate, and never leaves the machine. CI never reads or writes it. The
 window keeps the newest `KEEP` rows, and a row older than `MAX_AGE`
@@ -38,8 +38,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from livery.workshop import _state
-from livery.workshop._git_ops import GitError, GitOps
+from livery import git
+from livery.workshop._ci_context import state_store
 from livery.workshop._verified import Verified, tree_id
 
 #: How many rows the record keeps, newest first.
@@ -57,7 +57,7 @@ NEAR = 20
 #: How many of a branch's earlier merge rows a leg rebuilds, newest first.
 MERGES = 5
 
-SERIES = _state.Series("gate-record", window=KEEP, ci_only=False, local=True)
+SERIES = git.Series("gate-record", window=KEEP, ci_only=False, local=True)
 
 #: The scopes: a full gate roots a chain; a step gates the delta from
 #: ``base_tree``. ``affected`` is the step of an earlier spelling,
@@ -159,7 +159,7 @@ def rows(root: Path) -> tuple[tuple[Row, ...], str]:
     A row without a tree is not a proof and is left out; the store
     already skipped what does not parse or is of another schema.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return (), found.reason
     kept: list[Row] = []
@@ -200,7 +200,6 @@ def _fresh(row: Row, now: datetime) -> bool:
 
 def remember(
     root: Path,
-    git: GitOps,
     *,
     tree: str,
     packages: tuple[str, ...] | None,
@@ -213,7 +212,6 @@ def remember(
     the same tree, scope, and base replaces its predecessor; the
     window keeps the newest `KEEP` rows.
     """
-    del git  # the seam every writer of the record takes, for the callers' symmetry
     scope = FULL if packages is None else STEP
     base = base_tree if packages is not None else ""
     row = {
@@ -224,7 +222,7 @@ def remember(
         "root": str(root),
     }
     why = SERIES.put(
-        root,
+        state_store(root),
         {_name(tree, scope, base): row},
         message=f"gate record: tree {tree[:12]} proved green ({scope})",
     )
@@ -234,7 +232,7 @@ def remember(
 
 
 def chain(
-    git: GitOps,
+    root: Path,
     tree: str,
     *,
     roots: set[str],
@@ -250,7 +248,7 @@ def chain(
     read once here otherwise.
     """
     if found is None:
-        found, why = rows(git.root)
+        found, why = rows(root)
         if why:
             return None
     moment = now or datetime.now(UTC)
@@ -281,7 +279,7 @@ def chain(
     return None
 
 
-def verified_roots(root: Path, git: GitOps, base: str) -> tuple[set[str], str]:
+def verified_roots(root: Path, base: str) -> tuple[set[str], str]:
     """The trees CI's record holds that a chain may rest on, and why none when none.
 
     The candidates are the merge base with *base* and HEAD's
@@ -292,15 +290,15 @@ def verified_roots(root: Path, git: GitOps, base: str) -> tuple[set[str], str]:
     the forge could not answer leaves the chain rootless, and the
     reason is returned for the line.
     """
+    from livery.git import remote_snapshot
     from livery.workshop import _verified
-    from livery.workshop._state import remote_snapshot
 
     try:
-        base_tree = tree_id(git, git.merge_base(base))
-    except GitError as error:
+        base_tree = tree_id(root, git.merge_base(root, base))
+    except git.GitError as error:
         return set(), f"no merge base with origin/{base} ({error})"
-    history = git.first_parent_trees(REACH)
-    with remote_snapshot(root, fetch=("verified",)):
+    history = git.first_parent_trees(root, REACH)
+    with remote_snapshot(state_store(root), fetch=("verified",)):
         roots, why = _verified.held(root, [base_tree, *history])
     if roots:
         return roots, ""
@@ -313,24 +311,22 @@ def verified_roots(root: Path, git: GitOps, base: str) -> tuple[set[str], str]:
 
 
 def covering(
-    git: GitOps, *, base: str = "main", now: datetime | None = None
+    root: Path, *, base: str = "main", now: datetime | None = None
 ) -> tuple[Chain | None, str]:
     """The chain proving HEAD's tree for the gate a submit would run, or why not."""
     try:
-        tree = tree_id(git)
-    except GitError as error:
+        tree = tree_id(root)
+    except git.GitError as error:
         return None, f"no tree id ({error})"
-    roots, why = verified_roots(git.root, git, base)
-    proof = chain(git, tree, roots=roots, now=now)
+    roots, why = verified_roots(root, base)
+    proof = chain(root, tree, roots=roots, now=now)
     if proof is not None:
         return proof, ""
     reason = f"no chain of green gates reaches tree {tree[:12]}"
     return None, f"{reason} ({why})" if why else reason
 
 
-def plan(
-    root: Path, git: GitOps, *, base: str = "main", now: datetime | None = None
-) -> Plan:
+def plan(root: Path, *, base: str = "main", now: datetime | None = None) -> Plan:
     """What the reflex runs for the working tree: nothing, a step, or everything.
 
     The working tree's own chain settles it first. Else the proved
@@ -341,20 +337,20 @@ def plan(
     edit; a row's tree git no longer has is passed over. With none in
     reach the whole gate runs and roots a new chain.
     """
-    tree = git.working_tree_id()
-    roots, why = verified_roots(root, git, base)
+    tree = git.working_tree_id(root)
+    roots, why = verified_roots(root, base)
     found, unread = rows(root)
     moment = now or datetime.now(UTC)
-    proof = chain(git, tree, roots=roots, now=now, found=found)
+    proof = chain(root, tree, roots=roots, now=now, found=found)
     if proof is not None:
         return Plan("proved", tree, why=proof.describe())
     near = list(dict.fromkeys(row.tree for row in found if _fresh(row, moment)))
     best = _fewest(
-        git,
+        root,
         tree,
-        [*git.first_parent_trees(REACH), *near[:NEAR]],
+        [*git.first_parent_trees(root, REACH), *near[:NEAR]],
         lambda candidate: (
-            chain(git, candidate, roots=roots, now=now, found=found) is not None
+            chain(root, candidate, roots=roots, now=now, found=found) is not None
         ),
     )
     if best is not None:
@@ -363,10 +359,7 @@ def plan(
 
 
 def _fewest(
-    git: GitOps,
-    tree: str,
-    candidates: Iterable[str],
-    proved: Callable[[str], bool],
+    root: Path, tree: str, candidates: Iterable[str], proved: Callable[[str], bool]
 ) -> tuple[str, tuple[str, ...]] | None:
     """The proved candidate with the fewest paths changed to *tree*, and those paths.
 
@@ -378,15 +371,15 @@ def _fewest(
         if candidate == tree or not proved(candidate):
             continue
         try:
-            paths = tuple(git.tree_diff(candidate, tree))
-        except GitError:
+            paths = tuple(git.tree_diff(root, candidate, tree))
+        except git.GitError:
             continue
         if best is None or len(paths) < len(best[1]):
             best = (candidate, paths)
     return best
 
 
-def leg_plan(root: Path, git: GitOps, *, base: str, branch: str) -> Plan:
+def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
     """Where a CI check leg measures its change from; the reflex's rule on CI's record.
 
     The candidates are the merge base with *base*, HEAD's first-parent
@@ -404,24 +397,24 @@ def leg_plan(root: Path, git: GitOps, *, base: str, branch: str) -> Plan:
     base (`MERGE_BASE`), and *why* says so. Without a merge base the
     mode is ``full``.
     """
+    from livery.git import remote_snapshot
     from livery.workshop import _verified
-    from livery.workshop._state import remote_snapshot
 
-    tree = tree_id(git)
+    tree = tree_id(root)
     try:
-        merge_base = tree_id(git, git.merge_base(base))
-    except GitError as error:
+        merge_base = tree_id(root, git.merge_base(root, base))
+    except git.GitError as error:
         return Plan("full", tree, why=f"no merge base with origin/{base} ({error})")
     try:
-        merged = git.merge_parents()
-    except GitError:
+        merged = git.merge_parents(root)
+    except git.GitError:
         merged = None
-    with remote_snapshot(root, fetch=("verified",)):
+    with remote_snapshot(state_store(root), fetch=("verified",)):
         rows, unread = _verified.proved(root)
-    candidates = [merge_base, *git.first_parent_trees(REACH)]
-    rebuilt = _rebuilt(git, rows, branch) if merged is not None else []
+    candidates = [merge_base, *git.first_parent_trees(root, REACH)]
+    rebuilt = _rebuilt(root, rows, branch) if merged is not None else []
     best = _fewest(
-        git, tree, [*candidates, *rebuilt], lambda candidate: candidate in rows
+        root, tree, [*candidates, *rebuilt], lambda candidate: candidate in rows
     )
     if best is not None:
         base_tree, paths = best
@@ -438,15 +431,15 @@ def leg_plan(root: Path, git: GitOps, *, base: str, branch: str) -> Plan:
         else "CI's record proves no tree in reach"
     )
     try:
-        paths = tuple(git.tree_diff(merge_base, tree))
-    except GitError as error:
+        paths = tuple(git.tree_diff(root, merge_base, tree))
+    except git.GitError as error:
         return Plan(
             "full", tree, why=f"{why}, and the merge base's diff failed ({error})"
         )
     return Plan(MERGE_BASE, tree, base_tree=merge_base, paths=paths, why=why)
 
 
-def _rebuilt(git: GitOps, rows: Mapping[str, Verified], branch: str) -> list[str]:
+def _rebuilt(root: Path, rows: Mapping[str, Verified], branch: str) -> list[str]:
     """The trees of *branch*'s earlier merge runs this clone can rebuild exactly.
 
     A row whose commits this clone lacks, a force-push having dropped
@@ -462,11 +455,11 @@ def _rebuilt(git: GitOps, rows: Mapping[str, Verified], branch: str) -> list[str
     ]
     rebuilt: list[str] = []
     for row in merges[:MERGES]:
-        if not (git.sha_of(row.head_sha) and git.sha_of(row.base_sha)):
+        if not (git.sha_of(root, row.head_sha) and git.sha_of(root, row.base_sha)):
             continue
         try:
-            if git.merge_tree(row.base_sha, row.head_sha) == row.tree:
+            if git.merge_tree(root, row.base_sha, row.head_sha) == row.tree:
                 rebuilt.append(row.tree)
-        except GitError:
+        except git.GitError:
             continue
     return rebuilt

@@ -484,6 +484,27 @@ UNDECLARED: tuple[str, ...] = ()
 STALE: tuple[str, ...] = ()
 
 
+def mount_git_plugin() -> str:
+    """Mount the git plugin; the reason it could not, printed as a note, or empty.
+
+    The environment every git spawn runs with: one ssh connection per
+    host, the tools' identity, an editor that never opens. The mount
+    runs on every command, ``fm sync`` among them, which is what
+    installs the entry point a checkout that just moved past the
+    plugin's arrival lacks, so a refusal here would stop the command
+    that repairs it.
+    """
+    from livery.footman import plugin, prog
+
+    try:
+        plugin("livery.git")
+    except ValueError as error:
+        why = f"the git plugin is not mounted ({error}); `{prog()} sync` installs it"
+        _note(why)
+        return why
+    return ""
+
+
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount every listed extension's plugin, in mount order; the names mounted.
 

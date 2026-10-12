@@ -10,11 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _metrics, _quality, _state, _verified
-from livery.workshop._git_ops import GitOps
+from livery import git
+from livery.workshop import _ci_context, _metrics, _quality, _verified
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
-RUN = _state.RunContext("gitea", "1013", "push", "refs/heads/main")
+RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -59,7 +60,7 @@ def _trace(path: Path) -> Path:
 
 
 def test_an_absent_record_and_an_unknown_tree_are_quiet(work: Path) -> None:
-    tree = _verified.tree_id(GitOps(work))
+    tree = _verified.tree_id(work)
     assert _verified.record(work, tree) == (None, "")
     assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=("check",)) == ""
     assert _verified.record(work, "f" * 40) == (None, "")
@@ -76,10 +77,10 @@ def _rmtree(path: Path) -> None:
 def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     work: Path, tmp_path: Path
 ) -> None:
-    tree = _verified.tree_id(GitOps(work))
+    tree = _verified.tree_id(work)
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             _verified.SERIES.ref,
             {tree: "not json", "other": json.dumps({"schema": 99})},
             message="junk",
@@ -99,7 +100,7 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
 def test_held_answers_for_many_trees_in_one_read_and_falls_open(
     work: Path, tmp_path: Path
 ) -> None:
-    tree = _verified.tree_id(GitOps(work))
+    tree = _verified.tree_id(work)
     assert _verified.held(work, [tree, "f" * 40]) == (set(), "")
     assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=("check",)) == ""
     assert _verified.held(work, [tree, "f" * 40, tree]) == ({tree}, "")
@@ -128,8 +129,8 @@ def test_a_narrowed_leg_or_a_missing_row_leaves_the_tree_unstamped(work: Path) -
         },
     }
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             _metrics.SERIES.ref,
             {_metrics.run_file(RUN.run_id): json.dumps(narrowed)},
             message="rows",
@@ -141,7 +142,7 @@ def test_a_narrowed_leg_or_a_missing_row_leaves_the_tree_unstamped(work: Path) -
     # A narrowed leg composes only with the tree it measured from, and
     # this one named none, so the tree stays unstamped.
     assert "check (b) named no tree its narrowed gate measured from" in line
-    assert _verified.record(work, _verified.tree_id(GitOps(work))) == (None, "")
+    assert _verified.record(work, _verified.tree_id(work)) == (None, "")
 
 
 def test_the_gate_runs_when_the_record_cannot_decide_or_names_a_narrowed_tree(
@@ -178,8 +179,8 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
         },
     }
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             _metrics.SERIES.ref,
             {_metrics.run_file(RUN.run_id): json.dumps(full)},
             message="rows",
@@ -188,7 +189,7 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
         == ""
     )
     line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
-    tree = _verified.tree_id(GitOps(work))
+    tree = _verified.tree_id(work)
     assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1013"
     found, why = _verified.record(work, tree)
     assert why == "" and found is not None
@@ -198,7 +199,7 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
     # The gate itself: a verified tree ends the run before any step, marker left.
     (work / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: RUN)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: RUN)
     monkeypatch.setattr(
         "livery.workshop._quality._leg_plan",
         lambda root, base, run: pytest.fail("ran"),
@@ -227,7 +228,7 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
     assert (
         _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace) == ""
     )
-    found = _state.read(work, _metrics.run_ref(RUN, "check-a"))
+    found = git.read(state_store(work), _metrics.run_ref(RUN, "check-a"))
     assert found.files is not None
     row = json.loads(found.files[_metrics.ROW_FILE])
     assert row["scope"] == {
@@ -240,7 +241,7 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
 
 # --- the composed stamp: a narrowed run on a verified base --------------------
 
-PULL = _state.RunContext(
+PULL = _ci_context.RunContext(
     "gitea",
     "1014",
     "pull_request",
@@ -252,7 +253,7 @@ PULL = _state.RunContext(
 
 def _rows(
     work: Path,
-    run: _state.RunContext,
+    run: _ci_context.RunContext,
     scopes: dict[str, str],
     bases: dict[str, str] | None = None,
 ) -> None:
@@ -274,8 +275,8 @@ def _rows(
         },
     }
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             _metrics.SERIES.ref,
             {_metrics.run_file(run.run_id): json.dumps(entry)},
             message="rows",
@@ -294,7 +295,6 @@ def _branch_commit(work: Path, name: str) -> None:
 
 
 def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> None:
-    git = GitOps(work)
     # A leg that left no scope: no stamp, the leg named.
     _rows(work, PULL, {"check (a)": "affected", "check (b)": "unknown"})
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
@@ -302,8 +302,8 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
     # Narrowed legs on a base the record does not name: no stamp, the
     # base named, so a reader knows which tree's proof is missing.
     _branch_commit(work, "feat/one")
-    base = _verified.tree_id(git, "origin/main")
-    tree = _verified.tree_id(git)
+    base = _verified.tree_id(work, "origin/main")
+    tree = _verified.tree_id(work)
     both = {"check (a)": base, "check (b)": base}
     _rows(work, PULL, {"check (a)": "affected", "check (b)": "nothing"}, both)
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
@@ -345,12 +345,11 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
 def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    git = GitOps(work)
-    base = _verified.tree_id(git)
+    base = _verified.tree_id(work)
     stamped = _verified.stamp(work, RUN, tree=base, sha="b" * 40, legs=("check (a)",))
     assert stamped == ""
     _branch_commit(work, "feat/one")
-    tree = _verified.tree_id(git)
+    tree = _verified.tree_id(work)
     _rows(work, PULL, {"check (a)": "affected"}, {"check (a)": base})
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line == (
@@ -376,13 +375,13 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     _git(work, "push", "-q", "origin", "feat/one:main")
     _git(work, "fetch", "-q", "origin")
     _branch_commit(work, "feat/two")
-    later = _state.RunContext(
+    later = _ci_context.RunContext(
         "gitea", "1015", "pull_request", "refs/pull/2/merge", base_ref="main"
     )
     _rows(work, later, {"check (a)": "nothing"}, {"check (a)": tree})
     line = _verified.stamp_from_metrics(work, later, sha="a" * 40)
     assert f"on top of tree {tree[:12]} (run 1014)" in line
-    found, _ = _verified.record(work, _verified.tree_id(git))
+    found, _ = _verified.record(work, _verified.tree_id(work))
     assert found is not None and found.base_tree == tree
     # Every leg skipped on the record already: nothing to add.
     _rows(work, later, {"check (a)": "verified"})
@@ -391,7 +390,6 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
 
 
 def test_a_merge_checkouts_stamp_names_the_two_commits_it_merged(work: Path) -> None:
-    git = GitOps(work)
     base = _git(work, "rev-parse", "HEAD").strip()
     _branch_commit(work, "feat/one")
     head = _git(work, "rev-parse", "HEAD").strip()
@@ -399,7 +397,7 @@ def test_a_merge_checkouts_stamp_names_the_two_commits_it_merged(work: Path) -> 
     _git(work, "merge", "-q", "--no-ff", "--no-edit", "feat/one")
     _rows(work, PULL, {"check (a)": "full"})
     line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
-    tree = _verified.tree_id(git)
+    tree = _verified.tree_id(work)
     assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1014"
     found, _ = _verified.record(work, tree)
     assert found is not None
@@ -408,5 +406,5 @@ def test_a_merge_checkouts_stamp_names_the_two_commits_it_merged(work: Path) -> 
     _git(work, "checkout", "-q", "feat/one")
     _rows(work, PULL, {"check (a)": "full"})
     _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
-    found, _ = _verified.record(work, _verified.tree_id(git))
+    found, _ = _verified.record(work, _verified.tree_id(work))
     assert found is not None and (found.base_sha, found.head_sha) == ("", "")

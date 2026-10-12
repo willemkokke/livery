@@ -202,7 +202,7 @@ def test_the_release_history_lists_a_grouped_package_newest_first(
 
     def git(*args: str) -> None:
         subprocess.run(
-            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            ["git", *args],
             cwd=tmp_path,
             capture_output=True,
             check=True,

@@ -22,6 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from livery import git
 from livery.workshop._categories import matches
 from livery.workshop._packages import Package
 
@@ -57,9 +58,8 @@ class Changes:
         """*path* where the change is measured from; empty if unknown."""
         if not self.before:
             return ""
-        from livery.workshop._git_ops import GitOps
 
-        return GitOps(self.root).file_at(self.before, path)
+        return git.file_at(self.root, self.before, path)
 
 
 @dataclass(frozen=True)

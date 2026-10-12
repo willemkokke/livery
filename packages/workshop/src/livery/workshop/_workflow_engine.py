@@ -13,12 +13,13 @@ decision extension reads the state and does the right thing.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import livery.footman as footman
+from livery import git
 from livery.footman import fail
 from livery.forge import ForgeError, Repository
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._workflow_decision import (
     WorkflowAction,
     workflow_decision,
@@ -94,7 +95,7 @@ class WorkflowDriver(Protocol):
 def run_workflow(
     driver: WorkflowDriver,
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     current_user: str | None = None,
 ) -> None:
@@ -107,7 +108,7 @@ def run_workflow(
     """
     tidied: set[str] = set()
     while True:
-        states = workflow_states(repo, git, base=driver.base)
+        states = workflow_states(repo, root, base=driver.base)
         wf = next(
             (s for s in states if s.name == driver.name),
             WorkflowStatus(kind=None, state=WorkflowState.NONE),
@@ -118,9 +119,9 @@ def run_workflow(
             name=driver.name,
             wf=wf,
             members=driver.members,
-            branch=git.current_branch(),
-            dirty=not git.is_clean(),
-            behind_default=_behind_default(git, driver.base),
+            branch=git.current_branch(root),
+            dirty=not git.is_clean(root),
+            behind_default=_behind_default(root, driver.base),
             default_branch=driver.base,
             current_user=(_forge_user(repo) if current_user is None else current_user),
             others=others,
@@ -156,7 +157,7 @@ def run_workflow(
             raise SystemExit(f"  {decision.message}")
 
         if action is WorkflowAction.MERGE_DEFAULT:
-            _merge_default(git, driver.base)
+            _merge_default(root, driver.base)
             continue
 
         # A stale set re-derives in place: the prepare starts from the
@@ -169,7 +170,7 @@ def run_workflow(
 
         if action is WorkflowAction.TIDY_THEN_START:
             target = decision.tidy_target
-            tidy_leftover(repo, git, target or wf, base=driver.base)
+            tidy_leftover(repo, root, target or wf, base=driver.base)
             if target is not None and target.name not in tidied:
                 tidied.add(target.name)
                 continue
@@ -197,7 +198,7 @@ def run_workflow(
                     " then arm."
                 )
 
-        started = git.current_branch()
+        started = git.current_branch(root)
         submission = driver.prepare()
         if submission is None:
             print("  nothing to submit: everything is already current")
@@ -209,7 +210,7 @@ def run_workflow(
         # know their done oracle (a release watches its receipts).
         submit_flow(
             repo,
-            git,
+            root,
             title=submission.title,
             body=submission.body,
             base=driver.base,
@@ -219,8 +220,8 @@ def run_workflow(
             follow_to_verdict=False,
             force=force,
         )
-        _leave_reserved(git, driver, started)
-        if arm and driver.watch > 0 and not _merged(repo, git, driver.branch):
+        _leave_reserved(root, driver, started)
+        if arm and driver.watch > 0 and not _merged(repo, root, driver.branch):
             # An armed act waits the way `submit --armed` waits: from
             # the branch it returned to, since the pull request holds
             # the reserved branch on the remote. A blocker exits with
@@ -228,13 +229,13 @@ def run_workflow(
             from livery.workshop._verdict import follow
 
             print(f"  following PR of {driver.branch} to its merge")
-            follow(repo, driver.branch, git, timeout=driver.watch)
-        if _merged(repo, git, driver.branch):
+            follow(repo, driver.branch, root, timeout=driver.watch)
+        if _merged(repo, root, driver.branch):
             driver.on_merged()
         return
 
 
-def _leave_reserved(git: GitOps, driver: WorkflowDriver, started: str) -> None:
+def _leave_reserved(root: Path, driver: WorkflowDriver, started: str) -> None:
     """Return to the branch the act started from; the reserved branch lives on origin.
 
     The pull request holds the reserved branch on the remote, and the
@@ -242,17 +243,21 @@ def _leave_reserved(git: GitOps, driver: WorkflowDriver, started: str) -> None:
     leftover the moment the submit returns. An act started on the
     reserved branch itself stays there: a person chose it.
     """
-    if not started or started == driver.branch or git.current_branch() != driver.branch:
+    if (
+        not started
+        or started == driver.branch
+        or git.current_branch(root) != driver.branch
+    ):
         return
-    git.switch(started)
-    git.delete_local_branch(driver.branch)
+    git.switch(root, started)
+    git.delete_branch(root, driver.branch)
     print(
         f"  back on {started}; {driver.branch} stays on origin under its pull request"
     )
 
 
 def tidy_leftover(
-    repo: Repository, git: GitOps, wf: WorkflowStatus, *, base: str
+    repo: Repository, root: Path, wf: WorkflowStatus, *, base: str
 ) -> None:
     """Tear down a finished workflow's branches; safe, it is merged.
 
@@ -263,15 +268,15 @@ def tidy_leftover(
     if wf.branch:
         from livery.workshop._submit import teardown_branch
 
-        teardown_branch(repo, git, wf.branch, base)
+        teardown_branch(repo, root, wf.branch, base)
 
 
-def _merged(repo: Repository, git: GitOps, branch: str) -> bool:
+def _merged(repo: Repository, root: Path, branch: str) -> bool:
     """Whether *branch*'s PR has merged, asked of the forge."""
     try:
         pr = repo.pr.find_by_head(branch, state="all")
         if pr is None:
-            pr = repo.pr.find_by_head_sha(git.any_head(branch))
+            pr = repo.pr.find_by_head_sha(git.any_head(root, branch))
         return pr is not None and pr.merged
     except ForgeError:
         return False
@@ -297,20 +302,20 @@ def _forge_user(repo: Repository) -> str:
         return ""
 
 
-def _behind_default(git: GitOps, base: str) -> int:
+def _behind_default(root: Path, base: str) -> int:
     """Commits on origin/*base* not in HEAD; 0 when none or offline."""
     try:
-        git.fetch()
-        return git.behind_base(base)
-    except GitError:
+        git.fetch(root)
+        return git.behind_base(root, base)
+    except git.GitError:
         return 0
 
 
-def _merge_default(git: GitOps, base: str) -> None:
+def _merge_default(root: Path, base: str) -> None:
     """Merge origin/*base* in; a conflict stops with the resolution path."""
     try:
-        git.integrate(base)
-    except GitError as exc:
+        git.integrate(root, base)
+    except git.GitError as exc:
         raise SystemExit(
             f"  The merge from {base} stopped on a conflict. Resolve it,"
             f" commit, and run the workflow again to resume.\n{exc}"

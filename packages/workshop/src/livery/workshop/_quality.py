@@ -12,6 +12,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from livery import git
+
 if TYPE_CHECKING:
     from livery.workshop._gate_record import Plan
     from livery.workshop._influence import Changes
@@ -22,10 +24,10 @@ from livery.extensions.python import _backend as _python
 from livery.footman import Forward, doc, fail, group, task
 from livery.workshop import _checks
 from livery.workshop._backends import require_backends
+from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext, run_phase
-from livery.workshop._state import RunContext
 
 # Re-exported by name: the render check's record looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -191,20 +193,18 @@ def ci_changes(root: Path) -> Changes | None:
     ``affected-legs``, and when git cannot answer; the run then judges
     everything, and the line printed says why.
     """
-    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._ci_context import run_context
     from livery.workshop._influence import Changes
-    from livery.workshop._state import run_context
 
     run = run_context()
     base = ci_affected_base(root, run) if run is not None else ""
     if not base:
         return None
-    git = GitOps(root)
     try:
-        git.fetch()
-        paths = tuple(git.changed_paths(base))
-        before = git.merge_base(base)
-    except GitError as error:
+        git.fetch(root)
+        paths = tuple(git.changed_paths(root, base))
+        before = git.merge_base(root, base)
+    except git.GitError as error:
         print(
             f"  affected-legs: no diff against origin/{base}; everything is"
             f" judged ({error})"
@@ -224,11 +224,10 @@ def verified_already(root: Path) -> Verified | None:
     run proved it, the coverage record main's run copies.
     """
     from livery.workshop import _verified
-    from livery.workshop._git_ops import GitError, GitOps
 
     try:
-        tree = _verified.tree_id(GitOps(root))
-    except GitError as error:
+        tree = _verified.tree_id(root)
+    except git.GitError as error:
         print(f"  verified: this checkout has no tree id ({error}); running the gate")
         return None
     found, why = _verified.record(root, tree)
@@ -256,11 +255,9 @@ def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
     """
     from livery.workshop import _gate_record
     from livery.workshop._gate_record import Plan
-    from livery.workshop._git_ops import GitOps
 
-    git = GitOps(root)
-    git.fetch()
-    step = _gate_record.leg_plan(root, git, base=base, branch=run.head_ref)
+    git.fetch(root)
+    step = _gate_record.leg_plan(root, base=base, branch=run.head_ref)
     if run.event == "push" and step.mode == _gate_record.MERGE_BASE:
         # On the pushed branch the merge base is HEAD itself, and a step
         # from it would judge nothing: a push with no proved tree in
@@ -280,12 +277,11 @@ def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
 
 def _affected(root: Path, step: Plan) -> tuple[Package, ...] | None:
     """The packages *step*'s paths reach; None means everything."""
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._graph import affected_by
 
     if step.mode == "full":
         return None
-    scope = affected_by(root, GitOps(root), step.paths, before=step.base_tree)
+    scope = affected_by(root, step.paths, before=step.base_tree)
     return None if scope is None else scope.packages
 
 
@@ -341,15 +337,16 @@ def check(
     locally and push the result.
 
     On a machine the state store is read from what the last ``sync``
-    or ``start`` fetched ([livery.workshop._state.fetched_snapshot][]):
+    or ``start`` fetched ([livery.git.fetched_snapshot][]):
     nothing the gate runs reaches origin, and a checkout the store was
     never fetched into roots its chain on a full gate and says so.
     Inside CI the legs read the store as the run's own snapshot.
     """
     from contextlib import nullcontext
 
+    from livery.git import fetched_snapshot
     from livery.workshop._checks import arguments_refusal, split_arguments
-    from livery.workshop._state import fetched_snapshot, run_context
+    from livery.workshop._ci_context import run_context
 
     _refuse_both(fix, safe_fix)
     paths, arguments = split_arguments(paths)
@@ -361,7 +358,7 @@ def check(
         return
     root = workspace_root()
     scope = (
-        fetched_snapshot(root)
+        fetched_snapshot(state_store(root))
         if root is not None and run_context() is None
         else nullcontext()
     )
@@ -553,7 +550,7 @@ def _run_check(
             f" `{footman.prog()} check --fix` locally and push the result."
         )
     from livery.workshop import _verified
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     root_for_ci = workspace_root()
     run = run_context()
@@ -573,10 +570,10 @@ def _run_check(
     elif dispatched:
         print("  dispatched: the whole gate, the verified record set aside")
     if not (nightly or dispatched) and root_for_ci is not None and run is not None:
-        from livery.workshop._state import remote_snapshot
+        from livery.git import remote_snapshot
 
         # The verified record and the records a skip reads: one listing.
-        with remote_snapshot(root_for_ci, fetch=("verified", "coverage/")):
+        with remote_snapshot(state_store(root_for_ci), fetch=("verified", "coverage/")):
             proved = verified_already(root_for_ci)
             if proved is not None:
                 _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
@@ -633,15 +630,13 @@ def _run_check(
     proved_tree = ""
     if run is None and root_for_ci is not None:
         from livery.workshop import _gate_record
-        from livery.workshop._git_ops import GitOps
         from livery.workshop._graph import affected_from_paths
 
-        git = GitOps(root_for_ci)
         if full:
-            proved_tree = git.working_tree_id()
+            proved_tree = git.working_tree_id(root_for_ci)
             print("  full: everything runs, whatever the record proves")
         else:
-            reflex = _gate_record.plan(root_for_ci, git, base=base)
+            reflex = _gate_record.plan(root_for_ci, base=base)
             proved_tree = reflex.tree
             if reflex.mode == "proved":
                 say_skipped(
@@ -659,7 +654,6 @@ def _run_check(
                     root_for_ci,
                     packages,
                     reflex.paths,
-                    git=git,
                     before=reflex.base_tree,
                 )
                 if scope is not None:
@@ -761,9 +755,8 @@ def _rewritten_tree(root: Path | None, run: RunContext | None, tree: str) -> str
     """
     if root is None or run is not None or not tree:
         return tree
-    from livery.workshop._git_ops import GitOps
 
-    return GitOps(root).working_tree_id()
+    return git.working_tree_id(root)
 
 
 def _remember_local(
@@ -778,12 +771,9 @@ def _remember_local(
     if root is None or run is not None or not tree:
         return
     from livery.workshop import _gate_record
-    from livery.workshop._git_ops import GitOps
 
     print(
-        _gate_record.remember(
-            root, GitOps(root), tree=tree, packages=packages, base_tree=base_tree
-        )
+        _gate_record.remember(root, tree=tree, packages=packages, base_tree=base_tree)
     )
 
 
@@ -791,7 +781,7 @@ def _current_point() -> str:
     """The point this process runs at, as the job runner named it; gate outside CI."""
     import os
 
-    from livery.workshop._state import POINT_VARIABLE
+    from livery.workshop._ci_context import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
 
@@ -852,7 +842,6 @@ def _unrecorded(
     suite and the records need no backfill.
     """
     from livery.workshop._coverage_store import closure_id, recorded
-    from livery.workshop._git_ops import GitError, GitOps
 
     if not units:
         return ()
@@ -864,12 +853,11 @@ def _unrecorded(
             )
         return units
     held = {base: recorded(root, leg=run.leg, base=base) for base in bases}
-    git = GitOps(root)
     out: list[Package] = []
     for unit in units:
         try:
-            key = closure_id(git, packages, unit)
-        except GitError as error:
+            key = closure_id(root, packages, unit)
+        except git.GitError as error:
             print(
                 f"  coverage store: {unit.path} runs, nothing to reuse (its closure"
                 f" has no identity: {error})"
@@ -1049,7 +1037,8 @@ def coverage_union() -> None:
     """
     from contextlib import nullcontext
 
-    from livery.workshop._state import remote_snapshot, run_context
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
 
     root = workspace_root()
     if root is None:
@@ -1058,7 +1047,7 @@ def coverage_union() -> None:
     # The legs' per-run refs and every record the union may carry
     # from: one listing and one fetch.
     scope = (
-        remote_snapshot(root, fetch=(f"run/{run.run_id}/", "coverage/"))
+        remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "coverage/"))
         if run is not None
         else nullcontext()
     )

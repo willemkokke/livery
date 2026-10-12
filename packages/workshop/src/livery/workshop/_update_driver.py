@@ -28,9 +28,9 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import doc, fail
 from livery.forge import Repository
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._update import bump_floors
 from livery.workshop._uv import run_uv
@@ -64,7 +64,6 @@ class UpdateDriver:
     def __init__(
         self,
         root: Path,
-        git: GitOps,
         flavor: str,
         *,
         armed: bool,
@@ -72,7 +71,6 @@ class UpdateDriver:
         refresh: bool = False,
     ) -> None:
         self._root = root
-        self._git = git
         self._names = names
         self._refresh = refresh
         self.name = f"update/{flavor}"
@@ -106,12 +104,14 @@ class UpdateDriver:
         runs the work again on the branch instead, so the floors
         those releases earned land as a second commit.
         """
-        git = self._git
+        root = self._root
         resumed = False
-        if git.current_branch() == self.branch or git.local_branch_exists(self.branch):
-            if git.current_branch() != self.branch:
-                git.switch(self.branch)
-            subjects = git.subjects_ahead(self.base)
+        if git.current_branch(root) == self.branch or git.local_branch_exists(
+            root, self.branch
+        ):
+            if git.current_branch(root) != self.branch:
+                git.switch(root, self.branch)
+            subjects = git.subjects_ahead(root, self.base)
             if subjects:
                 # A "Merge " subject is the engine's own MERGE_DEFAULT
                 # bringing the base in, never someone's hand-made work.
@@ -133,15 +133,15 @@ class UpdateDriver:
                     print("  resuming the committed update from its branch")
                     return Submission(title=subjects[-1], body="")
                 resumed = True
-        elif self.branch in git.remote_branches(""):
+        elif self.branch in git.remote_branches(root, ""):
             # The engine returns to the branch it started from and
             # drops the local copy once the pull request holds the
             # branch, so a re-run resumes from origin's copy.
-            git.fetch()
-            git._run("checkout", "-b", self.branch, f"origin/{self.branch}")
+            git.fetch(root)
+            git.run(root, "checkout", "-b", self.branch, f"origin/{self.branch}")
             return self.prepare()
         else:
-            git.create_branch(self.branch)
+            git.create_branch(root, self.branch)
         toolchain_before = _locked_workshop(self._root)
         notes = self._work()
         # The new wheels ship the files they compose: install them, then
@@ -150,17 +150,17 @@ class UpdateDriver:
         from livery.workshop._templates import apply_project
 
         notes += [f"composed: {path}" for path in apply_project(self._root)]
-        if git.is_clean():
+        if git.is_clean(root):
             if resumed:
                 # A refresh with nothing new: the committed work stands.
-                subjects = git.subjects_ahead(self.base)
+                subjects = git.subjects_ahead(root, self.base)
                 return Submission(title=subjects[-1], body="")
-            git.switch(self.base)
-            git.delete_local_branch(self.branch)
+            git.switch(root, self.base)
+            git.delete_branch(root, self.branch)
             return None
         run_gate(self._root)
         title = f"chore: {self.name.replace('/', ' ')}"
-        git.commit_all(title + "\n\n" + "\n".join(f"- {n}" for n in notes))
+        git.commit_all(root, title + "\n\n" + "\n".join(f"- {n}" for n in notes))
         toolchain_after = _locked_workshop(self._root)
         if (
             toolchain_after != toolchain_before
@@ -187,13 +187,13 @@ class UpdateDriver:
         if not self._names:
             run_uv("lock", "--upgrade", root=self._root)
             notes.append("lock: upgraded every dependency")
-            notes += bump_floors(self._root, self._git)
+            notes += bump_floors(self._root)
             return notes
         for name in external:
             run_uv("lock", "--upgrade-package", name, root=self._root)
             notes.append(f"lock: upgraded {name}")
         if named_siblings:
-            notes += bump_floors(self._root, self._git, only=named_siblings)
+            notes += bump_floors(self._root, only=named_siblings)
         return notes
 
     def _reexec(self) -> None:
@@ -248,18 +248,18 @@ def run_gate(root: Path) -> None:
         )
 
 
-def _live_releases(repo: Repository, git: GitOps) -> tuple[str, ...]:
+def _live_releases(repo: Repository, root: Path) -> tuple[str, ...]:
     """The release workflows currently parking updates, by name."""
     return tuple(
         wf.name
-        for wf in workflow_states(repo, git)
+        for wf in workflow_states(repo, root)
         if wf.kind is WorkflowKind.RELEASE and wf.state in PARKS_UPDATES
     )
 
 
 def wait_for_releases(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     interactive: bool,
     timeout: float = BOUNDED_WAIT,
@@ -275,7 +275,7 @@ def wait_for_releases(
     deadline = time.monotonic() + timeout
     announced = False
     while True:
-        live = _live_releases(repo, git)
+        live = _live_releases(repo, root)
         if not live:
             return True
         if not announced:
@@ -304,23 +304,22 @@ def _drive(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    git = GitOps(root)
     repo = this_repository(root)
-    driver = UpdateDriver(root, git, flavor, armed=armed, names=names)
-    run_workflow(driver, repo, git)
+    driver = UpdateDriver(root, flavor, armed=armed, names=names)
+    run_workflow(driver, repo, root)
     if not armed:
         return
     # Parked by a live release: wait, then finish ourselves. The
     # re-run re-prepares (fresh floors included) and arms.
-    if not _live_releases(repo, git):
+    if not _live_releases(repo, root):
         return
     interactive = footman.attended()
     # timeout and poll read at call time so a bounded test can move them.
     if wait_for_releases(
-        repo, git, interactive=interactive, timeout=BOUNDED_WAIT, poll=WAIT_POLL
+        repo, root, interactive=interactive, timeout=BOUNDED_WAIT, poll=WAIT_POLL
     ):
-        fresh = UpdateDriver(root, git, flavor, armed=armed, names=names, refresh=True)
-        run_workflow(fresh, repo, git)
+        fresh = UpdateDriver(root, flavor, armed=armed, names=names, refresh=True)
+        run_workflow(fresh, repo, root)
         return
     print(
         "  still parked: the release outlasted the wait. Run"

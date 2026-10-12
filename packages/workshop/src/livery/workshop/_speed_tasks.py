@@ -18,9 +18,9 @@ from typing import Annotated
 import livery.footman as footman
 from livery.footman import doc, fail, group, requires
 from livery.workshop import _speed
+from livery.workshop._ci_context import RunContext, run_context, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import discover_packages
-from livery.workshop._state import RunContext, run_context
 
 speed = group("speed", help="The test suites' speed marks")
 
@@ -38,9 +38,9 @@ def judge_flow(root: Path, run: RunContext) -> list[str]:
     Prints every verdict and every write. Fails open: a store that
     cannot be read prints its reason and reddens nothing.
     """
-    from livery.workshop._state import remote_snapshot
+    from livery.git import remote_snapshot
 
-    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+    with remote_snapshot(state_store(root), fetch=("metrics", "speed/marks")):
         verdicts, why = _speed.judge_run(root, run)
         for line in why:
             print(line)

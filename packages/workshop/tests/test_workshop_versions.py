@@ -134,8 +134,6 @@ def _repository(tmp_path: Path, baseline: str, steps: list[Step]) -> Path:
         f'kind = "python"\nname = "livery-member"\n{release}', encoding="utf-8"
     )
     _git(root, "init", "-q", "-b", "main")
-    _git(root, "config", "user.email", "t@example.com")
-    _git(root, "config", "user.name", "t")
     _git(root, "config", "commit.gpgsign", "false")
     for index, (tag, subject, body, where) in enumerate(steps):
         if subject:

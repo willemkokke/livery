@@ -194,9 +194,16 @@ def sync_tools(
     argument: a birth runs it for the newborn from inside its own
     task, and a task may not change the process directory, so the
     root travels as a value; ``sync`` calls it for the same reason.
-    The flags mean what the task's do.
+    The flags mean what the task's do. Once the lock stands, the
+    receipts are read before anything is supplied
+    ([livery.workshop._reconcile.tools_current][]): when every tool the
+    lock holds for this host has its receipt at the locked version and
+    its directory in the store, nothing is supplied and the line says
+    the tools are up to date. A receipt that is off names itself, and
+    the supply writes it again.
     """
     from livery.toolroom.store import LOCK_FILE
+    from livery.workshop._reconcile import tools_current
     from livery.workshop._sync import materialise_tools
     from livery.workshop._tools import lock_is_current, write_lock
 
@@ -210,6 +217,12 @@ def sync_tools(
                 )
             print(f"  {LOCK_FILE}: {why}; writing it")
             _report(write_lock(root, offline=offline))
+    if (root / LOCK_FILE).is_file():
+        off = tools_current(root)
+        if not off:
+            print("  tools: up to date")
+            return
+        print(f"  tools: {off}; supplying")
     for line in materialise_tools(root, offline=offline):
         print(line)
 

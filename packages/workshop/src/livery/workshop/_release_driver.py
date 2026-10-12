@@ -23,10 +23,10 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
 from livery.workshop import _lifecycle
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages, receipt_member
 from livery.workshop._release import prepare_release
@@ -153,7 +153,7 @@ def _write_manifest(
     (root / MANIFEST).write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
 
 
-def member_pairs_at(git: GitOps, ref: str) -> list[tuple[str, str]] | None:
+def member_pairs_at(root: Path, ref: str) -> list[tuple[str, str]] | None:
     """(distribution, version) for each member in the member list at *ref*.
 
     Each name is read from the member's contract as committed at
@@ -164,14 +164,14 @@ def member_pairs_at(git: GitOps, ref: str) -> list[tuple[str, str]] | None:
 
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    recorded = read_manifest(git.file_at(ref, MANIFEST))
+    recorded = read_manifest(git.file_at(root, ref, MANIFEST))
     if recorded is None:
         return None
     pairs: list[tuple[str, str]] = []
     for directory, version in recorded:
         try:
             contract = tomllib.loads(
-                git.file_at(ref, f"packages/{directory}/workshop.toml")
+                git.file_at(root, ref, f"packages/{directory}/workshop.toml")
             )
             name = str(contract.get("name") or directory)
         except tomllib.TOMLDecodeError:
@@ -378,7 +378,7 @@ def validate_member(
         print(f"  {plan.package.name} {label}: {listed}")
 
 
-def _base_tree_verified(git: GitOps, base: str) -> bool:
+def _base_tree_verified(root: Path, base: str) -> bool:
     """Whether the verified record already vouches for *base*'s tip tree.
 
     A gate that proved this exact tree green in full, on the pull
@@ -389,9 +389,9 @@ def _base_tree_verified(git: GitOps, base: str) -> bool:
     from livery.workshop import _verified
 
     try:
-        git.fetch()
-        sha = git.remote_head(base)
-        tree = _verified.tree_id(git, sha) if sha else ""
+        git.fetch(root)
+        sha = git.remote_head(root, base)
+        tree = _verified.tree_id(root, sha) if sha else ""
     except Exception as error:
         print(
             f"  {base}: its tip cannot be read for the verified record: {error};"
@@ -401,7 +401,7 @@ def _base_tree_verified(git: GitOps, base: str) -> bool:
     if not tree:
         print(f"  {base}: no tree at origin's tip to verify; waiting for its run")
         return False
-    found, why = _verified.record(git.root, tree)
+    found, why = _verified.record(root, tree)
     if found is None:
         if why:
             print(f"  {base}: tree {tree[:12]}: {why}; waiting for the tip's own run")
@@ -421,7 +421,7 @@ def _base_tree_verified(git: GitOps, base: str) -> bool:
 
 def require_verified_base(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     base: str,
     *,
     force: bool = False,
@@ -454,7 +454,7 @@ def require_verified_base(
     if force:
         print("  base verification skipped (--force-unverified-base)")
         return
-    if _base_tree_verified(git, base):
+    if _base_tree_verified(root, base):
         return
     deadline = time.monotonic() + timeout
     announced = False
@@ -463,8 +463,8 @@ def require_verified_base(
     ever_reported = False
     while True:
         try:
-            git.fetch()
-            sha = git.remote_head(base)
+            git.fetch(root)
+            sha = git.remote_head(root, base)
             status = repo.checks.status(sha) if sha else None
         except (ForgeError, Exception):
             return
@@ -480,7 +480,7 @@ def require_verified_base(
                 " release with --force-unverified-base if you accept an"
                 " unvouched tree."
             )
-        if "[skip ci]" in git.commit_message(sha):
+        if "[skip ci]" in git.commit_message(root, sha):
             fail(
                 f"{base}'s tip carries a skip-ci marker, so CI will never"
                 " report on it. Push a commit CI can run, or"
@@ -535,7 +535,6 @@ class ReleaseDriver:
         self,
         root: Path,
         repo: Repository,
-        git: GitOps,
         members: tuple[Package, ...],
         *,
         armed: bool,
@@ -544,7 +543,6 @@ class ReleaseDriver:
     ) -> None:
         self._root = root
         self._repo = repo
-        self._git = git
         self._members = members
         self.members = tuple(p.member for p in members)
         self.name = release_name(self.members)
@@ -582,19 +580,19 @@ class ReleaseDriver:
 
         from livery.workshop._publish import MANIFEST, read_manifest
 
-        git = self._git
-        git.fetch()
-        text = git.file_at(f"origin/{self.branch}", MANIFEST)
+        root = self._root
+        git.fetch(root)
+        text = git.file_at(root, f"origin/{self.branch}", MANIFEST)
         pairs = read_manifest(text) if text else None
         mined = ""
         if pairs:
             with contextlib.suppress(ValueError, TypeError, AttributeError):
                 mined = str(json.loads(text).get("mined-at") or "")
         self._previous = (mined, pairs) if pairs and mined else None
-        if git.current_branch() == self.branch:
-            git.switch(self.base)
-        if git.local_branch_exists(self.branch):
-            git.delete_local_branch(self.branch)
+        if git.current_branch(root) == self.branch:
+            git.switch(root, self.base)
+        if git.local_branch_exists(root, self.branch):
+            git.delete_branch(root, self.branch)
         self._fresh = True
 
     def legs_kept(self, plans: tuple[MemberPlan, ...], mined_at: str) -> set[str]:
@@ -614,10 +612,10 @@ class ReleaseDriver:
         kept: set[str] = set()
         for plan in plans:
             try:
-                moved = self._git.log_paths(
-                    f"{previous_mined}..{mined_at}", (plan.package.path,)
+                moved = git.log_paths(
+                    self._root, f"{previous_mined}..{mined_at}", (plan.package.path,)
                 )
-            except GitError:
+            except git.GitError:
                 continue  # an unreadable span proves nothing: run the legs
             if not moved:
                 kept.add(plan.package.member)
@@ -630,26 +628,28 @@ class ReleaseDriver:
         nothing is rebuilt, the engine re-submits what the branch
         holds, and titles come from the ref, never the working tree.
         """
-        git = self._git
+        root = self._root
         if not self._fresh and (
-            git.local_branch_exists(self.branch)
+            git.local_branch_exists(root, self.branch)
             or self._repo.branch_exists(self.branch)
         ):
-            if git.current_branch() != self.branch:
-                if not git.local_branch_exists(self.branch):
-                    git.fetch()
-                    git._run("checkout", "-b", self.branch, f"origin/{self.branch}")
+            if git.current_branch(root) != self.branch:
+                if not git.local_branch_exists(root, self.branch):
+                    git.fetch(root)
+                    git.run(
+                        root, "checkout", "-b", self.branch, f"origin/{self.branch}"
+                    )
                 else:
-                    git.switch(self.branch)
+                    git.switch(root, self.branch)
             print(f"  recovering the prepared {self.name} from its branch")
             self._require_fresh_base()
             return self._submission_from_ref()
 
-        require_verified_base(self._repo, git, self.base, force=self._force)
+        require_verified_base(self._repo, root, self.base, force=self._force)
         plans = derive_plans(self._root, self._members)
-        mined_at = git.head_sha()
+        mined_at = git.head_sha(root)
         kept = self.legs_kept(plans, mined_at)
-        git.create_branch(self.branch)
+        git.create_branch(root, self.branch)
         prepared = False
         try:
             floor_changes = bump_set_floors(self._root, plans)
@@ -660,7 +660,7 @@ class ReleaseDriver:
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
                 _lifecycle.build(plan.package, self._root)
-                if git.is_clean():
+                if git.is_clean(root):
                     # Already stamped: a release squash-merged but never
                     # published leaves main carrying exactly these
                     # entries and versions, and re-preparing is the
@@ -670,13 +670,15 @@ class ReleaseDriver:
                         " already stamped on the base; nothing to commit"
                     )
                     continue
-                git.commit_all(f"chore(release): {plan.package.name} v{plan.version}")
-            if not git.is_clean():
+                git.commit_all(
+                    root, f"chore(release): {plan.package.name} v{plan.version}"
+                )
+            if not git.is_clean(root):
                 # Only the manifest changed: every member was already
                 # stamped on the base (a merged release whose publish
                 # failed), and the manifest alone is what lets the
                 # squash's discovery still name the whole set.
-                git.commit_all("chore(release): the set manifest")
+                git.commit_all(root, "chore(release): the set manifest")
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
@@ -692,8 +694,8 @@ class ReleaseDriver:
         finally:
             if not prepared:
                 rollback_prepare(self._root, self._members)
-                git.switch(self.base)
-                git.delete_local_branch(self.branch)
+                git.switch(root, self.base)
+                git.delete_branch(root, self.branch)
         title = release_title([(plan.package.name, plan.version) for plan in plans])
         body = (
             "## Release summary\n"
@@ -712,10 +714,10 @@ class ReleaseDriver:
         and the fresh prepare mines everything. Deviation from hse
         ruled 2026-09-04 with issue #161.
         """
-        git = self._git
-        git.fetch()
-        base_sha = git._run("rev-parse", f"origin/{self.base}").strip()
-        if git.is_ancestor(base_sha, "HEAD"):
+        root = self._root
+        git.fetch(root)
+        base_sha = git.run(root, "rev-parse", f"origin/{self.base}").strip()
+        if git.is_ancestor(root, base_sha, "HEAD"):
             return
         fail(
             f"{self.base} has moved past this prepared release: commits"
@@ -734,9 +736,9 @@ class ReleaseDriver:
         part of what was prepared, so the rebuilt title stays
         consistent with the content the squash will carry.
         """
-        git = self._git
-        mined_at = git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
-        pairs = member_pairs_at(git, "HEAD") or []
+        root = self._root
+        mined_at = git.run(root, "merge-base", "HEAD", f"origin/{self.base}").strip()
+        pairs = member_pairs_at(root, "HEAD") or []
         body = (
             "## Release summary\n"
             + "\n".join(f"- **{name}** v{version}" for name, version in pairs)
@@ -810,11 +812,11 @@ class ReleaseDriver:
         """
         from livery.workshop._traces import drop_chain
 
-        git = self._git
-        at = git.sha_of(self.branch)
+        root = self._root
+        at = git.sha_of(root, self.branch)
         if not at:
-            at, _subject = newest_release_squash(git, self.base)
-        if line := drop_chain(self._repo, git, commit=at):
+            at, _subject = newest_release_squash(root, self.base)
+        if line := drop_chain(self._repo, root, commit=at):
             print(f"  {line}")
 
 
@@ -857,12 +859,11 @@ def fresh_receipts(root: Path) -> None:
     its own tags to read; one that cannot reach origin derives from its
     own and says so.
     """
-    git = GitOps(root)
-    if not git.has_remote("origin"):
+    if not git.has_remote(root, "origin"):
         return
     try:
-        git.fetch_tags()
-    except GitError as error:
+        git.fetch_tags(root)
+    except git.GitError as error:
         print(
             "  origin could not be fetched, so the versions come from this"
             f" checkout's own tags: {error}"
@@ -985,7 +986,6 @@ def await_wave(
 def dispatch_flow(
     root: Path,
     repo: Repository,
-    git: GitOps,
     *,
     base: str = "main",
     at: str = "",
@@ -1015,12 +1015,12 @@ def dispatch_flow(
     """
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    where = at or _base_ref(git, base)
-    text = git.file_at(where, MANIFEST)
+    where = at or _base_ref(root, base)
+    text = git.file_at(root, where, MANIFEST)
     recorded = read_manifest(text) if text else None
     if not recorded:
         return [f"  no release manifest at {where}: nothing to dispatch"]
-    cut = set(git.remote_tags())
+    cut = set(git.remote_tags(root))
     receipts = [f"packages/{directory}/v{version}" for directory, version in recorded]
     missing = [tag for tag in receipts if tag not in cut]
     if not missing:
@@ -1031,12 +1031,12 @@ def dispatch_flow(
             f"  the wave is already in flight: run {live[0].id};"
             f" uncut so far: {', '.join(missing)}"
         ]
-    stamping = at or git.last_commit_touching(MANIFEST, ref=where)
+    stamping = at or git.last_commit_touching(root, MANIFEST, ref=where)
     if not stamping:
         return [
             f"  {MANIFEST} is at {where} but no commit touches it: nothing to dispatch"
         ]
-    _require_release_squash(git, stamping, base)
+    _require_release_squash(root, stamping, base)
     seen = {run.id for run in _wave_runs(repo)}
     inputs = {"ref": stamping}
     if workshop:
@@ -1072,7 +1072,7 @@ def dispatch_flow(
     ]
 
 
-def _require_release_squash(git: GitOps, stamping: str, base: str) -> None:
+def _require_release_squash(root: Path, stamping: str, base: str) -> None:
     """Refuse to send the wave to a commit the wave itself would refuse.
 
     The wave publishes only from a release squash, recognised by the
@@ -1084,9 +1084,9 @@ def _require_release_squash(git: GitOps, stamping: str, base: str) -> None:
     """
     from livery.workshop._publish import mined_at
 
-    if mined_at(git.commit_message(stamping)):
+    if mined_at(git.commit_message(root, stamping)):
         return
-    squash, subject = newest_release_squash(git, base)
+    squash, subject = newest_release_squash(root, base)
     prog = footman.prog()
     if squash:
         where = (
@@ -1103,19 +1103,19 @@ def _require_release_squash(git: GitOps, stamping: str, base: str) -> None:
     )
 
 
-def newest_release_squash(git: GitOps, base: str = "main") -> tuple[str, str]:
+def newest_release_squash(root: Path, base: str = "main") -> tuple[str, str]:
     """The newest release squash on the base, as (sha, subject); ("", "") when none."""
     from livery.workshop._publish import mined_at
 
-    for sha, subject in git.recent_commits(50, ref=_base_ref(git, base)):
+    for sha, subject in git.recent_commits(root, 50, ref=_base_ref(root, base)):
         if subject.startswith("chore(release): released") and mined_at(
-            git.commit_message(sha)
+            git.commit_message(root, sha)
         ):
             return sha, subject
     return "", ""
 
 
-def _base_ref(git: GitOps, base: str) -> str:
+def _base_ref(root: Path, base: str) -> str:
     """``origin/<base>`` after a fetch when the clone knows it, else HEAD.
 
     The release squashes live on the base. HEAD equals the base on the
@@ -1123,17 +1123,17 @@ def _base_ref(git: GitOps, base: str) -> str:
     branch, whose history lacks the squash it was merged as; a clone
     without the remote (a rig) has only HEAD.
     """
-    with contextlib.suppress(GitError):
-        git.fetch()
+    with contextlib.suppress(git.GitError):
+        git.fetch(root)
     try:
-        git.object_id(f"origin/{base}")
-    except GitError:
+        git.object_id(root, f"origin/{base}")
+    except git.GitError:
         return "HEAD"
     return f"origin/{base}"
 
 
 def pending_release_waves(
-    root: Path, git: GitOps, base: str = "main"
+    root: Path, base: str = "main"
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     """Every recent release squash whose receipts are not all cut, oldest first.
 
@@ -1152,14 +1152,14 @@ def pending_release_waves(
     """
     from livery.workshop._publish import discover_release
 
-    cut = set(git.remote_tags())
+    cut = set(git.remote_tags(root))
     pending: list[tuple[str, tuple[str, ...]]] = []
     # Newest first: the packages a later release squash names.
     taken: set[str] = set()
-    for sha, subject in git.recent_commits(50, ref=_base_ref(git, base)):
+    for sha, subject in git.recent_commits(root, 50, ref=_base_ref(root, base)):
         if not subject.startswith("chore(release): released"):
             continue
-        released = discover_release(root, git, sha)
+        released = discover_release(root, sha)
         missing = tuple(
             f"{package.path}/v{version}"
             for package, version in released
@@ -1172,18 +1172,18 @@ def pending_release_waves(
     return tuple(pending)
 
 
-def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
+def pending_release_wave(root: Path) -> tuple[str, tuple[str, ...]] | None:
     """The oldest release squash with an uncut receipt, or None.
 
     The set-blind selection, for a dispatch with no set named:
     recoveries run in order, oldest first.
     """
-    waves = pending_release_waves(root, git)
+    waves = pending_release_waves(root)
     return waves[0] if waves else None
 
 
 def pending_release_wave_for(
-    root: Path, git: GitOps, members: tuple[Package, ...]
+    root: Path, members: tuple[Package, ...]
 ) -> tuple[str, tuple[str, ...]] | None:
     """The oldest uncut squash whose receipts touch *members*, or None.
 
@@ -1192,7 +1192,7 @@ def pending_release_wave_for(
     other set's recovery, named by the caller, never a reason to
     prepare this set again from a tree already stamped.
     """
-    for sha, missing in pending_release_waves(root, git):
+    for sha, missing in pending_release_waves(root):
         if uncut_in_set(missing, members):
             return (sha, missing)
     return None
@@ -1261,8 +1261,7 @@ def workflow_release(
             f" `{footman.prog()} workflow.release forge workshop` (an atomic set)"
         )
     members = resolve_set(root, tuple(paths))
-    git = GitOps(root)
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     if not branch:
         fail(
             "HEAD is detached, and the branch decides the act. Check out a"
@@ -1270,13 +1269,13 @@ def workflow_release(
             " dev build), then run this again."
         )
     if not runs_the_train(branch):
-        dev_release(root, git, members, local=local)
+        dev_release(root, members, local=local)
         return
     if local:
         local_release(root, members)
         return
     print(f"  act: release train, from '{branch}'")
-    pending = pending_release_wave_for(root, git, members)
+    pending = pending_release_wave_for(root, members)
     repo = this_repository(root)
     if abandon:
         if pending is None:
@@ -1300,11 +1299,11 @@ def workflow_release(
         # at the squash, the duplicate-tolerant wave walks past what
         # an earlier attempt already did, and nothing new prepares.
         print("  dispatching the wave at the squash; nothing new prepares")
-        for line in dispatch_flow(root, repo, git, at=squash, workshop=workshop):
+        for line in dispatch_flow(root, repo, at=squash, workshop=workshop):
             print(line)
         print("  re-run to release work newer than the squash")
         return
-    for squash, missing in pending_release_waves(root, git):
+    for squash, missing in pending_release_waves(root):
         # An uncut receipt outside this set is that set's recovery,
         # named so a person can run it; this release goes ahead.
         inside = uncut_in_set(missing, members)
@@ -1328,13 +1327,12 @@ def workflow_release(
             ReleaseDriver,
             root,
             repo,
-            git,
             members,
             armed=armed,
             force_unverified_base=force_unverified_base,
         ),
         repo,
-        git,
+        root,
         armed=armed,
     )
 
@@ -1342,7 +1340,7 @@ def workflow_release(
 def run_release(
     make_driver: Callable[[], ReleaseDriver],
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     armed: bool,
 ) -> None:
@@ -1356,13 +1354,13 @@ def run_release(
     for attempt in range(1, REDERIVE_LIMIT + 1):
         driver = make_driver()
         try:
-            run_workflow(driver, repo, git)
+            run_workflow(driver, repo, root)
             return
         except SystemExit:
             if (
                 not armed
                 or attempt == REDERIVE_LIMIT
-                or not set_moved(repo, git, driver.name)
+                or not set_moved(repo, root, driver.name)
             ):
                 raise
             print(
@@ -1379,14 +1377,14 @@ def run_release(
 REDERIVE_LIMIT = 3
 
 
-def set_moved(repo: Repository, git: GitOps, name: str) -> bool:
+def set_moved(repo: Repository, root: Path, name: str) -> bool:
     """Whether release *name*'s open pull request is stale in its set's paths."""
     from livery.workshop._workflow_state import workflow_states
 
-    git.fetch()
+    git.fetch(root)
     return any(
         wf.name == name and wf.blocker.name == "STALE_SET"
-        for wf in workflow_states(repo, git)
+        for wf in workflow_states(repo, root)
     )
 
 
@@ -1415,9 +1413,7 @@ def workflow_release_dispatch(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    for line in dispatch_flow(
-        root, this_repository(root), GitOps(root), at=at, workshop=workshop
-    ):
+    for line in dispatch_flow(root, this_repository(root), at=at, workshop=workshop):
         print(line)
 
 
@@ -1446,7 +1442,7 @@ def workflow_release_check_title(
         # The shell passes no title: the event payload names it, and
         # names the head branch too. An explicit --title is always
         # checked, whatever branch the runner is on.
-        from livery.workshop._state import event_payload
+        from livery.workshop._ci_context import event_payload
 
         pull = (event_payload() or {}).get("pull_request") or {}
         title = str(pull.get("title") or "")
@@ -1457,9 +1453,8 @@ def workflow_release_check_title(
         if head_ref and not head_ref.startswith("workflow/release/"):
             print(f"  {head_ref} is not a release branch: nothing to check")
             return
-    git = GitOps(root)
-    branch = git.current_branch()
-    recorded = member_pairs_at(git, "HEAD")
+    branch = git.current_branch(root)
+    recorded = member_pairs_at(root, "HEAD")
     if not recorded:
         print(f"  {branch}: no release member list; nothing to check")
         return
@@ -1501,7 +1496,7 @@ def workflow_release_check_fresh(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     if not head:
-        from livery.workshop._state import event_payload
+        from livery.workshop._ci_context import event_payload
 
         pull = (event_payload() or {}).get("pull_request") or {}
         if not pull:
@@ -1513,8 +1508,7 @@ def workflow_release_check_fresh(
         print(f"  {head or 'this branch'} is not a release branch: nothing to check")
         return
     base = base or "main"
-    git = GitOps(root)
-    text = git.file_at("HEAD", MANIFEST)
+    text = git.file_at(root, "HEAD", MANIFEST)
     pairs = read_manifest(text) if text else None
     mined = ""
     if pairs:
@@ -1523,9 +1517,9 @@ def workflow_release_check_fresh(
     if not pairs or not mined:
         print(f"  {MANIFEST} records no mining point: nothing to check")
         return
-    git.fetch()
+    git.fetch(root)
     paths = tuple(f"packages/{directory}" for directory, _ in pairs)
-    moved = git.log_paths(f"{mined}..origin/{base}", paths)
+    moved = git.log_paths(root, f"{mined}..origin/{base}", paths)
     if moved:
         listed = "\n".join(f"    {subject}" for subject in moved)
         members = " ".join(directory for directory, _ in pairs)
@@ -1575,7 +1569,6 @@ def workflow_release_publish(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    git = GitOps(root)
     target = resolve_registry(root, "python")
     if not target.publish_url:
         from livery.workshop._dev_release import INDEX_VAR
@@ -1593,7 +1586,7 @@ def workflow_release_publish(
     registry = SimpleRegistry(target.url, token=target.token)
     registries: dict[str, Registry] = {"python": registry}
     if not prebuilt:
-        prebuilt = collected_wheels(root, git, ref)
+        prebuilt = collected_wheels(root, ref)
 
     def registry_for(package: Package) -> Registry:
         artifact = kind_for(package.kind).artifact
@@ -1615,7 +1608,6 @@ def workflow_release_publish(
 
     receipts = publish_release(
         root,
-        git,
         registry_for,
         ref=ref,
         index_url=target.publish_url,
@@ -1628,22 +1620,22 @@ def workflow_release_publish(
     print(f"  wave: {len(receipts)} member(s) published")
 
 
-def collected_wheels(root: Path, git: GitOps, ref: str) -> bool:
+def collected_wheels(root: Path, ref: str) -> bool:
     """Whether the wheels matrix fed this wave, judged inside CI alone.
 
     A runner's checkout starts with an empty dist/, so wheels there
     were collected from the matrix's artifacts; outside CI a dist/
     may hold a stale local build, and the wave builds as asked.
     """
+    from livery.workshop._ci_context import run_context
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
-    from livery.workshop._state import run_context
 
     if run_context() is None:
         return False
     fed = [
         package.name
-        for package, _version in discover_release(root, git, ref or git.head_sha())
+        for package, _version in discover_release(root, ref or git.head_sha(root))
         if kind_for(package.kind).wheel_identity == "platform"
         and any((package.directory / "dist").glob("*.whl"))
     ]

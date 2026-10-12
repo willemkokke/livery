@@ -31,21 +31,16 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.workshop._state import (
+from livery import git
+from livery.workshop._ci_context import (
     LEG_VARIABLE,
-    TRACE_NAMESPACE,
-    Keyed,
     RunContext,
-    put,
-    remote_snapshot,
     run_context,
-    slug,
+    state_store,
 )
-from livery.workshop._state import read as state_read
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
-    from livery.workshop._git_ops import GitOps
 
 #: The one file a leg puts on its trace ref: the trace as its writer
 #: wrote it, byte for byte, so nothing re-serialises a megabyte to
@@ -203,13 +198,13 @@ def _kept_runs(root: Path) -> int | None:
 #: One ref per leg of a run, keyed as the per-run metrics are, so the
 #: two halves of one leg answer to the same key. The files are not
 #: rows, so the count of runs is the whole bound the janitor applies.
-TRACES = Keyed(
+TRACES = git.Keyed(
     # Under the traces' own namespace, so the ref reads
     # ``refs/workshop-trace/run/<run>/<leg>``, the per-run metrics'
     # shape one namespace over.
     "run",
     ("run", "leg"),
-    namespace=TRACE_NAMESPACE,
+    namespace=git.TRACE_NAMESPACE,
     holds_rows=False,
     keep=_kept_runs,
 )
@@ -221,10 +216,10 @@ TRACES = Keyed(
 #: commit the dispatch named, so the run writes down the commit it
 #: actually checked out. Read beside the forge's own listing, never
 #: instead of it, and kept by age because a sha ranks by nothing.
-ABOUT = Keyed(
+ABOUT = git.Keyed(
     "about",
     ("commit",),
-    namespace=TRACE_NAMESPACE,
+    namespace=git.TRACE_NAMESPACE,
     stale_after=timedelta(days=90),
 )
 
@@ -276,8 +271,8 @@ def push(
     files = {TRACE_FILE: trace.read_text(encoding="utf-8")}
     if job:
         files[JOB_FILE] = json.dumps({"job": job}, sort_keys=True)
-    refused = put(
-        root,
+    refused = git.put(
+        state_store(root),
         series.ref,
         files,
         message=f"trace: {named} of run {found.run_id}",
@@ -289,7 +284,7 @@ def push(
     return f"profile: {size // 1024} KiB pushed to {series.ref}"
 
 
-def about(root: Path, git: GitOps, *, run: RunContext | None = None) -> str:
+def about(root: Path, *, run: RunContext | None = None) -> str:
     """Record the commit this run ran on when the forge files it elsewhere; the line.
 
     A push run and a pull request run are filed under the commit they
@@ -311,11 +306,11 @@ def about(root: Path, git: GitOps, *, run: RunContext | None = None) -> str:
     found = run or run_context()
     if found is None:
         return ""
-    head = git.head_sha()
+    head = git.head_sha(root)
     if not head or head == found.head_sha:
         return ""  # the forge already files it here
     refused = ABOUT.series(head).put(
-        root,
+        state_store(root),
         {found.run_id: {"run": found.run_id, "event": found.event, "ref": found.ref}},
         message=f"about: run {found.run_id} ran on {head[:12]}",
     )
@@ -356,8 +351,8 @@ def runs_about(
         Caused(str(run.id), run.event) for run in repo.checks.runs(head_sha=commit)
     ]
     known = {caused.run_id for caused in found}
-    with remote_snapshot(root, fetch=(ABOUT.series(commit).ref,)):
-        rows = ABOUT.series(commit).rows(root)
+    with git.remote_snapshot(state_store(root), fetch=(ABOUT.series(commit).ref,)):
+        rows = ABOUT.series(commit).rows(state_store(root))
     lines = [f"{commit[:12]}: {rows.reason}"] if rows.reason else []
     for row in rows.rows:
         run_id = str(row.data.get("run") or "")
@@ -601,14 +596,14 @@ def assemble(
         }
     ]
     # One listing and one fetch for every leg's trace of the run.
-    with remote_snapshot(root, fetch=(f"{TRACES.prefix}{run_id}/",)):
+    with git.remote_snapshot(state_store(root), fetch=(f"{TRACES.prefix}{run_id}/",)):
         traced, refusals = _legs_of(root, run_id)
     lines += refusals
     pids = itertools.count(LEG_PIDS)
     ordered = sorted(jobs, key=_job_order)
     for tid, job in enumerate(ordered, start=1):
         events += _job_events(job, tid=tid, zero=zero, created=created, now=moment)
-        text = traced.get(job.name) or traced.get(slug(job.name))
+        text = traced.get(job.name) or traced.get(git.slug(job.name))
         if text is None:
             continue
         found, why = laid_on(text, zero=zero, pids=pids, label=job.name)
@@ -853,14 +848,14 @@ def _legs_of(root: Path, run_id: str) -> tuple[dict[str, str], list[str]]:
     answered for by its own key, which is what a job whose name needs
     no spelling looks like.
     """
-    keys = TRACES.listed(root, run_id)
+    keys = TRACES.listed(state_store(root), run_id)
     if keys is None:
         return {}, [f"{TRACES.prefix}{run_id}/*: could not be listed; no leg's own"]
     lines: list[str] = []
     found: dict[str, str] = {}
     for key in keys:
         series = TRACES.at(*key)
-        read = state_read(root, series.ref)
+        read = git.read(state_store(root), series.ref)
         if read.files is None:
             lines.append(f"{key[-1]}: {read.reason or 'its ref could not be read'}")
             continue
@@ -890,7 +885,7 @@ def newest_run(repo: Repository, head_sha: str) -> str:
     return str(runs[0].id) if runs else ""
 
 
-def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
+def drop_run(repo: Repository, root: Path, *, run_id: str = "") -> str:
     """Put the run of *git*'s head in this command's own drop box; the line.
 
     For a verb that followed a run to its end. With a trace being kept, the
@@ -915,11 +910,11 @@ def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
     if not keeping():
         return ""
     try:
-        head_sha = git.head_sha()
+        head_sha = git.head_sha(root)
         found = run_id or newest_run(repo, head_sha)
         if not found:
             return f"profile: the forge lists no run for {head_sha[:12]}"
-        made = assemble(git.root, repo, found, head_sha=head_sha, clock=0.0)
+        made = assemble(root, repo, found, head_sha=head_sha, clock=0.0)
         if not made.events:
             why = made.lines[0] if made.lines else f"run {found} assembled to nothing"
             return f"profile: {why}"
@@ -932,7 +927,7 @@ def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
 
 
 def drop_chain(
-    repo: Repository, git: GitOps, *, commit: str = "", depth: int = 2
+    repo: Repository, root: Path, *, commit: str = "", depth: int = 2
 ) -> str:
     """Put the chain from *commit* in this command's own drop box; the line.
 
@@ -954,8 +949,8 @@ def drop_chain(
     if not keeping():
         return ""
     try:
-        at = commit or git.head_sha()
-        walked = chain(git.root, repo, at, depth=depth, now=None)
+        at = commit or git.head_sha(root)
+        walked = chain(root, repo, at, depth=depth, now=None)
         if not walked.events:
             why = walked.lines[-1] if walked.lines else f"nothing about {at[:12]}"
             return f"profile: {why}"

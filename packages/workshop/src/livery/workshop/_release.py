@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import Context, doc, fail, group
 from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._extensions import workspace_root
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages, release_tag
 from livery.workshop._versions import derive_version
 
@@ -93,7 +93,7 @@ def verify_release(
             stamp in module.read_text("utf-8") for module in modules
         ):
             problems.append(f"no __init__.py under src/ declares {stamp}")
-    released = set(GitOps(root).tags())
+    released = set(git.tags(root))
     for edge in package.depends:
         if not edge.floor:
             continue
@@ -136,10 +136,9 @@ def _last_released(root: Path, package: Package) -> str:
     Tags are the release identity and its receipt; a stamped version
     without its tag is an unfinished release, not a finished one.
     """
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._update import latest_released
 
-    return latest_released(GitOps(root).tags()).get(package.path, "")
+    return latest_released(git.tags(root)).get(package.path, "")
 
 
 def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
@@ -251,9 +250,9 @@ def release_replay(
     import sys
 
     from livery.forge import SimpleRegistry
+    from livery.workshop._ci_context import run_context
     from livery.workshop._registries import resolve_registry
     from livery.workshop._replay import replay_flow
-    from livery.workshop._state import run_context
 
     root = _root()
     packages = {p.member: p for p in discover_packages(root)}
@@ -274,7 +273,6 @@ def release_replay(
         repo = this_repository(root)
     replay_flow(
         root,
-        GitOps(root),
         package,
         python=python or f"{sys.version_info.major}.{sys.version_info.minor}",
         registry=registry,
@@ -312,10 +310,9 @@ def release_wheels(
     from livery.workshop._wheels import cibw_build_set
 
     root = _root()
-    git = GitOps(root)
-    resolved_ref = ref or git.head_sha()
-    epoch = int(git._run("log", "-1", "--format=%ct", resolved_ref).strip() or "0")
-    members = discover_release(root, git, resolved_ref)
+    resolved_ref = ref or git.head_sha(root)
+    epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    members = discover_release(root, resolved_ref)
     released = {package.path: version for package, version in members}
     conan_members = [
         (package, version)

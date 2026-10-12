@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
-from livery.workshop._git_ops import GitOps
 from livery.workshop._release import (
     prepare_release,
     verify_release,
@@ -41,8 +41,6 @@ def _build(base: Path) -> None:
     root.mkdir()
     (root / "workshop.toml").write_text("[workspace]\n")
     _git(root, "init", "--initial-branch=main")
-    _git(root, "config", "user.email", "test@livery.local")
-    _git(root, "config", "user.name", "Livery Test")
     for name, extra, deps in (
         ("core", "", ""),
         (
@@ -167,27 +165,25 @@ def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, notes: FakeNotes) 
 def test_floor_bumps_move_both_homes(seeds: Seeds) -> None:
     root = _workspace(seeds)
     _git(root, "tag", "packages/core/v0.2.0")
-    git = GitOps(root)
-    assert latest_released(git.tags())["packages/core"] == "0.2.0"
-    changed = bump_floors(root, git)
+    assert latest_released(git.tags(root))["packages/core"] == "0.2.0"
+    changed = bump_floors(root)
     assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]
     contract = (root / "packages" / "tool" / "workshop.toml").read_text()
     assert 'floor = "0.2.0"' in contract
     pyproject = (root / "packages" / "tool" / "pyproject.toml").read_text()
     assert "livery-core>=0.2.0" in pyproject
-    assert bump_floors(root, git) == []  # already at the newest release
+    assert bump_floors(root) == []  # already at the newest release
 
 
 def test_a_scoped_floor_bump_moves_only_the_named_sibling(seeds: Seeds) -> None:
     root = _workspace(seeds)
     _git(root, "tag", "packages/core/v0.2.0")
-    git = GitOps(root)
     # A name outside the scope moves nothing, so a dependencies run
     # naming only externals cannot drag every floor along.
-    assert bump_floors(root, git, only=("livery-other",)) == []
+    assert bump_floors(root, only=("livery-other",)) == []
     contract = (root / "packages" / "tool" / "workshop.toml").read_text()
     assert 'floor = "0.1.0"' in contract
-    changed = bump_floors(root, git, only=("livery-core",))
+    changed = bump_floors(root, only=("livery-core",))
     assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]
 
 

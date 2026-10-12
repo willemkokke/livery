@@ -1,7 +1,7 @@
 """Timing rows on the CI state store, and the reader that renders them.
 
 One row per job per run, one file per run on the ``metrics`` series
-of the state store ([livery.workshop._state][]), named by zero-padded
+of the state store ([livery.git][]), named by zero-padded
 run id so that name order is time order. A row is end to end, not
 gate-only: the queue wait, the job's wall, and every step's wall as
 the forge times them, beside the per-task durations and lane waits
@@ -28,7 +28,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.workshop._state import Keyed, RunContext, Series, drop
+from livery import git
+from livery.workshop._ci_context import RunContext, state_store
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -41,7 +42,7 @@ SCHEMA = 1
 #: The series the gate job writes: one file per run, the newest 300
 #: kept. Three hundred runs at a few kilobytes each keeps the tree
 #: under a megabyte and a quarter's trend in reach.
-SERIES = Series("metrics", window=300, schema=SCHEMA)
+SERIES = git.Series("metrics", window=300, schema=SCHEMA)
 
 #: The per-run family: one series per run and check leg, holding the
 #: leg's half of its timing row, and beside it the scope its gate ran
@@ -51,7 +52,7 @@ SERIES = Series("metrics", window=300, schema=SCHEMA)
 #: older than six hours outlived a run that was cancelled or died
 #: before its gate job could collect, and the janitor drops it: no
 #: run lasts that long, and the forge has no run-by-id lookup to ask.
-RUNS = Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6))
+RUNS = git.Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6))
 
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"
@@ -234,7 +235,9 @@ def put_leg(root: Path, run: RunContext, *, job: str, label: str, trace: Path) -
     # trace: the stamp after the verdict reads it back per leg.
     row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
     return RUNS.series(run.run_id, label).put(
-        root, {ROW_FILE: row}, message=f"metrics: {job} of run {run.run_id}"
+        state_store(root),
+        {ROW_FILE: row},
+        message=f"metrics: {job} of run {run.run_id}",
     )
 
 
@@ -322,7 +325,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     run's own wall from its start to this collection.
     """
     lines: list[str] = []
-    keys = RUNS.listed(root, run.run_id)
+    keys = RUNS.listed(state_store(root), run.run_id)
     if keys is None:
         return [
             f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed;"
@@ -333,7 +336,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     for key in keys:
         series = RUNS.series(*key)
         refs.append(series.ref)
-        found, why = series.row(root, ROW_FILE)
+        found, why = series.row(state_store(root), ROW_FILE)
         if why:
             lines.append(f"  {series.ref}: {why}; skipped")
             continue
@@ -411,7 +414,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         entry["coverage"] = coverage
         lines.append(f"  coverage: {len(coverage)} package(s) recorded on the run")
     why = SERIES.put(
-        root,
+        state_store(root),
         {run_file(run.run_id): entry},
         message=f"metrics: run {run.run_id} at {sha[:12]}",
     )
@@ -432,7 +435,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         )
         return lines
     for ref in sorted(refs):
-        gone = drop(root, ref)
+        gone = git.drop(state_store(root), ref)
         lines.append(f"  {ref}: {gone or 'dropped'}")
     return lines
 
@@ -487,7 +490,7 @@ def render(
     the base median. Nothing yet, an unreadable series, and a row of
     another schema each say so.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return [f"  {found.reason}"]
     if not found.rows and not found.skipped:

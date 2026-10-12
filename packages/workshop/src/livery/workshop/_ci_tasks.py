@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
+from livery import git
 from livery.footman import doc, fail, group, pre_tasks, task
 from livery.forge import (
     ForgeError,
@@ -36,8 +37,8 @@ from livery.forge import (
     Run,
     Unsupported,
 )
+from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
-from livery.workshop._git_ops import GitOps
 from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_PENDING,
@@ -66,18 +67,18 @@ def remember_mounted_tasks(inv: footman.Invocation) -> None:
     _points.MOUNTED = inv.tasks
 
 
-def _resolved() -> tuple[Repository, GitOps]:
+def _resolved() -> tuple[Repository, Path]:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     from livery.workshop._forge_lane import this_repository
 
-    return this_repository(root), GitOps(root)
+    return this_repository(root), root
 
 
-def status_flow(repo: Repository, git: GitOps) -> int:
+def status_flow(repo: Repository, root: Path) -> int:
     """Print where the branch stands; return that state's exit code."""
-    verdict = classify(repo, git.current_branch(), git)
+    verdict = classify(repo, git.current_branch(root), root)
     print(f"  {verdict.state}: {verdict.detail}")
     return verdict.exit_code
 
@@ -100,32 +101,32 @@ def status(
     state, author, and, for a mid-publish release, the members whose
     receipt tag is already cut.
     """
-    repo, git = _resolved()
+    repo, root = _resolved()
     if workflow:
         from livery.workshop._workflow_state import workflow_states
         from livery.workshop._workflow_tasks import render_workflows
 
-        render_workflows(workflow_states(repo, git))
+        render_workflows(workflow_states(repo, root))
         return
     if watch:
-        follow(repo, git.current_branch(), git, interval=interval, timeout=timeout)
+        follow(repo, git.current_branch(root), root, interval=interval, timeout=timeout)
         return
-    code = status_flow(repo, git)
+    code = status_flow(repo, root)
     if code:
         raise SystemExit(code)
 
 
-def _head_sha(repo: Repository, git: GitOps) -> str:
+def _head_sha(repo: Repository, root: Path) -> str:
     """The commit whose runs matter: the PR's head, else the local HEAD.
 
     After a push the two agree; the pull request's answer also covers
     a checkout that has moved on locally since the push.
     """
-    pr = repo.pr.find_by_head(git.current_branch())
-    return pr.head_sha if pr is not None else git.head_sha()
+    pr = repo.pr.find_by_head(git.current_branch(root))
+    return pr.head_sha if pr is not None else git.head_sha(root)
 
 
-def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> None:
+def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> None:
     """Re-run the failed runs that hold this branch's verdict.
 
     The verdict is each workflow's newest run on a commit this branch
@@ -138,8 +139,8 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
     contains is main's verdict (a scheduled nightly, a merge-point
     run): it is named and left for a re-run from main.
     """
-    sha = _head_sha(repo, git)
-    on_main = git.current_branch() == "main"
+    sha = _head_sha(repo, root)
+    on_main = git.current_branch(root) == "main"
     newest: dict[str, Run] = {}
     # The newest hundred, asked of the forge so a repository with a
     # long run history stays cheap. A run on a sha this clone does not
@@ -147,7 +148,7 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
     for run in repo.checks.runs(limit=100):
         if run.workflow in newest:
             continue
-        if run.head_sha == sha or git.is_ancestor(run.head_sha, "HEAD"):
+        if run.head_sha == sha or git.is_ancestor(root, run.head_sha, "HEAD"):
             newest[run.workflow] = run
     failed = [
         run
@@ -162,7 +163,7 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
         for run in failed
         if not on_main
         and run.head_sha != sha
-        and git.is_ancestor(run.head_sha, "origin/main")
+        and git.is_ancestor(root, run.head_sha, "origin/main")
         and (run.workflow or "").rsplit("/", 1)[-1] != release_workflow
     ]
     for run in mains:
@@ -239,17 +240,17 @@ def ci_rerun(
     failed_only: Annotated[bool, doc("re-run only the failed jobs")] = True,
 ) -> None:
     """Re-run the head commit's failed runs."""
-    repo, git = _resolved()
-    rerun_flow(repo, git, failed_only=failed_only)
+    repo, root = _resolved()
+    rerun_flow(repo, root, failed_only=failed_only)
 
 
-def cancel_flow(repo: Repository, git: GitOps, *, force: bool = False) -> None:
+def cancel_flow(repo: Repository, root: Path, *, force: bool = False) -> None:
     """Cancel the head commit's unfinished runs.
 
     The relief for a wedged queue; ``force`` reaches the runs a plain
     cancel cannot, where the forge grants the capability.
     """
-    sha = _head_sha(repo, git)
+    sha = _head_sha(repo, root)
     cancelled = 0
     for run in repo.checks.runs(head_sha=sha):
         if run.status != "completed":
@@ -265,8 +266,8 @@ def ci_cancel(
     force: Annotated[bool, doc("force-cancel a wedged run")] = False,
 ) -> None:
     """Cancel the head commit's unfinished runs."""
-    repo, git = _resolved()
-    cancel_flow(repo, git, force=force)
+    repo, root = _resolved()
+    cancel_flow(repo, root, force=force)
 
 
 #: The run conclusions that are not red.
@@ -497,7 +498,7 @@ def ci_dispatch(
     merge point runs on a push alone, and the release wave is the
     merge point's to dispatch.
     """
-    repo, _git = _resolved()
+    repo, _root = _resolved()
     code = dispatch_flow(
         repo,
         point=point,
@@ -527,7 +528,7 @@ def runs_state(runs: tuple[Run, ...]) -> tuple[str, int]:
 
 def runs_status_flow(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     wait: bool = False,
     interval: float = 15,
@@ -553,7 +554,7 @@ def runs_status_flow(
         subject = f"the {point} point"
         nothing = f"no {point} runs yet"
     else:
-        sha = _head_sha(repo, git)
+        sha = _head_sha(repo, root)
         subject = sha[:10]
         nothing = f"no runs yet for {sha[:10]}"
     deadline = time.monotonic() + timeout
@@ -619,9 +620,9 @@ def ci_status(
     workflow rather than by commit, so a failure only the nightly
     meets reaches a person here.
     """
-    repo, git = _resolved()
+    repo, root = _resolved()
     code = runs_status_flow(
-        repo, git, wait=wait, interval=interval, timeout=timeout, point=point
+        repo, root, wait=wait, interval=interval, timeout=timeout, point=point
     )
     if code:
         raise SystemExit(code)
@@ -649,7 +650,7 @@ def failure_lines(log: str, *, limit: int = 40) -> list[str]:
 
 def logs_flow(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     *,
     lines: int = 80,
     failed_only: bool = True,
@@ -667,7 +668,7 @@ def logs_flow(
         runs = point_runs(repo, point, limit=1)
         subject = f"the {point} point"
     else:
-        sha = _head_sha(repo, git)
+        sha = _head_sha(repo, root)
         runs = repo.checks.runs(head_sha=sha)
         subject = sha[:10]
     if not runs:
@@ -713,8 +714,8 @@ def ci_logs(
 
     ``--point=nightly`` prints the newest nightly run's logs instead.
     """
-    repo, git = _resolved()
-    logs_flow(repo, git, lines=lines, failed_only=failed_only, point=point)
+    repo, root = _resolved()
+    logs_flow(repo, root, lines=lines, failed_only=failed_only, point=point)
 
 
 @ci.task(name="run")
@@ -809,7 +810,7 @@ def verdict_flow(repo: Repository, *, needs: tuple[str, ...], job: str) -> list[
     ``check``). A needed job the forge does not list at all counts as
     red: the verdict never passes on a job it could not see.
     """
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     run = run_context()
     if run is None:
@@ -865,17 +866,18 @@ def ci_verdict(
 verified = ci.group("verified", help="The trees a green gate proved", hidden=True)
 
 
-def verified_stamp_flow(root: Path, git: GitOps) -> None:
+def verified_stamp_flow(root: Path) -> None:
     """Stamp the run's tree when every check leg ran the full gate; print why not."""
-    from livery.workshop._state import remote_snapshot, run_context
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
     from livery.workshop._verified import stamp_from_metrics
 
     run = run_context()
     if run is None:
         print("  not a CI run: the verified record is written by CI only")
         return
-    with remote_snapshot(root, fetch=("metrics", "verified")):
-        print(stamp_from_metrics(root, run, sha=git.head_sha()))
+    with remote_snapshot(state_store(root), fetch=("metrics", "verified")):
+        print(stamp_from_metrics(root, run, sha=git.head_sha(root)))
 
 
 @verified.task(name="stamp")
@@ -888,24 +890,25 @@ def ci_verified_stamp() -> None:
     run of the same tree pays the gate. Fails open loudly: every
     reason is printed and the exit stays 0.
     """
-    _repo, git = _resolved()
-    verified_stamp_flow(git.root, git)
+    _repo, root = _resolved()
+    verified_stamp_flow(root)
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
 
 
-def metrics_collect_flow(root: Path, repo: Repository, git: GitOps) -> None:
+def metrics_collect_flow(root: Path, repo: Repository) -> None:
     """Collect the run's rows into the metrics series; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
     from livery.workshop._metrics import collect
-    from livery.workshop._state import remote_snapshot, run_context
 
     run = run_context()
     if run is None:
         print("  not a CI run: the run's timing rows are collected by CI only")
         return
-    with remote_snapshot(root, fetch=(f"run/{run.run_id}/", "metrics")):
-        for line in collect(root, repo, run, sha=git.head_sha()):
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "metrics")):
+        for line in collect(root, repo, run, sha=git.head_sha(root)):
             print(line)
 
 
@@ -921,8 +924,8 @@ def ci_metrics_collect() -> None:
     failed jobs runs this gate again without its legs. Fails open
     loudly: every reason is printed and the exit stays 0.
     """
-    repo, git = _resolved()
-    metrics_collect_flow(git.root, repo, git)
+    repo, root = _resolved()
+    metrics_collect_flow(root, repo)
 
 
 profile = ci.group("profile", help="A run as one timeline")
@@ -958,13 +961,13 @@ def ci_profile(
     """
     from livery.workshop._traces import write_chain, write_run
 
-    repo, git = _resolved()
+    repo, root = _resolved()
     where = Path(into) if into else None
     if from_:
-        commit = git.sha_of(from_)
+        commit = git.sha_of(root, from_)
         if not commit:
             fail(f"--from={from_} names no commit this checkout can resolve")
-        path, lines = write_chain(git.root, repo, commit, into=where)
+        path, lines = write_chain(root, repo, commit, into=where)
         for line in lines:
             print(f"  {line}")
         if path is None:
@@ -972,10 +975,10 @@ def ci_profile(
         print(f"  profile: {path}")
         return
     path, lines = write_run(
-        git.root,
+        root,
         repo,
         run_id=run,
-        head_sha="" if run else git.head_sha(),
+        head_sha="" if run else git.head_sha(root),
         into=where,
     )
     for line in lines:
@@ -987,11 +990,11 @@ def ci_profile(
 
 def timings_flow(root: Path, *, since: int, base: int) -> None:
     """Print the rendered timings, then the speed marks beside the newest run."""
+    from livery.git import remote_snapshot
     from livery.workshop._metrics import render
     from livery.workshop._speed import render_marks
-    from livery.workshop._state import remote_snapshot
 
-    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+    with remote_snapshot(state_store(root), fetch=("metrics", "speed/marks")):
         for line in render(root, since=since, base=base):
             print(line)
         for line in render_marks(root):

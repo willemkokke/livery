@@ -23,8 +23,6 @@ def _repository(tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
     _git(root, "init", "-q", "--initial-branch=main")
-    _git(root, "config", "user.email", "t@acme.test")
-    _git(root, "config", "user.name", "T")
     (root / "local").mkdir()
     (root / "local" / "tracked.txt").write_text("committed\n")
     (root / "committed.txt").write_text("committed\n")

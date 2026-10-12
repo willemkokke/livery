@@ -1164,8 +1164,13 @@ the marks beside the timings.
 ## The state store
 
 Every row the workshop keeps across runs is a row of the state
-store: JSON files on git refs, `refs/workshop/*` on the remote and
-`refs/workshop-local/*` in the checkout's git directory. A default
+store, which `livery-git` ships and the workshop builds with its own
+policy: JSON files on git refs, `refs/workshop/*` on the remote and
+`refs/workshop-local/*` in the checkout's git directory. The workshop
+declares the series, says who may write (a CI run), which identity
+every commit carries (the tools') and which variable a published
+listing travels in; the transport, the snapshots and the janitor are
+the library's. A default
 clone or fetch never downloads the remote namespace, no refspec
 names the local one, and every row carries the schema the store
 stamped and the time it wrote it. A machine's gate never reaches

@@ -50,6 +50,7 @@ from typing import Annotated, Any
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import doc, fail
 from livery.workshop._ci_tasks import ci
 
@@ -244,11 +245,9 @@ def _environment(root: Path) -> dict[str, str]:
     The conan home is the fixture's own, beside the workspace, so the
     packages its native members build never reach the machine's cache.
     """
-    from livery.workshop._e2e import unsigned_environment
-
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     env["CONAN_HOME"] = str(root.parent / "conan-home")
-    return {**env, **unsigned_environment(env)}
+    return env
 
 
 def run_verb(root: Path, verb: tuple[str, ...], *, name: str) -> Timing:
@@ -309,8 +308,9 @@ def record(root: Path, job_row: dict[str, Any], *, sha: str) -> str:
 
     Outside CI nothing is written and the line says so.
     """
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context, state_store
     from livery.workshop._metrics import SERIES, run_file
-    from livery.workshop._state import remote_snapshot, run_context
 
     run = run_context()
     if run is None:
@@ -325,9 +325,9 @@ def record(root: Path, job_row: dict[str, Any], *, sha: str) -> str:
         "collected_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "jobs": {str(job_row["job"]): job_row},
     }
-    with remote_snapshot(root, fetch=("metrics",)):
+    with remote_snapshot(state_store(root), fetch=("metrics",)):
         why = SERIES.put(
-            root,
+            state_store(root),
             {run_file(run.run_id): entry},
             message=f"metrics: scale fixture of run {run.run_id} at {sha[:12]}",
         )
@@ -351,6 +351,7 @@ def _counts(python: int, cpp: int, nanobind: int) -> dict[str, int]:
 
 
 @ci.task(name="scale")
+@git.unsigned
 def ci_scale(
     python: Annotated[int, doc("generated python members")] = DEFAULT_COUNTS[
         "package-python"

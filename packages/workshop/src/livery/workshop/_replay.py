@@ -24,11 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from livery import git
 from livery.footman import fail, scratch_dir
 
 if TYPE_CHECKING:
     from livery.forge import Repository
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
 #: The issue the failure path files or extends; the search key.
@@ -125,7 +125,6 @@ def report_failure(repo: Repository, replay: Replay, *, url: str) -> str:
 
 def replay_flow(
     root: Path,
-    git: GitOps,
     package: Package,
     *,
     python: str,
@@ -150,7 +149,7 @@ def replay_flow(
     replay = Replay(
         member, package.name, latest_release(registry, package.name), extras
     )
-    if replay.tag not in git.tags():
+    if replay.tag not in git.tags(root):
         fail(
             f"the checkout carries no tag {replay.tag}: fetch the tags"
             " (git fetch --tags), or the release is not this repository's"

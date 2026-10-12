@@ -1,6 +1,7 @@
 # One home for every git access: the git library
 
-Status: planned and ruled, 2026-10-11, no phase started. The destination note
+Status: phases 1 and 2 on main (PRs #1501, #1503), phase 3 in review
+(#1504); phases 4 and 5 not started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -50,7 +51,7 @@ other modules, 31 of them in the loop.
 The library takes the helper's methods as module functions, each
 taking the repository's `root: Path` as its first argument, with no
 class, no memory and no `cached` flag: the memory saved a few
-`rev-parse` processes per flow and measured no change, and phase 4
+`rev-parse` processes per flow and measured no change, and phase 5
 makes those reads a file read. The library takes the store whole: the series
 model (`Series`, `Keyed`, `Row`, `Rows`, `Skipped`, `slug`), the
 snapshots (`Read`, `Fetched`), the reads, the compare-and-swap writes,
@@ -81,7 +82,7 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
 
 ## Ground-truth contracts (do not violate)
 
-1. One door. After phase 3, no module under `packages/workshop/src`
+1. One door. After phase 4, no module under `packages/workshop/src`
    calls the git handle; every git access goes through the library. A
    test refuses a call that does, the way the vocabulary test refuses a
    kind's word in the base.
@@ -94,7 +95,10 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    never touched; every failure is a printed reason, never a boolean.
 3. The library imports nothing of the workshop and no CI fact. What is
    CI's, allowed writers, identities, variable names, arrives as a
-   parameter.
+   parameter. The library's functions import nothing of footman
+   either; the one module that does is its footman plugin,
+   `livery.git._plugin`, loaded only through footman's own `plugin()`,
+   the shape `livery.forge._dev` has.
 4. Porcelain and the network stay with the git binary from the
    toolroom's pinned store: merge, rebase, stash, worktrees, fetch, push.
    The leased push is never emulated in-process: libgit2 has no lease
@@ -109,7 +113,12 @@ and the stack recorded as `branch.<name>.workshop-parent` config keys.
    and carries the root and the policy it was built with, nothing else.
 7. Every behaviour pin the state and helper tests hold today holds
    after each phase; the process-count pins move to the new counts, and
-   in phase 4 to zero where a read is in-process.
+   in phase 5 to zero where a read is in-process.
+8. The library never edits a user's ssh configuration, and a user's
+   own `GIT_SSH_COMMAND` or `core.sshCommand` wins over the library's
+   multiplexing, which is the only case where a user meets the
+   setting at all. Whether multiplexing works is decided by a
+   behaviour probe, never by the platform's name.
 
 ## Phase 1: the package, and the helper moves
 
@@ -144,7 +153,165 @@ the workshop.
   nothing.
 - `fm ci.e2e --scenario=develop` is green on the local Gitea.
 
-## Phase 2: the store's transport and series model move
+## Phase 2: the plugin, the environment every git spawn runs with
+
+Every network git call opens a fresh ssh connection, and the handshake
+is about half of a quiet fetch. Measured on 2026-10-11 on a macOS
+checkout against github.com, `git fetch origin` with nothing to fetch:
+
+| connection                            | time           |
+| ------------------------------------- | -------------- |
+| a fresh ssh handshake each call       | 2.1 s to 3.0 s |
+| multiplexed over one open connection  | 1.0 s to 1.3 s |
+
+A sync makes one round trip, a start three, submit and the release
+driver more. With a master kept open for the idle window, every verb
+inside that window, and every process of the same user, reuses one
+connection per remote host. The local loop is not affected: its remotes are
+`http://` with a token (`_e2e.py:591`, `:1295`).
+
+The library gains one function, `ssh_environment(socket_dir, idle)`,
+which returns a mapping to merge into a spawned git's environment,
+holding `GIT_SSH_COMMAND`, or an empty mapping with a printed reason.
+Its rules, in order:
+
+1. `GIT_SSH_COMMAND` set in the environment to a command that is not
+   the library's own, or `core.sshCommand` set in git's config: empty,
+   no reason printed. The user has an opinion and keeps it.
+2. The socket path would exceed the unix socket limit, 104 bytes on
+   macOS and 108 on Linux: empty, the reason naming the directory and
+   the limit. The socket's name is `%r@%h:%p`, 17 bytes for github.
+3. The probe failed before: empty, with ssh's own words. Two fixed
+   names in the socket directory are the whole memory. The socket,
+   `<user>@<host>:<port>`, is the proof of success: `ssh -O check` on
+   it says a master is up, and a missing socket means the next call
+   opens one. A failure is written to `<dir>/unsupported` with ssh's
+   words, after the first call through the built environment did not
+   return within its timeout or `-O check` found no master; every
+   later call reads that file first, and deleting it probes again.
+   The probe opens no connection of its own, and no process holds a
+   memory.
+4. Otherwise `GIT_SSH_COMMAND` is `ssh -o ControlMaster=auto -o
+   ControlPath=<quoted path> -o ControlPersist=<idle> -o
+   ServerAliveInterval=15 -o ServerAliveCountMax=2`. The path is
+   shell-quoted: git hands the command to a shell, and footman's data
+   directory on macOS is under `Application Support`, with a space.
+
+Why each option: `ControlMaster=auto` reuses a master when one is up
+and opens one otherwise, and replaces a stale socket from an unclean
+exit; two spawns racing to open a master is allowed, one wins and the
+other connects directly. `ControlPersist=<idle>` keeps the master a
+few minutes after the verb exits so the next verb reuses it; on CI it
+dies with the job. The two `ServerAlive` options make a master whose
+TCP connection died (sleep, a network change) exit within 30 s, so the
+next call opens fresh instead of hanging to the TCP timeout; the first
+call after a wake may still fail once, every workflow verb is
+idempotent, and the docs say so.
+
+The policy is a footman plugin the library ships, `livery.git._plugin`,
+registered as `"livery.git"` under the `footman.tasks` entry point the
+way `livery.forge._dev` is. The ssh connection is one of the things
+the plugin puts in the environment; the others are below. A project lists `plugin("livery.git")` in
+its `tasks.py` to turn it on and drops the line to turn it off; the
+workshop's generated tasks list it; a project on bare footman gets it
+the same way. The plugin registers a `pre_task` hook: footman gives
+each task its own complete environment, `task.env`, which the task's
+subprocesses see, so the hook writes the mapping into every task's
+`task.env`, computing it once per process from `footman.data_dir()
+/ "ssh"` and the idle window. No call site changes, and nothing in the
+workshop knows the mechanism exists. The hook must write per task: a
+write into one task's environment does not reach the next task's. The
+`core.sshCommand` read is one git process per fm run until phase 5
+reads the config in-process.
+
+Facts that constrain it: the ssh agent is unaffected, since the
+program is still `ssh` reading `~/.ssh/config`, so an `IdentityAgent`
+entry applies and the master signs once per window; any process of
+the same user may reuse the authenticated connection for the window,
+the same trust boundary as `SSH_AUTH_SOCK`, and the docs state it.
+On Windows the tool store pins PortableGit, whose bundled MSYS2 ssh
+accepts `ControlMaster`, while Windows' own OpenSSH does not; a
+backgrounded `ControlPersist` master on the MSYS2 build has been
+reported to keep git's pipes open so the fetch never returns, which
+`ssh -O check` would not reveal. The phase's own test on the Windows
+leg runs a fetch through the built environment under a timeout; the
+probe is per socket directory, so a Windows host that fails it runs
+the normal path. `https` remotes need no special case.
+
+### The identity, the editor, and the decorators
+
+The workshop sets a git identity in three places with three names: the
+release driver writes "livery release" into a fresh checkout's config
+(`_publish.py:175`), the loop rides "livery loop" in the environment
+(`_e2e.py:190`), the store commits as "<prog> ci state"
+(`_state.py:691`); the scale fixture and toolroom-bench's colour probe
+set a fourth and a fifth in throwaway repositories. Ruled 2026-10-12:
+one identity for every commit the tools make, `<prog>` with the
+address `<prog>@<prog>.invalid`, which `livery.git.identity(prog)`
+returns and the store takes as its `identity` argument. The plugin
+writes it into `task.env` as `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+`GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` when `user.email`
+resolves to nothing, the same config read that decides the ssh
+command, so a person's own identity always stands and no verb writes
+a person's config. `ensure_git_identity` and the loop's identity
+environment go.
+
+The plugin exports task decorators for the cases where a task knows
+better than the default rule, each a marker on the task the way
+`@task(serial=True)` leaves `_footman_serial`, read by the plugin's
+one `pre_task` hook from the handle it receives:
+
+- `@git.identity(name, email)`: this task commits as the given
+  identity whatever the config says.
+- `@git.unsigned`: `commit.gpgsign=false` and `tag.gpgsign=false` for
+  this task's spawns, as `GIT_CONFIG_COUNT` pairs; the loop, the
+  scale fixture and the colour probe each set this by hand today.
+- `@git.no_editor`: `GIT_EDITOR=true`, so a rebase continue or a merge
+  commit never opens an editor; `_sync.py:117` and `:1012` pass
+  `-c core.editor=true` by hand today.
+
+The decorators stack, and they are the only way signing is turned
+off: the plugin never decides that by itself, so `fm commit
+--no-input` on a desk with signing on still waits on the signer.
+Footman gives a plugin hook the task's handle
+with its name, its environment and its per-plugin state; reading a
+marker off the handle needs one small public read on footman, since
+the handle's function is private.
+
+Tests, fallbacks first: `GIT_SSH_COMMAND` already set leaves it
+untouched; a person's `user.email` set leaves the identity variables
+unset; a task without a marker gets the default rule; then a marked
+task gets its marker's environment, and two markers stack; `core.sshCommand` set in the repository config the same; a
+directory past the limit gives the reason with the directory and the
+limit; an `unsupported` file gives its words and runs no ssh; a
+failed probe writes the file, with a fake `ssh` first on `PATH` that
+exits non-zero on `-O check`; then the happy path, the command with the five options and
+the quoted path.
+
+**Acceptance**
+
+- `fm check` is green on every runner, the Windows leg's fetch under
+  the built environment included.
+- Two `git fetch origin` through the built environment against
+  github.com, the second a channel open, not a handshake, and
+  `ssh -O check` on the socket showing the master; the two times are
+  in the PR body and in the decision record.
+- `fm sync` on a quiet checkout, timed before and after, in the
+  decision record.
+- `fm doctor` names an existing `ControlMaster` entry in the user's
+  ssh config and does nothing more.
+- `grep -rn "ensure_git_identity\|LOOP_IDENTITY\|core.editor=true"
+  packages/workshop/src` prints nothing.
+- `grep -rln "user.email" packages/workshop/tests` prints only the
+  files whose test needs a second author, a colleague's clone: the
+  isolation plugin gives every test's git one global config with the
+  one identity, and the files that configured a "tester" identity in
+  the repositories they create no longer do.
+- `git log --format=%an origin/main` on the local loop's repository
+  after `fm ci.e2e --scenario=release` shows `<prog>` as the author of
+  the release commits.
+
+## Phase 3: the store's transport and series model move
 
 `livery.git` exports the store as a public interface:
 `StateStore(root, in_ci=..., identity=..., snapshot_variable=...)`
@@ -179,7 +346,7 @@ reason, and a published snapshot reaches a child.
   metrics row and janitor write the store through the library on the
   real runner.
 
-## Phase 3: the direct calls converge
+## Phase 4: the direct calls converge
 
 The loop's 31 direct calls (`fetch`, `switch -C`, `clean`, `reset`,
 listings), `_new_project`'s five, the release driver's four and the
@@ -198,7 +365,7 @@ allowance table.
   refuses a direct call, with no allowance.
 - `fm ci.e2e --scenario=release` is green.
 
-## Phase 4: in-process reads
+## Phase 5: in-process reads
 
 The library takes dulwich as a dependency, ruled over pygit2 on
 2026-10-11, and answers reads without a
@@ -230,6 +397,47 @@ and the number recorded here.
 
 ## Decision record
 
+- 2026-10-12, phase 3 built. The store moved whole as
+  `livery.git.StateStore(root, in_ci, identity, snapshot_variable,
+  prog)`, frozen; `prog` is a fourth construction datum, for the words
+  a refusal gives a person. The ref namespaces (`refs/workshop/`, its
+  local, trace and origin siblings) stay as the library's constants:
+  they are the store's own vocabulary, not a CI fact, and every series
+  spells its ref through them. The workshop's declarations already
+  lived in `_series.py`, so no `_records` module was made; the CI run
+  context and the one `state_store(root)` factory are
+  `_ci_context.py`, and `_state.py` is gone. The workshop calls the
+  library through the module, `git.read(store, ref)`, as phase 1 does,
+  so a test patches `livery.git` and every caller sees it. The store's
+  60 tests moved to `packages/git/tests/test_git_store.py` with their
+  process-count pins; the 13 run-context and policy tests are
+  `test_workshop_ci_context.py`.
+- 2026-10-12, phase 2 built. Three departures from the phase's text,
+  each decided while building: the editor is `GIT_EDITOR=true` for
+  every task unless the person set one, with no `@git.no_editor` mark,
+  because the rebase that needed it runs inside every verb's first
+  task through the reconcile hook, which no mark on a verb can reach;
+  the one footman addition is `task.mark(name, default)` on the
+  handle, a read of an attribute a decorator left on the function; and
+  no runtime probe opens a connection: the `unsupported` file is
+  written by a person or by the Windows leg's own test, since the
+  runners check out over https and have no ssh remote to probe, so the
+  MSYS2 ssh's multiplexing stays unproven until a Windows host with an
+  ssh remote runs a verb. The loop's commits are by `fm` now, not
+  "livery loop". The live proof on macOS, two fetches against
+  github.com through the built command: the first opened the master
+  in 1.69 s, the second and third took 0.71 s and 0.67 s, and `ssh -O
+  check` on the socket showed the master running;
+  it also caught that ssh splits an option value on spaces, so the
+  socket path is double-quoted inside the shell quoting.
+- 2026-10-12, phase 1 built: the helper's methods are functions of
+  `livery.git`, the move classifier went with the memory it served,
+  `delete_local_branch` folded into `delete_branch`, and `run` and
+  `call` are the public door for a subcommand no function names. The
+  tests' five subclassed fakes became one helper, `wire_pushes` in
+  `workshop_seeds`, which makes every push through the library reach
+  the fake forge; a test that needs a push to fail or stay unsettled
+  adjusts the `ForgePushes` it returns.
 - 2026-10-11, Willem: every git access leaves the workshop for one
   library, the state store included, since it proves local trees as
   well as remote ones and is one mechanism with two homes. Why: a
@@ -254,13 +462,14 @@ and the number recorded here.
 - 2026-10-11, Willem: the package is `git`: `packages/git`,
   distribution `livery-git`, import `livery.git`. The theme names
   (muniments, ledger, clerk) were weighed and the plain word won.
-- 2026-10-11, Willem: dulwich, not pygit2, for phase 4.
+- 2026-10-11, Willem: dulwich, not pygit2, for phase 5.
 - 2026-10-11, Willem: no class and no memory. The helper's methods
   become functions taking the root; the `cached` flag and its memory
   go in phase 1, since they measured no gain and dulwich removes the
   cost they were for. The store stays a frozen value because forty
   callers must not each pass the policy.
-- 2026-10-11, Willem: phases 1 to 3 land between the #1377 slices;
+- 2026-10-11, Willem: the phases that rewrite imports, 1, 3 and 4,
+  land between the #1377 slices;
   sessions that would conflict are paused for them.
 - 2026-10-11, Willem: the store's value type is `StateStore`, the
   docs' own name for it; `Store` is taken twice already, by the tool
@@ -268,6 +477,31 @@ and the number recorded here.
 - 2026-10-11, Willem: all git access goes through `livery.git`, the
   loop's included. A function only the loop calls lives in the library
   all the same; the one-door test carries no allowance table.
+- 2026-10-11, Willem: ssh connection multiplexing for every network git
+  call the library spawns, on by default, with no setting for a user to
+  find; the library owns the mechanism, the workshop the policy and
+  the socket directory; never an edit of the user's ssh config;
+  support decided by a behaviour probe. It is phase 2, since it needs
+  only the package and pays at once.
+- 2026-10-12, Willem: the probe's memory is two fixed names in the
+  socket directory, the socket itself and `unsupported`; no pointer
+  file, no per-process memory. Signing is turned off by the
+  `@git.unsigned` decorator alone, never by the plugin's own judgement
+  of whether a person is there. The workshop's test seeds move to one
+  conftest fixture in phase 2.
+- 2026-10-12, Willem: one identity for every commit the tools make,
+  `<prog>` at `<prog>@<prog>.invalid`, in place of the five the
+  repository invents; set through the environment when a person's is
+  absent, never by writing a person's config. The plugin exports task
+  decorators that force an identity, unsigned commits, or no editor
+  for one task.
+- 2026-10-11, Willem: the ssh policy is a footman plugin shipped by
+  `livery.git`, on by listing `plugin("livery.git")` and off by not,
+  so it works on bare footman too. The plugin's `pre_task` hook writes
+  `GIT_SSH_COMMAND` into every task's own environment, the moment
+  footman already gives the workshop's `sync_first` hook. The plugin
+  module is the library's one footman import, the forge's `_dev`
+  shape; the functions stay footman-free.
 
 ## Open
 

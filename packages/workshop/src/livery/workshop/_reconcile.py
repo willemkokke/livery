@@ -1,17 +1,20 @@
-"""The per-command hook: a checkout is brought current before its command runs.
+"""The per-command hook: the sync verb runs before a command, frozen and offline.
 
 Runs at footman's per-task moment, before the first task of a command,
-from the hook in [livery.workshop._env_tasks][]. One predicate,
-[livery.workshop._reconcile.current][], reads the receipts a checkout
-keeps of its last sync: the uv lock and the manifests the venv was
-installed from, the tool receipts against ``toolroom.lock``, and the
-receipt of the files the extensions write for the checkout alone. A
-current checkout costs those reads and nothing else. One that is not
-is synced by the ``sync`` verb itself, called as a function in the
-mode that changes nothing a commit holds and touches no network, and
-the command re-runs on the installed code when that sync changed it,
-so a pull that moved the lock never judges from stale code. When
-``sync`` is the command, the hook leaves the work to it.
+from the hook in [livery.workshop._env_tasks][]. It calls the ``sync``
+verb as a function, in the mode that changes nothing a commit holds
+and touches no network. The verb reads the receipts a checkout keeps
+of its last sync ([livery.workshop._reconcile.current][]): the uv lock
+and the manifests the venv was installed from, the tool receipts
+against ``toolroom.lock``, and the receipt of the files the extensions
+write for the checkout alone. A current checkout costs those reads and
+nothing else; one that is not is brought current from what the machine
+holds, and the command re-runs on the installed code when that sync
+changed it, so a pull that moved the lock never judges from stale
+code. When ``sync`` is the command, the hook leaves the work to it.
+
+The receipts live here beside the hook. What a sync records at its end
+and what it reads at its start are one record.
 
 Never fatal: on any failure the command proceeds and the failure is
 reported in the sync's own words. A task that cannot run without what
@@ -164,13 +167,15 @@ def current(root: Path) -> str:
     manifests on disk as the ones installed, since the emitted
     ``setup.sh``'s fresh venv is that case, and the next move is seen.
     Then a receipt per tool ``toolroom.lock`` holds for this host, at
-    the locked version; then the receipt a delivery leaves. A checkout
-    with no lock or no venv is current here: those cold states are
-    footman's own uv handoff's.
+    the locked version and still in the store, with the stubs beside
+    them; then the receipt a delivery leaves. A checkout with no lock
+    or no venv has nothing to compare and is not current.
     """
     lock = root / "uv.lock"
-    if not lock.is_file() or not (root / ".venv").is_dir():
-        return ""
+    if not lock.is_file():
+        return "there is no uv.lock yet"
+    if not (root / ".venv").is_dir():
+        return "there is no environment yet"
     receipt = receipt_path(root)
     if not receipt.is_file() or receipt.read_bytes() != lock.read_bytes():
         return "uv.lock moved past the environment"
@@ -180,7 +185,7 @@ def current(root: Path) -> str:
         manifests.write_text(digest, "utf-8")
     elif manifests.read_text("utf-8") != digest:
         return "a package manifest moved past the environment"
-    why = _tools_current(root)
+    why = tools_current(root)
     if why:
         return why
     from livery.workshop._fragment_engine import LOCAL_RECEIPT
@@ -190,12 +195,20 @@ def current(root: Path) -> str:
     return ""
 
 
-def _tools_current(root: Path) -> str:
-    """Why the tool receipts do not match ``toolroom.lock``; empty when they do."""
+def tools_current(root: Path) -> str:
+    """Why the tool receipts do not match ``toolroom.lock``; empty when they do.
+
+    A receipt matches when it names the locked version and the
+    directory it points into is still in the store; a receipt whose
+    tool the store has lost reads as off, so a sync supplies it again.
+    The stubs the checkers read stand beside the receipts: a checkout
+    locked for this host with no ``typings/`` is off too. A checkout
+    with no ``toolroom.lock`` has nothing to match and is current here.
+    """
     import platform
 
     from livery.toolroom.store import LOCK_FILE, Lock, LockError, host_key
-    from livery.workshop._tools import receipts
+    from livery.workshop._tools import TYPINGS, receipts
 
     if not (root / LOCK_FILE).is_file():
         return ""
@@ -214,6 +227,10 @@ def _tools_current(root: Path) -> str:
         if receipt.version != lock.tools[name].version:
             locked = lock.tools[name].version
             return f"{name} is at {receipt.version}, the lock holds {locked}"
+        if receipt.tool_dir and not Path(receipt.tool_dir).is_dir():
+            return f"the store no longer holds {name}"
+    if lock.on_host(host) and not (root / TYPINGS).is_dir():
+        return f"no stubs in {TYPINGS}/"
     return ""
 
 
@@ -234,21 +251,23 @@ def _say(message: str) -> None:
 
 
 def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
-    """Bring *root* current before *task*, the command's first, runs; whether it synced.
+    """Run the ``sync`` verb before *task*, the command's first; whether it did work.
 
-    Nothing happens for a current checkout, when *task* is ``sync``,
-    which does this work itself, and inside a process the hook's own
-    sync started, which *env*, the task's own environment, marks for
-    the processes the sync starts. Otherwise the ``sync`` verb runs as a function,
-    frozen and offline, its lines on stderr so a command whose stdout a
-    shell evaluates stays clean, and the command re-runs on the
-    installed code when the sync changed it. A sync that fails is said
-    and the command runs on what is here.
+    Nothing happens when *task* is ``sync``, the verb itself, or inside
+    a process the hook's own sync started, which *env*, the task's own
+    environment, marks for the processes the sync starts. Otherwise the
+    verb runs as a function, frozen and offline, its lines on stderr so
+    a command whose stdout a shell evaluates stays clean. The verb reads
+    the receipts first and does nothing, silently, for a current
+    checkout; otherwise it says what is off and brings the checkout
+    current, and the command re-runs on the installed code when that
+    changed it. A sync that fails is said and the command runs on what
+    is here.
 
     Returns:
-        Whether a sync ran. The caller entered the environment before
-        it, from receipts the sync may have written since, so it enters
-        again.
+        Whether the sync did work. The caller entered the environment
+        before it, from receipts the sync may have written since, so it
+        enters again.
     """
     import contextlib
 
@@ -257,14 +276,6 @@ def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
     if os.environ.get(_SYNCING) or env.get(_SYNCING) or task == "sync":
         return False
     prog = footman.prog()
-    try:
-        why = current(root)
-    except Exception as error:  # the hook never stops the command it precedes
-        _say(f"{prog}: this checkout's receipts could not be read ({error})")
-        return False
-    if not why:
-        return False
-    _say(f"{prog}: {why}; syncing from what the machine holds")
     before = installed_distributions(root)
     # Set in the task's own environment, which the sync's children see
     # and no sibling does, and removed after them.
@@ -273,12 +284,14 @@ def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
         from livery.workshop._sync import sync
 
         with contextlib.redirect_stdout(sys.stderr):
-            sync(frozen=True, offline=True)
-    except Exception as error:
+            worked = sync(frozen=True, offline=True)
+    except Exception as error:  # the hook never stops the command it precedes
         _say(f"{prog}: the sync did not complete ({error}); running on what is here")
         return False
     finally:
         env.pop(_SYNCING, None)
+    if not worked:
+        return False
     after = installed_distributions(root)
     if any(
         before.get(name) != after.get(name) for name in before.keys() | after.keys()

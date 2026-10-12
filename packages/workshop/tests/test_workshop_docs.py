@@ -1429,7 +1429,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text("a = 1\nb = 2\n")
     # Outside CI nothing is pulled: no data, nothing rendered.
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     assert _docs.render_coverage_pages(root) == []
     # Inside CI the store's units stand in for the legs' data.
     stored = root / "coverage-data" / "check-a" / "reuse-core.coverage"
@@ -1479,11 +1479,11 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
         "livery.extensions.python._backend._stored_legs", lambda root: ([], [])
     )
     # Inside CI the data is the record of the tree being built: red.
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
     with pytest.raises(_FAILURES, match="coverage html for core exited 1"):
         _docs.render_coverage_pages(root)
     # On a desk the data outlived a move: the page states the absence.
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     assert _docs.render_coverage_pages(root) == []
     out = capsys.readouterr().out
     assert "core: the local data names files that moved or went" in out
@@ -1589,11 +1589,11 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
 
     monkeypatch.setattr(_python, "stored_union", _pull)
     monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "gate")
     assert _python._stored_legs(root) == ([], [])
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
     monkeypatch.setenv("WORKSHOP_POINT", "gate")
     monkeypatch.setenv("WORKSHOP_LEG", "docs")
     assert _python._stored_legs(root) == ([], [])
@@ -2011,10 +2011,6 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     (root / ".gitignore").write_bytes(ignore.body)
     git = [
         "git",
-        "-c",
-        "user.name=t",
-        "-c",
-        "user.email=t@t",
         "-c",
         "commit.gpgsign=false",
     ]

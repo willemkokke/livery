@@ -1,7 +1,7 @@
 """Every series the workshop keeps, declared in one place.
 
 The janitor walks this tuple to bound them
-([livery.workshop._state.sweep][]) and a reader lists them. Each
+([livery.git.sweep][]) and a reader lists them. Each
 series is declared where its rows mean something; this module only
 gathers the declarations, so a new kind of row is one entry here and
 nothing else.
@@ -9,6 +9,7 @@ nothing else.
 
 from __future__ import annotations
 
+from livery import git
 from livery.workshop import (
     _coverage_marks,
     _coverage_store,
@@ -19,17 +20,16 @@ from livery.workshop import (
     _traces,
     _verified,
 )
-from livery.workshop._state import FETCHED, Keyed, Series
 
 #: The local series a loop pass writes its rows to: one file per
 #: pass on the driver's checkout, never pushed, so passes compare
 #: across days on one machine. Declared here rather than beside the
 #: loop, since the loop's module loads the CI verbs and this module
 #: must import without them; `fm store.show loop` reads it.
-LOOP = Series("loop", window=200, ci_only=False, local=True)
+LOOP = git.Series("loop", window=200, ci_only=False, local=True)
 
 #: Every series and family, remote and local.
-DECLARED: tuple[Series | Keyed, ...] = (
+DECLARED: tuple[git.Series | git.Keyed, ...] = (
     _metrics.SERIES,
     _metrics.RUNS,
     _verified.SERIES,
@@ -41,5 +41,5 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _traces.TRACES,
     _traces.ABOUT,
     LOOP,
-    FETCHED,
+    git.FETCHED,
 )
