@@ -14,11 +14,23 @@ from pathlib import Path
 
 import livery.workshop
 
-SRC = Path(livery.workshop.__file__).resolve().parents[1]
+# The workshop distribution's own trees: the base and the extensions it
+# ships. Its grandparent is the whole livery namespace, which in an
+# installed environment holds the git library beside it, and that one
+# calls the handle by design.
+_LIVERY = Path(livery.workshop.__file__).resolve().parents[1]
+SRC = (_LIVERY / "workshop", _LIVERY / "extensions")
 
 
-def handle_calls(src: Path) -> list[str]:
-    """Every attribute access of a git handle on the tools module under *src*."""
+def handle_calls(*roots: Path) -> list[str]:
+    """Every attribute access of a git handle on the tools module under *roots*."""
+    found: list[str] = []
+    for src in roots:
+        found.extend(_handle_calls(src))
+    return found
+
+
+def _handle_calls(src: Path) -> list[str]:
     found: list[str] = []
     for path in sorted(src.rglob("*.py")):
         tree = ast.parse(path.read_text("utf-8"))
@@ -44,7 +56,7 @@ def handle_calls(src: Path) -> list[str]:
 
 
 def test_no_workshop_module_calls_the_git_handle() -> None:
-    assert handle_calls(SRC) == []
+    assert handle_calls(*SRC) == []
 
 
 def test_the_scan_sees_a_call_of_the_handle(tmp_path: Path) -> None:

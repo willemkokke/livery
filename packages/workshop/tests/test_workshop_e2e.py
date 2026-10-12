@@ -777,6 +777,10 @@ def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
     # The pass marks itself unsigned: the git plugin puts the setting in
     # the task's environment, which every child, the loop's own fm and
     # the driver's git, inherits.
+    if not hasattr(_e2e, "e2e"):
+        # The loop's task exists only beside the workshop's own tests;
+        # the release train's isolated leg installs the wheel alone.
+        pytest.skip("the loop's task exists only in the workshop's checkout")
     assert getattr(_e2e.e2e, "livery_git_unsigned", False) is True
 
 

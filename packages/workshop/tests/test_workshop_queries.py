@@ -54,6 +54,19 @@ DECLARES_DEPTH = (
 MEMBERS: Query[str] = Query("docs.members")
 
 
+def _this_checkout_or_skip(root: Path) -> None:
+    """Skip unless the workshop under test is this checkout's, with its dev group.
+
+    The release train's isolated leg installs the workshop's wheel alone,
+    beside no extension, so a test that answers this workspace's listed
+    extensions has nothing to answer there.
+    """
+    import livery.workshop
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(root):
+        pytest.skip("the test reads this checkout's listed extensions")
+
+
 def _answering(**answers_by_query: str) -> str:
     """The ``[queries]`` table answering each query with its function in ``_steps``.
 
@@ -709,6 +722,7 @@ def test_this_workspace_renders_its_dev_group_from_the_query() -> None:
     from livery.workshop._templates import render_injections
 
     root = Path(__file__).resolve().parents[3]
+    _this_checkout_or_skip(root)
     injected = render_injections(root, project_facts(root))
     group = injected["queries"]["python.dev-group"]
     assert group, "this workspace lists extensions that ride the dev group"
