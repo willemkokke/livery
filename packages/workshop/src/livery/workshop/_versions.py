@@ -19,8 +19,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from livery import git
 from livery.workshop._contract import load_contract
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 
 #: A subject that marks a break: ``!`` before the colon.
@@ -75,15 +75,15 @@ def derive_version(root: Path, package: Package, *, released: str = "") -> str:
     an answer equal to it means nothing unreleased touches the
     package, which the caller reports.
     """
-    git = GitOps(root)
     if not released:
         from livery.workshop._update import latest_released
 
-        released = latest_released(git.tags()).get(package.path, "")
+        released = latest_released(git.tags(root)).get(package.path, "")
     if not released:
         return baseline(package)
     tag = f"{package.path}/v{released}"
-    log = git._run(
+    log = git.run(
+        root,
         "log",
         f"--format=%s{_FIELD}%b{_RECORD}",
         f"{tag}..HEAD",

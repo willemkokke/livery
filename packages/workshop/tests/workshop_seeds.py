@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
+from livery.forge.testing import FakeForge, Outcome
 from livery.workshop import Package
 
 #: A seed builder: makes the repositories under the directory it is given;
@@ -293,3 +295,59 @@ def member(root: Path, name: str, *, floor_on: str = "") -> None:
     (directory / "src" / "livery" / name / "__init__.py").write_text(
         '__version__ = "0.2.0"\n'
     )
+
+
+class ForgePushes:
+    """What a wired push does on the fake forge, adjustable per test.
+
+    Attributes:
+        fake: The fake forge the pushes reach.
+        outcome: The CI outcome the fake records for each pushed sha.
+        auto_settle: Whether each push settles its CI on the spot.
+    """
+
+    def __init__(
+        self, fake: FakeForge, owner: str, name: str, *, auto_settle: bool
+    ) -> None:
+        self.fake = fake
+        self.owner = owner
+        self.name = name
+        self.outcome: Outcome = "success"
+        self.auto_settle = auto_settle
+
+    def arrived(self, root: Path, branch: str) -> None:
+        """Record the branch's head on the fake, as a forge would see the push."""
+        sha = self.fake.push(
+            self.owner, self.name, branch, sha=git.head_sha(root), outcome=self.outcome
+        )
+        if self.auto_settle:
+            self.fake.settle(self.owner, self.name, sha)
+
+
+def wire_pushes(
+    monkeypatch: pytest.MonkeyPatch,
+    fake: FakeForge,
+    owner: str,
+    name: str,
+    *,
+    auto_settle: bool = True,
+) -> ForgePushes:
+    """Make every push through livery.git reach *fake* too, for the test's duration.
+
+    The real push happens first, so sha-based reasoning (the merged-PR
+    guard's ancestor test) sees what a forge would.
+    """
+    wire = ForgePushes(fake, owner, name, auto_settle=auto_settle)
+    real_push, real_force = git.push, git.push_force
+
+    def push(root: Path, branch: str) -> None:
+        real_push(root, branch)
+        wire.arrived(root, branch)
+
+    def push_force(root: Path, branch: str) -> None:
+        real_force(root, branch)
+        wire.arrived(root, branch)
+
+    monkeypatch.setattr(git, "push", push)
+    monkeypatch.setattr(git, "push_force", push_force)
+    return wire

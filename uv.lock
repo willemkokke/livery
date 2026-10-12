@@ -21,6 +21,7 @@ members = [
     "livery-extensions-ty",
     "livery-footman",
     "livery-forge",
+    "livery-git",
     "livery-strongroom",
     "livery-toolroom",
     "livery-toolroom-bench",
@@ -750,6 +751,7 @@ dev = [
     { name = "livery-extensions-ty" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
+    { name = "livery-git" },
     { name = "livery-strongroom" },
     { name = "livery-toolroom", extra = ["test"] },
     { name = "livery-toolroom-bench" },
@@ -783,6 +785,7 @@ dev = [
     { name = "livery-extensions-ty", editable = "packages/extensions/ty" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
+    { name = "livery-git", editable = "packages/git" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
     { name = "livery-toolroom-bench", editable = "packages/toolroom-bench" },
@@ -1012,6 +1015,17 @@ requires-dist = [
 provides-extras = ["github-secrets", "test"]
 
 [[package]]
+name = "livery-git"
+version = "0.0.0"
+source = { editable = "packages/git" }
+dependencies = [
+    { name = "livery-toolroom" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "livery-toolroom", editable = "packages/toolroom" }]
+
+[[package]]
 name = "livery-strongroom"
 version = "0.4.0"
 source = { editable = "packages/strongroom" }
@@ -1086,6 +1100,7 @@ dependencies = [
     { name = "griffelib" },
     { name = "livery-footman" },
     { name = "livery-forge" },
+    { name = "livery-git" },
     { name = "livery-strongroom" },
     { name = "livery-toolroom" },
     { name = "livery-toolroom-store" },
@@ -1103,6 +1118,7 @@ requires-dist = [
     { name = "griffelib", specifier = ">=2.2.0" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
+    { name = "livery-git", editable = "packages/git" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-toolroom-store", editable = "packages/toolroom-store" },

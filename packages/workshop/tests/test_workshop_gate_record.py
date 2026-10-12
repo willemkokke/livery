@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.workshop import _gate_record, _state
-from livery.workshop._git_ops import GitOps
 from livery.workshop._verified import tree_id
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 from workshop_spawns import counting_spawns
@@ -33,7 +33,7 @@ def work(seeds: Seeds) -> Path:
 def unverified(monkeypatch: pytest.MonkeyPatch) -> None:
     """CI's record holds nothing: every chain must root on a full row."""
     monkeypatch.setattr(
-        _gate_record, "verified_roots", lambda root, git, base: (set(), "no record")
+        _gate_record, "verified_roots", lambda root, base: (set(), "no record")
     )
 
 
@@ -56,7 +56,7 @@ def _commit(work: Path, name: str) -> str:
     (work / name).write_text(f"{name}\n")
     _git(work, "add", name)
     _git(work, "commit", "-qm", f"feat: {name}")
-    return tree_id(GitOps(work))
+    return tree_id(work)
 
 
 # --- the working tree's id --------------------------------------------------------
@@ -65,22 +65,21 @@ def _commit(work: Path, name: str) -> str:
 def test_the_working_tree_id_is_heads_when_clean_and_moves_with_the_files(
     work: Path,
 ) -> None:
-    git = GitOps(work)
-    assert git.working_tree_id() == tree_id(git)
+    assert git.working_tree_id(work) == tree_id(work)
     (work / "dirt.txt").write_text("dirt\n")
-    dirty = git.working_tree_id()
-    assert dirty != tree_id(git)
+    dirty = git.working_tree_id(work)
+    assert dirty != tree_id(work)
     # The real index was never touched: nothing is staged.
     assert _git(work, "diff", "--cached", "--name-only").strip() == ""
     # An ignored file does not count; a commit that takes everything
     # has the id the dirty tree had.
     (work / ".gitignore").write_text("ignored.txt\n")
     (work / "ignored.txt").write_text("x\n")
-    with_ignore = git.working_tree_id()
+    with_ignore = git.working_tree_id(work)
     _git(work, "add", "-A")
     _git(work, "commit", "-qm", "feat: dirt")
-    assert tree_id(git) == with_ignore
-    assert git.tree_diff(dirty, with_ignore) == [".gitignore"]
+    assert tree_id(work) == with_ignore
+    assert git.tree_diff(work, dirty, with_ignore) == [".gitignore"]
 
 
 def test_the_working_tree_id_reads_a_rewrite_the_cached_stat_calls_clean(
@@ -90,7 +89,6 @@ def test_the_working_tree_id_reads_a_rewrite_the_cached_stat_calls_clean(
     # the one the index cached, so nothing but git's racy-clean rule can
     # tell it apart. ctime cannot be set from here, so it leaves the
     # comparison the way a repository may configure it.
-    git = GitOps(work)
     _git(work, "config", "core.trustctime", "false")
     module = work / "mod.py"
     module.write_text("x = 1\n")
@@ -100,11 +98,11 @@ def test_the_working_tree_id_reads_a_rewrite_the_cached_stat_calls_clean(
     os.utime(module, ns=(stamp, stamp))
     _git(work, "add", "-A")
     _git(work, "commit", "-qm", "feat: mod")
-    committed = tree_id(git)
+    committed = tree_id(work)
     module.write_text("x = 2\n")
     os.utime(module, ns=(stamp, stamp))
     os.utime(work / ".git" / "index", ns=(stamp, stamp))
-    assert git.working_tree_id() != committed
+    assert git.working_tree_id(work) != committed
 
 
 # --- refusals: what proves nothing ------------------------------------------------
@@ -113,17 +111,16 @@ def test_the_working_tree_id_reads_a_rewrite_the_cached_stat_calls_clean(
 def test_junk_rows_and_a_rootless_chain_prove_nothing(
     work: Path, unverified: None
 ) -> None:
-    git = GitOps(work)
     junk = {
         "a": "{not json",
         "b": json.dumps({"schema": 99}),
         "c": json.dumps({"schema": 1, "when": "2026-09-10T00:00:00+00:00"}),
     }
     assert _state.put(work, _gate_record.SERIES.ref, junk, message="junk") == ""
-    proof, why = _gate_record.covering(git)
+    proof, why = _gate_record.covering(work)
     assert proof is None and "no chain of green gates" in why
     # A step whose base no row proves is not a proof either.
-    tree = tree_id(git)
+    tree = tree_id(work)
     fresh = datetime.now(UTC).isoformat(timespec="seconds")
     orphan = {
         f"{tree}--step--{'0' * 40}": _raw(
@@ -131,7 +128,7 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
         )
     }
     assert _state.put(work, _gate_record.SERIES.ref, orphan, message="orphan") == ""
-    assert _gate_record.covering(git)[0] is None
+    assert _gate_record.covering(work)[0] is None
     # Nor a cycle.
     loop = {
         f"{tree}--step--{'1' * 40}": _raw(
@@ -142,22 +139,18 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
         ),
     }
     assert _state.put(work, _gate_record.SERIES.ref, loop, message="loop") == ""
-    assert _gate_record.covering(git)[0] is None
+    assert _gate_record.covering(work)[0] is None
 
 
 def test_the_record_never_reaches_the_remote(work: Path) -> None:
-    git = GitOps(work)
-    assert "recorded" in _gate_record.remember(
-        work, git, tree=tree_id(git), packages=None
-    )
+    assert "recorded" in _gate_record.remember(work, tree=tree_id(work), packages=None)
     _git(work, "push", "-q", "origin", "main")
     assert "workshop-local" not in _git(work, "ls-remote", "origin")
     assert _gate_record.SERIES.ref.startswith(_state.LOCAL_NAMESPACE)
 
 
 def test_rows_are_bounded_by_count_and_age(work: Path, unverified: None) -> None:
-    git = GitOps(work)
-    tree = tree_id(git)
+    tree = tree_id(work)
     old = (datetime.now(UTC) - timedelta(days=8)).isoformat(timespec="seconds")
     stale = {
         f"{n:040d}--full": _raw(f"{n:040d}", when=old)
@@ -166,12 +159,12 @@ def test_rows_are_bounded_by_count_and_age(work: Path, unverified: None) -> None
     stale[f"{tree}--full"] = _raw(tree, when=old)
     assert _state.put(work, _gate_record.SERIES.ref, stale, message="old") == ""
     # Eight days old: the row proves nothing, however exact its tree.
-    assert _gate_record.covering(git)[0] is None
+    assert _gate_record.covering(work)[0] is None
     # A write keeps the newest KEEP rows, the new one among them.
-    assert "recorded" in _gate_record.remember(work, git, tree=tree, packages=None)
+    assert "recorded" in _gate_record.remember(work, tree=tree, packages=None)
     kept, why = _gate_record.rows(work)
     assert why == "" and len(kept) == _gate_record.KEEP and kept[0].tree == tree
-    proof, _ = _gate_record.covering(git)
+    proof, _ = _gate_record.covering(work)
     assert proof is not None and proof.steps[0].when != old
 
 
@@ -181,16 +174,15 @@ def test_rows_are_bounded_by_count_and_age(work: Path, unverified: None) -> None
 def test_a_chain_of_steps_proves_its_tree_back_to_a_full_row(
     work: Path, unverified: None
 ) -> None:
-    git = GitOps(work)
-    first = tree_id(git)
-    assert "(full)" in _gate_record.remember(work, git, tree=first, packages=None)
+    first = tree_id(work)
+    assert "(full)" in _gate_record.remember(work, tree=first, packages=None)
     second = _commit(work, "a.txt")
     assert "(step)" in _gate_record.remember(
-        work, git, tree=second, packages=("packages/x",), base_tree=first
+        work, tree=second, packages=("packages/x",), base_tree=first
     )
     third = _commit(work, "b.txt")
-    _gate_record.remember(work, git, tree=third, packages=(), base_tree=second)
-    proof, why = _gate_record.covering(git)
+    _gate_record.remember(work, tree=third, packages=(), base_tree=second)
+    proof, why = _gate_record.covering(work)
     assert proof is not None and why == ""
     assert [row.tree for row in proof.steps] == [third, second, first]
     assert proof.root == "full" and proof.root_tree == first
@@ -204,28 +196,23 @@ def test_a_chain_of_steps_proves_its_tree_back_to_a_full_row(
         )
     }
     assert _state.put(work, _gate_record.SERIES.ref, legacy, message="legacy") == ""
-    proof, _ = _gate_record.covering(git)
+    proof, _ = _gate_record.covering(work)
     assert proof is not None and proof.steps[0].tree == fourth
 
 
 def test_a_chain_rests_on_a_tree_cis_record_holds(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git = GitOps(work)
-    base = tree_id(git)
-    monkeypatch.setattr(
-        _gate_record, "verified_roots", lambda root, git, b: ({base}, "")
-    )
+    base = tree_id(work)
+    monkeypatch.setattr(_gate_record, "verified_roots", lambda root, b: ({base}, ""))
     # HEAD's own tree is CI's: a chain with no step at all.
-    proof, _ = _gate_record.covering(git)
+    proof, _ = _gate_record.covering(work)
     assert proof is not None and proof.steps == () and proof.root == "verified"
     assert proof.describe() == f"CI's record of {base[:12]}"
     # One step from it.
     second = _commit(work, "a.txt")
-    _gate_record.remember(
-        work, git, tree=second, packages=("packages/x",), base_tree=base
-    )
-    proof, _ = _gate_record.covering(git)
+    _gate_record.remember(work, tree=second, packages=("packages/x",), base_tree=base)
+    proof, _ = _gate_record.covering(work)
     assert proof is not None and proof.root_tree == base and len(proof.steps) == 1
     assert proof.describe() == f"1 step(s) on CI's record of {base[:12]}"
 
@@ -235,8 +222,7 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
 ) -> None:
     from livery.workshop import _verified
 
-    git = GitOps(work)
-    base = tree_id(git)
+    base = tree_id(work)
     parent = _commit(work, "a.txt")
     tip = _commit(work, "b.txt")
     monkeypatch.setattr(
@@ -245,7 +231,7 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
     )
     # The record could not be read: rootless, and the line says why.
     monkeypatch.setattr(_verified, "held", lambda root, trees: (set(), "down"))
-    roots, why = _gate_record.verified_roots(work, git, "main")
+    roots, why = _gate_record.verified_roots(work, "main")
     assert roots == set() and "could not be read (down)" in why
     # The record holds none of them: the merge base and the reach are named.
     asked: list[list[str]] = []
@@ -255,7 +241,7 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
         return set(), ""
 
     monkeypatch.setattr(_verified, "held", noting)
-    roots, why = _gate_record.verified_roots(work, git, "main")
+    roots, why = _gate_record.verified_roots(work, "main")
     assert roots == set()
     assert why == (
         f"CI's record holds neither the merge base's tree {base[:12]}"
@@ -267,10 +253,10 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
     monkeypatch.setattr(
         _verified, "held", lambda root, trees: ({t for t in trees if t in held}, "")
     )
-    assert _gate_record.verified_roots(work, git, "main") == ({parent}, "")
+    assert _gate_record.verified_roots(work, "main") == ({parent}, "")
     # The merge base is a root as well.
     held.add(base)
-    assert _gate_record.verified_roots(work, git, "main") == ({base, parent}, "")
+    assert _gate_record.verified_roots(work, "main") == ({base, parent}, "")
 
 
 def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
@@ -279,8 +265,7 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
     """A machine's gate roots its chain on what the last sync fetched, offline."""
     from livery.workshop import _verified
 
-    git = GitOps(work)
-    base = tree_id(git)
+    base = tree_id(work)
     run = _state.RunContext("github", "7", "push", "refs/heads/main")
     monkeypatch.setattr(_state, "run_context", lambda environ=None: run)
     assert _verified.SERIES.put(work, {base: {"scope": "full"}}, message="ci") == ""
@@ -288,12 +273,12 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
     assert _state.fetch_store(work)[:2] == (1, "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     with counting_spawns() as spawned, _state.fetched_snapshot(work):
-        assert _gate_record.verified_roots(work, git, "main") == ({base}, "")
+        assert _gate_record.verified_roots(work, "main") == ({base}, "")
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
     # Never fetched: rootless, and the line names the sync.
     _git(work, "update-ref", "-d", _state.FETCHED.ref)
     with _state.fetched_snapshot(work):
-        roots, why = _gate_record.verified_roots(work, git, "main")
+        roots, why = _gate_record.verified_roots(work, "main")
     assert roots == set() and "has not been fetched" in why and "sync`" in why
 
 
@@ -303,79 +288,76 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
 def test_the_plan_steps_from_the_nearest_tree_cis_record_holds(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git = GitOps(work)
     parent = _commit(work, "a.txt")
     _commit(work, "b.txt")
     monkeypatch.setattr(
-        _gate_record, "verified_roots", lambda root, git, base: ({parent}, "")
+        _gate_record, "verified_roots", lambda root, base: ({parent}, "")
     )
     # The tip's own run is not in the record: the step is from its parent.
-    step = _gate_record.plan(work, git)
+    step = _gate_record.plan(work)
     assert step.mode == "step" and step.base_tree == parent
     assert step.paths == ("b.txt",)
     # An edit rides in the same step.
     (work / "c.txt").write_text("c\n")
-    step = _gate_record.plan(work, git)
+    step = _gate_record.plan(work)
     assert step.base_tree == parent and step.paths == ("b.txt", "c.txt")
     # Once the record holds the tip, the clean tree is proved outright.
     monkeypatch.setattr(
         _gate_record,
         "verified_roots",
-        lambda root, git, base: ({parent, tree_id(git)}, ""),
+        lambda root, base: ({parent, tree_id(root)}, ""),
     )
     (work / "c.txt").unlink()
-    proved = _gate_record.plan(work, git)
+    proved = _gate_record.plan(work)
     assert proved.mode == "proved"
-    assert proved.why == f"CI's record of {tree_id(git)[:12]}"
+    assert proved.why == f"CI's record of {tree_id(work)[:12]}"
 
 
 def test_the_plan_steps_from_the_proved_tree_nearest_by_delta(
     work: Path, unverified: None
 ) -> None:
-    git = GitOps(work)
-    first = _gate_record.plan(work, git)
-    _gate_record.remember(work, git, tree=first.tree, packages=None)
+    first = _gate_record.plan(work)
+    _gate_record.remember(work, tree=first.tree, packages=None)
     _commit(work, "a.txt")
     _commit(work, "b.txt")
     # A green check of a dirty tree: its row is one path from the next
     # edit, where the history's proved tree is four.
     (work / "c.txt").write_text("c\n")
-    dirty = git.working_tree_id()
-    _gate_record.remember(work, git, tree=dirty, packages=(), base_tree=first.tree)
+    dirty = git.working_tree_id(work)
+    _gate_record.remember(work, tree=dirty, packages=(), base_tree=first.tree)
     # A row whose tree git does not have is passed over.
-    _gate_record.remember(work, git, tree="f" * 40, packages=(), base_tree=first.tree)
+    _gate_record.remember(work, tree="f" * 40, packages=(), base_tree=first.tree)
     (work / "d.txt").write_text("d\n")
-    step = _gate_record.plan(work, git)
+    step = _gate_record.plan(work)
     assert step.mode == "step" and step.base_tree == dirty
     assert step.paths == ("d.txt",)
 
 
 def test_the_plan_is_proved_a_step_or_full(work: Path, unverified: None) -> None:
-    git = GitOps(work)
     # Nothing in reach: the whole gate runs and roots a chain.
-    first = _gate_record.plan(work, git)
-    assert first.mode == "full" and first.tree == tree_id(git)
-    _gate_record.remember(work, git, tree=first.tree, packages=None)
+    first = _gate_record.plan(work)
+    assert first.mode == "full" and first.tree == tree_id(work)
+    _gate_record.remember(work, tree=first.tree, packages=None)
     # The same tree again: proved, nothing to run.
-    assert _gate_record.plan(work, git).mode == "proved"
+    assert _gate_record.plan(work).mode == "proved"
     # A dirty tree: a step from HEAD's proved tree, the delta named.
     (work / "packages").mkdir()
     (work / "packages" / "x.txt").write_text("x\n")
-    step = _gate_record.plan(work, git)
+    step = _gate_record.plan(work)
     assert step.mode == "step" and step.base_tree == first.tree
     assert step.paths == ("packages/x.txt",)
-    assert step.tree == git.working_tree_id()
+    assert step.tree == git.working_tree_id(work)
     _gate_record.remember(
-        work, git, tree=step.tree, packages=("packages/x",), base_tree=first.tree
+        work, tree=step.tree, packages=("packages/x",), base_tree=first.tree
     )
     # The commit that takes everything has the proved tree: nothing to run.
     _git(work, "add", "-A")
     _git(work, "commit", "-qm", "feat: x")
-    assert _gate_record.plan(work, git).mode == "proved"
+    assert _gate_record.plan(work).mode == "proved"
     # Two commits later, the nearest proved tree in the history is the base.
     _commit(work, "a.txt")
     _commit(work, "b.txt")
-    later = _gate_record.plan(work, git)
+    later = _gate_record.plan(work)
     assert later.mode == "step" and later.base_tree == step.tree
     assert later.paths == ("a.txt", "b.txt")
 
@@ -419,7 +401,7 @@ def _merged(work: Path, branch: str) -> tuple[str, str, str]:
     head = _git(work, "rev-parse", branch).strip()
     _git(work, "checkout", "-q", "--detach", base)
     _git(work, "merge", "-q", "--no-ff", "--no-edit", branch)
-    return base, head, tree_id(GitOps(work))
+    return base, head, tree_id(work)
 
 
 def _pushed_again(work: Path, name: str) -> None:
@@ -432,30 +414,28 @@ def _pushed_again(work: Path, name: str) -> None:
 def test_a_leg_with_no_proved_tree_steps_from_the_merge_base_and_says_why(
     work: Path, tmp_path: Path
 ) -> None:
-    git = GitOps(work)
-    main = tree_id(git)
+    main = tree_id(work)
     _git(work, "checkout", "-q", "-b", "feat/one")
     _commit(work, "one.txt")
     _merged(work, "feat/one")
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert step.mode == _gate_record.MERGE_BASE
     assert (step.base_tree, step.paths) == (main, ("one.txt",))
     assert step.why == "CI's record proves no tree in reach"
     # A record the store cannot read steps the same way, in its words.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert step.mode == _gate_record.MERGE_BASE and step.base_tree == main
     assert step.why.startswith("CI's record could not be read (")
 
 
 def test_a_leg_without_a_merge_base_runs_everything(work: Path) -> None:
-    step = _gate_record.leg_plan(work, GitOps(work), base="gone", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="gone", branch="feat/one")
     assert step.mode == "full"
     assert step.why.startswith("no merge base with origin/gone (")
 
 
 def test_a_merge_row_counts_only_when_its_commits_rebuild_its_tree(work: Path) -> None:
-    git = GitOps(work)
     _git(work, "checkout", "-q", "-b", "feat/one")
     _commit(work, "one.txt")
     base, head, first = _merged(work, "feat/one")
@@ -464,30 +444,29 @@ def test_a_merge_row_counts_only_when_its_commits_rebuild_its_tree(work: Path) -
     _stamped(work, first, merged=(base, "f" * 40))
     _stamped(work, "e" * 40, merged=(base, head))
     _pushed_again(work, "two.txt")
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert step.mode == _gate_record.MERGE_BASE
     assert step.paths == ("one.txt", "two.txt")
     # Another branch's merge is not rebuilt for this one.
     _stamped(work, first, merged=(base, head))
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/two")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/two")
     assert step.mode == _gate_record.MERGE_BASE
 
 
 def test_a_second_push_steps_from_the_first_pushs_merge(work: Path) -> None:
-    git = GitOps(work)
-    main = tree_id(git)
+    main = tree_id(work)
     _git(work, "checkout", "-q", "-b", "feat/one")
     _commit(work, "one.txt")
     base, head, first = _merged(work, "feat/one")
-    assert git.merge_parents() == (base, head)
+    assert git.merge_parents(work) == (base, head)
     # main's own run proved its tree: the first push steps from it.
     _stamped(work, main)
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert (step.mode, step.base_tree, step.paths) == ("step", main, ("one.txt",))
     assert step.why == "proved by run 8"
     # The first push's run proved its merge and named the two commits.
     _stamped(work, first, merged=(base, head))
     _pushed_again(work, "two.txt")
-    step = _gate_record.leg_plan(work, git, base="main", branch="feat/one")
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert (step.mode, step.base_tree, step.paths) == ("step", first, ("two.txt",))
     assert step.why == f"run 8's merge of {head[:12]} onto {base[:12]}"

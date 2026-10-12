@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.workshop import _coverage_store, _verified
@@ -463,9 +464,7 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     (tmp_path / "tests").mkdir()
     _in_ci(monkeypatch, "check-a")
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
-    )
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     write_marker(tmp_path, FULL, leg="check-a")
     put: list[dict[str, object]] = []
 
@@ -566,9 +565,7 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
 
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
     monkeypatch.setattr(_coverage_store, "put_run", _capture)
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
-    )
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     _in_ci(monkeypatch, "check-a")
     _python.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
@@ -629,9 +626,7 @@ def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope
     _contextual_part(tmp_path, "host.1.X", {"": {source: [1]}})
     write_marker(tmp_path, FULL, leg="check-a")
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
-    )
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     monkeypatch.setattr(
         _coverage_store, "put_run", lambda root, run, **kw: "push refused: down"
     )
@@ -1281,9 +1276,7 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
 
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
     monkeypatch.setattr(_coverage_store, "put_run", _capture)
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
-    )
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     _in_ci(monkeypatch, "check-a")
     _python.combine_leg(tmp_path, (x, n))
     units = _units(put[0])

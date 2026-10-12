@@ -1,6 +1,7 @@
 # One home for every git access: the git library
 
-Status: planned and ruled, 2026-10-11, no phase started. The destination note
+Status: phase 1 in review, 2026-10-12 (#1500); phases 2 to 5 not
+started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -395,6 +396,14 @@ and the number recorded here.
 
 ## Decision record
 
+- 2026-10-12, phase 1 built: the helper's methods are functions of
+  `livery.git`, the move classifier went with the memory it served,
+  `delete_local_branch` folded into `delete_branch`, and `run` and
+  `call` are the public door for a subcommand no function names. The
+  tests' five subclassed fakes became one helper, `wire_pushes` in
+  `workshop_seeds`, which makes every push through the library reach
+  the fake forge; a test that needs a push to fail or stay unsettled
+  adjusts the `ForgePushes` it returns.
 - 2026-10-11, Willem: every git access leaves the workshop for one
   library, the state store included, since it proves local trees as
   well as remote ones and is one mechanism with two homes. Why: a

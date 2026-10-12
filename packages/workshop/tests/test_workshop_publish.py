@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.workshop import _lifecycle
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (
     Receipt,
@@ -141,7 +141,6 @@ def _seed(base: Path) -> None:
 def train(seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A squashed release of a diamond: base, two legs, an apex."""
     root = seeds("publish", _seed) / "ws"
-    git = GitOps(root)
     registry = LedgerRegistry()
     starts: dict[str, float] = {}
     spans: dict[str, tuple[float, float]] = {}
@@ -166,7 +165,7 @@ def train(seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("livery.workshop._lifecycle.build", _fake_build)
     monkeypatch.setattr("livery.workshop._lifecycle.publish", _fake_publish)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
-    return root, git, registry, spans
+    return root, registry, spans
 
 
 def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
@@ -305,7 +304,7 @@ def test_the_manifest_names_the_set_the_diff_cannot() -> None:
 def test_a_squash_without_a_member_list_refuses_naming_the_recovery(train) -> None:
     # The fallback first: a commit carrying no member list is not a
     # release squash, whatever its title or its changelogs say.
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     (root / "notes.txt").write_text("just notes\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): released livery-base v0.3.0")
@@ -315,25 +314,25 @@ def test_a_squash_without_a_member_list_refuses_naming_the_recovery(train) -> No
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): released livery-base v0.3.0")
     with pytest.raises(_FAILURES) as caught:
-        discover_release(root, git, git.head_sha())
+        discover_release(root, git.head_sha(root))
     assert "not a release squash" in str(caught.value)
     assert "--ref=<squash sha>" in str(caught.value)
 
 
 def test_a_member_list_naming_no_package_refuses(train) -> None:
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     _member_list(root, ("gone",))
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): released livery-gone v0.3.0")
     with pytest.raises(_FAILURES) as caught:
-        discover_release(root, git, git.head_sha())
+        discover_release(root, git.head_sha(root))
     assert "packages/gone, which is not a workspace package" in str(caught.value)
 
 
 def test_discovery_reads_members_from_the_squash_content(train) -> None:
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     sha = _squash(root, ("base", "left"))
-    discovered = discover_release(root, git, sha)
+    discovered = discover_release(root, sha)
     assert [(p.directory.name, v) for p, v in discovered] == [
         ("base", "0.3.0"),
         ("left", "0.3.0"),
@@ -345,11 +344,11 @@ def test_a_version_the_index_already_serves_is_walked_past_before_upload(
 ) -> None:
     # The recovery first: a died receipt re-run must reach the tag
     # without repeating an upload it may not be able to make.
-    root, git, registry, spans = train
+    root, registry, spans = train
     registry.serve("livery-base", "0.3.0")
     sha = _squash(root, ("base", "left"))
     receipts = publish_release(
-        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+        root, lambda _p: registry, ref=sha, index_url="https://idx.example/"
     )
     by_name = {r.package.directory.name: r for r in receipts}
     assert by_name["base"].published is False
@@ -370,10 +369,10 @@ def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     # name the recovery.
     from livery.workshop._release_driver import pending_release_wave
 
-    root, git, _registry, _spans = train
-    assert pending_release_wave(root, git) is None
+    root, _registry, _spans = train
+    assert pending_release_wave(root) is None
     sha = _squash(root, ("base", "left"))
-    pending = pending_release_wave(root, git)
+    pending = pending_release_wave(root)
     assert pending is not None
     found, missing = pending
     assert found == sha
@@ -383,12 +382,12 @@ def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     later = _squash(root, ("right",))
     _git(root, "tag", "-a", "packages/right/v0.3.0", "-m", "right", later)
     _git(root, "push", "origin", "--tags")
-    pending = pending_release_wave(root, git)
+    pending = pending_release_wave(root)
     assert pending is not None and pending[0] == sha
     for tag in missing:
         _git(root, "tag", "-a", tag, "-m", tag, sha)
     _git(root, "push", "origin", "--tags")
-    assert pending_release_wave(root, git) is None
+    assert pending_release_wave(root) is None
 
 
 def test_abandon_refuses_without_a_died_wave_and_prepares_over_one(
@@ -397,7 +396,7 @@ def test_abandon_refuses_without_a_died_wave_and_prepares_over_one(
     from livery.workshop import _release_driver
     from livery.workshop._release_driver import pending_release_waves
 
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -408,7 +407,7 @@ def test_abandon_refuses_without_a_died_wave_and_prepares_over_one(
     monkeypatch.setattr(
         _release_driver,
         "ReleaseDriver",
-        lambda _root, _repo, _git, members, **_kw: prepared.append(
+        lambda _root, _repo, members, **_kw: prepared.append(
             tuple(m.directory.name for m in members)
         ),
     )
@@ -431,18 +430,18 @@ def test_abandon_refuses_without_a_died_wave_and_prepares_over_one(
     # for nothing it named; the new squash carries the receipts.
     (root / "packages" / "base" / "fixed.txt").write_text("the fix\n")
     newer = _squash(root, ("base", "left"))
-    assert [sha for sha, _ in pending_release_waves(root, git)] == [newer]
+    assert [sha for sha, _ in pending_release_waves(root)] == [newer]
 
 
 def test_a_later_release_squash_takes_over_a_packages_uncut_receipt(train) -> None:
     from livery.workshop._release_driver import pending_release_waves
 
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     older = _squash(root, ("base", "left"))
     newer = _squash(root, ("left",))
     # The older squash keeps what no later squash names; the later one
     # carries the package they share.
-    assert pending_release_waves(root, git) == (
+    assert pending_release_waves(root) == (
         (older, ("packages/base/v0.3.0",)),
         (newer, ("packages/left/v0.3.0",)),
     )
@@ -477,47 +476,47 @@ def test_the_recovery_finds_the_requested_sets_own_uncut_squash(train) -> None:
         pending_release_waves,
     )
 
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     by_name = {p.directory.name: p for p in discover_packages(root)}
-    assert pending_release_wave_for(root, git, (by_name["base"],)) is None
+    assert pending_release_wave_for(root, (by_name["base"],)) is None
     older = _squash(root, ("base",))
     newer = _squash(root, ("left", "right"))
-    assert [sha for sha, _ in pending_release_waves(root, git)] == [older, newer]
+    assert [sha for sha, _ in pending_release_waves(root)] == [older, newer]
     # From a release branch cut before the squashes, whose own history
     # lacks them, the recovery walks origin/main and still finds both.
     _git(root, "checkout", "-q", "-b", "workflow/release/probe", f"{older}~1")
-    assert [sha for sha, _ in pending_release_waves(root, git)] == [older, newer]
+    assert [sha for sha, _ in pending_release_waves(root)] == [older, newer]
     _git(root, "checkout", "-q", "main")
-    assert pending_release_wave(root, git) == (older, ("packages/base/v0.3.0",))
-    assert pending_release_wave_for(root, git, (by_name["left"],)) == (
+    assert pending_release_wave(root) == (older, ("packages/base/v0.3.0",))
+    assert pending_release_wave_for(root, (by_name["left"],)) == (
         newer,
         ("packages/left/v0.3.0", "packages/right/v0.3.0"),
     )
-    own = pending_release_wave_for(root, git, (by_name["base"],))
+    own = pending_release_wave_for(root, (by_name["base"],))
     assert own is not None and own[0] == older
-    assert pending_release_wave_for(root, git, (by_name["apex"],)) is None
+    assert pending_release_wave_for(root, (by_name["apex"],)) is None
 
 
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:
     # hse's shape: the title is presentation. A rider file in the
     # squash and a hand-mangled title change nothing about what the
     # member list states.
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     _member_list(root, ("base",))
     (root / "rider.txt").write_text("a rider\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): the lock records something")
-    discovered = discover_release(root, git, git.head_sha())
+    discovered = discover_release(root, git.head_sha(root))
     assert [(p.directory.name, v) for p, v in discovered] == [("base", "0.3.0")]
 
 
 def test_discovery_refuses_a_garbled_member_list(train) -> None:
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     (root / ".release-manifest.json").write_text('{"members": [{"dir": "base"}]}\n')
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: mangle")
     with pytest.raises(_FAILURES) as caught:
-        discover_release(root, git, git.head_sha())
+        discover_release(root, git.head_sha(root))
     assert "no readable .release-manifest.json" in str(caught.value)
 
 
@@ -526,13 +525,13 @@ def test_the_member_pairs_name_each_member_from_its_contract_at_the_ref(
 ) -> None:
     from livery.workshop._release_driver import member_pairs_at
 
-    root, git, _registry, _spans = train
-    assert member_pairs_at(git, "HEAD") is None
+    root, _registry, _spans = train
+    assert member_pairs_at(root, "HEAD") is None
     _member_list(root, ("base", "nowhere"))
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: list")
     # A directory with no contract at the ref keeps its directory name.
-    assert member_pairs_at(git, "HEAD") == [
+    assert member_pairs_at(root, "HEAD") == [
         ("livery-base", "0.3.0"),
         ("nowhere", "0.3.0"),
     ]
@@ -541,7 +540,7 @@ def test_the_member_pairs_name_each_member_from_its_contract_at_the_ref(
 def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git, registry, _spans = train
+    root, registry, _spans = train
     sha = _squash(root, ("base", "left", "right"))
     # base's project exists already; the legs are new.
     registry.serve("livery-base", "0.2.0")
@@ -560,7 +559,7 @@ def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
     monkeypatch.setattr("livery.workshop._lifecycle.publish", _limited)
     with pytest.raises(_FAILURES) as caught:
         publish_release(
-            root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+            root, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
         )
     message = str(caught.value)
     assert "refuses more new projects for now" in message
@@ -574,7 +573,7 @@ def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
 def test_new_projects_upload_one_at_a_time(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git, registry, _spans = train
+    root, registry, _spans = train
     sha = _squash(root, ("base", "left", "right"))
     registry.serve("livery-base", "0.2.0")
     uploads: dict[str, tuple[float, float]] = {}
@@ -588,7 +587,7 @@ def test_new_projects_upload_one_at_a_time(
 
     monkeypatch.setattr("livery.workshop._lifecycle.publish", _slow)
     publish_release(
-        root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+        root, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
     )
     left, right = uploads["livery-left"], uploads["livery-right"]
     assert left[1] <= right[0] or right[1] <= left[0]
@@ -597,7 +596,7 @@ def test_new_projects_upload_one_at_a_time(
 def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
     train,
 ) -> None:
-    root, git, registry, spans = train
+    root, registry, spans = train
     sha = _squash(root, ("base", "left", "right", "apex"))
     # Projects the registry already knows: only a new project's first
     # upload waits for another's.
@@ -605,7 +604,6 @@ def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
         registry.serve(f"livery-{member}", "0.2.0")
     receipts = publish_release(
         root,
-        git,
         lambda _p: registry,
         ref=sha,
         probe_timeout=5,
@@ -617,7 +615,7 @@ def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
         "right",
         "apex",
     ]
-    tags = git.tags()
+    tags = git.tags(root)
     for member in ("base", "left", "right", "apex"):
         assert f"packages/{member}/v0.3.0" in tags
     # The two legs overlapped: each started before the other finished.
@@ -630,7 +628,7 @@ def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
 def test_a_failed_member_stops_only_its_dependents(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git, registry, spans = train
+    root, registry, spans = train
     sha = _squash(root, ("base", "left", "right", "apex"))
 
     real_serve = registry.serve
@@ -647,7 +645,6 @@ def test_a_failed_member_stops_only_its_dependents(
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
-            git,
             lambda _p: registry,
             ref=sha,
             probe_timeout=5,
@@ -655,7 +652,7 @@ def test_a_failed_member_stops_only_its_dependents(
         )
     message = str(caught.value)
     assert "left" in message and "walked past" in message
-    tags = git.tags()
+    tags = git.tags(root)
     # Siblings kept their receipts; the apex never started.
     assert "packages/base/v0.3.0" in tags
     assert "packages/right/v0.3.0" in tags
@@ -666,10 +663,10 @@ def test_a_failed_member_stops_only_its_dependents(
 def test_a_rerun_walks_past_the_receipts_already_cut(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git, registry, _spans = train
+    root, registry, _spans = train
     sha = _squash(root, ("base", "left"))
     publish_release(
-        root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+        root, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
     )
     republished: list[str] = []
     monkeypatch.setattr(
@@ -677,14 +674,14 @@ def test_a_rerun_walks_past_the_receipts_already_cut(
         lambda package, _root, **kwargs: republished.append(package.name),
     )
     receipts = publish_release(
-        root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+        root, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
     )
     assert republished == []  # everything tagged was walked past
     assert all(not receipt.published for receipt in receipts)
 
 
 def test_movement_after_prepare_refuses_naming_the_commits(train) -> None:
-    root, git, _registry, _spans = train
+    root, _registry, _spans = train
     packages = {p.directory.name: p for p in discover_packages(root)}
     # A commit touching base lands after the entry was stamped, before
     # the squash: the squash carries code the changelog never saw.
@@ -701,13 +698,13 @@ def test_movement_after_prepare_refuses_naming_the_commits(train) -> None:
     _git(root, "commit", "-m", "feat: the sneaked change")
     sha = _squash(root, ("base",), mined_at=mined_at)
     with pytest.raises(_FAILURES) as caught:
-        movement_check(root, git, packages["base"], sha)
+        movement_check(root, packages["base"], sha)
     message = str(caught.value)
     assert "sneaked" in message and "workflow.release" in message
 
 
 def test_the_floor_probe_refuses_an_unservable_floor(train) -> None:
-    root, _git_seam, registry, _spans = train
+    root, registry, _spans = train
     packages = {p.path: p for p in discover_packages(root)}
     registry.serve("livery-base", "0.1.0")  # below the 0.3.0 floor
     with pytest.raises(_FAILURES) as caught:
@@ -726,10 +723,10 @@ def test_the_probe_times_out_teaching_the_rerun() -> None:
 
 
 def test_receipts_expose_the_ledger(train) -> None:
-    root, git, registry, _spans = train
+    root, registry, _spans = train
     sha = _squash(root, ("base",))
     receipts = publish_release(
-        root, git, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
+        root, lambda _p: registry, ref=sha, probe_timeout=5, probe_poll=0.01
     )
     assert receipts == (
         Receipt(
@@ -767,11 +764,11 @@ def test_a_publish_key_that_is_not_a_boolean_refuses(tmp_path: Path) -> None:
 def test_an_opted_out_member_is_built_and_tagged_and_never_uploaded(
     train, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, git, registry, spans = train
+    root, registry, spans = train
     _opt_out(root, "left")
     sha = _squash(root, ("base", "left"))
     receipts = publish_release(
-        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+        root, lambda _p: registry, ref=sha, index_url="https://idx.example/"
     )
     by_name = {r.package.directory.name: r for r in receipts}
     assert by_name["base"].published is True
@@ -789,7 +786,7 @@ def test_an_opted_out_member_is_built_and_tagged_and_never_uploaded(
     assert "packages/left/v0.3.0" in tags
     # A re-run walks past the tagged member without building or probing.
     again = publish_release(
-        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+        root, lambda _p: registry, ref=sha, index_url="https://idx.example/"
     )
     assert {r.package.directory.name: r.published for r in again}["left"] is False
     assert "livery-left v0.3.0: already tagged; publish = false, done" in (
@@ -801,7 +798,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     train, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The opt-out is the base kind's: a conan member obeys it the same way."""
-    root, git, registry, _spans = train
+    root, registry, _spans = train
     native = root / "packages" / "native"
     native.mkdir()
     (native / "workshop.toml").write_text(
@@ -825,7 +822,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     # No conan registry is declared anywhere: the wave resolves a conan
     # target only for members that publish, so this one asks for none.
     receipts = publish_release(
-        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+        root, lambda _p: registry, ref=sha, index_url="https://idx.example/"
     )
     by_name = {r.package.directory.name: r for r in receipts}
     assert built == ["livery-native"]

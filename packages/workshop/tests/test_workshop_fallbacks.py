@@ -18,10 +18,10 @@ from typing import Any
 
 import pytest
 
+from livery import git
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._release import prepare_release, verify_release
 from livery.workshop._submit import _arm_verified
@@ -99,31 +99,31 @@ def test_a_local_override_survives_the_fallback(
     assert override.read_text() == "mine now\n"
 
 
-def test_a_push_the_forge_failed_is_named_in_its_words_not_as_behind() -> None:
-    from livery.workshop._git_ops import GitError
+def test_a_push_the_forge_failed_is_named_in_its_words_not_as_behind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from livery.workshop._submit import _push
 
-    class _Refusing:
-        def __init__(self, words: str) -> None:
-            self.words = words
+    words = {"text": ""}
 
-        def push(self, branch: str) -> None:
-            raise GitError(self.words)
+    def refusing(root: Path, branch: str) -> None:
+        raise git.GitError(words["text"])
 
+    monkeypatch.setattr(git, "push", refusing)
     # The refusal first: a server error is the forge's, said in its words.
-    failed = (
+    words["text"] = (
         "git push -u origin fix/x exited 1:\n ! [remote rejected]  fix/x -> fix/x"
         " (Internal Server Error)"
     )
     with pytest.raises(Failed) as caught:
-        _push(_Refusing(failed), "fix/x", force=False)  # type: ignore[arg-type]
+        _push(tmp_path, "fix/x", force=False)
     assert "(Internal Server Error)" in str(caught.value)
     assert "origin holds commits" not in str(caught.value)
     assert "submit` again once the forge answers" in str(caught.value)
     # A branch behind origin still gets the add-a-commit advice.
-    behind = "! [rejected]  fix/x -> fix/x (non-fast-forward)"
+    words["text"] = "! [rejected]  fix/x -> fix/x (non-fast-forward)"
     with pytest.raises(Failed) as caught:
-        _push(_Refusing(behind), "fix/x", force=False)  # type: ignore[arg-type]
+        _push(tmp_path, "fix/x", force=False)
     assert "origin holds commits this branch does not" in str(caught.value)
 
 
@@ -188,33 +188,23 @@ def test_the_clean_heal_reships_and_lands(
 
     calls = {"follows": 0}
 
-    class HealGit(GitOps):
-        def push(self, branch: str) -> None:  # the fake owns the remote
-            pass
+    def integrate(root: Path, base: str) -> None:
+        calls["integrated"] = True
 
-        def fetch(self) -> None:
-            pass
+    def head_sha(root: Path) -> str:
+        return ("b" if calls.get("integrated") else "a") * 40
 
-        def integrate(self, base: str) -> None:
-            calls["integrated"] = True
-
-        def head_sha(self, *, cached: bool = False) -> str:
-            return ("b" if calls.get("integrated") else "a") * 40
-
-        def current_branch(self, *, cached: bool = False) -> str:
-            return "feat/1-heal"
-
-        def head_subject(self) -> str:
-            return "feat: heal"
-
-        def head_body(self) -> str:
-            return ""
-
-        def head_message(self) -> tuple[str, str]:
-            return "feat: heal", ""
-
-        def subjects_ahead(self, base: str) -> list[str]:
-            return ["feat: heal"]
+    monkeypatch.setattr(
+        git, "push", lambda root, branch: None
+    )  # the fake owns the remote
+    monkeypatch.setattr(git, "fetch", lambda root: None)
+    monkeypatch.setattr(git, "integrate", integrate)
+    monkeypatch.setattr(git, "head_sha", head_sha)
+    monkeypatch.setattr(git, "current_branch", lambda root: "feat/1-heal")
+    monkeypatch.setattr(git, "head_subject", lambda root: "feat: heal")
+    monkeypatch.setattr(git, "head_body", lambda root: "")
+    monkeypatch.setattr(git, "head_message", lambda root: ("feat: heal", ""))
+    monkeypatch.setattr(git, "subjects_ahead", lambda root, base: ["feat: heal"])
 
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
@@ -241,7 +231,7 @@ def test_the_clean_heal_reships_and_lands(
     monkeypatch.setattr(_reconcile, "_reexec", cannot_start)
     number = submit_flow(
         repo,
-        HealGit(tmp_path),
+        tmp_path,
         armed=True,
         gate=False,
         interval=0,

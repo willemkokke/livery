@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.workshop import _publish
 from livery.workshop._backends import _cpp_conan
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import assert_wheel_identity, publish_release
 from livery.workshop._registries import RegistryTarget
@@ -290,13 +290,13 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     monkeypatch.setenv("CONAN_REMOTE_URL", str(tmp_path / "share"))
-    return root, GitOps(root)
+    return root
 
 
 def test_the_cross_kind_wave_orders_and_dispatches(
     cross_train, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    root, git = cross_train
+    root = cross_train
     registry = _Ledger()
     conan_registry = _Ledger()
     order: list[str] = []
@@ -334,9 +334,8 @@ def test_the_cross_kind_wave_orders_and_dispatches(
 
     receipts = publish_release(
         root,
-        git,
         registry_for,
-        ref=git.head_sha(),
+        ref=git.head_sha(root),
         probe_timeout=5,
         probe_poll=0.01,
     )
@@ -360,7 +359,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     from livery.forge import ForgeError
     from livery.forge.testing import FakeForge
 
-    root, git = cross_train
+    root = cross_train
     registry = _Ledger()
     fake = FakeForge()
     fake.create_repo("acme", "ws")
@@ -370,13 +369,12 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         "livery.workshop._forge_lane.this_repository", lambda _root: repository
     )
     monkeypatch.setattr(
-        "livery.workshop._registries.resolve_registry",
-        lambda _root, _kind: target,
+        "livery.workshop._registries.resolve_registry", lambda _root, _kind: target
     )
     real_cut = _publish.cut_tag
 
-    def _cut_and_push_to_the_forge(git_ops: GitOps, tag: str, ref: str) -> None:
-        real_cut(git_ops, tag, ref)
+    def _cut_and_push_to_the_forge(root: Path, tag: str, ref: str) -> None:
+        real_cut(root, tag, ref)
         if tag not in repository.tags():
             fake.create_tag("acme", "ws", tag)
 
@@ -414,14 +412,13 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     with pytest.raises(_FAILURES, match="the upload died"):
         publish_release(
             root,
-            git,
             registry_for,
-            ref=git.head_sha(),
+            ref=git.head_sha(root),
             probe_timeout=2,
             probe_poll=0.01,
         )
     tag = "packages/geometry/v0.3.0"
-    assert tag in git.tags()  # the tag went first, as the route needs
+    assert tag in git.tags(root)  # the tag went first, as the route needs
     assert repository.release.assets(tag) == ()
 
     # The re-run finishes it: the tag is not read as a receipt.
@@ -438,7 +435,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     receipts = publish_release(
-        root, git, registry_for, ref=git.head_sha(), probe_timeout=5, probe_poll=0.01
+        root, registry_for, ref=git.head_sha(root), probe_timeout=5, probe_poll=0.01
     )
     assert [r.tag for r in receipts] == [
         "packages/geometry/v0.3.0",
@@ -451,7 +448,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
 def test_prebuilt_refuses_an_empty_collection(
     cross_train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git = cross_train
+    root = cross_train
     registry = _Ledger()
     conan_registry = _Ledger()
 
@@ -477,9 +474,8 @@ def test_prebuilt_refuses_an_empty_collection(
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
-            git,
             registry_for,
-            ref=git.head_sha(),
+            ref=git.head_sha(root),
             probe_timeout=5,
             probe_poll=0.01,
             prebuilt=True,
@@ -498,7 +494,7 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
     the wave stops instead of building a package only this runner's
     host could use.
     """
-    root, git = cross_train
+    root = cross_train
     registry = _Ledger()
     conan_registry = _Ledger()
     from livery.workshop._backends import _cpp_conan as cpp
@@ -513,9 +509,8 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
-            git,
             registry_for,
-            ref=git.head_sha(),
+            ref=git.head_sha(root),
             probe_timeout=5,
             probe_poll=0.01,
             prebuilt=True,

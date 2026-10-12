@@ -27,7 +27,7 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/claude", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/claude", "packages/extensions/mypy", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/git", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
@@ -42,6 +42,7 @@ livery-extensions-ruff = { workspace = true }
 livery-extensions-ty = { workspace = true }
 livery-footman = { workspace = true }
 livery-forge = { workspace = true }
+livery-git = { workspace = true }
 livery-strongroom = { workspace = true }
 livery-toolroom = { workspace = true }
 livery-toolroom-bench = { workspace = true }
@@ -74,6 +75,7 @@ dev = [
     "livery-extensions-ty",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
+    "livery-git",
     "livery-strongroom",
     "livery-toolroom[test]",
     "livery-toolroom-bench",

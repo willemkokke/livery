@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.extensions.python import _backend as _python
 from livery.workshop import _coverage_store, _quality, _verified
 from livery.workshop._gate_record import Plan
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
@@ -110,7 +110,7 @@ def test_a_push_with_no_proved_tree_in_reach_pays_the_whole_gate_never_the_merge
     from livery.workshop import _gate_record
 
     root = _root(tmp_path, "affected-legs = true\n")
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    monkeypatch.setattr(git, "fetch", lambda root: None)
     plans = iter(
         [
             Plan(
@@ -130,7 +130,7 @@ def test_a_push_with_no_proved_tree_in_reach_pays_the_whole_gate_never_the_merge
         ]
     )
     monkeypatch.setattr(
-        _gate_record, "leg_plan", lambda root, git, *, base, branch: next(plans)
+        _gate_record, "leg_plan", lambda root, *, base, branch: next(plans)
     )
     # The fallback first: on main the merge base is HEAD, so the step
     # would be empty; the push pays the whole gate instead.
@@ -174,7 +174,7 @@ def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
         cwd=root,
         check=True,
     )
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    monkeypatch.setattr(git, "fetch", lambda root: None)
     step = _quality._leg_plan(root, "develop", _run("pull_request", "develop"))
     assert step.mode == "full"
     assert _quality._affected(root, step) is None
@@ -189,7 +189,7 @@ def test_a_leg_says_where_it_measures_from_and_why(
     from livery.workshop import _gate_record
 
     root = _root(tmp_path, "affected-legs = true\n")
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps.fetch", lambda self: None)
+    monkeypatch.setattr(git, "fetch", lambda root: None)
     plans = iter(
         [
             Plan(
@@ -210,7 +210,7 @@ def test_a_leg_says_where_it_measures_from_and_why(
     )
     asked: list[tuple[str, str]] = []
 
-    def _plan(root: Path, git: object, *, base: str, branch: str) -> Plan:
+    def _plan(root: Path, *, base: str, branch: str) -> Plan:
         asked.append((base, branch))
         return next(plans)
 
@@ -253,7 +253,7 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     bases: list[str] = []
 
-    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
+    def _plan(root: Path, *, base: str = "main") -> _gate_record.Plan:
         bases.append(base)
         return _gate_record.Plan(
             "step", "t" * 40, base_tree="b" * 40, paths=("notes/x.md",)
@@ -262,7 +262,7 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
     monkeypatch.setattr(_gate_record, "plan", _plan)
     recorded: list[dict[str, object]] = []
 
-    def _remember(root: Path, git: object, **kw: object) -> str:
+    def _remember(root: Path, **kw: object) -> str:
         recorded.append(kw)
         return "  gate record: recorded"
 
@@ -297,7 +297,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.delenv("CI", raising=False)  # the fix guard is its own test
 
-    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
+    def _plan(root: Path, *, base: str = "main") -> _gate_record.Plan:
         return _gate_record.Plan(
             "step", "t" * 40, base_tree="b" * 40, paths=("packages/x/a.py",)
         )
@@ -305,7 +305,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     monkeypatch.setattr(_gate_record, "plan", _plan)
     recorded: list[dict[str, object]] = []
 
-    def _remember(root: Path, git: object, **kw: object) -> str:
+    def _remember(root: Path, **kw: object) -> str:
         recorded.append(kw)
         return "  gate record: recorded"
 
@@ -345,7 +345,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     _quality.check(fix=True)
     # The walk ran the fixers, and the row names the tree they left.
     assert judged == [True]
-    left = GitOps(root).working_tree_id()
+    left = git.working_tree_id(root)
     assert left != "t" * 40
     assert recorded == [
         {"tree": left, "packages": ("packages/x",), "base_tree": "b" * 40}
@@ -373,14 +373,14 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
     for named in ("packages/x/tests/test_a.py", "packages/y/tests/test_b.py"):
         (root / named).write_text("def test_it() -> None:\n    pass\n")
 
-    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
+    def _plan(root: Path, *, base: str = "main") -> _gate_record.Plan:
         return _gate_record.Plan(
             "step", "t" * 40, base_tree="b" * 40, paths=tuple(paths)
         )
 
     monkeypatch.setattr(_gate_record, "plan", _plan)
     monkeypatch.setattr(
-        _gate_record, "remember", lambda root, git, **kw: "  gate record: recorded"
+        _gate_record, "remember", lambda root, **kw: "  gate record: recorded"
     )
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
     seen: list[tuple[tuple[str, ...], dict[str, tuple[str, ...]]]] = []
@@ -495,8 +495,8 @@ def test_a_leg_without_a_label_or_an_identity_runs_every_suite(
         lambda root, *, leg, base="main": _coverage_store.Record({}),
     )
 
-    def _no_identity(git: object, ps: object, p: object) -> str:
-        raise GitError("HEAD:packages/y is not in HEAD")
+    def _no_identity(root: object, ps: object, p: object) -> str:
+        raise git.GitError("HEAD:packages/y is not in HEAD")
 
     monkeypatch.setattr(_coverage_store, "closure_id", _no_identity)
     widened = _quality._with_unstored_suites(

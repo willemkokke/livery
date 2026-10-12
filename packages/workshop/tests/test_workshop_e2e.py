@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
@@ -47,8 +48,7 @@ def test_each_lane_addresses_its_own_registry() -> None:
 
 
 def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("GITLAB_URL", "http://gitlab.example")
     monkeypatch.setenv("GITLAB_TOKEN", "the-lane-token")
@@ -162,8 +162,7 @@ def test_missing_credentials_teach_the_dev_up_verb(
 
 
 def test_provisioning_creates_then_reuses_and_writes_the_secret(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("GITEA_URL", "http://gitea.example")
     monkeypatch.setenv("GITEA_TOKEN", "the-lane-token")
@@ -886,7 +885,6 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from types import SimpleNamespace
 
     for member in MEMBERS:
         home = tmp_path / "packages" / member
@@ -903,19 +901,14 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "t"))
-    monkeypatch.setattr(
-        "livery.workshop._git_ops.GitOps",
-        lambda root: SimpleNamespace(
-            head_sha=lambda: HEAD,
-            is_clean=lambda: clean,
-            # The loop runs from a feature branch, where the release
-            # verb is the dev act.
-            current_branch=lambda: "chore/loop",
-        ),
-    )
+    monkeypatch.setattr(git, "head_sha", lambda root: HEAD)
+    monkeypatch.setattr(git, "is_clean", lambda root: clean)
+    # The loop runs from a feature branch, where the release verb is
+    # the dev act.
+    monkeypatch.setattr(git, "current_branch", lambda root: "chore/loop")
     monkeypatch.setattr(
         "livery.workshop._dev_release.unchanged_since_release",
-        lambda root, git, package: "0.3.0" if package.name == "livery-forge" else "",
+        lambda root, package: "0.3.0" if package.name == "livery-forge" else "",
     )
     ran: list[list[str]] = []
     monkeypatch.setattr("livery.footman.run", lambda argv, **kwargs: ran.append(argv))
@@ -1002,9 +995,7 @@ def test_the_birth_reads_the_dev_index_before_any_other(
     assert seen[-1]["UV_INDEX"] == "file:///dev-index https://mirror.example/simple"
 
 
-def test_the_checkout_index_refuses_a_member_without_a_version(
-    tmp_path: Path,
-) -> None:
+def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -> None:
     from livery.workshop._packages import Package
 
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "livery-x"\n')
@@ -1567,17 +1558,15 @@ def test_from_main_refuses_a_dirty_checkout_naming_the_paths(tmp_path: Path) -> 
 def test_from_main_runs_the_pass_on_a_scratch_branch_and_returns(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._git_ops import GitOps
 
     root = _main_repo(tmp_path)
-    git = GitOps(root)
     with _e2e.scratch_branch(root, enabled=True):
-        inside = git.current_branch()
+        inside = git.current_branch(root)
         assert inside.startswith("chore/loop-")
         # The loop's own refusal lets the pass go on from here.
         _e2e.require_dev_branch(root)
-    assert git.current_branch() == "main"
-    assert not git.local_branch_exists(inside)
+    assert git.current_branch(root) == "main"
+    assert not git.local_branch_exists(root, inside)
     out = capsys.readouterr().out
     assert f"from main: left 'main' for {inside}" in out
     assert f"back on main; {inside} deleted" in out
@@ -1586,31 +1575,27 @@ def test_from_main_runs_the_pass_on_a_scratch_branch_and_returns(
 def test_from_main_keeps_a_scratch_branch_the_pass_committed_on(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._git_ops import GitOps
 
     root = _main_repo(tmp_path)
-    git = GitOps(root)
     with _e2e.scratch_branch(root, enabled=True):
-        inside = git.current_branch()
+        inside = git.current_branch(root)
         (root / "made.txt").write_text("by the pass\n")
-        git.commit_all("chore: what the pass made")
-    assert git.current_branch() == "main"
-    assert git.local_branch_exists(inside)
+        git.commit_all(root, "chore: what the pass made")
+    assert git.current_branch(root) == "main"
+    assert git.local_branch_exists(root, inside)
     assert f"{inside} holds 1 commit(s) and stays" in capsys.readouterr().out
 
 
 def test_from_main_leaves_a_dev_branch_and_an_unasked_checkout_alone(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._git_ops import GitOps
 
     root = _main_repo(tmp_path)
-    git = GitOps(root)
     with _e2e.scratch_branch(root, enabled=False):
-        assert git.current_branch() == "main"
-    git.create_branch("chore/loop")
+        assert git.current_branch(root) == "main"
+    git.create_branch(root, "chore/loop")
     with _e2e.scratch_branch(root, enabled=True):
-        assert git.current_branch() == "chore/loop"
+        assert git.current_branch(root) == "chore/loop"
     with _e2e.scratch_branch(None, enabled=True):
         pass
     assert "from main" not in capsys.readouterr().out
@@ -1711,14 +1696,10 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
 
     monkeypatch.setattr(_e2e, "_loop_fm", loop_fm)
 
-    class Git:
-        def __init__(self, root: Path) -> None:
-            pass
+    def commit_all(root: Path, message: str) -> None:
+        calls.append(("commit", message.splitlines()[0]))
 
-        def commit_all(self, message: str) -> None:
-            calls.append(("commit", message.splitlines()[0]))
-
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps", Git)
+    monkeypatch.setattr(git, "commit_all", commit_all)
     for name, _kind in _e2e.LOOP_MEMBERS:
         (tmp_path / "packages" / name).mkdir(parents=True)
         (tmp_path / "packages" / name / "workshop.toml").write_text("", "utf-8")

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 import pytest
 
+from livery import git
 from livery.workshop._backends import _cpp_conan
-from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import (
     affected_packages,
     dependents_closure,
@@ -86,9 +85,7 @@ def test_disagreeing_floors_refuse_naming_both(tmp_path: Path) -> None:
     assert "acme-geometry[>=0.1.0]" in message
 
 
-def test_a_missing_conan_requirement_refuses_teaching_the_form(
-    tmp_path: Path,
-) -> None:
+def test_a_missing_conan_requirement_refuses_teaching_the_form(tmp_path: Path) -> None:
     _library(tmp_path)
     _extension(tmp_path, conan_ref="", floor="0.1.0")
     with pytest.raises(ValueError) as caught:
@@ -121,15 +118,16 @@ def test_an_unextractable_kind_refuses_in_the_lint(tmp_path: Path) -> None:
 
 
 def test_affected_fails_open_on_an_unknown_kind(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _member(tmp_path, "mystery", kind_name="carrier-pigeon")
 
-    class _Git:
-        def changed_paths(self, base: str) -> list[str]:
-            return ["packages/mystery/file.txt"]
-
-    assert affected_packages(tmp_path, cast("GitOps", _Git())) is None
+    monkeypatch.setattr(
+        git, "changed_paths", lambda root, base: ["packages/mystery/file.txt"]
+    )
+    assert affected_packages(tmp_path) is None
     out = capsys.readouterr().out
     assert "carrier-pigeon" in out
     assert "failing open" in out
@@ -145,15 +143,16 @@ def test_agreeing_floors_pass(tmp_path: Path) -> None:
     assert [p.name for p in packages] == ["acme-ext", "acme-geometry"]
 
 
-def test_touching_the_library_marks_the_extension(tmp_path: Path) -> None:
+def test_touching_the_library_marks_the_extension(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _library(tmp_path)
     _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
 
-    class _Git:
-        def changed_paths(self, base: str) -> list[str]:
-            return ["packages/geometry/src/geometry.cpp"]
-
-    affected = affected_packages(tmp_path, cast("GitOps", _Git()))
+    monkeypatch.setattr(
+        git, "changed_paths", lambda root, base: ["packages/geometry/src/geometry.cpp"]
+    )
+    affected = affected_packages(tmp_path)
     assert affected is not None
     assert {p.name for p in affected} == {"acme-geometry", "acme-ext"}
     # And the closure alone answers the same across kinds.

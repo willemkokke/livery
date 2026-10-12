@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._git_ops import GitError, GitOps
+from livery import git
 from livery.workshop._state import RunContext, Series
 
 #: The series: one row per tree id, the newest kept.
@@ -101,11 +101,11 @@ class Verified:
     base_sha: str = ""
 
 
-def tree_id(git: GitOps, ref: str = "HEAD") -> str:
+def tree_id(root: Path, ref: str = "HEAD") -> str:
     """The tree id *ref* points at."""
     # `<ref>:` names the root tree, as `^{tree}` does without a caret,
     # which cmd.exe drops on its way to a git run through a `.cmd` launcher.
-    return git._run("rev-parse", f"{ref}:").strip()
+    return git.run(root, "rev-parse", f"{ref}:").strip()
 
 
 def write_marker(
@@ -299,13 +299,12 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     unknown = [name for name, scope in scopes.items() if scope not in KNOWN]
     if unknown:
         return f"  verified: no stamp, {', '.join(unknown)} left no scope"
-    git = GitOps(root)
-    tree = tree_id(git)
+    tree = tree_id(root)
     if all(scope in PROVED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
     try:
-        merged = git.merge_parents()
-    except GitError as error:
+        merged = git.merge_parents(root)
+    except git.GitError as error:
         return f"  verified: no stamp, HEAD's parents could not be read ({error})"
     if all(scope in (FULL, *PROVED) for scope in scopes.values()):
         why = stamp(

@@ -18,7 +18,6 @@ from livery.workshop._dev_release import (
     sanitise_branch,
     semver_to_pep440,
 )
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from workshop_seeds import FakeNotes, fake_notes, member  # noqa: F401
 
@@ -54,36 +53,31 @@ def _grow_on_branch(root: Path) -> None:
     _git(root, "commit", "-m", "feat: widget")
 
 
-def test_an_unchanged_package_refuses_with_the_pin_teaching(
-    tmp_path: Path,
-) -> None:
+def test_an_unchanged_package_refuses_with_the_pin_teaching(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _git(root, "checkout", "-b", "feat/9-widget")
     # HEAD moves, but nothing touches core: content, not position.
     (root / "elsewhere.txt").write_text("x\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: elsewhere")
-    git = GitOps(root)
     packages = discover_packages(root)
     with pytest.raises(_FAILURES) as caught:
-        dev_version(root, git, packages[0])
+        dev_version(root, packages[0])
     message = str(caught.value)
     assert "sorts below" in message and "Pin the released 0.2.0" in message
     # The rule itself, for the loop to pin by: the release, or nothing
     # once the package has unreleased changes.
     from livery.workshop._dev_release import unchanged_since_release
 
-    assert unchanged_since_release(root, git, packages[0]) == "0.2.0"
+    assert unchanged_since_release(root, packages[0]) == "0.2.0"
     marker = root / "packages" / "core" / "src" / "livery" / "core" / "grown.py"
     marker.write_text("x = 1\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: widget")
-    assert unchanged_since_release(root, git, packages[0]) == ""
+    assert unchanged_since_release(root, packages[0]) == ""
 
 
-def test_a_stamped_ahead_pyproject_is_not_an_unchanged_refusal(
-    tmp_path: Path,
-) -> None:
+def test_a_stamped_ahead_pyproject_is_not_an_unchanged_refusal(tmp_path: Path) -> None:
     # The tag is the record of what was released, not the stamped
     # file: a prepared bump in pyproject whose tag is not cut yet
     # must not read as "nothing unreleased".
@@ -94,19 +88,15 @@ def test_a_stamped_ahead_pyproject_is_not_an_unchanged_refusal(
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: grow past the stamp")
     _git(root, "checkout", "-b", "feat/9-widget")
-    git = GitOps(root)
-    version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
+    version = dev_version(root, discover_packages(root)[0], stamp="20260901")
     assert version.startswith("0.3.0-dev.feat.9-widget.")
 
 
 def test_no_index_degrades_to_local_with_the_teaching(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.delenv("PYTHON_PUBLISH_INDEX", raising=False)
     built: list[str] = []
 
@@ -123,7 +113,7 @@ def test_no_index_degrades_to_local_with_the_teaching(
         "livery.workshop._dev_release.footman.confirm",
         lambda *a, **k: pytest.fail("a local run never asks"),
     )
-    dev_release(root, git, discover_packages(root))
+    dev_release(root, discover_packages(root))
     out = capsys.readouterr().out
     assert "--local" in out and "PYTHON_PUBLISH_INDEX" in out
     assert "PyPI is never the fallback" in out
@@ -138,14 +128,13 @@ def test_headless_without_yes_refuses_teaching_the_flag(
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     # Off a terminal footman.confirm answers its default no.
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
     )
     with pytest.raises(SystemExit) as caught:
-        dev_release(root, git, discover_packages(root))
+        dev_release(root, discover_packages(root))
     assert "--yes" in str(caught.value)
 
 
@@ -154,7 +143,6 @@ def test_local_never_publishes_and_never_asks_even_with_an_index(
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
         "livery.workshop._dev_release.publish_wheels",
@@ -171,7 +159,7 @@ def test_local_never_publishes_and_never_asks_even_with_an_index(
         return root / "d"
 
     monkeypatch.setattr("livery.workshop._dev_release.build_dev", _fake_build)
-    dev_release(root, git, discover_packages(root), local=True)
+    dev_release(root, discover_packages(root), local=True)
     assert len(built) == 1
 
 
@@ -180,7 +168,6 @@ def test_a_confirmed_publish_goes_to_the_configured_index(
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setenv("UV_PUBLISH_TOKEN", "tok")
     monkeypatch.setattr(
@@ -197,7 +184,7 @@ def test_a_confirmed_publish_goes_to_the_configured_index(
         return True
 
     monkeypatch.setattr("livery.workshop._dev_release.publish_wheels", _fake_publish)
-    dev_release(root, git, discover_packages(root))
+    dev_release(root, discover_packages(root))
     assert published == [("https://example.test/simple", "tok")]
 
 
@@ -206,7 +193,6 @@ def test_a_package_before_its_first_tag_still_describes(tmp_path: Path) -> None:
     # matching tag, and a package's first release is exactly that
     # state. The whole history's count is the honest age.
     root = _workspace(tmp_path)
-    git = GitOps(root)
     packages = discover_packages(root)
     subprocess.run(
         ["git", "tag", "-d", f"{packages[0].path}/v0.2.0"],
@@ -214,7 +200,7 @@ def test_a_package_before_its_first_tag_still_describes(tmp_path: Path) -> None:
         check=True,
         capture_output=True,
     )
-    distance, sha = describe_distance(git, packages[0])
+    distance, sha = describe_distance(root, packages[0])
     assert distance >= 1  # every commit in history counts
     assert sha
 
@@ -222,10 +208,9 @@ def test_a_package_before_its_first_tag_still_describes(tmp_path: Path) -> None:
 def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     packages = discover_packages(root)
-    version = dev_version(root, git, packages[0], stamp="20260901")
-    distance, sha = describe_distance(git, packages[0])
+    version = dev_version(root, packages[0], stamp="20260901")
+    distance, sha = describe_distance(root, packages[0])
     assert distance == 1
     assert version == f"0.3.0-dev.feat.9-widget.1+g{sha}.20260901"
     assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.g{sha}.20260901"
@@ -233,7 +218,7 @@ def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     (root / "packages" / "core" / "workshop.toml").write_text(
         'kind = "python"\nname = "livery-core"\n# dirt\n'
     )
-    assert dev_version(root, git, packages[0], stamp="20260901").endswith(".dirty")
+    assert dev_version(root, packages[0], stamp="20260901").endswith(".dirty")
 
 
 def test_sanitise_and_pep440_pass_throughs() -> None:
@@ -245,13 +230,10 @@ def test_sanitise_and_pep440_pass_throughs() -> None:
 
 
 def test_a_terminal_no_skips_the_member_and_continues(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
@@ -262,7 +244,7 @@ def test_a_terminal_no_skips_the_member_and_continues(
         "livery.workshop._dev_release.build_dev",
         lambda *a, **k: pytest.fail("a declined member must not build"),
     )
-    dev_release(root, git, discover_packages(root))
+    dev_release(root, discover_packages(root))
     assert "skipped livery-core" in capsys.readouterr().out
 
 
@@ -275,7 +257,6 @@ def test_no_input_at_a_terminal_refuses_instead_of_skipping(
     # skipped in silence, which is what the refusal exists to prevent.
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
@@ -291,7 +272,7 @@ def test_no_input_at_a_terminal_refuses_instead_of_skipping(
         lambda *a, **k: pytest.fail("silence must never build"),
     )
     with pytest.raises(SystemExit) as caught:
-        dev_release(root, git, discover_packages(root))
+        dev_release(root, discover_packages(root))
     assert "--yes" in str(caught.value)
 
 
@@ -300,14 +281,13 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     member = root / "packages" / "core"
     # An uncommitted edit in a file the build stamps: a git-based
     # restore would discard it, the snapshot restore must not.
     pyproject = member / "pyproject.toml"
     dirty = pyproject.read_text() + "# uncommitted local edit\n"
     pyproject.write_text(dirty)
-    version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
+    version = dev_version(root, discover_packages(root)[0], stamp="20260901")
     assert version.endswith(".dirty")
     stamped_at = pyproject.stat().st_mtime_ns
 
@@ -328,10 +308,9 @@ def test_a_roots_init_is_stamped_and_restored(
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    git = GitOps(root)
     # A root keeps its version in its __init__.py.
     init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
-    version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
+    version = dev_version(root, discover_packages(root)[0], stamp="20260901")
     seen: list[str] = []
 
     def _boom(*_args: object, **_kwargs: object) -> Path:
@@ -360,9 +339,7 @@ def test_the_branch_routes_the_act(
         lambda _root, _members: routed.append("train-local"),
     )
 
-    def _dev(
-        _root: Path, _git: GitOps, _members: object, *, local: bool = False
-    ) -> None:
+    def _dev(_root: Path, _members: object, *, local: bool = False) -> None:
         routed.append("dev")
 
     monkeypatch.setattr("livery.workshop._dev_release.dev_release", _dev)
@@ -414,9 +391,8 @@ def test_the_real_build_splices_the_readme_and_restores_the_tree(
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: readme")
     _grow_on_branch(root)
-    git = GitOps(root)
     packages = discover_packages(root)
-    version = dev_version(root, git, packages[0], stamp="20260901")
+    version = dev_version(root, packages[0], stamp="20260901")
     before = {
         p: p.read_bytes()
         for p in sorted(member.rglob("*"))

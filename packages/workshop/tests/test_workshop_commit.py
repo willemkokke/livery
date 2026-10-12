@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.workshop import _commit
 from livery.workshop._commit import commit, scope_of
@@ -211,21 +212,20 @@ def test_a_red_check_stops_before_anything_is_staged(
 def test_a_refused_commit_object_is_a_plain_refusal_with_gits_words(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._git_ops import GitError, GitOps
 
     root = _rig(seeds, monkeypatch)
     (root / "packages" / "x" / "a.py").write_text("A = 2\n")
-    real = GitOps._run
+    real = git.run
 
-    def _refusing(self: GitOps, *args: str) -> str:
+    def _refusing(root: Path, *args: str) -> str:
         if args[0] == "commit":
-            raise GitError(
+            raise git.GitError(
                 "git commit exited 128:\nerror: 1Password: failed to fill whole"
                 " buffer\nfatal: failed to write commit object"
             )
-        return real(self, *args)
+        return real(root, *args)
 
-    monkeypatch.setattr(GitOps, "_run", _refusing)
+    monkeypatch.setattr(git, "run", _refusing)
     with pytest.raises(_FAILURES) as caught:
         commit("feat", "bumps a", check=False)
     message = str(caught.value)

@@ -18,8 +18,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from livery import git
 from livery.footman import group
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
 graph = group("graph", help="The workspace dependency graph")
@@ -129,9 +129,7 @@ def is_prose(path: str) -> bool:
     return path.startswith(NOTES) or path.endswith(".md")
 
 
-def affected_packages(
-    root: Path, git: GitOps, *, base: str = "main"
-) -> tuple[Package, ...] | None:
+def affected_packages(root: Path, *, base: str = "main") -> tuple[Package, ...] | None:
     """The packages this branch's changes can influence, and the workspace's own tests.
 
     None means everything: a touched file outside every package (the
@@ -148,20 +146,15 @@ def affected_packages(
     """
     scope = affected_by(
         root,
-        git,
-        git.changed_paths(base),
+        git.changed_paths(root, base),
         # Asked only for a change outside every package.
-        before=lambda: git.merge_base(base),
+        before=lambda: git.merge_base(root, base),
     )
     return None if scope is None else scope.packages
 
 
 def affected_by(
-    root: Path,
-    git: GitOps,
-    paths: Iterable[str],
-    *,
-    before: str | Callable[[], str],
+    root: Path, paths: Iterable[str], *, before: str | Callable[[], str]
 ) -> Scope | None:
     """What *paths*, changed since *before*, reach among the workspace's packages.
 
@@ -181,7 +174,7 @@ def affected_by(
                 " registered kind; failing open to everything"
             )
             return None
-    return affected_from_paths(root, packages, paths, git=git, before=before)
+    return affected_from_paths(root, packages, paths, before=before)
 
 
 @dataclass(frozen=True)
@@ -219,7 +212,6 @@ def affected_from_paths(
     packages: tuple[Package, ...],
     paths: Iterable[str],
     *,
-    git: GitOps | None = None,
     before: str | Callable[[], str] = "",
 ) -> Scope | None:
     """What a change to *paths* reaches: the packages, and the tests that stand alone.
@@ -278,7 +270,7 @@ def affected_from_paths(
         else:
             outside.append(path)
     if outside:
-        attributed = _attribute(root, packages, outside, git=git, before=before)
+        attributed = _attribute(root, packages, outside, before=before)
         if attributed is None:
             return None
         seeds |= attributed
@@ -305,7 +297,6 @@ def _attribute(
     packages: tuple[Package, ...],
     paths: list[str],
     *,
-    git: GitOps | None,
     before: str | Callable[[], str],
 ) -> set[str] | None:
     """The packages the changes to *paths*, all outside every package, are about.
@@ -322,15 +313,15 @@ def _attribute(
     )
 
     point = before if isinstance(before, str) else before()
-    if git is None or not point:
+    if root is None or not point:
         print(f"  {paths[0]}: outside the packages; everything runs")
         return None
-    delta = package_delta(git, point, packages)
+    delta = package_delta(root, point, packages)
     seeds = {package.path for package in delta.added}
     for path in paths:
         if delta.holds(path):
             continue  # a removed package's own files: nothing depends on it now
-        old = git.file_at(point, path)
+        old = git.file_at(root, point, path)
         target = root / path
         new = target.read_text("utf-8") if target.is_file() else ""
         if path == LOCK:
@@ -362,9 +353,8 @@ def graph_affected(base: str = "main") -> None:
     if root is None:
         print("  no workspace: no workshop.toml above the working directory")
         return
-    git = GitOps(root)
-    git.fetch()
-    affected = affected_packages(root, git, base=base)
+    git.fetch(root)
+    affected = affected_packages(root, base=base)
     if affected is None:
         print("  everything: a change outside the packages configures every gate")
         return

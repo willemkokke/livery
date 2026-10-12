@@ -11,8 +11,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from livery import git
 from livery.footman import fail
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages, release_tag
 
 
@@ -31,7 +31,7 @@ def latest_released(tags: tuple[str, ...]) -> dict[str, str]:
     return {path: ".".join(map(str, v)) for path, v in latest.items()}
 
 
-def bump_floors(root: Path, git: GitOps, *, only: tuple[str, ...] = ()) -> list[str]:
+def bump_floors(root: Path, *, only: tuple[str, ...] = ()) -> list[str]:
     """Raise floors to the latest released tags; what changed.
 
     A floor names the oldest version a dependant accepts; this raises
@@ -43,7 +43,7 @@ def bump_floors(root: Path, git: GitOps, *, only: tuple[str, ...] = ()) -> list[
     """
     packages = discover_packages(root)
     dist_names = {p.path: p.name for p in packages}
-    released = latest_released(git.tags())
+    released = latest_released(git.tags(root))
     changed = []
     for package in packages:
         for edge in package.depends:

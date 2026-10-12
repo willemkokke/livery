@@ -20,10 +20,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from livery import git
 from livery.footman import Arg, cwd, doc, fail, passthrough, prog, suggest, task
 
 if TYPE_CHECKING:
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
 #: The record of the development builds, under the workspace root.
@@ -195,7 +195,6 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
     whole, and says so.
     """
     from livery.workshop._checks import checks_by_name, judges_extensions
-    from livery.workshop._git_ops import GitError, GitOps
     from livery.workshop._graph import dependencies_closure, order_topologically
     from livery.workshop._kinds import extension_set
     from livery.workshop._quality import run_on_packages
@@ -204,16 +203,15 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
         record for record in checks_by_name().values() if record.role == "build"
     ]
     closure = order_topologically(dependencies_closure(packages, {package.path}))
-    git = GitOps(root)
     try:
-        tree = git.working_tree_id()
-    except GitError as error:
+        tree = git.working_tree_id(root)
+    except git.GitError as error:
         print(
             f"  run: git cannot read this checkout, so every member builds: {error}",
             file=sys.stderr,
         )
         tree = ""
-    ids = _subtrees(git, tree, closure)
+    ids = _subtrees(root, tree, closure)
     record = _read(root)
     prints: dict[str, str] = {}
     built: list[str] = []
@@ -236,14 +234,14 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
     return built
 
 
-def _subtrees(git: GitOps, tree: str, members: tuple[Package, ...]) -> dict[str, str]:
+def _subtrees(root: Path, tree: str, members: tuple[Package, ...]) -> dict[str, str]:
     """Each of *members*' paths that *tree* holds, to its id, read in one process.
 
     Empty without a tree, so every member builds.
     """
     if not tree:
         return {}
-    return git.object_ids(tree, [member.path for member in members])
+    return git.object_ids(root, tree, [member.path for member in members])
 
 
 def _read(root: Path) -> dict[str, str]:

@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import livery.footman as footman
+from livery import git
 from livery.footman import fail
 from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
@@ -39,7 +40,6 @@ from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge import Forge, Job, Repository, Run
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import Package
 
 #: The seeded organisation and the loop's one scratch repository.
@@ -759,7 +759,7 @@ def _dev_wheels(root: Path, head: str, members: tuple[str, ...]) -> dict[str, Pa
 
 
 def _dev_split(
-    root: Path, git: GitOps, stack: Sequence[str] = ()
+    root: Path, stack: Sequence[str] = ()
 ) -> tuple[list[str], dict[str, str]]:
     """The dev members this pass builds, and the release each other one pins, by member.
 
@@ -776,7 +776,7 @@ def _dev_split(
     changed: list[str] = []
     released: dict[str, str] = {}
     for member in dev_members(root, tuple(stack) or None):
-        version = unchanged_since_release(root, git, packages[member])
+        version = unchanged_since_release(root, packages[member])
         if version:
             released[member] = version
         else:
@@ -918,10 +918,9 @@ def require_dev_branch(root: Path) -> None:
     which opens a real release on this repository's forge, and a merged
     one publishes to the real index; a detached HEAD names no act at all.
     """
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._release_driver import runs_the_train
 
-    branch = GitOps(root).current_branch()
+    branch = git.current_branch(root)
     if branch and not runs_the_train(branch):
         return
     where = f"'{branch}'" if branch else "a detached HEAD"
@@ -952,28 +951,26 @@ def scratch_branch(root: Path | None, *, enabled: bool) -> Generator[None, None,
     Yields:
         Nothing; the pass runs inside.
     """
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._release_driver import runs_the_train
 
     if root is None or not enabled:
         yield
         return
-    git = GitOps(root)
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     if branch and not runs_the_train(branch):
         yield
         return
-    dirty = git.dirty_paths()
+    dirty = git.dirty_paths(root)
     if dirty:
         fail(
             "--from-main starts a scratch branch at this commit, and the working"
             f" tree has changes: {', '.join(dirty)}; commit or discard them first"
         )
-    origin = branch or git.head_sha()
+    origin = branch or git.head_sha(root)
     scratch = f"chore/loop-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
-    git.create_branch(scratch)
+    git.create_branch(root, scratch)
     where = f"'{branch}'" if branch else "a detached HEAD"
-    print(f"  from main: left {where} for {scratch} at {git.head_sha()[:12]}")
+    print(f"  from main: left {where} for {scratch} at {git.head_sha(root)[:12]}")
     try:
         yield
     finally:
@@ -982,30 +979,27 @@ def scratch_branch(root: Path | None, *, enabled: bool) -> Generator[None, None,
 
 def _leave_scratch(root: Path, origin: str, scratch: str, branch: str) -> None:
     """Return *root* to *origin*; *scratch* goes when it gained nothing."""
-    from livery.workshop._git_ops import GitOps
-
-    git = GitOps(root)
-    if git.current_branch() != scratch:
+    if git.current_branch(root) != scratch:
         print(
             f"  from main: the checkout left {scratch} during the pass;"
             " nothing restored"
         )
         return
-    if not git.is_clean():
+    if not git.is_clean(root):
         print(f"  from main: the tree has changes, so {scratch} stays checked out")
         return
-    gained = git.commits_since(origin)
+    gained = git.commits_since(root, origin)
     if branch:
-        git.switch(branch)
+        git.switch(root, branch)
     else:
-        git.detach(origin)
+        git.detach(root, origin)
     back = branch or origin[:12]
     if gained:
         print(
             f"  from main: back on {back}; {scratch} holds {gained} commit(s) and stays"
         )
     else:
-        git.delete_branch(scratch)
+        git.delete_branch(root, scratch)
         print(f"  from main: back on {back}; {scratch} deleted")
 
 
@@ -1024,7 +1018,6 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
     """
     from livery.footman import run
     from livery.workshop._extensions import workspace_root
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._packages import discover_packages
 
     root = workspace_root()
@@ -1032,9 +1025,8 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
         fail("no workspace: no workshop.toml above the working directory")
     require_dev_branch(root)
     _, token = _dev_forge(kind)
-    git = GitOps(root)
     packages = {package.member: package for package in discover_packages(root)}
-    changed, pinned = _dev_split(root, git, stack)
+    changed, pinned = _dev_split(root, stack)
     released = {packages[member].name: version for member, version in pinned.items()}
     for member, version in pinned.items():
         print(
@@ -1048,7 +1040,7 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
             f"  registry: {len(purged)} stale rehearsal release(s) of the pinned"
             " member(s) dropped"
         )
-    if changed and not git.is_clean():
+    if changed and not git.is_clean(root):
         purged = _purge(
             kind,
             os.environ.get(_lane(kind).url_var, ""),
@@ -1073,7 +1065,7 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
                 "UV_PUBLISH_TOKEN": token,
             },
         )
-    pins = _dev_pins(root, git.head_sha(), tuple(changed)) | released
+    pins = _dev_pins(root, git.head_sha(root), tuple(changed)) | released
     print("  dev wheels: published to the loop's registry")
     return pins
 
@@ -1341,10 +1333,8 @@ def _eat_dev_wheels(
     test declares off. Idempotent: an already-wired workspace pushes
     nothing.
     """
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._new_project import _SETUP_BRANCH
 
-    git = GitOps(root)
     # main is protected by the birth's own assertion, so the wiring
     # rides the setup branch and its pull request proves the gate.
     # The branch is pass-owned: rebuilt from current main every
@@ -1484,15 +1474,16 @@ def _eat_dev_wheels(
     _lock_pins(root, pins)
     # Cleanliness is the truth, not this run's edits: a resumed
     # half-wired workspace still commits and pushes here.
-    if git.is_clean():
+    if git.is_clean(root):
         print("  dev wheels: already wired")
     else:
         git.commit_all(
+            root,
             "chore: the loop eats the dev wheels\n\nThe registry index"
             " joins uv's config on the compose hostname, true on both"
             " sides, and the lock pins the workshop's own dev wheels,"
             " so the installed workshop matches the emitter that"
-            " rendered these workflows."
+            " rendered these workflows.",
         )
         # Force: the branch is rebuilt from main each pass, so the
         # remote's copy is always superseded, like everything scratch.
@@ -1500,11 +1491,11 @@ def _eat_dev_wheels(
         # nothing left to read them: they are cancelled after the push.
         previous = ""
         try:
-            previous = git.remote_head(_SETUP_BRANCH)
+            previous = git.remote_head(root, _SETUP_BRANCH)
         except Exception:  # no such branch on origin yet
             previous = ""
-        git.push_force(_SETUP_BRANCH)
-        if previous and previous != git.head_sha():
+        git.push_force(root, _SETUP_BRANCH)
+        if previous and previous != git.head_sha(root):
             from livery.workshop._ci_tasks import cancel_superseded_runs
 
             forge_lane, _ = _dev_forge(kind)
@@ -1513,15 +1504,11 @@ def _eat_dev_wheels(
             ):
                 print(line)
         print("  dev wheels: wired and pushed")
-    return git.head_sha()
+    return git.head_sha(root)
 
 
 def _runs_patiently(
-    repo: Repository,
-    transient: Transient,
-    *,
-    head_sha: str = "",
-    subject: str,
+    repo: Repository, transient: Transient, *, head_sha: str = "", subject: str
 ) -> tuple[Run, ...] | None:
     """One poll of the runs; ``None`` for a transport error within the budget.
 
@@ -2003,8 +1990,6 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
     already on main is skipped, and nothing is submitted when none is
     missing.
     """
-    from livery.workshop._git_ops import GitOps
-
     # Landed means on main: a failed pass leaves the working tree on
     # the feature branch with the member present, and judging that
     # tree would skip straight to the release act with nothing
@@ -2018,7 +2003,6 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
             missing.append((name, kind))
     if not missing:
         return
-    git = GitOps(root)
     _fresh_branch(root, "feat/members")
     for name, kind in missing:
         _loop_fm(root, "new.package", name, f"--kind={kind}")
@@ -2056,9 +2040,10 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
     _loop_fm(root, "drift.check", "--fix")
     names = ", ".join(name for name, _kind in missing)
     git.commit_all(
+        root,
         f"feat: the loop's members\n\n{names}: born through new.package on"
         " the dev wheels, with the release baseline seeded so the"
-        " first release lands at 0.1.0."
+        " first release lands at 0.1.0.",
     )
     # Force for the same reason the setup branch pushes force: the
     # branch is pass-owned, rebuilt from main every time, so the
@@ -2190,10 +2175,8 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     nothing counted, or measuring what the branch already measured
     is the failure this proof exists for.
     """
-    from livery.workshop._git_ops import GitOps
-
     _align_main(root)
-    head = GitOps(root).head_sha()
+    head = git.head_sha(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     from livery.workshop._new_project import _SETUP_BRANCH
@@ -2272,7 +2255,6 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     reads the same lines either way.
     """
     import livery.toolroom.tools as toolroom
-    from livery.workshop._git_ops import GitOps
 
     contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
     body = contract.read_text("utf-8")
@@ -2284,18 +2266,19 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
         if switched == body:
             fail(f"{contract}: no literal floor to switch to auto-ratchet")
         contract.write_text(switched, "utf-8")
-        GitOps(root).commit_all(
+        git.commit_all(
+            root,
             f"chore({RATCHET_MEMBER}): the member's floor is the mark on the"
             " store\n\nUnder auto-ratchet the first gated run records the"
             " mark, and the loop proves the record, an accepted lowering,"
-            " and the ratchet up on every pass."
+            " and the ratchet up on every pass.",
         )
         toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
         _loop_fm(root, "submit", "--force", "--armed")
         _align_main(root)
         forge, _ = _dev_forge(kind)
         repo = forge.repository(E2E_OWNER, E2E_REPO)
-        run, _jobs = _completed_run(repo, GitOps(root).head_sha(), event="push")
+        run, _jobs = _completed_run(repo, git.head_sha(root), event="push")
         print(
             f"  ratchet member: {RATCHET_MEMBER} landed under auto-ratchet;"
             f" main's run {run.id} judged the first mark"
@@ -2333,11 +2316,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     record into main's. Re-run on a pass-owned branch with main's tip
     as the stamp, so the diff is never empty.
     """
-    from livery.workshop._git_ops import GitOps
-
-    git = GitOps(root)
     _fresh_branch(root, "chore/scoped-leg")
-    stamp = git.head_sha()
+    stamp = git.head_sha(root)
     probe = root / "packages" / "loop-echo" / "tests" / "test_scoped_leg.py"
     probe.write_text(
         '"""A member-only change: the loop proves the scoped check leg on it."""\n'
@@ -2349,11 +2329,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         "utf-8",
     )
     git.commit_all(
+        root,
         "chore(loop-echo): a member-only change for the scoped leg\n\nOne file"
         " under one member, so the check leg narrows to that member and"
-        " says so."
+        " says so.",
     )
-    head = git.head_sha()
+    head = git.head_sha(root)
     # The last pass's merge deleted the branch on origin, and the clone's
     # tracking ref still names its final commit; the forced submit pushes
     # with a lease on that ref, which git refuses as stale against a
@@ -2429,7 +2410,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     # composed naming the branch, and main's push after the squash
     # skips the gate, measures nothing, and copies the branch's
     # record, every unit at the closures the squash lands.
-    landed = GitOps(root).head_sha()
+    landed = git.head_sha(root)
     run, logs = _completed_run(repo, landed, event="push")
     _require_lines(
         repo,
@@ -2476,11 +2457,9 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     skipped, is the failure this proof exists for.
     """
     import livery.toolroom.tools as toolroom
-    from livery.workshop._git_ops import GitOps
 
     _align_main(root)
-    git = GitOps(root)
-    before = git.head_sha()
+    before = git.head_sha(root)
     toolroom.git.opts(cwd=root)("switch", "-C", "chore/unproven-push", f"{before}~1")
     probe = root / "packages" / "loop-native" / "tests" / "test_unproven_push.py"
     probe.write_text(
@@ -2493,13 +2472,14 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
         "utf-8",
     )
     git.commit_all(
+        root,
         "chore(loop-native): a member-only change behind main\n\nCut from the"
-        " commit before main's tip, so its squash lands a tree no run proved."
+        " commit before main's tip, so its squash lands a tree no run proved.",
     )
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
-    landed = git.head_sha()
+    landed = git.head_sha(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run, logs = _completed_run(repo, landed, event="push")
@@ -2551,11 +2531,8 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     judge every member, and compose the stamp with main's verified
     tree, so main's push run after the squash skips too.
     """
-    from livery.workshop._git_ops import GitOps
-
-    git = GitOps(root)
     _fresh_branch(root, "chore/prose-leg")
-    stamp = git.head_sha()
+    stamp = git.head_sha(root)
     note = root / "notes" / "loop-prose.md"
     note.parent.mkdir(exist_ok=True)
     note.write_text(
@@ -2564,11 +2541,12 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         "utf-8",
     )
     git.commit_all(
+        root,
         "docs(notes): a note-only change for the prose leg\n\nOne markdown"
         " file under notes/, so the check leg finds nothing affected and"
-        " skips its gate."
+        " skips its gate.",
     )
-    head = git.head_sha()
+    head = git.head_sha(root)
     import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
@@ -2617,7 +2595,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         " check leg skipped, the union reused every unit from main's record"
         " and wrote the branch's, the stamp composed)"
     )
-    landed = GitOps(root).head_sha()
+    landed = git.head_sha(root)
     run, logs = _completed_run(repo, landed, event="push")
     _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
     print(f"  composed skip: proven on main's run {run.id} after the note-only squash")
@@ -2633,11 +2611,8 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     record with the one fresh unit, and the stamp composes with main's
     tree. Re-run on a pass-owned branch with main's tip as the stamp.
     """
-    from livery.workshop._git_ops import GitOps
-
-    git = GitOps(root)
     _fresh_branch(root, "chore/tests-leg")
-    stamp = git.head_sha()
+    stamp = git.head_sha(root)
     probe = root / "tests" / "test_tests_leg.py"
     probe.write_text(
         '"""A workspace-tests change: the loop proves the tests leg on it."""\n'
@@ -2649,11 +2624,12 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
         "utf-8",
     )
     git.commit_all(
+        root,
         "chore(tests): a workspace-tests change for the tests leg\n\nOne file"
         " under the root tests directory, so the check leg narrows to the"
-        " workspace tests and says so."
+        " workspace tests and says so.",
     )
-    head = git.head_sha()
+    head = git.head_sha(root)
     import livery.toolroom.tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
@@ -2705,7 +2681,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
         " check leg ran the workspace tests alone, the union reused every member"
         " from main's record, the stamp composed)"
     )
-    landed = GitOps(root).head_sha()
+    landed = git.head_sha(root)
     run, logs = _completed_run(repo, landed, event="push")
     _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
     print(f"  composed skip: proven on main's run {run.id} after the tests-leg squash")
@@ -3504,14 +3480,11 @@ if _WORKSHOP_TESTS.is_dir():
                 names = ", ".join(scrubbed)
                 print(f"  ci markers removed for the pass's children: {names}")
             if driver is not None:
-                from livery.workshop._git_ops import GitOps
-
-                git = GitOps(driver)
                 edit_environments(
                     identity_environment(
                         os.environ,
-                        name=git.config_get("user.name"),
-                        email=git.config_get("user.email"),
+                        name=git.config_get(driver, "user.name"),
+                        email=git.config_get(driver, "user.email"),
                     )
                 )
             _require_host_alias(forge)

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.workshop._categories import (
     WORKSPACE,
     CategoryError,
@@ -321,26 +322,19 @@ def test_ci_changes_is_the_runs_diff_against_its_base_or_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import ci_changes
-    from livery.workshop._git_ops import GitError
 
     broken: list[str] = []
 
-    class FakeGit:
-        def __init__(self, root: Path) -> None:
-            del root
+    def fetch(root: Path) -> None:
+        if broken:
+            raise git.GitError(broken[0])
 
-        def fetch(self) -> None:
-            if broken:
-                raise GitError(broken[0])
+    def changed_paths(root: Path, base: str) -> list[str]:
+        return [f"changed-against-{base}.md"]
 
-        def changed_paths(self, base: str) -> list[str]:
-            return [f"changed-against-{base}.md"]
-
-        def merge_base(self, base: str) -> str:
-            del base
-            return "b" * 40
-
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps", FakeGit)
+    monkeypatch.setattr(git, "fetch", fetch)
+    monkeypatch.setattr(git, "changed_paths", changed_paths)
+    monkeypatch.setattr(git, "merge_base", lambda root, base: "b" * 40)
     # The fallbacks first: at a desk, and outside a pull request's
     # narrowing, the run judges everything.
     monkeypatch.setattr("livery.workshop._state.run_context", lambda environ=None: None)
@@ -374,29 +368,22 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import _points
-    from livery.workshop._git_ops import GitError
 
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     changed: list[str] = ["notes/musings.md"]
     broken: list[str] = []
 
-    class FakeGit:
-        def __init__(self, root: Path) -> None:
-            del root
+    def fetch(root: Path) -> None:
+        if broken:
+            raise git.GitError(broken[0])
 
-        def fetch(self) -> None:
-            if broken:
-                raise GitError(broken[0])
+    def changed_paths(root: Path, base: str) -> list[str]:
+        del base
+        return list(changed)
 
-        def changed_paths(self, base: str) -> list[str]:
-            del base
-            return list(changed)
-
-        def merge_base(self, base: str) -> str:
-            del base
-            return "b" * 40
-
-    monkeypatch.setattr("livery.workshop._git_ops.GitOps", FakeGit)
+    monkeypatch.setattr(git, "fetch", fetch)
+    monkeypatch.setattr(git, "changed_paths", changed_paths)
+    monkeypatch.setattr(git, "merge_base", lambda root, base: "b" * 40)
     monkeypatch.setattr(
         "livery.workshop._state.run_context", lambda environ=None: object()
     )
