@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import affected_from_paths
 from livery.workshop._packages import discover_packages
 from livery.workshop._root_attribution import (
@@ -184,9 +183,7 @@ def test_an_unexplained_root_change_still_affects_everything(tmp_path: Path) -> 
         'members = ["packages/a", "packages/b"]\nline-length = 100\n'
     )
     paths = _paths(root, before)
-    scope = affected_from_paths(
-        root, discover_packages(root), paths, git=GitOps(root), before=before
-    )
+    scope = affected_from_paths(root, discover_packages(root), paths, before=before)
     assert scope is None
 
 
@@ -197,9 +194,7 @@ def test_adding_a_package_affects_that_package_alone(tmp_path: Path) -> None:
         'members = ["packages/a", "packages/extensions/ruff"]\nline-length = 88\n'
     )
     paths = _paths(root, before)
-    scope = affected_from_paths(
-        root, discover_packages(root), paths, git=GitOps(root), before=before
-    )
+    scope = affected_from_paths(root, discover_packages(root), paths, before=before)
     assert scope is not None
     assert [package.path for package in scope.packages] == ["packages/extensions/ruff"]
 
@@ -208,9 +203,7 @@ def test_the_render_receipt_alone_affects_no_package(tmp_path: Path) -> None:
     root, before = _workspace(tmp_path)
     (root / ".workshop-rendered").write_text('{"pyproject.toml": "abc"}\n')
     paths = _paths(root, before)
-    scope = affected_from_paths(
-        root, discover_packages(root), paths, git=GitOps(root), before=before
-    )
+    scope = affected_from_paths(root, discover_packages(root), paths, before=before)
     assert scope is not None and scope.packages == ()
 
 
@@ -226,9 +219,7 @@ def test_removing_a_package_affects_nothing_else(tmp_path: Path) -> None:
     _git(root, "rm", "-q", "-r", "packages/b")
     (root / "pyproject.toml").write_text('members = ["packages/a"]\nline-length = 88\n')
     paths = _paths(root, before)
-    delta = package_delta(GitOps(root), before, discover_packages(root))
+    delta = package_delta(root, before, discover_packages(root))
     assert delta.removed == (("packages/b", "acme-b"),)
-    scope = affected_from_paths(
-        root, discover_packages(root), paths, git=GitOps(root), before=before
-    )
+    scope = affected_from_paths(root, discover_packages(root), paths, before=before)
     assert scope is not None and scope.packages == ()

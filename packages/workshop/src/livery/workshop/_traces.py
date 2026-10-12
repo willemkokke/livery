@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from livery import git
 from livery.workshop._state import (
     LEG_VARIABLE,
     TRACE_NAMESPACE,
@@ -45,7 +46,6 @@ from livery.workshop._state import read as state_read
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
-    from livery.workshop._git_ops import GitOps
 
 #: The one file a leg puts on its trace ref: the trace as its writer
 #: wrote it, byte for byte, so nothing re-serialises a megabyte to
@@ -289,7 +289,7 @@ def push(
     return f"profile: {size // 1024} KiB pushed to {series.ref}"
 
 
-def about(root: Path, git: GitOps, *, run: RunContext | None = None) -> str:
+def about(root: Path, *, run: RunContext | None = None) -> str:
     """Record the commit this run ran on when the forge files it elsewhere; the line.
 
     A push run and a pull request run are filed under the commit they
@@ -311,7 +311,7 @@ def about(root: Path, git: GitOps, *, run: RunContext | None = None) -> str:
     found = run or run_context()
     if found is None:
         return ""
-    head = git.head_sha()
+    head = git.head_sha(root)
     if not head or head == found.head_sha:
         return ""  # the forge already files it here
     refused = ABOUT.series(head).put(
@@ -890,7 +890,7 @@ def newest_run(repo: Repository, head_sha: str) -> str:
     return str(runs[0].id) if runs else ""
 
 
-def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
+def drop_run(repo: Repository, root: Path, *, run_id: str = "") -> str:
     """Put the run of *git*'s head in this command's own drop box; the line.
 
     For a verb that followed a run to its end. With a trace being kept, the
@@ -915,11 +915,11 @@ def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
     if not keeping():
         return ""
     try:
-        head_sha = git.head_sha()
+        head_sha = git.head_sha(root)
         found = run_id or newest_run(repo, head_sha)
         if not found:
             return f"profile: the forge lists no run for {head_sha[:12]}"
-        made = assemble(git.root, repo, found, head_sha=head_sha, clock=0.0)
+        made = assemble(root, repo, found, head_sha=head_sha, clock=0.0)
         if not made.events:
             why = made.lines[0] if made.lines else f"run {found} assembled to nothing"
             return f"profile: {why}"
@@ -932,7 +932,7 @@ def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
 
 
 def drop_chain(
-    repo: Repository, git: GitOps, *, commit: str = "", depth: int = 2
+    repo: Repository, root: Path, *, commit: str = "", depth: int = 2
 ) -> str:
     """Put the chain from *commit* in this command's own drop box; the line.
 
@@ -954,8 +954,8 @@ def drop_chain(
     if not keeping():
         return ""
     try:
-        at = commit or git.head_sha()
-        walked = chain(git.root, repo, at, depth=depth, now=None)
+        at = commit or git.head_sha(root)
+        walked = chain(root, repo, at, depth=depth, now=None)
         if not walked.events:
             why = walked.lines[-1] if walked.lines else f"nothing about {at[:12]}"
             return f"profile: {why}"

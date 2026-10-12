@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from livery import git
 from livery.workshop import _state, _traces
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
@@ -820,9 +821,7 @@ def test_a_run_nobody_can_name_refuses_to_write_a_file(
 
 def _git_at(root: Path) -> Any:
     """A git handle answering for *root*, as the submit hands one over."""
-    from livery.workshop._git_ops import GitOps
-
-    return GitOps(root)
+    return root
 
 
 def test_a_trace_can_never_fail_the_command_it_watched(
@@ -1036,20 +1035,14 @@ def test_a_jobs_entries_and_its_residue_add_up_to_the_span_the_forge_reported(
     assert "setup 3.0s, teardown 5.0s" in made.lines[0]
 
 
-class _Head:
-    """A git stand-in answering one commit as its head.
+def _head(monkeypatch: pytest.MonkeyPatch, sha: str) -> None:
+    """Make every checkout's head *sha*.
 
     The fake forge mints shas of its own, and the commit a wave checks
-    out is one of those; a real checkout of it is nothing this test
-    needs.
+    out is one of those; a real checkout of it is nothing these tests
+    need.
     """
-
-    def __init__(self, root: Path, sha: str) -> None:
-        self.root = root
-        self._sha = sha
-
-    def head_sha(self) -> str:
-        return self._sha
+    monkeypatch.setattr(git, "head_sha", lambda root: sha)
 
 
 def _wave(repo: Any, commit: str) -> Any:
@@ -1113,14 +1106,14 @@ def test_a_commit_nobody_can_walk_from_is_a_root_and_a_loop_cannot_spin(
 def test_a_contract_that_wants_no_traces_records_nothing_about_a_run(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from typing import cast
 
     _contract(work, profile=False)
     _in_ci(monkeypatch, run="91", leg="publish")
     context = _state.RunContext(
         "github", "91", "workflow_dispatch", "refs/heads/main", "f" * 40
     )
-    assert _traces.about(work, cast(Any, _Head(work, "e" * 40)), run=context) == ""
+    _head(monkeypatch, "e" * 40)
+    assert _traces.about(work, run=context) == ""
     assert _state.read(work, _traces.ABOUT.series("e" * 40).ref).files is None
 
 
@@ -1132,16 +1125,16 @@ def test_a_run_the_forge_files_under_another_commit_records_what_it_ran_on(
     A push run and a pull request run are filed under the commit they
     ran on, and then there is nothing to write down.
     """
-    from typing import cast
-
     _in_ci(monkeypatch, run="91", leg="publish")
     ran_on, filed_under = "e" * 40, "f" * 40
     same = _state.RunContext("github", "91", "push", "refs/heads/main", ran_on)
-    assert _traces.about(work, cast(Any, _Head(work, ran_on)), run=same) == ""
+    _head(monkeypatch, ran_on)
+    assert _traces.about(work, run=same) == ""
     moved = _state.RunContext(
         "github", "91", "workflow_dispatch", "refs/heads/main", filed_under
     )
-    line = _traces.about(work, cast(Any, _Head(work, ran_on)), run=moved)
+    _head(monkeypatch, ran_on)
+    line = _traces.about(work, run=moved)
     assert "run 91 recorded as the run of eeeeeeeeeeee" in line
     rows = _traces.ABOUT.series(ran_on).rows(work)
     assert [row.data["run"] for row in rows.rows] == ["91"]
@@ -1184,9 +1177,8 @@ def test_a_release_walks_from_its_branch_into_the_wave_its_squash_dispatched(
     context = _state.RunContext(
         "github", str(wave.id), wave.event, "refs/heads/main", later
     )
-    assert "recorded as the run of" in _traces.about(
-        work, cast(Any, _Head(work, squash)), run=context
-    )
+    _head(monkeypatch, squash)
+    assert "recorded as the run of" in _traces.about(work, run=context)
 
     walked = _traces.chain(work, cast(Any, repo), branch, depth=1)
     assert [node.commit for node in walked.nodes] == [branch, squash]

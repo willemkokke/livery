@@ -992,11 +992,10 @@ def _push_about(root: Path) -> None:
     job because any job of the run can write it and the write merges;
     a run whose own head is the commit it checked out writes nothing.
     """
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._traces import about
 
     try:
-        line = about(root, GitOps(root))
+        line = about(root)
     except Exception as error:
         line = f"profile: what this run ran on was not recorded ({error})"
     if line:

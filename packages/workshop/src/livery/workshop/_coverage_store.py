@@ -43,7 +43,7 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._git_ops import GitError, GitOps
+from livery import git
 from livery.workshop._packages import Package
 from livery.workshop._state import (
     Keyed,
@@ -326,7 +326,7 @@ def closure(packages: tuple[Package, ...], package: Package) -> tuple[Package, .
     return tuple(seen[path] for path in sorted(seen))
 
 
-def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> str:
+def closure_id(root: Path, packages: tuple[Package, ...], package: Package) -> str:
     """The identity of *package*'s suite inputs at ``HEAD``.
 
     A digest over the tree ids of the package's closure directories
@@ -351,11 +351,11 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
     # One process whatever the closure holds: the ids of every required
     # directory and every pin come back together, and a pin the tree
     # lacks is simply absent.
-    ids = git.object_ids("HEAD", [*required, *ROOT_PINS])
+    ids = git.object_ids(root, "HEAD", [*required, *ROOT_PINS])
     parts: list[str] = []
     for path in required:
         if path not in ids:
-            raise GitError(f"HEAD holds no {path}")
+            raise git.GitError(f"HEAD holds no {path}")
         parts.append(f"{path}={ids[path]}")
     parts.extend(f"{pin}={ids[pin]}" for pin in ROOT_PINS if pin in ids)
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()

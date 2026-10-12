@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import livery.footman as footman
+from livery import git
 from livery.footman import Forward, doc, fail, step, task
+from livery.workshop import _stack
 
 if TYPE_CHECKING:
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._state import Fetched
 
 from livery.workshop._extensions import (
@@ -44,10 +45,10 @@ def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
     return lines
 
 
-def _foreign_authors(git: GitOps, since: str) -> set[str]:
+def _foreign_authors(root: Path, since: str) -> set[str]:
     """Author emails of the commits after *since* a rebase would rewrite; never mine."""
-    me = git._run("config", "user.email").strip()
-    authors = git._run("log", "--format=%ae", f"{since}..HEAD").strip()
+    me = git.run(root, "config", "user.email").strip()
+    authors = git.run(root, "log", "--format=%ae", f"{since}..HEAD").strip()
     return {email for email in authors.splitlines() if email and email != me}
 
 
@@ -56,7 +57,7 @@ def _rebase_args(onto: str, upstream: str) -> tuple[str, ...]:
     return ("--onto", onto, upstream) if upstream else (onto,)
 
 
-def resolve_receipts(git: GitOps) -> bool:
+def resolve_receipts(root: Path) -> bool:
     """Resolve a stopped merge or rebase whose every conflict is a render receipt.
 
     Returns whether it did. Each conflicted receipt file is merged key
@@ -74,24 +75,24 @@ def resolve_receipts(git: GitOps) -> bool:
         write_rendered,
     )
 
-    unmerged = git.unmerged_paths()
+    unmerged = git.unmerged_paths(root)
     if not unmerged or any(
         PurePosixPath(path).name != RENDERED_MANIFEST for path in unmerged
     ):
         return False
     for path in unmerged:
-        directory = (git.root / path).parent
+        directory = (root / path).parent
         merged = merge_receipts(
-            *(receipts_from(git.staged_text(path, stage)) for stage in (1, 2, 3)),
+            *(receipts_from(git.staged_text(root, path, stage)) for stage in (1, 2, 3)),
             beside=directory,
         )
         write_rendered(directory, merged)
-        git.add(path)
+        git.add(root, path)
         print(f"  {path}: the two sides' receipts merged, file by file")
     return True
 
 
-def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> tuple[str, str]:
+def _try_rebase(root: Path, onto: str, upstream: str = "") -> tuple[str, str]:
     """Attempt a rebase onto *onto*; how it ended and, when it failed, git's words.
 
     The outcome is ``clean``, ``conflict`` or ``failed``.
@@ -105,27 +106,25 @@ def _try_rebase(git: GitOps, onto: str, upstream: str = "") -> tuple[str, str]:
     refused or a hook, is ``failed`` with git's own words: each needs
     another next act, and only git's words say which.
     """
-    from livery.workshop._git_ops import GitError
-
     try:
-        git._run("rebase", *_rebase_args(onto, upstream))
+        git.run(root, "rebase", *_rebase_args(onto, upstream))
         return "clean", ""
-    except GitError as error:
+    except git.GitError as error:
         stopped = error
-    while resolve_receipts(git):
+    while resolve_receipts(root):
         try:
-            git._run("-c", "core.editor=true", "rebase", "--continue")
-        except GitError as error:
+            git.run(root, "-c", "core.editor=true", "rebase", "--continue")
+        except git.GitError as error:
             stopped = error
             continue
         return "clean", ""
-    unmerged = git.unmerged_paths()
-    git._run("rebase", "--abort")
+    unmerged = git.unmerged_paths(root)
+    git.run(root, "rebase", "--abort")
     return ("conflict", "") if unmerged else ("failed", str(stopped))
 
 
 def _rebase_step(
-    git: GitOps, onto: str, *, interactive: bool, upstream: str = ""
+    root: Path, onto: str, *, interactive: bool, upstream: str = ""
 ) -> bool:
     """One rebase of the current branch onto *onto*; whether it landed.
 
@@ -140,8 +139,8 @@ def _rebase_step(
     """
     import livery.footman as footman
 
-    branch = git.current_branch()
-    foreign = _foreign_authors(git, upstream or onto)
+    branch = git.current_branch(root)
+    foreign = _foreign_authors(root, upstream or onto)
     if foreign:
         listed = ", ".join(sorted(foreign))
         if not (
@@ -157,7 +156,7 @@ def _rebase_step(
                 f" Bring the base in by merge instead: `{footman.prog()} integrate`."
             )
             return False
-    outcome, said = _try_rebase(git, onto, upstream)
+    outcome, said = _try_rebase(root, onto, upstream)
     if outcome == "clean":
         print(f"  rebased {branch} onto {onto}")
         return True
@@ -176,10 +175,8 @@ def _rebase_step(
     ):
         import contextlib
 
-        from livery.workshop._git_ops import GitError
-
-        with contextlib.suppress(GitError):
-            git._run("rebase", *_rebase_args(onto, upstream))
+        with contextlib.suppress(git.GitError):
+            git.run(root, "rebase", *_rebase_args(onto, upstream))
         raise SystemExit(
             "  the rebase is started and waiting on you: resolve the"
             f" conflicts, `git rebase --continue`, then run `{footman.prog()} sync`"
@@ -194,7 +191,7 @@ def _rebase_step(
 
 
 def restack(
-    git: GitOps,
+    root: Path,
     branch: str,
     *,
     interactive: bool,
@@ -219,26 +216,26 @@ def restack(
     branch that is not stacked returns False. *stack* is the branch's
     stack when the caller read it already; read here otherwise.
     """
-    parent, tip = stack if stack is not None else git.stack(branch)
+    parent, tip = stack if stack is not None else _stack.stack(root, branch)
     if not parent:
         return False
-    if tip and not git.is_ancestor(tip, "HEAD"):
+    if tip and not git.is_ancestor(root, tip, "HEAD"):
         tip = ""  # moved by hand since: its history no longer holds the start
-    merged = parent not in git.remote_branches(parent)
+    merged = parent not in git.remote_branches(root, parent)
     onto = "origin/main" if merged else f"origin/{parent}"
     if not merged:
-        target = git.sha_of(onto)
-        if tip == target or (not tip and git.is_ancestor(target, "HEAD")):
+        target = git.sha_of(root, onto)
+        if tip == target or (not tip and git.is_ancestor(root, target, "HEAD")):
             if not tip:
-                git.record_stack(branch, parent, target)
+                _stack.record_stack(root, branch, parent, target)
             return False
-    if not _rebase_step(git, onto, interactive=interactive, upstream=tip):
+    if not _rebase_step(root, onto, interactive=interactive, upstream=tip):
         return None
     if merged:
-        git.forget_stack(branch)
+        _stack.forget_stack(root, branch)
         print(f"  {parent} has merged: {branch} stands on main now")
     else:
-        git.record_stack(branch, parent, git.sha_of(onto))
+        _stack.record_stack(root, branch, parent, git.sha_of(root, onto))
     return True
 
 
@@ -248,7 +245,7 @@ def _repository(root: Path) -> Any:
     return this_repository(root)
 
 
-def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
+def _leave_merged_reserved(root: Path, branch: str) -> None:
     """Step off a reserved branch whose pull request merged; else the engine owns it.
 
     The release act returns to the branch it started from, so a
@@ -265,7 +262,7 @@ def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
 
     try:
         repo = _repository(root)
-        pull = merged_pull_request(repo, git, branch)
+        pull = merged_pull_request(repo, root, branch)
     except Exception:
         repo = None
         pull = None
@@ -275,12 +272,12 @@ def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
             " request merges"
         )
         return
-    why = only_local_work(git, root, branch, merged_head=pull.head_sha)
+    why = only_local_work(root, branch, merged_head=pull.head_sha)
     if why:
         print(f"  {branch}: PR #{pull.number} merged, but the branch holds {why}; kept")
         return
     print(f"  {branch}: PR #{pull.number} merged; stepping off")
-    teardown_branch(repo, git, branch, "main")
+    teardown_branch(repo, root, branch, "main")
 
 
 def continue_on_moved_code(
@@ -380,9 +377,7 @@ def require_mounted(
     )
 
 
-def bring_current(
-    root: Path, git: GitOps, *, interactive: bool, fetched: bool = False
-) -> None:
+def bring_current(root: Path, *, interactive: bool, fetched: bool = False) -> None:
     """Bring the current checkout up to date; the one-stop's first act.
 
     ``main`` only ever fast-forwards. A reserved ``workflow/`` branch
@@ -400,28 +395,28 @@ def bring_current(
     offline and the remote-tracking refs the last fetch left stand.
     """
     _ = root
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     if not branch:
         print("  detached HEAD: nothing to bring current")
         return
-    if not git.has_remote("origin"):
+    if not git.has_remote(root, "origin"):
         print("  no origin remote: nothing to bring current")
         return
     if not fetched:
-        git.fetch()
+        git.fetch(root)
     if branch == "main":
-        ahead = git._run("rev-list", "--count", "origin/main..main").strip()
+        ahead = git.run(root, "rev-list", "--count", "origin/main..main").strip()
         if ahead != "0":
             print(
                 "  main has local commits origin does not: never rebased,"
                 " never merged here. Move them to a branch."
             )
             return
-        behind = git._run("rev-list", "--count", "main..origin/main").strip()
+        behind = git.run(root, "rev-list", "--count", "main..origin/main").strip()
         if behind == "0":
             return
         try:
-            git._run("merge", "--ff-only", "origin/main")
+            git.run(root, "merge", "--ff-only", "origin/main")
         except Exception as error:
             # The two states need different acts, so the refusal is
             # named with git's own reason, never read as "local
@@ -430,33 +425,33 @@ def bring_current(
             print(f"  {error}")
         return
     if branch.startswith("workflow/"):
-        _leave_merged_reserved(root, git, branch)
+        _leave_merged_reserved(root, branch)
         return
-    if not git.is_clean():
+    if not git.is_clean(root):
         print("  uncommitted changes: the branch stays where it is")
         return
     rebased = False
-    remote_exists = branch in git.remote_branches("")
+    remote_exists = branch in git.remote_branches(root, "")
     if remote_exists:
-        ahead_remote = git._run(
-            "rev-list", "--count", f"origin/{branch}..{branch}"
+        ahead_remote = git.run(
+            root, "rev-list", "--count", f"origin/{branch}..{branch}"
         ).strip()
-        behind_remote = git._run(
-            "rev-list", "--count", f"{branch}..origin/{branch}"
+        behind_remote = git.run(
+            root, "rev-list", "--count", f"{branch}..origin/{branch}"
         ).strip()
         if behind_remote != "0":
             if ahead_remote == "0":
-                git._run("merge", "--ff-only", f"origin/{branch}")
+                git.run(root, "merge", "--ff-only", f"origin/{branch}")
                 print(f"  fast-forwarded {branch} to origin/{branch}")
-            elif not _rebase_step(git, f"origin/{branch}", interactive=interactive):
+            elif not _rebase_step(root, f"origin/{branch}", interactive=interactive):
                 return
             else:
                 rebased = True
-    behind_base = git._run("rev-list", "--count", f"{branch}..origin/main").strip()
-    stack = git.stack(branch)
+    behind_base = git.run(root, "rev-list", "--count", f"{branch}..origin/main").strip()
+    stack = _stack.stack(root, branch)
     parent, _tip = stack
     if parent:
-        moved = restack(git, branch, interactive=interactive, stack=stack)
+        moved = restack(root, branch, interactive=interactive, stack=stack)
         if moved is None:
             return
         if moved:
@@ -467,13 +462,13 @@ def bring_current(
                 f" {parent} merges"
             )
     elif behind_base != "0":
-        if not _rebase_step(git, "origin/main", interactive=interactive):
+        if not _rebase_step(root, "origin/main", interactive=interactive):
             return
         rebased = True
     if rebased and remote_exists:
         # The same commits, rewritten: the lease guards anything a
         # colleague pushed since the fetch above.
-        git.push_force(branch)
+        git.push_force(root, branch)
         print(f"  origin/{branch} follows (leased force-push)")
 
 
@@ -593,8 +588,6 @@ def sync(
         Whether the local steps ran. A frozen sync of a current
         checkout returns False.
     """
-    from livery.workshop._git_ops import GitOps
-
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
@@ -610,7 +603,6 @@ def sync(
             )
     # Neither mode changes what a commit holds.
     local_only = locked or frozen
-    git = GitOps(root)
     # Each phase is a step: a receipt line with its duration, a row in
     # --json, a slice in a profile, and a unit parallel() could schedule
     # where two were independent. They are not yet: the fetch moves the
@@ -620,15 +612,15 @@ def sync(
     # both halves just wrote.
     fetched = False
     stored = False
-    if not local_only and not offline and git.has_commits():
+    if not local_only and not offline and git.has_commits(root):
         fetched = fetch_origin(root)()
         stored = True
-    if not local_only and not git.has_commits():
+    if not local_only and not git.has_commits(root):
         print("  no git history here: nothing to bring current")
     elif not local_only:
         # Offline, the remote-tracking refs the last fetch left are what
         # the checkout holds: the bring-current reads them and fetches nothing.
-        moved = bring_checkout_current(root, git, fetched=fetched or offline)()
+        moved = bring_checkout_current(root, fetched=fetched or offline)()
         if moved is not None:
             continue_on_moved_code(root, *moved)
     # Before anything renders or locks: a listed extension the mount
@@ -834,13 +826,11 @@ def _fetch_origin(root: Path) -> bool:
     return not fetched.why
 
 
-def _bring_checkout_current(
-    root: Path, git: GitOps, *, fetched: bool
-) -> tuple[str, str]:
+def _bring_checkout_current(root: Path, *, fetched: bool) -> tuple[str, str]:
     """Bring the checkout current; HEAD before and after, for the handoff."""
-    before = git.head_sha()
-    bring_current(root, git, interactive=footman.attended(), fetched=fetched)
-    return before, git.head_sha()
+    before = git.head_sha(root)
+    bring_current(root, interactive=footman.attended(), fetched=fetched)
+    return before, git.head_sha(root)
 
 
 def _fetch_store_mirror(root: Path) -> None:
@@ -982,41 +972,38 @@ def integrate() -> None:
     is merged key by key and committed; any other conflict stops with
     git's own words: resolve, commit, and re-run.
     """
-    from livery.workshop._git_ops import GitError, GitOps
-
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    git = GitOps(root)
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     if not branch or branch == "main" or branch.startswith("workflow/"):
         fail(
             "integrate brings origin/main into a feature branch, and"
             f" you are on {branch or '(detached)'!r}."
         )
-    if not git.is_clean():
+    if not git.is_clean(root):
         fail(
             "the working tree has uncommitted changes: commit them first,"
             " so the merge has one parent to speak for you."
         )
-    before = git.head_sha()
+    before = git.head_sha(root)
     try:
-        git.integrate("main")
-    except GitError as error:
-        if not resolve_receipts(git):
+        git.integrate(root, "main")
+    except git.GitError as error:
+        if not resolve_receipts(root):
             fail(
                 f"the merge stopped on conflicts:\n{error}\n  Resolve them,"
                 " `git commit`, and the branch is current; re-running any verb"
                 " is the recovery."
             )
-        git._run("-c", "core.editor=true", "commit", "--no-edit")
-    if git.head_sha() == before:
+        git.run(root, "-c", "core.editor=true", "commit", "--no-edit")
+    if git.head_sha(root) == before:
         print("  already current with origin/main")
         return
     print(f"  merged origin/main into {branch}")
     for line in sweep_residue(root):
         print(line)
-    match_lock(root, git, since=before)
+    match_lock(root, since=before)
 
 
 #: The files whose change across a HEAD move leaves the venv behind:
@@ -1024,7 +1011,7 @@ def integrate() -> None:
 LOCK_FILES = ("uv.lock", "pyproject.toml", "packages/*/pyproject.toml")
 
 
-def match_lock(root: Path, git: GitOps, *, since: str) -> None:
+def match_lock(root: Path, *, since: str) -> None:
     """Match the venv to the lock when HEAD moved across a change to it; say so.
 
     *since* is the commit HEAD moved from. A merge that changed the
@@ -1037,7 +1024,7 @@ def match_lock(root: Path, git: GitOps, *, since: str) -> None:
     from livery.workshop._reconcile import record_receipt
     from livery.workshop._uv import run_uv
 
-    changed = git.changed_between(since, "HEAD", LOCK_FILES)
+    changed = git.changed_between(root, since, "HEAD", LOCK_FILES)
     if not changed:
         return
     print(f"  matching the lock: the merge changed {', '.join(changed)}")

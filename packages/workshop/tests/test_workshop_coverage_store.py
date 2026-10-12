@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.workshop import _coverage_store, _state
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Edge, Package
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -249,19 +249,18 @@ def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
         kind="python",
         depends=(),
     )
-    with pytest.raises(GitError):
-        _coverage_store.closure_id(GitOps(work), (base, ghost), ghost)
+    with pytest.raises(git.GitError):
+        _coverage_store.closure_id(work, (base, ghost), ghost)
 
 
 def test_the_closure_id_answers_without_a_root_pin(work: Path) -> None:
     # A tree that holds no lock is not an error: the pin contributes
     # nothing and the rest of the identity still stands.
     base, top = _packages(work)
-    git = GitOps(work)
-    pinned = _coverage_store.closure_id(git, (base, top), base)
+    pinned = _coverage_store.closure_id(work, (base, top), base)
     _git(work, "rm", "-q", "uv.lock")
     _git(work, "commit", "-qm", "the lock goes")
-    unpinned = _coverage_store.closure_id(git, (base, top), base)
+    unpinned = _coverage_store.closure_id(work, (base, top), base)
     assert unpinned and unpinned != pinned
 
 
@@ -272,18 +271,14 @@ def test_the_closure_id_reads_the_tree_in_one_process(
     # processes on this workspace's own seven packages, and several times
     # that in wall clock on Windows. One `ls-tree` answers the closure and
     # the pins together, and nothing here may go back to a call per path.
+    from workshop_spawns import counting_spawns
+
+    del monkeypatch
     base, top = _packages(work)
-    calls: list[tuple[str, ...]] = []
-    original = GitOps._run
-
-    def counted(self: GitOps, *args: str) -> str:
-        calls.append(args)
-        return original(self, *args)
-
-    monkeypatch.setattr(GitOps, "_run", counted)
-    _coverage_store.closure_id(GitOps(work), (base, top), top)
-    assert len(calls) == 1, calls
-    assert calls[0][0] == "ls-tree"
+    with counting_spawns() as spawned:
+        _coverage_store.closure_id(work, (base, top), top)
+    assert spawned["git"] == 1, spawned
+    assert spawned["git ls-tree"] == 1
 
 
 # --- the identity -------------------------------------------------------------
@@ -291,11 +286,10 @@ def test_the_closure_id_reads_the_tree_in_one_process(
 
 def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> None:
     base, top = _packages(work)
-    git = GitOps(work)
     packages = (base, top)
     before = {
-        "base": _coverage_store.closure_id(git, packages, base),
-        "top": _coverage_store.closure_id(git, packages, top),
+        "base": _coverage_store.closure_id(work, packages, base),
+        "top": _coverage_store.closure_id(work, packages, top),
     }
     assert _coverage_store.closure(packages, top) == (base, top)
     assert _coverage_store.closure(packages, base) == (base,)
@@ -303,22 +297,22 @@ def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> Non
     (work / "packages" / "base" / "src" / "base" / "mod.py").write_text("a = 2\n")
     _git(work, "commit", "-qam", "base changes")
     after = {
-        "base": _coverage_store.closure_id(git, packages, base),
-        "top": _coverage_store.closure_id(git, packages, top),
+        "base": _coverage_store.closure_id(work, packages, base),
+        "top": _coverage_store.closure_id(work, packages, top),
     }
     assert after["base"] != before["base"] and after["top"] != before["top"]
     # A change inside the dependant leaves the dependency's identity alone.
     (work / "packages" / "top" / "src" / "top" / "mod.py").write_text("a = 3\n")
     _git(work, "commit", "-qam", "top changes")
     again = {
-        "base": _coverage_store.closure_id(git, packages, base),
-        "top": _coverage_store.closure_id(git, packages, top),
+        "base": _coverage_store.closure_id(work, packages, base),
+        "top": _coverage_store.closure_id(work, packages, top),
     }
     assert again["base"] == after["base"] and again["top"] != after["top"]
     # A pin change is a dependency change for every suite.
     (work / "uv.lock").write_text("version = 2\n")
     _git(work, "commit", "-qam", "lock moves")
-    pinned = _coverage_store.closure_id(git, packages, base)
+    pinned = _coverage_store.closure_id(work, packages, base)
     assert pinned != again["base"]
     # Files outside the closure are not the suite's to store.
     assert _coverage_store.in_closure(packages, top, "packages/base/src/base/mod.py")
@@ -411,9 +405,7 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
 # --- a row a write moves on from stays a day, refusals first -----------------
 
 
-def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(
-    work: Path,
-) -> None:
+def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(work: Path) -> None:
     down = _coverage_store.Record({}, failed=True, reason="remote down")
     why = _coverage_store.put_record(work, RUN, leg=LEG, fresh={}, held=down)
     assert why == (
@@ -609,24 +601,23 @@ def test_the_workspace_tests_are_a_unit_keyed_by_the_tree(work: Path) -> None:
     (work / "tests").mkdir()
     unit = _coverage_store.workspace_suite(work)
     assert unit is not None and unit.path == "tests" and unit.name == "workspace-tests"
-    git = GitOps(work)
     (work / "tests" / "test_all.py").write_text("def test_it():\n    pass\n")
     _git(work, "add", "tests")
     _git(work, "commit", "-qm", "workspace tests")
-    before = _coverage_store.closure_id(git, (base, top), unit)
+    before = _coverage_store.closure_id(work, (base, top), unit)
     # Prose leaves the key alone; a package or a pin moves it.
     (work / "notes").mkdir()
     (work / "notes" / "plan.md").write_text("# plan\n")
     _git(work, "add", "notes")
     _git(work, "commit", "-qm", "a note")
-    assert _coverage_store.closure_id(git, (base, top), unit) == before
+    assert _coverage_store.closure_id(work, (base, top), unit) == before
     (work / "packages" / "top" / "src" / "top" / "mod.py").write_text("a = 9\n")
     _git(work, "commit", "-qam", "top changes")
-    after = _coverage_store.closure_id(git, (base, top), unit)
+    after = _coverage_store.closure_id(work, (base, top), unit)
     assert after != before
     (work / "uv.lock").write_text("version = 3\n")
     _git(work, "commit", "-qam", "lock moves")
-    assert _coverage_store.closure_id(git, (base, top), unit) != after
+    assert _coverage_store.closure_id(work, (base, top), unit) != after
     # Any file is the unit's to store: its tests reach every package.
     assert _coverage_store.in_closure(
         (base, top), unit, "packages/base/src/base/mod.py"

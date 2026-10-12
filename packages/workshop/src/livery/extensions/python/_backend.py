@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import fail
 from livery.toolroom.tools import pytest
 from livery.workshop._contract import load_contract
@@ -33,7 +34,6 @@ from livery.workshop._state import RunContext, slug
 
 if TYPE_CHECKING:
     from livery.workshop._coverage_store import Record
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._kinds import Extractor
     from livery.workshop._registries import RegistryTarget
 
@@ -550,7 +550,6 @@ def store_suites(
 
     from livery.workshop._coverage_lines import pairs, read_parts
     from livery.workshop._coverage_store import LINES, Unit, closure_id
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._state import run_context
 
     leg = marker["leg"]
@@ -566,7 +565,6 @@ def store_suites(
             combined.update(piece)
         combined.write()
     run = run_context()
-    git = GitOps(root)
     measured: dict[str, Unit] = {}
     for package in suites_that_ran(marker, root, packages):
         measurer = LINES if measures_lines(package) else ARCS_MEASURER
@@ -591,9 +589,9 @@ def store_suites(
                 " outside CI nothing is stored"
             )
             continue
-        key = closure_id(git, packages, package)
+        key = closure_id(root, packages, package)
         measured[package.path] = Unit(
-            package.path, key, run.run_id, git.head_sha(), files, measurer=measurer
+            package.path, key, run.run_id, git.head_sha(root), files, measurer=measurer
         )
     (root / SUITES_DATA).unlink(missing_ok=True)
     if run is None:
@@ -649,7 +647,6 @@ def combine_leg(
             # package source: each unit the leg ran is put with no
             # lines, so the union finds what ran and judges nothing.
             from livery.workshop._coverage_store import Unit, closure_id
-            from livery.workshop._git_ops import GitOps
             from livery.workshop._state import run_context
 
             print(
@@ -659,13 +656,12 @@ def combine_leg(
             run = run_context()
             empty: dict[str, Unit] = {}
             if run is not None:
-                git = GitOps(root)
                 for unit in units_of(root, ()):
                     empty[unit.path] = Unit(
                         unit.path,
-                        closure_id(git, (), unit),
+                        closure_id(root, (), unit),
                         run.run_id,
-                        git.head_sha(),
+                        git.head_sha(root),
                         {},
                     )
             _put_leg(root, marker, empty, timing=timing)
@@ -783,7 +779,6 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         row_name,
         run_legs,
     )
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._state import run_context
     from livery.workshop._verified import (
         AFFECTED,
@@ -821,10 +816,9 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     scratch = root / COVERAGE_DATA
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir()
-    git = GitOps(root)
     units = units_of(root, packages)
-    keys = {unit.path: closure_id(git, packages, unit) for unit in units}
-    bases, target = _record_bases(root, git, run)
+    keys = {unit.path: closure_id(root, packages, unit) for unit in units}
+    bases, target = _record_bases(root, run)
     collected: list[Path] = []
     reused: list[Path] = []
     # The lines units, merged per package across the legs and the
@@ -911,6 +905,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                     else f"{base} none"
                 )
             else:
+                if leg.scope == ABSENT:
+                    # The leg did not run and no record of any base has
+                    # ever measured this suite on its platform: a package
+                    # born on this branch. Nothing stands in, the legs that
+                    # ran judge it, and the merge point measures it here.
+                    print(
+                        f"  coverage: leg {leg.label} has no record of"
+                        f" {suite.path} yet; the merge point measures it"
+                    )
+                    continue
                 fail(
                     f"leg {leg.label}: no record holds {suite.path} at closure"
                     f" {key[:12]} ({', '.join(states)}). A leg skips a suite"
@@ -975,7 +979,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     # Two runs of one branch overlap when a push follows a push: the
     # older run's gate job can finish last, and its rows would replace
     # the newer run's. Only the run of the branch's current head writes.
-    moved, head = _moved_on(git, run, target)
+    moved, head = _moved_on(root, run, target)
     if moved:
         print(
             f"  coverage record: {target}'s head moved on to {moved[:12]} since"
@@ -1032,27 +1036,23 @@ def _read_record(root: Path, held: dict[str, Record], base: str, label: str) -> 
     return held[base]
 
 
-def _moved_on(git: GitOps, run: RunContext, branch: str) -> tuple[str, str]:
+def _moved_on(root: Path, run: RunContext, branch: str) -> tuple[str, str]:
     """*branch*'s head on origin and this run's, when they differ; empty otherwise.
 
     This run's head is the pull request's on a pull request and the
     checkout on a push. Empty too when origin cannot be asked: an
     answer the run cannot get never withholds a write on its own.
     """
-    from livery.workshop._git_ops import GitError
-
     try:
-        head = run.head_sha if run.event == "pull_request" else git.head_sha()
-        git.fetch()
-        current = git.remote_head(branch)
-    except GitError:
+        head = run.head_sha if run.event == "pull_request" else git.head_sha(root)
+        git.fetch(root)
+        current = git.remote_head(root, branch)
+    except git.GitError:
         return "", ""
     return (current, head) if current and current != head else ("", "")
 
 
-def _record_bases(
-    root: Path, git: GitOps, run: RunContext
-) -> tuple[tuple[str, ...], str]:
+def _record_bases(root: Path, run: RunContext) -> tuple[tuple[str, ...], str]:
     """The records the union carries from, in order, and the one it writes.
 
     A pull request's run reads its branch's record before main's and
@@ -1068,7 +1068,7 @@ def _record_bases(
     from livery.workshop._verified import record, tree_id
 
     if run.event == "push":
-        row, why = record(root, tree_id(git))
+        row, why = record(root, tree_id(root))
         branch = row.branch if row is not None else ""
         if why:
             print(f"  coverage record: the verified row could not be read ({why})")

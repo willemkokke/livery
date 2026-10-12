@@ -20,9 +20,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
+from livery import git
 from livery.forge import ForgeError, Repository, Unsupported
-from livery.workshop._git_ops import GitOps
 
 #: Reserved workflow branches live under this prefix.
 WORKFLOW_PREFIX = "workflow/"
@@ -211,7 +212,7 @@ def blocker(sig: Signals) -> Blocker:
 
 
 def base_moved_in_paths(
-    git: GitOps, base: str, paths: tuple[str, ...], *, head: str = "HEAD"
+    root: Path, base: str, paths: tuple[str, ...], *, head: str = "HEAD"
 ) -> bool:
     """Whether ``origin/<base>`` carries commits *head* lacks touching *paths*.
 
@@ -223,20 +224,18 @@ def base_moved_in_paths(
     clone does not hold reads False: the release pull request's own
     freshness check is the guard that never guesses.
     """
-    from livery.workshop._git_ops import GitError
-
     if not paths:
         return False
     try:
-        out = git.log_paths(f"{head}..origin/{base}", paths)
-    except GitError:
+        out = git.log_paths(root, f"{head}..origin/{base}", paths)
+    except git.GitError:
         return False
     return bool(out)
 
 
 def gather(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     name: str,
     *,
     base: str = "main",
@@ -248,7 +247,7 @@ def gather(
     try:
         pr = repo.pr.find_by_head(branch, state="all")
         if pr is None:
-            head = git.any_head(branch)
+            head = git.any_head(root, branch)
             if head:
                 pr = repo.pr.find_by_head_sha(head)
         remote_branch = repo.branch_exists(branch)
@@ -290,7 +289,7 @@ def gather(
             ci_state = status.state
             if kind is WorkflowKind.RELEASE:
                 stale = base_moved_in_paths(
-                    git,
+                    root,
                     base,
                     tuple(f"packages/{m}" for m in members),
                     head=pr.head_sha or "HEAD",
@@ -351,7 +350,7 @@ def status_of(sig: Signals | None, name: str) -> WorkflowStatus:
     )
 
 
-def active_workflow_names(repo: Repository, git: GitOps) -> tuple[str, ...]:
+def active_workflow_names(repo: Repository, root: Path) -> tuple[str, ...]:
     """The distinct workflow names in play, local and remote united.
 
     The union, never local-else-remote: a colleague's live release
@@ -359,16 +358,16 @@ def active_workflow_names(repo: Repository, git: GitOps) -> tuple[str, ...]:
     hide it. The remote probe degrades to the local list when the
     forge is unreachable.
     """
-    local = set(git.local_branches(WORKFLOW_PREFIX))
+    local = set(git.local_branches(root, WORKFLOW_PREFIX))
     try:
-        remote = set(git.remote_branches(WORKFLOW_PREFIX))
+        remote = set(git.remote_branches(root, WORKFLOW_PREFIX))
     except Exception:
         remote = set()
     return tuple(sorted(b.removeprefix(WORKFLOW_PREFIX) for b in local | remote))
 
 
 def workflow_states(
-    repo: Repository, git: GitOps, *, base: str = "main"
+    repo: Repository, root: Path, *, base: str = "main"
 ) -> tuple[WorkflowStatus, ...]:
     """Every active workflow, each classified on its own signals.
 
@@ -376,8 +375,8 @@ def workflow_states(
     not a broken invariant. Releases sort first, then by name.
     """
     states = [
-        status_of(gather(repo, git, name, base=base), name)
-        for name in active_workflow_names(repo, git)
+        status_of(gather(repo, root, name, base=base), name)
+        for name in active_workflow_names(repo, root)
     ]
     states.sort(key=lambda wf: (wf.kind is not WorkflowKind.RELEASE, wf.name))
     return tuple(states)

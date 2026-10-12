@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import arming_reason, ci_automerge
 from livery.workshop._templates import new_package
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
 from workshop_composed import IDENTITY
-from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
+from workshop_seeds import Seeds, _seed_home, seed_copier, wire_pushes  # noqa: F401
 
 # Bound before the autouse no-op fixture patches the module attribute,
 # so the red-gate test can put the real gate back.
@@ -66,23 +66,12 @@ def _build(base: Path) -> None:
     _git(root, "push", "-u", "origin", "main")
 
 
-class _UpdateGit(GitOps):
-    """The engine rig's git: a push reaches the fake and settles."""
-
-    def __init__(self, root: Path, fake: FakeForge) -> None:
-        super().__init__(root)
-        self.fake = fake
-
-    def push(self, branch: str) -> None:
-        super().push(branch)
-        sha = self.fake.push("willemkokke", "livery", branch, sha=self.head_sha())
-        self.fake.settle("willemkokke", "livery", sha)
-
-
-def _fake_pair(root: Path) -> tuple[FakeForge, _UpdateGit]:
+def _fake_pair(monkeypatch: pytest.MonkeyPatch, root: Path) -> tuple[FakeForge, Path]:
+    """The fake forge; every push through livery.git reaches it and settles."""
     fake = FakeForge()
     fake.create_repo("willemkokke", "livery", private=True, description="t")
-    return fake, _UpdateGit(root, fake)
+    wire_pushes(monkeypatch, fake, "willemkokke", "livery")
+    return fake, root
 
 
 @pytest.fixture(autouse=True)
@@ -105,9 +94,7 @@ def _no_toolchain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("livery.workshop._update_driver.run_gate", lambda root: None)
 
 
-def _wire_drive(
-    monkeypatch: pytest.MonkeyPatch, root: Path, repo: object, git: GitOps
-) -> None:
+def _wire_drive(monkeypatch: pytest.MonkeyPatch, root: Path, repo: object) -> None:
     """Point ``_drive``'s discovery at the toy instance and its fake."""
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
@@ -115,7 +102,6 @@ def _wire_drive(
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
-    monkeypatch.setattr("livery.workshop._update_driver.GitOps", lambda _root: git)
     monkeypatch.setattr("livery.workshop._update_driver.BOUNDED_WAIT", 0.05)
     monkeypatch.setattr("livery.workshop._update_driver.WAIT_POLL", 0.01)
     # The fake's PRs are authored by its own user; the identity the
@@ -125,11 +111,11 @@ def _wire_drive(
     )
 
 
-def _open_release(fake: FakeForge, git: GitOps, root: Path) -> None:
+def _open_release(fake: FakeForge, root: Path) -> None:
     """A live release on the fake: branch pushed, PR open, unsettled."""
-    git.create_branch("workflow/release/forge")
+    git.create_branch(root, "workflow/release/forge")
     (root / "r.txt").write_text("r\n")
-    git.commit_all("feat: r")
+    git.commit_all(root, "feat: r")
     subprocess.run(
         ["git", "push", "origin", "workflow/release/forge"],
         cwd=root,
@@ -140,7 +126,7 @@ def _open_release(fake: FakeForge, git: GitOps, root: Path) -> None:
     fake.repository("willemkokke", "livery").pr.open(
         "workflow/release/forge", "main", "feat: r"
     )
-    git.switch("main")
+    git.switch(root, "main")
 
 
 def _finish_release(fake: FakeForge, root: Path) -> None:
@@ -161,17 +147,20 @@ def _finish_release(fake: FakeForge, root: Path) -> None:
 
 
 def test_a_current_instance_updates_to_nothing(
-    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    fake, root = _fake_pair(monkeypatch, root)
+    driver = UpdateDriver(root, "dependencies", armed=False)
     run_workflow(
-        driver, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
+        driver, fake.repository("willemkokke", "livery"), root, current_user="fake-user"
     )
     out = capsys.readouterr().out
     assert "nothing to submit" in out, _committed(root, out)
-    assert git.current_branch() == "main"  # the empty branch was tidied
+    assert git.current_branch(root) == "main"  # the empty branch was tidied
 
 
 def _committed(root: Path, out: str) -> str:
@@ -188,16 +177,17 @@ def _committed(root: Path, out: str) -> str:
 def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
     seeds: Seeds,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
-    git.create_branch("feat/elsewhere")
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    fake, root = _fake_pair(monkeypatch, root)
+    git.create_branch(root, "feat/elsewhere")
+    driver = UpdateDriver(root, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         run_workflow(
             driver,
             fake.repository("willemkokke", "livery"),
-            git,
+            root,
             current_user="fake-user",
         )
     assert "workflow/update/dependencies" in str(caught.value)
@@ -207,7 +197,7 @@ def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
         run_workflow(
             driver,
             fake.repository("willemkokke", "livery"),
-            git,
+            root,
             current_user="fake-user",
         )
     assert "uncommitted" in str(caught.value)
@@ -216,6 +206,7 @@ def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
 def test_a_changed_instance_submits_through_the_engine(
     seeds: Seeds,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = seeds("update", _build) / "ws"
     # Drift one rendered file; the update re-renders and submits.
@@ -223,10 +214,10 @@ def test_a_changed_instance_submits_through_the_engine(
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
-    fake, git = _fake_pair(root)
-    driver = UpdateDriver(root, git, "dependencies", armed=True)
+    fake, root = _fake_pair(monkeypatch, root)
+    driver = UpdateDriver(root, "dependencies", armed=True)
     run_workflow(
-        driver, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
+        driver, fake.repository("willemkokke", "livery"), root, current_user="fake-user"
     )
     pr = fake.repository("willemkokke", "livery").pr.get(1)
     assert pr is not None and pr.merged
@@ -244,9 +235,9 @@ def test_a_killed_update_resumes_without_redoing_the_work(
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
-    fake, git = _fake_pair(root)
+    fake, root = _fake_pair(monkeypatch, root)
     # The kill: prepare commits, then the process dies before submit.
-    dead = UpdateDriver(root, git, "dependencies", armed=False)
+    dead = UpdateDriver(root, "dependencies", armed=False)
     submission = dead.prepare()
     assert submission is not None  # committed, never submitted
     # The re-run resumes: the work function must not run again.
@@ -257,9 +248,9 @@ def test_a_killed_update_resumes_without_redoing_the_work(
         return []
 
     monkeypatch.setattr(UpdateDriver, "_work", _tracked_work)
-    again = UpdateDriver(root, git, "dependencies", armed=False)
+    again = UpdateDriver(root, "dependencies", armed=False)
     run_workflow(
-        again, fake.repository("willemkokke", "livery"), git, current_user="fake-user"
+        again, fake.repository("willemkokke", "livery"), root, current_user="fake-user"
     )
     assert reworked == []
     assert "resuming the committed update" in capsys.readouterr().out
@@ -269,13 +260,14 @@ def test_a_killed_update_resumes_without_redoing_the_work(
 def test_foreign_commits_on_the_update_branch_stop_with_options(
     seeds: Seeds,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
-    git.create_branch("workflow/update/dependencies")
+    _fake, root = _fake_pair(monkeypatch, root)
+    git.create_branch(root, "workflow/update/dependencies")
     (root / "hand.txt").write_text("hand-made\n")
-    git.commit_all("feat: someone's own work")
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    git.commit_all(root, "feat: someone's own work")
+    driver = UpdateDriver(root, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         driver.prepare()
     message = str(caught.value)
@@ -289,7 +281,7 @@ def test_named_dependencies_route_siblings_to_floors_only(
     from types import SimpleNamespace
 
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
+    _fake, root = _fake_pair(monkeypatch, root)
     invoked: list[tuple[str, ...]] = []
     floors: list[tuple[str, ...]] = []
     monkeypatch.setattr(
@@ -301,15 +293,15 @@ def test_named_dependencies_route_siblings_to_floors_only(
         lambda _root: (SimpleNamespace(name="livery-forge"),),
     )
 
-    def _floors(_root: Path, _git: GitOps, *, only: tuple[str, ...] = ()) -> list[str]:
+    def _floors(_root: Path, *, only: tuple[str, ...] = ()) -> list[str]:
         floors.append(only)
         return []
 
     monkeypatch.setattr("livery.workshop._update_driver.bump_floors", _floors)
     driver = UpdateDriver(
-        root, git, "dependencies", armed=False, names=("requests", "livery-forge")
+        root, "dependencies", armed=False, names=("requests", "livery-forge")
     )
-    git.create_branch(driver.branch)
+    git.create_branch(root, driver.branch)
     driver._work()
     # The external name moves through the lock; the sibling never
     # reaches it (the lock cannot move a source-resolved member), and
@@ -327,18 +319,18 @@ def test_the_parked_update_waits_and_the_bounded_wait_parks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
+    fake, root = _fake_pair(monkeypatch, root)
     repo = fake.repository("willemkokke", "livery")
-    _open_release(fake, git, root)
+    _open_release(fake, root)
     # Non-interactive bounded wait: parks with the teaching, True never.
-    cleared = wait_for_releases(repo, git, interactive=False, timeout=0.05, poll=0.01)
+    cleared = wait_for_releases(repo, root, interactive=False, timeout=0.05, poll=0.01)
     out = capsys.readouterr().out
     assert cleared is False
     assert "Release(s) in progress: release/forge" in out
     assert "finished automatically" in out and "Ctrl-C is safe" in out
     # The release completes (merge it); the wait clears.
     _finish_release(fake, root)
-    assert wait_for_releases(repo, git, interactive=False, timeout=1, poll=0.01)
+    assert wait_for_releases(repo, root, interactive=False, timeout=1, poll=0.01)
 
 
 def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
@@ -347,7 +339,7 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
     from types import SimpleNamespace
 
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
+    _fake, root = _fake_pair(monkeypatch, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
@@ -364,22 +356,22 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
     monkeypatch.setattr(
         "livery.workshop._update_driver.run_uv", lambda *args, root: None
     )
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    driver = UpdateDriver(root, "dependencies", armed=False)
     with pytest.raises(_FAILURES) as caught:
         driver.prepare()
     message = str(caught.value)
     assert "gate is red" in message and "resume" in message
     # Nothing was committed: the changes wait on the branch.
-    assert git.current_branch() == "workflow/update/dependencies"
-    assert git.subjects_ahead("main") == []
-    assert not git.is_clean()
+    assert git.current_branch(root) == "workflow/update/dependencies"
+    assert git.subjects_ahead(root, "main") == []
+    assert not git.is_clean(root)
 
 
 def test_sync_and_the_gate_run_between_the_work_and_the_commit(
     seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
+    _fake, root = _fake_pair(monkeypatch, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
@@ -393,20 +385,20 @@ def test_sync_and_the_gate_run_between_the_work_and_the_commit(
         "livery.workshop._update_driver.run_gate",
         lambda root: events.append("gate"),
     )
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    driver = UpdateDriver(root, "dependencies", armed=False)
     submission = driver.prepare()
     assert submission is not None
     # The lock moves, the environment installs it, the composed files
     # are written from it, and the gate judges the result.
     assert events == ["lock", "sync", "gate"]
-    assert git.subjects_ahead("main") == ["chore: update dependencies"]
+    assert git.subjects_ahead(root, "main") == ["chore: update dependencies"]
 
 
 def test_the_reexec_guard_prevents_a_loop(
     seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
+    _fake, root = _fake_pair(monkeypatch, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
@@ -425,7 +417,7 @@ def test_the_reexec_guard_prevents_a_loop(
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _no_spawn)
     # The guard: inside the re-executed child, never spawn again.
     monkeypatch.setenv("WORKSHOP_UPDATE_REEXEC", "1")
-    driver = UpdateDriver(root, git, "dependencies", armed=False)
+    driver = UpdateDriver(root, "dependencies", armed=False)
     assert driver.prepare() is not None
     assert spawned == []
 
@@ -434,7 +426,7 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
     seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = seeds("update", _build) / "ws"
-    _fake, git = _fake_pair(root)
+    _fake, root = _fake_pair(monkeypatch, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
@@ -452,7 +444,7 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
 
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _record)
     monkeypatch.delenv("WORKSHOP_UPDATE_REEXEC", raising=False)
-    driver = UpdateDriver(root, git, "dependencies", armed=True)
+    driver = UpdateDriver(root, "dependencies", armed=True)
     with pytest.raises(SystemExit) as caught:
         driver.prepare()
     assert caught.value.code == 7  # the child's verdict is the verdict
@@ -470,10 +462,10 @@ def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
     from livery.workshop._update_driver import _drive
 
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
+    fake, root = _fake_pair(monkeypatch, root)
     repo = fake.repository("willemkokke", "livery")
-    _wire_drive(monkeypatch, root, repo, git)
-    _open_release(fake, git, root)
+    _wire_drive(monkeypatch, root, repo)
+    _open_release(fake, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
@@ -495,17 +487,17 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     import livery.workshop._update_driver as ud
 
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
+    fake, root = _fake_pair(monkeypatch, root)
     repo = fake.repository("willemkokke", "livery")
-    _wire_drive(monkeypatch, root, repo, git)
-    _open_release(fake, git, root)
+    _wire_drive(monkeypatch, root, repo)
+    _open_release(fake, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     released = {"done": False}
 
-    def _floors(_root: Path, _git: GitOps, *, only: tuple[str, ...] = ()) -> list[str]:
+    def _floors(_root: Path, *, only: tuple[str, ...] = ()) -> list[str]:
         # Before the release lands there is nothing to raise; after it,
         # the fresh floor is a real tree change the re-run must commit.
         if not released["done"]:
@@ -518,7 +510,7 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
 
     def _finishing_wait(
         repo: Repository,
-        git: GitOps,
+        root: Path,
         *,
         interactive: bool,
         timeout: float = 1.0,
@@ -526,7 +518,9 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     ) -> bool:
         _finish_release(fake, root)
         released["done"] = True
-        return real_wait(repo, git, interactive=interactive, timeout=timeout, poll=poll)
+        return real_wait(
+            repo, root, interactive=interactive, timeout=timeout, poll=poll
+        )
 
     monkeypatch.setattr(
         "livery.workshop._update_driver.wait_for_releases", _finishing_wait
@@ -555,17 +549,15 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
 
 
 def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
-    seeds: Seeds,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._update_driver import _drive
 
     root = seeds("update", _build) / "ws"
-    fake, git = _fake_pair(root)
+    fake, root = _fake_pair(monkeypatch, root)
     repo = fake.repository("willemkokke", "livery")
-    _wire_drive(monkeypatch, root, repo, git)
-    _open_release(fake, git, root)
+    _wire_drive(monkeypatch, root, repo)
+    _open_release(fake, root)
     # A file the update writes back: the composed tasks.py, removed.
     (root / "tasks.py").unlink()
     _git(root, "commit", "-am", "chore: drift")

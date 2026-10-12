@@ -31,8 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import livery.footman as footman
+from livery import git
 from livery.forge import ForgeError, RateBudget, RateLimited, Repository
-from livery.workshop._git_ops import GitOps
 
 EXIT_CONFLICTS = 10
 EXIT_DISARMED = 11
@@ -299,7 +299,7 @@ def _head_of(repo: Repository, branch: str) -> str:
 
 
 def classify(
-    repo: Repository, branch: str, git: GitOps, *, grace_spent: bool = False
+    repo: Repository, branch: str, root: Path, *, grace_spent: bool = False
 ) -> Verdict:
     """One reading of the branch, named and coded.
 
@@ -311,7 +311,7 @@ def classify(
     """
     pr = repo.pr.find_by_head(branch, state="all")
     if pr is None:
-        sha = git.head_sha()
+        sha = git.head_sha(root)
         merged = repo.pr.find_by_head_sha(sha)
         if merged is not None and merged.merged:
             return Verdict("merged", 0, f"PR #{merged.number} merged", merged.number)
@@ -333,7 +333,7 @@ def classify(
     # commit the push replaced. In-flight until the forge catches
     # up; a branch checked out elsewhere (submit.merge from another
     # tree) matches by construction.
-    standing, head = git.position()
+    standing, head = git.position(root)
     local_head = head if standing == branch else ""
     if local_head and pr.head_sha != local_head:
         return Verdict(
@@ -353,8 +353,8 @@ def classify(
         # run at all, so its status stays none for as long as anyone
         # waits. The conflict probe decides at once instead: exit 10,
         # and the self-heal integrates and re-submits.
-        git.fetch()
-        if git.conflicts_with_base(pr.base_branch):
+        git.fetch(root)
+        if git.conflicts_with_base(root, pr.base_branch):
             return Verdict(
                 "conflicts",
                 EXIT_CONFLICTS,
@@ -370,8 +370,8 @@ def classify(
     # it is classified first; behind matters only once an armed pull
     # request has been given time, because without strict protection an
     # armed behind head still merges.
-    git.fetch()
-    if git.conflicts_with_base(pr.base_branch):
+    git.fetch(root)
+    if git.conflicts_with_base(root, pr.base_branch):
         return Verdict(
             "conflicts",
             EXIT_CONFLICTS,
@@ -387,7 +387,7 @@ def classify(
         current = repo.pr.get(pr.number)
         if current is not None and current.merged:
             return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
-        behind = git.behind_base(pr.base_branch)
+        behind = git.behind_base(root, pr.base_branch)
         if behind:
             # Without this, the parked answer says "merge it" while
             # the merge verb refuses behindness, and the two point at
@@ -411,7 +411,7 @@ def classify(
         )
     if not grace_spent:
         return Verdict("in-flight", 0, "green and armed; awaiting the merge", pr.number)
-    if git.behind_base(pr.base_branch) > 0:
+    if git.behind_base(root, pr.base_branch) > 0:
         return Verdict(
             "behind",
             EXIT_BEHIND,
@@ -422,7 +422,7 @@ def classify(
     current = repo.pr.get(pr.number)
     if current is not None and current.merged:
         return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
-    outstanding = _approvals_outstanding(repo, pr.number, pr.base_branch, git)
+    outstanding = _approvals_outstanding(repo, pr.number, pr.base_branch, root)
     if outstanding is not None:
         return Verdict("awaiting-approvals", 0, outstanding, pr.number)
     return Verdict(
@@ -435,7 +435,7 @@ def classify(
 
 
 def _approvals_outstanding(
-    repo: Repository, number: int, base: str, git: GitOps
+    repo: Repository, number: int, base: str, root: Path
 ) -> str | None:
     """The awaiting-approvals message, or None when reviews are not it.
 
@@ -463,7 +463,7 @@ def _approvals_outstanding(
     if needed <= 0:
         return None
     author = details.author if details is not None else ""
-    eligible = _eligible_reviewers(git, base) - approved - {author}
+    eligible = _eligible_reviewers(root, base) - approved - {author}
     who = ", ".join(sorted(eligible)) if eligible else "the declared owners"
     plural = "approval" if needed == 1 else "approvals"
     return (
@@ -473,20 +473,18 @@ def _approvals_outstanding(
     )
 
 
-def _eligible_reviewers(git: GitOps, base: str) -> set[str]:
+def _eligible_reviewers(root: Path, base: str) -> set[str]:
     """Owners of the touched paths, from the package declarations.
 
     Best effort: an unreadable workspace answers empty and the
     message falls back to naming the declared owners collectively.
     """
     try:
-        from livery.workshop._extensions import workspace_root
         from livery.workshop._governance import governance_entries
 
-        root = workspace_root()
-        if root is None:
-            return set()
-        touched = git._run("diff", "--name-only", f"origin/{base}...HEAD").splitlines()
+        touched = git.run(
+            root, "diff", "--name-only", f"origin/{base}...HEAD"
+        ).splitlines()
         owners: set[str] = set()
         for entry in governance_entries(root):
             prefix = entry.path.strip("/")
@@ -500,7 +498,7 @@ def _eligible_reviewers(git: GitOps, base: str) -> set[str]:
 def follow(
     repo: Repository,
     branch: str,
-    git: GitOps,
+    root: Path,
     *,
     interval: float = 15,
     timeout: float = 1800,
@@ -531,7 +529,7 @@ def follow(
     while True:
         try:
             grace_spent = green_polls >= _MERGE_GRACE_POLLS
-            verdict = classify(repo, branch, git, grace_spent=grace_spent)
+            verdict = classify(repo, branch, root, grace_spent=grace_spent)
             # Every job's move prints as it happens, before the verdict
             # line it may lead to: a red leg is named while the others
             # run, with its failure lines, so the fix starts at once.
@@ -569,7 +567,7 @@ def follow(
             if verdict.state != "closed" and confirm_streak < _CONFIRM_POLLS:
                 time.sleep(interval)
                 continue
-            _record_ending(repo, verdict, branch, git.root)
+            _record_ending(repo, verdict, branch, root)
             raise SystemExit(verdict.exit_code)
         confirm_streak = 0
         if verdict.state == "in-flight" and verdict.detail.startswith("green"):
@@ -578,7 +576,7 @@ def follow(
             green_polls = 0
         if time.monotonic() >= deadline:
             print(f"  still in flight after {timeout:.0f}s")
-            _record_ending(repo, verdict, branch, git.root)
+            _record_ending(repo, verdict, branch, root)
             raise SystemExit(EXIT_TIMEOUT)
         pace.rest(repo)
 

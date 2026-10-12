@@ -14,11 +14,11 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
+from livery import git
 from livery.footman import doc, fail, group, suggest
 from livery.forge import Forge, RepoConfig, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import workspace_root
-from livery.workshop._git_ops import GitOps
 from livery.workshop._workflow_state import (
     TEARDOWN_SAFE,
     WorkflowState,
@@ -36,11 +36,11 @@ def _root() -> Path:
     return root
 
 
-def _resolved() -> tuple[Repository, GitOps]:
+def _resolved() -> tuple[Repository, Path]:
     from livery.workshop._forge_lane import this_repository
 
     root = _root()
-    return this_repository(root), GitOps(root)
+    return this_repository(root), root
 
 
 def render_workflows(states: tuple[WorkflowStatus, ...]) -> None:
@@ -61,7 +61,7 @@ def render_workflows(states: tuple[WorkflowStatus, ...]) -> None:
 
 def abort_policy(
     repo: Repository,
-    git: GitOps,
+    root: Path,
     states: tuple[WorkflowStatus, ...],
     name: str,
     *,
@@ -137,18 +137,18 @@ def abort_policy(
 
     head_sha = ""
     try:
-        head_sha = git.any_head(target.branch)
+        head_sha = git.any_head(root, target.branch)
     except Exception:
         head_sha = ""
-    teardown_branch(repo, git, target.branch, base)
-    _reconcile_configuration(git, head_sha)
+    teardown_branch(repo, root, target.branch, base)
+    _reconcile_configuration(root, head_sha)
 
 
 def _active_names() -> tuple[str, ...]:
     """The in-flight workflow names, for completion; empty off a workspace."""
     try:
-        repo, git = _resolved()
-        return tuple(wf.name for wf in workflow_states(repo, git))
+        repo, root = _resolved()
+        return tuple(wf.name for wf in workflow_states(repo, root))
     except Exception:
         return ()
 
@@ -172,11 +172,11 @@ def workflow_abort(
     workflow that had moved settings forward cannot leave protection
     demanding contexts that never report again.
     """
-    repo, git = _resolved()
-    states = workflow_states(repo, git)
+    repo, root = _resolved()
+    states = workflow_states(repo, root)
     abort_policy(
         repo,
-        git,
+        root,
         states,
         name,
         force=force,
@@ -254,9 +254,7 @@ def contract_changed(root: Path) -> tuple[str, ...]:
     a squash as a root commit and lists every file, so the shell
     fetches two.
     """
-    from livery.workshop._git_ops import GitOps
-
-    changed = GitOps(root).files_in_commit("HEAD")
+    changed = git.files_in_commit(root, "HEAD")
     return tuple(
         path
         for path in changed
@@ -426,7 +424,7 @@ def _spawn_configure() -> footman.Result:
     )
 
 
-def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
+def _reconcile_configuration(root: Path, head_sha: str) -> None:
     """Re-assert configuration after an abort; silent when provably unneeded.
 
     The ladder: an offline diff of the governance paths from the
@@ -446,7 +444,8 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
             # touched governance may have applied protection before
             # its merge (the rename heal), and the abort leaves main
             # demanding the old contract.
-            changed = git._run(
+            changed = git.run(
+                root,
                 "diff",
                 "--name-only",
                 f"origin/main...{head_sha}",

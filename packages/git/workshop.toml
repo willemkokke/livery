@@ -1,0 +1,31 @@
+# Seeded from the package-python seeds at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+kind = "python"
+# The package-level extensions this package is composed of.
+extensions = ["python"]
+name = "livery-git"
+description = "Git access for the livery ecosystem: every call a function of the repository's root, through the tool store's pinned git."
+
+[[depends]]
+path = "packages/toolroom"
+kind = "runtime"
+floor = "0.11.0"
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage-floor = 100
+
+# Who reviews this package; the codeowners file renders from
+# these declarations.
+[owners]
+users = ["willemkokke"]
+
+[release]
+# The first release lands at the baseline, so a dev build before it
+# sorts above the floor the workshop names (0.0.0).
+baseline = "0.1.0"

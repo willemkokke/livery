@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import workshop_python_checks as fake_checks
+from livery import git
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
@@ -151,11 +152,9 @@ def test_check_affected_scopes_or_says_nothing(
     # built and never run (livery#291). Execution is the property.
     # A tree the record proves runs nothing: the reflex says so.
     from livery.workshop import _gate_record
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._verified import tree_id
 
-    git = GitOps(root)
-    _gate_record.remember(root, git, tree=tree_id(git), packages=None)
+    _gate_record.remember(root, tree=tree_id(root), packages=None)
     _quality.check()
     out = capsys.readouterr().out
     assert "proved: tree" in out and "nothing to run" in out
@@ -210,11 +209,9 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     )
     monkeypatch.setattr(fake_checks, "run_test", lambda **kwargs: ran.append("test"))
     from livery.workshop import _gate_record
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._verified import tree_id
 
-    git = GitOps(root)
-    _gate_record.remember(root, git, tree=tree_id(git), packages=None)
+    _gate_record.remember(root, tree=tree_id(root), packages=None)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
     monkeypatch.setenv("GITHUB_RUN_ID", "7")
@@ -230,9 +227,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
 
 
 def test_check_fix_rewrites_serially_then_judges_the_rest(
-    rig: tuple[FakeForge, Path],
-    monkeypatch: pytest.MonkeyPatch,
-    python_checks: object,
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, python_checks: object
 ) -> None:
     _, root = rig
     calls: list[tuple[str, object]] = []
@@ -273,10 +268,9 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     assert {name for name, _ in calls[3:]} == {"types", "test"}
     # The row names the tree the rewrite left, not the one the plan measured.
     from livery.workshop import _gate_record
-    from livery.workshop._git_ops import GitOps
 
     rows, why = _gate_record.rows(root)
-    assert why == "" and rows[0].tree == GitOps(root).working_tree_id()
+    assert why == "" and rows[0].tree == git.working_tree_id(root)
     calls.clear()
     # Without --fix nothing rewrites: format checks and lint reports.
     # The tree is proved by now, so the run is asked for in full.
@@ -405,7 +399,6 @@ def test_ci_run_spawns_the_jobs_entries(
 def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._git_ops import GitOps
     from livery.workshop._verdict import EXIT_PENDING
 
     fake, root = rig
@@ -435,7 +428,7 @@ def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
     # Settled, the point's own reader answers green for the dispatched
     # run, whatever commit it checked.
     fake.settle(OWNER, NAME, sha)
-    assert _ci_tasks.runs_status_flow(repo, GitOps(root), point="gate") == 0
+    assert _ci_tasks.runs_status_flow(repo, root, point="gate") == 0
     assert "green: 1 run(s) for the gate point" in capsys.readouterr().out
 
 

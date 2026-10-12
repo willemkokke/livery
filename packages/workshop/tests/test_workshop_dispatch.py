@@ -11,7 +11,6 @@ import pytest
 from livery.footman import Failed
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._publish import MANIFEST
 from livery.workshop._release_driver import await_wave, dispatch_flow
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -28,13 +27,13 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 @pytest.fixture
-def rig(seeds: Seeds) -> tuple[FakeForge, Path, GitOps]:
+def rig(seeds: Seeds) -> tuple[FakeForge, Path]:
     """A clone with main pushed, and a fake forge knowing the same main."""
     root = seeds("pushed", pushed) / "work"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME)
     fake.push(OWNER, NAME, "main", sha=_git(root, "rev-parse", "HEAD").strip())
-    return fake, root, GitOps(root)
+    return fake, root
 
 
 def _stamp(root: Path, fake: FakeForge, *members: tuple[str, str]) -> str:
@@ -63,37 +62,35 @@ def _stamp(root: Path, fake: FakeForge, *members: tuple[str, str]) -> str:
 # --- refusals, each green and named ----------------------------------------------
 
 
-def test_no_manifest_is_nothing_to_dispatch(
-    rig: tuple[FakeForge, Path, GitOps],
-) -> None:
-    fake, root, git = rig
+def test_no_manifest_is_nothing_to_dispatch(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
     repo = fake.repository(OWNER, NAME)
-    assert dispatch_flow(root, repo, git) == [
+    assert dispatch_flow(root, repo) == [
         "  no release manifest at origin/main: nothing to dispatch"
     ]
     assert repo.checks.runs(event="workflow_dispatch") == ()
 
 
 def test_every_receipt_cut_is_nothing_to_dispatch(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     _stamp(root, fake, ("thing", "1.2.0"))
     _git(root, "tag", "packages/thing/v1.2.0")
     _git(root, "push", "-q", "origin", "packages/thing/v1.2.0")
-    (line,) = dispatch_flow(root, fake.repository(OWNER, NAME), git)
+    (line,) = dispatch_flow(root, fake.repository(OWNER, NAME))
     assert line == "  every receipt is cut (packages/thing/v1.2.0): nothing to dispatch"
 
 
 def test_a_wave_in_flight_is_reported_not_redispatched(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     _stamp(root, fake, ("thing", "1.2.0"))
     repo = fake.repository(OWNER, NAME)
     repo.checks.dispatch("release.yml", ref="main")
     (live,) = repo.checks.runs(event="workflow_dispatch")
-    (line,) = dispatch_flow(root, repo, git)
+    (line,) = dispatch_flow(root, repo)
     assert line == (
         f"  the wave is already in flight: run {live.id};"
         " uncut so far: packages/thing/v1.2.0"
@@ -102,9 +99,9 @@ def test_a_wave_in_flight_is_reported_not_redispatched(
 
 
 def test_a_refused_dispatch_names_the_reason(
-    rig: tuple[FakeForge, Path, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     _stamp(root, fake, ("thing", "1.2.0"))
     repo = fake.repository(OWNER, NAME)
 
@@ -114,7 +111,7 @@ def test_a_refused_dispatch_names_the_reason(
     monkeypatch.setattr(repo.checks, "dispatch", refuse)
     # Red, never a printed line: the run's verdict is the exit code.
     with pytest.raises(_FAILURES) as caught:
-        list(dispatch_flow(root, repo, git))
+        list(dispatch_flow(root, repo))
     message = str(caught.value)
     assert "the forge refused the dispatch: dispatch needs actions: write" in message
     assert "uncut: packages/thing/v1.2.0" in message
@@ -122,13 +119,13 @@ def test_a_refused_dispatch_names_the_reason(
 
 
 def test_an_accepted_dispatch_without_a_run_times_out_naming_the_rerun(
-    rig: tuple[FakeForge, Path, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     _stamp(root, fake, ("thing", "1.2.0"))
     repo = fake.repository(OWNER, NAME)
     monkeypatch.setattr(repo.checks, "dispatch", lambda *a, **k: None)
-    (line,) = dispatch_flow(root, repo, git, timeout=0.2, interval=0.05)
+    (line,) = dispatch_flow(root, repo, timeout=0.2, interval=0.05)
     assert "no wave run appeared within 0s" in line
     assert "workflow.release.dispatch" in line
 
@@ -148,20 +145,20 @@ def _branch_stamp(root: Path, fake: FakeForge, branch: str) -> str:
 
 
 def test_a_dispatch_reads_the_base_whatever_branch_the_checkout_is_on(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     repo = fake.repository(OWNER, NAME)
     stamp = _branch_stamp(root, fake, "workflow/release/thing")
     # The refusal first: a branch's own stamp commit, named by hand, is
     # no release squash, and the wave would refuse it.
     with pytest.raises((SystemExit, Failed)) as caught:
-        dispatch_flow(root, repo, git, at=stamp)
+        dispatch_flow(root, repo, at=stamp)
     message = str(caught.value)
     assert f"{stamp[:12]} carries no Mined-At line" in message
     assert "origin/main holds no release squash" in message
     # Bare, the dispatch reads the base: no release has merged yet.
-    (line,) = dispatch_flow(root, repo, git)
+    (line,) = dispatch_flow(root, repo)
     assert line == "  no release manifest at origin/main: nothing to dispatch"
     assert repo.checks.runs(event="workflow_dispatch") == ()
     # The squash lands on main; the checkout is still on the branch, as
@@ -170,22 +167,22 @@ def test_a_dispatch_reads_the_base_whatever_branch_the_checkout_is_on(
     _git(root, "checkout", "-q", "main")
     squash = _stamp(root, fake, ("thing", "1.2.0"))
     _git(root, "checkout", "-q", "workflow/release/thing")
-    (line,) = dispatch_flow(root, repo, git, timeout=5, interval=0.05)
+    (line,) = dispatch_flow(root, repo, timeout=5, interval=0.05)
     assert line.startswith(f"  dispatched the wave at {squash[:12]}")
 
 
 def test_a_checkout_behind_the_base_dispatches_the_newer_squash(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     # A later release took over the older squash's receipts. A checkout
     # still standing on the older squash reads the base, so the wave
     # goes to the newer one, never to the squash it replaced.
-    fake, root, git = rig
+    fake, root = rig
     repo = fake.repository(OWNER, NAME)
     older = _stamp(root, fake, ("thing", "1.2.0"))
     newer = _stamp(root, fake, ("thing", "1.2.0"), ("other", "0.3.0"))
     _git(root, "reset", "-q", "--hard", older)
-    (line,) = dispatch_flow(root, repo, git, timeout=5, interval=0.05)
+    (line,) = dispatch_flow(root, repo, timeout=5, interval=0.05)
     assert line.startswith(f"  dispatched the wave at {newer[:12]}")
 
 
@@ -193,9 +190,9 @@ def test_a_checkout_behind_the_base_dispatches_the_newer_squash(
 
 
 def test_the_wave_is_dispatched_at_the_stamping_commit_and_confirmed(
-    rig: tuple[FakeForge, Path, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, root, git = rig
+    fake, root = rig
     stamping = _stamp(root, fake, ("thing", "1.2.0"), ("other", "0.3.0"))
     # An unrelated merge lands after the stamp: the wave still goes
     # to the stamping commit, never to HEAD.
@@ -215,7 +212,7 @@ def test_the_wave_is_dispatched_at_the_stamping_commit_and_confirmed(
         real(workflow, ref=ref, inputs=inputs)
 
     monkeypatch.setattr(repo.checks, "dispatch", record)
-    (line,) = dispatch_flow(root, repo, git, timeout=5, interval=0.05)
+    (line,) = dispatch_flow(root, repo, timeout=5, interval=0.05)
     assert asked == [("release.yml", "main", {"ref": stamping})]
     (run,) = repo.checks.runs(event="workflow_dispatch")
     assert line == (
@@ -223,17 +220,17 @@ def test_the_wave_is_dispatched_at_the_stamping_commit_and_confirmed(
         " uncut: packages/thing/v1.2.0, packages/other/v0.3.0"
     )
     # The second call reports the wave in flight, never a second one.
-    (again,) = dispatch_flow(root, repo, git)
+    (again,) = dispatch_flow(root, repo)
     assert again.startswith(f"  the wave is already in flight: run {run.id}")
 
 
 def test_an_older_squash_is_dispatched_at_itself_with_a_named_driver(
-    rig: tuple[FakeForge, Path, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The recovery for a squash a later release moved past: the wave
     # goes to the older squash, reads its manifest there, and names
     # the released workshop that drives it in place of the squash's.
-    fake, root, git = rig
+    fake, root = rig
     older = _stamp(root, fake, ("thing", "1.2.0"))
     _stamp(root, fake, ("other", "0.3.0"))
     repo = fake.repository(OWNER, NAME)
@@ -248,7 +245,7 @@ def test_an_older_squash_is_dispatched_at_itself_with_a_named_driver(
 
     monkeypatch.setattr(repo.checks, "dispatch", record)
     (line,) = dispatch_flow(
-        root, repo, git, at=older, workshop="0.2.0", timeout=5, interval=0.05
+        root, repo, at=older, workshop="0.2.0", timeout=5, interval=0.05
     )
     assert asked == [("release.yml", "main", {"ref": older, "workshop": "0.2.0"})]
     (run,) = repo.checks.runs(event="workflow_dispatch")
@@ -280,7 +277,7 @@ def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
 
 
 def test_await_wave_retries_an_unreadable_poll_and_names_a_spent_budget(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -288,7 +285,7 @@ def test_await_wave_retries_an_unreadable_poll_and_names_a_spent_budget(
     from livery.workshop import _release_driver
     from livery.workshop._verdict import Transient
 
-    fake, _root, _ = rig
+    fake, _root = rig
     repo = fake.repository(OWNER, NAME)
     repo.checks.dispatch("release.yml", ref="main")
     (run,) = repo.checks.runs(event="workflow_dispatch")
@@ -327,9 +324,9 @@ def test_await_wave_retries_an_unreadable_poll_and_names_a_spent_budget(
 
 
 def test_await_wave_answers_a_wave_newer_than_the_merge_or_none(
-    rig: tuple[FakeForge, Path, GitOps],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, root, _ = rig
+    fake, root = rig
     repo = fake.repository(OWNER, NAME)
     assert await_wave(repo, before=set(), timeout=0.2, interval=0.05) is None
     repo.checks.dispatch("release.yml", ref="main")

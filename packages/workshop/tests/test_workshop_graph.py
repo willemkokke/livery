@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import (
     affected_from_paths,
     affected_packages,
@@ -68,7 +67,7 @@ def test_the_closure_follows_reversed_edges(seeds: Seeds) -> None:
 def test_a_leaf_change_affects_only_its_closure(seeds: Seeds) -> None:
     root = _workspace(seeds)
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
 
@@ -87,35 +86,35 @@ def test_a_workspace_tests_change_affects_that_unit_alone(
     _git(root, "fetch", "origin")
     (root / "tests" / "test_all.py").unlink()
     (root / "tests").rmdir()
-    assert affected_packages(root, GitOps(root)) is None
+    assert affected_packages(root) is None
     assert "tests/: changed and gone; everything runs" in capsys.readouterr().out
     # A change under the directory affects the workspace tests alone,
     # answered as a package of their own.
     (root / "tests").mkdir()
     (root / "tests" / "test_all.py").write_text("def test_it():\n    assert True\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert [p.path for p in affected] == ["tests"]
     assert affected[0].name == "workspace-tests"
     # With a package change the closure comes first and the unit last.
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert [p.path for p in affected] == ["packages/mid", "packages/top", "tests"]
     # A root file beside it still widens to everything.
     (root / "tasks.py").write_text("# touched\n")
-    assert affected_packages(root, GitOps(root)) is None
+    assert affected_packages(root) is None
 
 
 def test_a_root_change_affects_everything(seeds: Seeds) -> None:
     root = _workspace(seeds)
     (root / "workshop.toml").write_text("[workspace]\n# touched\n")
-    assert affected_packages(root, GitOps(root)) is None
+    assert affected_packages(root) is None
 
 
 def test_no_change_affects_nothing(seeds: Seeds) -> None:
     root = _workspace(seeds)
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected == ()
 
 
@@ -124,7 +123,7 @@ def test_committed_and_uncommitted_changes_both_count(seeds: Seeds) -> None:
     (root / "packages" / "aside" / "thing.py").write_text("x = 3\n")
     _git(root, "commit", "-am", "feat: aside moves")
     (root / "packages" / "core" / "thing.py").write_text("x = 4\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert {p.path for p in affected} == {
         "packages/aside",
@@ -146,7 +145,7 @@ def test_a_prose_only_change_affects_nothing(seeds: Seeds) -> None:
     (root / "README.md").write_text("# the readme\n")
     (root / "packages" / "core" / "docs").mkdir(parents=True)
     (root / "packages" / "core" / "docs" / "index.md").write_text("# core\n")
-    assert affected_packages(root, GitOps(root)) == ()
+    assert affected_packages(root) == ()
     assert is_prose("notes/anything.txt") and is_prose("packages/core/README.md")
     assert not is_prose("packages/core/thing.py") and not is_prose("tests/notes.py")
 
@@ -158,11 +157,11 @@ def test_a_mixed_change_narrows_to_its_packages_and_a_root_file_still_widens(
     (root / "notes").mkdir()
     (root / "notes" / "plan.md").write_text("# a plan\n")
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
     (root / "tasks.py").write_text("# touched\n")
-    assert affected_packages(root, GitOps(root)) is None
+    assert affected_packages(root) is None
 
 
 # --- the site's own files affect no package ------------------------------------
@@ -177,7 +176,7 @@ def test_a_site_only_change_affects_nothing(
 
     root = _workspace(seeds)
     (root / "pyproject.toml").write_text("[project]\nname = 'x'\n")
-    assert affected_packages(root, GitOps(root)) is None
+    assert affected_packages(root) is None
     assert "pyproject.toml: outside the packages" in capsys.readouterr().out
     (root / "pyproject.toml").unlink()
     # The site's configuration and the root docs tree reach no gate:
@@ -185,7 +184,7 @@ def test_a_site_only_change_affects_nothing(
     (root / "zensical.toml").write_text("site_name = 'x'\n")
     (root / "docs" / "assets").mkdir(parents=True)
     (root / "docs" / "assets" / "logo.svg").write_text("<svg/>\n")
-    assert affected_packages(root, GitOps(root)) == ()
+    assert affected_packages(root) == ()
     assert is_site("zensical.toml") and is_site("docs/assets/logo.svg")
     # A package's own docs file is the package's; the workspace tests
     # and a nested zensical.toml are not the site's.
@@ -194,7 +193,7 @@ def test_a_site_only_change_affects_nothing(
     # Beside a package change the site files change nothing: the
     # legs narrow to the package.
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
-    affected = affected_packages(root, GitOps(root))
+    affected = affected_packages(root)
     assert affected is not None
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
 

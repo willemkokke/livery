@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import livery.footman as footman
+from livery import git
 from livery.footman import fail
 from livery.workshop import _lifecycle, _release_notes
-from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
 from livery.workshop._update import latest_released
@@ -80,7 +80,7 @@ def semver_to_pep440(semver: str) -> str:
     return f"{base}.dev{distance}+{tail}"
 
 
-def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
+def describe_distance(root: Path, package: Package) -> tuple[int, str]:
     """Commits since *package*'s last release tag, and the short sha.
 
     ``(0, sha)`` on the tag itself; with no tag at all, the whole
@@ -88,10 +88,10 @@ def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
     not the content check (that is the unchanged refusal).
     """
     try:
-        described = git._run(
-            "describe", "--tags", "--long", "--match", f"{package.path}/v*"
+        described = git.run(
+            root, "describe", "--tags", "--long", "--match", f"{package.path}/v*"
         ).strip()
-    except GitError:
+    except git.GitError:
         # A package before its first release has no tag to describe;
         # git refuses rather than answering empty, and the whole
         # history's count below is the honest age.
@@ -100,12 +100,12 @@ def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
         parts = described.rsplit("-", 2)
         if len(parts) == 3:
             return int(parts[1]), parts[2].lstrip("g")
-    count = git._run("rev-list", "--count", "HEAD").strip()
-    sha = git._run("rev-parse", "--short", "HEAD").strip()
+    count = git.run(root, "rev-list", "--count", "HEAD").strip()
+    sha = git.run(root, "rev-parse", "--short", "HEAD").strip()
     return (int(count) if count.isdigit() else 0), (sha or "0000000")
 
 
-def unchanged_since_release(root: Path, git: GitOps, package: Package) -> str:
+def unchanged_since_release(root: Path, package: Package) -> str:
     """The released version nothing unreleased has touched, or empty.
 
     Content, not position, judged against the release tag: HEAD can
@@ -113,12 +113,12 @@ def unchanged_since_release(root: Path, git: GitOps, package: Package) -> str:
     the derivation then answers the released version back. Empty for a
     package with unreleased changes, or one with no release yet.
     """
-    released = latest_released(git.tags()).get(package.path, "")
+    released = latest_released(git.tags(root)).get(package.path, "")
     derived = derive_version(root, package, released=released)
     return released if released and derived == released else ""
 
 
-def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -> str:
+def dev_version(root: Path, package: Package, *, stamp: str = "") -> str:
     """Derive *package*'s dev version, refusing an unchanged package.
 
     The refusal is content, not position, and judged against the
@@ -139,7 +139,7 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
     leading zero, so a short sha such as ``0442877`` would read back
     as another commit's.
     """
-    released = unchanged_since_release(root, git, package)
+    released = unchanged_since_release(root, package)
     derived = derive_version(root, package)
     if released:
         fail(
@@ -149,13 +149,13 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
             f" it. Pin the released {released} instead, or drop"
             f" {package.member} from the set."
         )
-    distance, sha = describe_distance(git, package)
+    distance, sha = describe_distance(root, package)
     when = stamp or datetime.now(UTC).strftime("%Y%m%d")
     version = (
-        f"{derived}-dev.{sanitise_branch(git.current_branch())}.{distance}"
+        f"{derived}-dev.{sanitise_branch(git.current_branch(root))}.{distance}"
         f"+g{sha}.{when}"
     )
-    if not git.is_clean():
+    if not git.is_clean(root):
         version += ".dirty"
     return version
 
@@ -201,7 +201,6 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
 
 def dev_release(
     root: Path,
-    git: GitOps,
     members: tuple[Package, ...],
     *,
     local: bool = False,
@@ -219,10 +218,10 @@ def dev_release(
     ``--dry-run`` as well as the terminal, so silence never publishes
     under any of them.
     """
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     index = os.environ.get(INDEX_VAR, "")
     plans = tuple(
-        DevPlan(package=package, version=dev_version(root, git, package))
+        DevPlan(package=package, version=dev_version(root, package))
         for package in members
     )
     publishing = not local and bool(index)

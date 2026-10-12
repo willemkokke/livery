@@ -222,7 +222,7 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
     monkeypatch.setattr(
         "livery.workshop._publish.discover_release",
-        lambda root, git, ref: ((package, "0.1.0"),),
+        lambda root, ref: ((package, "0.1.0"),),
     )
     monkeypatch.chdir(tmp_path)
     ctx = SimpleNamespace(env={})
@@ -310,7 +310,7 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
     monkeypatch.setattr(
         "livery.workshop._publish.discover_release",
-        lambda root, git, ref: (
+        lambda root, ref: (
             (members["geometry"], "0.1.0"),
             (members["ext"], "0.2.0"),
         ),

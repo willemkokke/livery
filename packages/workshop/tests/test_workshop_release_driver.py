@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._pythons import scripts_dir
@@ -39,6 +39,7 @@ from workshop_seeds import (  # noqa: F401
     fake_notes,
     member,
     seed_copier,
+    wire_pushes,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -71,27 +72,14 @@ def _seed(base: Path) -> None:
 
 
 @pytest.fixture
-def workspace(
-    seeds: Seeds, tmp_path: Path, notes: FakeNotes
-) -> tuple[FakeForge, GitOps, Path]:
+def workspace(seeds: Seeds, tmp_path: Path, notes: FakeNotes) -> tuple[FakeForge, Path]:
     # The stand-in provider writes each member's entry, as a listed
     # release-notes extension would.
     del notes
     root = seeds("release-driver", _seed) / "ws"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
-    return fake, GitOps(root), root
-
-
-class _RigGit(GitOps):
-    def __init__(self, root: Path, fake: FakeForge) -> None:
-        super().__init__(root)
-        self.fake = fake
-
-    def push(self, branch: str) -> None:
-        super().push(branch)
-        sha = self.fake.push(OWNER, NAME, branch, sha=self.head_sha())
-        self.fake.settle(OWNER, NAME, sha)
+    return fake, root
 
 
 def _grow(root: Path, name: str, message: str) -> None:
@@ -102,9 +90,9 @@ def _grow(root: Path, name: str, message: str) -> None:
 
 
 def test_an_unchanged_member_refuses_before_the_branch_exists(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
-    _fake, git, root = workspace
+    _fake, root = workspace
     members = resolve_set(root, ("core", "tool"))
     _grow(root, "core", "feat: core grows (#1)")
     with pytest.raises(_FAILURES) as caught:
@@ -112,13 +100,11 @@ def test_an_unchanged_member_refuses_before_the_branch_exists(
     message = str(caught.value)
     assert "tool" in message and "drop them from the set" in message
     # Nothing to undo, structurally: no workflow branch was ever cut.
-    assert git.local_branches("workflow/") == ()
+    assert git.local_branches(root, "workflow/") == ()
 
 
-def test_resolve_set_teaches_the_members(
-    workspace: tuple[FakeForge, GitOps, Path],
-) -> None:
-    _fake, _git_seam, root = workspace
+def test_resolve_set_teaches_the_members(workspace: tuple[FakeForge, Path]) -> None:
+    _fake, root = workspace
     with pytest.raises(_FAILURES) as caught:
         resolve_set(root, ("ghost",))
     assert "packages/core" in str(caught.value)
@@ -128,18 +114,18 @@ def test_resolve_set_teaches_the_members(
 
 
 def test_order_topologically_puts_dependencies_first(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     ordered = order_topologically((packages["tool"], packages["core"]))
     assert [p.directory.name for p in ordered] == ["core", "tool"]
 
 
 def test_floors_rise_within_the_set_in_both_homes(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     plans = (
         MemberPlan(packages["core"], "0.3.0"),
@@ -156,9 +142,9 @@ def test_floors_rise_within_the_set_in_both_homes(
 
 
 def test_rollback_restores_exactly_what_prepare_writes(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
-    _fake, git, root = workspace
+    _fake, root = workspace
     members = resolve_set(root, ("core", "tool"))
     before = {
         path: path.read_text()
@@ -179,15 +165,15 @@ def test_rollback_restores_exactly_what_prepare_writes(
     rollback_prepare(root, members)
     after = {path: path.read_text() for path in before}
     assert after == before
-    assert git.is_clean()
+    assert git.is_clean(root)
 
 
 def test_rollback_restores_the_version_in_a_roots_init(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
     # A root keeps __version__ in its __init__.py; the rollback restores
     # what the stamper wrote there.
-    _fake, git, root = workspace
+    _fake, root = workspace
     init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
     members = resolve_set(root, ("core",))
     from livery.workshop._release import prepare_release
@@ -196,17 +182,17 @@ def test_rollback_restores_the_version_in_a_roots_init(
     assert '__version__ = "9.9.9"' in init.read_text()
     rollback_prepare(root, members)
     assert '__version__ = "0.2.0"' in init.read_text()
-    assert git.is_clean()
+    assert git.is_clean(root)
 
 
 def test_the_floor_leg_follows_prove_floors_package_over_workspace(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop._release_driver import proves_floors, validate_member
 
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     core = resolve_set(root, ("core",))[0]
     ran: list[str] = []
 
@@ -245,40 +231,40 @@ def test_the_floor_leg_follows_prove_floors_package_over_workspace(
 
 
 def test_the_base_gate_refuses_red_and_teaches(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
-    fake, git, _root_dir = workspace
-    sha = git.remote_head("main")
+    fake, root = workspace
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", outcome="failure", sha=sha)
     fake.settle(OWNER, NAME, sha)
     repo = fake.repository(OWNER, NAME)
     with pytest.raises(_FAILURES) as caught:
-        require_verified_base(repo, git, "main")
+        require_verified_base(repo, root, "main")
     message = str(caught.value)
     assert "red" in message and "force-unverified-base" in message
     # And force is the taught override, skipping the wait entirely.
-    require_verified_base(repo, git, "main", force=True)
+    require_verified_base(repo, root, "main", force=True)
 
 
 def test_the_base_gate_fails_open_when_the_forge_is_unreachable(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, git, _root_dir = workspace
+    fake, root = workspace
     repo = fake.repository(OWNER, NAME)
 
     def _down(sha: str):
         raise RuntimeError("down")
 
     monkeypatch.setattr(repo.checks, "status", _down)
-    require_verified_base(repo, git, "main")  # returns; the engine's story
+    require_verified_base(repo, root, "main")  # returns; the engine's story
 
 
 def test_local_release_reports_builds_and_restores(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _fake, git, root = workspace
+    _fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     validated: list[str] = []
@@ -287,25 +273,24 @@ def test_local_release_reports_builds_and_restores(
         lambda _root, plan, dirs: validated.append(plan.package.name),
     )
     monkeypatch.setattr(
-        "livery.workshop._lifecycle.build",
-        lambda package, root, **kw: None,
+        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
     )
     members = resolve_set(root, ("core", "tool"))
     local_release(root, members)
     out = capsys.readouterr().out
     assert "would release: livery-core v0.3.0, livery-tool v0.3.0" in out
     assert validated == ["livery-core", "livery-tool"]
-    assert git.is_clean()  # the stamps rolled back
+    assert git.is_clean(root)  # the stamps rolled back
 
 
 def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The fallback first: an origin this checkout cannot reach leaves
     # the derivation to its own tags, and says so.
-    _fake, git, root = workspace
+    _fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _git(root, "push", "origin", "main")
     monkeypatch.setattr(
@@ -313,8 +298,7 @@ def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
         lambda _root, plan, dirs: None,
     )
     monkeypatch.setattr(
-        "livery.workshop._lifecycle.build",
-        lambda package, root, **kw: None,
+        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
     )
     origin = subprocess.run(
         ["git", "remote", "get-url", "origin"],
@@ -337,18 +321,18 @@ def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
     _git(other, "push", "origin", "packages/core/v0.3.0")
     with pytest.raises(_FAILURES, match=r"nothing unreleased touches: core\."):
         local_release(root, resolve_set(root, ("core",)))
-    assert git.is_clean()
+    assert git.is_clean(root)
 
 
 def test_a_failing_member_rolls_the_whole_prepare_back(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
 
@@ -360,27 +344,26 @@ def test_a_failing_member_rolls_the_whole_prepare_back(
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),
-        rig,
         resolve_set(root, ("core", "tool")),
         armed=False,
     )
     with pytest.raises(_FAILURES):
         driver.prepare()
     # The base is restored exactly: clean tree, on main, no branch.
-    assert rig.current_branch() == "main"
-    assert rig.is_clean()
-    assert not rig.local_branch_exists(driver.branch)
+    assert git.current_branch(root) == "main"
+    assert git.is_clean(root)
+    assert not git.local_branch_exists(root, driver.branch)
 
 
 def test_the_driver_prepares_commits_and_the_engine_lands_it(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -389,41 +372,41 @@ def test_the_driver_prepares_commits_and_the_engine_lands_it(
     )
     members = resolve_set(root, ("core", "tool"))
     driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+        root, fake.repository(OWNER, NAME), members, armed=True, wave_timeout=0
     )
-    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    run_workflow(driver, fake.repository(OWNER, NAME), root, current_user="fake-user")
     pr = fake.repository(OWNER, NAME).pr.get(1)
     assert pr is not None and pr.merged
     assert pr.title == "chore(release): released livery-core v0.3.0, livery-tool v0.3.0"
     assert "- **livery-core** v0.3.0" in pr.body
     # The act returned to main and dropped its local copy of the
     # reserved branch; origin's copy under the pull request holds it.
-    assert rig.current_branch() == "main"
-    assert not rig.local_branch_exists(driver.branch)
-    subjects = rig.log_paths(f"origin/main..origin/{driver.branch}", (".",))
+    assert git.current_branch(root) == "main"
+    assert not git.local_branch_exists(root, driver.branch)
+    subjects = git.log_paths(root, f"origin/main..origin/{driver.branch}", (".",))
     assert subjects == (
         "chore(release): livery-tool v0.3.0",
         "chore(release): livery-core v0.3.0",
     )
-    tool_pyproject = rig.file_at(
-        f"origin/{driver.branch}", "packages/tool/pyproject.toml"
+    tool_pyproject = git.file_at(
+        root, f"origin/{driver.branch}", "packages/tool/pyproject.toml"
     )
     assert '"livery-core>=0.3.0"' in tool_pyproject
 
 
 def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """From main: the pull request to its squash, then the wave to its verdict."""
     from types import SimpleNamespace
 
     from livery.workshop import _release_driver, _workflow_engine
 
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -454,12 +437,12 @@ def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
     monkeypatch.setattr("livery.workshop._ci_tasks.follow_run", watching)
     members = resolve_set(root, ("core",))
     driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=90
+        root, fake.repository(OWNER, NAME), members, armed=True, wave_timeout=90
     )
-    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    run_workflow(driver, fake.repository(OWNER, NAME), root, current_user="fake-user")
     assert followed == [(driver.branch, 90.0)]
     assert watched == [("release", 7)]
-    assert rig.current_branch() == "main"
+    assert git.current_branch(root) == "main"
     # A red wave ends the act with the wave's exit, and everything the
     # release caused joins its own trace before that: a red wave's
     # timeline is the one most worth having. The walk starts at the
@@ -476,22 +459,22 @@ def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
     with pytest.raises(SystemExit) as caught:
         driver.on_merged()
     assert caught.value.code == 13
-    assert chained == [rig.sha_of(driver.branch)]
-    assert chained[0] != rig.head_sha()
+    assert chained == [git.sha_of(root, driver.branch)]
+    assert chained[0] != git.head_sha(root)
 
 
 def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A release squash-merged but never published leaves main carrying
     # the stamped versions and entries; re-preparing is the recovery,
     # and a member whose stamp produces no diff is that state, not a
     # fault ("nothing to commit" once failed the whole re-run here).
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -500,24 +483,24 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     )
     members = resolve_set(root, ("core",))
     driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+        root, fake.repository(OWNER, NAME), members, armed=True, wave_timeout=0
     )
-    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    run_workflow(driver, fake.repository(OWNER, NAME), root, current_user="fake-user")
     # The squash landed the stamps on main; the publish never ran, so
     # a second armed run re-prepares the same release. The merged
     # branch is gone both sides (the forge deletes on merge, and the
     # taught recovery is fm workflow.abort locally).
-    assert rig.current_branch() == "main"
+    assert git.current_branch(root) == "main"
     _git(root, "pull", "origin", "main")
     _git(root, "push", "origin", "--delete", "workflow/release/core")
     fake.repository(OWNER, NAME).delete_branch("workflow/release/core")
-    sha = rig.remote_head("main")
+    sha = git.remote_head(root, "main")
     fake.settle(OWNER, NAME, sha)
     members = resolve_set(root, ("core",))
     driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+        root, fake.repository(OWNER, NAME), members, armed=True, wave_timeout=0
     )
-    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    run_workflow(driver, fake.repository(OWNER, NAME), root, current_user="fake-user")
     pr = fake.repository(OWNER, NAME).pr.get(2)
     assert pr is not None
     assert "livery-core v0.3.0" in pr.title
@@ -526,7 +509,7 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     # discovery.
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    recorded = read_manifest(rig.file_at(f"origin/{driver.branch}", MANIFEST))
+    recorded = read_manifest(git.file_at(root, f"origin/{driver.branch}", MANIFEST))
     assert recorded == (("core", "0.3.0"),)
     # The same members at the same versions, and still a commit: the
     # manifest records the point this prepare mined at, so the branch
@@ -535,7 +518,7 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     # last commit touching it.
     import json
 
-    branch_manifest = json.loads(rig.file_at(f"origin/{driver.branch}", MANIFEST))
+    branch_manifest = json.loads(git.file_at(root, f"origin/{driver.branch}", MANIFEST))
     assert branch_manifest["mined-at"] == sha
     touched = subprocess.run(
         ["git", "log", "--format=%H", f"{sha}..origin/{driver.branch}", "--", MANIFEST],
@@ -548,14 +531,14 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
 
 
 def test_recovery_reads_the_branch_and_rebuilds_nothing(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -563,9 +546,7 @@ def test_recovery_reads_the_branch_and_rebuilds_nothing(
         lambda _root, plan, dirs: None,
     )
     members = resolve_set(root, ("core", "tool"))
-    driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=False
-    )
+    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     first = driver.prepare()
     assert first is not None
     rebuilt: list[str] = []
@@ -573,7 +554,7 @@ def test_recovery_reads_the_branch_and_rebuilds_nothing(
         "livery.workshop._release_driver.derive_plans",
         lambda _root, _members: rebuilt.append("derived"),
     )
-    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     recovered = again.prepare()
     assert recovered is not None
     assert recovered.title == first.title  # from the ref, not the tree
@@ -581,17 +562,17 @@ def test_recovery_reads_the_branch_and_rebuilds_nothing(
 
 
 def test_recovery_survives_a_rider_and_a_hand_edited_entry(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Finding 12's scenario, on the fixed shape: the title rebuilds
     # from the branch's changelogs, so a rider commit (even with the
     # reserved prefix) never enters it, and hand-editing an entry on
     # the prepared branch is a supported flow.
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -599,9 +580,7 @@ def test_recovery_survives_a_rider_and_a_hand_edited_entry(
         lambda _root, plan, dirs: None,
     )
     members = resolve_set(root, ("core",))
-    driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=False
-    )
+    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     first = driver.prepare()
     assert first is not None
     changelog = root / "packages" / "core" / "CHANGELOG.md"
@@ -611,7 +590,7 @@ def test_recovery_survives_a_rider_and_a_hand_edited_entry(
     (root / "uv.lock.marker").write_text("a rider\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): the lock records something")
-    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     recovered = again.prepare()
     assert recovered is not None
     assert recovered.title == first.title
@@ -619,16 +598,16 @@ def test_recovery_survives_a_rider_and_a_hand_edited_entry(
 
 
 def test_recovery_refuses_a_prepared_branch_whose_base_moved(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Issue #161: reusing prepared commits after main advanced would
     # release code the entries never mined; the recovery refuses and
     # teaches the abandon-and-rerun path instead.
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -636,9 +615,7 @@ def test_recovery_refuses_a_prepared_branch_whose_base_moved(
         lambda _root, plan, dirs: None,
     )
     members = resolve_set(root, ("core",))
-    driver = ReleaseDriver(
-        root, fake.repository(OWNER, NAME), rig, members, armed=False
-    )
+    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     assert driver.prepare() is not None
     _git(root, "checkout", "main")
     moved = root / "packages" / "core" / "src" / "livery" / "core" / "moved.py"
@@ -647,7 +624,7 @@ def test_recovery_refuses_a_prepared_branch_whose_base_moved(
     _git(root, "commit", "-m", "feat: main moves on (#9)")
     _git(root, "push", "origin", "main")
     _git(root, "checkout", driver.branch)
-    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), members, armed=False)
     with pytest.raises(_FAILURES) as caught:
         again.prepare()
     assert "moved past this prepared release" in str(caught.value)
@@ -665,41 +642,41 @@ def test_release_name_sorts_its_members() -> None:
 
 
 def test_the_base_gate_timeout_names_failed_run_creation(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
     # A tip the forge never mints a run for: not started and hanging
     # are different problems, and this timeout names run creation.
-    fake, git, _root_dir = workspace
+    fake, root = workspace
     repo = fake.repository(OWNER, NAME)
     with pytest.raises(_FAILURES) as caught:
-        require_verified_base(repo, git, "main", timeout=0.2, poll=0.01)
+        require_verified_base(repo, root, "main", timeout=0.2, poll=0.01)
     message = str(caught.value)
     assert "never got a CI run" in message
     assert "fresh push event" in message
 
 
 def test_the_base_gate_timeout_names_the_runners_when_a_run_hangs(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
     # A run exists and never finishes: the reader goes to the
     # runners, not to minting push events.
-    fake, git, _root_dir = workspace
+    fake, root = workspace
     repo = fake.repository(OWNER, NAME)
-    git.fetch()
-    fake.push(OWNER, NAME, "main", sha=git.remote_head("main"))
+    git.fetch(root)
+    fake.push(OWNER, NAME, "main", sha=git.remote_head(root, "main"))
     with pytest.raises(_FAILURES) as caught:
-        require_verified_base(repo, git, "main", timeout=0.2, poll=0.01)
+        require_verified_base(repo, root, "main", timeout=0.2, poll=0.01)
     message = str(caught.value)
     assert "never went green" in message and "runners" in message
 
 
 def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
-    workspace: tuple[FakeForge, GitOps, Path],
+    workspace: tuple[FakeForge, Path],
 ) -> None:
     # The one unmocked validation: uv build, two fresh venvs, the
     # installed copy's tests. Everything else in this suite may stub
     # it because this proves the machinery.
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     member = root / "packages" / "core"
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
@@ -803,9 +780,7 @@ def _starve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *versions: str) -> 
 
 
 def test_the_toolchain_probe_refuses_a_moved_floor(
-    workspace: tuple[FakeForge, GitOps, Path],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The deliberate overlap, forced first: a toolchain pin that
     # names one of the package's own floored dependencies lifts it
@@ -813,7 +788,7 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     # than let the floor leg pass against the wrong version.
     from livery.extensions.python import _backend as _python
 
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     member = root / "packages" / "core"
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
@@ -849,9 +824,7 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
 
 
 def test_the_toolchain_pins_leave_what_the_leg_resolved(
-    workspace: tuple[FakeForge, GitOps, Path],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The leg's floor survives the toolchain install: the lock's pin
     # on the member's own dependency is dropped from the toolchain,
@@ -859,7 +832,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
     # refuse.
     from livery.extensions.python import _backend as _python
 
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     member = root / "packages" / "core"
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
@@ -1025,16 +998,14 @@ def test_dev_pins_export_the_locks_resolution_or_none(tmp_path: Path) -> None:
 
 
 def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
-    workspace: tuple[FakeForge, GitOps, Path],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # A solo release whose declared floor names a version no index
     # serves: the floor leg's install refuses, and the refusal is the
     # release's answer, never a silent pass against the tree.
     from livery.extensions.python import _backend as _python
 
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     member = root / "packages" / "tool"
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-tool"\nversion = "0.2.0"\n'
@@ -1054,11 +1025,11 @@ def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
 
 
 def test_derive_plans_judges_by_tags_not_the_stamp(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The stranded shape: stamped and written, never tagged. The set
     # must still release; only the tag is the receipt.
-    _fake, _git, root = workspace
+    _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     monkeypatch.setattr(
         "livery.workshop._release_driver.derive_version",
@@ -1069,16 +1040,16 @@ def test_derive_plans_judges_by_tags_not_the_stamp(
 
 
 def test_the_driver_builds_the_whole_set_before_any_leg(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The legs' find-links name each sibling's dist, so a two-member
     # set must build both wheels before either member's legs run.
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     events: list[str] = []
@@ -1095,7 +1066,6 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),
-        rig,
         resolve_set(root, ("core", "tool")),
         armed=False,
     )
@@ -1129,7 +1099,7 @@ def test_refresh_args_name_every_wheel_of_the_set_once(tmp_path: Path) -> None:
 
 
 def test_the_leg_refreshes_the_co_released_members_before_installing(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # uv serves a cached wheel by filename, and a member rebuilt at
     # the same version keeps its filename: the first install carries
@@ -1142,7 +1112,7 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     import livery.toolroom.tools as toolroom
     from livery.extensions.python import _backend as _python
 
-    _fake, _git_seam, root = workspace
+    _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     core = packages["core"]
     dist = core.directory / "dist"
@@ -1188,17 +1158,17 @@ def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:
 
 
 def test_a_verified_tip_tree_lets_the_release_start_without_waiting(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _verified
 
-    fake, git, _root_dir = workspace
-    sha = git.remote_head("main")
+    fake, root = workspace
+    sha = git.remote_head(root, "main")
     # The push CI is red, which alone would refuse; the record vouches.
     fake.push(OWNER, NAME, "main", outcome="failure", sha=sha)
     fake.settle(OWNER, NAME, sha)
     repo = fake.repository(OWNER, NAME)
-    tree = _verified.tree_id(git, sha)
+    tree = _verified.tree_id(root, sha)
     asked: list[str] = []
 
     def _record(root: Path, wanted: str) -> tuple[_verified.Verified | None, str]:
@@ -1206,7 +1176,7 @@ def test_a_verified_tip_tree_lets_the_release_start_without_waiting(
         return _verified.Verified(wanted, "77", sha, _verified.FULL, ("check",)), ""
 
     monkeypatch.setattr("livery.workshop._verified.record", _record)
-    require_verified_base(repo, git, "main")  # returns at once
+    require_verified_base(repo, root, "main")  # returns at once
     assert asked == [tree]
     # A narrowed entry does not vouch: the red push CI decides again.
     monkeypatch.setattr(
@@ -1217,7 +1187,7 @@ def test_a_verified_tip_tree_lets_the_release_start_without_waiting(
         ),
     )
     with pytest.raises(_FAILURES):
-        require_verified_base(repo, git, "main")
+        require_verified_base(repo, root, "main")
 
 
 def test_a_release_title_names_its_members_until_it_would_pass_the_limit() -> None:
@@ -1238,11 +1208,11 @@ def test_a_release_title_names_its_members_until_it_would_pass_the_limit() -> No
 
 
 def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directories(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._release_driver import _wheel_dists, validate_member
 
-    fake, _git_seam, root = workspace
+    fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     core, tool = packages["core"], packages["tool"]
     # The edge first: a member whose kind builds no wheel has no dist
@@ -1267,11 +1237,7 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     legs: list[tuple[str, str, tuple[Path, ...]]] = []
 
     def _leg(
-        package: Package,
-        root: Path,
-        *,
-        resolution: str,
-        release_dirs: tuple[Path, ...],
+        package: Package, root: Path, *, resolution: str, release_dirs: tuple[Path, ...]
     ) -> dict[str, str]:
         legs.append((package.name, resolution, release_dirs))
         return {}
@@ -1288,8 +1254,8 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     _grow(root, "core", "feat: core grows (#1)")
     _grow(root, "tool", "feat: tool grows (#2)")
     _git(root, "push", "origin", "main")
-    rig = _RigGit(root, fake)
-    sha = rig.remote_head("main")
+    wire_pushes(monkeypatch, fake, OWNER, NAME)
+    sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
     monkeypatch.setattr(
@@ -1298,7 +1264,6 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),
-        rig,
         resolve_set(root, ("core", "tool")),
         armed=False,
     )

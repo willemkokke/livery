@@ -18,12 +18,13 @@ from typing import Any, cast
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.forge import ForgeError, Repository, Run, StateFilter
-from livery.forge.testing import FakeForge, Outcome
+from livery.forge.testing import FakeForge
+from livery.workshop import _stack
 from livery.workshop._ci_tasks import cancel_flow, rerun_flow, status_flow
 from livery.workshop._doctor import forge_findings
-from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import (
     Plan,
     abandon_flow,
@@ -44,7 +45,13 @@ from livery.workshop._verdict import (
     classify,
     follow,
 )
-from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    ForgePushes,
+    Seeds,
+    _seed_home,
+    seed_copier,
+    wire_pushes,
+)
 
 OWNER, NAME = "willemkokke", "livery"
 
@@ -55,36 +62,6 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
     ).stdout
-
-
-class SubmitGit(GitOps):
-    """The git seam wired to the fake: a push reaches both sides."""
-
-    def __init__(
-        self, root: Path, fake: FakeForge, *, auto_settle: bool = True
-    ) -> None:
-        super().__init__(root)
-        self.fake = fake
-        self.auto_settle = auto_settle
-        self.outcome: Outcome = "success"
-
-    def push(self, branch: str) -> None:
-        super().push(branch)
-        # The fake records the real head sha, so sha-based reasoning
-        # (the merged-PR guard's ancestor test) sees what a forge would.
-        sha = self.fake.push(
-            OWNER, NAME, branch, sha=self.head_sha(), outcome=self.outcome
-        )
-        if self.auto_settle:
-            self.fake.settle(OWNER, NAME, sha)
-
-    def push_force(self, branch: str) -> None:
-        super().push_force(branch)
-        sha = self.fake.push(
-            OWNER, NAME, branch, sha=self.head_sha(), outcome=self.outcome
-        )
-        if self.auto_settle:
-            self.fake.settle(OWNER, NAME, sha)
 
 
 def _seed(base: Path) -> None:
@@ -123,24 +100,30 @@ def _stays(root: Path, cause: str) -> None:
 
 
 @pytest.fixture
+def pushes(monkeypatch: pytest.MonkeyPatch) -> ForgePushes:
+    """The fake forge, with every push through livery.git reaching it."""
+    fake = FakeForge()
+    fake.create_repo(OWNER, NAME, private=True, description="test")
+    return wire_pushes(monkeypatch, fake, OWNER, NAME)
+
+
+@pytest.fixture
 def rig(
-    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[FakeForge, SubmitGit]:
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pushes: ForgePushes
+) -> tuple[FakeForge, Path]:
     """A bare origin, a clone on a feature branch, and the fake."""
     from livery.workshop import _reconcile
 
     seeds("submit", _seed)
-    fake = FakeForge()
-    fake.create_repo(OWNER, NAME, private=True, description="test")
     monkeypatch.setattr(_reconcile, "_reexec", _stays)
-    return fake, SubmitGit(tmp_path / "clone", fake)
+    return pushes.fake, tmp_path / "clone"
 
 
 def _repo(fake: FakeForge):
     return fake.repository(OWNER, NAME)
 
 
-def _submit(fake: FakeForge, git: SubmitGit, **kwargs: object):
+def _submit(fake: FakeForge, root: Path, **kwargs: object):
     # The watch polls through git subprocesses, and a loaded runner
     # (Windows, four workers) spends seconds on a handful of polls.
     # The deadline only has to outlast the polls a test forces; a test
@@ -151,69 +134,67 @@ def _submit(fake: FakeForge, git: SubmitGit, **kwargs: object):
         "timeout": 60,
     }
     defaults.update(kwargs)
-    return submit_flow(_repo(fake), git, **defaults)  # type: ignore[arg-type]
+    return submit_flow(_repo(fake), root, **defaults)  # type: ignore[arg-type]
 
 
-def test_submit_opens_arms_and_merges(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    number = _submit(fake, git, armed=True)
+def test_submit_opens_arms_and_merges(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    number = _submit(fake, root, armed=True)
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.merged
     assert pr.title == "feat: the first change"
 
 
-def test_a_second_submit_reuses_the_pr(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    first = _submit(fake, git, armed=False, follow_to_verdict=False)
-    (git.root / "work.txt").write_text("more\n")
-    _git(git.root, "commit", "-am", "feat: more work")
-    second = _submit(fake, git, armed=False, follow_to_verdict=False)
+def test_a_second_submit_reuses_the_pr(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    first = _submit(fake, root, armed=False, follow_to_verdict=False)
+    (root / "work.txt").write_text("more\n")
+    _git(root, "commit", "-am", "feat: more work")
+    second = _submit(fake, root, armed=False, follow_to_verdict=False)
     assert first == second
     repo = _repo(fake)
     assert len([p for p in [repo.pr.get(first)] if p]) == 1
 
 
-def test_an_unarmed_green_submit_parks_cleanly(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
+def test_an_unarmed_green_submit_parks_cleanly(rig: tuple[FakeForge, Path]) -> None:
     # Deliberately unarmed and green is the run finishing its job, so
     # it returns instead of raising; 11 is reserved for an armed submit
     # whose schedule went missing.
-    fake, git = rig
-    number = _submit(fake, git, armed=False)
+    fake, root = rig
+    number = _submit(fake, root, armed=False)
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.state == "open" and not pr.merged
 
 
-def test_red_ci_names_the_failing_job(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    git.outcome = "failure"
+def test_red_ci_names_the_failing_job(
+    rig: tuple[FakeForge, Path], pushes: ForgePushes
+) -> None:
+    fake, root = rig
+    pushes.outcome = "failure"
     with pytest.raises(SystemExit) as caught:
-        _submit(fake, git, armed=True)
+        _submit(fake, root, armed=True)
     assert caught.value.code == EXIT_CI_FAILED
     number = 1
-    verdict = classify(_repo(fake), "feat/1-first", git)
+    verdict = classify(_repo(fake), "feat/1-first", root)
     assert verdict.exit_code == EXIT_CI_FAILED
     assert "ci.yml" in verdict.detail
     assert verdict.pr_number == number
 
 
-def test_self_heal_integrates_a_conflicting_base(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
+def test_self_heal_integrates_a_conflicting_base(rig: tuple[FakeForge, Path]) -> None:
     # Another clone advances main with a conflicting edit; the submit
     # classifies 10 on the green PR, integrates, and re-submits. The
     # conflict is real, so the heal stops on the merge for a person.
-    fake, git = rig
-    other = git.root.parent / "other"
+    fake, root = rig
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "work.txt").write_text("their conflicting line\n")
@@ -221,50 +202,50 @@ def test_self_heal_integrates_a_conflicting_base(
     _git(other, "commit", "-m", "feat: their change")
     _git(other, "push", "origin", "main")
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, armed=False)
+        _submit(fake, root, armed=False)
     message = str(caught.value)
     assert "resolve it, commit" in message  # the heal engaged and handed over
 
 
-def test_self_heal_integrates_a_clean_advance(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
+def test_self_heal_integrates_a_clean_advance(rig: tuple[FakeForge, Path]) -> None:
     # A non-conflicting advance of main: with the strict reading the
     # branch is merely behind, which an unarmed PR reports as 11 and
     # an armed one heals through 17; here the conflict probe stays
     # quiet and the flow ends disarmed after the push.
-    fake, git = rig
-    other = git.root.parent / "other"
+    fake, root = rig
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
     _git(other, "push", "origin", "main")
-    number = _submit(fake, git, armed=False)
+    number = _submit(fake, root, armed=False)
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.state == "open"
-    assert git.behind_base("main") > 0  # behind alone never parks a submit red
+    assert git.behind_base(root, "main") > 0  # behind alone never parks a submit red
 
 
-def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
+def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
     fake.faults.lose_arm_schedule = 1
-    number = _submit(fake, git, armed=True)
+    number = _submit(fake, root, armed=True)
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.merged
 
 
 def test_a_red_hold_refuses_at_once_and_never_waits(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     # Red first: merging against red checks must surface on the
     # first answer with the classified message and the forge's
@@ -274,9 +255,9 @@ def test_a_red_hold_refuses_at_once_and_never_waits(
     def _no_sleep(_s: float) -> None:
         pytest.fail("a red refusal must never wait")
 
-    fake, git = rig
-    git.outcome = "failure"
-    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    pushes.outcome = "failure"
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     pr = repo.pr.get(number)
     assert pr is not None
@@ -291,16 +272,14 @@ def test_a_red_hold_refuses_at_once_and_never_waits(
     assert "the forge said" in message
 
 
-def test_a_discovered_merge_walks_past_quietly(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
+def test_a_discovered_merge_walks_past_quietly(rig: tuple[FakeForge, Path]) -> None:
     # The armed schedule can land the merge while a follow loop is
     # mid-flight; the classified success is a walk-past, not an
     # error.
     from livery.workshop._submit import _follow_merge_state
 
-    fake, git = rig
-    number = _submit(fake, git, armed=True)
+    fake, root = rig
+    number = _submit(fake, root, armed=True)
     repo = _repo(fake)
     pr = repo.pr.get(number)
     assert pr is not None and pr.merged
@@ -310,140 +289,139 @@ def test_a_discovered_merge_walks_past_quietly(
 
 
 def test_the_arm_rides_out_the_mergeability_recompute(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Right after a push (a force push above all) the arm answers 405
     # like an immediate merge would; the submit waits through the
     # window instead of dying on the first refusal.
-    fake, git = rig
+    fake, root = rig
     monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
     fake.faults.merge_405_window = 2
-    number = _submit(fake, git, armed=True)
+    number = _submit(fake, root, armed=True)
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.merged
 
 
 def test_a_wedged_queue_times_out_and_cancel_is_the_relief(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
+    pushes: ForgePushes,
 ) -> None:
-    fake, git = rig
-    git.auto_settle = False
+    fake, root = rig
+    pushes.auto_settle = False
     with pytest.raises(SystemExit) as caught:
-        _submit(fake, git, armed=True, timeout=0.2)
+        _submit(fake, root, armed=True, timeout=0.2)
     assert caught.value.code == EXIT_TIMEOUT
-    cancel_flow(_repo(fake), git)  # the relief: the queued run cancels
+    cancel_flow(_repo(fake), root)  # the relief: the queued run cancels
     runs = _repo(fake).checks.runs()
     assert all(run.status == "completed" for run in runs)
 
 
 def test_slow_status_reads_keep_the_watch_in_flight(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     fake.faults.slow_status_reads = 2
-    number = _submit(fake, git, armed=False)  # polled through the window
+    number = _submit(fake, root, armed=False)  # polled through the window
     assert _repo(fake).pr.get(number) is not None
 
 
 def test_submit_refuses_a_branch_with_nothing_beyond_the_base(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, git = rig
-    _git(git.root, "checkout", "-b", "feat/2-empty", "origin/main")
+    fake, root = rig
+    _git(root, "checkout", "-b", "feat/2-empty", "origin/main")
     with pytest.raises(_FAILURES, match="no commits beyond origin/main"):
-        _submit(fake, git, armed=True)
+        _submit(fake, root, armed=True)
     # Nothing was pushed and nothing was opened: the refusal came first.
-    assert git.remote_head("feat/2-empty") == ""
+    assert git.remote_head(root, "feat/2-empty") == ""
     assert _repo(fake).pr.find_by_head("feat/2-empty", state="all") is None
 
 
 def test_submit_merge_refuses_red_and_waits_out_pending(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     # The refusal first: a red head names the red at once and never
     # merges. Pending is no refusal any more: merge means merge as
     # soon as possible, so the verb follows a running CI to its
     # verdict and merges on the green.
-    fake, git = rig
+    fake, root = rig
     monkeypatch.setattr("livery.workshop._submit._HOLD_POLL", 0.01)
-    git.outcome = "failure"
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     with pytest.raises(_FAILURES) as caught:
-        merge_flow(_repo(fake), git, "feat/1-first")
+        merge_flow(_repo(fake), root, "feat/1-first")
     assert "red" in str(caught.value)
     pr = _repo(fake).pr.get(1)
     assert pr is not None and not pr.merged
-    git.outcome = "success"
-    (git.root / "work.txt").write_text("more\n")
-    _git(git.root, "commit", "-am", "feat: more work")
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    pushes.outcome = "success"
+    (root / "work.txt").write_text("more\n")
+    _git(root, "commit", "-am", "feat: more work")
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     # The slow-status window stands in for a running CI: the merge
     # waits it out instead of refusing, then lands.
     fake.faults.slow_status_reads = 2
-    merge_flow(_repo(fake), git, "feat/1-first")
+    merge_flow(_repo(fake), root, "feat/1-first")
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
 
 
-def test_submit_merge_refuses_a_behind_head(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
-    _git(git.root, "checkout", "main")
-    (git.root / "other.txt").write_text("moved\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "feat: main moved")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "checkout", "feat/1-first")
+def test_submit_merge_refuses_a_behind_head(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    _git(root, "checkout", "main")
+    (root / "other.txt").write_text("moved\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: main moved")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", "feat/1-first")
     with pytest.raises(_FAILURES) as caught:
-        merge_flow(_repo(fake), git, "feat/1-first")
+        merge_flow(_repo(fake), root, "feat/1-first")
     assert "behind" in str(caught.value)
 
 
 def test_submit_merge_rides_out_the_405_window(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     monkeypatch.setattr("time.sleep", lambda _s: None)
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.merge_405_window = 2
-    merge_flow(_repo(fake), git, "feat/1-first")
+    merge_flow(_repo(fake), root, "feat/1-first")
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
 
 
-def test_disarm_before_push_and_the_merged_refusal(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+def test_disarm_before_push_and_the_merged_refusal(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     repo.pr.arm(1, title="feat: the first change")  # green: merges now
     merged_pr = repo.pr.get(1)
     assert merged_pr is not None and merged_pr.merged
-    (git.root / "work.txt").write_text("late fixup\n")
-    _git(git.root, "commit", "-am", "feat: late fixup")
+    (root / "work.txt").write_text("late fixup\n")
+    _git(root, "commit", "-am", "feat: late fixup")
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, armed=False, follow_to_verdict=False)
+        _submit(fake, root, armed=False, follow_to_verdict=False)
     assert "already merged" in str(caught.value)
 
 
 def test_a_rerun_on_the_merged_head_reports_the_merge(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Re-running the submit is its recovery procedure: with HEAD the
     # very head the pull request merged, nothing is pushed or opened,
     # and the verdict reported is the merge. The refusal above is for
     # a head strictly ahead of the merged one.
-    fake, git = rig
-    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     repo.pr.arm(number, title="feat: the first change")  # green: merges now
     merged_pr = repo.pr.get(number)
     assert merged_pr is not None and merged_pr.merged
     capsys.readouterr()
-    again = _submit(fake, git, armed=True)
+    again = _submit(fake, root, armed=True)
     out = capsys.readouterr().out
     assert again == number
     assert f"PR #{number} already merged this head; nothing to push" in out
@@ -452,30 +430,30 @@ def test_a_rerun_on_the_merged_head_reports_the_merge(
 
 
 def test_a_fresh_cycle_of_a_reused_branch_name_proceeds(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     # The release train reuses its reserved branch name every cycle,
     # so a merged past release must not block the next one: a branch
     # cut fresh off the merged base carries none of the merged head.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     repo.pr.arm(1, title="feat: the first change")  # green: merges now
     merged_pr = repo.pr.get(1)
     assert merged_pr is not None and merged_pr.merged
-    _git(git.root, "push", "origin", "--delete", "feat/1-first")
-    _git(git.root, "fetch", "origin")
-    _git(git.root, "checkout", "-B", "feat/1-first", "origin/main")
-    (git.root / "next.txt").write_text("the next cycle\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "feat: the next cycle")
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    _git(root, "push", "origin", "--delete", "feat/1-first")
+    _git(root, "fetch", "origin")
+    _git(root, "checkout", "-B", "feat/1-first", "origin/main")
+    (root / "next.txt").write_text("the next cycle\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: the next cycle")
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     fresh = repo.pr.find_by_head("feat/1-first")
     assert fresh is not None and fresh.number != 1 and not fresh.merged
 
 
 def test_abandon_in_a_linked_worktree_removes_the_worktree(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -483,26 +461,26 @@ def test_abandon_in_a_linked_worktree_removes_the_worktree(
     # Issue #161: a linked worktree cannot switch to main (the main
     # checkout holds it), so abandoning from one removes the worktree
     # itself instead of parking it on main or dying on the switch.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     wt = tmp_path / "wt-abandon"
-    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    _git(root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
     (wt / "linked.txt").write_text("w\n")
     _git(wt, "add", ".")
     _git(wt, "commit", "-m", "feat: linked work")
     monkeypatch.chdir(wt)
     repo = _repo(fake)
-    abandon_flow(repo, GitOps(wt), "feat/9-linked", "main")
+    abandon_flow(repo, wt, "feat/9-linked", "main")
     out = capsys.readouterr().out
     assert "removed the worktree" in out and "cd " in out
     assert not wt.exists()
-    listing = _git(git.root, "branch", "--list", "feat/9-linked")
+    listing = _git(root, "branch", "--list", "feat/9-linked")
     assert listing.strip() == ""
     # The main clone kept its own checkout untouched.
-    assert _git(git.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
+    assert _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
 
 
-def test_closes_resolution_guards(rig: tuple[FakeForge, SubmitGit]) -> None:
+def test_closes_resolution_guards(rig: tuple[FakeForge, Path]) -> None:
     fake, _ = rig
     repo = _repo(fake)
     assert resolve_closes(repo, "feat/9-thing", 0) is None  # absent: dropped
@@ -513,9 +491,9 @@ def test_closes_resolution_guards(rig: tuple[FakeForge, SubmitGit]) -> None:
     assert with_closes(with_closes("body", 5), 5).count("Closes #5") == 1
 
 
-def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, SubmitGit]) -> None:
-    _, git = rig
-    plan = prepare(git)
+def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, Path]) -> None:
+    _, root = rig
+    plan = prepare(root)
     assert plan == Plan(
         branch="feat/1-first",
         base="main",
@@ -525,49 +503,51 @@ def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, SubmitGit]) ->
         subjects=("feat: the first change",),
     )
     with pytest.raises(_FAILURES):
-        prepare(git, title="no convention here")
-    _git(git.root, "checkout", "-b", "wrong-shape")
+        prepare(root, title="no convention here")
+    _git(root, "checkout", "-b", "wrong-shape")
     with pytest.raises(_FAILURES):
-        prepare(git)
+        prepare(root)
 
 
 def test_ci_status_reads_the_heads_runs_and_exits_by_state(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._ci_tasks import runs_status_flow
     from livery.workshop._verdict import EXIT_CI_FAILED, EXIT_PENDING, EXIT_TIMEOUT
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
-    sha = git.head_sha()
+    sha = git.head_sha(root)
     # No run yet is pending, and a wait that runs out says so and exits 14.
-    assert runs_status_flow(repo, git) == EXIT_PENDING
+    assert runs_status_flow(repo, root) == EXIT_PENDING
     assert "no runs yet for" in capsys.readouterr().out
-    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=0) == EXIT_TIMEOUT
+    assert (
+        runs_status_flow(repo, root, wait=True, interval=0, timeout=0) == EXIT_TIMEOUT
+    )
     assert "still pending after 0s" in capsys.readouterr().out
     # A queued run is pending; settled red is 13; settled green is 0.
-    fake.push(OWNER, NAME, git.current_branch(), outcome="failure", sha=sha)
-    assert runs_status_flow(repo, git) == EXIT_PENDING
+    fake.push(OWNER, NAME, git.current_branch(root), outcome="failure", sha=sha)
+    assert runs_status_flow(repo, root) == EXIT_PENDING
     fake.settle(OWNER, NAME, sha)
-    assert runs_status_flow(repo, git) == EXIT_CI_FAILED
+    assert runs_status_flow(repo, root) == EXIT_CI_FAILED
     out = capsys.readouterr().out
     assert "ci.yml" in out and "failure" in out and "red: 1 run(s)" in out
     # A new head whose run settles green is 0; a skipped run is not red.
-    _git(git.root, "commit", "--allow-empty", "-m", "feat: a green head")
-    head = git.head_sha()
-    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=head)
-    fake.push(OWNER, NAME, git.current_branch(), outcome="skipped", sha=head)
+    _git(root, "commit", "--allow-empty", "-m", "feat: a green head")
+    head = git.head_sha(root)
+    fake.push(OWNER, NAME, git.current_branch(root), outcome="success", sha=head)
+    fake.push(OWNER, NAME, git.current_branch(root), outcome="skipped", sha=head)
     fake.settle(OWNER, NAME, head)
-    assert runs_status_flow(repo, git) == 0
+    assert runs_status_flow(repo, root) == 0
     assert "green: 2 run(s)" in capsys.readouterr().out
 
 
 def test_ci_dispatch_refuses_points_without_a_dispatch_entry(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow
 
-    fake, _git = rig
+    fake, _root = rig
     repo = _repo(fake)
     # The merge point runs on a push alone; the gate and the nightly
     # carry the entries.
@@ -586,13 +566,13 @@ def test_ci_dispatch_refuses_points_without_a_dispatch_entry(
 
 
 def test_ci_dispatch_reports_a_forge_refusal_and_a_run_that_never_registers(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow
 
-    fake, _git = rig
+    fake, _root = rig
     repo = _repo(fake)
     # A ref the forge does not have: its refusal is the message.
     with pytest.raises(_FAILURES) as caught:
@@ -611,11 +591,11 @@ def test_ci_dispatch_reports_a_forge_refusal_and_a_run_that_never_registers(
 
 
 def test_ci_dispatch_starts_the_nightly_and_follows_it_to_its_verdict(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
 
-    fake, _git = rig
+    fake, _root = rig
     repo = _repo(fake)
     main = fake.push(OWNER, NAME, "main", outcome="success")
     # Started, registered, and left running: exit 18 without the follow.
@@ -644,12 +624,12 @@ def test_ci_dispatch_starts_the_nightly_and_follows_it_to_its_verdict(
 
 
 def test_ci_dispatch_follow_waits_out_a_running_run_then_times_out(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
     from livery.workshop._verdict import EXIT_UNREACHABLE
 
-    fake, _git = rig
+    fake, _root = rig
     repo = _repo(fake)
     fake.push(OWNER, NAME, "main", outcome="success")
     assert dispatch_flow(repo, point="nightly", ref="main", follow=False) == 18
@@ -664,76 +644,78 @@ def test_ci_dispatch_follow_waits_out_a_running_run_then_times_out(
 
 
 def test_ci_status_and_logs_read_the_newest_run_of_a_point(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow, logs_flow, runs_status_flow
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
-    assert runs_status_flow(repo, git, point="nightly") == EXIT_PENDING
+    assert runs_status_flow(repo, root, point="nightly") == EXIT_PENDING
     assert "no nightly runs yet" in capsys.readouterr().out
-    logs_flow(repo, git, point="nightly", failed_only=False)
+    logs_flow(repo, root, point="nightly", failed_only=False)
     assert "no nightly runs" in capsys.readouterr().out
     main = fake.push(OWNER, NAME, "main", outcome="success")
     # A gate run on a pull request is not the nightly's.
-    fake.push(OWNER, NAME, git.current_branch(), outcome="failure", sha=git.head_sha())
-    fake.settle(OWNER, NAME, git.head_sha())
+    fake.push(
+        OWNER, NAME, git.current_branch(root), outcome="failure", sha=git.head_sha(root)
+    )
+    fake.settle(OWNER, NAME, git.head_sha(root))
     dispatch_flow(repo, point="nightly", ref="main", follow=False)
     capsys.readouterr()
-    assert runs_status_flow(repo, git, point="nightly") == EXIT_PENDING
+    assert runs_status_flow(repo, root, point="nightly") == EXIT_PENDING
     fake.settle(OWNER, NAME, main)
-    assert runs_status_flow(repo, git, point="nightly") == 0
+    assert runs_status_flow(repo, root, point="nightly") == 0
     out = capsys.readouterr().out
     assert "nightly.yml" in out and "workflow_dispatch" in out and main[:10] in out
     assert "green: 1 run(s) for the nightly point" in out
-    logs_flow(repo, git, point="nightly", failed_only=False)
+    logs_flow(repo, root, point="nightly", failed_only=False)
     out = capsys.readouterr().out
     assert "nightly.yml / gate: success" in out
 
 
 def test_a_pull_request_the_forge_never_runs_classifies_as_conflicts_at_once(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     from livery.workshop._verdict import EXIT_CONFLICTS, classify
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
-    branch = git.current_branch()
+    branch = git.current_branch(root)
     # A skipped run is no verdict, so the combined status reads none:
     # the shape of a pull request the forge never runs. Without a
     # conflict that is in flight, as before.
-    _git(git.root, "push", "-u", "origin", branch)
-    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha())
-    fake.settle(OWNER, NAME, git.head_sha())
+    _git(root, "push", "-u", "origin", branch)
+    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha(root))
+    fake.settle(OWNER, NAME, git.head_sha(root))
     repo.pr.open(branch, "main", "feat: the first change")
-    verdict = classify(repo, branch, git)
+    verdict = classify(repo, branch, root)
     assert verdict.state == "in-flight" and "CI none" in verdict.detail
     # Main moves on the same file the branch changed: the forge cannot
     # build the merge ref and never starts a run, and the probe decides
     # within one read instead of a timeout.
-    _git(git.root, "switch", "main")
-    (git.root / "work.txt").write_text("main moved\n")
-    _git(git.root, "add", "work.txt")
-    _git(git.root, "commit", "-m", "feat: main moves")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "switch", branch)
-    (git.root / "work.txt").write_text("branch moved\n")
-    _git(git.root, "commit", "-am", "feat: the branch moves")
-    _git(git.root, "push", "origin", branch)
-    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha())
-    fake.settle(OWNER, NAME, git.head_sha())
-    verdict = classify(repo, branch, git)
+    _git(root, "switch", "main")
+    (root / "work.txt").write_text("main moved\n")
+    _git(root, "add", "work.txt")
+    _git(root, "commit", "-m", "feat: main moves")
+    _git(root, "push", "origin", "main")
+    _git(root, "switch", branch)
+    (root / "work.txt").write_text("branch moved\n")
+    _git(root, "commit", "-am", "feat: the branch moves")
+    _git(root, "push", "origin", branch)
+    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha(root))
+    fake.settle(OWNER, NAME, git.head_sha(root))
+    verdict = classify(repo, branch, root)
     assert verdict.state == "conflicts" and verdict.exit_code == EXIT_CONFLICTS
     assert "the forge runs nothing for it" in verdict.detail
 
 
 def test_a_lock_that_is_not_current_refuses_before_the_gate_and_the_push(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The check CI's setup makes, made here first: the refusal names
     # the lock and the sync that writes it, and neither the gate's
     # minutes nor the push are spent on a branch CI would refuse.
-    fake, git = rig
+    fake, root = rig
     gates: list[bool] = []
     monkeypatch.setattr(
         "livery.workshop._submit._gate",
@@ -744,13 +726,13 @@ def test_a_lock_that_is_not_current_refuses_before_the_gate_and_the_push(
         lambda root: ["uv.lock is not current (the lockfile needs to be updated)"],
     )
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, armed=False, follow_to_verdict=False, gate=True)
+        _submit(fake, root, armed=False, follow_to_verdict=False, gate=True)
     assert "uv.lock is not current" in str(caught.value)
     assert "sync` writes it" in str(caught.value)
     assert gates == []
     heads = subprocess.run(
-        ["git", "ls-remote", "--heads", "origin", git.current_branch()],
-        cwd=git.root,
+        ["git", "ls-remote", "--heads", "origin", git.current_branch(root)],
+        cwd=root,
         capture_output=True,
         check=True,
         text=True,
@@ -759,15 +741,15 @@ def test_a_lock_that_is_not_current_refuses_before_the_gate_and_the_push(
 
 
 def test_an_ambiguous_title_default_refuses_on_first_open(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Two commits ahead: no commit subject may name the new PR. The
     # refusal lists the subjects; --title opens; and once the PR
     # exists, a defaulted re-submit is fine because the default is
     # inert there.
-    fake, git = rig
-    (git.root / "work.txt").write_text("second\n")
-    _git(git.root, "commit", "-am", "feat: the second commit")
+    fake, root = rig
+    (root / "work.txt").write_text("second\n")
+    _git(root, "commit", "-am", "feat: the second commit")
     # The refusal comes before the gate: a flag a person could have
     # passed never costs minutes of gate first.
     gates: list[bool] = []
@@ -776,15 +758,15 @@ def test_an_ambiguous_title_default_refuses_on_first_open(
         lambda fix=False, *, root, base="main": gates.append(True),
     )
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, armed=False, follow_to_verdict=False, gate=True)
+        _submit(fake, root, armed=False, follow_to_verdict=False, gate=True)
     assert "2 commits ahead" in str(caught.value)
     assert "the first change" in str(caught.value)
     assert gates == []
     # The refusal happens before the push: a branch left on the remote
     # would make the next submit of a rebuilt branch non-fast-forward.
     heads = subprocess.run(
-        ["git", "ls-remote", "--heads", "origin", git.current_branch()],
-        cwd=git.root,
+        ["git", "ls-remote", "--heads", "origin", git.current_branch(root)],
+        cwd=root,
         capture_output=True,
         check=True,
         text=True,
@@ -792,28 +774,26 @@ def test_an_ambiguous_title_default_refuses_on_first_open(
     assert heads.stdout == ""
     number = _submit(
         fake,
-        git,
+        root,
         armed=False,
         follow_to_verdict=False,
         title="feat: the whole intent",
     )
-    (git.root / "work.txt").write_text("third\n")
-    _git(git.root, "commit", "-am", "feat: a fixup")
+    (root / "work.txt").write_text("third\n")
+    _git(root, "commit", "-am", "feat: a fixup")
     assert (
-        _submit(fake, git, armed=False, follow_to_verdict=False) == number
+        _submit(fake, root, armed=False, follow_to_verdict=False) == number
     )  # defaulted re-submit: reused, title kept
     pr = _repo(fake).pr.get(number)
     assert pr is not None and pr.title == "feat: the whole intent"
 
 
-def test_a_given_title_updates_the_reused_pr(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+def test_a_given_title_updates_the_reused_pr(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     _submit(
         fake,
-        git,
+        root,
         armed=False,
         follow_to_verdict=False,
         title="feat: the better title",
@@ -823,107 +803,111 @@ def test_a_given_title_updates_the_reused_pr(
 
 
 def test_a_given_body_updates_the_reused_pr_and_a_defaulted_one_keeps_it(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The keep first: a submit without --body leaves the body the
     # pull request was opened with, even though HEAD's body defaults
     # the plan's. Then the update, said once, and silent when the
     # given body already stands.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False, body="the first body")
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False, body="the first body")
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.body == "the first body"
     assert "body updated" not in capsys.readouterr().out
-    _submit(fake, git, armed=False, follow_to_verdict=False, body="the corrected body")
+    _submit(fake, root, armed=False, follow_to_verdict=False, body="the corrected body")
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.body == "the corrected body"
     assert "body updated" in capsys.readouterr().out
-    _submit(fake, git, armed=False, follow_to_verdict=False, body="the corrected body")
+    _submit(fake, root, armed=False, follow_to_verdict=False, body="the corrected body")
     assert "body updated" not in capsys.readouterr().out
 
 
 def test_submit_fix_amends_rewrites_into_an_unpushed_head(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     # The gate's fixers rewrite a file; the fold must land it in HEAD
     # without changing the subject, or the pushed commit lies.
     monkeypatch.setattr(
         "livery.workshop._submit._gate",
-        lambda fix, **_: (git.root / "work.txt").write_text("healed\n"),
+        lambda fix, **_: (root / "work.txt").write_text("healed\n"),
     )
-    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
-    assert git.is_clean()
-    assert git.subjects_ahead("main") == ["feat: the first change"]
-    show = _git(git.root, "show", "HEAD:work.txt")
+    _submit(fake, root, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    assert git.is_clean(root)
+    assert git.subjects_ahead(root, "main") == ["feat: the first change"]
+    show = _git(root, "show", "HEAD:work.txt")
     assert show == "healed\n"
 
 
 def test_submit_fix_commits_rewrites_on_a_pushed_head(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)  # pushed, PR open
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)  # pushed, PR open
     monkeypatch.setattr(
         "livery.workshop._submit._gate",
-        lambda fix, **_: (git.root / "work.txt").write_text("healed\n"),
+        lambda fix, **_: (root / "work.txt").write_text("healed\n"),
     )
-    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    _submit(fake, root, gate=True, fix=True, armed=False, follow_to_verdict=False)
     # A pushed commit is never amended: the fixes ride a follow-up
     # commit the squash merge collapses away.
-    assert git.subjects_ahead("main") == [
+    assert git.subjects_ahead(root, "main") == [
         "chore: apply gate fixes",
         "feat: the first change",
     ]
 
 
-def test_abandon_refuses_a_dirty_tree(rig: tuple[FakeForge, SubmitGit]) -> None:
+def test_abandon_refuses_a_dirty_tree(rig: tuple[FakeForge, Path]) -> None:
     # The refusal first: abandoning deletes the branch, so uncommitted
     # work must stop it before anything moves.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
-    (git.root / "work.txt").write_text("uncommitted\n")
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    (root / "work.txt").write_text("uncommitted\n")
     with pytest.raises(_FAILURES) as caught:
-        abandon_flow(_repo(fake), git, "feat/1-first", "main")
+        abandon_flow(_repo(fake), root, "feat/1-first", "main")
     assert "uncommitted" in str(caught.value)
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.state == "open"
 
 
-def test_abandon_is_idempotent(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+def test_abandon_is_idempotent(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
-    abandon_flow(repo, git, "feat/1-first", "main")
+    abandon_flow(repo, root, "feat/1-first", "main")
     pr = repo.pr.get(1)
     assert pr is not None and pr.state == "closed" and not pr.merged
     assert not repo.branch_exists("feat/1-first")
-    assert git.current_branch() == "main"
-    assert not git.local_branch_exists("feat/1-first")
-    abandon_flow(repo, git, "feat/1-first", "main")  # second run: nothing left
+    assert git.current_branch(root) == "main"
+    assert not git.local_branch_exists(root, "feat/1-first")
+    abandon_flow(repo, root, "feat/1-first", "main")  # second run: nothing left
 
 
-def test_status_and_rerun_and_doctor(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    assert status_flow(_repo(fake), git) == 0  # no PR yet
-    git.outcome = "failure"
-    _submit(fake, git, armed=False, follow_to_verdict=False)
-    assert status_flow(_repo(fake), git) == EXIT_CI_FAILED
-    rerun_flow(_repo(fake), git)  # the failed run re-queues
+def test_status_and_rerun_and_doctor(
+    rig: tuple[FakeForge, Path], pushes: ForgePushes
+) -> None:
+    fake, root = rig
+    assert status_flow(_repo(fake), root) == 0  # no PR yet
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    assert status_flow(_repo(fake), root) == EXIT_CI_FAILED
+    rerun_flow(_repo(fake), root)  # the failed run re-queues
     # The fake's shas are its own; classify by branch still answers.
     assert forge_findings(fake, None) and fake.whoami()
 
 
 def test_rerun_runs_the_whole_run_when_only_the_verdict_job_failed(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
 ) -> None:
     # The recovery first: the verdict job judges the legs' rows, which
     # the first attempt's collect dropped, so re-run alone it can only
     # fail; the fake's one job is named gate, the verdict job.
-    fake, git = rig
-    git.outcome = "failure"
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     asked: list[bool] = []
     real = repo.checks.rerun
@@ -934,19 +918,21 @@ def test_rerun_runs_the_whole_run_when_only_the_verdict_job_failed(
 
     monkeypatch_target = repo.checks
     monkeypatch_target.rerun = record
-    rerun_flow(repo, git)
+    rerun_flow(repo, root)
     assert asked == [False]
     assert "only the verdict job failed" in capsys.readouterr().out
 
 
 def test_rerun_keeps_failed_only_when_a_leg_failed(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     from livery.forge import Job
 
-    fake, git = rig
-    git.outcome = "failure"
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     asked: list[bool] = []
     real = repo.checks.rerun
@@ -970,61 +956,61 @@ def test_rerun_keeps_failed_only_when_a_leg_failed(
 
     monkeypatch.setattr(repo.checks, "rerun", record)
     monkeypatch.setattr(repo.checks, "jobs", two_jobs)
-    rerun_flow(repo, git)
+    rerun_flow(repo, root)
     assert asked == [True]
 
 
 def test_rerun_leaves_a_release_wave_to_the_train_off_main(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A red release wave on an ancestor commit is the train's to
     # re-dispatch; on a feature branch the rerun names that and moves
     # on. On main the wave is the branch's verdict and re-runs.
-    fake, git = rig
-    _git(git.root, "checkout", "main")
-    main_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake, root = rig
+    _git(root, "checkout", "main")
+    main_sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "main", sha=main_sha)
     fake.settle(OWNER, NAME, main_sha)
     repo = _repo(fake)
     cast(Any, repo.checks).dispatch("release.yml", ref="main", outcome="failure")
     fake.settle(OWNER, NAME, main_sha)
-    _git(git.root, "checkout", "-b", "feat/later")
-    (git.root / "later.txt").write_text("later\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "feat: later")
-    rerun_flow(repo, git)
+    _git(root, "checkout", "-b", "feat/later")
+    (root / "later.txt").write_text("later\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: later")
+    rerun_flow(repo, root)
     out = capsys.readouterr().out
     assert "release.yml" in out and "is a release wave, left to the train" in out
     (wave,) = [run for run in repo.checks.runs() if run.workflow == "release.yml"]
     assert wave.status == "completed"
-    _git(git.root, "checkout", "main")
-    rerun_flow(repo, git)
+    _git(root, "checkout", "main")
+    rerun_flow(repo, root)
     (wave,) = [run for run in repo.checks.runs() if run.workflow == "release.yml"]
     assert wave.status != "completed"
 
 
 def test_rerun_off_main_leaves_mains_red_runs_to_main(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A red nightly on a commit main already has is main's verdict: a
     # branch's rerun names it and re-runs only the branch's own red
     # run. From main, the nightly re-runs.
-    fake, git = rig
-    _git(git.root, "checkout", "main")
-    main_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake, root = rig
+    _git(root, "checkout", "main")
+    main_sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "main", sha=main_sha)
     fake.settle(OWNER, NAME, main_sha)
     repo = _repo(fake)
     cast(Any, repo.checks).dispatch("nightly.yml", ref="main", outcome="failure")
     fake.settle(OWNER, NAME, main_sha)
-    _git(git.root, "checkout", "-b", "feat/later")
-    (git.root / "later.txt").write_text("later\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "feat: later")
-    branch_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    _git(root, "checkout", "-b", "feat/later")
+    (root / "later.txt").write_text("later\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: later")
+    branch_sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "feat/later", sha=branch_sha, outcome="failure")
     fake.settle(OWNER, NAME, branch_sha)
-    rerun_flow(repo, git)
+    rerun_flow(repo, root)
     out = capsys.readouterr().out
     assert (
         f"nightly.yml (run {_run_of(repo, 'nightly.yml').id}) failed on"
@@ -1033,8 +1019,8 @@ def test_rerun_off_main_leaves_mains_red_runs_to_main(
     ) in out
     assert _run_of(repo, "nightly.yml").status == "completed"
     assert "re-running ci.yml" in out
-    _git(git.root, "checkout", "main")
-    rerun_flow(repo, git)
+    _git(root, "checkout", "main")
+    rerun_flow(repo, root)
     assert _run_of(repo, "nightly.yml").status != "completed"
 
 
@@ -1043,15 +1029,15 @@ def _run_of(repo: Repository, workflow: str) -> Run:
 
 
 def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The branch's verdict includes a workflow whose newest run sits
     # on an earlier commit (a merged release squash, a path-filtered
     # job); scoping to the head sha alone misses it, and that is how
     # a red governance run survived a rerun that reported success.
-    fake, git = rig
-    _git(git.root, "checkout", "main")
-    old_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake, root = rig
+    _git(root, "checkout", "main")
+    old_sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "main", sha=old_sha)
     fake.settle(OWNER, NAME, old_sha)
     repo = _repo(fake)
@@ -1059,13 +1045,13 @@ def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
     # protocol's signature, so the call goes through the fake's type.
     cast(Any, repo.checks).dispatch("governance.yml", ref="main", outcome="failure")
     fake.settle(OWNER, NAME, old_sha)
-    (git.root / "later.txt").write_text("later\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "chore: a later commit")
-    new_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    (root / "later.txt").write_text("later\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "chore: a later commit")
+    new_sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "main", sha=new_sha)
     fake.settle(OWNER, NAME, new_sha)
-    rerun_flow(repo, git)
+    rerun_flow(repo, root)
     out = capsys.readouterr().out
     assert "re-running governance.yml" in out
     governance = [run for run in repo.checks.runs() if run.workflow == "governance.yml"]
@@ -1073,30 +1059,31 @@ def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
 
 
 def test_rerun_names_a_forge_that_ignored_the_request(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     # The read-back: a rerun the forge quietly ignores is reported as
     # such, never as re-running.
-    fake, git = rig
-    git.outcome = "failure"
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     monkeypatch.setattr(repo.checks, "rerun", lambda run, failed_only=True: None)
-    rerun_flow(repo, git)
+    rerun_flow(repo, root)
     out = capsys.readouterr().out
     assert "did not restart it" in out and "re-running" not in out
 
 
 def test_the_stalled_and_behind_verdicts_discriminate(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     # The fake's server never loses an evaluation, so the two verdicts
     # that need green+armed+unmerged run against a stub that answers
     # like a forge which has.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     real_pr = repo.pr
 
@@ -1120,60 +1107,60 @@ def test_the_stalled_and_behind_verdicts_discriminate(
         def protection(self, branch: str) -> None:
             return None
 
-    stalled = classify(StubRepo(), "feat/1-first", git, grace_spent=True)  # type: ignore[arg-type]
+    stalled = classify(StubRepo(), "feat/1-first", root, grace_spent=True)  # type: ignore[arg-type]
     assert stalled.exit_code == EXIT_STALLED
-    other = git.root.parent / "other"
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "elsewhere.txt").write_text("independent\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
     _git(other, "push", "origin", "main")
-    behind = classify(StubRepo(), "feat/1-first", git, grace_spent=True)  # type: ignore[arg-type]
+    behind = classify(StubRepo(), "feat/1-first", root, grace_spent=True)  # type: ignore[arg-type]
     assert behind.exit_code == EXIT_BEHIND
 
 
 def test_a_disarmed_verdict_still_raises_for_the_watcher(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     # The classifier's code is unchanged: fm status (bare or --watch) still
     # answer 11 for a parked PR; only a deliberately unarmed submit
     # treats it as its own finish line.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
-    verdict = classify(_repo(fake), "feat/1-first", git)
+    verdict = classify(_repo(fake), "feat/1-first", root)
     assert "parked unarmed" in verdict.detail
 
 
-def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    number = _submit(fake, git, armed=True)
-    verdict = follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    number = _submit(fake, root, armed=True)
+    verdict = follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert verdict.state == "merged" and verdict.pr_number == number
 
 
 def test_the_follow_polls_through_dropped_connections(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A transport error mid-poll is a retry, not a verdict: the watch
     # prints each one once and reads the verdict on the next answer
     # (an unarmed, green pull request: parked, exit 11).
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.drop_connections = 2
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
     out = capsys.readouterr().out
     assert "forge unreachable (1/5)" in out and "forge unreachable (2/5)" in out
@@ -1181,7 +1168,7 @@ def test_the_follow_polls_through_dropped_connections(
 
 
 def test_the_follow_waits_out_a_spent_budget_and_carries_on(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1190,14 +1177,14 @@ def test_the_follow_waits_out_a_spent_budget_and_carries_on(
     # verdict after, with no transient counted against it.
     import time
 
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     slept: list[float] = []
     monkeypatch.setattr("livery.workshop._verdict.time.sleep", slept.append)
     fake.faults.rate_limited = 2
     fake.faults.rate_limit_reset = time.time() + 300
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
     assert len([wait for wait in slept if wait > 290]) == 2
     out = capsys.readouterr().out
@@ -1207,26 +1194,26 @@ def test_the_follow_waits_out_a_spent_budget_and_carries_on(
 
 
 def test_ci_status_wait_waits_out_a_spent_budget(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._ci_tasks import runs_status_flow
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
-    sha = git.head_sha()
-    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=sha)
+    sha = git.head_sha(root)
+    fake.push(OWNER, NAME, git.current_branch(root), outcome="success", sha=sha)
     fake.settle(OWNER, NAME, sha)
     slept: list[float] = []
     monkeypatch.setattr("livery.workshop._verdict.time.sleep", slept.append)
     # Without --wait the refusal is the caller's, with its reset named.
     fake.faults.rate_limited = 1
     with pytest.raises(ForgeError):
-        runs_status_flow(repo, git)
+        runs_status_flow(repo, root)
     fake.faults.rate_limited = 1
     fake.faults.rate_limit_reset = None
-    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=5) == 0
+    assert runs_status_flow(repo, root, wait=True, interval=0, timeout=5) == 0
     assert 60.0 in slept
     assert "waiting 60s, then watching again" in capsys.readouterr().out
 
@@ -1247,15 +1234,15 @@ def test_a_watch_slows_its_polls_while_the_budget_is_low() -> None:
 
 
 def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._verdict import EXIT_UNREACHABLE
 
-    fake, git = rig
-    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.drop_connections = 50
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_UNREACHABLE
     out = capsys.readouterr().out
     assert "forge unreachable (5/5)" in out
@@ -1265,40 +1252,40 @@ def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
 
 
 def test_ci_status_wait_polls_through_dropped_connections_then_gives_up(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._ci_tasks import runs_status_flow
     from livery.workshop._verdict import EXIT_UNREACHABLE
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
-    sha = git.head_sha()
-    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=sha)
+    sha = git.head_sha(root)
+    fake.push(OWNER, NAME, git.current_branch(root), outcome="success", sha=sha)
     fake.settle(OWNER, NAME, sha)
     # Without --wait a single unreadable poll is the caller's error.
     fake.faults.drop_connections = 1
     with pytest.raises(ForgeError):
-        runs_status_flow(repo, git)
+        runs_status_flow(repo, root)
     fake.faults.drop_connections = 2
-    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=5) == 0
+    assert runs_status_flow(repo, root, wait=True, interval=0, timeout=5) == 0
     out = capsys.readouterr().out
     assert "forge unreachable (2/5)" in out and "green: 1 run(s)" in out
     fake.faults.drop_connections = 50
     assert (
-        runs_status_flow(repo, git, wait=True, interval=0, timeout=5)
+        runs_status_flow(repo, root, wait=True, interval=0, timeout=5)
         == EXIT_UNREACHABLE
     )
     assert "giving up" in capsys.readouterr().out
 
 
 def test_a_merge_in_flight_wins_over_a_stale_arming_read(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     # Forge evidence (livery PR #21): the server merges between the
     # open-PR read and the arming read, so the consumed schedule looks
     # like "green and not armed". The re-read must answer merged.
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     real_pr = repo.pr
 
@@ -1326,81 +1313,78 @@ def test_a_merge_in_flight_wins_over_a_stale_arming_read(
         checks = repo.checks
 
     real_pr.arm(1, title="feat: the first change")  # green: merges now
-    verdict = classify(RacingRepo(), "feat/1-first", git)  # type: ignore[arg-type]
+    verdict = classify(RacingRepo(), "feat/1-first", root)  # type: ignore[arg-type]
     assert verdict.state == "merged" and verdict.exit_code == 0
 
 
-def test_conflicts_classify_before_arming(rig: tuple[FakeForge, SubmitGit]) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=False, follow_to_verdict=False)
-    other = git.root.parent / "other"
+def test_conflicts_classify_before_arming(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "work.txt").write_text("their conflicting line\n")
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: their change")
     _git(other, "push", "origin", "main")
-    verdict = classify(_repo(fake), "feat/1-first", git)
+    verdict = classify(_repo(fake), "feat/1-first", root)
     assert verdict.exit_code == EXIT_CONFLICTS
 
 
-def test_force_is_refused_on_workflow_branches(
-    rig: tuple[FakeForge, SubmitGit],
-) -> None:
-    fake, git = rig
-    _git(git.root, "checkout", "-b", "workflow/release/forge")
+def test_force_is_refused_on_workflow_branches(rig: tuple[FakeForge, Path]) -> None:
+    fake, root = rig
+    _git(root, "checkout", "-b", "workflow/release/forge")
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, force=True, follow_to_verdict=False)
+        _submit(fake, root, force=True, follow_to_verdict=False)
     message = str(caught.value)
     assert "never force-pushed" in message
     assert "workflow.abort" in message
 
 
 def test_a_rejected_push_teaches_the_fix_commit_and_the_force(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, git = rig
-    _submit(fake, git, follow_to_verdict=False)
-    _git(git.root, "commit", "--amend", "-m", "feat: the first change, rewritten")
+    fake, root = rig
+    _submit(fake, root, follow_to_verdict=False)
+    _git(root, "commit", "--amend", "-m", "feat: the first change, rewritten")
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, follow_to_verdict=False)
+        _submit(fake, root, follow_to_verdict=False)
     message = str(caught.value)
     assert "new commit" in message and "submit --force" in message
 
 
 def test_force_names_the_discarded_commits_and_lands(
-    rig: tuple[FakeForge, SubmitGit],
-    capsys: pytest.CaptureFixture[str],
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, git = rig
-    _submit(fake, git, follow_to_verdict=False)
-    _git(git.root, "commit", "--amend", "-m", "feat: the first change, rewritten")
-    _submit(fake, git, force=True, follow_to_verdict=False)
+    fake, root = rig
+    _submit(fake, root, follow_to_verdict=False)
+    _git(root, "commit", "--amend", "-m", "feat: the first change, rewritten")
+    _submit(fake, root, force=True, follow_to_verdict=False)
     out = capsys.readouterr().out
     assert "forcing discards these commits" in out
     assert "feat: the first change" in out  # the old tip, named
-    remote = _git(git.root, "ls-remote", "origin", "feat/1-first").split()[0]
-    local = _git(git.root, "rev-parse", "HEAD").strip()
+    remote = _git(root, "ls-remote", "origin", "feat/1-first").split()[0]
+    local = _git(root, "rev-parse", "HEAD").strip()
     assert remote == local
     assert "reusing PR #1" in out
 
 
 def test_the_lease_refuses_an_advance_this_clone_never_saw(
-    tmp_path: Path, rig: tuple[FakeForge, SubmitGit]
+    tmp_path: Path, rig: tuple[FakeForge, Path]
 ) -> None:
     # The push-level guard, forced without the flow's fetch: a
     # colleague's commit that arrived after our last fetch makes the
     # lease refuse rather than clobber blind.
-    _fake, git = rig
-    git.push("feat/1-first")
+    _fake, root = rig
+    git.push(root, "feat/1-first")
     other = tmp_path / "other"
     _git(
         tmp_path,
@@ -1417,11 +1401,10 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: a colleague advanced the branch")
     _git(other, "push", "origin", "feat/1-first")
-    _git(git.root, "commit", "--amend", "-m", "feat: rewritten locally")
-    from livery.workshop._git_ops import GitError
+    _git(root, "commit", "--amend", "-m", "feat: rewritten locally")
 
-    with pytest.raises(GitError) as caught:
-        git.push_force("feat/1-first")
+    with pytest.raises(git.GitError) as caught:
+        git.push_force(root, "feat/1-first")
     text = str(caught.value)
     assert "stale info" in text or "rejected" in text
 
@@ -1434,20 +1417,20 @@ def _contract(clone: Path, context: str) -> None:
 
 
 def test_a_context_rename_refuses_teaching_fix_armed(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, git = rig
-    _contract(git.root, "gate")
-    _git(git.root, "checkout", "main")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "chore: contract")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "checkout", "feat/1-first")
-    _contract(git.root, "the-new-gate")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "feat: rename the required context")
+    fake, root = rig
+    _contract(root, "gate")
+    _git(root, "checkout", "main")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: contract")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", "feat/1-first")
+    _contract(root, "the-new-gate")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     # The title is decided before anything else, so the two-commit
@@ -1455,7 +1438,7 @@ def test_a_context_rename_refuses_teaching_fix_armed(
     with pytest.raises(_FAILURES) as caught:
         _submit(
             fake,
-            git,
+            root,
             follow_to_verdict=False,
             title="feat: rename the required context",
         )
@@ -1466,24 +1449,24 @@ def test_a_context_rename_refuses_teaching_fix_armed(
 
 
 def test_fix_applies_the_rename_and_rereruns_quietly(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.forge import Protection
 
-    fake, git = rig
-    _contract(git.root, "gate")
-    _git(git.root, "checkout", "main")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "chore: contract")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "checkout", "feat/1-first")
-    _contract(git.root, "the-new-gate")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "feat: rename the required context")
+    fake, root = rig
+    _contract(root, "gate")
+    _git(root, "checkout", "main")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: contract")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", "feat/1-first")
+    _contract(root, "the-new-gate")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     monkeypatch.setattr(
@@ -1492,7 +1475,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     )
     _submit(
         fake,
-        git,
+        root,
         fix=True,
         gate=False,
         follow_to_verdict=False,
@@ -1508,7 +1491,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     )
     _submit(
         fake,
-        git,
+        root,
         fix=True,
         gate=False,
         follow_to_verdict=False,
@@ -1519,22 +1502,22 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
 
 
 def test_a_refused_admin_write_teaches_instead_of_half_healing(
-    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.forge import ForgeError
 
-    fake, git = rig
-    _contract(git.root, "gate")
-    _git(git.root, "checkout", "main")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "chore: contract")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "checkout", "feat/1-first")
-    _contract(git.root, "the-new-gate")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "feat: rename the required context")
+    fake, root = rig
+    _contract(root, "gate")
+    _git(root, "checkout", "main")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: contract")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", "feat/1-first")
+    _contract(root, "the-new-gate")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: rename the required context")
     monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
 
@@ -1552,7 +1535,7 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
     with pytest.raises(_FAILURES) as caught:
         _submit(
             fake,
-            git,
+            root,
             fix=True,
             gate=False,
             follow_to_verdict=False,
@@ -1565,7 +1548,7 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
 
 
 def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1574,23 +1557,23 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
     # heal, and the submit proceeds saying so, without --fix and
     # with it. Before the gate existed, the no-fix arm failed
     # falsely and the --fix arm died on an unhandled Unsupported.
-    fake, git = rig
-    _git(git.root, "checkout", "main")
-    (git.root / "workshop.toml").write_text(
+    fake, root = rig
+    _git(root, "checkout", "main")
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
         '[ci]\nrequired-context = "old-gate"\n'
     )
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "chore: contract")
-    _git(git.root, "push", "origin", "main")
-    _git(git.root, "checkout", "feat/1-first")
-    _git(git.root, "rebase", "main")
-    (git.root / "workshop.toml").write_text(
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: contract")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", "feat/1-first")
+    _git(root, "rebase", "main")
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
         '[ci]\nrequired-context = "new-gate"\n'
     )
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "feat: rename the gate")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: rename the gate")
     limited = FakeForge(
         capabilities=(
             "auto_merge",
@@ -1602,16 +1585,16 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
         )
     )
     monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: git.root
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: limited)
-    number = _submit(fake, git, armed=False, title="feat: rename the gate")
+    number = _submit(fake, root, armed=False, title="feat: rename the gate")
     assert "nothing to heal" in capsys.readouterr().out
-    (git.root / "more.txt").write_text("x\n")
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "-m", "feat: more work")
+    (root / "more.txt").write_text("x\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: more work")
     assert (
-        _submit(fake, git, armed=False, fix=True, title="feat: rename the gate")
+        _submit(fake, root, armed=False, fix=True, title="feat: rename the gate")
         == number
     )
     assert "nothing to heal" in capsys.readouterr().out
@@ -1627,85 +1610,81 @@ def _recording_check(calls: list[dict[str, object]]):
     return _check
 
 
-def _declare(git: SubmitGit, contract: str) -> None:
+def _declare(root: Path, contract: str) -> None:
     """The contract rides the branch's one unpushed commit."""
-    (git.root / "workshop.toml").write_text(contract)
-    _git(git.root, "add", "-A")
-    _git(git.root, "commit", "--amend", "--no-edit")
+    (root / "workshop.toml").write_text(contract)
+    _git(root, "add", "-A")
+    _git(root, "commit", "--amend", "--no-edit")
 
 
 def test_the_gate_is_the_reflex_whatever_the_contract_declares(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # With or without the affected-legs key, the submit's gate is the
     # reflex fm check runs on a machine, with and without --fix, and
     # the submit says why the chain did not spare it.
-    fake, git = rig
+    fake, root = rig
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
-    _declare(git, '[workspace]\n\n[ci]\nrunners = ["ubuntu-latest"]\n')
-    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    _declare(root, '[workspace]\n\n[ci]\nrunners = ["ubuntu-latest"]\n')
+    _submit(fake, root, gate=True, armed=False, follow_to_verdict=False)
     assert calls == [{"full": False, "fix": False, "base": "main"}]
     out = capsys.readouterr().out
     assert "gate: no chain of green gates reaches tree" in out
     assert "running the gate" in out
     calls.clear()
-    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    _submit(fake, root, gate=True, fix=True, armed=False, follow_to_verdict=False)
     assert calls == [{"full": False, "fix": True, "base": "main"}]
 
 
 def test_the_gate_skips_a_tree_this_machines_check_proved(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop import _gate_record
 
-    fake, git = rig
-    monkeypatch.setattr("livery.footman.data_dir", lambda: git.root.parent / "home")
+    fake, root = rig
+    monkeypatch.setattr("livery.footman.data_dir", lambda: root.parent / "home")
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
-    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    _declare(root, "[workspace]\n\n[ci]\naffected-legs = true\n")
     # No row: the gate runs. A full row for this tree: the gate is
     # skipped, with and without --fix, and the line names the check.
-    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    _submit(fake, root, gate=True, armed=False, follow_to_verdict=False)
     assert len(calls) == 1
     from livery.workshop._verified import tree_id
 
-    assert "recorded" in _gate_record.remember(
-        git.root, git, tree=tree_id(git), packages=None
-    )
+    assert "recorded" in _gate_record.remember(root, tree=tree_id(root), packages=None)
     calls.clear()
-    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    _submit(fake, root, gate=True, fix=True, armed=False, follow_to_verdict=False)
     assert calls == []
     assert "proved green by fm check (a full gate of" in capsys.readouterr().out
     # A new commit is another tree: the gate runs again.
-    (git.root / "more.txt").write_text("more\n")
-    _git(git.root, "add", ".")
-    _git(git.root, "commit", "-m", "feat: more")
-    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    (root / "more.txt").write_text("more\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: more")
+    _submit(fake, root, gate=True, armed=False, follow_to_verdict=False)
     assert len(calls) == 1
 
 
 def test_the_gate_narrows_against_the_base_when_the_legs_do(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
-    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
-    _git(git.root, "branch", "develop", "main")
-    _git(git.root, "push", "origin", "develop")
-    fake.push(
-        OWNER, NAME, "develop", sha=_git(git.root, "rev-parse", "develop").strip()
-    )
+    _declare(root, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    _git(root, "branch", "develop", "main")
+    _git(root, "push", "origin", "develop")
+    fake.push(OWNER, NAME, "develop", sha=_git(root, "rev-parse", "develop").strip())
     _submit(
         fake,
-        git,
+        root,
         gate=True,
         fix=True,
         armed=False,
@@ -1720,8 +1699,9 @@ def test_the_gate_narrows_against_the_base_when_the_legs_do(
 
 
 def test_the_self_heal_gate_narrows_the_same_way(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     # A clean advance of main behind an armed submit heals through 17:
     # integrate, gate again, push again. The second gate is the same
@@ -1729,19 +1709,19 @@ def test_the_self_heal_gate_narrows_the_same_way(
     # The fake merges a green armed PR whatever its distance from
     # main, so the follow answers 17 once by hand, as a strict forge
     # would.
-    fake, git = rig
+    fake, root = rig
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
-    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
-    other = git.root.parent / "other"
+    _declare(root, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "elsewhere.txt").write_text("independent\n")
@@ -1756,35 +1736,36 @@ def test_the_self_heal_gate_narrows_the_same_way(
             raise SystemExit(EXIT_BEHIND)
 
     monkeypatch.setattr("livery.workshop._submit.follow", _follow)
-    git.auto_settle = False  # CI never settles, so the PR waits for the heal
-    _submit(fake, git, gate=True, armed=True)
+    pushes.auto_settle = False  # CI never settles, so the PR waits for the heal
+    _submit(fake, root, gate=True, armed=True)
     assert answered == [EXIT_BEHIND]
     assert calls == [{"full": False, "fix": False, "base": "main"}] * 2
-    assert git.behind_base("main") == 0  # the heal integrated the advance
+    assert git.behind_base(root, "main") == 0  # the heal integrated the advance
 
 
 def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
 ) -> None:
     # The merge can carry the code this process runs, so the gate after
     # it belongs to a fresh submit on the merged code. Above, the
     # handoff cannot start and the heal gates in this process.
     from livery.workshop import _reconcile
 
-    fake, git = rig
+    fake, root = rig
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
-    other = git.root.parent / "other"
+    other = root.parent / "other"
     _git(
-        git.root.parent,
+        root.parent,
         "clone",
         "--config",
         "user.email=other@livery.local",
         "--config",
         "user.name=Other",
-        str(git.root.parent / "origin.git"),
+        str(root.parent / "origin.git"),
         "other",
     )
     (other / "elsewhere.txt").write_text("independent\n")
@@ -1805,19 +1786,19 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
 
     monkeypatch.setattr("livery.workshop._submit.follow", _follow)
     monkeypatch.setattr(_reconcile, "_reexec", _handed_on)
-    git.auto_settle = False
-    before = git.head_sha()
+    pushes.auto_settle = False
+    before = git.head_sha(root)
     with pytest.raises(SystemExit) as caught:
-        _submit(fake, git, gate=True, armed=True)
+        _submit(fake, root, gate=True, armed=True)
     assert caught.value.code == 0
     assert answered == [EXIT_BEHIND]
-    assert handed == [git.root]
+    assert handed == [root]
     # The first gate ran here; the one after the merge is the fresh
     # submit's, on the merged code.
     assert calls == [{"full": False, "fix": False, "base": "main"}]
     out = capsys.readouterr().out
     assert (
-        f"the checkout moved from {before[:12]} to {git.head_sha()[:12]}; the"
+        f"the checkout moved from {before[:12]} to {git.head_sha(root)[:12]}; the"
         " submit continues on that code" in out
     )
 
@@ -1825,16 +1806,16 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
 # --- the one keep-or-drop rule, and the submit's own teardown ------------------
 
 
-def _squash_and_forget(git: SubmitGit, branch: str) -> str:
+def _squash_and_forget(root: Path, branch: str) -> str:
     """Squash *branch* onto origin's main and delete the remote branch; the tip."""
-    tip = _git(git.root, "rev-parse", branch).strip()
-    other = git.root.parent / "squasher"
+    tip = _git(root, "rev-parse", branch).strip()
+    other = root.parent / "squasher"
     if not other.is_dir():
         _git(
-            git.root.parent,
+            root.parent,
             "clone",
             "-q",
-            str(git.root.parent / "origin.git"),
+            str(root.parent / "origin.git"),
             "squasher",
         )
         _git(other, "config", "user.email", "ci@livery.local")
@@ -1846,59 +1827,55 @@ def _squash_and_forget(git: SubmitGit, branch: str) -> str:
     _git(other, "commit", "-qm", f"squash of {branch}")
     _git(other, "push", "-q", "origin", "main")
     _git(other, "push", "-q", "origin", "--delete", branch)
-    _git(git.root, "fetch", "-q", "--prune", "origin")
+    _git(root, "fetch", "-q", "--prune", "origin")
     return tip
 
 
 def test_the_rule_keeps_a_tip_past_the_merged_head_and_frees_the_merged_tip(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
     from livery.workshop._submit import only_local_work
 
-    _fake, git = rig
-    git.push("feat/1-first")
-    tip = _squash_and_forget(git, "feat/1-first")
+    _fake, root = rig
+    git.push(root, "feat/1-first")
+    tip = _squash_and_forget(root, "feat/1-first")
     # Without the merged head the ancestry rule speaks, and after a
     # squash it reads every commit as unique: the fallback, pinned.
-    assert (
-        only_local_work(git, git.root, "feat/1-first")
-        == "1 commit(s) not on any remote"
-    )
+    assert only_local_work(root, "feat/1-first") == "1 commit(s) not on any remote"
     # A commit past the merge is unique work, named as such.
-    (git.root / "after.txt").write_text("a\n")
-    git.commit_all("feat: after the merge")
+    (root / "after.txt").write_text("a\n")
+    git.commit_all(root, "feat: after the merge")
     assert (
-        only_local_work(git, git.root, "feat/1-first", merged_head=tip)
+        only_local_work(root, "feat/1-first", merged_head=tip)
         == "1 commit(s) past the merged head"
     )
-    _git(git.root, "reset", "-q", "--hard", tip)
+    _git(root, "reset", "-q", "--hard", tip)
     # The merged head itself holds nothing only here.
-    assert only_local_work(git, git.root, "feat/1-first", merged_head=tip) == ""
+    assert only_local_work(root, "feat/1-first", merged_head=tip) == ""
     # Dirt is dirt whatever the head.
-    (git.root / "dirt.txt").write_text("d\n")
+    (root / "dirt.txt").write_text("d\n")
     assert (
-        only_local_work(git, git.root, "feat/1-first", merged_head=tip)
-        == "uncommitted changes"
+        only_local_work(root, "feat/1-first", merged_head=tip) == "uncommitted changes"
     )
-    (git.root / "dirt.txt").unlink()
+    (root / "dirt.txt").unlink()
 
 
 def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._verdict import follow as real_follow
 
-    fake, git = rig
+    fake, root = rig
     wt = tmp_path / "wt-dirty"
-    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    _git(root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
     (wt / "linked.txt").write_text("w\n")
     _git(wt, "add", ".")
     _git(wt, "commit", "-m", "feat: linked work")
     monkeypatch.chdir(wt)
-    linked = SubmitGit(wt, fake)
+    linked = wt
 
     def dirty_follow(*args: object, **kwargs: object) -> object:
         (wt / "scratch.txt").write_text("s\n")  # dirt arrives while the follow waits
@@ -1915,14 +1892,14 @@ def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
     assert wt.is_dir() and (wt / "scratch.txt").exists()
 
 
-def _linked(git: SubmitGit, wt: Path) -> None:
-    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+def _linked(root: Path, wt: Path) -> None:
+    _git(root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
     (wt / "linked.txt").write_text("w\n")
     _git(wt, "add", ".")
     _git(wt, "commit", "-m", "feat: linked work")
 
 
-def _sweep(git: SubmitGit, wt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _sweep(root: Path, wt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove *wt* the way another command's janitor does."""
     if sys.platform == "win32":
         # Windows refuses to delete a directory that is a process's
@@ -1930,11 +1907,11 @@ def _sweep(git: SubmitGit, wt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # only after this process has left it. Elsewhere the process
         # stays inside the deleted tree, which the tidy must leave.
         monkeypatch.chdir(wt.parent)
-    _git(git.root, "worktree", "remove", "--force", str(wt))
+    _git(root, "worktree", "remove", "--force", str(wt))
 
 
 def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -1944,15 +1921,15 @@ def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
     # tidy: the merge landed, and nothing is left to do.
     from livery.workshop._verdict import follow as real_follow
 
-    fake, git = rig
+    fake, root = rig
     wt = tmp_path / "wt-swept"
-    _linked(git, wt)
+    _linked(root, wt)
     monkeypatch.chdir(wt)
-    linked = SubmitGit(wt, fake)
+    linked = wt
 
     def swept_follow(*args: object, **kwargs: object) -> object:
         result = real_follow(*args, **kwargs)  # type: ignore[arg-type]
-        _sweep(git, wt, monkeypatch)
+        _sweep(root, wt, monkeypatch)
         return result
 
     monkeypatch.setattr("livery.workshop._submit.follow", swept_follow)
@@ -1966,23 +1943,23 @@ def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
 
 
 def test_a_worktree_swept_while_the_tidy_runs_still_finishes_clean(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop import _submit
 
-    fake, git = rig
+    fake, root = rig
     wt = tmp_path / "wt-racing"
-    _linked(git, wt)
+    _linked(root, wt)
     monkeypatch.chdir(wt)
-    linked = SubmitGit(wt, fake)
+    linked = wt
     real_check = _submit.only_local_work
 
     def swept_mid_tidy(*args: object, **kwargs: object) -> str:
         found = real_check(*args, **kwargs)  # type: ignore[arg-type]
-        _sweep(git, wt, monkeypatch)
+        _sweep(root, wt, monkeypatch)
         return found
 
     monkeypatch.setattr(_submit, "only_local_work", swept_mid_tidy)
@@ -1996,7 +1973,7 @@ def test_a_worktree_swept_while_the_tidy_runs_still_finishes_clean(
 
 @pytest.mark.parametrize("error", [FileNotFoundError, NotADirectoryError])
 def test_the_tidy_reads_either_platforms_error_as_a_sweep_only_when_the_tree_is_gone(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -2009,7 +1986,7 @@ def test_the_tidy_reads_either_platforms_error_as_a_sweep_only_when_the_tree_is_
     fake, _ = rig
     tree = tmp_path / "wt-gone"
     tree.mkdir()
-    gone = SubmitGit(tree, fake)
+    gone = tree
 
     def present(*args: object) -> None:
         raise error(2, "no such program: git")
@@ -2035,19 +2012,19 @@ def test_the_tidy_reads_either_platforms_error_as_a_sweep_only_when_the_tree_is_
 
 
 def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     wt = tmp_path / "wt-merged"
-    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    _git(root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
     (wt / "linked.txt").write_text("w\n")
     _git(wt, "add", ".")
     _git(wt, "commit", "-m", "feat: linked work")
     monkeypatch.chdir(wt)
-    linked = SubmitGit(wt, fake)
+    linked = wt
     number = submit_flow(
         _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
     )
@@ -2058,9 +2035,9 @@ def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
     # the local branch are gone, and the shell is told where to go.
     assert "removed the worktree" in out and "cd " in out
     assert not wt.exists()
-    assert _git(git.root, "branch", "--list", "feat/9-linked").strip() == ""
+    assert _git(root, "branch", "--list", "feat/9-linked").strip() == ""
     # The main checkout is not the submit's to move.
-    assert _git(git.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
+    assert _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
 
 
 def test_the_verbs_that_remove_a_worktree_own_the_real_directory() -> None:
@@ -2077,25 +2054,25 @@ def test_the_verbs_that_remove_a_worktree_own_the_real_directory() -> None:
 
 
 def test_a_merged_submit_in_the_main_checkout_keeps_its_branch(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
 ) -> None:
-    fake, git = rig
-    _submit(fake, git, armed=True)
+    fake, root = rig
+    _submit(fake, root, armed=True)
     # A person reads the run from here; the janitor's branch rule
     # drops the branch later.
-    assert git.current_branch() == "feat/1-first"
+    assert git.current_branch(root) == "feat/1-first"
 
 
 # --- slice 2: no-close, a named abandon, and arming a green pull request ------
 
 
 def test_no_close_submits_without_the_footer_and_the_issue_stays_open(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     issue = _repo(fake).issue.create("the work behind feat/1-first")
     assert issue.number == 1
-    number = _submit(fake, git, armed=True, close=False)
+    number = _submit(fake, root, armed=True, close=False)
     out = capsys.readouterr().out
     assert "closes nothing (--no-close)" in out
     pr = _repo(fake).pr.get(number)
@@ -2105,45 +2082,46 @@ def test_no_close_submits_without_the_footer_and_the_issue_stays_open(
 
 
 def test_abandon_of_a_named_branch_refuses_a_dirty_worktree_then_removes_it(
-    rig: tuple[FakeForge, SubmitGit], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
     # A branch that is nowhere is nothing to undo, said plainly.
-    abandon_flow(repo, git, "feat/9-nowhere", "main")
+    abandon_flow(repo, root, "feat/9-nowhere", "main")
     assert "no open pull request for feat/9-nowhere" in capsys.readouterr().out
     wt = tmp_path / "wt-named"
-    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    _git(root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
     (wt / "linked.txt").write_text("w\n")
     _git(wt, "add", ".")
     _git(wt, "commit", "-m", "feat: linked work")
-    linked = SubmitGit(wt, fake)
-    linked.push("feat/9-linked")
+    linked = wt
+    git.push(linked, "feat/9-linked")
     repo.pr.open("feat/9-linked", "main", "feat: linked work")
     (wt / "dirt.txt").write_text("d\n")
     with pytest.raises(_FAILURES, match="uncommitted changes"):
-        abandon_flow(repo, git, "feat/9-linked", "main")
+        abandon_flow(repo, root, "feat/9-linked", "main")
     (wt / "dirt.txt").unlink()
-    abandon_flow(repo, git, "feat/9-linked", "main")
+    abandon_flow(repo, root, "feat/9-linked", "main")
     out = capsys.readouterr().out
     assert "removed the worktree" in out and "deleted feat/9-linked" in out
     assert not wt.exists()
-    assert _git(git.root, "branch", "--list", "feat/9-linked").strip() == ""
+    assert _git(root, "branch", "--list", "feat/9-linked").strip() == ""
     closed = repo.pr.find_by_head("feat/9-linked", state="all")
     assert closed is not None and closed.state == "closed" and not closed.merged
     # This checkout never moved, and the output does not say it did.
-    assert git.current_branch() == "feat/1-first"
+    assert git.current_branch(root) == "feat/1-first"
     assert "back on" not in out
 
 
 def test_a_refused_arm_on_a_running_pull_request_follows_ci_and_merges_when_green(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     from livery.forge import ForgeError
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
 
     def refuse(number: int, *, title: str, message: str = "") -> None:
@@ -2161,16 +2139,16 @@ def test_a_refused_arm_on_a_running_pull_request_follows_ci_and_merges_when_gree
 
     monkeypatch.setattr(repo.checks, "status", running)
     # Red after the wait: refused, naming the refusal and the state.
-    git.outcome = "failure"
+    pushes.outcome = "failure"
     with pytest.raises(_FAILURES, match=r"arming was refused \(Commit title is too"):
-        submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+        submit_flow(repo, root, gate=False, armed=True, interval=0, timeout=5)
     # Green after the wait: followed and merged. A new head, since the
     # fake keeps the red verdict of the old one.
     verdicts = iter(["pending", "pending"])
-    git.outcome = "success"
-    (git.root / "more.txt").write_text("m\n")
-    git.commit_all("feat: more work")
-    number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    pushes.outcome = "success"
+    (root / "more.txt").write_text("m\n")
+    git.commit_all(root, "feat: more work")
+    number = submit_flow(repo, root, gate=False, armed=True, interval=0, timeout=5)
     out = capsys.readouterr().out
     assert "CI is still running, so the submit follows it" in out
     # Merged here, so the submit says merged, never armed.
@@ -2181,13 +2159,14 @@ def test_a_refused_arm_on_a_running_pull_request_follows_ci_and_merges_when_gree
 
 
 def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     from livery.forge import ForgeError
 
-    fake, git = rig
+    fake, root = rig
     repo = _repo(fake)
 
     def refuse(number: int, *, title: str, message: str = "") -> None:
@@ -2196,15 +2175,15 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
     monkeypatch.setattr(repo.checks, "status", repo.checks.status)
     monkeypatch.setattr(repo.pr, "arm", refuse)
     # Red: refused, naming the forge's own error.
-    git.outcome = "failure"
+    pushes.outcome = "failure"
     with pytest.raises(_FAILURES, match="clean status"):
-        submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+        submit_flow(repo, root, gate=False, armed=True, interval=0, timeout=5)
     # Green: merged when green was the intent, and it is green. A new
     # head, since the fake keeps the red verdict of the old one.
-    git.outcome = "success"
-    (git.root / "more.txt").write_text("m\n")
-    git.commit_all("feat: more work")
-    number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    pushes.outcome = "success"
+    (root / "more.txt").write_text("m\n")
+    git.commit_all(root, "feat: more work")
+    number = submit_flow(repo, root, gate=False, armed=True, interval=0, timeout=5)
     out = capsys.readouterr().out
     assert "arming refused" in out and "merged now" in out
     assert f"  merged: PR #{number}" in out
@@ -2214,42 +2193,42 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
 
 
 def test_the_base_is_the_recorded_parent_while_origin_has_it(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._submit import resolve_base
 
-    _fake, git = rig
+    _fake, root = rig
     # No record: the default stands, silently.
-    assert resolve_base(git, "main", given=False) == "main"
-    git.config_set("branch.feat/1-first.workshop-parent", "feat/0-parent")
+    assert resolve_base(root, "main", given=False) == "main"
+    git.config_set(root, "branch.feat/1-first.workshop-parent", "feat/0-parent")
     # The parent gone from origin (merged, its branch deleted): the
     # default again, said out loud. The fallback before the happy path.
-    assert resolve_base(git, "main", given=False) == "main"
+    assert resolve_base(root, "main", given=False) == "main"
     assert "gone from origin" in capsys.readouterr().out
-    _git(git.root, "branch", "feat/0-parent", "origin/main")
-    _git(git.root, "push", "-u", "origin", "feat/0-parent")
-    assert resolve_base(git, "main", given=False) == "feat/0-parent"
+    _git(root, "branch", "feat/0-parent", "origin/main")
+    _git(root, "push", "-u", "origin", "feat/0-parent")
+    assert resolve_base(root, "main", given=False) == "feat/0-parent"
     # The parent merged and the forge deleted its branch, which is the
     # state a stacked child submits in. A plain fetch does not prune, so
     # the tracking ref is still here and answers as if the branch were
     # too; origin itself is the only honest answer.
-    head = git.remote_head("feat/0-parent")
-    _git(git.root, "push", "origin", "--delete", "feat/0-parent")
+    head = git.remote_head(root, "feat/0-parent")
+    _git(root, "push", "origin", "--delete", "feat/0-parent")
     # The forge deletes the branch, not this checkout, so the tracking
     # ref stays until something prunes it. Put it back to be that state.
-    _git(git.root, "update-ref", "refs/remotes/origin/feat/0-parent", head)
-    assert git.remote_head("feat/0-parent") == head
-    assert resolve_base(git, "main", given=False) == "main"
+    _git(root, "update-ref", "refs/remotes/origin/feat/0-parent", head)
+    assert git.remote_head(root, "feat/0-parent") == head
+    assert resolve_base(root, "main", given=False) == "main"
     assert "gone from origin" in capsys.readouterr().out
     # The flag wins over the record.
-    assert resolve_base(git, "release", given=True) == "release"
+    assert resolve_base(root, "release", given=True) == "release"
 
 
 def test_a_stacked_branch_whose_parent_merged_moves_its_own_commits_before_the_push(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, git = rig
-    root = git.root
+    fake, root = rig
+    root = root
     # The parent: two commits, the second fixing the first, pushed; the
     # child starts on it, as `fm start --from` leaves it.
     _git(root, "checkout", "-b", "feat/0-parent", "origin/main")
@@ -2259,9 +2238,9 @@ def test_a_stacked_branch_whose_parent_merged_moves_its_own_commits_before_the_p
     (root / "shared.txt").write_text("a\nB\nc\n")
     _git(root, "commit", "-am", "fix: the parent's fix")
     _git(root, "push", "-u", "origin", "feat/0-parent")
-    start = git.head_sha()
+    start = git.head_sha(root)
     _git(root, "checkout", "-B", "feat/1-first", "feat/0-parent")
-    git.record_stack("feat/1-first", "feat/0-parent", start)
+    _stack.record_stack(root, "feat/1-first", "feat/0-parent", start)
     (root / "shared.txt").write_text("a\nB\nc\nd\n")
     _git(root, "commit", "-am", "feat: the child")
     # The parent lands on main as one squash commit, and origin deletes
@@ -2274,36 +2253,36 @@ def test_a_stacked_branch_whose_parent_merged_moves_its_own_commits_before_the_p
     _git(root, "push", "origin", "--delete", "feat/0-parent")
     _git(root, "checkout", "feat/1-first")
     _git(root, "branch", "-D", "landing")
-    _submit(fake, git, armed=False, follow_to_verdict=False)
+    _submit(fake, root, armed=False, follow_to_verdict=False)
     out = capsys.readouterr().out
     assert "feat/0-parent has merged: feat/1-first stands on main now" in out
     subjects = _git(root, "log", "--format=%s", "origin/main..HEAD").split("\n")[:-1]
     assert subjects == ["feat: the child"]
     # The rewrite reached origin: the push went with the lease.
     assert _git(root, "ls-remote", "origin", "feat/1-first").split()[0] == (
-        git.head_sha()
+        git.head_sha(root)
     )
 
 
 def test_an_armed_stacked_branch_waits_for_its_open_parent_unarmed(
-    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A child of an open parent is never armed; the recovery is named."""
-    fake, git = rig
-    root = git.root
+    fake, root = rig
+    root = root
     _git(root, "checkout", "-b", "feat/0-parent", "origin/main")
     (root / "parent.txt").write_text("p\n")
     _git(root, "add", ".")
     _git(root, "commit", "-m", "feat: the parent")
-    git.push("feat/0-parent")
+    git.push(root, "feat/0-parent")
     _git(root, "checkout", "-B", "feat/1-first", "feat/0-parent")
-    git.record_stack("feat/1-first", "feat/0-parent", git.head_sha())
+    _stack.record_stack(root, "feat/1-first", "feat/0-parent", git.head_sha(root))
     (root / "child.txt").write_text("c\n")
     _git(root, "add", ".")
     _git(root, "commit", "-m", "feat: the child")
     # The task resolves the base from the record before the flow runs.
     number = _submit(
-        fake, git, armed=True, follow_to_verdict=False, base="feat/0-parent"
+        fake, root, armed=True, follow_to_verdict=False, base="feat/0-parent"
     )
     out = capsys.readouterr().out
     assert (
@@ -2317,9 +2296,10 @@ def test_an_armed_stacked_branch_waits_for_its_open_parent_unarmed(
 
 
 def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    pushes: ForgePushes,
 ) -> None:
     from livery.forge import ForgeError
     from livery.workshop._verdict import EXIT_CI_FAILED, JobWatch, elapsed_label, follow
@@ -2331,10 +2311,10 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
         "1h02m",
     ]
 
-    fake, git = rig
-    git.auto_settle = False
-    git.outcome = "failure"
-    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake, root = rig
+    pushes.auto_settle = False
+    pushes.outcome = "failure"
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
     pr = repo.pr.get(number)
     assert pr is not None
@@ -2369,7 +2349,7 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     # The follow prints the same, then the verdict naming the job.
     capsys.readouterr()
     with pytest.raises(SystemExit) as caught:
-        follow(repo, "feat/1-first", git, interval=0, timeout=1)
+        follow(repo, "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_CI_FAILED
     out = capsys.readouterr().out
     assert out.index("ci.yml / gate: failed") < out.index(
@@ -2378,7 +2358,7 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
 
 
 def test_a_profiled_submit_puts_the_run_it_followed_in_its_own_trace(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -2389,11 +2369,11 @@ def test_a_profiled_submit_puts_the_run_it_followed_in_its_own_trace(
     whatever is keeping this command's trace, so the timeline holds the verb
     and the run it caused rather than the verb alone.
     """
-    fake, git = rig
+    fake, root = rig
     box = tmp_path / "box"
     box.mkdir()
     monkeypatch.setenv("FM_PROFILE_DIR", str(box))
-    _submit(fake, git, armed=True)
+    _submit(fake, root, armed=True)
     printed = capsys.readouterr().out
     assert "joins this trace" in printed, printed
     (fragment,) = list(box.glob("*.json"))
@@ -2404,22 +2384,23 @@ def test_a_profiled_submit_puts_the_run_it_followed_in_its_own_trace(
 
 
 def test_an_unprofiled_submit_asks_the_forge_for_no_run_at_all(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The ordinary submit pays one environment read and nothing else."""
-    fake, git = rig
+    fake, root = rig
     monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
-    _submit(fake, git, armed=True)
+    _submit(fake, root, armed=True)
     assert "joins this trace" not in capsys.readouterr().out
 
 
 def test_a_red_run_is_traced_too(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
 ) -> None:
     """A timeline is wanted most where something went wrong.
 
@@ -2427,13 +2408,13 @@ def test_a_red_run_is_traced_too(
     and wrote a file holding the submit's own task and nothing else, because
     the trace was taken on the way to a merge rather than at every way out.
     """
-    fake, git = rig
+    fake, root = rig
     box = tmp_path / "box"
     box.mkdir()
     monkeypatch.setenv("FM_PROFILE_DIR", str(box))
-    git.outcome = "failure"
+    pushes.outcome = "failure"
     with pytest.raises(SystemExit) as exited:
-        _submit(fake, git, armed=True)
+        _submit(fake, root, armed=True)
     assert exited.value.code == EXIT_CI_FAILED
     assert "joins this trace" in capsys.readouterr().out
     assert len(list(box.glob("*.json"))) == 1

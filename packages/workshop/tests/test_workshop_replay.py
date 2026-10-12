@@ -10,7 +10,6 @@ import pytest
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop import _replay
-from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
@@ -50,7 +49,7 @@ def _build(base: Path) -> None:
 
 
 @pytest.fixture
-def released(seeds: Seeds) -> tuple[Path, GitOps, Package]:
+def released(seeds: Seeds) -> tuple[Path, Package]:
     """A workspace whose member thing is released at v1.2.0 and tagged."""
     root = seeds("released", _build) / "ws"
     package = Package(
@@ -60,7 +59,7 @@ def released(seeds: Seeds) -> tuple[Path, GitOps, Package]:
         kind="python",
         depends=(),
     )
-    return root, GitOps(root), package
+    return root, package
 
 
 # --- refusals -----------------------------------------------------------------
@@ -77,11 +76,11 @@ def test_the_latest_release_is_the_newest_final() -> None:
     )
 
 
-def test_a_missing_receipt_tag_refuses(released: tuple[Path, GitOps, Package]) -> None:
-    root, git, package = released
+def test_a_missing_receipt_tag_refuses(released: tuple[Path, Package]) -> None:
+    root, package = released
     with pytest.raises(_FAILURES, match=r"carries no tag packages/thing/v2\.0\.0"):
         _replay.replay_flow(
-            root, git, package, python="3.14", registry=_Index("2.0.0"), index=""
+            root, package, python="3.14", registry=_Index("2.0.0"), index=""
         )
 
 
@@ -102,9 +101,9 @@ def _replayed(
 
 
 def test_a_red_replay_fails_and_leaves_no_worktree(
-    released: tuple[Path, GitOps, Package], monkeypatch: pytest.MonkeyPatch
+    released: tuple[Path, Package], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, git, package = released
+    root, package = released
     _replayed(monkeypatch, 1)
     from livery.footman import scratch_dir as real
 
@@ -119,7 +118,7 @@ def test_a_red_replay_fails_and_leaves_no_worktree(
         _FAILURES, match=r"replay of livery-thing==1.2.0 is red \(exit 1\)"
     ):
         _replay.replay_flow(
-            root, git, package, python="3.14", registry=_Index("1.2.0"), index=""
+            root, package, python="3.14", registry=_Index("1.2.0"), index=""
         )
     # The temporary worktree is gone either way, and the scratch that held it.
     assert "replay-" not in _git(root, "worktree", "list")
@@ -127,11 +126,11 @@ def test_a_red_replay_fails_and_leaves_no_worktree(
 
 
 def test_a_refused_issue_is_named_and_the_replay_still_fails(
-    released: tuple[Path, GitOps, Package],
+    released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root, git, package = released
+    root, package = released
     fake = FakeForge()
     fake.create_repo("o", "r")
     repo = fake.repository("o", "r")
@@ -145,7 +144,6 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
     with pytest.raises(_FAILURES, match="is red"):
         _replay.replay_flow(
             root,
-            git,
             package,
             python="3.14",
             registry=_Index("1.2.0"),
@@ -162,16 +160,15 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
 
 
 def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
-    released: tuple[Path, GitOps, Package],
+    released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root, git, package = released
+    root, package = released
     seen: dict[str, object] = {}
     _replayed(monkeypatch, 0, seen)
     _replay.replay_flow(
         root,
-        git,
         package,
         python="3.14",
         registry=_Index("1.2.0", "1.1.0"),
@@ -197,11 +194,11 @@ def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
 
 
 def test_a_red_replay_files_then_extends_the_marker_issue(
-    released: tuple[Path, GitOps, Package],
+    released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root, git, package = released
+    root, package = released
     fake = FakeForge()
     fake.create_repo("o", "r")
     repo = fake.repository("o", "r")
@@ -214,7 +211,6 @@ def test_a_red_replay_files_then_extends_the_marker_issue(
         with pytest.raises(_FAILURES, match="is red"):
             _replay.replay_flow(
                 root,
-                git,
                 package,
                 python="3.14",
                 registry=_Index("1.2.0"),

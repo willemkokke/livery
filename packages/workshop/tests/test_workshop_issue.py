@@ -9,9 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._git_ops import GitError, GitOps
+from livery.workshop import _stack
 from livery.workshop._issue_tasks import (
     assignee_limit,
     branch_name,
@@ -63,12 +64,11 @@ def _instance(tmp_path: Path) -> Path:
 @pytest.fixture()
 def rig(
     seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[Path, FakeForge, GitOps]:
+) -> tuple[Path, FakeForge]:
     root = seeds("issue", _instance) / "ws"
     fake = FakeForge()
     fake.create_repo("willemkokke", "livery", private=True, description="t")
     repo = fake.repository("willemkokke", "livery")
-    git = GitOps(root)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -78,16 +78,16 @@ def rig(
     monkeypatch.setattr("livery.workshop._issue_tasks._me", lambda _repo: "fake-user")
     monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
-    return root, fake, git
+    return root, fake
 
 
 def test_show_refuses_a_title_and_a_missing_number_then_prints_the_issue_whole(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The refusals first: a title is not a number, and a number the
     # forge has no issue for dies naming it. Then the whole issue: the
     # header, the branch's open pull request, the body and the thread.
-    root, fake, git = rig
+    root, fake = rig
     with pytest.raises(_FAILURES, match="not one"):
         issue_show("a title")
     with pytest.raises(_FAILURES, match="no issue #41"):
@@ -97,7 +97,7 @@ def test_show_refuses_a_title_and_a_missing_number_then_prints_the_issue_whole(
     repo.issue.assign(made.number, "fake-user")
     repo.issue.comment(made.number, "the first reply")
     branch = branch_name("feat", made.number, "the work")
-    git.create_branch(branch)
+    git.create_branch(root, branch)
     (root / "w.txt").write_text("w\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: w")
@@ -113,21 +113,21 @@ def test_show_refuses_a_title_and_a_missing_number_then_prints_the_issue_whole(
 
 
 def test_show_prints_the_whole_issue_when_git_cannot_list_the_branches(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The branch only names an open pull request: a git that cannot
     # answer costs that line, never the body or the thread.
-    _root, fake, _git_ops = rig
+    _root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     made = repo.issue.create("the work", body="the order")
     repo.issue.comment(made.number, "the first reply")
 
-    def _down(self: GitOps, prefix: str) -> tuple[str, ...]:
-        raise GitError("git for-each-ref exited 128: fatal: not a git repository")
+    def _down(root: Path, prefix: str) -> tuple[str, ...]:
+        raise git.GitError("git for-each-ref exited 128: fatal: not a git repository")
 
-    monkeypatch.setattr(GitOps, "local_branches", _down)
+    monkeypatch.setattr(git, "local_branches", _down)
     issue_show(str(made.number))
     out = capsys.readouterr().out
     assert (
@@ -138,15 +138,15 @@ def test_show_prints_the_whole_issue_when_git_cannot_list_the_branches(
 
 
 def test_show_finds_the_branch_among_the_tracking_refs_and_never_asks_origin(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     made = repo.issue.create("the work", body="the order")
     branch = branch_name("feat", made.number, "the work")
-    git.create_branch(branch)
+    git.create_branch(root, branch)
     (root / "w.txt").write_text("w\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: w")
@@ -157,13 +157,13 @@ def test_show_finds_the_branch_among_the_tracking_refs_and_never_asks_origin(
     fake.push("willemkokke", "livery", branch)
     repo.pr.open(branch, "main", "feat: the work", "")
 
-    def _asked(self: GitOps, prefix: str) -> tuple[str, ...]:
+    def _asked(root: Path, prefix: str) -> tuple[str, ...]:
         raise AssertionError("issue.show asked origin for its branches")
 
-    monkeypatch.setattr(GitOps, "remote_branches", _asked)
+    monkeypatch.setattr(git, "remote_branches", _asked)
     issue_show(str(made.number))
     assert f"open PR #1 on {branch}" in capsys.readouterr().out
-    assert git.tracking_branches("feat/") == (branch,)
+    assert git.tracking_branches(root, "feat/") == (branch,)
 
 
 def test_ref_parsing_and_branch_grammar() -> None:
@@ -214,13 +214,12 @@ def test_work_started_inside_a_worktree_lands_beside_the_rest(
 
 
 def test_start_at_the_limit_warns_and_continues(
-    rig: tuple[Path, FakeForge, GitOps],
-    capsys: pytest.CaptureFixture[str],
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Assignment is documentation, not a gate: at the limit the work
     # still starts; only the listing is lost, and the warning says
     # to communicate.
-    _root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("held work")
     repo.issue.assign(created.number, "colleague")
@@ -228,13 +227,13 @@ def test_start_at_the_limit_warns_and_continues(
     out = capsys.readouterr().out
     assert "Warning" in out and "colleague" in out
     assert "[issues] assignees" in out and "workshop.toml" in out
-    assert git.current_branch().startswith(f"feat/{created.number}-")
+    assert git.current_branch(root).startswith(f"feat/{created.number}-")
     live = repo.issue.get(created.number)
     assert live is not None and live.assignees == ("colleague",)
 
 
 def test_start_refuses_a_missing_number_and_a_bad_type(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
     with pytest.raises(_FAILURES) as caught:
         start("999", worktree=False)
@@ -245,9 +244,9 @@ def test_start_refuses_a_missing_number_and_a_bad_type(
 
 
 def test_start_in_this_checkout_refuses_dirt_naming_both_escapes(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, fake, _git_seam = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("dirty start")
     (root / "stray.txt").write_text("dirty\n")
@@ -258,23 +257,23 @@ def test_start_in_this_checkout_refuses_dirt_naming_both_escapes(
 
 
 def test_start_assigns_and_branches_from_the_fetched_base(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    _root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("build the widget")
     start(str(created.number), worktree=False)
     live = repo.issue.get(created.number)
     assert live is not None and "fake-user" in live.assignees
-    assert git.current_branch() == f"feat/{created.number}-build-the-widget"
+    assert git.current_branch(root) == f"feat/{created.number}-build-the-widget"
 
 
 def test_start_fails_when_origin_cannot_be_fetched(
-    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _state
 
-    _root, fake, _git = rig
+    _root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("no network")
     monkeypatch.setattr(
@@ -282,19 +281,19 @@ def test_start_fails_when_origin_cannot_be_fetched(
         "fetch_store",
         lambda at, *, branches=False: _state.Fetched(0, "could not resolve host"),
     )
-    monkeypatch.setattr(GitOps, "fetch", lambda self: pytest.fail("a second fetch"))
+    monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     with pytest.raises(_FAILURES, match="could not be fetched: could not resolve host"):
         start(str(created.number), worktree=False)
 
 
 def test_start_fetches_origins_heads_and_the_store_in_one_round_trip(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop import _state
 
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("one trip")
     fetches: list[tuple[Path, bool]] = []
@@ -304,22 +303,22 @@ def test_start_fetches_origins_heads_and_the_store_in_one_round_trip(
         return _state.Fetched(3, "", 1)
 
     monkeypatch.setattr(_state, "fetch_store", fetch_store)
-    monkeypatch.setattr(GitOps, "fetch", lambda self: pytest.fail("a second fetch"))
+    monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     start(str(created.number), worktree=False)
     assert fetches == [(root, True)]
     assert "store: 1 ref(s) changed, 3 mirrored" in capsys.readouterr().out
-    assert git.current_branch() == f"feat/{created.number}-one-trip"
+    assert git.current_branch(root) == f"feat/{created.number}-one-trip"
 
 
 def test_start_wip_parks_the_dirty_tree_then_branches(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("park then go")
     (root / "stray.txt").write_text("dirty\n")
     start(str(created.number), worktree=False, wip=True)
-    assert git.current_branch().startswith(f"feat/{created.number}-")
+    assert git.current_branch(root).startswith(f"feat/{created.number}-")
     parked = subprocess.run(
         ["git", "log", "--format=%s", "main", "-1"],
         cwd=root,
@@ -331,11 +330,11 @@ def test_start_wip_parks_the_dirty_tree_then_branches(
 
 
 def test_start_opens_a_worktree_by_default_and_provisions_it(
-    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from types import SimpleNamespace
 
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
@@ -377,11 +376,11 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     assert head == f"feat/{created.number}-tree-work"
     assert any("fm sync" in call for call in provisioned)
     # This checkout never moved: the worktree is where the work is.
-    assert git.current_branch() == "main"
+    assert git.current_branch(root) == "main"
 
 
 def test_a_start_run_again_syncs_the_worktree_its_first_run_left_unsynced(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -389,7 +388,7 @@ def test_a_start_run_again_syncs_the_worktree_its_first_run_left_unsynced(
     # network; running the start again is the recovery, so it syncs.
     from types import SimpleNamespace
 
-    _root, fake, _git = rig
+    _root, fake = rig
     created = fake.repository("willemkokke", "livery").issue.create("tree work")
     codes = [1, 0]
     provisioned: list[str] = []
@@ -429,7 +428,7 @@ def test_start_is_a_verb_and_its_helper_is_not() -> None:
 
 
 def test_start_refuses_without_a_ref_naming_the_three_forms(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
     with pytest.raises(_FAILURES) as caught:
         start("")
@@ -439,7 +438,7 @@ def test_start_refuses_without_a_ref_naming_the_three_forms(
 
 
 def test_start_refuses_a_branch_it_does_not_recognise(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
     for bad in ("wat/thing", "docs/", "feat/-x"):
         with pytest.raises(_FAILURES) as caught:
@@ -450,13 +449,13 @@ def test_start_refuses_a_branch_it_does_not_recognise(
 
 
 def test_start_of_a_plain_branch_files_nothing_and_opens_its_worktree(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from types import SimpleNamespace
 
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     before = len(repo.issue.list(state="all"))
     import livery.toolroom.tools as toolroom
@@ -489,18 +488,18 @@ def test_start_of_a_plain_branch_files_nothing_and_opens_its_worktree(
     assert head == "docs/a-note"
     # No issue was filed, nobody was assigned, and this checkout never moved.
     assert len(repo.issue.list(state="all")) == before
-    assert git.current_branch() == "main"
+    assert git.current_branch(root) == "main"
     # A re-run re-enters the started work.
     start("docs/a-note")
     assert "already started: docs/a-note" in capsys.readouterr().out
 
 
 def test_start_of_a_plain_branch_in_this_checkout(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    _root, _fake, git = rig
+    root, _fake = rig
     start("fix/a-small-one", worktree=False)
-    assert git.current_branch() == "fix/a-small-one"
+    assert git.current_branch(root) == "fix/a-small-one"
     # The branch starts from the fetched base and carries no issue.
     from livery.workshop._submit import branch_issue
 
@@ -529,7 +528,7 @@ def _quiet_provision(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _branch_with_work(
-    rig: tuple[Path, FakeForge, GitOps], title: str, *, merged: bool
+    rig: tuple[Path, FakeForge], title: str, *, merged: bool
 ) -> tuple[int, str, str]:
     """An issue's branch, one pushed commit past main, that no tree holds.
 
@@ -537,16 +536,16 @@ def _branch_with_work(
     leaves a branch whose worktree it removed. The issue's number, the
     branch, and its tip.
     """
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
     branch = branch_name("feat", created.number, title)
-    git.create_branch(branch)
+    git.create_branch(root, branch)
     (root / "w.txt").write_text("w\n")
-    git.commit_all("feat: w")
+    git.commit_all(root, "feat: w")
     _git(root, "push", "-u", "origin", branch)
-    tip = git.head_sha()
-    git.switch("main")
+    tip = git.head_sha(root)
+    git.switch(root, "main")
     if merged:
         fake.push("willemkokke", "livery", branch, sha=tip)
         made = repo.pr.open(branch, "main", f"feat: {title}")
@@ -566,14 +565,14 @@ def _head(tree: Path) -> str:
 
 
 def test_start_drops_a_merged_branch_no_tree_holds_and_starts_fresh(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The merge removed the worktree and left the branch at the merged
     # head. That is finished work: a start of the reopened issue begins
     # fresh from the base, and never names a tree that does not exist.
-    root, _fake, _git_ops = rig
+    root, _fake = rig
     _quiet_provision(monkeypatch)
     number, branch, tip = _branch_with_work(rig, "merged work", merged=True)
     start(str(number), open="none")
@@ -582,30 +581,30 @@ def test_start_drops_a_merged_branch_no_tree_holds_and_starts_fresh(
     assert f"branch {branch}: PR #1 merged, nothing only here; removed" in out
     path = worktree_path(root, number, "merged work")
     assert _head(path) == _head(root) != tip
-    assert GitOps(path).current_branch() == branch
+    assert git.current_branch(path) == branch
 
 
 def test_start_in_this_checkout_drops_a_merged_branch_and_starts_fresh(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, _fake, git = rig
+    root, _fake = rig
     base = _head(root)
     number, branch, tip = _branch_with_work(rig, "merged here", merged=True)
     start(str(number), worktree=False)
     out = capsys.readouterr().out
     assert "already started" not in out and "nothing only here; removed" in out
-    assert git.current_branch() == branch
-    assert git.head_sha() == base != tip
+    assert git.current_branch(root) == branch
+    assert git.head_sha(root) == base != tip
 
 
 def test_start_re_enters_a_branch_no_tree_holds_on_its_own_tip(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # No merged pull request: work in progress whose tree went, so the
     # start puts a worktree on the branch and keeps its commits.
-    root, _fake, _git_ops = rig
+    root, _fake = rig
     _quiet_provision(monkeypatch)
     number, branch, tip = _branch_with_work(rig, "open work", merged=False)
     start(str(number), open="none")
@@ -620,11 +619,11 @@ def test_start_re_enters_a_branch_no_tree_holds_on_its_own_tip(
 
 
 def test_start_names_the_tree_that_holds_the_branch(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root, _fake, _git_ops = rig
+    root, _fake = rig
     _quiet_provision(monkeypatch)
     number, branch, _tip = _branch_with_work(rig, "held work", merged=False)
     elsewhere = (root.parent / "elsewhere").resolve()
@@ -636,25 +635,25 @@ def test_start_names_the_tree_that_holds_the_branch(
 
 
 def _started(
-    rig: tuple[Path, FakeForge, GitOps], title: str = "the work"
-) -> tuple[Path, FakeForge, GitOps, int, str]:
-    root, fake, git = rig
+    rig: tuple[Path, FakeForge], title: str = "the work"
+) -> tuple[Path, FakeForge, int, str]:
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
     start(str(created.number), worktree=False)
-    branch = git.current_branch()
-    return root, fake, git, created.number, branch
+    branch = git.current_branch(root)
+    return root, fake, created.number, branch
 
 
 def test_stop_refuses_an_unpushed_delta_naming_the_remote(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, _fake, git, number, branch = _started(rig)
+    root, _fake, number, branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: local only")
+    git.commit_all(root, "feat: local only")
     _git(root, "push", "origin", branch)  # remote exists...
     (root / "more.txt").write_text("m\n")
-    git.commit_all("feat: newer, unpushed")
+    git.commit_all(root, "feat: newer, unpushed")
     with pytest.raises(_FAILURES) as caught:
         issue_stop(str(number))
     message = str(caught.value)
@@ -663,11 +662,11 @@ def test_stop_refuses_an_unpushed_delta_naming_the_remote(
 
 
 def test_stop_refuses_when_the_remote_vanished_while_open(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, _fake, git, number, _branch = _started(rig)
+    root, _fake, number, _branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: local only")
+    git.commit_all(root, "feat: local only")
     with pytest.raises(_FAILURES) as caught:
         issue_stop(str(number))
     message = str(caught.value)
@@ -675,11 +674,11 @@ def test_stop_refuses_when_the_remote_vanished_while_open(
 
 
 def test_stop_names_the_closure_when_the_issue_is_closed(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, fake, git, number, _branch = _started(rig)
+    root, fake, number, _branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: local only")
+    git.commit_all(root, "feat: local only")
     fake.repository("willemkokke", "livery").issue.close(number)
     with pytest.raises(_FAILURES) as caught:
         issue_stop(str(number))
@@ -687,17 +686,17 @@ def test_stop_names_the_closure_when_the_issue_is_closed(
 
 
 def test_stop_unassigns_cleans_local_and_leaves_the_remote(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: pushed work")
+    git.commit_all(root, "feat: pushed work")
     _git(root, "push", "origin", branch)
     issue_stop()  # bare: inferred from the branch
     live = fake.repository("willemkokke", "livery").issue.get(number)
     assert live is not None and live.assignees == ()
-    assert git.current_branch() == "main"
-    assert not git.local_branch_exists(branch)
+    assert git.current_branch(root) == "main"
+    assert not git.local_branch_exists(root, branch)
     remote = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", branch],
         cwd=root,
@@ -708,32 +707,30 @@ def test_stop_unassigns_cleans_local_and_leaves_the_remote(
     assert branch in remote  # the pool's copy stays
 
 
-def test_stop_discard_destroys_deliberately(
-    rig: tuple[Path, FakeForge, GitOps],
-) -> None:
-    root, _fake, git, number, branch = _started(rig)
+def test_stop_discard_destroys_deliberately(rig: tuple[Path, FakeForge]) -> None:
+    root, _fake, number, branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: local only")
+    git.commit_all(root, "feat: local only")
     issue_stop(str(number), discard=True)
-    assert not git.local_branch_exists(branch)
+    assert not git.local_branch_exists(root, branch)
 
 
 def test_close_tears_down_the_open_pr_and_records_the_sha(
-    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: submitted work")
+    git.commit_all(root, "feat: submitted work")
     _git(root, "push", "origin", branch)
-    tip = git.head_sha()
+    tip = git.head_sha(root)
     fake.push("willemkokke", "livery", branch, sha=tip)
     repo.pr.open(branch, "main", "feat: submitted work")
     torn: list[str] = []
 
     def _teardown(
         _repo: object,
-        _git: GitOps,
+        _root: Path,
         target: str,
         _base: str,
         *,
@@ -742,11 +739,11 @@ def test_close_tears_down_the_open_pr_and_records_the_sha(
         _ = keep_branches
         torn.append(target)
         repo.pr.close(1)
-        _git._run("push", "origin", "--delete", target)
-        if _git.local_branch_exists(target):
-            if _git.current_branch() == target:
-                _git.switch("main")
-            _git.delete_local_branch(target)
+        git.run(_root, "push", "origin", "--delete", target)
+        if git.local_branch_exists(_root, target):
+            if git.current_branch(_root) == target:
+                git.switch(_root, "main")
+            git.delete_branch(_root, target)
 
     monkeypatch.setattr("livery.workshop._submit.teardown_branch", _teardown)
     issue_close(str(number), reason="wontfix", message="superseded by 12")
@@ -762,14 +759,14 @@ def test_close_tears_down_the_open_pr_and_records_the_sha(
 
 
 def test_close_on_a_merged_pr_degrades_to_already_resolved(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: landed work")
+    git.commit_all(root, "feat: landed work")
     _git(root, "push", "origin", branch)
-    tip = git.head_sha()
+    tip = git.head_sha(root)
     fake.push("willemkokke", "livery", branch, sha=tip)
     repo.pr.open(branch, "main", "feat: landed work")
     fake.settle("willemkokke", "livery", tip)
@@ -782,18 +779,18 @@ def test_close_on_a_merged_pr_degrades_to_already_resolved(
     assert live is not None and live.state == "closed"
     # The merge took the tip, so the branch holds nothing only here
     # and goes without --discard.
-    assert not git.local_branch_exists(branch)
+    assert not git.local_branch_exists(root, branch)
 
 
 def test_close_keep_branch_retains_both_copies(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, _fake, git, number, branch = _started(rig)
+    root, _fake, number, branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: kept work")
+    git.commit_all(root, "feat: kept work")
     _git(root, "push", "origin", branch)
     issue_close(str(number), reason="stale", keep_branch=True)
-    assert git.local_branch_exists(branch)
+    assert git.local_branch_exists(root, branch)
     remote = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", branch],
         cwd=root,
@@ -805,11 +802,11 @@ def test_close_keep_branch_retains_both_copies(
 
 
 def test_close_refuses_to_destroy_an_only_copy_without_discard(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, _fake, git, number, _branch = _started(rig)
+    root, _fake, number, _branch = _started(rig)
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: only local")
+    git.commit_all(root, "feat: only local")
     with pytest.raises(_FAILURES) as caught:
         issue_close(str(number), reason="stale")
     message = str(caught.value)
@@ -817,8 +814,7 @@ def test_close_refuses_to_destroy_an_only_copy_without_discard(
 
 
 def test_create_carries_the_body(
-    rig: tuple[Path, FakeForge, GitOps],
-    capsys: pytest.CaptureFixture[str],
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
     fake = rig[1]
     issue_create("bodied work", body="the work order, readable by an outsider")
@@ -830,8 +826,7 @@ def test_create_carries_the_body(
 
 
 def test_update_rewrites_only_the_provided_fields(
-    rig: tuple[Path, FakeForge, GitOps],
-    capsys: pytest.CaptureFixture[str],
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._issue_tasks import issue_update
 
@@ -852,8 +847,7 @@ def test_update_rewrites_only_the_provided_fields(
 
 
 def test_comment_adds_to_the_thread_and_leaves_the_body(
-    rig: tuple[Path, FakeForge, GitOps],
-    capsys: pytest.CaptureFixture[str],
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._issue_tasks import issue_comment
 
@@ -876,7 +870,7 @@ def test_comment_adds_to_the_thread_and_leaves_the_body(
 
 
 def test_create_falls_back_when_the_label_is_refused(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -911,9 +905,7 @@ def test_cmd_is_refused_naming_pwsh(tmp_path: Path) -> None:
     assert "bash, zsh, pwsh" in str(caught.value)
 
 
-def test_the_bash_plan_writes_an_rc_that_chains_and_enters(
-    tmp_path: Path,
-) -> None:
+def test_the_bash_plan_writes_an_rc_that_chains_and_enters(tmp_path: Path) -> None:
     plan = shell_launch_plan("bash", root=tmp_path, tmp_dir=tmp_path)
     assert plan.argv[1] == "--rcfile" and plan.argv[-1] == "-i"
     rc = next(iter(plan.files.values()))
@@ -982,13 +974,13 @@ def test_default_kind_follows_the_shell_variable(
 
 
 def _started_in_worktree(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     monkeypatch: pytest.MonkeyPatch,
     title: str = "tree work",
-) -> tuple[Path, FakeForge, GitOps, int, str, Path]:
+) -> tuple[Path, FakeForge, int, str, Path]:
     from types import SimpleNamespace
 
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
     monkeypatch.setattr(
@@ -1004,46 +996,46 @@ def _started_in_worktree(
     start(str(created.number))
     path = worktree_path(root, created.number, title)
     branch = f"feat/{created.number}-{'-'.join(title.split())}"
-    return root, fake, git, created.number, branch, path
+    return root, fake, created.number, branch, path
 
 
 def test_close_refuses_before_any_teardown_when_work_is_only_local(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
     # The ordering hole the audit found: the refusal must fire while
     # the PR is still open and the branch still exists, never after a
     # teardown already destroyed both.
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "pushed.txt").write_text("p\n")
-    git.commit_all("feat: pushed part")
+    git.commit_all(root, "feat: pushed part")
     _git(root, "push", "origin", branch)
-    fake.push("willemkokke", "livery", branch, sha=git.head_sha())
+    fake.push("willemkokke", "livery", branch, sha=git.head_sha(root))
     repo.pr.open(branch, "main", "feat: pushed part")
     (root / "unpushed.txt").write_text("u\n")
-    git.commit_all("feat: the unpushed delta")
+    git.commit_all(root, "feat: the unpushed delta")
     with pytest.raises(_FAILURES) as caught:
         issue_close(str(number), reason="wontfix")
     assert "--discard" in str(caught.value)
     live = repo.pr.get(1)
     assert live is not None and live.state == "open"  # nothing torn down
-    assert git.local_branch_exists(branch)
+    assert git.local_branch_exists(root, branch)
 
 
 def test_close_keep_branch_ends_the_pr_and_keeps_both_branches(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: kept work")
+    git.commit_all(root, "feat: kept work")
     _git(root, "push", "origin", branch)
-    fake.push("willemkokke", "livery", branch, sha=git.head_sha())
+    fake.push("willemkokke", "livery", branch, sha=git.head_sha(root))
     repo.pr.open(branch, "main", "feat: kept work")
     issue_close(str(number), reason="stale", keep_branch=True)
     live = repo.pr.get(1)
     assert live is not None and live.state == "closed" and not live.merged
-    assert git.local_branch_exists(branch)
+    assert git.local_branch_exists(root, branch)
     remote = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", branch],
         cwd=root,
@@ -1055,45 +1047,43 @@ def test_close_keep_branch_ends_the_pr_and_keeps_both_branches(
 
 
 def test_close_on_merged_keeps_an_only_local_delta_without_discard(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: landed work")
+    git.commit_all(root, "feat: landed work")
     _git(root, "push", "origin", branch)
-    tip = git.head_sha()
+    tip = git.head_sha(root)
     fake.push("willemkokke", "livery", branch, sha=tip)
     repo.pr.open(branch, "main", "feat: landed work")
     fake.settle("willemkokke", "livery", tip)
     repo.pr.merge_now(1, title="feat: landed work")
     (root / "leftover.txt").write_text("l\n")
-    git.commit_all("feat: a leftover past the merge")
+    git.commit_all(root, "feat: a leftover past the merge")
     issue_close(str(number), reason="done")
     out = capsys.readouterr().out
     assert "kept" in out and "--discard" in out
     assert "1 commit(s) past the merged head" in out
-    assert git.local_branch_exists(branch)  # the leftover survived
+    assert git.local_branch_exists(root, branch)  # the leftover survived
 
 
 def test_stop_from_main_removes_a_clean_worktree(
-    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _root, _fake, git, number, branch, path = _started_in_worktree(rig, monkeypatch)
+    root, _fake, number, branch, path = _started_in_worktree(rig, monkeypatch)
     _git(path, "push", "-u", "origin", branch)
     issue_stop(str(number))
     assert not path.exists()
-    assert not git.local_branch_exists(branch)
+    assert not git.local_branch_exists(root, branch)
 
 
 def test_stop_sees_uncommitted_worktree_changes_from_the_main_checkout(
-    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The audit's second hole: the dirt lives in the worktree, stop
     # runs from the main checkout, and the refusal must still fire.
-    _root, _fake, _git_seam, number, branch, path = _started_in_worktree(
-        rig, monkeypatch
-    )
+    _root, _fake, number, branch, path = _started_in_worktree(rig, monkeypatch)
     _git(path, "push", "-u", "origin", branch)
     (path / "precious.txt").write_text("uncommitted\n")
     with pytest.raises(_FAILURES) as caught:
@@ -1105,21 +1095,19 @@ def test_stop_sees_uncommitted_worktree_changes_from_the_main_checkout(
     assert not path.exists()
 
 
-def test_stop_off_an_issue_branch_teaches(
-    rig: tuple[Path, FakeForge, GitOps],
-) -> None:
+def test_stop_off_an_issue_branch_teaches(rig: tuple[Path, FakeForge]) -> None:
     with pytest.raises(_FAILURES) as caught:
         issue_stop()
     assert "not on an issue branch" in str(caught.value)
 
 
 def test_stop_with_a_remote_only_branch_reports_honestly(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     _git(root, "push", "origin", branch)
-    git.switch("main")
-    git.delete_local_branch(branch)
+    git.switch(root, "main")
+    git.delete_branch(root, branch)
     issue_stop(str(number))
     out = capsys.readouterr().out
     assert "nothing local to remove" in out
@@ -1128,16 +1116,16 @@ def test_stop_with_a_remote_only_branch_reports_honestly(
 
 
 def test_start_reruns_resume_instead_of_erroring(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _root, _fake, git, number, branch = _started(rig)
+    root, _fake, number, branch = _started(rig)
     start(str(number), worktree=False)  # the re-run
     assert "already started" in capsys.readouterr().out
-    assert git.current_branch() == branch
+    assert git.current_branch(root) == branch
 
 
 def test_start_with_a_title_survives_a_label_refusal(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1158,14 +1146,14 @@ def test_start_with_a_title_survives_a_label_refusal(
 
 
 def test_the_fail_opens_note_and_continue(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.forge import ForgeError
     from livery.forge.testing import _fake as fake_module
 
-    root, fake, git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("scoped token work")
 
@@ -1177,24 +1165,24 @@ def test_the_fail_opens_note_and_continue(
     start(str(created.number), worktree=False)
     out = capsys.readouterr().out
     assert "could not assign" in out
-    assert git.current_branch().startswith(f"feat/{created.number}-")
+    assert git.current_branch(root).startswith(f"feat/{created.number}-")
     # unassign fail-open: the local cleanup still happens.
-    _git(root, "push", "origin", git.current_branch())
+    _git(root, "push", "origin", git.current_branch(root))
     monkeypatch.setattr(fake_module._FakeIssues, "unassign", _refuse)
     issue_stop(str(created.number))
     out = capsys.readouterr().out
     assert "could not unassign" in out
-    assert git.current_branch() == "main"
+    assert git.current_branch(root) == "main"
 
 
 def test_the_provision_failure_is_a_note_not_a_refusal(
-    rig: tuple[Path, FakeForge, GitOps],
+    rig: tuple[Path, FakeForge],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from types import SimpleNamespace
 
-    root, fake, _git = rig
+    root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("cold tree")
     monkeypatch.setattr(
@@ -1226,9 +1214,7 @@ def test_completion_offline_costs_the_suggestions_never_the_command(
 
 
 def test_open_code_missing_binary_is_a_note(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from types import SimpleNamespace
 
@@ -1307,34 +1293,34 @@ def test_the_pwsh_plan_enters_through_invoke_expression(
 
 
 def test_stop_after_a_merge_removes_the_local_copy_without_discard(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, fake, git, number, branch = _started(rig)
+    root, fake, number, branch = _started(rig)
     repo = fake.repository("willemkokke", "livery")
     (root / "work.txt").write_text("w\n")
-    git.commit_all("feat: landed work")
+    git.commit_all(root, "feat: landed work")
     _git(root, "push", "origin", branch)
-    tip = git.head_sha()
+    tip = git.head_sha(root)
     fake.push("willemkokke", "livery", branch, sha=tip)
     repo.pr.open(branch, "main", "feat: landed work")
     fake.settle("willemkokke", "livery", tip)
     repo.pr.merge_now(1, title="feat: landed work")
     # A commit past the merge is unique work: the stop refuses first.
     (root / "after.txt").write_text("a\n")
-    git.commit_all("feat: after the merge")
+    git.commit_all(root, "feat: after the merge")
     with pytest.raises(_FAILURES) as caught:
         issue_stop(str(number))
     assert "1 commit(s) past the merged head" in str(caught.value)
     _git(root, "reset", "--hard", tip)
     issue_stop(str(number))
     assert "stopped #" in capsys.readouterr().out
-    assert not git.local_branch_exists(branch)
+    assert not git.local_branch_exists(root, branch)
 
 
 def test_reopen_refuses_a_missing_issue_then_reopens_and_assigns(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _root, fake, _git = rig
+    _root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     with pytest.raises(_FAILURES, match="name the issue to reopen"):
         issue_reopen("")
@@ -1353,24 +1339,24 @@ def test_reopen_refuses_a_missing_issue_then_reopens_and_assigns(
 
 
 def test_start_from_refuses_an_unpushed_parent_then_starts_on_it_and_records_it(
-    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+    rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root, _fake, git = rig
+    root, _fake = rig
     # The refusal first: a parent origin does not have is no base.
     with pytest.raises(_FAILURES, match="origin has no branch 'feat/9-parent'"):
         start("docs/child", worktree=False, from_="feat/9-parent")
-    assert git.current_branch() == "main"
-    git.create_branch("feat/9-parent")
+    assert git.current_branch(root) == "main"
+    git.create_branch(root, "feat/9-parent")
     (root / "parent.txt").write_text("p\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "feat: the parent")
     _git(root, "push", "-u", "origin", "feat/9-parent")
-    parent_head = git.head_sha()
-    git.switch("main")
+    parent_head = git.head_sha(root)
+    git.switch(root, "main")
     start("docs/child", worktree=False, from_="feat/9-parent")
-    assert git.current_branch() == "docs/child"
-    assert git.head_sha() == parent_head
+    assert git.current_branch(root) == "docs/child"
+    assert git.head_sha(root) == parent_head
     # The parent and the commit the child started from, so a sync moves
     # the child's own commits alone once the parent moves or merges.
-    assert git.stack("docs/child") == ("feat/9-parent", parent_head)
+    assert _stack.stack(root, "docs/child") == ("feat/9-parent", parent_head)
     assert "parent: feat/9-parent" in capsys.readouterr().out
