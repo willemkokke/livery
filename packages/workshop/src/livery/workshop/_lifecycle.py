@@ -1,6 +1,6 @@
 """What the engine asks of a package: build, versions, tests, publish, requirements.
 
-The release train, the layering check and the docs reach a package's
+The release train, the layering phase and the docs reach a package's
 artifacts and manifests through these functions alone: its build, the
 version its manifest declares, the files a version is written into,
 writing a version, testing the built artifact in isolation, publishing
@@ -27,11 +27,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
 
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._packages import Neighbours, Package
     from livery.workshop._phases import PhaseContext
     from livery.workshop._queries import Query
     from livery.workshop._registries import RegistryTarget
+    from livery.workshop._steps import StepRecord
 
 T = TypeVar("T")
 
@@ -39,7 +39,7 @@ T = TypeVar("T")
 def sync(packages: Iterable[Package], root: Path) -> None:
     """Run the sync phase over *packages*: what a member needs before ``uv sync``.
 
-    The steps are the listed extensions' (conan's profile check among
+    The steps are the listed extensions' (conan's profile step among
     them), and a package that lists no extension runs the phase over
     what its kind stands for ([livery.workshop._kinds.kind_stands_for][]),
     the bridge while package kinds remain. The sync phase alone takes
@@ -239,8 +239,8 @@ def verify(
 def declared_requirements(package: Package) -> dict[str, str] | None:
     """What *package*'s native manifest requires, each name to its constraint.
 
-    None for a package whose kind reads no manifest, which the layering
-    check names, since it cannot compare the package's edges.
+    None for a package whose kind reads no manifest, which
+    ``layering.graph`` names, since it cannot compare the package's edges.
     """
     from livery.workshop._queries import REQUIREMENTS
 
@@ -275,7 +275,7 @@ def module_roots(package: Package) -> tuple[str, ...]:
 def public_modules(package: Package) -> tuple[str, ...]:
     """The modules that declare *package*'s public API, by import path.
 
-    What a type-completeness check verifies. A package whose kind has
+    What a type-completeness step verifies. A package whose kind has
     no importable API answers nothing.
     """
     from livery.workshop._queries import PUBLIC_MODULES
@@ -339,7 +339,7 @@ def _run_steps(
     return run_phase(ctx, steps, inputs={phase: inputs})
 
 
-def _isolated_tests(package: Package) -> tuple[CheckRecord, ...]:
+def _isolated_tests(package: Package) -> tuple[StepRecord, ...]:
     """The steps *package*'s set adds to the test phase that serve its isolated side."""
     from livery.workshop._phases import ISOLATED, serves
 
@@ -350,7 +350,7 @@ def _isolated_tests(package: Package) -> tuple[CheckRecord, ...]:
     )
 
 
-def _phase_steps(package: Package, phase: str) -> tuple[CheckRecord, ...]:
+def _phase_steps(package: Package, phase: str) -> tuple[StepRecord, ...]:
     """The steps *package*'s set adds to *phase*; empty for a package listing none."""
     if not package.extensions:
         return ()

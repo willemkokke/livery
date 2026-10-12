@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.workshop import _checks
+from livery.workshop import _steps
 from livery.workshop._categories import (
     CategoryError,
     CategoryRule,
@@ -22,17 +22,17 @@ from livery.workshop._categories import (
     category_rules,
     matches,
 )
-from livery.workshop._checks import (
-    BASE_EXTENSION,
-    WORKSPACE,
-    CheckRecord,
-    answering,
-    checks_by_name,
-)
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
+from livery.workshop._steps import (
+    BASE_EXTENSION,
+    WORKSPACE,
+    StepRecord,
+    answering,
+    steps_by_name,
+)
 
 if TYPE_CHECKING:
     from livery.workshop._declaration import Additions, Declaration, Reference
@@ -52,12 +52,12 @@ class Subject:
             does.
         kinds: The kinds the extension registers, and the kinds whose
             category tables it extends.
-        checks: The checks the extension registers.
+        steps: The steps the extension registers.
     """
 
     extension: str
     kinds: tuple[KindRecord, ...] = ()
-    checks: tuple[CheckRecord, ...] = ()
+    steps: tuple[StepRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Violation:
 
     Attributes:
         clause: The clause's name.
-        where: What the violation concerns: a kind, a check, a file or
+        where: What the violation concerns: a kind, a step, a file or
             a path.
         reason: What is wrong, and what the gate does because of it.
     """
@@ -98,7 +98,7 @@ class Clause:
 BACKEND_PROTOCOL = "backend-protocol"
 FRAGMENT_OWNER = "fragment-owner"
 CATEGORY_TABLE = "category-table"
-CHECK_ORDER = "check-order"
+STEP_ORDER = "step-order"
 DECLARATION_VALIDATES = "declaration-validates"
 REFERENCES_REGISTER_NOTHING = "references-register-nothing"
 ENTRIES_NAME_DEFINED_TASKS = "entries-name-defined-tasks"
@@ -224,10 +224,10 @@ def _backend_protocol(subject: Subject) -> list[Violation]:
 
 
 def _fragment_owners(extension: str, file: str) -> list[str]:
-    """The checks carrying a fragment for *file* that names *extension*, by name."""
+    """The steps carrying a fragment for *file* that names *extension*, by name."""
     return sorted(
         name
-        for name, record in checks_by_name().items()
+        for name, record in steps_by_name().items()
         for fragment in record.fragments
         if fragment.file == file and extension in fragment.extensions
     )
@@ -238,14 +238,14 @@ def _fragment_owner(subject: Subject) -> list[Violation]:
     files = sorted(
         {
             fragment.file
-            for record in checks_by_name().values()
+            for record in steps_by_name().values()
             for fragment in record.fragments
             if fragment.extensions
         }
     )
     named = dict.fromkeys(
         extension
-        for record in subject.checks
+        for record in subject.steps
         for fragment in record.fragments
         for extension in fragment.extensions
     )
@@ -352,12 +352,12 @@ def _category_table(subject: Subject) -> list[Violation]:
     return list(dict.fromkeys(violations))
 
 
-# The order of an extension's checks.
+# The order of an extension's steps.
 
 
 def _loop(start: str) -> list[str]:
-    """The checks from *start* back to itself through ``after``; empty without one."""
-    records = checks_by_name()
+    """The steps from *start* back to itself through ``after``; empty without one."""
+    records = steps_by_name()
 
     def visit(name: str, path: list[str], seen: set[str]) -> list[str]:
         record = records.get(name)
@@ -380,17 +380,17 @@ def _loop(start: str) -> list[str]:
     return visit(start, [], {start})
 
 
-def _check_order(subject: Subject) -> list[Violation]:
+def _step_order(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
-    for record in subject.checks:
-        where = f"check {record.name}"
+    for record in subject.steps:
+        where = f"step {record.name}"
         for earlier in record.after:
             if answering(earlier) is None:
                 violations.append(
                     Violation(
-                        CHECK_ORDER,
+                        STEP_ORDER,
                         where,
-                        f"runs after {earlier}, which no registered check"
+                        f"runs after {earlier}, which no registered step"
                         " answers to; the gate stops there",
                     )
                 )
@@ -398,7 +398,7 @@ def _check_order(subject: Subject) -> list[Violation]:
         if loop:
             violations.append(
                 Violation(
-                    CHECK_ORDER,
+                    STEP_ORDER,
                     where,
                     f"runs after itself through {', '.join(loop)}; the gate"
                     " would wait on it for ever",
@@ -460,8 +460,8 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
 
     found: list[tuple[str, object]] = []
     for prefix, additions in _additions_of(declared):
-        for record in additions.checks:
-            where = shown((*prefix, "phases", record.role, record.tool))
+        for record in additions.steps:
+            where = shown((*prefix, "phases", record.phase, record.step))
             found += [(f"{where}.main", record.run), (f"{where}.fix", record.fix)]
             if record.inputs is not None:
                 found.append((f"{where}.inputs.widen", record.inputs.widen))
@@ -479,12 +479,12 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         (f"{shown(('fragments', output.target))}.render", output.render)
         for output in declared.fragments
     ]
-    registered = {id(record) for record in declared.additions.checks}
+    registered = {id(record) for record in declared.additions.steps}
     for phase, records in declared.phases.items():
         for record in records:
             if id(record) in registered:
                 continue  # named above, with the additions
-            where = shown(("phases", phase, record.tool))
+            where = shown(("phases", phase, record.step))
             found += [(f"{where}.main", record.run), (f"{where}.fix", record.fix)]
     found += [
         (shown(("queries", name)), reference)
@@ -573,8 +573,8 @@ def _entries_name_defined_tasks(subject: Subject) -> list[Violation]:
 
 
 def _words_are_answerable(subject: Subject) -> list[Violation]:
-    from livery.workshop._checks import PACKAGE, PACKAGES
     from livery.workshop._contract_keys import shown
+    from livery.workshop._steps import PACKAGE, PACKAGES
     from livery.workshop._words import PACKAGE_PLACEHOLDERS, PLACEHOLDERS
 
     found = _declared_of(subject)
@@ -582,16 +582,16 @@ def _words_are_answerable(subject: Subject) -> list[Violation]:
         return []
     violations: list[Violation] = []
     for prefix, additions in _additions_of(found[1]):
-        for record in additions.checks:
+        for record in additions.steps:
             words = record.words
             if words is None:
                 continue
-            where = shown((*prefix, "phases", record.role, record.tool))
+            where = shown((*prefix, "phases", record.phase, record.step))
             reasons: list[str] = []
             if words.tool not in record.tools:
                 reasons.append(
                     f"runs {words.tool}, which its tools do not name"
-                    f" ({', '.join(record.tools) or 'none'}); a check runs a tool"
+                    f" ({', '.join(record.tools) or 'none'}); a step runs a tool"
                     " it requires"
                 )
             reasons += [
@@ -607,7 +607,7 @@ def _words_are_answerable(subject: Subject) -> list[Violation]:
             if record.scope != PACKAGE and record.narrowing != PACKAGES:
                 reasons += [
                     f"names {{{name}}}, which only a call that judges one package"
-                    " answers, and the check judges the workspace whole"
+                    " answers, and the step judges the workspace whole"
                     for name in PACKAGE_PLACEHOLDERS
                     if name in words.placeholders()
                 ]
@@ -629,8 +629,8 @@ def _claims_name_categories(subject: Subject) -> list[Violation]:
     known = sorted(known_categories())
     violations: list[Violation] = []
     for prefix, additions in _additions_of(found[1]):
-        for record in additions.checks:
-            where = shown((*prefix, "phases", record.role, record.tool, "claims"))
+        for record in additions.steps:
+            where = shown((*prefix, "phases", record.phase, record.step, "claims"))
             for claim in record.claims:
                 if claim.category not in known:
                     near = difflib.get_close_matches(claim.category, known, n=1)
@@ -640,7 +640,7 @@ def _claims_name_categories(subject: Subject) -> list[Violation]:
                             CLAIMS_NAME_CATEGORIES,
                             where,
                             f"names the category {claim.category!r}, which no"
-                            f" extension registers{hint}; the check claims no"
+                            f" extension registers{hint}; the step claims no"
                             " file of it",
                         )
                     )
@@ -797,11 +797,11 @@ def _probe_answers(kind: str = "") -> dict[str, Any]:
     }
 
 
-def _package_fragments(subject: Subject) -> list[tuple[CheckRecord, Fragment]]:
-    """The subject's fragments for per-package files, each with its check."""
+def _package_fragments(subject: Subject) -> list[tuple[StepRecord, Fragment]]:
+    """The subject's fragments for per-package files, each with its step."""
     return [
         (record, fragment)
-        for record in subject.checks
+        for record in subject.steps
         for fragment in record.fragments
         if fragment.extensions
     ]
@@ -813,7 +813,7 @@ def _project_drift(subject: Subject) -> list[Violation]:
 
     owners = sorted(
         record.name
-        for record in subject.checks
+        for record in subject.steps
         for fragment in record.fragments
         if fragment.file == "pyproject.toml"
     )
@@ -865,24 +865,24 @@ def _fragment_drift(subject: Subject) -> list[Violation]:
         problem = _package_drift(fragment)
         if problem:
             held = " or ".join(fragment.extensions)
-            where = f"check {record.name} {fragment.file} for {held}"
+            where = f"step {record.name} {fragment.file} for {held}"
             violations.append(Violation(FRAGMENT_DRIFT, where, problem))
     return violations
 
 
-def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
+def _withdraw(record: StepRecord, fragment: Fragment, *, edited: bool) -> str:
     """What goes wrong when *record* leaves a rendered file behind; empty when nothing.
 
     The render writes the file into a probe package, a person edits it
-    or not, the check is withdrawn, and the render settles the file
-    again. A file another check still renders for the same extensions is
+    or not, the step is withdrawn, and the render settles the file
+    again. A file another step still renders for the same extensions is
     not withdrawn at all, and says nothing here.
     """
     from livery.workshop import _shipped_files
 
-    if record.name not in checks_by_name():
+    if record.name not in steps_by_name():
         return ""
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     with tempfile.TemporaryDirectory() as scratch:
         member = Path(scratch)
         copy = member / fragment.file
@@ -892,22 +892,22 @@ def _withdraw(record: CheckRecord, fragment: Fragment, *, edited: bool) -> str:
                 return ""  # it did not render: the drift clause names that
             if edited:
                 copy.write_bytes(b"# a hand edit\n" + copy.read_bytes())
-            _checks.unregister_check(record.name)
+            _steps.unregister_step(record.name)
             if package_fragment(fragment.extensions, fragment.file) is not None:
                 return ""
             _shipped_files.settle_package(member, fragment.extensions)
         except Exception:
             return ""  # a render that fails is the drift clause's to name
         finally:
-            _checks.restore(state)
+            _steps.restore(state)
         if edited and not copy.is_file():
             return (
-                "an edited copy is removed once the check is withdrawn;"
+                "an edited copy is removed once the step is withdrawn;"
                 " contract 11 keeps it as a local override"
             )
         if not edited and copy.is_file():
             return (
-                "an unedited copy stays once the check is withdrawn; contract 11"
+                "an unedited copy stays once the step is withdrawn; contract 11"
                 " removes it"
             )
     return ""
@@ -917,7 +917,7 @@ def _withdrawn_file(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     for record, fragment in _package_fragments(subject):
         held = " or ".join(fragment.extensions)
-        where = f"check {record.name} {fragment.file} for {held}"
+        where = f"step {record.name} {fragment.file} for {held}"
         for edited in (False, True):
             problem = _withdraw(record, fragment, edited=edited)
             if problem:
@@ -925,11 +925,11 @@ def _withdrawn_file(subject: Subject) -> list[Violation]:
     return violations
 
 
-# The gate's walk over an extension's checks.
+# The gate's walk over an extension's steps.
 
 
 class _Recorder:
-    """The calls a probe walk makes into the subject's checks, in order."""
+    """The calls a probe walk makes into the subject's steps, in order."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -944,12 +944,12 @@ class _Recorder:
         return record
 
 
-#: A file of the probe workspace no check's claims reach.
+#: A file of the probe workspace no step's claims reach.
 _UNCLAIMED = "probe/unclaimed.probe"
 
 
 def _probe_packages(root: Path) -> tuple[Package, ...]:
-    """One probe package of each concrete kind, so a package check finds its own."""
+    """One probe package of each concrete kind, so a package step finds its own."""
     return tuple(
         Package(
             root / "packages" / kind.name,
@@ -963,7 +963,7 @@ def _probe_packages(root: Path) -> tuple[Package, ...]:
     )
 
 
-def _probed(record: CheckRecord, packages: tuple[Package, ...]) -> bool:
+def _probed(record: StepRecord, packages: tuple[Package, ...]) -> bool:
     """Whether the probe workspace gives *record* something to judge."""
     from livery.workshop._kinds import extension_set
 
@@ -977,28 +977,26 @@ def _probed(record: CheckRecord, packages: tuple[Package, ...]) -> bool:
 def _probe_walk(
     subject: Subject, *, fix: bool, named: bool
 ) -> tuple[list[tuple[str, str]], str, tuple[Package, ...]]:
-    """Walk the gate over a probe workspace with the subject's checks recording.
+    """Walk the gate over a probe workspace with the subject's steps recording.
 
-    The checks' bodies are replaced by recorders and their ``after``
+    The steps' bodies are replaced by recorders and their ``after``
     lists emptied, so no tool runs; the registry is restored after.
     *named* walks over one file no claim reaches; otherwise the walk
-    is whole and the checks' claims are emptied, so every check reads
+    is whole and the steps' claims are emptied, so every step reads
     whatever git lists around the probe. Returns the calls, the gate's
     output, and the probe's packages.
     """
     from livery.workshop import _quality
 
     recorder = _Recorder()
-    names = [
-        record.name for record in subject.checks if record.name in checks_by_name()
-    ]
-    state = _checks.snapshot()
+    names = [record.name for record in subject.steps if record.name in steps_by_name()]
+    state = _steps.snapshot()
     out = io.StringIO()
     try:
-        for record in subject.checks:
+        for record in subject.steps:
             if record.name not in names:
                 continue
-            _checks.register_check(
+            _steps.register_step(
                 replace(
                     record,
                     run=recorder.body("run", record.name),
@@ -1023,7 +1021,7 @@ def _probe_walk(
             with contextlib.redirect_stdout(out):
                 _quality.walk(ctx, only=frozenset(names))
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
     return recorder.calls, out.getvalue(), packages
 
 
@@ -1033,10 +1031,10 @@ def _walk_order(subject: Subject) -> list[Violation]:
         (index for index, (mode, _name) in enumerate(calls) if mode == "run"), None
     )
     violations: list[Violation] = []
-    for record in subject.checks:
-        if record.name not in checks_by_name():
+    for record in subject.steps:
+        if record.name not in steps_by_name():
             continue
-        where = f"check {record.name}"
+        where = f"step {record.name}"
         fixes = [
             index for index, call in enumerate(calls) if call == ("fix", record.name)
         ]
@@ -1060,7 +1058,7 @@ def _walk_order(subject: Subject) -> list[Violation]:
                     Violation(
                         WALK_ORDER,
                         where,
-                        "judged after it rewrote; a check that rewrote is not judged"
+                        "judged after it rewrote; a step that rewrote is not judged"
                         " again",
                     )
                 )
@@ -1073,10 +1071,10 @@ def _gate_lines(subject: Subject) -> list[Violation]:
     calls, out, _packages = _probe_walk(subject, fix=False, named=True)
     lines = out.splitlines()
     violations: list[Violation] = []
-    for record in subject.checks:
-        if record.name not in checks_by_name():
+    for record in subject.steps:
+        if record.name not in steps_by_name():
             continue
-        where = f"check {record.name}"
+        where = f"step {record.name}"
         if (
             subject.extension != BASE_EXTENSION
             and record.extension != subject.extension
@@ -1086,7 +1084,7 @@ def _gate_lines(subject: Subject) -> list[Violation]:
                     GATE_LINES,
                     where,
                     f"names {record.extension} as its extension; the gate says who"
-                    f" registered a check by it, and {subject.extension} registered"
+                    f" registered a step by it, and {subject.extension} registered"
                     " this one",
                 )
             )
@@ -1128,7 +1126,7 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         FRAGMENT_OWNER,
-        "A per-package configuration file has one owner among the checks"
+        "A per-package configuration file has one owner among the steps"
         " whose fragments name an extension.",
         _fragment_owner,
     ),
@@ -1139,10 +1137,10 @@ CLAUSES: tuple[Clause, ...] = (
         _category_table,
     ),
     Clause(
-        CHECK_ORDER,
-        "Every check a check runs after is registered, and following the"
-        " checks it runs after never leads back to it.",
-        _check_order,
+        STEP_ORDER,
+        "Every step a step runs after is registered, and following the"
+        " steps it runs after never leads back to it.",
+        _step_order,
     ),
     Clause(
         DECLARATION_VALIDATES,
@@ -1166,15 +1164,15 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         CLAIMS_NAME_CATEGORIES,
-        "Every category a check's claims name is one an extension registers,"
+        "Every category a step's claims name is one an extension registers,"
         " and every suffix starts with a dot.",
         _claims_name_categories,
     ),
     Clause(
         WORDS_ARE_ANSWERABLE,
-        "A check in words runs a tool it requires, every placeholder its words"
+        "A step in words runs a tool it requires, every placeholder its words"
         " name is one the engine or its matrix answers, every matrix key is"
-        " named in its words, and a package's placeholder sits in a check that"
+        " named in its words, and a package's placeholder sits in a step that"
         " judges one package at a time.",
         _words_are_answerable,
     ),
@@ -1196,27 +1194,27 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         FRAGMENT_DRIFT,
-        "A check's fragments render, the composed pyproject.toml parses, and a"
+        "A step's fragments render, the composed pyproject.toml parses, and a"
         " per-package file matches its render until a person edits it, when"
         " the drift gate names it.",
         _fragment_drift,
     ),
     Clause(
         WITHDRAWN_FILE,
-        "A per-package file whose check is withdrawn, and which no other check"
+        "A per-package file whose step is withdrawn, and which no other step"
         " renders for the kind, is removed when unedited and kept when edited.",
         _withdrawn_file,
     ),
     Clause(
         WALK_ORDER,
-        "Under --fix every check with a fix mode rewrites before any judge"
-        " starts and is not judged again, and every other check is judged.",
+        "Under --fix every step with a fix mode rewrites before any judge"
+        " starts and is not judged again, and every other step is judged.",
         _walk_order,
     ),
     Clause(
         GATE_LINES,
-        "Every check names the extension that registered it, which the gate prints,"
-        " and a check with no file to read is named and never started.",
+        "Every step names the extension that registered it, which the gate prints,"
+        " and a step with no file to read is named and never started.",
         _gate_lines,
     ),
 )
@@ -1229,13 +1227,13 @@ def judge(subject: Subject) -> list[Violation]:
 
 
 def builtin_subject() -> Subject:
-    """The workshop's own kinds and checks as a subject, for its own suite."""
+    """The workshop's own kinds and steps as a subject, for its own suite."""
     return Subject(
         BASE_EXTENSION,
         kinds=all_kinds(),
-        checks=tuple(
+        steps=tuple(
             record
-            for record in checks_by_name().values()
+            for record in steps_by_name().values()
             if record.extension == BASE_EXTENSION
         ),
     )

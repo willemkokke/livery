@@ -8,7 +8,7 @@
   // the checker that reads the whole tree skips the recipes. The cpp
   // members are skipped whole: their kind type-checks nothing. A
   // documentation example is judged for its names by lint and run by
-  // the examples check; it is not typed code.
+  // the examples step; it is not typed code.
   "exclude": [{% for package in native %}"packages/{{ package.dir }}", {% endfor %}"packages/**/conanfile.py", "packages/**/docs/examples"],
   // The editor and the command line resolve the same environment: the
   // workspace members are editable installs in .venv, so basedpyright

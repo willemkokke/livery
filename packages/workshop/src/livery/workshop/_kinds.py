@@ -4,7 +4,7 @@ A kind answers three questions through one registration: how to
 build (the backend, three callables), what a birth writes (the seed
 tree, with a parent chain written beneath it), and what the machine
 needs (the tools it contributes to the derived profile). What the gate
-runs over a package is the checks' to say: each names the kinds it
+runs over a package is the steps' to say: each names the kinds it
 judges, and a package of another kind skips it by name.
 
 Adding a kind means one call: ``register_kind`` with the record.
@@ -136,7 +136,7 @@ class Backend(Protocol):
         The files changed, relative to the package; empty when the
         manifest already names the dependency. Which file that is, and
         how a requirement is spelled there, is the kind's knowledge:
-        the layering check's fix mode calls this for a sibling the
+        the fix mode of ``layering.sibling-references`` calls this for a sibling the
         graph already reaches, at the floor the graph carries.
         """
         ...
@@ -148,7 +148,7 @@ class Backend(Protocol):
     def public_modules(self, package: Package) -> tuple[str, ...]:
         """The modules that declare the package's public API, by import path.
 
-        What a type-completeness check verifies; empty for a package
+        What a type-completeness step verifies; empty for a package
         whose kind has no importable API.
         """
         ...
@@ -284,7 +284,7 @@ class KindRecord:
             package, the workspace root, the named example files (empty
             for all of them) and the arguments for its tool; None for a
             kind that runs
-            none, which the examples check says by name. A child kind
+            none, which the examples step says by name. A child kind
             takes the nearest ancestor's.
         suites: How the kind runs the test suites of several packages
             in one call ([livery.workshop.run_suites][]); None for
@@ -301,7 +301,7 @@ class KindRecord:
             kind needs a backend; an abstract one has none.
         stands_for: The package-level extensions a package of the kind
             that lists none is taken to hold: their categories, root
-            files and checks are its own. A child kind adds to its
+            files and steps are its own. A child kind adds to its
             parent's.
     """
 
@@ -524,7 +524,7 @@ def kind_stands_for(kind_name: str) -> tuple[str, ...]:
 
 
 def extension_set(package: Package) -> tuple[str, ...]:
-    """The package-level extensions *package* holds, which its checks match.
+    """The package-level extensions *package* holds, which its steps match.
 
     Its set, the extensions it lists and those they require, for a
     package that lists any; what its kind stands for
@@ -618,7 +618,7 @@ def _register_builtin() -> None:
     # Two contract kinds exist today. The extension package template
     # (package-extension) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
-    # The python kind's one tool is uv, which makes the venv the checks
+    # The python kind's one tool is uv, which makes the venv the steps
     # run in. Declared here as data, so a workspace's lock takes it
     # from the kind like any other requirement and no branch in code
     # knows the list.
@@ -629,14 +629,14 @@ def _register_builtin() -> None:
             template="package-python",
             parent="base",
             # uv operates the workspace; the checkers, the formatter and
-            # the test runner ride their check records.
+            # the test runner ride their step records.
             tools=("uv",),
             extractor=_python.extractor(),
             examples=_python.run_examples,
             suites=_python.run_test,
             coverage_pages=_python.render_coverage_pages,
             # A package that lists no extension is taken to hold the
-            # python extension: its categories and checks are the same.
+            # python extension: its categories and steps are the same.
             stands_for=("python",),
         )
     )
@@ -653,7 +653,7 @@ def _register_builtin() -> None:
             template="package-python-nanobind",
             parent="python",
             # The build tools; the native format and lint tools ride
-            # their check records.
+            # their step records.
             tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
             wheel_identity="platform",
@@ -667,11 +667,11 @@ def _register_builtin() -> None:
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the
-    # test check, conan packages the result. The python type checkers
+    # test step, conan packages the result. The python type checkers
     # do not gate it (there is no dist to verify types on); a python
     # formatter and linter judge its conanfile.py beside clang-format
     # and clang-tidy over its sources, and its build and ctest records
-    # carry the build and test roles.
+    # carry the build and test phases.
     register_kind(
         KindRecord(
             name="cpp-conan",
@@ -688,7 +688,7 @@ def _register_builtin() -> None:
             tests_need_build=True,
             # A package that lists no extension is taken to hold the
             # three a new one lists: one category table, one conan
-            # workspace and the same checks either way.
+            # workspace and the same steps either way.
             stands_for=_cpp_conan.STANDS_FOR,
         )
     )

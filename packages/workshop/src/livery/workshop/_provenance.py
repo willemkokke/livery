@@ -412,7 +412,7 @@ def _rule_member(
     if rest == ".workshop-rendered":
         return Provenance(
             "receipts",
-            "what the render wrote into this package for the checks' files",
+            "what the render wrote into this package for the steps' files",
             f"never by hand; `{prog} sync` keeps it",
         )
     from livery.workshop._fragments import package_files
@@ -420,7 +420,7 @@ def _rule_member(
     if rest in package_files():
         return Provenance(
             "rendered",
-            "a check record's fragment for this package's kind",
+            "a step record's fragment for this package's kind",
             f"edit the record's fragment and run `{prog} sync`; a"
             " deeper file with InheritParentConfig carries this package's own lines",
         )
@@ -473,14 +473,14 @@ def explain(
         Arg[str],
         ask(),
         suggest(_tracked_paths, strict=False),
-        doc("the file to explain, relative to the workspace root, or a check's name"),
+        doc("the file to explain, relative to the workspace root, or a step's name"),
     ] = "",
 ) -> None:
-    """Name a file's owning channel, its source and its edit path; or what a check runs.
+    """Name a file's owning channel, its source and its edit path; or what a step runs.
 
     Every answer for a file has the same three lines; a file no channel
     claims is yours, which is the honest default, not an error. A
-    check's name, ``typecheck.mypy``, prints the command the check runs
+    step's name, ``typecheck.mypy``, prints the command the step runs
     and what the engine appends to it.
     """
     if not path:
@@ -488,9 +488,9 @@ def explain(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    from livery.workshop._checks import checks_by_name
+    from livery.workshop._steps import steps_by_name
 
-    record = checks_by_name().get(path)
+    record = steps_by_name().get(path)
     if record is not None:
         from livery.workshop._words import explained
 
@@ -513,7 +513,7 @@ def explain(
 def describe(root: Path, relative: Path) -> list[str]:
     """The lines ``fm explain`` prints for *relative*: category, channel, claims.
 
-    A file is claimed by each check that reads it and each CI job whose
+    A file is claimed by each step that reads it and each CI job whose
     declared inputs read it, the job as ``<point>/<job>``. A contract
     also names the schema it is judged by, with the owners whose keys
     the schema holds.
@@ -533,7 +533,7 @@ def describe(root: Path, relative: Path) -> list[str]:
     lines.append(f"    channel: {answer.channel} ({supplier})")
     lines.append(f"    source: {answer.source}")
     lines.append(f"    edit: {answer.edit}")
-    from livery.workshop._checks import claimants
+    from livery.workshop._steps import claimants
 
     claims = list(claimants(unit, inside)) if unit is not None else []
     claims.extend(jobs_reading(root, relative.as_posix()))
@@ -676,7 +676,7 @@ def provenance_check(
 def check_content(*, fix: bool = False, files: frozenset[str] | None = None) -> None:
     """The provenance check over the content files in scope; refuses a missing header.
 
-    The engine behind `fm provenance` and the gate's check: *files*
+    The engine behind `fm provenance` and the gate's ``provenance.check``: *files*
     keeps it to those root-relative files, None to every content file.
     """
     root = workspace_root()

@@ -786,7 +786,7 @@ def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
 # The one parse, and the rules an extension registers into it.
 
 
-def test_the_layering_check_parses_each_source_once(
+def test_the_layering_phase_parses_each_source_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _ast_rules
@@ -818,10 +818,10 @@ def test_the_layering_check_parses_each_source_once(
 
 
 def test_each_base_rule_is_a_step_of_the_layering_phase_over_the_sources() -> None:
-    from livery.workshop._checks import BASE_EXTENSION, check_for
+    from livery.workshop._steps import BASE_EXTENSION, step_for
 
     for step in RULES:
-        record = check_for(f"layering.{step}")
+        record = step_for(f"layering.{step}")
         assert record.extension == BASE_EXTENSION
         assert record.inputs is not None
         assert record.inputs.reads == ("tasks.py", "packages/**/*.py")
@@ -833,29 +833,29 @@ def test_a_base_step_refuses_with_its_rules_findings_and_the_others_hold(
     tmp_path: Path,
 ) -> None:
     from livery.footman import Failed
-    from livery.workshop._checks import check_for
     from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import step_for
 
     _package(tmp_path, "tool")
     _forge_stub(tmp_path)
     (tmp_path / "packages" / "forge" / "src" / "bad.py").write_text("import requests\n")
     ctx = PhaseContext(root=tmp_path, packages=discover_packages(tmp_path))
     with pytest.raises(Failed) as raised:
-        check_for("layering.forge-stdlib-only").run(ctx)
+        step_for("layering.forge-stdlib-only").run(ctx)
     assert str(raised.value).startswith("the workspace breaks its layering:\n  ")
     assert "imports 'requests': livery.forge is stdlib-only at import time" in str(
         raised.value
     )
     for step in ("runner-terminal", "base-imports-no-extension", "sibling-references"):
-        check_for(f"layering.{step}").run(ctx)
+        step_for(f"layering.{step}").run(ctx)
 
 
 def test_the_sibling_fix_rewrites_then_locks_a_moved_manifest_then_judges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _packages
-    from livery.workshop._checks import check_for
     from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import step_for
 
     order: list[str] = []
 
@@ -879,7 +879,7 @@ def test_the_sibling_fix_rewrites_then_locks_a_moved_manifest_then_judges(
     monkeypatch.setattr(_packages, "write_edges", written)
     monkeypatch.setattr(_packages, "rule_problems", judged)
     monkeypatch.setattr("livery.workshop._uv.run_uv", locked)
-    record = check_for("layering.sibling-references")
+    record = step_for("layering.sibling-references")
     assert record.fix is not None
     record.fix(PhaseContext(root=tmp_path, packages=(), fix=True))
     # The rewrite, the lock the moved manifest asks for, then the judge.

@@ -27,20 +27,20 @@ mypy_path =
     {{ path }}{% endfor %}
 namespace_packages = True
 explicit_package_bases = True
-# A deterministic world, whatever host runs the check: a bare run
-# checks linux, and the check adds darwin and win32, since mypy has no
+# A deterministic world, whatever host runs the step: a bare run
+# checks linux, and the step adds darwin and win32, since mypy has no
 # all-platforms mode.
 platform = linux
 python_version = {{ python_floor }}
 # The cache lives with the workshop's state, never in the root; a bare
-# run shares the check's linux one.
+# run shares the step's linux one.
 cache_dir = .workshop/.cache/mypy/linux
 strict = True
 disallow_untyped_defs = False
 disallow_incomplete_defs = False
 disallow_untyped_calls = False
 disallow_untyped_decorators = False
-# The public names' re-exports are the type-completeness check's and
+# The public names' re-exports are the type-completeness step's and
 # the public-surface test's to police.
 implicit_reexport = True
 

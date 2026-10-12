@@ -22,14 +22,14 @@ if TYPE_CHECKING:
 import livery.footman as footman
 from livery.extensions.python import _backend as _python
 from livery.footman import Forward, doc, fail, group, task
-from livery.workshop import _checks
+from livery.workshop import _steps
 from livery.workshop._backends import require_backends
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext, run_phase
 
-# Re-exported by name: the render check's record looks it up on this
+# Re-exported by name: the drift step's body looks it up on this
 # module at run time, which is where the gate's characterisation tests
 # patch it.
 from livery.workshop._templates import drift_check as drift_check
@@ -105,33 +105,33 @@ def walk(
     through the one walk ([livery.workshop._phases.run_phase][]). What
     was narrowed and by whom is printed first. Under ``--fix`` every
     fixer that applies runs, one at a time in registration order,
-    before any judge reads the tree, and a check that rewrote is not
+    before any judge reads the tree, and a step that rewrote is not
     judged again in the run; then *between* runs, where a machine's
     run measures the tree the judges read; then every judge runs in
     one parallel block, the steps a judge runs after among them, and
-    one refusal is the verdict. A check whose claims reach no file in
+    one refusal is the verdict. A step whose claims reach no file in
     scope is said and not started. Without *judge* the walk stops
     after the fixers, the post-edit hook's run. *only* keeps the named
-    checks alone, a generated verb's run. *inputs* are the keys the
+    steps alone, a generated verb's run. *inputs* are the keys the
     walk gives each phase, the gate's own
     ([livery.workshop._quality.GATE_INPUTS][]) unless another engine
     names its.
     """
-    for line in _checks.narrowings():
+    for line in _steps.narrowings():
         print(line)
-    ctx = replace(ctx, catalogue=_checks.catalogue(ctx))
+    ctx = replace(ctx, catalogue=_steps.catalogue(ctx))
 
     def chosen(names: tuple[str, ...]) -> tuple[str, ...]:
         return names if only is None else tuple(n for n in names if n in only)
 
-    for name in _checks.with_files(chosen(_checks.rewriters(ctx)), ctx):
-        run_phase(ctx, (_checks.check_for(name),), inputs=inputs, fixing=True)
+    for name in _steps.with_files(chosen(_steps.rewriters(ctx)), ctx):
+        run_phase(ctx, (_steps.step_for(name),), inputs=inputs, fixing=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
-    names = _checks.with_files(chosen(_checks.judges(ctx)), ctx)
-    run_phase(ctx, _checks.with_earlier(names), inputs=inputs)
+    names = _steps.with_files(chosen(_steps.judges(ctx)), ctx)
+    run_phase(ctx, _steps.with_earlier(names), inputs=inputs)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -314,14 +314,14 @@ def check(
     base: Annotated[str, doc("the branch the chain's root is taken from")] = "main",
     point: Annotated[str, doc("run the tests of this CI point, nightly say")] = "",
 ) -> None:
-    """Run the gate: every registered check, the rewriters first under --fix.
+    """Run the gate: every registered step, the rewriters first under --fix.
 
     With *paths*, exactly those files are checked, or the files under
-    those directories: every check whose claims reach one of them runs
-    over them and no other, a check without claims does not run, and
+    those directories: every step whose claims reach one of them runs
+    over them and no other, a step without claims does not run, and
     nothing is recorded as proved. ``--safe-fix`` runs the fixers in
     their in-flight mode, which removes no code, and refuses beside
-    ``--fix``. ``--point`` hands a CI point to the test role, which
+    ``--fix``. ``--point`` hands a CI point to the test phase, which
     selects that point's tests instead of the gate's.
 
     On a machine the gate is the reflex: it runs what the working
@@ -363,14 +363,14 @@ def check(
     from contextlib import nullcontext
 
     from livery.git import fetched_snapshot
-    from livery.workshop._checks import arguments_refusal, split_arguments
     from livery.workshop._ci_context import run_context
+    from livery.workshop._steps import arguments_refusal, split_arguments
 
     _refuse_both(fix, safe_fix)
     paths, arguments = split_arguments(paths)
     if arguments:
         verb = f"{footman.prog()} check"
-        fail(arguments_refusal(verb, _checks.checks_by_name().values()))
+        fail(arguments_refusal(verb, _steps.steps_by_name().values()))
     if paths:
         _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point)
         return
@@ -435,7 +435,7 @@ def _check_files(
 
     A person's path that names nothing in the workspace refuses, since
     running nothing there would pass: a typo, or a tool's own argument
-    after ``--``, which the checks never pass through. The post-edit
+    after ``--``, which the steps never pass through. The post-edit
     hook, which judges nothing, may name a file already deleted.
     """
     import os
@@ -453,9 +453,9 @@ def _check_files(
         if unknown:
             fail(
                 "not a file or directory in the workspace:"
-                f" {', '.join(unknown)}. Name files or directories; a check's"
+                f" {', '.join(unknown)}. Name files or directories; a step's"
                 " own verb hands its tool the words after --:"
-                f" `{footman.prog()} <role>.<tool> <paths> -- <words>`."
+                f" `{footman.prog()} <phase>.<step> <paths> -- <words>`."
             )
     files = named_files(root, paths)
     if not files:
@@ -483,7 +483,7 @@ def _check_files(
     walk(ctx, judge=judge, only=only, inputs=inputs)
 
 
-def run_checks(
+def run_steps(
     names: tuple[str, ...],
     paths: tuple[str, ...] = (),
     *,
@@ -492,11 +492,11 @@ def run_checks(
     point: str = "",
     arguments: tuple[str, ...] = (),
 ) -> None:
-    """Run the checks *names* through the walk: a generated verb's body.
+    """Run the steps *names* through the walk: a generated verb's body.
 
     Over the named paths, or the whole workspace; nothing is recorded
     as proved, since a part of the gate ran. *arguments*, the words
-    after ``--`` on a check's own verb, reach that check's tool. The
+    after ``--`` on a step's own verb, reach that step's tool. The
     phases take the verb's inputs
     ([livery.workshop._quality.VERB_INPUTS][]), not the gate's.
     """
@@ -532,9 +532,9 @@ def run_on_packages(
     *,
     inputs: Mapping[str, Mapping[str, object]] = GATE_INPUTS,
 ) -> None:
-    """Run the checks *names* over *packages* whole; nothing recorded as proved.
+    """Run the steps *names* over *packages* whole; nothing recorded as proved.
 
-    Each package check judges the packages it applies to, files and
+    Each package step judges the packages it applies to, files and
     claims notwithstanding: the development build ``fm run`` starts
     with ([livery.workshop._run.develop][]), which gives the phases its
     own *inputs*.
@@ -545,8 +545,8 @@ def run_on_packages(
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
     """Run the gate's fixers over *paths*, judging nothing.
 
-    Every check whose claims reach a file fixes it, and a file no claim
-    reaches is left alone. *safe* keeps to the fixes a check marks
+    Every step whose claims reach a file fixes it, and a file no claim
+    reaches is left alone. *safe* keeps to the fixes a step marks
     safe, which never remove code an edit in flight still needs; an
     agent's post-edit hook runs it after each edit.
     """
@@ -615,10 +615,10 @@ def _run_check(
             changes = Changes(root_for_ci, step.paths, step.base_tree)
             subset = _with_unstored_suites(root_for_ci, run, packages, subset)
             if not subset:
-                # The same walk as a local run: the workspace checks whose
-                # inputs changed judge, and no package's checks run.
-                if _checks.workspace_selected(_context(subset=(), changes=changes)):
-                    print("  no package affected: the workspace checks run")
+                # The same walk as a local run: the workspace steps whose
+                # inputs changed judge, and no package's steps run.
+                if _steps.workspace_selected(_context(subset=(), changes=changes)):
+                    print("  no package affected: the workspace steps run")
                     _scoped_check((), fix=fix, point=point, changes=changes)
                 else:
                     say_skipped(f"nothing affected: {_nothing_reason(step.paths)}")
@@ -683,17 +683,17 @@ def _run_check(
                         root_for_ci, tuple(reflex.paths), reflex.base_tree
                     )
                     if not subset:
-                        # No package's checks: the workspace checks whose
+                        # No package's steps: the workspace steps whose
                         # inputs changed still judge what changed.
-                        if not _checks.workspace_selected(
+                        if not _steps.workspace_selected(
                             _context(subset=(), changes=changes)
                         ):
                             say_skipped(
-                                "nothing affected: no file a check reads changed"
+                                "nothing affected: no file a step reads changed"
                                 " since the proved tree"
                             )
                         else:
-                            print("  no package affected: the workspace checks run")
+                            print("  no package affected: the workspace steps run")
                             _scoped_check((), fix=fix, safe=safe, changes=changes)
                         _remember_local(
                             root_for_ci,
@@ -939,7 +939,7 @@ def _with_unstored_suites(
 def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) -> None:
     """On a proved tree, run the units no record in *bases* can supply, for their lines.
 
-    The gate's checks already passed for this tree, so none reruns.
+    The gate's steps already passed for this tree, so none reruns.
     The coverage union still needs every unit at its current closure;
     the branch whose run proved the tree recorded them, so a tree the
     records supply in full leaves the ``verified`` scope and runs
@@ -950,9 +950,9 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     from livery.workshop import _verified
 
     packages = _packages()
-    # Only a suite a listed test check runs has a record to miss: a
-    # workspace that lists no python test check measures nothing here.
-    tested = _checks.tested(units_of(root, packages))
+    # Only a suite a listed test step runs has a record to miss: a
+    # workspace that lists no python test step measures nothing here.
+    tested = _steps.tested(units_of(root, packages))
     units = _unrecorded(root, run, packages, tested, bases=bases)
     if not units:
         _verified.write_marker(root, _verified.VERIFIED, leg=run.leg)
@@ -978,9 +978,9 @@ def _scoped_check(
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
 
-    A workspace check with declared inputs judges what *changes*
+    A workspace step with declared inputs judges what *changes*
     touched of them, and nothing when they touched none
-    ([livery.workshop._checks.selected][]). *tests* names, per package
+    ([livery.workshop._steps.selected][]). *tests* names, per package
     path, the test files that stand for the package's suite in this
     run; *examples* the packages whose examples alone changed;
     *between* runs after the fixers under ``--fix``, as
@@ -1177,9 +1177,8 @@ caches = group("caches", help="The workspace's derived caches")
 def caches_clear() -> None:
     """Remove build artifacts and checker caches.
 
-    A tool that is a check of its own keeps its cache under
-    ``.workshop/.cache/<tool>/``, which goes whole; the build
-    artifacts are named.
+    A step's own cache directory, ``.workshop/.cache/<step>/``, goes
+    whole; the build artifacts are named.
     """
     import shutil
 

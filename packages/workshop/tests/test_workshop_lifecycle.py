@@ -73,7 +73,7 @@ def test_a_backend_that_leaves_a_function_out_answers_nothing_for_it(
     assert _lifecycle.build(package, tmp_path) == package.directory / "dist"
 
 
-def test_the_layering_check_names_a_kind_that_reads_no_manifest(
+def test_layering_graph_names_a_kind_that_reads_no_manifest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     package = _package(tmp_path, _build_only_kind(monkeypatch))

@@ -30,14 +30,14 @@ def mend(ctx):
 
 @pytest.fixture
 def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """An importable package ``acme_declared`` with check bodies and no declaration."""
+    """An importable package ``acme_declared`` with step bodies and no declaration."""
     directory = tmp_path / "site" / "acme_declared"
     directory.mkdir(parents=True)
-    (directory / "_checks.py").write_text(BODIES)
+    (directory / "_steps.py").write_text(BODIES)
     monkeypatch.syspath_prepend(str(tmp_path / "site"))
     importlib.invalidate_caches()
     yield directory
-    sys.modules.pop("acme_declared._checks", None)
+    sys.modules.pop("acme_declared._steps", None)
     sys.modules.pop("acme_declared", None)
 
 
@@ -55,7 +55,7 @@ def _refusal(package: Path, text: str) -> str:
     return str(caught.value)
 
 
-STEP = '[phases.lint.acme]\nmain = "acme_declared._checks:judge"\n'
+STEP = '[phases.lint.acme]\nmain = "acme_declared._steps:judge"\n'
 WORDS_STEP = (
     '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "check", "{paths}"]\n'
 )
@@ -85,12 +85,12 @@ def test_a_check_table_refuses_naming_the_step_spelling(package: Path) -> None:
         " a reference to its code, module:function"
     )
     assert _refusal(
-        package, '[checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+        package, '[checks.acme.lint]\nrun = "acme_declared._steps:judge"\n'
     ) == (
         f"{where}: checks.acme.lint is the check tables' spelling; a step is"
         f" [phases.lint.acme]{body}"
     )
-    # A tool's table with no check beneath it, and the table under a target.
+    # A step's table with no phase beneath it, and the table under a target.
     assert _refusal(package, "[checks.acme]\nscope = 'workspace'\n") == (
         f"{where}: checks.acme is the check tables' spelling; a step is"
         f" [phases.<phase>.acme]{body}"
@@ -100,7 +100,7 @@ def test_a_check_table_refuses_naming_the_step_spelling(package: Path) -> None:
         f" [phases.<phase>.<step>]{body}"
     )
     assert _refusal(
-        package, '[for.docs.checks.acme.lint]\nrun = "acme_declared._checks:judge"\n'
+        package, '[for.docs.checks.acme.lint]\nrun = "acme_declared._steps:judge"\n'
     ) == (
         f"{where}: for.docs.checks.acme.lint is the check tables' spelling; a step"
         f" is [phases.lint.acme]{body}"
@@ -157,14 +157,14 @@ def test_a_key_spelled_with_an_underscore_refuses_naming_its_spelling(
 def test_a_reference_that_does_not_import_refuses_at_mount(package: Path) -> None:
     where = package / "extension.toml"
     assert _refusal(package, STEP.replace(":judge", ":jduge")) == (
-        f"{where}: phases.lint.acme.main names jduge, which acme_declared._checks"
+        f"{where}: phases.lint.acme.main names jduge, which acme_declared._steps"
         " does not define at its top level; did you mean 'judge'?"
     )
-    assert _refusal(package, STEP.replace("._checks:", "._chekcs:")) == (
-        f"{where}: phases.lint.acme.main names acme_declared._chekcs, which"
+    assert _refusal(package, STEP.replace("._steps:", "._stpes:")) == (
+        f"{where}: phases.lint.acme.main names acme_declared._stpes, which"
         " acme_declared does not contain"
     )
-    assert _refusal(package, STEP.replace("acme_declared._checks", "json")) == (
+    assert _refusal(package, STEP.replace("acme_declared._steps", "json")) == (
         f"{where}: phases.lint.acme.main names json, outside the extension's package"
         " acme_declared; a reference names the extension's own code"
     )
@@ -172,7 +172,7 @@ def test_a_reference_that_does_not_import_refuses_at_mount(package: Path) -> Non
         package, STEP.replace(":judge", "")
     )
     # Read from the source: nothing of the extension was imported.
-    assert "acme_declared._checks" not in sys.modules
+    assert "acme_declared._steps" not in sys.modules
 
 
 def test_words_name_one_tool_and_a_matrix_key_has_values(package: Path) -> None:
@@ -206,7 +206,7 @@ def test_a_step_in_words_reads_its_words_and_imports_nothing(package: Path) -> N
         'env = { ACME_COLOR = "never" }\n'
         'matrix = { platform = ["linux", "win32"] }\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert record.words is not None
     assert record.words.judge == ("acme", "--platform={platform}", "{arguments}")
     assert record.words.env == (("ACME_COLOR", "never"),)
@@ -214,7 +214,7 @@ def test_a_step_in_words_reads_its_words_and_imports_nothing(package: Path) -> N
     assert str(record.run) == "acme --platform={platform} {arguments}"
     assert record.fix is not None and str(record.fix) == "acme --fix"
     assert record.arguments is True
-    assert "acme_declared._checks" not in sys.modules
+    assert "acme_declared._steps" not in sys.modules
 
 
 def test_a_claim_without_a_category_and_a_fragment_off_its_shape_refuse(
@@ -240,12 +240,12 @@ def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
         'listed-with = "deep"': "is enabled = false on the step, which a workspace"
         " turns on with [phases.lint.acme] enabled = true in its root contract",
         'judge = ["acme"]': "is main: the step's body, a template or a reference",
-        'run = "acme_declared._checks:judge"': "is main: the step's body",
+        'run = "acme_declared._steps:judge"': "is main: the step's body",
         "arguments = true": "is said by {arguments} in main, where the words after"
         " -- go",
-        'pre = "acme_declared._checks:judge"': "a step that runs after it names"
+        'pre = "acme_declared._steps:judge"': "a step that runs after it names"
         " it in after",
-        'post = "acme_declared._checks:judge"': "does its own cleanup on failure",
+        'post = "acme_declared._steps:judge"': "does its own cleanup on failure",
     }
     for line, spelling in said.items():
         key = line.partition(" = ")[0]
@@ -268,8 +268,8 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     assert _refusal(package, "[phases.lint.acme]\nmain = []\n") == (
         f"{where}: phases.lint.acme.main is empty: the tool's name comes first"
     )
-    assert _refusal(package, WORDS_STEP + 'fix = "acme_declared._checks:mend"\n') == (
-        f"{where}: phases.lint.acme.fix is 'acme_declared._checks:mend', a"
+    assert _refusal(package, WORDS_STEP + 'fix = "acme_declared._steps:mend"\n') == (
+        f"{where}: phases.lint.acme.fix is 'acme_declared._steps:mend', a"
         " reference to code; in a step in words, fix is words: the tool's name,"
         " then its arguments"
     )
@@ -277,7 +277,7 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
         f"{where}: phases.lint.acme.fix is words, and main is a reference to code:"
         " a step that runs code fixes with code, module:function"
     )
-    assert _refusal(package, STEP + 'safe-fix = "acme_declared._checks:mend"\n') == (
+    assert _refusal(package, STEP + 'safe-fix = "acme_declared._steps:mend"\n') == (
         f"{where}: phases.lint.acme.safe-fix is declared without fix: a step that"
         " fixes safely fixes too"
     )
@@ -298,7 +298,7 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
         'safe-fix = ["acme", "fix", "--safe", "{paths}"]\n'
         'env = { ACME_COLOR = "never" }\nmatrix = { platform = ["linux", "win32"] }\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (record.name, record.phase, record.step) == ("lint.acme", "lint", "acme")
     assert record.words is not None
     assert record.words.judge == ("acme", "check", "{paths}")
@@ -308,35 +308,35 @@ def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     assert str(record.run) == "acme check {paths}"
     assert record.fix is not None and str(record.fix) == "acme fix {paths}"
     assert (record.narrowing, record.arguments) == ("paths", False)
-    assert "acme_declared._checks" not in sys.modules
+    assert "acme_declared._steps" not in sys.modules
     # A template without {paths} runs whole, and {arguments} takes the
     # words after --.
     found = _declare(
         package,
         '[phases.lint.acme]\ntools = ["acme"]\nmain = ["acme", "{arguments}"]\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (record.narrowing, record.arguments) == ("none", True)
     # A reference: its fix and safe-fix are references, the safe one
     # run under --safe-fix.
     found = _declare(
         package,
-        STEP + 'fix = "acme_declared._checks:mend"\n'
-        'safe-fix = "acme_declared._checks:judge"\n',
+        STEP + 'fix = "acme_declared._steps:mend"\n'
+        'safe-fix = "acme_declared._steps:judge"\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (str(record.run), record.words, record.narrowing) == (
-        "acme_declared._checks:judge",
+        "acme_declared._steps:judge",
         None,
         "packages",
     )
     assert isinstance(record.fix, CodedFix)
     assert (str(record.fix.fix), str(record.fix.safe_fix)) == (
-        "acme_declared._checks:mend",
-        "acme_declared._checks:judge",
+        "acme_declared._steps:mend",
+        "acme_declared._steps:judge",
     )
-    found = _declare(package, STEP + 'fix = "acme_declared._checks:mend"\n')
-    (record,) = found.additions.checks
+    found = _declare(package, STEP + 'fix = "acme_declared._steps:mend"\n')
+    (record,) = found.additions.steps
     assert isinstance(record.fix, Reference)
 
 
@@ -346,19 +346,19 @@ def test_a_step_in_code_says_what_its_code_does(package: Path) -> None:
     # by them and judges the whole; a package step narrows by its
     # packages and says none. Without tools, none takes the words
     # after --.
-    (record,) = _declare(package, STEP).additions.checks
+    (record,) = _declare(package, STEP).additions.steps
     assert (record.narrowing, record.arguments) == ("packages", False)
     (record,) = _declare(
         package, STEP + 'inputs = { reads = ["docs/**/*.md"] }\n'
-    ).additions.checks
+    ).additions.steps
     assert (record.narrowing, record.arguments) == ("none", False)
     (record,) = _declare(
         package, STEP + 'scope = "package"\nextensions = ["python"]\n'
-    ).additions.checks
+    ).additions.steps
     assert (record.narrowing, record.arguments) == ("none", False)
     # A step in code that names tools wraps them: its verb hands them
     # the words after --.
-    (record,) = _declare(package, STEP + 'tools = ["acme"]\n').additions.checks
+    (record,) = _declare(package, STEP + 'tools = ["acme"]\n').additions.steps
     assert (record.narrowing, record.arguments) == ("packages", True)
 
 
@@ -430,12 +430,12 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
     # pass it.
     found = _declare(
         package,
-        STEP + 'fix = "acme_declared._checks:mend"\n'
+        STEP + 'fix = "acme_declared._steps:mend"\n'
         'scope = "workspace"\nextensions = ["acme-kind"]\ntools = ["acme"]\n'
         'after = ["lint.other"]\ntests-only = true\nflags = ["point"]\n'
         'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
         'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
-        ' on-removal = true, widen = "acme_declared._checks:mend",'
+        ' on-removal = true, widen = "acme_declared._steps:mend",'
         ' ignores = ["docs/README.md"], per-file = false }\n'
         'enabled = false\nreads = ["wheel"]\n'
         'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
@@ -446,11 +446,11 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         '[phases.lint.acme.fragments.".acme"]\nextensions = ["acme-kind"]\n'
         'text = "strict: true\\n"\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (record.name, str(record.run), str(record.fix)) == (
         "lint.acme",
-        "acme_declared._checks:judge",
-        "acme_declared._checks:mend",
+        "acme_declared._steps:judge",
+        "acme_declared._steps:mend",
     )
     assert (
         record.scope,
@@ -509,7 +509,7 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
     # main belongs to a step.
     assert _refusal(
         package,
-        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
         'scope = "workspace"\n',
     ) == (
         f"{where}: phases.build.acme.scope is not read on a step of the build"
@@ -518,41 +518,41 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
     )
     assert _refusal(
         package,
-        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
         'extensions = ["acme"]\n',
     ).startswith(f"{where}: phases.build.acme.extensions is not read on a step")
     assert _refusal(
-        package, identity + '[phases.build]\npre = "acme_declared._checks:judge"\n'
+        package, identity + '[phases.build]\npre = "acme_declared._steps:judge"\n'
     ) == (
         f"{where}: phases.build.pre goes: a step is named, and a step that runs"
         " after it names it in after"
     )
     assert _refusal(
-        package, identity + '[phases.build]\npost = "acme_declared._checks:judge"\n'
+        package, identity + '[phases.build]\npost = "acme_declared._steps:judge"\n'
     ) == (
         f"{where}: phases.build.post goes: a step is named, runs after the steps"
         " it names in after, and does its own cleanup on failure"
     )
     assert _refusal(
-        package, identity + '[phases.build]\nmain = "acme_declared._checks:judge"\n'
+        package, identity + '[phases.build]\nmain = "acme_declared._steps:judge"\n'
     ) == (
         f"{where}: phases.build.main belongs to a step: a phase's table holds"
         " steps, [phases.build.<step>], each with main"
     )
     # Then the read: several steps in one phase, in code or in words,
-    # each a package record naming the extension, registering no check.
+    # each a package record naming the extension, registering no step.
     found = _declare(
         package,
-        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
         'provides = { wheel = "path" }\nreads = ["epoch"]\n'
         '[phases.build.other]\ntools = ["acme"]\nmain = ["acme", "build"]\n'
         'after = ["build.acme"]\n',
     )
-    assert found.additions.checks == ()
+    assert found.additions.steps == ()
     first, second = found.phases["build"]
     assert (first.name, str(first.run), first.scope, first.extensions) == (
         "build.acme",
-        "acme_declared._checks:judge",
+        "acme_declared._steps:judge",
         "package",
         ("acme",),
     )
@@ -564,10 +564,10 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
         ("acme",),
     )
     assert second.words is not None
-    assert "acme_declared._checks" not in sys.modules
+    assert "acme_declared._steps" not in sys.modules
 
 
-def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
+def test_a_steps_inputs_name_their_reads_and_a_widen_that_resolves(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
@@ -575,24 +575,24 @@ def test_a_checks_inputs_name_their_reads_and_a_widen_that_resolves(
         f"{where}: phases.lint.acme.inputs names no reads: inputs name the files"
         " it reads"
     )
-    assert "names gone, which acme_declared._checks does not define" in _refusal(
+    assert "names gone, which acme_declared._steps does not define" in _refusal(
         package,
         STEP
-        + 'inputs = { reads = ["**/*.md"], widen = "acme_declared._checks:gone" }\n',
+        + 'inputs = { reads = ["**/*.md"], widen = "acme_declared._steps:gone" }\n',
     )
     found = _declare(
         package,
         STEP + 'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
-        ' on-removal = true, widen = "acme_declared._checks:mend",'
+        ' on-removal = true, widen = "acme_declared._steps:mend",'
         ' ignores = ["docs/README.md"] }\n',
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert record.inputs is not None
     assert record.inputs.reads == ("docs/**/*.md",)
     assert record.inputs.widens == ("mkdocs.yml",)
     assert record.inputs.on_removal is True
     assert record.inputs.per_file is True
-    assert str(record.inputs.widen) == "acme_declared._checks:mend"
+    assert str(record.inputs.widen) == "acme_declared._steps:mend"
     assert record.inputs.ignores == ("docs/README.md",)
 
 
@@ -606,8 +606,8 @@ def test_a_query_combines_by_a_rule_or_a_reference_that_resolves(
         f"{where}: queries.\"acme.style\".combine is 'longest'; a query combines"
         " its answers by 'union', 'nearest', 'agreed', or a function 'module:name'"
     )
-    assert "names gone, which acme_declared._checks does not define" in _refusal(
-        package, '[queries."acme.style"]\ncombine = "acme_declared._checks:gone"\n'
+    assert "names gone, which acme_declared._steps does not define" in _refusal(
+        package, '[queries."acme.style"]\ncombine = "acme_declared._steps:gone"\n'
     )
     # A query the base declares is not declared again.
     assert _refusal(package, '[queries.public-modules]\ncombine = "union"\n') == (
@@ -618,14 +618,14 @@ def test_a_query_combines_by_a_rule_or_a_reference_that_resolves(
         package,
         '[queries."acme.depth"]\nlevel = "workspace"\ncombine = "nearest"\n'
         'default = "shallow"\nvalues = ["shallow", "deep"]\n'
-        '[queries."acme.style"]\ncombine = "acme_declared._checks:mend"\n'
+        '[queries."acme.style"]\ncombine = "acme_declared._steps:mend"\n'
         '[queries."acme.paths"]\nlevel = "package"\n',
     )
     depth, style, paths = found.query_specs.values()
     assert depth == QuerySpec(
         "acme.depth", "nearest", "workspace", "shallow", ("shallow", "deep"), "acme"
     )
-    assert str(style.combine) == "acme_declared._checks:mend"
+    assert str(style.combine) == "acme_declared._steps:mend"
     assert (style.level, paths.combine, paths.values) == ("package", "union", None)
     assert found.queries == {}
 
@@ -695,8 +695,8 @@ def test_a_jobs_inputs_name_their_reads(package: Path) -> None:
 def test_a_jobs_functions_resolve_against_the_extensions_sources(
     package: Path,
 ) -> None:
-    assert "names gone, which acme_declared._checks does not define" in _refusal(
-        package, JOB + 'installs = "acme_declared._checks:gone"\n'
+    assert "names gone, which acme_declared._steps does not define" in _refusal(
+        package, JOB + 'installs = "acme_declared._steps:gone"\n'
     )
     assert "outside the extension's package acme_declared" in _refusal(
         package, JOB + 'deploy = "elsewhere._seams:pages"\n'
@@ -724,7 +724,7 @@ def test_every_key_is_optional(package: Path) -> None:
     assert found.api_version == 1
     assert found.levels == ("workspace",)
     assert found.plugin == ""
-    assert found.additions.checks == ()
+    assert found.additions.steps == ()
 
 
 def test_a_declaration_reads_into_records_named_for_the_extension(
@@ -736,7 +736,7 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         'requires = ["docs"]\n'
         '[toolroom]\nrequires = ["docker>=27"]\n'
         + STEP
-        + 'fix = "acme_declared._checks:mend"\n'
+        + 'fix = "acme_declared._steps:mend"\n'
         'extensions = ["python"]\ntools = ["acme"]\n'
         'claims = [{ category = "source", ignore = ["X1"], suffixes = [".py"] }]\n'
         "[phases.lint.acme.options.strict]\n"
@@ -752,11 +752,11 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         ("docs",),
         ("docker>=27",),
     )
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (record.name, record.extension) == ("lint.acme", "acme")
     assert (str(record.run), str(record.fix)) == (
-        "acme_declared._checks:judge",
-        "acme_declared._checks:mend",
+        "acme_declared._steps:judge",
+        "acme_declared._steps:mend",
     )
     assert [(c.category, c.ignore, c.suffixes) for c in record.claims] == [
         ("source", ("X1",), (".py",))
@@ -777,8 +777,8 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
         package,
         '[ci.jobs.merge.book]\nentries = ["acme.book.build", "acme.book.publish"]\n'
         'needs = ["gate"]\nfetch = "tags"\ntoken = "job"\n'
-        'installs = "acme_declared._checks:judge"\n'
-        'deploy = "acme_declared._checks:mend"\nnote = "The book."\n'
+        'installs = "acme_declared._steps:judge"\n'
+        'deploy = "acme_declared._steps:mend"\nnote = "The book."\n'
         '[for.other.ci.jobs.gate.prose]\nentries = ["acme.prose"]\ngates = true\n',
     )
     (book,) = found.additions.jobs
@@ -794,8 +794,8 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
         "job",
         "The book.",
     )
-    assert str(book.job.installs) == "acme_declared._checks:judge"
-    assert str(book.job.deploy) == "acme_declared._checks:mend"
+    assert str(book.job.installs) == "acme_declared._steps:judge"
+    assert str(book.job.deploy) == "acme_declared._steps:mend"
     assert [(e.point, e.job, e.task, e.source) for e in book.entries] == [
         ("merge", "book", "acme.book.build", "acme"),
         ("merge", "book", "acme.book.publish", "acme"),
@@ -807,10 +807,10 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
 
 def test_a_reference_imports_when_it_runs(package: Path) -> None:
     found = _declare(package, STEP)
-    (record,) = found.additions.checks
-    assert "acme_declared._checks" not in sys.modules
+    (record,) = found.additions.steps
+    assert "acme_declared._steps" not in sys.modules
     record.run(object())  # type: ignore[arg-type]
-    assert "acme_declared._checks" in sys.modules
+    assert "acme_declared._steps" in sys.modules
 
 
 def test_the_contract_keys_a_declaration_owns_are_read_without_the_rest(
@@ -831,18 +831,18 @@ def test_the_contract_keys_a_declaration_owns_are_read_without_the_rest(
     assert contract_keys("acme_absent_package") == ()
 
 
-def test_declared_checks_register_under_the_listed_name(package: Path) -> None:
-    from livery.workshop import _checks
+def test_declared_steps_register_under_the_listed_name(package: Path) -> None:
+    from livery.workshop import _steps
     from livery.workshop._extensions import register_declared
 
     found = _declare(package, STEP)
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     try:
         assert register_declared("acme.listed", found.additions) is True
-        assert _checks.checks_by_name()["lint.acme"].extension == "acme.listed"
+        assert _steps.steps_by_name()["lint.acme"].extension == "acme.listed"
         assert register_declared("acme.listed", Additions()) is False
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
 
 
 def test_declared_jobs_join_their_points_under_the_listed_name(package: Path) -> None:
@@ -923,12 +923,10 @@ def test_a_fragment_declares_its_target_its_render_and_whether_it_is_local(
 
     found = _declare(
         package,
-        '[fragments."NOTES.md"]\nrender = "acme_declared._checks:judge"\n\n'
-        '[fragments.".acme/"]\nrender = "acme_declared._checks:mend"\nlocal = true\n',
+        '[fragments."NOTES.md"]\nrender = "acme_declared._steps:judge"\n\n'
+        '[fragments.".acme/"]\nrender = "acme_declared._steps:mend"\nlocal = true\n',
     )
     assert found.fragments == (
-        DeclaredOutput("NOTES.md", Reference("acme_declared._checks", "judge")),
-        DeclaredOutput(
-            ".acme/", Reference("acme_declared._checks", "mend"), local=True
-        ),
+        DeclaredOutput("NOTES.md", Reference("acme_declared._steps", "judge")),
+        DeclaredOutput(".acme/", Reference("acme_declared._steps", "mend"), local=True),
     )

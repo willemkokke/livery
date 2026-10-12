@@ -13,7 +13,7 @@ levels = ["workspace"]
 # is one the test step reads, and runs the suite for. The suite runs in
 # the workspace's venv, so the step serves the test phase's tree side.
 [phases.test.pytest]
-main = "livery.extensions.pytest._checks:judge_test"
+main = "livery.extensions.pytest._steps:judge_test"
 isolated = false
 extensions = ["python"]
 tools = ["pytest"]
@@ -30,7 +30,7 @@ default = true
 doc = "run the package's suite across cores; false runs it under -n 0"
 
 [phases.examples.pytest]
-main = "livery.extensions.pytest._checks:judge_examples"
+main = "livery.extensions.pytest._steps:judge_examples"
 extensions = ["python"]
 tools = ["pytest"]
 claims = [{ category = "example", suffixes = [".py", ".pyi"] }]

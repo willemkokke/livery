@@ -42,11 +42,11 @@ from typing import TYPE_CHECKING
 from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._packages import Package
     from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import StepRecord
 
-#: The placeholders the engine answers, beside a check's matrix keys.
+#: The placeholders the engine answers, beside a step's matrix keys.
 PLACEHOLDERS = ("cache", "package", "compile-commands", "paths", "arguments")
 
 #: The placeholders only a call that judges one package can answer.
@@ -65,13 +65,13 @@ _PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9-]*)\}")
 
 @dataclass(frozen=True)
 class Words:
-    """A check's words, as its declaration spells them.
+    """A step's words, as its declaration spells them.
 
     Attributes:
-        judge: The tool's name, as the check's ``tools`` name it, and
+        judge: The tool's name, as the step's ``tools`` name it, and
             the arguments that judge.
         fix: The tool and the arguments that rewrite under ``--fix``;
-            empty for a check that only judges.
+            empty for a step that only judges.
         safe_fix: The tool and the arguments that rewrite under
             ``--safe-fix``, removing no code; empty to rewrite with
             ``fix``.
@@ -111,18 +111,18 @@ class Words:
 
 @dataclass(frozen=True)
 class Command:
-    """One mode of a check in words, called as the check's ``run`` or ``fix``.
+    """One mode of a step in words, called as the step's ``run`` or ``fix``.
 
     Attributes:
-        words: The check's words.
-        check: The check's name, ``lint.ruff``, which a run that names
-            no check judges by.
+        words: The step's words.
+        step: The step's name, ``lint.ruff``, which a run that names
+            no step judges by.
         fixing: Whether this is the fix mode, which runs ``safe-fix``
             under ``--safe-fix`` where the words declare it.
     """
 
     words: Words
-    check: str
+    step: str
     fixing: bool = False
 
     def argv(self, *, safe: bool = False) -> tuple[str, ...]:
@@ -141,11 +141,11 @@ class Command:
 
 
 def run_words(command: Command, ctx: PhaseContext) -> None:
-    """Run *command* over what the run reaches, as its check's scope and narrowing say.
+    """Run *command* over what the run reaches, as its step's scope and narrowing say.
 
-    A package check calls the tool on the package's files the run
+    A package step calls the tool on the package's files the run
     reaches, from the package's directory, and calls nothing when there
-    are none. A workspace check that narrows by paths calls it on the
+    are none. A workspace step that narrows by paths calls it on the
     paths the run reaches, with none when the run is whole, and not at
     all when the run reaches nothing it reads; one that narrows by
     packages calls it once per package; any other calls it once, with no
@@ -154,19 +154,19 @@ def run_words(command: Command, ctx: PhaseContext) -> None:
     Raises:
         Failed: when a call exits non-zero, every call's reason merged.
     """
-    from livery.workshop._checks import (
+    from livery.workshop._steps import (
         PACKAGE,
         PACKAGES,
         PATHS,
         WHOLE,
-        check_for,
         scoped_files,
         scoped_packages,
         scoped_paths,
+        step_for,
     )
 
-    record = check_for(ctx.check or command.check)
-    ctx = replace(ctx, check=record.name)
+    record = step_for(ctx.step or command.step)
+    ctx = replace(ctx, step=record.name)
     argv = command.argv(safe=ctx.safe)
     if record.scope == PACKAGE:
         if ctx.package is None:
@@ -178,7 +178,7 @@ def run_words(command: Command, ctx: PhaseContext) -> None:
     if record.narrowing == PATHS:
         chosen = scoped_paths(ctx, record.name)
         if not chosen:
-            return  # the run reaches nothing the check reads
+            return  # the run reaches nothing the step reads
         _calls(
             record, command.words, argv, ctx, None, () if chosen == WHOLE else chosen
         )
@@ -191,7 +191,7 @@ def run_words(command: Command, ctx: PhaseContext) -> None:
 
 
 def _calls(
-    record: CheckRecord,
+    record: StepRecord,
     words: Words,
     argv: tuple[str, ...],
     ctx: PhaseContext,
@@ -224,14 +224,14 @@ def _calls(
         return
     parallel(
         *(
-            step(one, title="_".join((record.tool, *varied.values())))(varied)
+            step(one, title="_".join((record.step, *varied.values())))(varied)
             for varied in combinations
         )
     )
 
 
 def _answers(
-    record: CheckRecord,
+    record: StepRecord,
     words: Words,
     root: Path,
     cwd: Path,
@@ -249,12 +249,12 @@ def _answers(
     from livery.workshop._lifecycle import compile_commands
 
     named = words.placeholders()
-    answers = {"cache": _relative(root / ".workshop" / ".cache" / record.tool, cwd)}
+    answers = {"cache": _relative(root / ".workshop" / ".cache" / record.step, cwd)}
     for name in PACKAGE_PLACEHOLDERS:
         if name in named and package is None:
             fail(
                 f"{record.name} names {{{name}}}, which only a call that judges"
-                ' one package answers; declare the check with scope = "package"'
+                ' one package answers; declare the step with scope = "package"'
             )
     if package is not None:
         answers["package"] = str(package.directory)
@@ -288,7 +288,7 @@ def _combinations(
     ]
 
 
-def _expand(record: CheckRecord, word: str, answers: dict[str, str]) -> str:
+def _expand(record: StepRecord, word: str, answers: dict[str, str]) -> str:
     """*word* with each placeholder answered.
 
     Raises:
@@ -384,21 +384,21 @@ def run_tool(
     try:
         (handle.opts(**chosen) if chosen else handle)(*argv)
     except (tools.ToolError, RunFailed) as error:
-        # A failed call refuses as a check's call does, so a batched
+        # A failed call refuses as a step's call does, so a batched
         # run collects every batch's reason, the tool's output in each,
         # before it refuses.
         fail(str(error))
 
 
-def explained(record: CheckRecord) -> list[str]:
-    """The lines ``fm explain <check>`` prints: what the check runs, and over what.
+def explained(record: StepRecord) -> list[str]:
+    """The lines ``fm explain <step>`` prints: what the step runs, and over what.
 
     A step in words shows each mode's command as the tool's handle
     spells it, the placeholders left for the engine to answer, then
     what the engine puts where ``{paths}`` and ``{arguments}`` stand;
     a step that runs code names its references.
     """
-    from livery.workshop._checks import PACKAGE, PACKAGES, PATHS
+    from livery.workshop._steps import PACKAGE, PACKAGES, PATHS
 
     lines = [f"  {record.name}", f"    extension: {record.extension}"]
     if record.scope == PACKAGE:
@@ -425,7 +425,7 @@ def explained(record: CheckRecord) -> list[str]:
     for name, value in words.env:
         lines.append(f"    env: {name}={value}")
     if "cache" in words.placeholders():
-        lines.append(f"    {{cache}}: .workshop/.cache/{record.tool}")
+        lines.append(f"    {{cache}}: .workshop/.cache/{record.step}")
     if "paths" in words.placeholders():
         reached = "files" if record.scope == PACKAGE else "paths"
         lines.append(f"    {{paths}}: the {reached} the run reaches, a batch per call")

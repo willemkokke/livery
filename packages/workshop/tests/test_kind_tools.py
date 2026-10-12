@@ -22,7 +22,7 @@ from livery.toolroom.store import (
     Requirement,
     Surface,
 )
-from livery.workshop import _checks, _tool_tasks, _tools
+from livery.workshop import _steps, _tool_tasks, _tools
 from livery.workshop._phases import PhaseContext
 from workshop_hosts import (  # noqa: F401
     HERE,
@@ -37,16 +37,16 @@ def _idle(ctx: PhaseContext) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _a_test_check_requires_pytest() -> Iterator[None]:
-    """The python test check a listed pytest extension registers, as a stand-in.
+def _a_test_step_requires_pytest() -> Iterator[None]:
+    """The python test step a listed pytest extension registers, as a stand-in.
 
-    The base registers no python check, and these tests lock a
-    workspace whose checks require a tool: pytest is the one they name,
-    at the site `check test.pytest`.
+    The base registers no python step, and these tests lock a
+    workspace whose steps require a tool: pytest is the one they name,
+    at the site `step test.pytest`.
     """
-    state = _checks.snapshot()
-    _checks.register_check(
-        _checks.CheckRecord(
+    state = _steps.snapshot()
+    _steps.register_step(
+        _steps.StepRecord(
             "pytest",
             "test",
             _idle,
@@ -58,7 +58,7 @@ def _a_test_check_requires_pytest() -> Iterator[None]:
     try:
         yield
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
 
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
@@ -301,11 +301,11 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     root = _workspace(tmp_path, monkeypatch)
     declared = _tools.requirements(root)
     assert {r.name for r in declared} == {"uv", "pytest"}
-    # uv is the python kind's own, and every checker names its check.
+    # uv is the python kind's own, and every checker names its step.
     sites = {(r.name, r.site) for r in declared}
     assert ("uv", "kind python") in sites
     assert {
-        ("pytest", "check test.pytest"),
+        ("pytest", "step test.pytest"),
     } <= sites
     assert {r.name for r in declared if r.site == "kind python"} == {"uv"}
     lock = _tools.write_lock(root)
@@ -351,14 +351,14 @@ def test_the_three_sites_union_and_each_names_itself(
     assert lock.tools["bun"].version == "1.3.0" and set(lock.tools["bun"].hosts) == set(
         THREE
     )
-    # The kinds first, as declared: python's own, then its checks'.
+    # The kinds first, as declared: python's own, then its steps'.
     assert _tools.tool_names(root)[:2] == ("uv", "pytest")
 
 
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
         "uv",  # the python kind's own
-        "pytest",  # then the checks' tools, in their registration order
+        "pytest",  # then the steps' tools, in their registration order
     )
 
 
@@ -366,7 +366,7 @@ def test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes(
     tmp_path: Path,
 ) -> None:
     # The root's tasks.py and tests are python whatever the members are,
-    # and the python checks judge them, so their tools stay required
+    # and the python steps judge them, so their tools stay required
     # beside a native member alone.
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)

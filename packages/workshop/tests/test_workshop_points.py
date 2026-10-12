@@ -482,7 +482,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     monkeypatch.delenv("CI_PIPELINE_SOURCE")
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
-    # The drift and provenance checks are the legs' own walk, selected
+    # The drift and provenance steps are the legs' own walk, selected
     # by what changed, as a local gate selects them; the gate job holds
     # none of them.
     assert seen == [

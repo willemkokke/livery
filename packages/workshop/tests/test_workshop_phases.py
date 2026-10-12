@@ -176,15 +176,15 @@ def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
 def test_a_side_on_a_phase_with_one_side_refuses_in_the_walk(tmp_path: Path) -> None:
     # A step built in code bypasses the declaration's reader, so the
     # walk refuses it before any step runs, naming the phase.
-    from livery.workshop._checks import PACKAGE as PER_PACKAGE
-    from livery.workshop._checks import CheckRecord
+    from livery.workshop._steps import PACKAGE as PER_PACKAGE
+    from livery.workshop._steps import StepRecord
 
     ran: list[str] = []
 
     def body(ctx: PhaseContext) -> None:
-        ran.append(ctx.check)
+        ran.append(ctx.step)
 
-    record = CheckRecord(
+    record = StepRecord(
         "odd",
         "stamp",
         body,
@@ -474,7 +474,7 @@ def test_a_read_its_provider_never_wrote_refuses_naming_the_provider(
 def test_a_context_outside_a_walk_refuses_its_keys_and_names_no_package(
     tmp_path: Path,
 ) -> None:
-    ctx = PhaseContext(root=tmp_path, check="build.x")
+    ctx = PhaseContext(root=tmp_path, step="build.x")
     with pytest.raises(
         PhaseError, match=r"build\.x is not a step of the walk that built this context"
     ):
@@ -623,7 +623,7 @@ def test_each_step_runs_on_the_side_of_its_phase_the_engine_gives(
     assert sorted(_said(capsys.readouterr().out)) == ["both.main", "iso.main"]
 
 
-def test_a_step_serving_the_isolated_side_alone_registers_no_gate_check(
+def test_a_step_serving_the_isolated_side_alone_registers_no_gate_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The gate runs the tree side, so of a workspace-level phase's steps
@@ -636,9 +636,9 @@ def test_a_step_serving_the_isolated_side_alone_registers_no_gate_check(
     iso = _extensions.declaration("acme.iso")
     tree = _extensions.declaration("acme.tree")
     assert iso is not None and tree is not None
-    assert iso.additions.checks == ()
+    assert iso.additions.steps == ()
     assert [(r.name, r.isolated) for r in iso.phases["test"]] == [("test.iso", True)]
-    assert [(r.name, r.isolated) for r in tree.additions.checks] == [
+    assert [(r.name, r.isolated) for r in tree.additions.steps] == [
         ("test.tree", False)
     ]
 
@@ -648,13 +648,13 @@ def test_a_step_serving_the_isolated_side_alone_registers_no_gate_check(
 
 
 @pytest.fixture
-def restored_checks() -> Iterator[None]:
-    """Put the check registry back after a mount registered steps into it."""
-    from livery.workshop import _checks
+def restored_steps() -> Iterator[None]:
+    """Put the step registry back after a mount registered steps into it."""
+    from livery.workshop import _steps
 
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 #: A workspace-level extension declaring a workspace-level phase, docs,
@@ -780,7 +780,7 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
 
 
 def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     from livery.footman import _registry as registry
 
@@ -805,7 +805,7 @@ def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
     fake_extensions(tmp_path, monkeypatch, site=DECLARES_DOCS, index=ADDS_DOCS_STEP)
     root_contract(tmp_path, '["acme.index"]')
     found = _extensions.declaration("acme.index")
-    assert found is not None and [r.name for r in found.additions.checks] == [
+    assert found is not None and [r.name for r in found.additions.steps] == [
         "docs.index"
     ]
     refusal = (
@@ -816,19 +816,19 @@ def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
     with pytest.raises(BaseException, match=refusal), registry.capture():
         _extensions.mount_extensions(tmp_path)
     # Listed before it, the declarer mounts first and the step registers.
-    from livery.workshop import _checks
+    from livery.workshop import _steps
 
     root_contract(tmp_path, '["acme.site", "acme.index"]')
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
-    assert _checks.checks_by_name()["docs.index"].extension == "acme.index"
+    assert _steps.steps_by_name()["docs.index"].extension == "acme.index"
 
 
 def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_verb(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     from livery.footman import _registry as registry
-    from livery.workshop import _checks
+    from livery.workshop import _steps
     from livery.workshop._phases import WORKSPACE_LEVEL, PhaseSpec, phase_spec
 
     # The declared phases are read through the module: each fake set
@@ -900,7 +900,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
         tmp_path,
         monkeypatch,
         site='[phases.notes]\nlevel = "package"\n'
-        '[phases.notes.write]\nmain = "{package}._checks:noop"\n',
+        '[phases.notes.write]\nmain = "{package}._steps:noop"\n',
     )
     with pytest.raises(DeclarationError, match="adds steps to a package's phase"):
         _extensions.declaration("acme.site")
@@ -914,7 +914,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     )
     assert found.phase_specs == {"docs": docs}
     assert declared_phases()["docs"] == docs and phase_spec("docs") == docs
-    (record,) = found.additions.checks
+    (record,) = found.additions.steps
     assert (record.name, record.phase, record.step) == ("docs.pages", "docs", "pages")
     # The one record, by phase as well, whatever the phase's level.
     assert found.phases == {"docs": (record,)}
@@ -923,10 +923,10 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     root_contract(tmp_path, '["acme.site"]')
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
-    registered = _checks.checks_by_name()["docs.pages"]
+    registered = _steps.steps_by_name()["docs.pages"]
     assert registered.extension == "acme.site"
-    assert _checks.verb_tree()["docs"] == {"pages": registered}
-    assert "docs.pages" in _checks.judges(PhaseContext(root=tmp_path, packages=()))
+    assert _steps.verb_tree()["docs"] == {"pages": registered}
+    assert "docs.pages" in _steps.judges(PhaseContext(root=tmp_path, packages=()))
     # Declared without a verb and outside the gate, the step keeps its
     # address and gets neither.
     quiet = DECLARES_DOCS.replace("gated = true", "gated = false").replace(
@@ -935,9 +935,9 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     fake_extensions(tmp_path, monkeypatch, site=quiet)
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
-    assert "docs.pages" in _checks.checks_by_name()
-    assert "docs" not in _checks.verb_tree()
-    assert "docs.pages" not in _checks.judges(PhaseContext(root=tmp_path, packages=()))
+    assert "docs.pages" in _steps.steps_by_name()
+    assert "docs" not in _steps.verb_tree()
+    assert "docs.pages" not in _steps.judges(PhaseContext(root=tmp_path, packages=()))
     # Two installed extensions declaring one phase refuse naming both; a
     # fake stays in the scan for the test, so this comes last.
     fake_extensions(tmp_path, monkeypatch, other=DECLARES_DOCS)

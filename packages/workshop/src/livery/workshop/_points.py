@@ -137,7 +137,7 @@ class Job:
             before its one call.
         only: When the job exists at all: ``wheels`` where a member
             declares wheel platforms, ``""`` always.
-        inputs: The files the job's entries read, declared as a check
+        inputs: The files the job's entries read, declared as a step
             declares its own: a pull request's run that changed none of
             them skips the entries. None for a job that always runs.
         step: What the forge's run page calls the one call; the job's
@@ -869,7 +869,7 @@ def unread_by_the_job(root: Path, point: str, job: str) -> str:
     terms the check legs narrow on: a push, a dispatch, the clock and a
     person's own run always run every entry. The changes are the run's
     own ([livery.workshop.ci_changes][]), read the way the check legs
-    read them, and the inputs select as a check's do, so a change to
+    read them, and the inputs select as a step's do, so a change to
     the sources of the extension that contributed the job runs it.
     """
     from livery.workshop._extensions import extension_provider

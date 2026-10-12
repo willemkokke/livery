@@ -32,7 +32,7 @@ from livery.workshop._envfile import (
     quote_value,
     set_value,
 )
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -341,10 +341,10 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
 
 
 def test_the_tool_profile_derives_from_package_types(
-    tmp_path: Path, python_checks: object
+    tmp_path: Path, python_steps: object
 ) -> None:
     # No packages: the root's kind, python, with its own tool and the
-    # tools of the checks that judge it.
+    # tools of the steps that judge it.
     profile = tool_profile(tmp_path)
     assert "uv" in profile and "fake" in profile
 
@@ -427,11 +427,11 @@ def test_render_plan_lists_all_three_kinds() -> None:
 
 
 def test_fix_files_asks_only_the_fixers_that_claim_the_file_in_the_safe_mode(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     from typing import cast
 
-    import workshop_python_checks as fake_checks
+    import workshop_python_steps as fake_steps
     from livery.workshop import fix_files
 
     # The walk reads the workspace's registry from the project root,
@@ -444,11 +444,9 @@ def test_fix_files_asks_only_the_fixers_that_claim_the_file_in_the_safe_mode(
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     calls: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(
-        fake_checks, "run_format", lambda **kw: calls.append(("format", kw))
+        fake_steps, "run_format", lambda **kw: calls.append(("format", kw))
     )
-    monkeypatch.setattr(
-        fake_checks, "run_lint", lambda **kw: calls.append(("lint", kw))
-    )
+    monkeypatch.setattr(fake_steps, "run_lint", lambda **kw: calls.append(("lint", kw)))
     # A file no claim reaches asks no fixer.
     other = tmp_path / "notes.md"
     other.write_text("#Heading\n")

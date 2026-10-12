@@ -239,7 +239,7 @@ def gate_build(package: Package, root: Path) -> None:
 
     What the kind's tests run on, in one call, for the affected
     gate's test-only step; the two halves are the ``configure`` and
-    ``build`` checks the kind registers.
+    ``build`` steps the kind registers.
     """
     del root
     configure(package)

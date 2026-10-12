@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-import workshop_python_checks as fake_checks
+import workshop_python_steps as fake_steps
 from livery import git
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
@@ -23,7 +23,7 @@ from livery.workshop._packages import Package
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -50,7 +50,7 @@ def _workspace(root: Path) -> None:
     (package / "tests").mkdir()
     (package / "tests" / "test_mod.py").write_text("def test_it() -> None:\n    pass\n")
     # The composed files a sync writes and the files the contract
-    # generates, which the gate's template check judges in every
+    # generates, which the gate's `drift.check` judges in every
     # workspace.
     from livery.workshop._templates import apply_project
 
@@ -134,19 +134,17 @@ def test_graph_affected_prints_the_reach(
 def test_check_affected_scopes_or_says_nothing(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
-    python_checks: object,
+    python_steps: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _, root = rig
     ran: list[str] = []
+    monkeypatch.setattr(fake_steps, "run_format", lambda **kwargs: ran.append("format"))
+    monkeypatch.setattr(fake_steps, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(
-        fake_checks, "run_format", lambda **kwargs: ran.append("format")
+        fake_steps, "run_typecheck", lambda **kwargs: ran.append("types")
     )
-    monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
-    monkeypatch.setattr(
-        fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
-    )
-    monkeypatch.setattr(fake_checks, "run_test", lambda **kwargs: ran.append("test"))
+    monkeypatch.setattr(fake_steps, "run_test", lambda **kwargs: ran.append("test"))
     # The block contract runs unstubbed, deliberately: stubbing
     # parallel and step here once certified a gate whose steps were
     # built and never run (livery#291). Execution is the property.
@@ -192,7 +190,7 @@ def test_check_affected_scopes_or_says_nothing(
 def test_a_dispatched_run_sets_the_verified_record_aside(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
-    python_checks: object,
+    python_steps: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # A person dispatched the gate for this tree: the run proves it
@@ -200,14 +198,12 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     # read and every verb runs.
     _, root = rig
     ran: list[str] = []
+    monkeypatch.setattr(fake_steps, "run_format", lambda **kwargs: ran.append("format"))
+    monkeypatch.setattr(fake_steps, "run_lint", lambda **kwargs: ran.append("lint"))
     monkeypatch.setattr(
-        fake_checks, "run_format", lambda **kwargs: ran.append("format")
+        fake_steps, "run_typecheck", lambda **kwargs: ran.append("types")
     )
-    monkeypatch.setattr(fake_checks, "run_lint", lambda **kwargs: ran.append("lint"))
-    monkeypatch.setattr(
-        fake_checks, "run_typecheck", lambda **kwargs: ran.append("types")
-    )
-    monkeypatch.setattr(fake_checks, "run_test", lambda **kwargs: ran.append("test"))
+    monkeypatch.setattr(fake_steps, "run_test", lambda **kwargs: ran.append("test"))
     from livery.workshop import _gate_record
     from livery.workshop._verified import tree_id
 
@@ -227,7 +223,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
 
 
 def test_check_fix_rewrites_serially_then_judges_the_rest(
-    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, python_checks: object
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     _, root = rig
     calls: list[tuple[str, object]] = []
@@ -237,15 +233,15 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
         module = root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py"
         module.write_text("x = 2\n")
 
-    monkeypatch.setattr(fake_checks, "run_format", _format)
+    monkeypatch.setattr(fake_steps, "run_format", _format)
     monkeypatch.setattr(
-        fake_checks, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
+        fake_steps, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
     )
     monkeypatch.setattr(
-        fake_checks, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
+        fake_steps, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
     )
     monkeypatch.setattr(
-        fake_checks, "run_test", lambda **kwargs: calls.append(("test", kwargs))
+        fake_steps, "run_test", lambda **kwargs: calls.append(("test", kwargs))
     )
     monkeypatch.setattr(
         _quality, "drift_check", lambda files=None: calls.append(("render", None))

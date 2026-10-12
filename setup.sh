@@ -77,7 +77,7 @@ _run() { uv run --project "$_root" --no-sync fm "$@"; }
 # files (the agent's fragments, skills and settings), so a job holds
 # what a person's checkout holds. A lock that is not current refuses
 # here, naming the lock. A tool the store could not supply is named and
-# not fatal: the gate says which check that cost. The emission below
+# not fatal: the gate says which step that cost. The emission below
 # puts the receipts' paths on PATH, so a tool the venv does not carry
 # (an archive from its own release) resolves for the gate.
 _run sync --locked >&2 \

@@ -29,7 +29,7 @@ refuses naming the declared ones.
 
 A step is declared at ``[phases.<phase>.<step>]`` and reads into one
 record whatever its phase's level
-([livery.workshop._checks.CheckRecord][]): a workspace-level phase's
+([livery.workshop._steps.StepRecord][]): a workspace-level phase's
 steps register at mount, and a package-level phase's run over each
 package whose set holds the extension. A step whose verdict is its
 tool's exit code is its tool's words (``main`` as a template, with
@@ -60,12 +60,12 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._contract_keys import ContractKind, Declared, Type
     from livery.workshop._influence import Inputs
     from livery.workshop._phases import PhaseContext, PhaseSpec
     from livery.workshop._points import JobContribution
     from livery.workshop._queries import QuerySpec
+    from livery.workshop._steps import StepRecord
     from livery.workshop._words import Words
 
 #: The declaration file's name, beside the package an entry point names.
@@ -138,13 +138,13 @@ class Additions:
     """What a declaration adds while it is mounted.
 
     Attributes:
-        checks: The steps of the ``[phases.<phase>.<step>]`` tables of
+        steps: The steps of the ``[phases.<phase>.<step>]`` tables of
             the workspace-level phases, as records under the
             extension's name, which the mount registers.
         jobs: The CI jobs it adds to the builtin points, with their entries.
     """
 
-    checks: tuple[CheckRecord, ...] = ()
+    steps: tuple[StepRecord, ...] = ()
     jobs: tuple[JobContribution, ...] = ()
 
 
@@ -237,8 +237,8 @@ class Declaration:
     deletes: dict[str, str] = field(default_factory=dict[str, str])
     fragments: tuple[DeclaredOutput, ...] = ()
     phase_specs: dict[str, PhaseSpec] = field(default_factory=dict[str, "PhaseSpec"])
-    phases: dict[str, tuple[CheckRecord, ...]] = field(
-        default_factory=dict[str, tuple["CheckRecord", ...]]
+    phases: dict[str, tuple[StepRecord, ...]] = field(
+        default_factory=dict[str, tuple["StepRecord", ...]]
     )
     query_specs: dict[str, QuerySpec] = field(default_factory=dict[str, "QuerySpec"])
     queries: dict[str, Reference | DeclaredValue] = field(
@@ -521,7 +521,7 @@ class _Reader:
         data: dict[str, Any],
         prefix: tuple[str, ...],
         *,
-        steps: Mapping[str, tuple[CheckRecord, ...]] | None = None,
+        steps: Mapping[str, tuple[StepRecord, ...]] | None = None,
     ) -> Additions:
         """What *data* adds: the gate phases' steps and jobs.
 
@@ -536,7 +536,7 @@ class _Reader:
         from livery.workshop._phases import WORKSPACE_LEVEL
 
         found = steps if steps is not None else self.steps(data, prefix)
-        checks = [
+        registered = [
             record
             for phase, records in found.items()
             if self.specs[phase].level == WORKSPACE_LEVEL
@@ -555,7 +555,7 @@ class _Reader:
                         earlier=tuple(jobs),
                     )
                 )
-        return Additions(tuple(checks), tuple(jobs))
+        return Additions(tuple(registered), tuple(jobs))
 
     def job(
         self,
@@ -634,8 +634,8 @@ class _Reader:
     def removed(self, data: dict[str, Any]) -> None:
         """Refuse the check tables' spelling, naming the step's.
 
-        A ``[checks.<tool>.<role>]`` table is the step
-        ``[phases.<role>.<tool>]``, an ``[options]`` table is
+        A ``[checks.<step>.<phase>]`` table is the step
+        ``[phases.<phase>.<step>]``, an ``[options]`` table is
         ``enabled`` on the step, a ``[root-files."<path>"]`` table is
         ``[fragments."<path>"]``, a ``[rules.<name>]`` table is
         ``[phases.layering.<name>]``, and a key the step table dropped
@@ -658,25 +658,25 @@ class _Reader:
     def removed_tables(self, data: dict[str, Any], prefix: tuple[str, ...]) -> None:
         """Refuse the check tables' spelling in *data*, one table of the file."""
         if "checks" in data:
-            # The first check table names the step it is: [checks.<tool>.<role>]
-            # is [phases.<role>.<tool>]; a bare table names the shape.
+            # The first check table names the step it is: [checks.<step>.<phase>]
+            # is [phases.<phase>.<step>]; a bare table names the shape.
             where = [*prefix, "checks"]
-            tool, role = "<step>", "<phase>"
+            step, phase = "<step>", "<phase>"
             checks = data["checks"]
             if isinstance(checks, dict) and cast("dict[str, Any]", checks):
-                tool, roles = next(iter(cast("dict[str, Any]", checks).items()))
-                where.append(tool)
+                step, phases = next(iter(cast("dict[str, Any]", checks).items()))
+                where.append(step)
                 named = (
-                    [key for key, value in roles.items() if isinstance(value, dict)]
-                    if isinstance(roles, dict)
+                    [key for key, value in phases.items() if isinstance(value, dict)]
+                    if isinstance(phases, dict)
                     else []
                 )
                 if named:
-                    role = str(named[0])
-                    where.append(role)
+                    phase = str(named[0])
+                    where.append(phase)
             raise self.refuse(
                 tuple(where),
-                f"is the check tables' spelling; a step is [phases.{role}.{tool}]"
+                f"is the check tables' spelling; a step is [phases.{phase}.{step}]"
                 " with main, its body: a template, the tool's name then its"
                 " arguments, or a reference to its code, module:function",
             )
@@ -751,7 +751,7 @@ class _Reader:
 
     def steps(
         self, data: dict[str, Any], prefix: tuple[str, ...]
-    ) -> dict[str, tuple[CheckRecord, ...]]:
+    ) -> dict[str, tuple[StepRecord, ...]]:
         """Every step *data*'s ``[phases.<phase>.<step>]`` tables declare, by phase.
 
         A phase with no step is left out. A step of a package-level
@@ -760,7 +760,7 @@ class _Reader:
         """
         from livery.workshop._phases import PACKAGE_LEVEL
 
-        found: dict[str, tuple[CheckRecord, ...]] = {}
+        found: dict[str, tuple[StepRecord, ...]] = {}
         for phase, table in data.get("phases", {}).items():
             spec = self.spec(str(phase), prefix)
             named = _step_tables(table)
@@ -780,7 +780,7 @@ class _Reader:
 
     def step(
         self, phase: str, step: str, entry: dict[str, Any], prefix: tuple[str, ...]
-    ) -> CheckRecord:
+    ) -> StepRecord:
         """The step ``[phases.<phase>.<step>]`` declares: a record placing its paths.
 
         ``main`` is the body: a template, the tool's name as ``tools``
@@ -801,8 +801,8 @@ class _Reader:
         """
         from dataclasses import replace
 
-        from livery.workshop._checks import NONE, PACKAGE, PACKAGES, PATHS, WORKSPACE
         from livery.workshop._phases import ISOLATED, PACKAGE_LEVEL
+        from livery.workshop._steps import NONE, PACKAGE, PACKAGES, PATHS, WORKSPACE
 
         where = (*prefix, phase, step)
         if ISOLATED in entry and ISOLATED not in self.specs[phase].keys:
@@ -880,22 +880,22 @@ class _Reader:
 
     def record(
         self,
-        tool: str,
-        role: str,
+        step: str,
+        phase: str,
         entry: dict[str, Any],
         where: tuple[str, ...],
         run: Callable[[PhaseContext], None],
         fix: Callable[[PhaseContext], None] | None,
         words: Words | None,
-    ) -> CheckRecord:
+    ) -> StepRecord:
         """The record from a step table's shared keys, its body resolved.
 
         ``scope``, ``claims``, ``extensions``, ``options``, ``fragments``,
         ``inputs``, ``after``, ``tools``, ``tests-only`` and ``flags``;
         ``step`` sets the step's own fields after.
         """
-        from livery.workshop._checks import CheckRecord, Claim, Option
         from livery.workshop._fragments import verify
+        from livery.workshop._steps import Claim, Option, StepRecord
 
         claims: list[Claim] = []
         for index, claim in enumerate(entry.get("claims", ())):
@@ -915,9 +915,9 @@ class _Reader:
             if "inputs" in entry
             else None
         )
-        record = CheckRecord(
-            tool,
-            role,
+        record = StepRecord(
+            step,
+            phase,
             run,
             scope=str(entry.get("scope", "workspace")),
             fix=fix,
@@ -1177,7 +1177,7 @@ class _Reader:
         return self.reference(value, where)
 
     def inputs(self, table: dict[str, Any], where: tuple[str, ...]) -> Inputs:
-        """The files a workspace check or a job reads, from its ``inputs`` table."""
+        """The files a workspace step or a job reads, from its ``inputs`` table."""
         from livery.workshop._influence import Inputs
 
         if "reads" not in table:

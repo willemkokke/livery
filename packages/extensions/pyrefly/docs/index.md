@@ -4,7 +4,7 @@
 -->
 # livery-extensions-pyrefly
 
-pyrefly as a check of the workshop: `typecheck.pyrefly` type-checks the
+pyrefly as a step of the workshop: `typecheck.pyrefly` type-checks the
 python packages' sources on every platform at once. A workspace turns it
 on by listing the extension:
 
@@ -22,7 +22,7 @@ words after `--`.
 ## The configuration
 
 `fm sync` writes the root `pyrefly.toml`, and a bare `pyrefly check` in the
-repository reads the same file the check does. It includes each python
+repository reads the same file the step does. It includes each python
 member's `src` directory, or `tasks.py` in a workspace without one, checks
 every platform at the python version the workspace supports, reads the
 tool stubs in `typings/`, and holds two error classes at error:

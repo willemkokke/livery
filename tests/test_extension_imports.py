@@ -7,7 +7,7 @@ another only when its extension.toml requires it. A member's source is
 held to that; tests are exempt, as the reach test exempts them. The
 one exception is the workshop's own: the base modules that
 ``livery.workshop._packages.BASE_EXTENSION_IMPORTS`` names import the
-python extension until the package kinds go, and the layering check
+python extension until the package kinds go, and the layering phase
 reads the same list.
 
 An extension is the module a member's ``workshop.extensions`` entry
@@ -164,7 +164,7 @@ def _workspace(root: Path) -> Path:
         "lint",
         extension="acme.extensions.lint",
         files={
-            "acme/extensions/lint/_checks.py": "import acme.extensions.site._pages\n"
+            "acme/extensions/lint/_steps.py": "import acme.extensions.site._pages\n"
         },
     )
     _member(
@@ -196,7 +196,7 @@ def test_an_import_of_an_extension_from_outside_it_refuses_naming_its_place(
         " (acme.extensions.site); only the workshop mounts an extension, through"
         " its entry point, and an extension imports another only when its"
         " extension.toml requires it",
-        "packages/lint/src/acme/extensions/lint/_checks.py:1: imports the extension"
+        "packages/lint/src/acme/extensions/lint/_steps.py:1: imports the extension"
         " site (acme.extensions.site); only the workshop mounts an extension,"
         " through its entry point, and an extension imports another only when its"
         " extension.toml requires it",

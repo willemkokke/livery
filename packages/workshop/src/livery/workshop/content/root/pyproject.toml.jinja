@@ -1,6 +1,6 @@
 {% set py = packages | selectattr("dev") | list %}{% set native = packages | rejectattr("dev") | list -%}
 # Composed by `{{ prog }} sync` from the base's template and the tables
-# each registered check owns; the gate keeps it matching. Edit inside
+# each registered step owns; the gate keeps it matching. Edit inside
 # the region at the end, which is the repository's own; an edit
 # anywhere else is drift.
 # The workspace's virtual root: never built, never published.

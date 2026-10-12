@@ -22,7 +22,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Package
 from workshop_composed import seed_into
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -148,7 +148,7 @@ def test_a_pure_wheel_from_the_native_kind_refuses(tmp_path: Path) -> None:
     _python_nanobind.assert_platform_tagged(package, dist)
 
 
-def test_the_kind_chains_from_python(python_checks: object) -> None:
+def test_the_kind_chains_from_python(python_steps: object) -> None:
     assert template_chain("package-python-nanobind") == (
         "package-base",
         "package-python",
@@ -157,12 +157,12 @@ def test_the_kind_chains_from_python(python_checks: object) -> None:
     assert is_python_kind("python-nanobind")
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
-    # The native configs are rendered from the check records, so the kind
+    # The native configs are rendered from the step records, so the kind
     # manages them.
     # The chain's union of what operates the kinds: python's beneath
     # the kind's own build tools; the checkers, the
     # formatter, the test runner and the two clang tools ride their
-    # check records, which the chain reaches the same way.
+    # step records, which the chain reaches the same way.
     assert kind_tools({"python-nanobind"}) == (
         "cmake",
         "cmake_conan",
@@ -170,20 +170,20 @@ def test_the_kind_chains_from_python(python_checks: object) -> None:
         "ninja",
         "uv",
     )
-    from livery.workshop._checks import tools_for
     from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._steps import tools_for
 
-    # A check naming python reaches the child kind through its chain:
+    # A step naming python reaches the child kind through its chain:
     # its tool joins the child's profile.
     held = kind_stands_for("python-nanobind")
     assert {"fake"} <= {tool for tool, _ in tools_for(held)}
     record = kind_for("python-nanobind")
     assert record.parent == "python"
-    # Its roles are those of the checks naming an extension it holds.
-    from livery.workshop._checks import checks_by_name, judges_extensions
+    # Its phases are those of the steps naming an extension it holds.
+    from livery.workshop._steps import judges_extensions, steps_by_name
 
-    roles = {r.role for r in checks_by_name().values() if judges_extensions(r, held)}
-    assert {"test", "typecheck"} <= roles
+    phases = {r.phase for r in steps_by_name().values() if judges_extensions(r, held)}
+    assert {"test", "typecheck"} <= phases
     assert record.host_tools == ("cc", "c++")
 
 

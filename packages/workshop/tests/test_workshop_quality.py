@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-import workshop_python_checks as fake_checks
+import workshop_python_steps as fake_steps
 from livery.extensions.python import _backend as _python
 from livery.workshop import _phases, _quality
 from livery.workshop._packages import Package
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
-# The python checks that judge and never rewrite, sorted, as the fakes
+# The python steps that judge and never rewrite, sorted, as the fakes
 # below record them: one type check per type checker.
 PYTHON_JUDGES = (
     "test.fake",
@@ -38,7 +38,7 @@ LAYERING_STEPS = (LAYERING_FIXER, *LAYERING_JUDGES)
 def _package(tmp_path: Path) -> Package:
     member = tmp_path / "packages" / "one"
     (member / "tests").mkdir(parents=True)
-    # A file to judge: a check never names a directory with none.
+    # A file to judge: a step never names a directory with none.
     (member / "tests" / "test_one.py").write_text("")
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-one"\nversion = "0.1.0"\n'
@@ -80,10 +80,10 @@ def _record(
     monkeypatch.setattr(
         "livery.workshop._provenance.check_content", named("provenance.check")
     )
-    monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
-    monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
-    monkeypatch.setattr(fake_checks, "run_typecheck", named("typecheck.fake"))
-    monkeypatch.setattr(fake_checks, "run_test", named("test.fake"))
+    monkeypatch.setattr(fake_steps, "run_format", named("format.fake"))
+    monkeypatch.setattr(fake_steps, "run_lint", named("lint.fake"))
+    monkeypatch.setattr(fake_steps, "run_typecheck", named("typecheck.fake"))
+    monkeypatch.setattr(fake_steps, "run_test", named("test.fake"))
     return ran, calls
 
 
@@ -98,14 +98,14 @@ def test_a_fixing_gate_refuses_inside_ci(
 
 
 def test_the_scoped_gate_runs_every_verb(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     from livery.workshop._influence import Changes
 
     ran, _ = _record(monkeypatch, tmp_path)
     package = _package(tmp_path)
     # A scoped gate that knows nothing of what changed reads every
-    # input of every workspace check.
+    # input of every workspace step.
     _quality._scoped_check((package,))
     assert sorted(ran) == sorted(
         (
@@ -119,7 +119,7 @@ def test_the_scoped_gate_runs_every_verb(
         )
     )
     # A source change reaches the layering steps over the sources and
-    # none of the workspace checks that read no source.
+    # none of the workspace steps that read no source.
     ran.clear()
     source = "packages/one/src/one/a.py"
     _quality._scoped_check((package,), changes=Changes(tmp_path, (source,)))
@@ -129,7 +129,7 @@ def test_the_scoped_gate_runs_every_verb(
 
 
 def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     from livery.workshop._coverage_store import workspace_suite
 
@@ -141,7 +141,7 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     _quality._scoped_check((unit,))
     # The unit is every unit this workspace has, so style and types run
     # over the configured whole; the tests run as the one suite, and no
-    # kind check for it.
+    # kind step for it.
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == (".",)
     assert by_verb["lint.fake"]["paths"] == (".",)
@@ -165,7 +165,7 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
 
 
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     # The serial rewrites were the silent half of the drift: built
     # outside the block, dropped without even a refusal.
@@ -187,11 +187,11 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # Every fixer that applies rewrites before any judge, the layering
     # fix and an extension's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
-    from livery.workshop import _checks
-    from livery.workshop._checks import CheckRecord, register_check
+    from livery.workshop import _steps
     from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import StepRecord, register_step
 
-    state = _checks.snapshot()
+    state = _steps.snapshot()
 
     def acme_fix(ctx: PhaseContext) -> None:
         del ctx
@@ -202,8 +202,8 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
         ran.append("acme-judged")
 
     try:
-        register_check(
-            CheckRecord(
+        register_step(
+            StepRecord(
                 "acme", "format", acme_judge, fix=acme_fix, extension="acme.extension"
             )
         )
@@ -216,7 +216,7 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
             changes=source,
         )
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
     fixed = between[0]
     assert fixed[:3] == [LAYERING_FIXER, "format.fake", "lint.fake"]
     assert LAYERING_FIXER in fixed and "acme-fix" in fixed
@@ -314,7 +314,7 @@ def test_a_root_with_nothing_public_verifies_nothing(tmp_path: Path) -> None:
     )
     root = package.directory / "src" / "acme" / "extensions" / "ext"
     (root / "content").mkdir(parents=True)
-    (root / "_checks.py").write_text("")
+    (root / "_steps.py").write_text("")
     assert _python.module_roots(package) == ("acme.extensions.ext",)
     assert _python.public_modules(package) == ()
 
@@ -360,18 +360,18 @@ def test_the_roots_are_what_the_build_ships(tmp_path: Path) -> None:
     assert _python.module_roots(single) == ("acme.seven",)
 
 
-def test_check_refuses_both_fix_flags_and_no_role_verb_is_written_by_hand() -> None:
+def test_check_refuses_both_fix_flags_and_no_phase_verb_is_written_by_hand() -> None:
     with pytest.raises((SystemExit, Exception)) as caught:
         _quality.check("tasks.py", fix=True, safe_fix=True)
     assert "Pass one" in str(caught.value)
-    # The role verbs are generated from the registry: none is written
-    # here beside the checks it would duplicate.
+    # The phase verbs are generated from the registry: none is written
+    # here beside the steps it would duplicate.
     for verb in ("format", "lint", "typecheck", "typecomplete", "test"):
         assert not hasattr(_quality, verb), verb
 
 
 def test_the_python_test_entry_maps_a_selection_to_its_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     from livery.extensions.python import _backend as _python
 
@@ -391,7 +391,7 @@ def test_the_python_test_entry_maps_a_selection_to_its_files(
     assert calls[2][0] == ("-k", "name")
 
 
-# --- what the gate is, pinned before the check registry replaces it -----------
+# --- what the gate is, pinned before the step registry replaces it -----------
 #
 # Characterisation, not specification: these say what the gate does
 # today so that a reimplementation which still passes them preserved
@@ -401,7 +401,7 @@ def test_the_python_test_entry_maps_a_selection_to_its_files(
 #
 # Two properties are pinned elsewhere and are not repeated:
 # `test_workshop_cpp_kind.py` holds both skip prints, `judged_by()`'s
-# per-check line and the kind gate's run-beside-skip announcement.
+# per-step line and the kind gate's run-beside-skip announcement.
 
 
 def _whole_gate(
@@ -412,7 +412,7 @@ def _whole_gate(
     Returns the recorded run, with `<parallel` and `>parallel` around
     each block footman schedules, and the tree ids the rewrite pass
     recomputed. With *python* the repository holds a package's source,
-    a ``tasks.py`` and a root test, so every python check has files to
+    a ``tasks.py`` and a root test, so every python step has files to
     read; without, it holds its contract alone.
     """
     import contextlib
@@ -466,10 +466,10 @@ def _whole_gate(
     monkeypatch.setattr(
         "livery.workshop._provenance.check_content", named("provenance.check")
     )
-    monkeypatch.setattr(fake_checks, "run_format", named("format.fake"))
-    monkeypatch.setattr(fake_checks, "run_lint", named("lint.fake"))
-    monkeypatch.setattr(fake_checks, "run_typecheck", typecheck)
-    monkeypatch.setattr(fake_checks, "run_test", named("test.fake"))
+    monkeypatch.setattr(fake_steps, "run_format", named("format.fake"))
+    monkeypatch.setattr(fake_steps, "run_lint", named("lint.fake"))
+    monkeypatch.setattr(fake_steps, "run_typecheck", typecheck)
+    monkeypatch.setattr(fake_steps, "run_test", named("test.fake"))
 
     def rewritten(root: object, run: object, tree: str) -> str:
         trees.append(tree)
@@ -503,14 +503,14 @@ def _whole_gate(
 
 
 def test_the_whole_gate_runs_every_member_in_one_parallel_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=False, base="")
     assert ran[0] == "<parallel"
     assert ran[-1] == ">parallel"
-    # The cpp-conan checks judge no package here, and the examples
-    # check finds no example to read.
+    # The cpp-conan steps judge no package here, and the examples
+    # step finds no example to read.
     assert sorted(ran[1:-1]) == sorted(
         (
             "format.fake",
@@ -524,15 +524,15 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
     )
 
 
-def test_a_workspace_without_python_starts_no_python_check(
+def test_a_workspace_without_python_starts_no_python_step(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    python_checks: object,
+    python_steps: object,
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path, python=False)
     _quality._run_check(full=True, fix=False, base="")
-    # The checks without claims read what their own body decides; the
+    # The steps without claims read what their own body decides; the
     # python ones claim .py files, and none is there to read.
     assert sorted(ran[1:-1]) == sorted(
         ("drift.check", "layering.graph", *LAYERING_STEPS, "provenance.check")
@@ -554,7 +554,7 @@ def _blocks(ran: list[str]) -> list[list[str]]:
 
 
 def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     ran, _ = _whole_gate(monkeypatch, tmp_path)
     _quality._run_check(full=True, fix=True, base="")
@@ -577,7 +577,7 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
 
 
 def test_the_judges_read_the_tree_the_rewriters_left(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     """The tree is recomputed between the two, and only under --fix."""
     ran, trees = _whole_gate(monkeypatch, tmp_path)
@@ -590,7 +590,7 @@ def test_the_judges_read_the_tree_the_rewriters_left(
 
 
 def test_one_refusing_member_is_the_gate_s_verdict(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     """The gate is the conjunction: one member's refusal is the answer."""
     _whole_gate(monkeypatch, tmp_path)
@@ -598,6 +598,6 @@ def test_one_refusing_member_is_the_gate_s_verdict(
     def refuse(*args: object, **kwargs: object) -> None:
         raise RuntimeError("typecheck says no")
 
-    monkeypatch.setattr(fake_checks, "run_typecheck", refuse)
+    monkeypatch.setattr(fake_steps, "run_typecheck", refuse)
     with pytest.raises(BaseException, match="typecheck says no"):
         _quality._run_check(full=True, fix=False, base="")

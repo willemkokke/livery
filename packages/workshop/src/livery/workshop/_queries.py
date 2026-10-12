@@ -199,7 +199,7 @@ def owned(answers: Mapping[str, Any], lookup: Lookup) -> tuple[str, ...]:
 RULES: Mapping[str, Combine] = {UNION: _union, NEAREST: _nearest, AGREED: _agreed}
 
 #: The modules that declare the package's public API, by import path:
-#: what a type-completeness check verifies.
+#: what a type-completeness step verifies.
 PUBLIC_MODULES: Query[tuple[str, ...]] = Query("public-modules")
 
 #: Where the package's build writes its compilation database, which a
@@ -299,7 +299,7 @@ def _walk(subject: Package | Path, spec: QuerySpec, lookup: Lookup) -> tuple[str
 
     A package's set in composition order, or the listed extensions in
     list order; a set whose declared order has no start is asked
-    alphabetically, and the layering check names the cycle.
+    alphabetically, and ``layering.graph`` names the cycle.
 
     Raises:
         QueryError: when *subject* is at the other level from the query.

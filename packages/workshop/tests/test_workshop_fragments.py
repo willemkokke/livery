@@ -7,12 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _checks
-from livery.workshop._checks import (
-    CheckRecord,
-    register_check,
-    unregister_check,
-)
+from livery.workshop import _steps
 from livery.workshop._fragments import (
     Fragment,
     compose_package,
@@ -21,18 +16,23 @@ from livery.workshop._fragments import (
 )
 from livery.workshop._phases import PhaseContext
 from livery.workshop._queries import EDITOR_EXTENSIONS, answer
+from livery.workshop._steps import (
+    StepRecord,
+    register_step,
+    unregister_step,
+)
 
 _FAILURES = (BaseException,)
 
 
 @pytest.fixture
-def restored_checks():
-    before, withdrawn = dict(_checks._CHECKS), dict(_checks._WITHDRAWN)
+def restored_steps():
+    before, withdrawn = dict(_steps._STEPS), dict(_steps._WITHDRAWN)
     yield
-    _checks._CHECKS.clear()
-    _checks._CHECKS.update(before)
-    _checks._WITHDRAWN.clear()
-    _checks._WITHDRAWN.update(withdrawn)
+    _steps._STEPS.clear()
+    _steps._STEPS.update(before)
+    _steps._WITHDRAWN.clear()
+    _steps._WITHDRAWN.update(withdrawn)
 
 
 def _this_checkout_or_skip(root: Path) -> None:
@@ -69,19 +69,19 @@ def _data() -> dict[str, object]:
 
 
 def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
-    restored_checks,
+    restored_steps,
 ) -> None:
     with pytest.raises(
         _FAILURES, match="'Makefile' names a file the render does not write"
     ):
-        register_check(
-            CheckRecord("acme", "lint", _noop, fragments=(Fragment("Makefile", "x"),))
+        register_step(
+            StepRecord("acme", "lint", _noop, fragments=(Fragment("Makefile", "x"),))
         )
     with pytest.raises(
         _FAILURES, match="applies to the whole workspace and names no extension"
     ):
-        register_check(
-            CheckRecord(
+        register_step(
+            StepRecord(
                 "acme",
                 "lint",
                 _noop,
@@ -91,16 +91,14 @@ def test_a_fragment_for_a_file_the_render_does_not_write_refuses(
     # A per-package file is one a fragment names extensions for; without
     # them, the file is no project file the render writes.
     with pytest.raises(_FAILURES, match="a fragment that names extensions is rendered"):
-        register_check(
-            CheckRecord(
-                "acme", "lint", _noop, fragments=(Fragment(".clang-tidy", "x"),)
-            )
+        register_step(
+            StepRecord("acme", "lint", _noop, fragments=(Fragment(".clang-tidy", "x"),))
         )
 
 
-def _native_style() -> CheckRecord:
-    """A base check carrying a per-package file for each C or C++ package."""
-    record = CheckRecord(
+def _native_style() -> StepRecord:
+    """A base step carrying a per-package file for each C or C++ package."""
+    record = StepRecord(
         "native-style",
         "lint",
         _noop,
@@ -112,12 +110,12 @@ def _native_style() -> CheckRecord:
             ),
         ),
     )
-    register_check(record)
+    register_step(record)
     return record
 
 
-def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
-    tmp_path: Path, restored_checks, monkeypatch: pytest.MonkeyPatch
+def test_a_withdrawn_steps_file_is_kept_when_edited_and_removed_when_unedited(
+    tmp_path: Path, restored_steps, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import deliver, shipped_drift
@@ -136,10 +134,10 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     assert ".native-style" in read_rendered(member)
     assert "C or C++" in (member / ".native-style").read_text()
     assert deliver(root) == []
-    # The check withdrawn: the edited arm first, kept and named.
-    unregister_check("lint.native-style", by="acme.brand")
+    # The step withdrawn: the edited arm first, kept and named.
+    unregister_step("lint.native-style", by="acme.brand")
     (member / ".native-style").write_text("mine\n")
-    # The gate's prose follows the withdrawn check too; the package's
+    # The gate's prose follows the withdrawn step too; the package's
     # lines are the ones under test.
     assert [line for line in deliver(root) if "packages/" in line] == [
         "  kept packages/native/.native-style: no listed extension renders it,"
@@ -149,9 +147,9 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
     assert ".native-style" not in read_rendered(member)
     # The unedited arm: removed by the next delivery, and no drift after.
     (member / ".native-style").unlink()
-    register_check(record)
+    register_step(record)
     deliver(root)
-    unregister_check("lint.native-style", by="acme.brand")
+    unregister_step("lint.native-style", by="acme.brand")
     assert [line for line in deliver(root) if "packages/" in line] == [
         "  removed packages/native/.native-style: no listed extension renders it"
     ]
@@ -160,16 +158,16 @@ def test_a_withdrawn_checks_file_is_kept_when_edited_and_removed_when_unedited(
 
 
 def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
-    tmp_path: Path, restored_checks: None
+    tmp_path: Path, restored_steps: None
 ) -> None:
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import settle_package
 
-    # A package file is any file a registered check's fragment for
-    # extensions names: a native check's, and an extension's style beside it.
+    # A package file is any file a registered step's fragment for
+    # extensions names: a native step's, and an extension's style beside it.
     _native_style()
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-style",
             "format",
             _noop,
@@ -211,34 +209,34 @@ def test_this_workspace_composes_no_tool_table_from_the_base_s_records() -> None
     assert injected["extensions"] == list(answer(root, EDITOR_EXTENSIONS))
 
 
-def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> None:
-    from livery.workshop._checks import tools_for
+def test_unregistering_a_tools_steps_removes_every_trace(restored_steps) -> None:
+    from livery.workshop._steps import tools_for
 
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "bystander",
             "lint",
             _noop,
             fragments=(Fragment("pyproject.toml", "[tool.bystander]\nx = 1\n"),),
         )
     )
-    for role in ("typecheck", "typecomplete"):
-        register_check(
-            CheckRecord(
+    for phase in ("typecheck", "typecomplete"):
+        register_step(
+            StepRecord(
                 "acme",
-                role,
+                phase,
                 _noop,
                 extensions=("python",),
                 tools=("acme",),
                 fragments=(Fragment("pyproject.toml", "[tool.acme]\nstrict = true\n"),)
-                if role == "typecheck"
+                if phase == "typecheck"
                 else (),
             )
         )
     composed = compose_project(_data())
     assert "[tool.acme]" in composed["pyproject.toml"]
-    unregister_check("typecheck.acme", by="acme.brand")
-    unregister_check("typecomplete.acme", by="acme.brand")
+    unregister_step("typecheck.acme", by="acme.brand")
+    unregister_step("typecomplete.acme", by="acme.brand")
     composed = compose_project(_data())
     assert "[tool.acme" not in composed["pyproject.toml"]
     assert "acme" not in {tool for tool, _ in tools_for(("python",))}
@@ -246,7 +244,7 @@ def test_unregistering_a_tools_checks_removes_every_trace(restored_checks) -> No
 
 
 def test_a_package_fragment_resolves_by_the_extensions_a_package_holds(
-    restored_checks,
+    restored_steps,
 ) -> None:
     record = _native_style()
     data = _data()
@@ -254,10 +252,10 @@ def test_a_package_fragment_resolves_by_the_extensions_a_package_holds(
     nano = compose_package(("python", "cpp"), ".native-style", data)
     assert native == nano == "# for a C or C++ package\n"
     assert package_fragment(("python",), ".native-style") is None
-    # Two checks carrying one file for what one package holds: the first
+    # Two steps carrying one file for what one package holds: the first
     # by name renders it there, and the other wherever it alone applies.
-    register_check(
-        CheckRecord(
+    register_step(
+        StepRecord(
             "acme-tidy",
             "lint",
             _noop,

@@ -15,7 +15,7 @@ from livery.workshop._ci_context import RunContext
 from livery.workshop._gate_record import Plan
 from livery.workshop._packages import Package
 from livery.workshop._verified import read_marker
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
 def _root(tmp_path: Path, ci: str) -> Path:
@@ -278,7 +278,7 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
     assert bases == ["develop"]
     out = capsys.readouterr().out
     assert "since tree bbbbbbbbbbbb: 1 path(s) changed" in out
-    assert "nothing affected: no file a check reads changed" in out
+    assert "nothing affected: no file a step reads changed" in out
     assert recorded == [{"tree": "t" * 40, "packages": (), "base_tree": "b" * 40}]
     _quality.check()
     assert bases == ["develop", "main"]
@@ -715,10 +715,10 @@ def _proved(
     return root, ran
 
 
-def test_a_proved_tree_with_no_test_check_listed_measures_nothing(
+def test_a_proved_tree_with_no_test_step_listed_measures_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A suite no listed check runs has no record to miss.
+    # A suite no listed step runs has no record to miss.
     root, ran = _proved(tmp_path, monkeypatch)
     monkeypatch.setattr(
         _coverage_store,
@@ -733,7 +733,7 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    python_checks: object,
+    python_steps: object,
 ) -> None:
     root, ran = _proved(tmp_path, monkeypatch)
     # Every unit recorded at its closure: the leg runs nothing.

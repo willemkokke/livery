@@ -593,24 +593,24 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
 
 
 def _declared(
-    *extensions: str, requires: tuple[str, ...] = (), role: str = "lint"
+    *extensions: str, requires: tuple[str, ...] = (), phase: str = "lint"
 ) -> Declaration:
-    """One check of *role* judging the packages that hold *extensions*."""
-    from livery.workshop._checks import CheckRecord
+    """One step of *phase* judging the packages that hold *extensions*."""
     from livery.workshop._declaration import Additions
+    from livery.workshop._steps import StepRecord
 
     def _idle(ctx: object) -> None:
         del ctx
 
-    checks = (
-        (CheckRecord("t", role, _idle, extensions=extensions),) if extensions else ()
+    steps = (
+        (StepRecord("t", phase, _idle, extensions=extensions),) if extensions else ()
     )
     return Declaration(
         "x",
         "x",
         Path("extension.toml"),
         requires=requires,
-        additions=Additions(checks),
+        additions=Additions(steps),
     )
 
 
@@ -626,9 +626,9 @@ def _fake_declarations(
     )
 
 
-def test_an_extension_with_no_check_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_extension_with_no_step_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
     _fake_declarations(monkeypatch, {"quiet": _declared()})
-    with pytest.raises(_FAILURES, match="registers no check"):
+    with pytest.raises(_FAILURES, match="registers no step"):
         _e2e.extension_under_test("quiet")
 
 
@@ -659,7 +659,7 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
     )
     stack, kinds = _e2e.extension_under_test("top")
     # No test extension installed: nothing rides along, and the pass
-    # lands the members the checks name alone.
+    # lands the members the steps name alone.
     assert _e2e.metering_extension() == ""
     assert stack == ("base", "mid", "top")
     assert kinds == ("cpp-conan",)
@@ -672,7 +672,7 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "top": _declared("cmake", requires=("mid", "base")),
             "mid": _declared("cmake", requires=("base",)),
             "base": _declared("cmake"),
-            "pytest": _declared("python", role="test"),
+            "pytest": _declared("python", phase="test"),
         },
     )
     assert _e2e.metering_extension() == "pytest"
@@ -684,8 +684,8 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
 def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._declaration import Additions
+    from livery.workshop._steps import StepRecord
 
     def _idle(ctx: object) -> None:
         del ctx
@@ -696,8 +696,8 @@ def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
         Path("extension.toml"),
         additions=Additions(
             (
-                CheckRecord("t", "lint", _idle, extensions=("python",)),
-                CheckRecord(
+                StepRecord("t", "lint", _idle, extensions=("python",)),
+                StepRecord(
                     "t", "typecomplete", _idle, extensions=("python",), enabled=False
                 ),
             )
@@ -716,7 +716,7 @@ def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
     assert _e2e._enable_steps(text, ()) == text  # pyright: ignore[reportPrivateUsage]
 
 
-def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
+def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_steps_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _fake_declarations(
@@ -725,12 +725,12 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     )
     stack, kinds = _e2e.extension_under_test("typed")
     assert stack == ("typed",)
-    # A kind standing for an extension a check names, not every kind
+    # A kind standing for an extension a step names, not every kind
     # deriving from it.
     assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
     _stack, kinds = _e2e.extension_under_test("both")
     # The nanobind kind stands for conan beside cpp, as a consumer of
-    # its packages, so a check naming conan lands that member too.
+    # its packages, so a step naming conan lands that member too.
     assert kinds == ("python", "python-nanobind", "cpp-conan")
     # The test extension's own pass lists it once, as the extension
     # under test; one that requires it lists it where the requirement
@@ -738,7 +738,7 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_checks_name(
     _fake_declarations(
         monkeypatch,
         {
-            "pytest": _declared("python", role="test"),
+            "pytest": _declared("python", phase="test"),
             "wrap": _declared("python", requires=("pytest",)),
             "typed": _declared("python"),
         },

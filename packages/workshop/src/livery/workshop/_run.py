@@ -3,7 +3,7 @@
 ``fm run <package>[:<executable>] -- <arguments>`` names a package and
 one of the executables its extensions answer under ``executables``
 ([livery.workshop.EXECUTABLES][]). It first runs the gate's ``build``
-role over the package's dependency closure, dependencies first, on the
+phase over the package's dependency closure, dependencies first, on the
 build phase's tree side in the ``debug`` configuration, and skips each
 package whose files and dependencies are unchanged since its last good
 build in this checkout; the record of those builds lives under
@@ -80,7 +80,7 @@ def run(
 ) -> int:
     """Build what a package's executable needs, start it, and exit with its code.
 
-    The gate's build role runs over the package's dependency closure
+    The gate's build phase runs over the package's dependency closure
     first, skipping what is unchanged since its last good build; then
     the run phase starts the executable with the words after ``--``.
     """
@@ -203,23 +203,23 @@ def _known(packages: tuple[Package, ...]) -> str:
 
 
 def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list[str]:
-    """Build *package*'s dependency closure with the gate's build role; the paths built.
+    """Build *package*'s dependency closure in the gate's build phase; the paths built.
 
     Dependencies come first, each on the build phase's tree side in the
     ``debug`` configuration ([livery.workshop._run.DEVELOP_INPUTS][]).
     A member is built when its files, or the fingerprint of a
     dependency, differ from its last good build in this checkout, so a
     dependency that changed rebuilds what depends on it; a member no
-    build check judges is never built. With nothing changed, no build
-    check runs. A checkout git cannot read is built whole, and says so.
+    build step judges is never built. With nothing changed, no build
+    step runs. A checkout git cannot read is built whole, and says so.
     """
-    from livery.workshop._checks import checks_by_name, judges_extensions
     from livery.workshop._graph import dependencies_closure, order_topologically
     from livery.workshop._kinds import extension_set
     from livery.workshop._quality import run_on_packages
+    from livery.workshop._steps import judges_extensions, steps_by_name
 
     builders = [
-        record for record in checks_by_name().values() if record.role == "build"
+        record for record in steps_by_name().values() if record.phase == "build"
     ]
     closure = order_topologically(dependencies_closure(packages, {package.path}))
     try:

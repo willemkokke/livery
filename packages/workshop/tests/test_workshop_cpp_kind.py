@@ -16,12 +16,6 @@ import pytest
 from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
-from livery.workshop._checks import (
-    check_for,
-    judges,
-    register_check,
-    run_check,
-)
 from livery.workshop._kinds import (
     KindRecord,
     is_python_kind,
@@ -33,7 +27,13 @@ from livery.workshop._kinds import (
 from livery.workshop._packages import Neighbours, Package, discover_packages
 from livery.workshop._phases import PhaseContext
 from livery.workshop._registries import RegistryTarget
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from livery.workshop._steps import (
+    judges,
+    register_step,
+    run_step,
+    step_for,
+)
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -89,14 +89,14 @@ def fresh_toolchain() -> object:
 
 @pytest.fixture
 def restored_registry():
-    from livery.workshop import _checks, _kinds
+    from livery.workshop import _kinds, _steps
 
     before = dict(_kinds._KINDS)
-    checks = _checks.snapshot()
+    steps = _steps.snapshot()
     yield
     _kinds._KINDS.clear()
     _kinds._KINDS.update(before)
-    _checks.restore(checks)
+    _steps.restore(steps)
 
 
 def _package(directory: Path, name: str, kind_name: str) -> Package:
@@ -124,7 +124,7 @@ def _render_cpp(tmp_path: Path) -> Package:
             "project_name": "acme",
         },
     )
-    # The native configs come from the check records, as they do at a
+    # The native configs come from the step records, as they do at a
     # birth: the template ships none.
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._shipped_files import settle_package
@@ -403,26 +403,26 @@ def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> No
         discover_packages(tmp_path)
 
 
-def test_python_checks_skip_a_native_member_by_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], python_checks: object
+def test_python_steps_skip_a_native_member_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], python_steps: object
 ) -> None:
-    from livery.workshop._checks import judged_by
+    from livery.workshop._steps import judged_by
 
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
     for name in ("typecheck.fake", "test.fake"):
-        assert judged_by(check_for(name), (py, native)) == (py,)
+        assert judged_by(step_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
         assert f"{name}: packages/native skips (not a python package)" in out
     # A python formatter and linter judge both: the conanfile is python.
     # ctest judges the native member alone.
     for name in ("format.fake", "lint.fake"):
-        assert judged_by(check_for(name), (py, native)) == (py, native)
+        assert judged_by(step_for(name), (py, native)) == (py, native)
         assert "skips" not in capsys.readouterr().out
-    assert judged_by(check_for("test.ctest"), (py, native), quiet=True) == (native,)
+    assert judged_by(step_for("test.ctest"), (py, native), quiet=True) == (native,)
 
 
-# The native kind's checks, in the order the walk runs them.
+# The native kind's steps, in the order the walk runs them.
 NATIVE_CHECKS = (
     "build.configure",
     "build.compile",
@@ -434,38 +434,38 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
-    from livery.workshop._checks import checks_by_name, judged_by, judges_extensions
+    from livery.workshop._steps import judged_by, judges_extensions, steps_by_name
 
-    for record in checks_by_name().values():
+    for record in steps_by_name().values():
         if judges_extensions(record, ("python",)):
             assert judged_by(record, (py,)) == (py,)
-    # No package check judges a python package: the walk schedules
+    # No package step judges a python package: the walk schedules
     # none of the native records for a workspace of python packages.
     ctx = PhaseContext(root=tmp_path, packages=(py,))
     assert not set(NATIVE_CHECKS) & set(judges(ctx))
     assert capsys.readouterr().out == ""
 
 
-def test_the_native_checks_run_per_package_in_order(
+def test_the_native_steps_run_per_package_in_order(
     restored_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from dataclasses import replace
 
     ran: list[tuple[str, str, tuple[str, ...]]] = []
     for name in NATIVE_CHECKS:
-        record = check_for(name)
+        record = step_for(name)
 
         def spy(ctx: PhaseContext, name: str = name) -> None:
             assert ctx.package is not None
             ran.append((name, ctx.package.name, ctx.selection))
 
-        register_check(replace(record, run=spy, fix=None))
+        register_step(replace(record, run=spy, fix=None))
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
 
     def run_package(ctx: PhaseContext) -> str:
         for name in judges(ctx):
-            if check_for(name).scope == "package":
-                run_check(name, ctx)
+            if step_for(name).scope == "package":
+                run_step(name, ctx)
         return capsys.readouterr().out
 
     out = run_package(PhaseContext(root=tmp_path, packages=(native,)))
@@ -491,7 +491,7 @@ def test_the_native_checks_run_per_package_in_order(
     ]
 
 
-def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
+def test_the_native_steps_hand_their_tool_the_words_after_the_dashes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     handed: list[tuple[str, tuple[str, ...]]] = []
@@ -520,7 +520,7 @@ def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
         root=tmp_path, packages=(native,), package=native, arguments=words
     )
     for name in ("build.configure", "build.compile", "test.ctest"):
-        record = check_for(name)
+        record = step_for(name)
         assert record.arguments
         record.run(ctx)
     assert handed == [("configure", words), ("compile", words), ("ctest", words)]
@@ -684,15 +684,15 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-extension") is None
     # The build tools are the kind's; a native tool an extension brings
-    # rides its check record, which is where the profile reads it.
+    # rides its step record, which is where the profile reads it.
     assert kind_for("cpp-conan").tools == (
         "cmake",
         "conan",
         "ninja",
         "dotnet_coverage@windows",
     )
-    from livery.workshop._checks import tools_for
     from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._steps import tools_for
 
     assert {tool for tool, _ in tools_for(kind_stands_for("cpp-conan"))} == set()
 

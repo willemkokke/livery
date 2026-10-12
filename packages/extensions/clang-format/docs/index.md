@@ -4,7 +4,7 @@
 -->
 # livery-extensions-clang-format
 
-clang-format as a check of the workshop: `format.clang-format` judges one
+clang-format as a step of the workshop: `format.clang-format` judges one
 native package at a time, a `cpp-conan` or a `python-nanobind` member, and
 rewrites under `--fix`. A workspace turns it on by listing the extension:
 
@@ -24,7 +24,7 @@ naming each file, and `fm check --fix` rewrites them.
 ## The style
 
 `fm sync` writes a `.clang-format` into each native package, and a bare
-`clang-format --style=file` in the package reads the same file the check
+`clang-format --style=file` in the package reads the same file the step
 does: LLVM's style, four-space indents, 88 columns, and the pointer beside
 the type. The file is the extension's, and the gate keeps it matching. A
 directory deeper in the package carries its own lines in a `.clang-format`

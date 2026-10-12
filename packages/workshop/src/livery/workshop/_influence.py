@@ -1,18 +1,18 @@
-"""Which files a workspace check reads, and which of them a change touched.
+"""Which files a workspace step reads, and which of them a change touched.
 
-A workspace check declares its inputs on its record
-([livery.workshop._checks.CheckRecord][] ``inputs``): the files it
+A workspace step declares its inputs on its record
+([livery.workshop._steps.StepRecord][] ``inputs``): the files it
 judges, whether it judges each changed one on its own or runs whole
 when any changed, and what widens it to every file it reads. The gate
-hands every check the paths changed since the tree it measures from,
-and [livery.workshop._influence.select][] answers for one check: skip
+hands every step the paths changed since the tree it measures from,
+and [livery.workshop._influence.select][] answers for one step: skip
 it, judge these files, or judge everything.
 
-Two widenings hold for every check. A run that knows nothing of what
-changed (the whole gate) judges everything. A check whose own code
+Two widenings hold for every step. A run that knows nothing of what
+changed (the whole gate) judges everything. A step whose own code
 changed judges everything, since its rule moved, not the files: the
 member package that ships it changed under its sources, or, for a
-check installed from an index, the lock moved.
+step installed from an index, the lock moved.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from livery import git
 from livery.workshop._categories import matches
 from livery.workshop._packages import Package
 
-#: The lock an installed check's version moves with.
+#: The lock an installed step's version moves with.
 LOCK = "uv.lock"
 
 #: Patterns, root-relative and posix (``**`` spans directories), or a
@@ -64,20 +64,20 @@ class Changes:
 
 @dataclass(frozen=True)
 class Inputs:
-    """The files a workspace check reads, as the affected engine asks.
+    """The files a workspace step reads, as the affected engine asks.
 
     Attributes:
-        reads: The files the check judges.
-        per_file: Whether the check judges each changed file it reads
+        reads: The files the step judges.
+        per_file: Whether the step judges each changed file it reads
             on its own; otherwise a change to any of them runs it
             whole.
-        widens: Files the check does not judge whose change runs it
-            over everything it reads: the contracts, for a check of
+        widens: Files the step does not judge whose change runs it
+            over everything it reads: the contracts, for a step of
             what is composed from them.
         on_removal: Whether a deleted or moved file anywhere runs it
             whole: a link checker's, since a link in an unchanged page
             may point at what went away.
-        widen: The check's own further reason to run whole, given the
+        widen: The step's own further reason to run whole, given the
             changes: a link checker's removed heading.
         ignores: Files that never count, though a pattern above names
             them: a package's readme beside its manifests.
@@ -93,12 +93,12 @@ class Inputs:
 
 @dataclass(frozen=True)
 class Selection:
-    """What one check judges in a run.
+    """What one step judges in a run.
 
     Attributes:
         whole: Whether it judges everything it reads.
         files: Otherwise, the changed files it judges; with *whole*
-            false and no files, the check does not run.
+            false and no files, the step does not run.
     """
 
     whole: bool
@@ -106,7 +106,7 @@ class Selection:
 
     @property
     def runs(self) -> bool:
-        """Whether the check runs at all."""
+        """Whether the step runs at all."""
         return self.whole or bool(self.files)
 
 
@@ -155,11 +155,11 @@ def provider_of(extension: str, packages: tuple[Package, ...]) -> str:
 
 
 def select(inputs: Inputs, changes: Changes | None, *, provider: str = "") -> Selection:
-    """What a check with *inputs* judges for *changes*.
+    """What a step with *inputs* judges for *changes*.
 
-    Everything when nothing is known of what changed, when the check's
+    Everything when nothing is known of what changed, when the step's
     own code changed (*provider*, the member that ships it, changed
-    under ``src/``; for a check with no member, the lock moved), or
+    under ``src/``; for a step with no member, the lock moved), or
     when a widening input changed; else the changed files it reads,
     each on its own, or everything when it does not judge per file;
     nothing when no file it reads changed.

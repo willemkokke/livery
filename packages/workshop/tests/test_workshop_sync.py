@@ -28,7 +28,7 @@ def test_sync_is_idempotent(tmp_path: Path) -> None:
 def _recorded_steps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Stand in for every step of a sync; the steps' names, in the order run.
 
-    The profile check answers the line a replaced profile prints.
+    The profile step answers the line a replaced profile prints.
     """
     from livery.workshop import _sync
 
@@ -328,7 +328,7 @@ def test_the_monorepo_is_in_sync() -> None:
         # re-point the repository's real links at the scratch venv.
         # The dogfood check means the editable checkout syncing itself.
         pytest.skip("dogfood: only the editable checkout syncs itself")
-    from livery.workshop import _checks
+    from livery.workshop import _steps
     from livery.workshop._extensions import (
         declaration,
         enabled_steps,
@@ -337,9 +337,9 @@ def test_the_monorepo_is_in_sync() -> None:
     )
 
     # A sync runs after the mount, which registers the listed
-    # extensions' checks and with them what they deliver; the registry
+    # extensions' steps and with them what they deliver; the registry
     # is put back after.
-    state = _checks.snapshot()
+    state = _steps.snapshot()
     try:
         enabled = enabled_steps(ROOT)
         for name in extension_names(ROOT):
@@ -351,7 +351,7 @@ def test_the_monorepo_is_in_sync() -> None:
         assert sync_workspace(ROOT) == []
         after = _tracked_state()
     finally:
-        _checks.restore(state)
+        _steps.restore(state)
     # A failure names what moved, so a runner-only difference is readable
     # from the log alone.
     moved = subprocess.run(

@@ -36,8 +36,8 @@ nothing serves both ([livery.workshop._phases.serves][]).
 
 Two steps providing one key, a key nobody provides, a step declaring a
 side of a phase that has one side, and an order with no start refuse
-before any step runs ([livery.workshop._phases.phase_problems][]); the
-layering check names them for each package.
+before any step runs ([livery.workshop._phases.phase_problems][]);
+``layering.graph`` names them for each package.
 """
 
 from __future__ import annotations
@@ -52,10 +52,10 @@ from typing import TYPE_CHECKING, Any, cast
 from livery.footman import fail, parallel, step
 
 if TYPE_CHECKING:
-    from livery.workshop._checks import CheckRecord
     from livery.workshop._composition import Lookup
     from livery.workshop._influence import Changes
     from livery.workshop._packages import Package
+    from livery.workshop._steps import StepRecord
 
 #: The levels a phase runs at: over one package at a time, or over the
 #: workspace once.
@@ -260,7 +260,7 @@ class PhaseContext:
     """What a run hands a step: the workspace, the run's scope, and the phase's keys.
 
     One context serves one walk, and every step receives its own view
-    of it, with the step named in ``check`` and, for a package step,
+    of it, with the step named in ``step`` and, for a package step,
     the package it runs over in ``package``. A step writes the keys its
     table ``provides`` with [livery.workshop.PhaseContext.provide][]
     and reads the ones it ``reads`` with
@@ -286,27 +286,27 @@ class PhaseContext:
             `fm check <paths>`; empty when the scope decides.
         safe: Whether the fixers run in their in-flight mode, which
             removes no code: ``--safe-fix``.
-        point: The CI point whose tests the test role selects; empty
+        point: The CI point whose tests the test phase selects; empty
             for the gate's own.
         catalogue: Every file the run may read, by unit, each with its
             category, listed once per walk by
-            [livery.workshop._checks.catalogue][]; None when there is
-            no listing, and then every check that applies runs.
+            [livery.workshop._steps.catalogue][]; None when there is
+            no listing, and then every step that applies runs.
         package: The package a package step runs over, else None.
         selection: The test files selected for that package, relative
             to it, else empty.
         changes: What changed since the tree the run measures from,
-            which selects what each workspace check with declared
+            which selects what each workspace step with declared
             inputs judges ([livery.workshop._influence.select][]); None
             when the run knows nothing of it, and then each judges
             everything.
         arguments: The words after ``--``, the same for every step of
-            the run: on a check's own verb, which a step that takes
-            them hands its tool (``CheckRecord.arguments``, a
+            the run: on a step's own verb, which a step that takes
+            them hands its tool (``StepRecord.arguments``, a
             template's ``{arguments}``), and on ``fm run``, which the
             step starting the executable passes it; empty in every
             other run.
-        check: The running step's name, ``<phase>.<step>``, which the
+        step: The running step's name, ``<phase>.<step>``, which the
             walk sets as it hands the context to the step; empty
             outside a step's run.
         phase: The phase the engine runs, ``build``, whose given keys
@@ -332,10 +332,10 @@ class PhaseContext:
     selection: tuple[str, ...] = ()
     changes: Changes | None = None
     arguments: tuple[str, ...] = ()
-    check: str = ""
+    step: str = ""
     phase: str = ""
-    _steps: Mapping[str, CheckRecord] = field(
-        default_factory=dict[str, "CheckRecord"], repr=False
+    _steps: Mapping[str, StepRecord] = field(
+        default_factory=dict[str, "StepRecord"], repr=False
     )
     _given: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict[str, Mapping[str, object]], repr=False
@@ -362,7 +362,7 @@ class PhaseContext:
         """
         if self.package is None:
             fail(
-                f"{self.check or 'this step'} runs over one package at a time, and"
+                f"{self.step or 'this step'} runs over one package at a time, and"
                 " this run names none"
             )
         return self.package
@@ -398,12 +398,12 @@ class PhaseContext:
         provided = dict(record.provides)
         if key not in provided:
             raise PhaseError(
-                f"{self.check} provides {key}, and its {self._table()} table does"
+                f"{self.step} provides {key}, and its {self._table()} table does"
                 " not name it in provides"
             )
         if not _holds(provided[key], value):
             raise PhaseError(
-                f"{self.check} provides {key} as {type(value).__name__}, and its"
+                f"{self.step} provides {key} as {type(value).__name__}, and its"
                 f" {self._table()} table declares it {provided[key]}"
             )
         with self._shared.lock:
@@ -423,14 +423,14 @@ class PhaseContext:
         record = self._running()
         if key not in record.reads:
             raise PhaseError(
-                f"{self.check} reads {key}, and its {self._table()} table does not"
+                f"{self.step} reads {key}, and its {self._table()} table does not"
                 " name it in reads"
             )
         if key in self._engine():
             given = self._given.get(self.phase, {})
             if key not in given:
                 raise PhaseError(
-                    f"{self.check} reads {key}, which the engine running the"
+                    f"{self.step} reads {key}, which the engine running the"
                     f" {self.phase} phase did not give it"
                 )
             return given[key]
@@ -445,7 +445,7 @@ class PhaseContext:
                 "its provider",
             )
             raise PhaseError(
-                f"{self.check} reads {key}, which {provider} has not provided in"
+                f"{self.step} reads {key}, which {provider} has not provided in"
                 f" the {self.phase} phase"
             )
         return values[key]
@@ -459,19 +459,19 @@ class PhaseContext:
         values = self._shared.values.get(self._unit(), {})
         return values.get(key, self._given.get(self.phase, {}).get(key))
 
-    def _running(self) -> CheckRecord:
+    def _running(self) -> StepRecord:
         """The running step's record; refuses outside a walk's step."""
-        record = self._steps.get(self.check)
+        record = self._steps.get(self.step)
         if record is None:
             raise PhaseError(
-                f"{self.check or 'this step'} is not a step of the walk that built"
+                f"{self.step or 'this step'} is not a step of the walk that built"
                 " this context, so the context has no table to judge its keys by"
             )
         return record
 
     def _table(self) -> str:
         """The running step's table, as the declaration spells it."""
-        phase, _dot, name = self.check.partition(".")
+        phase, _dot, name = self.step.partition(".")
         return f"[phases.{phase}.{name}]"
 
     def _engine(self) -> Mapping[str, str]:
@@ -485,13 +485,13 @@ class PhaseContext:
 
 def phase_steps(
     phase: str, members: tuple[str, ...], lookup: Lookup
-) -> tuple[CheckRecord, ...]:
+) -> tuple[StepRecord, ...]:
     """The steps the extensions *members* add to *phase*, in their order.
 
     Each member's steps in declaration order, the members in the order
     given, which for a package's set is its composition order.
     """
-    found: list[CheckRecord] = []
+    found: list[StepRecord] = []
     for name in members:
         declared = lookup(name)
         if declared is not None:
@@ -503,7 +503,7 @@ def phase_steps(
 ISOLATED = "isolated"
 
 
-def serves(record: CheckRecord, given: Mapping[str, object]) -> bool:
+def serves(record: StepRecord, given: Mapping[str, object]) -> bool:
     """Whether *record* runs on the side of its phase the engine's *given* keys name.
 
     *given* are the keys the engine gives the step's phase. A step
@@ -516,7 +516,7 @@ def serves(record: CheckRecord, given: Mapping[str, object]) -> bool:
     return record.isolated == (given.get(ISOLATED) is True)
 
 
-def _providers(steps: Iterable[CheckRecord]) -> dict[str, list[str]]:
+def _providers(steps: Iterable[StepRecord]) -> dict[str, list[str]]:
     """Each key the steps provide, to the steps that provide it."""
     found: dict[str, list[str]] = {}
     for record in steps:
@@ -526,8 +526,8 @@ def _providers(steps: Iterable[CheckRecord]) -> dict[str, list[str]]:
 
 
 def _earlier(
-    record: CheckRecord,
-    by_name: Mapping[str, CheckRecord],
+    record: StepRecord,
+    by_name: Mapping[str, StepRecord],
     providers: Mapping[str, list[str]],
     *,
     after: bool,
@@ -542,7 +542,7 @@ def _earlier(
         provider
         for key in record.reads
         for provider in providers.get(key, ())
-        if by_name[provider].role == record.role
+        if by_name[provider].phase == record.phase
     }
     if after:
         found.update(other for other in record.after if other in by_name)
@@ -551,8 +551,8 @@ def _earlier(
 
 
 def phase_order(
-    steps: Iterable[CheckRecord], *, after: bool = True
-) -> tuple[CheckRecord, ...]:
+    steps: Iterable[StepRecord], *, after: bool = True
+) -> tuple[StepRecord, ...]:
     """*steps* in the order the walk starts them.
 
     Each step after the providers of the keys it reads, in its own
@@ -589,7 +589,7 @@ def phase_order(
     return tuple(by_name[name] for name in done)
 
 
-def phase_problems(phase: str, steps: Iterable[CheckRecord]) -> list[str]:
+def phase_problems(phase: str, steps: Iterable[StepRecord]) -> list[str]:
     """Why *steps* cannot run as *phase*; empty when they can.
 
     Two extensions declaring one step, two steps providing one key, a
@@ -667,7 +667,7 @@ class _Unit:
 
     __slots__ = ("done", "failed", "needs", "package", "record", "title")
 
-    def __init__(self, record: CheckRecord, package: Package | None) -> None:
+    def __init__(self, record: StepRecord, package: Package | None) -> None:
         self.record = record
         self.package = package
         self.title = record.name if package is None else f"{record.name} {package.path}"
@@ -683,7 +683,7 @@ _POLL_SECONDS = 0.05
 
 def run_phase(
     ctx: PhaseContext,
-    steps: Iterable[CheckRecord],
+    steps: Iterable[StepRecord],
     *,
     inputs: Mapping[str, Mapping[str, object]] | None = None,
     fixing: bool = False,
@@ -723,7 +723,7 @@ def run_phase(
         Exception: the first failing step's, raised again once every
             step ran.
     """
-    from livery.workshop._checks import (
+    from livery.workshop._steps import (
         PACKAGE,
         judges_package,
         members,
@@ -740,9 +740,9 @@ def run_phase(
         phase_spec(ctx.phase)
     _judge_inputs(given, where)
     problems: list[str] = []
-    for phase in dict.fromkeys(record.role for record in records):
+    for phase in dict.fromkeys(record.phase for record in records):
         problems += phase_problems(
-            phase, (record for record in records if record.role == phase)
+            phase, (record for record in records if record.phase == phase)
         )
     if problems:
         raise PhaseError(where + "; ".join(problems))
@@ -754,7 +754,7 @@ def run_phase(
     for record in ordered:
         if (record.fix if fixing else record.run) is None:
             continue
-        if not serves(record, given.get(record.role, {})):
+        if not serves(record, given.get(record.phase, {})):
             continue
         if record.scope != PACKAGE:
             units.append(_Unit(record, None))
@@ -799,7 +799,7 @@ def _judge_inputs(given: Mapping[str, Mapping[str, object]], where: str) -> None
                 )
 
 
-def _link(units: list[_Unit], ordered: tuple[CheckRecord, ...], *, after: bool) -> None:
+def _link(units: list[_Unit], ordered: tuple[StepRecord, ...], *, after: bool) -> None:
     """Give each of *units* the units it waits on: its earlier steps, same package.
 
     A package unit waits on an earlier step's unit of its own package,
@@ -866,7 +866,7 @@ def _body(
                 print(f"  {reason}")
                 fail(reason)
             view = ctx if unit.package is None else ctx.for_package(unit.package)
-            view = replace(view, check=record.name, phase=record.role)
+            view = replace(view, step=record.name, phase=record.phase)
             if unit.package is not None:
                 held = extension_set(unit.package)
                 matched = " and ".join(n for n in record.extensions if n in held)

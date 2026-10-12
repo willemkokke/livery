@@ -139,7 +139,7 @@ This is the final form; there are no typing clean-up passes later.
 ## Docstrings
 
 - Google style only: Args, Returns, Raises, Yields, Attributes. The
-  lint check enforces the convention.
+  lint phase enforces the convention.
 - No RST anywhere. Not in docstrings, not in comments.
 - The voice and word rules of the imported guidance fragments apply to
   docstrings the same as to every other published sentence.

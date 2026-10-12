@@ -1,40 +1,40 @@
-"""The check registry: what the quality gate runs, one record per step.
+"""The step registry: what the quality gate runs, one record per step.
 
-A check is one tool's judgment over the workspace or over one
+A step is one tool's judgment over the workspace or over one
 package: a formatter's pass, the render drift comparison, ctest
-over a native member. Each is a [livery.workshop._checks.CheckRecord][]
-registered through [livery.workshop._checks.register_check][], and
-the gate is the walk over the registry: every applicable check
+over a native member. Each is a [livery.workshop._steps.StepRecord][]
+registered through [livery.workshop._steps.register_step][], and
+the gate is the walk over the registry: every applicable step
 green, the exit code the verdict. The workshop registers the
 builtin records at import, in the order the gate runs its
 rewriters; a listed extension's records register at mount, after
 them and in list order, and re-registering a name replaces the
 record.
 
-A check names the kinds it judges, and a package of another kind
+A step names the kinds it judges, and a package of another kind
 skips it by name: a C++ member is formatted over its recipe by a
 python formatter and over its sources by clang-format because both
-checks name its kind. A role is the set of checks that implement it,
-so the roles that exist are what the listed extensions register.
+steps name its kind. The phases the registry knows are the ones its
+steps name, so they are what the listed extensions register.
 
-A check is named by its role and its tool, ``test.pytest``. A role is
-a declared phase ([livery.workshop._phases.declared_phases][]), and a
-check of a phase nobody declares refuses naming the declared ones. A
-role whose phase declares a verb is a verb and every check a sub-task
-of it, made by [livery.workshop._checks.generate_verbs][] from the
-registry: ``fm test`` runs the test role's checks and ``fm
-test.pytest`` the one; the gate runs the checks of the phases that
-declare themselves gated.
+A step is named by its phase and its name in the phase,
+``test.pytest``. The phase is a declared one
+([livery.workshop._phases.declared_phases][]), and a step of a phase
+nobody declares refuses naming the declared ones. A phase that
+declares a verb is a verb and every step a sub-task of it, made by
+[livery.workshop._steps.generate_verbs][] from the registry: ``fm
+test`` runs the test phase's steps and ``fm test.pytest`` the one;
+the gate runs the steps of the phases that declare themselves gated.
 
-The gate runs the registered checks through the one walk
+The gate runs the registered steps through the one walk
 ([livery.workshop._phases.run_phase][]), each a footman step: the
 rewriters one at a time before any judge reads the tree
-([livery.workshop._checks.rewriters][]), then every judge in one
-block ([livery.workshop._checks.judges][]), each with its own record.
-A check that must follow another on the same package, a build after
+([livery.workshop._steps.rewriters][]), then every judge in one
+block ([livery.workshop._steps.judges][]), each with its own record.
+A step that must follow another on the same package, a build after
 its configure, names it in ``after``: the walk starts it once the
 earlier one ran, and the gate brings the earlier one in
-([livery.workshop._checks.with_earlier][]).
+([livery.workshop._steps.with_earlier][]).
 """
 
 from __future__ import annotations
@@ -57,11 +57,11 @@ if TYPE_CHECKING:
     from livery.workshop._phases import PhaseContext
     from livery.workshop._words import Words
 
-#: A check's scope: the whole workspace in one run, or one package at a time.
+#: A step's scope: the whole workspace in one run, or one package at a time.
 WORKSPACE = "workspace"
 PACKAGE = "package"
 
-#: How a workspace check narrows under a package-scoped gate.
+#: How a workspace step narrows under a package-scoped gate.
 PATHS = "paths"
 PACKAGES = "packages"
 NONE = "none"
@@ -72,7 +72,7 @@ BASE_EXTENSION = "livery.workshop"
 
 @dataclass(frozen=True)
 class Option:
-    """One option a package may set on a check, in the check's own table.
+    """One option a package may set on a step, in the step's own table.
 
     The table is ``[phases.<phase>.<step>]``, the step's address; a
     ``[phases.<phase>]`` table sets an option on every step of the
@@ -82,7 +82,7 @@ class Option:
         name: The option's key, kebab-case.
         kind: ``bool``, ``str`` or ``int``; a value of another type
             refuses naming the option.
-        default: What the check reads when the package says nothing.
+        default: What the step reads when the package says nothing.
         doc: One line saying what the option changes.
     """
 
@@ -92,25 +92,25 @@ class Option:
     doc: str = ""
 
 
-#: Every check carries this option: a package that turns a check off
+#: Every step carries this option: a package that turns a step off
 #: is skipped by name in the gate's output.
-ENABLED = Option("enabled", "bool", True, "whether the check judges this package")
+ENABLED = Option("enabled", "bool", True, "whether the step judges this package")
 
 
 @dataclass(frozen=True)
 class Claim:
-    """One category a check judges, and the rules it withholds there.
+    """One category a step judges, and the rules it withholds there.
 
     Attributes:
         category: The category, ``source``, ``test``, ``configuration``.
-        ignore: Rule codes the check does not apply to that category;
+        ignore: Rule codes the step does not apply to that category;
             a tool with per-file ignores renders them as those.
-        suffixes: The file suffixes the check reads in the category,
+        suffixes: The file suffixes the step reads in the category,
             ``(".py", ".pyi")`` for a python tool; empty reads every
-            file. A category names a role, not a language: a native
-            package's ``source`` is C++ and its ``conanfile.py`` is
-            configuration, and the suffix keeps a python tool's claim
-            to the files it reads.
+            file. A category names what a file is for, not its
+            language: a native package's ``source`` is C++ and its
+            ``conanfile.py`` is configuration, and the suffix keeps a
+            python tool's claim to the files it reads.
     """
 
     category: str
@@ -119,89 +119,88 @@ class Claim:
 
 
 @dataclass(frozen=True)
-class CheckRecord:
-    """One check, completely.
+class StepRecord:
+    """One step, completely.
 
-    A check's name is its role and its tool, ``test.pytest``: the
-    verb ``fm test.pytest``, the ``[phases.test.pytest]`` table of its
-    options, the gate's lines, and every lookup use it. A step of a
-    phase is the same record, its phase the role and its step the
-    tool, read from its ``[phases.<phase>.<step>]`` table.
+    A step's name is its phase and its name in the phase,
+    ``test.pytest``: the verb ``fm test.pytest``, the
+    ``[phases.test.pytest]`` table of its options, the gate's lines,
+    and every lookup use it. An extension declares the step in its
+    ``[phases.<phase>.<step>]`` table.
 
     Attributes:
-        tool: The tool the check runs, as its sub-task names it under
-            its role: ``pytest`` in ``fm test.pytest``.
-        role: What the check implements: ``format``, ``lint``,
+        step: The step's name in its phase, as its sub-task names it
+            under the phase's verb: ``pytest`` in ``fm test.pytest``.
+        phase: The phase the step belongs to: ``format``, ``lint``,
             ``typecheck``, ``typecomplete``, ``test``, ``build``,
-            ``drift``, ``provenance`` or ``layering``, a string a
-            verb is generated from. The roles that exist are those
-            of the registered checks.
+            ``drift``, ``provenance`` or ``layering``, a declared
+            phase a verb is generated from.
         run: The judging callable, called with the run's
             [livery.workshop.PhaseContext][]: the engine running the
-            check's words or a reference to its code; a refusal is its
+            step's words or a reference to its code; a refusal is its
             verdict.
-        scope: ``workspace`` for a check that judges the whole in one
+        scope: ``workspace`` for a step that judges the whole in one
             run, ``package`` for one that judges one package at a
             time.
-        narrowing: How a workspace check narrows under a scoped gate:
+        narrowing: How a workspace step narrows under a scoped gate:
             ``paths`` (the subset's directories), ``packages`` (the
             subset's members) or ``none`` (the whole is always
-            checked). A package check narrows by its packages. No
+            judged). A package step narrows by its packages. No
             declaration names it: the reader derives it, ``paths``
             for a template with ``{paths}``, ``packages`` for a
             workspace step in code with no ``inputs``, ``none``
             otherwise ([livery.workshop._declaration.read][]).
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
-            check that only judges.
+            step that only judges.
         extensions: The package-level extensions whose packages the
-            check judges: a package whose set holds one of them
-            ([livery.workshop._kinds.extension_set][]). A package check
-            runs per such member; a workspace check names them so its
+            step judges: a package whose set holds one of them
+            ([livery.workshop._kinds.extension_set][]). A package step
+            runs per such member; a workspace step names them so its
             tools and claims reach those packages, or leaves them empty.
-        tests_only: Whether a package check still runs when the
+        tests_only: Whether a package step still runs when the
             package's change is confined to its tests. A build and
             the tests do; a formatter does not.
-        inputs: The files a workspace check reads, so a run judges it
+        inputs: The files a workspace step reads, so a run judges it
             only when one of them, or what widens it, changed, and then
             only the changed ones when it judges per file
-            ([livery.workshop._influence.Inputs][]). None for a check
+            ([livery.workshop._influence.Inputs][]). None for a step
             that narrows by its packages alone.
-        after: The checks this one runs after, by name: a build
+        after: The steps this one runs after, by name: a build
             after its configure, a ctest after its build. The walk
             starts this one once each of them ran for the same
             package, and the gate's walk brings them in
-            ([livery.workshop._checks.with_earlier][]).
-        extension: The extension that registered the check, named when a
+            ([livery.workshop._steps.with_earlier][]).
+        extension: The extension that registered the step, named when a
             narrowing is printed.
-        tools: The tools the check runs, as the tool profile names
+        tools: The tools the step runs, as the tool profile names
             them, ``("clang_format",)``; each reaches the profile for every kind
-            the check judges, naming ``check <name>`` as its site, and
-            leaves it when the check is unregistered.
+            the step judges, naming ``step <name>`` as its site, and
+            leaves it when the step is unregistered.
         options: The options a package may set under
-            ``[phases.<phase>.<step>]``; ``enabled`` is every check's.
+            ``[phases.<phase>.<step>]``; ``enabled`` is every step's.
         fragments: The configuration the render manages for the
-            check, one per rendered file it has something to say in;
-            composed in check-name order, judged by the drift gate,
+            step, one per rendered file it has something to say in;
+            composed in step-name order, judged by the drift gate,
             gone from the next render with the record.
-        claims: The categories the check judges, each with the rules
-            it withholds there and the suffixes it reads; a check
+        claims: The categories the step judges, each with the rules
+            it withholds there and the suffixes it reads; a step
             judges every file its claims reach and no other, and a
             tool with per-file ignores renders its ignores from them.
-        flags: The command-line flags the check reads, from `FLAGS`:
-            ``point`` for a check that selects tests by CI point. A
-            generated verb offers the flags its checks declare, and
-            ``--fix`` with ``--safe-fix`` where a check has a fix mode.
-        arguments: Whether the check hands the tool it wraps the words
+        flags: The command-line flags the step reads, from `FLAGS`:
+            ``point`` for a step that selects tests by CI point. A
+            generated verb offers the flags its steps declare, and
+            ``--fix`` with ``--safe-fix`` where a step has a fix mode.
+        arguments: Whether the step hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
             which it reads from [livery.workshop.PhaseContext][]'s
-            ``arguments``. A check that wraps no tool leaves it off, and
+            ``arguments``. A step that wraps no tool leaves it off, and
             its verb refuses them. No declaration names it: the reader
             derives it, on for a template with ``{arguments}`` and for
             a step in code that names ``tools``.
-        words: The check's words when it is declared in words, which
+        words: The step's words when it is declared in words, which
             ``fm explain`` prints and the conformance kit judges; None
-            for a check whose ``main`` is code.
+            for a step whose ``main`` is code.
         provides: The context keys the step writes inside its phase,
             each to its type name; a step of one phase reads what
             another provides.
@@ -225,8 +224,8 @@ class CheckRecord:
 
     """
 
-    tool: str
-    role: str
+    step: str
+    phase: str
     run: Callable[[PhaseContext], None]
     scope: str = WORKSPACE
     narrowing: str = NONE
@@ -252,62 +251,53 @@ class CheckRecord:
 
     @property
     def name(self) -> str:
-        """The check's name: its role and its tool, ``test.pytest``."""
-        return f"{self.role}.{self.tool}"
-
-    @property
-    def phase(self) -> str:
-        """The phase the step belongs to: the role, as the step record names it."""
-        return self.role
-
-    @property
-    def step(self) -> str:
-        """The step's name inside its phase: the tool, as the step record names it."""
-        return self.tool
+        """The step's name: its phase and its name in the phase, ``test.pytest``."""
+        return f"{self.phase}.{self.step}"
 
 
-_CHECKS: dict[str, CheckRecord] = {}
+_STEPS: dict[str, StepRecord] = {}
 
-#: Builtin checks an extension withdrew, name to the extension that did: the
+#: Builtin steps an extension withdrew, name to the extension that did: the
 #: gate names them, so a lighter gate is a legible decision.
 _WITHDRAWN: dict[str, str] = {}
 
 
-#: The command-line flags a check may read, beyond the fix modes.
+#: The command-line flags a step may read, beyond the fix modes.
 FLAGS = ("point",)
 
 
-def register_check(record: CheckRecord) -> None:
+def register_step(record: StepRecord) -> None:
     """Register *record*; a name already registered is replaced.
 
-    Extensions call this from their plugin at mount. Replacing is how a
-    extension swaps a tool under a role, and how a test injects a fake;
-    a package check names at least one kind, since a check that
-    judges packages and applies to none never runs. The check's
-    address, ``<role>.<tool>``, is a task's address, so a dot inside
-    the role or the tool refuses, and a tool named ``default`` refuses
-    (that address is the role verb's own).
+    The mount registers each step a listed extension declares.
+    Replacing is how an extension swaps the step at an address, and
+    how a test injects a fake; a package step names at least one
+    extension, since a step that judges packages and applies to none
+    never runs. The step's address, ``<phase>.<step>``, is a task's
+    address, so a dot inside the phase or the step's name refuses, and
+    a step named ``default`` refuses (that address is the phase verb's
+    own).
     """
     from livery.workshop import _phases
 
-    for part in (record.role, record.tool):
+    for part in (record.phase, record.step):
         if not part or "." in part:
             fail(
-                f"check {record.name!r}: a role and a tool are one word each,"
-                f" not {part!r}; the check answers to <role>.<tool>"
+                f"step {record.name!r}: a phase and a step's name are one word"
+                f" each, not {part!r}; the step answers to <phase>.<step>"
             )
     declared = _phases.declared_phases()
-    if record.role not in declared:
+    if record.phase not in declared:
         fail(
-            f"check {record.name!r}: {record.role} is not a declared phase; the"
+            f"step {record.name!r}: {record.phase} is not a declared phase; the"
             f" phases are {', '.join(declared)}"
         )
-    if record.tool == "default":
+    if record.step == "default":
         fail(
-            f"check {record.name!r}: {record.name} is the address of the"
-            f" {record.role} verb itself; name the check by its tool"
+            f"step {record.name!r}: {record.name} is the address of the"
+            f" {record.phase} verb itself; name the step by its tool"
         )
-    held = _CHECKS.get(record.name)
+    held = _STEPS.get(record.name)
     if held is not None and held.extension != record.extension:
         # A second extension takes an address by saying so: the step it
         # replaces or deletes, named with its owner, and why.
@@ -321,24 +311,24 @@ def register_check(record: CheckRecord) -> None:
             )
     if record.scope not in (WORKSPACE, PACKAGE):
         fail(
-            f"check {record.name!r}: scope is {WORKSPACE!r} or {PACKAGE!r},"
+            f"step {record.name!r}: scope is {WORKSPACE!r} or {PACKAGE!r},"
             f" not {record.scope!r}"
         )
     unknown = [flag for flag in record.flags if flag not in FLAGS]
     if unknown:
         fail(
-            f"check {record.name!r} reads {', '.join(unknown)}, which no verb"
+            f"step {record.name!r} reads {', '.join(unknown)}, which no verb"
             f" offers; the flags are {', '.join(FLAGS)}"
         )
     if record.narrowing not in (PATHS, PACKAGES, NONE):
         fail(
-            f"check {record.name!r}: narrowing is {PATHS!r}, {PACKAGES!r} or"
+            f"step {record.name!r}: narrowing is {PATHS!r}, {PACKAGES!r} or"
             f" {NONE!r}, not {record.narrowing!r}"
         )
     if record.scope == PACKAGE and not record.extensions:
         fail(
-            f"check {record.name!r} judges packages and names no extension: a"
-            " package check judges the packages whose set holds one it names"
+            f"step {record.name!r} judges packages and names no extension: a"
+            " package step judges the packages whose set holds one it names"
         )
     try:
         _fragments.verify(record.fragments, record.name)
@@ -350,10 +340,10 @@ def register_check(record: CheckRecord) -> None:
     for claim in record.claims:
         if claim.category not in known:
             fail(
-                f"check {record.name!r} claims {claim.category!r}, which no category"
+                f"step {record.name!r} claims {claim.category!r}, which no category"
                 f" table knows; the categories are {', '.join(sorted(known))}"
             )
-    _CHECKS[record.name] = record
+    _STEPS[record.name] = record
     _WITHDRAWN.pop(record.name, None)
 
 
@@ -364,32 +354,32 @@ def _typed(option: Option, value: object) -> bool:
     return isinstance(value, expected)
 
 
-def option_addresses(record: CheckRecord) -> tuple[str, ...]:
+def option_addresses(record: StepRecord) -> tuple[str, ...]:
     """The tables that reach *record*'s options, shallowest first.
 
     ``phases.<phase>``, the phase's table, which reaches every step of
     the phase, then ``phases.<phase>.<step>``, the step's own: the
     later table wins key by key, since it names fewer steps.
     """
-    return (f"phases.{record.role}", f"phases.{record.role}.{record.tool}")
+    return (f"phases.{record.phase}", f"phases.{record.phase}.{record.step}")
 
 
-def option_value(record: CheckRecord, package: Package, name: str) -> object:
+def option_value(record: StepRecord, package: Package, name: str) -> object:
     """What *package* sets for *record*'s option *name*, or the option's default.
 
     The deepest table that sets it wins
-    ([livery.workshop._checks.option_addresses][]). Refuses an option
+    ([livery.workshop._steps.option_addresses][]). Refuses an option
     the record does not declare and a value of the wrong type, naming
     the record's options.
     """
     declared = {option.name: option for option in (*record.options, ENABLED)}
     if name not in declared:
         fail(
-            f"check {record.name!r} declares no option {name!r}; its options are"
+            f"step {record.name!r} declares no option {name!r}; its options are"
             f" {', '.join(declared)}"
         )
     option = declared[name]
-    tables = dict(package.checks)
+    tables = dict(package.step_options)
     found: object = option.default
     for address in option_addresses(record):
         for key, value in tables.get(address, ()):
@@ -404,8 +394,8 @@ def option_value(record: CheckRecord, package: Package, name: str) -> object:
     return found
 
 
-def _reached(address: str) -> tuple[CheckRecord, ...]:
-    """The registered checks a table *address* reaches.
+def _reached(address: str) -> tuple[StepRecord, ...]:
+    """The registered steps a table *address* reaches.
 
     ``phases.<phase>`` reaches every step of the phase, and
     ``phases.<phase>.<step>`` the one step.
@@ -413,34 +403,34 @@ def _reached(address: str) -> tuple[CheckRecord, ...]:
     _kind, _, rest = address.partition(".")
     phase, _, step = rest.partition(".")
     return tuple(
-        r for r in _CHECKS.values() if r.role == phase and (not step or r.tool == step)
+        r for r in _STEPS.values() if r.phase == phase and (not step or r.step == step)
     )
 
 
 def option_problems(packages: tuple[Package, ...]) -> list[str]:
-    """Every option table or key no registered check takes, one line each.
+    """Every option table or key no registered step takes, one line each.
 
-    Read by the layering check, so a package that addresses a phase or
+    Read by ``layering.graph``, so a package that addresses a phase or
     a step that does not exist, or sets an option none of the steps it
     reaches declares, is refused with the vocabulary named.
     """
     problems: list[str] = []
-    phases = sorted({r.role for r in _CHECKS.values()})
+    known = phases()
     for package in packages:
         where = f"{package.path}/workshop.toml"
-        for address, options in package.checks:
+        for address, options in package.step_options:
             reached = _reached(address)
             if not reached:
                 _kind, _, rest = address.partition(".")
                 if "." in rest:
                     problems.append(
                         f"{where}: [{address}] reaches no registered step; the"
-                        f" steps are {', '.join(sorted(_CHECKS))}"
+                        f" steps are {', '.join(sorted(_STEPS))}"
                     )
                 else:
                     problems.append(
                         f"{where}: [{address}] names no phase a registered step"
-                        f" has; the phases are {', '.join(phases)}"
+                        f" has; the phases are {', '.join(known)}"
                     )
                 continue
             declared: dict[str, Option] = {ENABLED.name: ENABLED}
@@ -450,7 +440,7 @@ def option_problems(packages: tuple[Package, ...]) -> list[str]:
                 option = declared.get(key)
                 if option is None:
                     problems.append(
-                        f"{where}: [{address}] sets {key!r}, which no check it"
+                        f"{where}: [{address}] sets {key!r}, which no step it"
                         f" reaches declares; their options are"
                         f" {', '.join(sorted(declared))}"
                     )
@@ -462,8 +452,8 @@ def option_problems(packages: tuple[Package, ...]) -> list[str]:
 
 
 def enabled(name: str, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """*packages* minus those that turned the check *name* off, each skip printed."""
-    record = check_for(name)
+    """*packages* minus those that turned the step *name* off, each skip printed."""
+    record = step_for(name)
     kept: list[Package] = []
     for package in packages:
         if option_value(record, package, "enabled"):
@@ -477,29 +467,29 @@ def enabled(name: str, packages: tuple[Package, ...]) -> tuple[Package, ...]:
 
 
 def tools_for(extensions: Iterable[str]) -> tuple[tuple[str, str], ...]:
-    """The tools the checks judging packages that hold *extensions* run.
+    """The tools the steps judging packages that hold *extensions* run.
 
-    Each as a ``(tool, check)`` pair. A check judges such a package
-    when it names one of *extensions*; a workspace check names the
+    Each as a ``(tool, step)`` pair. A step judges such a package
+    when it names one of *extensions*; a workspace step names the
     extensions its bodies judge the same way.
     """
     held = set(extensions)
     found: list[tuple[str, str]] = []
-    for record in _CHECKS.values():
+    for record in _STEPS.values():
         if held & set(record.extensions):
             found.extend((tool, record.name) for tool in record.tools)
     return tuple(found)
 
 
-def unregister_check(name: str, *, by: str = "") -> None:
-    """Drop the check *name*; unknown names refuse naming the registry.
+def unregister_step(name: str, *, by: str = "") -> None:
+    """Drop the step *name*; unknown names refuse naming the registry.
 
-    *by* names the extension withdrawing a check it did not register, so
+    *by* names the extension withdrawing a step it did not register, so
     the gate can print who narrowed it.
     """
-    if name not in _CHECKS:
-        fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
-    record = _CHECKS.pop(name)
+    if name not in _STEPS:
+        fail(f"{name!r} is not a registered step; steps: {', '.join(_STEPS)}")
+    record = _STEPS.pop(name)
     if by and record.extension != by:
         _WITHDRAWN[name] = by
 
@@ -507,12 +497,12 @@ def unregister_check(name: str, *, by: str = "") -> None:
 def narrowings() -> tuple[str, ...]:
     """The gate's lines naming what an extension added, replaced or withdrew.
 
-    A check the base did not register names its extension; a builtin a
+    A step the base did not register names its extension; a builtin an
     extension withdrew names the extension too. Empty for the base alone.
     """
     lines = [
         f"  {record.name}: registered by {record.extension}"
-        for record in _CHECKS.values()
+        for record in _STEPS.values()
         if record.extension != BASE_EXTENSION
     ]
     lines += [
@@ -521,21 +511,21 @@ def narrowings() -> tuple[str, ...]:
     return tuple(lines)
 
 
-def check_names() -> tuple[str, ...]:
-    """Every registered check, in registration order."""
-    return tuple(_CHECKS)
+def step_names() -> tuple[str, ...]:
+    """Every registered step, in registration order."""
+    return tuple(_STEPS)
 
 
-def snapshot() -> tuple[dict[str, CheckRecord], dict[str, str]]:
-    """The registry's state, for [livery.workshop._checks.restore][] to put back."""
-    return dict(_CHECKS), dict(_WITHDRAWN)
+def snapshot() -> tuple[dict[str, StepRecord], dict[str, str]]:
+    """The registry's state, for [livery.workshop._steps.restore][] to put back."""
+    return dict(_STEPS), dict(_WITHDRAWN)
 
 
-def restore(state: tuple[dict[str, CheckRecord], dict[str, str]]) -> None:
+def restore(state: tuple[dict[str, StepRecord], dict[str, str]]) -> None:
     """Put the registry back to *state*."""
     records, withdrawn = state
-    _CHECKS.clear()
-    _CHECKS.update(records)
+    _STEPS.clear()
+    _STEPS.update(records)
     _WITHDRAWN.clear()
     _WITHDRAWN.update(withdrawn)
 
@@ -567,13 +557,13 @@ def _package_files(package: Package) -> tuple[str, ...]:
     return tuple(name for name in names if (package.directory / name).is_file())
 
 
-def judged_files(record: CheckRecord, package: Package) -> tuple[str, ...]:
-    """The files of *package* the check's claims reach, relative to it, sorted.
+def judged_files(record: StepRecord, package: Package) -> tuple[str, ...]:
+    """The files of *package* the step's claims reach, relative to it, sorted.
 
     Every file git holds under the package directory is categorised
     and kept when a claim names its category and admits its suffix; a
     record without claims judges nothing by this measure, which is
-    what a check that runs a tool over directories looks like from
+    what a step that runs a tool over directories looks like from
     here.
     """
     from livery.workshop._categories import category_of
@@ -589,12 +579,12 @@ def judged_files(record: CheckRecord, package: Package) -> tuple[str, ...]:
 
 
 def claimants(package: Package, path: str) -> tuple[str, ...]:
-    """The checks whose claims reach *path* in *package*, by name, sorted."""
+    """The steps whose claims reach *path* in *package*, by name, sorted."""
     from livery.workshop._categories import category_of
 
     category = category_of(package, path).name
     names = []
-    for record in _CHECKS.values():
+    for record in _STEPS.values():
         if not any(c.category == category and _reaches(c, path) for c in record.claims):
             continue
         if record.extensions and not _applies(record, package):
@@ -610,7 +600,7 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
     that withholds rules on a category maps to that category's
     patterns in the kind's table, a package's under ``packages/**/``,
     which reaches a member in a group directory too, and the root's as
-    they are; two checks claiming one category under different rules
+    they are; two steps claiming one category under different rules
     land in one entry with both sets.
     """
     from livery.workshop._categories import WORKSPACE, category_rules
@@ -621,7 +611,7 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
     units.append((WORKSPACE, ""))
     for kind, prefix in units:
         held = set(kind_stands_for(kind))
-        for record in _CHECKS.values():
+        for record in _STEPS.values():
             if (
                 kind != WORKSPACE
                 and record.extensions
@@ -640,47 +630,47 @@ def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]
     return [(pattern, tuple(sorted(codes))) for pattern, codes in sorted(table.items())]
 
 
-def checks_by_name() -> dict[str, CheckRecord]:
+def steps_by_name() -> dict[str, StepRecord]:
     """Every registered record by name, in registration order."""
-    return dict(_CHECKS)
+    return dict(_STEPS)
 
 
 def answering(address: str) -> str | None:
-    """The check answering to *address*, its name; None when none is registered."""
-    return address if address in _CHECKS else None
+    """The step answering to *address*, its name; None when none is registered."""
+    return address if address in _STEPS else None
 
 
-def check_for(name: str) -> CheckRecord:
-    """The check named *name*, ``test.pytest``.
+def step_for(name: str) -> StepRecord:
+    """The step named *name*, ``test.pytest``.
 
     Refusal names the registry.
     """
-    if name not in _CHECKS:
-        fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
-    return _CHECKS[name]
+    if name not in _STEPS:
+        fail(f"{name!r} is not a registered step; steps: {', '.join(_STEPS)}")
+    return _STEPS[name]
 
 
-def roles() -> tuple[str, ...]:
-    """The roles the registered checks implement, sorted."""
-    return tuple(sorted({r.role for r in _CHECKS.values()}))
+def phases() -> tuple[str, ...]:
+    """The phases the registered steps belong to, sorted."""
+    return tuple(sorted({r.phase for r in _STEPS.values()}))
 
 
-def judges_extensions(record: CheckRecord, extensions: Iterable[str]) -> bool:
+def judges_extensions(record: StepRecord, extensions: Iterable[str]) -> bool:
     """Whether *record* judges a package holding *extensions*.
 
-    A check that names no extensions judges every package; one that
+    A step that names no extensions judges every package; one that
     names some judges a package holding one of them.
     """
     return not record.extensions or bool(set(record.extensions) & set(extensions))
 
 
 def judged_by(
-    record: CheckRecord, packages: tuple[Package, ...], *, quiet: bool = False
+    record: StepRecord, packages: tuple[Package, ...], *, quiet: bool = False
 ) -> tuple[Package, ...]:
     """The *packages* *record* judges, by the extensions they hold; each other skips.
 
-    A package holding none of the check's extensions prints a skip
-    naming the check, the package and the extensions, so a narrowed gate
+    A package holding none of the step's extensions prints a skip
+    naming the step, the package and the extensions, so a narrowed gate
     is visible in the output and never passes silently. *quiet* counts
     without printing.
     """
@@ -696,19 +686,19 @@ def judged_by(
     return tuple(kept)
 
 
-def _applies(record: CheckRecord, package: Package) -> bool:
-    """Whether a package check judges *package*, by the extensions it holds."""
+def _applies(record: StepRecord, package: Package) -> bool:
+    """Whether a package step judges *package*, by the extensions it holds."""
     from livery.workshop._kinds import extension_set
 
     return bool(set(record.extensions) & set(extension_set(package)))
 
 
-def judges_package(record: CheckRecord, ctx: PhaseContext, package: Package) -> bool:
+def judges_package(record: StepRecord, ctx: PhaseContext, package: Package) -> bool:
     """Whether the package step *record* runs over *package* in this run.
 
     The package holds an extension the step names; a change confined
     to the package's tests leaves the step out unless it is tests-only
-    ([livery.workshop._checks.CheckRecord][]).
+    ([livery.workshop._steps.StepRecord][]).
     """
     tests_only = ctx.scoped and package.path in ctx.tests
     return (
@@ -718,10 +708,10 @@ def judges_package(record: CheckRecord, ctx: PhaseContext, package: Package) -> 
     )
 
 
-def _package_records(ctx: PhaseContext, package: Package) -> list[CheckRecord]:
-    """The registered package checks that judge *package* in this run, in order."""
+def _package_records(ctx: PhaseContext, package: Package) -> list[StepRecord]:
+    """The registered package steps that judge *package* in this run, in order."""
     return [
-        record for record in _CHECKS.values() if judges_package(record, ctx, package)
+        record for record in _STEPS.values() if judges_package(record, ctx, package)
     ]
 
 
@@ -732,24 +722,24 @@ def members(ctx: PhaseContext) -> tuple[Package, ...]:
     return tuple(package for package in ctx.judged if package.path != WORKSPACE_TESTS)
 
 
-def _makes_verb(role: str) -> bool:
-    """Whether *role* gets a verb: its phase declares one."""
+def _makes_verb(phase: str) -> bool:
+    """Whether *phase* gets a verb: it declares one."""
     from livery.workshop import _phases
 
-    spec = _phases.declared_phases().get(role)
+    spec = _phases.declared_phases().get(phase)
     return spec is None or spec.verb
 
 
-def verb_tree() -> dict[str, dict[str, CheckRecord]]:
-    """Each role's checks by tool, sorted: the verbs the registry generates.
+def verb_tree() -> dict[str, dict[str, StepRecord]]:
+    """Each phase's steps by name, sorted: the verbs the registry generates.
 
-    A role whose phase declares no verb is left out.
+    A phase that declares no verb is left out.
     """
-    tree: dict[str, dict[str, CheckRecord]] = {}
-    for record in _CHECKS.values():
-        if _makes_verb(record.role):
-            tree.setdefault(record.role, {})[record.tool] = record
-    return {role: dict(sorted(tools.items())) for role, tools in sorted(tree.items())}
+    tree: dict[str, dict[str, StepRecord]] = {}
+    for record in _STEPS.values():
+        if _makes_verb(record.phase):
+            tree.setdefault(record.phase, {})[record.step] = record
+    return {phase: dict(sorted(steps.items())) for phase, steps in sorted(tree.items())}
 
 
 #: The verb functions the generator made. Footman shares a task's
@@ -787,7 +777,7 @@ def _run_named(
     paths, arguments = split_arguments(words)
     if arguments and refusal:
         fail(refusal)
-    _quality.run_checks(
+    _quality.run_steps(
         names, paths, fix=fix, safe_fix=safe_fix, point=point, arguments=arguments
     )
 
@@ -799,7 +789,7 @@ def _run_named(
 _Paths = Annotated[
     str, doc("the files or directories to check; the workspace when none")
 ]
-_Fix = Annotated[bool, doc("rewrite what the checks can, then judge the rest")]
+_Fix = Annotated[bool, doc("rewrite what the steps can, then judge the rest")]
 _SafeFix = Annotated[bool, doc("fix, removing no code: safe for an edit in flight")]
 _Point = Annotated[
     str, doc("select this CI point's tests: gate, merge, nightly, release")
@@ -814,11 +804,11 @@ def _verb(
     what: str,
     refusal: str = "",
 ) -> Callable[..., None]:
-    """A verb over the checks *select* names, offering exactly the flags they read.
+    """A verb over the steps *select* names, offering exactly the flags they read.
 
-    ``--fix`` and ``--safe-fix`` where a check can fix, ``--point``
+    ``--fix`` and ``--safe-fix`` where a step can fix, ``--point``
     where one reads the point; the paths narrow the run to those files.
-    The words after ``--`` reach the check's tool, unless *refusal*
+    The words after ``--`` reach the step's tool, unless *refusal*
     says why this verb takes none.
     """
 
@@ -855,16 +845,16 @@ def _verb(
     return chosen
 
 
-def _role_checks(role: str) -> Callable[[], tuple[str, ...]]:
-    """Every registered check of *role*, read when the verb runs."""
+def _steps_of(phase: str) -> Callable[[], tuple[str, ...]]:
+    """Every registered step of *phase*, read when the verb runs."""
 
     def select() -> tuple[str, ...]:
-        return tuple(record.name for record in _CHECKS.values() if record.role == role)
+        return tuple(record.name for record in _STEPS.values() if record.phase == phase)
 
     return select
 
 
-def _one_check(name: str) -> Callable[[], tuple[str, ...]]:
+def _one_step(name: str) -> Callable[[], tuple[str, ...]]:
     def select() -> tuple[str, ...]:
         return (name,)
 
@@ -889,8 +879,8 @@ def _place(parent: Group, key: str, verb: Callable[..., None]) -> None:
     """Put *verb* at *key* in *parent*, unless a verb that serves it is there.
 
     A verb the generator made is remade when its flags changed, so a
-    check registered later that fixes or reads the point reaches its
-    role's verb; any other task at the address is left alone.
+    step registered later that fixes or reads the point reaches its
+    phase's verb; any other task at the address is left alone.
     """
     existing = parent.tasks.get(key)
     if existing is not None:
@@ -903,72 +893,72 @@ def _place(parent: Group, key: str, verb: Callable[..., None]) -> None:
         parent.task(name=key)(verb)
 
 
-def _prune(target: Group, tree: Mapping[str, Mapping[str, CheckRecord]]) -> None:
-    """Remove the verbs the generator made whose checks are gone.
+def _prune(target: Group, tree: Mapping[str, Mapping[str, StepRecord]]) -> None:
+    """Remove the verbs the generator made whose steps are gone.
 
-    A role with no check left loses its verb, and its group when that
+    A phase with no step left loses its verb, and its group when that
     leaves the group empty; a task another extension put there stays.
     """
-    for role, parent in list(target.groups.items()):
-        tools = tree.get(role, {})
+    for phase, parent in list(target.groups.items()):
+        steps = tree.get(phase, {})
         removed = False
         for key, task in list(parent.tasks.items()):
-            kept = bool(tools) if key == "default" else key in tools
+            kept = bool(steps) if key == "default" else key in steps
             if _is_made(task) and not kept:
                 del parent.tasks[key]
                 removed = True
         if removed and not parent.tasks and not parent.groups:
-            del target.groups[role]
+            del target.groups[phase]
 
 
 def generate_verbs(into: Group | None = None) -> None:
-    """Make a verb per role and a sub-task per check, from the registry.
+    """Make a verb per phase and a sub-task per step, from the registry.
 
-    ``fm test`` runs every check of the test role and ``fm test.pytest``
-    the one, each offering exactly the flags its checks read. A role
+    ``fm test`` runs every step of the test phase and ``fm test.pytest``
+    the one, each offering exactly the flags its steps read. A phase
     or a sub-task whose address a verb already holds is served by that
     verb, ``fm provenance``, and nothing is
-    made there. Run again after extensions registered or withdrew checks,
+    made there. Run again after extensions registered or withdrew steps,
     it makes what is new, remakes a verb whose flags changed, and
-    removes a verb whose check is gone.
+    removes a verb whose step is gone.
     """
     target = into if into is not None else root_group
     tree = verb_tree()
     _prune(target, tree)
-    for role, tools in tree.items():
-        if role in target.tasks:
+    for phase, steps in tree.items():
+        if phase in target.tasks:
             continue
-        parent = target.groups.get(role)
+        parent = target.groups.get(phase)
         default = None if parent is None else parent.default_task
-        # The generator owns the role's verb in a group it made; a
+        # The generator owns the phase's verb in a group it made; a
         # group of another verb's gets no default.
         owned = parent is None or (default is not None and _is_made(default))
         if parent is None:
-            parent = target.group(role, help=f"The {role} checks, one task each")
+            parent = target.group(phase, help=f"The {phase} steps, one task each")
         if owned:
             _place(
                 parent,
                 "default",
                 _verb(
-                    _role_checks(role),
-                    fixes=any(r.fix is not None for r in tools.values()),
-                    reads_point=any("point" in r.flags for r in tools.values()),
-                    what=f"Run every {role} check, over the named paths or the"
+                    _steps_of(phase),
+                    fixes=any(r.fix is not None for r in steps.values()),
+                    reads_point=any("point" in r.flags for r in steps.values()),
+                    what=f"Run every {phase} step, over the named paths or the"
                     " workspace.",
-                    refusal=arguments_refusal(f"{prog()} {role}", tools.values()),
+                    refusal=arguments_refusal(f"{prog()} {phase}", steps.values()),
                 ),
             )
-        for tool, record in tools.items():
-            if tool in parent.groups:
+        for step, record in steps.items():
+            if step in parent.groups:
                 continue
             _place(
                 parent,
-                tool,
+                step,
                 _verb(
-                    _one_check(record.name),
+                    _one_step(record.name),
                     fixes=record.fix is not None,
                     reads_point="point" in record.flags,
-                    what=f"Run the {record.name} check alone, over the named paths"
+                    what=f"Run the {record.name} step alone, over the named paths"
                     " or the workspace"
                     + (
                         "; the words after -- go to its tool."
@@ -983,73 +973,73 @@ def generate_verbs(into: Group | None = None) -> None:
             )
 
 
-def arguments_refusal(verb: str, records: Iterable[CheckRecord]) -> str:
-    """Why *verb*, which runs several checks, takes no arguments after ``--``.
+def arguments_refusal(verb: str, records: Iterable[StepRecord]) -> str:
+    """Why *verb*, which runs several steps, takes no arguments after ``--``.
 
-    The words after ``--`` are one tool's, so they go to a check's own
+    The words after ``--`` are one tool's, so they go to a step's own
     verb; the refusal names those of *records* that take them.
     """
-    takers = [f"{prog()} {r.role}.{r.tool}" for r in records if r.arguments]
+    takers = [f"{prog()} {r.phase}.{r.step}" for r in records if r.arguments]
     named = f": {', '.join(takers)}" if takers else ""
     return (
-        f"`{verb}` runs several checks, and the words after -- are one tool's;"
-        f" give them to the check's own verb{named}"
+        f"`{verb}` runs several steps, and the words after -- are one tool's;"
+        f" give them to the step's own verb{named}"
     )
 
 
-def run_check(name: str, ctx: PhaseContext, *, fix: bool = False) -> None:
-    """Run the check *name* over *ctx* through the walk: its judge, or its fix mode.
+def run_step(name: str, ctx: PhaseContext, *, fix: bool = False) -> None:
+    """Run the step *name* over *ctx* through the walk: its judge, or its fix mode.
 
     One step alone ([livery.workshop._phases.run_phase][]): a workspace
-    check runs once, a package check once per package it judges, and
-    a check without a fix mode runs nothing in fix mode. The checks
+    step runs once, a package step once per package it judges, and
+    a step without a fix mode runs nothing in fix mode. The steps
     named in ``after`` are not run first: a caller running several
-    checks by hand orders them itself, and the gate's walk brings them
-    in ([livery.workshop._checks.with_earlier][]).
+    steps by hand orders them itself, and the gate's walk brings them
+    in ([livery.workshop._steps.with_earlier][]).
     """
     from livery.workshop._phases import run_phase
 
-    run_phase(ctx, (check_for(name),), fixing=fix)
+    run_phase(ctx, (step_for(name),), fixing=fix)
 
 
-def with_earlier(names: tuple[str, ...]) -> tuple[CheckRecord, ...]:
+def with_earlier(names: tuple[str, ...]) -> tuple[StepRecord, ...]:
     """The records of *names*, and of every step one of them runs after.
 
     Followed through ``after`` transitively, in registration order,
     so a build's configure joins the walk that judges the build.
 
     Raises:
-        Failed: when an ``after`` names no registered check.
+        Failed: when an ``after`` names no registered step.
     """
     wanted = set(names)
     queue = list(names)
     while queue:
-        for earlier in check_for(queue.pop()).after:
+        for earlier in step_for(queue.pop()).after:
             if earlier not in wanted:
                 wanted.add(earlier)
                 queue.append(earlier)
-    return tuple(record for record in _CHECKS.values() if record.name in wanted)
+    return tuple(record for record in _STEPS.values() if record.name in wanted)
 
 
-def _applies_now(record: CheckRecord, ctx: PhaseContext) -> bool:
+def _applies_now(record: StepRecord, ctx: PhaseContext) -> bool:
     if record.scope == WORKSPACE:
         if record.inputs is not None:
             # Listed, so the walk says when no file it reads changed.
             return True
-        # A check without declared inputs narrows by its packages, so a
+        # A step without declared inputs narrows by its packages, so a
         # scope that holds none leaves it nothing to judge. Running it
-        # would read the empty scope as the whole: the test check would
+        # would read the empty scope as the whole: the test step would
         # start the whole suite. Named files are a scope of their own,
-        # which the check's claims judge.
+        # which the step's claims judge.
         return bool(ctx.files) or not (ctx.scoped and not ctx.subset)
     return any(judges_package(record, ctx, p) for p in members(ctx))
 
 
 def workspace_selected(ctx: PhaseContext) -> tuple[str, ...]:
-    """The workspace checks with declared inputs that this run's changes select."""
+    """The workspace steps with declared inputs that this run's changes select."""
     return tuple(
         record.name
-        for record in _CHECKS.values()
+        for record in _STEPS.values()
         if record.scope == WORKSPACE
         and record.inputs is not None
         and selected(record, ctx).runs
@@ -1057,29 +1047,29 @@ def workspace_selected(ctx: PhaseContext) -> tuple[str, ...]:
 
 
 def selected_files(ctx: PhaseContext) -> frozenset[str] | None:
-    """The files the running check judges in this run; None for every file it reads.
+    """The files the running step judges in this run; None for every file it reads.
 
-    A workspace check that declares ``inputs`` judges, in a run that
+    A workspace step that declares ``inputs`` judges, in a run that
     knows what changed, the changed files among its inputs, and what
     its ``widen`` reference adds; in a run that knows nothing of the
     changes, it judges every file it reads, and this is None. The
-    context names the running check, so a check asks with the context
+    context names the running step, so a step asks with the context
     its run was handed.
 
     Raises:
-        Failed: when *ctx* names no check: one built by hand, outside
-            a check's run.
+        Failed: when *ctx* names no step: one built by hand, outside
+            a step's run.
     """
-    if not ctx.check:
+    if not ctx.step:
         fail(
-            "selected_files() answers for the running check, and this"
-            " PhaseContext names none: call it with the context a check's"
-            " run is handed, which sets PhaseContext.check"
+            "selected_files() answers for the running step, and this"
+            " PhaseContext names none: call it with the context a step's"
+            " run is handed, which sets PhaseContext.step"
         )
-    return _selected_files(check_for(ctx.check), ctx)
+    return _selected_files(step_for(ctx.step), ctx)
 
 
-def _selected_files(record: CheckRecord, ctx: PhaseContext) -> frozenset[str] | None:
+def _selected_files(record: StepRecord, ctx: PhaseContext) -> frozenset[str] | None:
     """The files *record* judges in this run; None for every file it reads."""
     selection = selected(record, ctx)
     return None if selection.whole else frozenset(selection.files)
@@ -1165,10 +1155,10 @@ def _drift_widens(root: Path) -> tuple[str, ...]:
     )
 
 
-def selected(record: CheckRecord, ctx: PhaseContext) -> Selection:
+def selected(record: StepRecord, ctx: PhaseContext) -> Selection:
     """What *record* judges in this run, by its declared inputs.
 
-    Everything for a check that declares none. The run's changes
+    Everything for a step that declares none. The run's changes
     select, or the named files of `fm check <paths>` when there are no
     changes; a run with neither judges everything.
     """
@@ -1199,9 +1189,9 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
     ignore, as the tools see them, or the run's named files alone. A
     package's files are relative to it
     and categorised by its kind's table; a file under no package
-    belongs to [livery.workshop._checks.ROOT_UNIT], relative to the
+    belongs to [livery.workshop._steps.ROOT_UNIT], relative to the
     root and categorised by the workspace's table. None when the root
-    is not a git checkout, and then every check that applies runs.
+    is not a git checkout, and then every step that applies runs.
     """
     from livery.workshop._categories import category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS
@@ -1227,10 +1217,10 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
     return {key: tuple(files) for key, files in found.items()}
 
 
-def _scope_units(record: CheckRecord, ctx: PhaseContext) -> tuple[str, ...]:
+def _scope_units(record: StepRecord, ctx: PhaseContext) -> tuple[str, ...]:
     """The units *record* reads in this run.
 
-    A package check reads the packages it judges. A workspace check
+    A package step reads the packages it judges. A workspace step
     reads every unit in a whole gate; in a scoped one, the subset's
     packages and the root's own files, since the workspace's tests
     ride every scoped run.
@@ -1247,13 +1237,13 @@ def _scope_units(record: CheckRecord, ctx: PhaseContext) -> tuple[str, ...]:
 
 
 def reads_files(
-    record: CheckRecord, ctx: PhaseContext, units: tuple[str, ...] | None = None
+    record: StepRecord, ctx: PhaseContext, units: tuple[str, ...] | None = None
 ) -> bool:
     """Whether *record*'s claims reach a file of *units*, or of its scope in this run.
 
-    A check without claims reads what its own body decides, and a run
+    A step without claims reads what its own body decides, and a run
     without a catalogue has no listing to judge by: both answer yes,
-    except over named files, which a check without claims cannot say
+    except over named files, which a step without claims cannot say
     it reads.
     """
     if record.inputs is not None:
@@ -1272,12 +1262,12 @@ def reads_files(
 
 
 def claimed_files(
-    record: CheckRecord, ctx: PhaseContext, unit: str | None = None
+    record: StepRecord, ctx: PhaseContext, unit: str | None = None
 ) -> tuple[str, ...]:
     """The files of the run's catalogue *record*'s claims reach, as absolute paths.
 
-    For a run over named files: the ones a check takes. *unit* keeps
-    one package's alone, for a package check.
+    For a run over named files: the ones a step takes. *unit* keeps
+    one package's alone, for a package step.
     """
     found: list[str] = []
     for key, files in (ctx.catalogue or {}).items():
@@ -1293,9 +1283,9 @@ def claimed_files(
 
 
 def with_files(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
-    """*names* less the checks with no file to read in this run, each skip said.
+    """*names* less the steps with no file to read in this run, each skip said.
 
-    No process starts for a check whose claims reach nothing in scope.
+    No process starts for a step whose claims reach nothing in scope.
     """
     kept: list[str] = []
     where = (
@@ -1306,7 +1296,7 @@ def with_files(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
         else "the workspace"
     )
     for name in names:
-        record = _CHECKS[name]
+        record = _STEPS[name]
         if reads_files(record, ctx):
             kept.append(name)
             continue
@@ -1319,16 +1309,16 @@ def with_files(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
     return tuple(kept)
 
 
-def _gated(record: CheckRecord) -> bool:
+def _gated(record: StepRecord) -> bool:
     """Whether the gate runs *record*: its phase declares itself gated."""
     from livery.workshop import _phases
 
-    spec = _phases.declared_phases().get(record.role)
+    spec = _phases.declared_phases().get(record.phase)
     return spec is None or spec.gated
 
 
 def rewriters(ctx: PhaseContext) -> tuple[str, ...]:
-    """The checks whose fix mode runs, serially and in order, under --fix.
+    """The steps whose fix mode runs, serially and in order, under --fix.
 
     Those of the gated phases; empty unless the gate runs in its fix
     mode.
@@ -1337,20 +1327,20 @@ def rewriters(ctx: PhaseContext) -> tuple[str, ...]:
         return ()
     return tuple(
         record.name
-        for record in _CHECKS.values()
+        for record in _STEPS.values()
         if record.fix is not None and _gated(record) and _applies_now(record, ctx)
     )
 
 
 def judges(ctx: PhaseContext) -> tuple[str, ...]:
-    """The checks the gate judges together, in registration order.
+    """The steps the gate judges together, in registration order.
 
-    Those of the gated phases. A check that rewrote in this run is not
+    Those of the gated phases. A step that rewrote in this run is not
     judged again: re-judging the style it just wrote would only spend
     time agreeing.
     """
     names = []
-    for record in _CHECKS.values():
+    for record in _STEPS.values():
         if not _gated(record) or not _applies_now(record, ctx):
             continue
         if record.fix is not None and ctx.fix:
@@ -1359,8 +1349,8 @@ def judges(ctx: PhaseContext) -> tuple[str, ...]:
     return tuple(names)
 
 
-#: The whole repository, as a check that walks it from the root reads it.
-#: [livery.workshop._checks.scoped_paths][] answers it when a check
+#: The whole repository, as a step that walks it from the root reads it.
+#: [livery.workshop._steps.scoped_paths][] answers it when a step
 #: judges its configured whole; a tool that reads ``.`` as more than
 #: its configuration names takes no paths then.
 WHOLE = (".",)
@@ -1374,21 +1364,21 @@ def _workspace_unit(ctx: PhaseContext) -> tuple[Package, ...]:
 
 
 def _claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
-    """The files of the native members the check *name* claims, by path.
+    """The files of the native members the step *name* claims, by path.
 
-    A native member's directories are not a python check's to walk, so
+    A native member's directories are not a python step's to walk, so
     its files come by name: its ``conanfile.py``, say.
     """
-    record = check_for(name)
+    record = step_for(name)
     return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
 
 
-def _every_unit_reached(ctx: PhaseContext, record: CheckRecord, chosen: int) -> bool:
+def _every_unit_reached(ctx: PhaseContext, record: StepRecord, chosen: int) -> bool:
     """Whether a scoped run over *chosen* units reaches every unit *record* judges.
 
-    Every member the check judges, the workspace's tests unit among
+    Every member the step judges, the workspace's tests unit among
     them, with none turned off anywhere: the whole would reach the
-    same, so the check runs over its configured whole instead of a
+    same, so the step runs over its configured whole instead of a
     list naming every unit.
     """
     from livery.workshop._coverage_store import WORKSPACE_TESTS
@@ -1406,19 +1396,19 @@ def _every_unit_reached(ctx: PhaseContext, record: CheckRecord, chosen: int) -> 
 
 
 def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
-    """The paths the path-narrowing check *name* judges in this run.
+    """The paths the path-narrowing step *name* judges in this run.
 
     The files the run names, when it names any. Otherwise the whole
-    tree, ``.``, when the run reaches every member the check judges;
+    tree, ``.``, when the run reaches every member the step judges;
     else the reached python members' ``src`` and ``tests``
     directories, the workspace's own tests when the run judges them,
-    and the files the check's claims give it in the reached native
+    and the files the step's claims give it in the reached native
     members.
     """
     from livery.workshop._kinds import is_python_kind
     from livery.workshop._packages import package_paths
 
-    record = check_for(name)
+    record = step_for(name)
     if ctx.files:
         return claimed_files(record, ctx)
     gated_members = judged_by(record, members(ctx))
@@ -1448,10 +1438,10 @@ def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
     return holding(judged) + _claimed(name, present)
 
 
-def _holds_claimed(record: CheckRecord, directory: Path) -> bool:
+def _holds_claimed(record: StepRecord, directory: Path) -> bool:
     """Whether *directory* holds a file with a suffix *record*'s claims read.
 
-    A check with no claim, or a claim that names no suffix, reads every
+    A step with no claim, or a claim that names no suffix, reads every
     file, so any directory holds one.
     """
     if not record.claims or any(not claim.suffixes for claim in record.claims):
@@ -1463,18 +1453,18 @@ def _holds_claimed(record: CheckRecord, directory: Path) -> bool:
 def scoped_files(
     ctx: PhaseContext, name: str, package: Package | None = None
 ) -> tuple[Path, ...]:
-    """The files of *package* the check *name* judges in this run, absolute.
+    """The files of *package* the step *name* judges in this run, absolute.
 
-    *package* is the run's own package unless named: a package check
-    names none, and a check that narrows by packages names each one
+    *package* is the run's own package unless named: a package step
+    names none, and a step that narrows by packages names each one
     [livery.workshop.scoped_packages][] answers. The files the run
-    names, when it names any; else every file the check's claims reach
+    names, when it names any; else every file the step's claims reach
     in the package, an untracked new one among them.
 
     Raises:
         Failed: when neither *package* nor the run names a package.
     """
-    record = check_for(name)
+    record = step_for(name)
     package = package or ctx.package
     if package is None:
         fail(f"{name} judges one package at a time, and this run names none")
@@ -1484,43 +1474,43 @@ def scoped_files(
 
 
 def scoped_packages(ctx: PhaseContext, name: str) -> tuple[Package, ...]:
-    """The members the package-narrowing check *name* judges in this run.
+    """The members the package-narrowing step *name* judges in this run.
 
     The members of its kinds, in a scoped run those of the subset,
-    less each one that turned the check off in its contract. Each
+    less each one that turned the step off in its contract. Each
     skip is printed, so a narrowed gate names what it left out. A run
     over named files keeps the members holding a named file the
-    check claims. The workspace's own tests are not a member.
+    step claims. The workspace's own tests are not a member.
     """
-    record = check_for(name)
+    record = step_for(name)
     chosen = enabled(name, judged_by(record, members(ctx)))
     if not ctx.files:
         return chosen
     return tuple(p for p in chosen if claimed_files(record, ctx, p.path))
 
 
-def check_option(name: str, package: Package, option: str) -> object:
-    """What *package* sets for the check *name*'s *option*, or the option's default.
+def step_option(name: str, package: Package, option: str) -> object:
+    """What *package* sets for the step *name*'s *option*, or the option's default.
 
     The deepest of the package's tables that sets it wins. Refuses an
-    option the check does not declare and a value of the wrong type,
-    naming the check's options.
+    option the step does not declare and a value of the wrong type,
+    naming the step's options.
     """
-    return option_value(check_for(name), package, option)
+    return option_value(step_for(name), package, option)
 
 
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The *units* whose suites a registered check of the test role runs.
+    """The *units* whose suites a registered step of the test phase runs.
 
     A package by the extensions it holds. The workspace's own tests
-    are the root's suite, run when a test check names an extension the
+    are the root's suite, run when a test step names an extension the
     root's kind stands for ([livery.workshop._tools.ROOT_KIND][]).
     """
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._tools import ROOT_KIND
 
-    tests = [record for record in _CHECKS.values() if record.role == "test"]
+    tests = [record for record in _STEPS.values() if record.phase == "test"]
     root = set(kind_stands_for(ROOT_KIND))
     workspace = any(root & set(record.extensions) for record in tests)
 
@@ -1533,10 +1523,10 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
 
 
 def _register_builtin() -> None:
-    """Register the workshop's own checks, in the order the rewriters run.
+    """Register the workshop's own steps, in the order the rewriters run.
 
-    The workspace checks judge the whole tree; the cmake build and test
-    checks judge one package at a time, each package holding the cmake
+    The workspace steps judge the whole tree; the cmake build and test
+    steps judge one package at a time, each package holding the cmake
     extension. The base registers those three until the package kinds
     go, since a package that lists no extension holds cmake through its
     kind alone and never mounts the extension. A body resolves its
@@ -1550,7 +1540,7 @@ def _register_builtin() -> None:
     def render_run(ctx: PhaseContext) -> None:
         from livery.workshop import _quality
 
-        _quality.drift_check(files=_selected_files(check_for("drift.check"), ctx))
+        _quality.drift_check(files=_selected_files(step_for("drift.check"), ctx))
 
     def render_fix(ctx: PhaseContext) -> None:
         # A rewriter is not judged again under --fix, so the fix judges
@@ -1569,14 +1559,14 @@ def _register_builtin() -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
-            files=_selected_files(check_for("provenance.check"), ctx)
+            files=_selected_files(step_for("provenance.check"), ctx)
         )
 
     def provenance_fix(ctx: PhaseContext) -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
-            fix=True, files=_selected_files(check_for("provenance.check"), ctx)
+            fix=True, files=_selected_files(step_for("provenance.check"), ctx)
         )
 
     def graph_run(ctx: PhaseContext) -> None:
@@ -1598,7 +1588,7 @@ def _register_builtin() -> None:
         def run(ctx: PhaseContext) -> None:
             from livery.workshop._packages import rule_problems
 
-            files = _selected_files(check_for(f"layering.{step}"), ctx)
+            files = _selected_files(step_for(f"layering.{step}"), ctx)
             problems = rule_problems(step, ctx.root, ctx.packages, files)
             if problems:
                 fail("the workspace breaks its layering:\n  " + "\n  ".join(problems))
@@ -1632,21 +1622,21 @@ def _register_builtin() -> None:
         )
 
     for record in (
-        CheckRecord(
+        StepRecord(
             "check",
             "drift",
             render_run,
             fix=render_fix,
             inputs=Inputs(reads=_drift_reads, widens=_drift_widens, ignores=NOT_INPUTS),
         ),
-        CheckRecord(
+        StepRecord(
             "check",
             "provenance",
             provenance_run,
             fix=provenance_fix,
             inputs=Inputs(reads=("packages/**/src/**/content/**",)),
         ),
-        CheckRecord(
+        StepRecord(
             "graph",
             "layering",
             graph_run,
@@ -1656,7 +1646,7 @@ def _register_builtin() -> None:
         # The base's rules over the sources, one step each; the sibling
         # step's fix is the one rewrite among them.
         *(
-            CheckRecord(
+            StepRecord(
                 step,
                 "layering",
                 rule_run(step),
@@ -1669,7 +1659,7 @@ def _register_builtin() -> None:
             )
             for step in RULES
         ),
-        CheckRecord(
+        StepRecord(
             "configure",
             "build",
             configure_run,
@@ -1678,7 +1668,7 @@ def _register_builtin() -> None:
             tests_only=True,
             arguments=True,
         ),
-        CheckRecord(
+        StepRecord(
             "compile",
             "build",
             build_run,
@@ -1690,7 +1680,7 @@ def _register_builtin() -> None:
         ),
         # A change to any test or source file reaches ctest, whatever the
         # language the project builds.
-        CheckRecord(
+        StepRecord(
             "ctest",
             "test",
             ctest_run,
@@ -1702,7 +1692,7 @@ def _register_builtin() -> None:
             arguments=True,
         ),
     ):
-        register_check(record)
+        register_step(record)
 
 
 _register_builtin()

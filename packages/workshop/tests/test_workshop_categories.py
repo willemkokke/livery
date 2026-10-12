@@ -23,7 +23,7 @@ from livery.workshop._packages import Package, discover_packages
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
 def _package(
@@ -233,7 +233,7 @@ def test_the_builtin_ladder_answers_as_before(tmp_path: Path) -> None:
 
 
 def test_explain_prints_category_channel_supplier_and_claims(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_checks: object
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
     from livery.workshop import _provenance
 

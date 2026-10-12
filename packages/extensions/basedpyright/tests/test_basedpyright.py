@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.basedpyright import _checks
+from livery.extensions.basedpyright import _steps
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -27,7 +27,7 @@ CONTRACT = (
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """Both checks registered, as the mount does once typecomplete is turned on."""
+    """Both steps registered, as the mount does once typecomplete is turned on."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -50,7 +50,7 @@ def _workspace(root: Path, extensions: str) -> Path:
     return root
 
 
-def _member(root: Path, name: str, *, checks: str = "") -> Package:
+def _member(root: Path, name: str, *, off_at: str = "") -> Package:
     """A python member whose root's __init__ declares its public names."""
     directory = root / "packages" / name
     source = directory / "src" / "acme" / name
@@ -59,14 +59,14 @@ def _member(root: Path, name: str, *, checks: str = "") -> Package:
     (directory / "tests" / f"test_{name}.py").write_text("")
     (source / "__init__.py").write_text('__all__ = ["VALUE"]\nVALUE = 1\n')
     (source / "py.typed").write_text("")
-    turned_off = (("enabled", False),) if checks else ()
+    turned_off = (("enabled", False),) if off_at else ()
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
         kind="python",
         depends=(),
-        checks=((checks, turned_off),) if checks else (),
+        step_options=((off_at, turned_off),) if off_at else (),
     )
 
 
@@ -82,13 +82,13 @@ def _settings(text: str) -> dict[str, object]:
 # The refusal first: installed and not listed, the extension does nothing.
 
 
-def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
+def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman import _registry as footman_registry
-    from livery.workshop._checks import checks_by_name, tools_for
     from livery.workshop._extensions import mount_extensions
     from livery.workshop._shipped_files import deliver
+    from livery.workshop._steps import steps_by_name, tools_for
 
     root = _workspace(tmp_path / "ws", "[]")
     monkeypatch.setattr(
@@ -98,7 +98,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
     try:
         with footman_registry.capture():
             assert mount_extensions(root) == ()
-        assert "typecheck.basedpyright" not in checks_by_name()
+        assert "typecheck.basedpyright" not in steps_by_name()
         assert "basedpyright" not in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         assert not (root / "pyrightconfig.json").exists()
@@ -109,9 +109,9 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         )
         with footman_registry.capture():
             assert mount_extensions(root) == ("basedpyright",)
-        checks = checks_by_name()
-        assert checks["typecheck.basedpyright"].extension == "basedpyright"
-        assert "typecomplete.basedpyright" not in checks
+        steps = steps_by_name()
+        assert steps["typecheck.basedpyright"].extension == "basedpyright"
+        assert "typecomplete.basedpyright" not in steps
         assert "basedpyright" in {tool for tool, _ in tools_for(("python",))}
         deliver(root)
         written = _settings((root / "pyrightconfig.json").read_text())
@@ -121,7 +121,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         # The editor answers with the checker this file configures alone.
         settings = (root / ".vscode" / "settings.json").read_text()
         assert '"python.languageServer": "None"' in settings
-        # Turned on at the step's address, the type-completeness check
+        # Turned on at the step's address, the type-completeness step
         # joins, under the listed name.
         (root / "workshop.toml").write_text(
             CONTRACT + 'extensions = ["basedpyright"]\n\n'
@@ -129,7 +129,7 @@ def test_unlisted_it_registers_no_check_requires_no_tool_and_writes_no_file(
         )
         with footman_registry.capture():
             mount_extensions(root)
-        assert checks_by_name()["typecomplete.basedpyright"].extension == "basedpyright"
+        assert steps_by_name()["typecomplete.basedpyright"].extension == "basedpyright"
     finally:
         registry.restore(state)
 
@@ -145,7 +145,7 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     monkeypatch.setattr(tools, "basedpyright", lambda *argv: calls.append(argv))
     one = _member(tmp_path, "one")
     two = _member(tmp_path, "two")
-    record = registry.check_for("typecheck.basedpyright")
+    record = registry.step_for("typecheck.basedpyright")
     # Every member reached: basedpyright reads its configured include,
     # which a `.` would replace with every file under the root. Its
     # warnings gate as errors in every call.
@@ -155,7 +155,7 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     calls.clear()
     record.run(PhaseContext(root=tmp_path, packages=(one, two), subset=(one,)))
     assert calls == [("--warnings", "packages/one/src", "packages/one/tests")]
-    # The words after -- on the check's own verb reach both calls.
+    # The words after -- on the step's own verb reach both calls.
     calls.clear()
     words = ("--level", "error")
     record.run(PhaseContext(root=tmp_path, packages=(one, two), arguments=words))
@@ -178,25 +178,25 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
 
     verified: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     monkeypatch.setattr(
-        _checks,
+        _steps,
         "run_typecomplete",
         lambda modules, arguments: verified.append((modules, arguments)),
     )
-    # A member that turned the check off is skipped by name, and the
+    # A member that turned the step off is skipped by name, and the
     # workspace's own tests are no member: neither is verified.
-    off = _member(tmp_path, "off", checks="phases.typecomplete.basedpyright")
+    off = _member(tmp_path, "off", off_at="phases.typecomplete.basedpyright")
     one = _member(tmp_path, "one")
     (tmp_path / "tests").mkdir()
     unit = workspace_suite(tmp_path)
     assert unit is not None
-    record = registry.check_for("typecomplete.basedpyright")
+    record = registry.step_for("typecomplete.basedpyright")
     record.run(PhaseContext(root=tmp_path, packages=(off, one, unit)))
     assert verified == [(("acme.one",), ())]
     assert (
         "typecomplete.basedpyright: packages/off skips (turned off in"
         " packages/off/workshop.toml)" in capsys.readouterr().out
     )
-    # The words after -- on the check's own verb reach each verification.
+    # The words after -- on the step's own verb reach each verification.
     verified.clear()
     record.run(
         PhaseContext(root=tmp_path, packages=(one,), arguments=("--outputjson",))
@@ -211,15 +211,15 @@ def test_each_public_module_is_verified_with_its_dependencies_external(
     monkeypatch.setattr(
         tools, "basedpyright", lambda *words, **kw: calls.append((words, kw))
     )
-    _checks.run_typecomplete(())
+    _steps.run_typecomplete(())
     assert calls == []
-    _checks.run_typecomplete(("acme.one", "acme.two"))
+    _steps.run_typecomplete(("acme.one", "acme.two"))
     assert calls == [
         ((), {"verifytypes": "acme.one", "ignoreexternal": True}),
         ((), {"verifytypes": "acme.two", "ignoreexternal": True}),
     ]
     calls.clear()
-    _checks.run_typecomplete(("acme.one",), ("--outputjson",))
+    _steps.run_typecomplete(("acme.one",), ("--outputjson",))
     assert calls == [
         (("--outputjson",), {"verifytypes": "acme.one", "ignoreexternal": True})
     ]

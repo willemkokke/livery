@@ -1,6 +1,6 @@
-"""The native seeds pass the native extensions' checks from their first commit.
+"""The native seeds pass the native extensions' steps from their first commit.
 
-The seeds are the workshop's, and the style and the lint checks are
+The seeds are the workshop's, and the style and the lint steps are
 the extensions', so each property spans both.
 """
 
@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.extensions.clang.tidy import _checks as clang_tidy
+from livery.extensions.clang.tidy import _steps as clang_tidy
 from livery.workshop import Package, PhaseContext
-from livery.workshop import _checks as registry
+from livery.workshop import _steps as registry
 from livery.workshop._kinds import kind_stands_for
 
 # The workshop's test helper: pytest's pythonpath carries every tests
@@ -26,7 +26,7 @@ from workshop_composed import seed_into  # pyright: ignore[reportMissingImports]
 
 @pytest.fixture
 def registered() -> Iterator[None]:
-    """The extensions' checks registered, as the mount registers them when listed."""
+    """The extensions' steps registered, as the mount registers them when listed."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -86,7 +86,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     )
     suffixes = {
         suffix
-        for claim in registry.check_for("format.clang-format").claims
+        for claim in registry.step_for("format.clang-format").claims
         for suffix in claim.suffixes
     }
     sources = tuple(
@@ -99,7 +99,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     # hands them: clang-format's words from the package's directory, so
     # its own .clang-format sets the style.
     named = tuple(path.relative_to(destination).as_posix() for path in sources)
-    registry.check_for("format.clang-format").run(
+    registry.step_for("format.clang-format").run(
         PhaseContext(
             root=tmp_path,
             packages=(package,),

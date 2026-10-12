@@ -3,7 +3,7 @@
 The workshop's base (``livery.workshop`` outside ``_backends``) reaches
 a kind through the kind registry, never by importing a backend or by
 spelling the kind's words, and names no tool a listed extension's
-checks bring. This test scans the base's sources for all three, and
+steps bring. This test scans the base's sources for all three, and
 every extension's (``livery.extensions``) for an import of a backend.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
@@ -48,8 +48,6 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 
 #: What the base still knows of a kind: (module, word) to count. Only falls.
 ALLOWANCE: dict[tuple[str, str], int] = {
-    ("_checks", BACKEND_IMPORT): 1,
-    ("_checks", "pyproject.toml"): 1,
     ("_ci_generate", "conanfile.py"): 1,
     ("_devenv", "conan"): 2,
     ("_e2e", BACKEND_IMPORT): 1,
@@ -74,6 +72,8 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "conanfile.py"): 2,
     ("_release_driver", "pyproject.toml"): 2,
     ("_release_driver", "python"): 2,
+    ("_steps", BACKEND_IMPORT): 1,
+    ("_steps", "pyproject.toml"): 1,
     ("_templates", "python"): 4,
     ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
@@ -209,7 +209,7 @@ def test_no_extension_imports_a_backend() -> None:
     assert found == []
 
 
-#: The tools an extension's checks bring that the base still names:
+#: The tools an extension's steps bring that the base still names:
 #: (module, tool) to (count, reason).
 TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
@@ -222,7 +222,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 
 
 def _extension_tools() -> set[str]:
-    """The tools the installed extensions' checks name and their tables require."""
+    """The tools the installed extensions' steps name and their tables require."""
     from importlib.metadata import entry_points
 
     from livery.toolroom.store import Requirement
@@ -233,8 +233,8 @@ def _extension_tools() -> set[str]:
         found = read(entry.name, entry.value)
         if found is None:
             continue
-        for record in found.additions.checks:
-            tools.update((record.tool, *record.tools))
+        for record in found.additions.steps:
+            tools.update((record.step, *record.tools))
         tools.update(
             Requirement.parse(text, site=entry.name).name for text in found.tools
         )
@@ -278,7 +278,7 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
         # to say which tools it brings.
         pytest.skip("the scan reads the extensions this checkout installs")
     tools = _extension_tools()
-    # The scan has something to look for, a check's tool and a table's.
+    # The scan has something to look for, a step's tool and a table's.
     assert {"ruff", "git_cliff"} <= tools
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}

@@ -1,6 +1,6 @@
-"""What an extension's kinds and checks are judged against: the conformance kit.
+"""What an extension's kinds and steps are judged against: the conformance kit.
 
-An extension registers kinds, checks and category tables that the gate
+An extension registers kinds, steps and category tables that the gate
 then relies on. The kit states what the gate relies on, one clause at
 a time, and judges an extension's registrations against it: a
 [livery.workshop.testing.Subject][] names what the extension registers,
@@ -15,7 +15,7 @@ import pytest
 
 from livery.workshop.testing import CLAUSES, Clause, Subject
 
-SUBJECT = Subject("acme.extension", kinds=(...), checks=(...))
+SUBJECT = Subject("acme.extension", kinds=(...), steps=(...))
 
 
 @pytest.mark.parametrize("clause", CLAUSES, ids=lambda clause: clause.name)
@@ -23,7 +23,7 @@ def test_the_extension_conforms(clause: Clause) -> None:
     assert clause.judge(SUBJECT) == []
 ```
 
-The workshop's own kinds and checks run the same clauses through
+The workshop's own kinds and steps run the same clauses through
 [livery.workshop.testing.builtin_subject][], so the kit cannot drift
 from what the gate enforces.
 """

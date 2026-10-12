@@ -1,4 +1,4 @@
-"""The role verbs: a verb per role and a sub-task per check, from the registry.
+"""The phase verbs: a verb per phase and a sub-task per step, from the registry.
 
 Refusals first: a flag no verb offers, a name that is no task address.
 Then the tree the registry generates, the flags each verb offers, the
@@ -17,36 +17,36 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Group
-from livery.workshop import _checks, _quality
-from livery.workshop._checks import (
-    CheckRecord,
-    check_for,
-    generate_verbs,
-    register_check,
-    roles,
-    unregister_check,
-    verb_tree,
-)
+from livery.workshop import _quality, _steps
 from livery.workshop._extensions import SELF
 from livery.workshop._phases import PhaseContext
-from workshop_python_checks import python_checks_fixture  # noqa: F401
+from livery.workshop._steps import (
+    StepRecord,
+    generate_verbs,
+    phases,
+    register_step,
+    step_for,
+    unregister_step,
+    verb_tree,
+)
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
 
 @pytest.fixture
 def registry() -> Iterator[None]:
-    """Restore the check registry a test registers into."""
-    state = _checks.snapshot()
+    """Restore the step registry a test registers into."""
+    state = _steps.snapshot()
     yield
-    _checks.restore(state)
+    _steps.restore(state)
 
 
 @pytest.fixture
 def empty(registry: None) -> None:
-    """An empty check registry, so a generated tree holds the test's checks alone."""
+    """An empty step registry, so a generated tree holds the test's steps alone."""
     del registry
-    _checks.restore(({}, {}))
+    _steps.restore(({}, {}))
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ def _flags(group: Group, key: str) -> set[str]:
     parameters = inspect.signature(task).parameters.values()
     assert any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in parameters)
     extras = typing.get_type_hints(inspect.unwrap(task), include_extras=True)
-    assert extras["paths"] == _checks._Paths  # pyright: ignore[reportPrivateUsage]
+    assert extras["paths"] == _steps._Paths  # pyright: ignore[reportPrivateUsage]
     hints = typing.get_type_hints(inspect.unwrap(task))
 
     flags = {p.name for p in parameters if p.kind is inspect.Parameter.KEYWORD_ONLY}
@@ -92,34 +92,36 @@ def test_a_flag_no_verb_offers_refuses(registry: None) -> None:
     with pytest.raises(
         _FAILURES,
         match=re.escape(
-            "check 'lint.odd' reads verbose, which no verb offers; the flags are point"
+            "step 'lint.odd' reads verbose, which no verb offers; the flags are point"
         ),
     ):
-        register_check(CheckRecord("odd", "lint", _idle, flags=("verbose",)))
+        register_step(StepRecord("odd", "lint", _idle, flags=("verbose",)))
 
 
 def test_a_name_that_is_no_task_address_refuses(registry: None) -> None:
     for record in (
-        CheckRecord("odd", "lint.deep", _idle),
-        CheckRecord("odd.one", "lint", _idle),
-        CheckRecord("", "lint", _idle),
+        StepRecord("odd", "lint.deep", _idle),
+        StepRecord("odd.one", "lint", _idle),
+        StepRecord("", "lint", _idle),
     ):
-        with pytest.raises(_FAILURES, match="a role and a tool are one word each"):
-            register_check(record)
+        with pytest.raises(
+            _FAILURES, match="a phase and a step's name are one word each"
+        ):
+            register_step(record)
     with pytest.raises(
         _FAILURES, match=re.escape("lint.default is the address of the lint verb")
     ):
-        register_check(CheckRecord("default", "lint", _idle))
+        register_step(StepRecord("default", "lint", _idle))
 
 
 def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with pytest.raises(_FAILURES, match="Pass one"):
-        _quality.run_checks(("layering.sibling-references",), fix=True, safe_fix=True)
+        _quality.run_steps(("layering.sibling-references",), fix=True, safe_fix=True)
     monkeypatch.setenv("CI", "true")
     with pytest.raises(_FAILURES, match="a fix inside CI"):
-        _quality.run_checks(("layering.sibling-references",), safe_fix=True)
+        _quality.run_steps(("layering.sibling-references",), safe_fix=True)
 
 
 def test_a_phase_s_own_verb_builds_in_the_debug_configuration(
@@ -140,8 +142,8 @@ def test_a_phase_s_own_verb_builds_in_the_debug_configuration(
     monkeypatch.setattr(_quality, "walk", walk)
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CI", raising=False)
-    _quality.run_checks(("build.compile",))
-    _quality.run_checks(("build.compile",), ("tasks.py",))
+    _quality.run_steps(("build.compile",))
+    _quality.run_steps(("build.compile",), ("tasks.py",))
     debug = {"build": {"isolated": False, "configuration": "debug"}}
     assert seen == [debug, debug]
     assert _quality.GATE_INPUTS["build"]["configuration"] == "instrumented"
@@ -152,7 +154,7 @@ def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
 ) -> None:
     # Checking nothing there would pass: a typo, or a tool's words given
     # as paths. The refusal says where those words go: after --, on a
-    # check's own verb.
+    # step's own verb.
 
     (tmp_path / "workshop.toml").write_text("")
     (tmp_path / "tasks.py").write_text("x = 1\n")
@@ -162,9 +164,9 @@ def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
     with pytest.raises(
         _FAILURES,
         match=r"not a file or directory in the workspace: -k, slow\. Name files or"
-        r" directories; a check's own verb hands its tool the words after --",
+        r" directories; a step's own verb hands its tool the words after --",
     ):
-        _quality.run_checks(("test.ctest",), ("-k", "slow"))
+        _quality.run_steps(("test.ctest",), ("-k", "slow"))
     outside = str(tmp_path.parent)
     with pytest.raises(
         _FAILURES, match=re.escape(f"in the workspace: gone.py, {outside}.")
@@ -174,8 +176,8 @@ def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
     _quality.fix_files(("gone.py",))
 
 
-# The words after --: a check's own verb hands them to its tool; the
-# role's verb, a check that wraps no tool and the gate refuse them.
+# The words after --: a step's own verb hands them to its tool; the
+# phase's verb, a step that wraps no tool and the gate refuse them.
 
 
 def test_the_words_after_the_dashes_split_off_the_paths(
@@ -184,39 +186,39 @@ def test_the_words_after_the_dashes_split_off_the_paths(
     # footman hands the variadic parameter the words after -- as well,
     # last, and names them through passthrough().
     monkeypatch.setattr("livery.footman.passthrough", lambda: ["-k", "a.py"])
-    assert _checks.split_arguments(("a.py", "-k", "a.py")) == (
+    assert _steps.split_arguments(("a.py", "-k", "a.py")) == (
         ("a.py",),
         ("-k", "a.py"),
     )
     monkeypatch.setattr("livery.footman.passthrough", lambda: [])
-    assert _checks.split_arguments(("a.py",)) == (("a.py",), ())
+    assert _steps.split_arguments(("a.py",)) == (("a.py",), ())
 
 
-def test_only_a_checks_own_verb_hands_its_tool_the_words_after_the_dashes(
+def test_only_a_steps_own_verb_hands_its_tool_the_words_after_the_dashes(
     empty: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = []
 
-    def run_checks(
+    def run_steps(
         names: tuple[str, ...], paths: tuple[str, ...], **kwargs: object
     ) -> None:
         arguments = kwargs["arguments"]
         assert isinstance(arguments, tuple)
         calls.append((names, paths, arguments))  # pyright: ignore[reportUnknownArgumentType]
 
-    monkeypatch.setattr(_quality, "run_checks", run_checks)
-    register_check(CheckRecord("acme", "test", _idle, arguments=True))
-    register_check(CheckRecord("plain", "test", _idle))
+    monkeypatch.setattr(_quality, "run_steps", run_steps)
+    register_step(StepRecord("acme", "test", _idle, arguments=True))
+    register_step(StepRecord("plain", "test", _idle))
     root = Group("root")
     generate_verbs(root)
     test = root.groups["test"]
     monkeypatch.setattr("livery.footman.passthrough", lambda: ["-k", "slow"])
-    # The refusals first: the role's verb runs several checks, and a
-    # check that wraps no tool takes none; neither runs anything.
+    # The refusals first: the phase's verb runs several steps, and a
+    # step that wraps no tool takes none; neither runs anything.
     with pytest.raises(
         _FAILURES,
-        match=r"test` runs several checks, and the words after -- are one"
-        r" tool's; give them to the check's own verb: .* test\.acme$",
+        match=r"test` runs several steps, and the words after -- are one"
+        r" tool's; give them to the step's own verb: .* test\.acme$",
     ):
         inspect.unwrap(test.tasks["default"])("-k", "slow")
     with pytest.raises(
@@ -225,7 +227,7 @@ def test_only_a_checks_own_verb_hands_its_tool_the_words_after_the_dashes(
     ):
         inspect.unwrap(test.tasks["plain"])("-k", "slow")
     assert calls == []
-    # The check's own verb runs it over its paths, the words its tool's.
+    # The step's own verb runs it over its paths, the words its tool's.
     inspect.unwrap(test.tasks["acme"])("tasks.py", "-k", "slow")
     assert calls == [(("test.acme",), ("tasks.py",), ("-k", "slow"))]
     assert "the words after -- go to its tool" in (
@@ -233,7 +235,7 @@ def test_only_a_checks_own_verb_hands_its_tool_the_words_after_the_dashes(
     )
 
 
-def test_the_words_after_the_dashes_reach_the_checks_context(
+def test_the_words_after_the_dashes_reach_the_steps_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seen: list[tuple[str, ...]] = []
@@ -243,7 +245,7 @@ def test_the_words_after_the_dashes_reach_the_checks_context(
         _quality, "walk", lambda ctx, **kwargs: seen.append(ctx.arguments)
     )
     monkeypatch.delenv("CI", raising=False)
-    _quality.run_checks(("test.acme",), arguments=("-k", "slow"))
+    _quality.run_steps(("test.acme",), arguments=("-k", "slow"))
     assert seen == [("-k", "slow")]
 
 
@@ -252,39 +254,39 @@ def test_the_gate_takes_no_words_after_the_dashes(
 ) -> None:
     monkeypatch.setattr("livery.footman.passthrough", lambda: ["-x"])
     with pytest.raises(
-        _FAILURES, match=r"check` runs several checks, and the words after --"
+        _FAILURES, match=r"check` runs several steps, and the words after --"
     ):
         _quality.check("-x")
 
 
-# A check answers to its one address, and leaves with its role.
+# A step answers to its one address, and leaves with its phase.
 
 
-def test_a_check_answers_to_its_address_and_leaves_with_its_role(
+def test_a_step_answers_to_its_address_and_leaves_with_its_phase(
     registry: None, fake_phases: None
 ) -> None:
-    register_check(CheckRecord("acme", "style", _idle))
-    record = check_for("style.acme")
-    assert "style" in roles()
+    register_step(StepRecord("acme", "style", _idle))
+    record = step_for("style.acme")
+    assert "style" in phases()
     assert verb_tree()["style"] == {"acme": record}
-    unregister_check("style.acme")
-    assert "style" not in roles()
+    unregister_step("style.acme")
+    assert "style" not in phases()
     with pytest.raises(
-        _FAILURES, match=re.escape("'style.acme' is not a registered check")
+        _FAILURES, match=re.escape("'style.acme' is not a registered step")
     ):
-        check_for("style.acme")
+        step_for("style.acme")
 
 
 # The tree the registry generates.
 
 
 def _probes() -> None:
-    register_check(CheckRecord("alpha", "probe", _idle, fix=_idle))
-    register_check(CheckRecord("beta", "probe", _idle, flags=("point",)))
-    register_check(CheckRecord("gamma", "quiet", _idle))
+    register_step(StepRecord("alpha", "probe", _idle, fix=_idle))
+    register_step(StepRecord("beta", "probe", _idle, flags=("point",)))
+    register_step(StepRecord("gamma", "quiet", _idle))
 
 
-def test_each_role_is_a_verb_and_each_check_a_sub_task_with_its_own_flags(
+def test_each_phase_is_a_verb_and_each_step_a_sub_task_with_its_own_flags(
     empty: None, fake_phases: None
 ) -> None:
     _probes()
@@ -294,8 +296,8 @@ def test_each_role_is_a_verb_and_each_check_a_sub_task_with_its_own_flags(
     probe, quiet = root.groups["probe"], root.groups["quiet"]
     assert set(probe.tasks) == {"default", "alpha", "beta"}
     assert set(quiet.tasks) == {"default", "gamma"}
-    # The role's verb offers what any of its checks reads; each check's
-    # sub-task offers what that check reads and nothing more.
+    # The phase's verb offers what any of its steps reads; each step's
+    # sub-task offers what that step reads and nothing more.
     assert _flags(probe, "default") == {"fix", "safe_fix", "point"}
     assert _flags(probe, "alpha") == {"fix", "safe_fix"}
     assert _flags(probe, "beta") == {"point"}
@@ -303,17 +305,17 @@ def test_each_role_is_a_verb_and_each_check_a_sub_task_with_its_own_flags(
     assert _flags(quiet, "gamma") == set()
 
 
-def test_a_verb_runs_its_checks_through_the_walk(
+def test_a_verb_runs_its_steps_through_the_walk(
     empty: None, fake_phases: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[tuple[str, ...], tuple[str, ...], dict[str, object]]] = []
 
-    def run_checks(
+    def run_steps(
         names: tuple[str, ...], paths: tuple[str, ...] = (), **flags: object
     ) -> None:
         calls.append((names, paths, flags))
 
-    monkeypatch.setattr(_quality, "run_checks", run_checks)
+    monkeypatch.setattr(_quality, "run_steps", run_steps)
     _probes()
     root = Group("root")
     generate_verbs(root)
@@ -338,9 +340,9 @@ def test_a_verb_runs_its_checks_through_the_walk(
         ),
     ]
 
-    # The role's verb reads its checks when it runs, so a check
+    # The phase's verb reads its steps when it runs, so a step
     # registered after the generation runs under it too.
-    register_check(CheckRecord("delta", "probe", _idle))
+    register_step(StepRecord("delta", "probe", _idle))
     calls.clear()
     body("default")()
     assert calls[0][0] == ("probe.alpha", "probe.beta", "probe.delta")
@@ -350,27 +352,27 @@ def test_an_address_an_existing_verb_holds_is_served_by_it(
     empty: None, fake_phases: None
 ) -> None:
     _probes()
-    register_check(CheckRecord("check", "held", _idle))
-    register_check(CheckRecord("new", "held", _idle))
-    register_check(CheckRecord("check", "owned", _idle))
+    register_step(StepRecord("check", "held", _idle))
+    register_step(StepRecord("new", "held", _idle))
+    register_step(StepRecord("check", "owned", _idle))
     root = Group("root")
 
     def own() -> None:
-        """A verb of the root's own at a check's address."""
+        """A verb of the root's own at a step's address."""
 
     def owned() -> None:
-        """A verb of the root's own at a role's address."""
+        """A verb of the root's own at a phase's address."""
 
     held = root.group("held", help="A group of another verb's")
     held.task(name="check")(own)
     root.task(name="owned")(owned)
     generate_verbs(root)
-    # The group keeps its own task at the check's address and gets no
-    # default, since the role's verb is not the generator's to make
-    # there; a check at a free address in it still gets its sub-task.
+    # The group keeps its own task at the step's address and gets no
+    # default, since the phase's verb is not the generator's to make
+    # there; a step at a free address in it still gets its sub-task.
     assert set(held.tasks) == {"check", "new"}
     assert inspect.unwrap(held.tasks["check"]) is own
-    # A task at the role's address serves the role: no group is made.
+    # A task at the phase's address serves the phase: no group is made.
     assert "owned" not in root.groups
     assert inspect.unwrap(root.tasks["owned"]) is owned
 
@@ -386,27 +388,27 @@ def test_a_second_generation_follows_the_registry(
     # Nothing changed: every verb is kept as it was.
     generate_verbs(root)
     assert probe.tasks["alpha"] is alpha
-    # A check that fixes joins a role whose verb offered no fix: the
-    # role's verb is remade with the flag; a withdrawn check's sub-task
-    # goes, and a role left with no check goes with its group.
-    register_check(CheckRecord("fixer", "quiet", _idle, fix=_idle))
-    unregister_check("probe.beta")
+    # A step that fixes joins a phase whose verb offered no fix: the
+    # phase's verb is remade with the flag; a withdrawn step's sub-task
+    # goes, and a phase left with no step goes with its group.
+    register_step(StepRecord("fixer", "quiet", _idle, fix=_idle))
+    unregister_step("probe.beta")
     generate_verbs(root)
     assert _flags(quiet, "default") == {"fix", "safe_fix"}
     assert _flags(quiet, "fixer") == {"fix", "safe_fix"}
     assert set(probe.tasks) == {"default", "alpha"}
     assert _flags(probe, "default") == {"fix", "safe_fix"}
-    unregister_check("probe.alpha")
+    unregister_step("probe.alpha")
     generate_verbs(root)
     assert "probe" not in root.groups
 
 
-def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> None:
+def test_the_builtin_steps_generate_the_phase_verbs(python_steps: object) -> None:
     # The base's own: an extension mounted earlier in this process (the
-    # docs extension's lint checks) and the fakes add theirs beside them.
+    # docs extension's lint steps) and the fakes add theirs beside them.
     tree = {
-        role: {tool for tool, record in tools.items() if record.extension == SELF}
-        for role, tools in verb_tree().items()
+        phase: {step for step, record in steps.items() if record.extension == SELF}
+        for phase, steps in verb_tree().items()
     }
     assert tree == {
         "build": {"compile", "configure"},
@@ -427,7 +429,7 @@ def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> No
     root = Group("root")
     generate_verbs(root)
     test = root.groups["test"]
-    # --point where a check reads it, and nowhere else.
+    # --point where a step reads it, and nowhere else.
     assert _flags(test, "default") == {"point"}
     assert _flags(test, "fake") == {"point"}
     assert _flags(test, "ctest") == set()
@@ -437,18 +439,18 @@ def test_the_builtin_checks_generate_the_role_verbs(python_checks: object) -> No
     }
 
 
-def test_a_role_with_no_listed_check_has_no_verb(
+def test_a_phase_with_no_listed_step_has_no_verb(
     registry: None, fake_phases: None
 ) -> None:
-    # The fallback first: no check of the role, no verb for it.
+    # The fallback first: no step of the phase, no verb for it.
     root = Group("root")
     generate_verbs(root)
     assert "divination" not in root.groups
-    register_check(CheckRecord("crystal", "divination", _idle))
+    register_step(StepRecord("crystal", "divination", _idle))
     generate_verbs(root)
     assert "divination" in root.groups
-    # Withdrawn, the role's verb goes with its last check.
-    unregister_check("divination.crystal")
+    # Withdrawn, the phase's verb goes with its last step.
+    unregister_step("divination.crystal")
     generate_verbs(root)
     assert "divination" not in root.groups
 
@@ -456,11 +458,11 @@ def test_a_role_with_no_listed_check_has_no_verb(
 def test_a_phase_declared_without_a_verb_gets_none(empty: None) -> None:
     from livery.workshop._phases import base_phases
 
-    # The base's phases: a check per phase, and a verb for each phase
+    # The base's phases: a step per phase, and a verb for each phase
     # that declares one, the gated phases; the train's and the engines'
     # own phases get none.
     for name in base_phases():
-        register_check(CheckRecord("acme", name, _idle))
+        register_step(StepRecord("acme", name, _idle))
     with_verb = {name for name, spec in base_phases().items() if spec.verb}
     assert with_verb == {
         "build",

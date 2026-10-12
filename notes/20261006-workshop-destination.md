@@ -1464,7 +1464,6 @@ the stack, which this design neither needs nor rules out).
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
-| `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
 | `[generators]` | the docs phase's steps (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
 
@@ -2699,6 +2698,20 @@ the stack, which this design neither needs nor rules out).
   `arguments` stays the context's words after `--` for every step. The
   engine's inputs are keyed by phase, since one walk runs several
   phases' steps. An isolated-only step registers no gate check.
+
+- 2026-10-12, #1532, #1377 part 11: the names. `_checks.py` is
+  `_steps.py`, `CheckRecord` is `StepRecord` with `phase` and `step`
+  fields, and the registry's functions say step: `register_step`,
+  `step_for`, `run_step`, `phases()`, the public `step_option`.
+  `PhaseContext.step` names the running step, `Package.step_options`
+  holds a package's step tables, and the extensions' code modules are
+  `_steps.py`. Role is gone from identifiers, messages, docs and tests;
+  `fm check` keeps its name, and the rendered fragments keep their file
+  names, which other repositories import by path. The refusals of the
+  old spelling still name `[checks]` and `roles`, since that is what
+  they refuse. Four public names changed, so the workshop and the
+  extensions that read them release as one set. With this part #1377
+  is complete.
 
 ## Open
 

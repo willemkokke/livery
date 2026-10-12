@@ -30,7 +30,7 @@ the whole workspace in every scope, and asks
 touched, with the context its run was handed; its ``widen``
 reference receives the run's [livery.workshop.Changes][]. A step
 declares the options a package may set on it under its ``options``
-and reads a package's value with [livery.workshop.check_option][]; a
+and reads a package's value with [livery.workshop.step_option][]; a
 step declared ``enabled = false`` registers once the root contract
 turns it on at the step's address. A package's
 public modules are its kind's answer,
@@ -88,16 +88,6 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.workshop import testing as testing
-    from livery.workshop._checks import NONE as NONE
-    from livery.workshop._checks import PACKAGE as PACKAGE
-    from livery.workshop._checks import PACKAGES as PACKAGES
-    from livery.workshop._checks import PATHS as PATHS
-    from livery.workshop._checks import WHOLE as WHOLE
-    from livery.workshop._checks import check_option as check_option
-    from livery.workshop._checks import scoped_files as scoped_files
-    from livery.workshop._checks import scoped_packages as scoped_packages
-    from livery.workshop._checks import scoped_paths as scoped_paths
-    from livery.workshop._checks import selected_files as selected_files
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
     from livery.workshop._contract import read_contract as read_contract
@@ -141,6 +131,16 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
+    from livery.workshop._steps import NONE as NONE
+    from livery.workshop._steps import PACKAGE as PACKAGE
+    from livery.workshop._steps import PACKAGES as PACKAGES
+    from livery.workshop._steps import PATHS as PATHS
+    from livery.workshop._steps import WHOLE as WHOLE
+    from livery.workshop._steps import scoped_files as scoped_files
+    from livery.workshop._steps import scoped_packages as scoped_packages
+    from livery.workshop._steps import scoped_paths as scoped_paths
+    from livery.workshop._steps import selected_files as selected_files
+    from livery.workshop._steps import step_option as step_option
     from livery.workshop._tokens import forge_token as forge_token
 
 __version__ = "0.9.0"
@@ -172,7 +172,6 @@ __all__ = [
     "RunContext",
     "__version__",
     "answer",
-    "check_option",
     "ci_changes",
     "ci_run",
     "compile_commands",
@@ -196,6 +195,7 @@ __all__ = [
     "scoped_paths",
     "selected_files",
     "shipped_content",
+    "step_option",
     "testing",
     "this_forge",
     "this_repository",
@@ -220,18 +220,17 @@ _EXPORTS: dict[str, str] = {
     "Changes": "livery.workshop._influence",
     "Edge": "livery.workshop._packages",
     "HUMAN": "livery.workshop._prose",
-    "NONE": "livery.workshop._checks",
-    "PACKAGE": "livery.workshop._checks",
-    "PACKAGES": "livery.workshop._checks",
-    "PATHS": "livery.workshop._checks",
+    "NONE": "livery.workshop._steps",
+    "PACKAGE": "livery.workshop._steps",
+    "PACKAGES": "livery.workshop._steps",
+    "PATHS": "livery.workshop._steps",
     "Package": "livery.workshop._packages",
     "PhaseContext": "livery.workshop._phases",
     "Prose": "livery.workshop._prose",
     "RegistryTarget": "livery.workshop._registries",
     "ReleaseNotes": "livery.workshop._release_notes",
     "RunContext": "livery.workshop._ci_context",
-    "WHOLE": "livery.workshop._checks",
-    "check_option": "livery.workshop._checks",
+    "WHOLE": "livery.workshop._steps",
     "ci_changes": "livery.workshop._quality",
     "ci_run": "livery.workshop._ci_context",
     "compile_commands": "livery.workshop._lifecycle",
@@ -253,10 +252,11 @@ _EXPORTS: dict[str, str] = {
     "release_notes": "livery.workshop._release_notes",
     "run_batched": "livery.workshop._invoke",
     "run_suites": "livery.workshop._kinds",
-    "scoped_files": "livery.workshop._checks",
-    "scoped_packages": "livery.workshop._checks",
-    "scoped_paths": "livery.workshop._checks",
-    "selected_files": "livery.workshop._checks",
+    "scoped_files": "livery.workshop._steps",
+    "scoped_packages": "livery.workshop._steps",
+    "scoped_paths": "livery.workshop._steps",
+    "selected_files": "livery.workshop._steps",
+    "step_option": "livery.workshop._steps",
     "verify_workspace": "livery.workshop._packages",
     "workspace_root": "livery.workshop._extensions",
     "workspace_suite": "livery.workshop._coverage_store",

@@ -1,4 +1,4 @@
-"""basedpyright's type completeness, the check its words cannot say.
+"""basedpyright's type completeness, the step its words cannot say.
 
 The type checker, ``typecheck.basedpyright``, is basedpyright's words in
 the extension's ``extension.toml``. ``typecomplete.basedpyright`` runs

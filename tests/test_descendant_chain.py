@@ -653,10 +653,10 @@ def _chain(
         _entered(child_fm, child, child_env),
     )
     child_gate = _run([str(child_fm), "check"], child, child_env)
-    # The kind's checks, one line each: the registry walks a native
-    # package's records in order, and a role the kind lacks skips by
+    # The kind's steps, one line each: the registry walks a native
+    # package's records in order, and a phase the kind lacks skips by
     # name.
-    for check, held in (
+    for step, held in (
         ("format.clang-format", "cpp"),
         ("build.configure", "cmake"),
         ("build.compile", "cmake"),
@@ -664,7 +664,7 @@ def _chain(
         ("lint.clang-tidy", "cpp"),
     ):
         assert (
-            f"  {check}: packages/geometry runs (a {held} package)" in child_gate.stdout
+            f"  {step}: packages/geometry runs (a {held} package)" in child_gate.stdout
         )
     assert (
         "typecheck.basedpyright: packages/geometry skips (not a python package)"

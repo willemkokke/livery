@@ -60,10 +60,10 @@ def graph_changed(changes: Changes) -> bool:
     The step's inputs widen on them: the distributions' roots come
     from the manifests and the allowance from the root contract, so a
     change there judges every source, as the base's layering steps do
-    ([livery.workshop._checks.graph_files][]).
+    ([livery.workshop._steps.graph_files][]).
     """
     from livery.workshop._categories import matches
-    from livery.workshop._checks import NOT_INPUTS, graph_files
+    from livery.workshop._steps import NOT_INPUTS, graph_files
 
     patterns = graph_files(changes.root)
     return any(

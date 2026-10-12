@@ -1,4 +1,4 @@
-"""The docs extension's checks: the refusals first, then this workspace's verdict."""
+"""The docs extension's steps: the refusals first, then this workspace's verdict."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.docs._checks import (
+from livery.extensions.docs._steps import (
     assignment_docstrings,
     doclinks_run,
     docstrings_run,
@@ -15,17 +15,17 @@ from livery.extensions.docs._checks import (
     undocumented_exports,
 )
 from livery.footman import Failed
-from livery.workshop import _checks as registry
-from livery.workshop._checks import checks_by_name
+from livery.workshop import _steps as registry
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
+from livery.workshop._steps import steps_by_name
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture(autouse=True)
 def registered() -> Iterator[None]:
-    """The docs checks registered, as the mount registers the listed extension's."""
+    """The docs steps registered, as the mount registers the listed extension's."""
     from livery.workshop._extensions import declaration, register_declared
 
     state = registry.snapshot()
@@ -56,9 +56,9 @@ def test_a_broken_link_and_a_dead_anchor_are_named(tmp_path: Path) -> None:
     problems = link_problems(tmp_path)
     assert "docs/index.md: missing.md does not exist" in problems
     assert "docs/index.md: other.md#nowhere anchors nothing" in problems
-    # The context names the check, as a run's does: the check asks it
+    # The context names the step, as a run's does: the step asks it
     # which files it judges.
-    ctx = PhaseContext(root=tmp_path, packages=(), check="lint.doclinks")
+    ctx = PhaseContext(root=tmp_path, packages=(), step="lint.doclinks")
     with pytest.raises(Failed, match="links that resolve nothing"):
         doclinks_run(ctx)
     (docs / "index.md").write_text("# Home\n\n[good](other.md#a-real-heading)\n")
@@ -148,8 +148,8 @@ def test_a_member_without_a_package_is_passed_over(tmp_path: Path) -> None:
     assert undocumented_exports(tmp_path, [member]) == []
 
 
-def test_the_checks_are_declared_under_the_lint_role() -> None:
-    registered = checks_by_name()
+def test_the_steps_are_declared_under_the_lint_phase() -> None:
+    registered = steps_by_name()
     for name in ("lint.docrefs", "lint.doclinks", "lint.docstrings"):
         assert registered[name].extension == "docs"
 

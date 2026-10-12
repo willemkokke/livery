@@ -65,11 +65,11 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
-        checks: The options the package sets on its steps, by the
-            table that sets them: ``phases.<phase>`` (every step of the
-            phase) and ``phases.<phase>.<step>`` (one step), each to its
-            ``(option, value)`` pairs; the check registry validates them
-            against what the steps they reach declare.
+        step_options: The options the package sets on its steps, by
+            the table that sets them: ``phases.<phase>`` (every step of
+            the phase) and ``phases.<phase>.<step>`` (one step), each to
+            its ``(option, value)`` pairs; the step registry validates
+            them against what the steps they reach declare.
         categories: The package's own reassignments of its paths
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
@@ -91,7 +91,7 @@ class Package:
     depends: tuple[Edge, ...]
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
+    step_options: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
     extensions: tuple[str, ...] = ()
 
     @property
@@ -344,24 +344,24 @@ def removed_option_tables(contract: dict[str, Any]) -> list[str]:
             "[checks] is the check tables' spelling; a step's options are"
             " [phases.<phase>.<step>]"
         )
-    tools: dict[str, Any] = checks if isinstance(checks, dict) else {}
-    for tool, table in tools.items():
-        # A table beneath the tool's is one check's; a scalar or an
-        # empty table is the tool's own, for every check of the tool.
+    steps: dict[str, Any] = checks if isinstance(checks, dict) else {}
+    for step, table in steps.items():
+        # [checks.<step>.<phase>] is one step's table; a scalar or an
+        # empty table under [checks.<step>] is the step's in every phase.
         nested = (
-            [str(role) for role, value in table.items() if isinstance(value, dict)]
+            [str(phase) for phase, value in table.items() if isinstance(value, dict)]
             if isinstance(table, dict)
             else []
         )
         problems += [
-            f"[checks.{tool}.{role}] is the check tables' spelling; the step's"
-            f" options are [phases.{role}.{tool}]"
-            for role in nested
+            f"[checks.{step}.{phase}] is the check tables' spelling; the step's"
+            f" options are [phases.{phase}.{step}]"
+            for phase in nested
         ]
         if not isinstance(table, dict) or len(nested) < max(len(table), 1):
             problems.append(
-                f"[checks.{tool}] is the check tables' spelling; a step's options"
-                f" are [phases.<phase>.{tool}], and [phases.<phase>] reaches"
+                f"[checks.{step}] is the check tables' spelling; a step's options"
+                f" are [phases.<phase>.{step}], and [phases.<phase>] reaches"
                 " every step of the phase"
             )
     phases = contract.get("roles")
@@ -372,9 +372,9 @@ def removed_option_tables(contract: dict[str, Any]) -> list[str]:
         )
     named: dict[str, Any] = phases if isinstance(phases, dict) else {}
     problems += [
-        f"[roles.{role}] is the check tables' spelling; every step of the phase"
-        f" takes [phases.{role}]"
-        for role in named
+        f"[roles.{phase}] is the check tables' spelling; every step of the phase"
+        f" takes [phases.{phase}]"
+        for phase in named
     ]
     return problems
 
@@ -443,7 +443,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 for step, nested in table.items()
                 if isinstance(nested, dict)
             )
-        options_by_check = tuple(options)
         publish = bool(release.get("publish", True))
         packages.append(
             Package(
@@ -454,7 +453,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 depends=depends,
                 publish=publish,
                 categories=tuple(reassigned),
-                checks=options_by_check,
+                step_options=tuple(options),
                 extensions=tuple(str(name) for name in contract.get("extensions", ())),
             )
         )
@@ -501,7 +500,7 @@ def verify_graph(root: Path) -> tuple[Package, ...]:
 
     Each edge agrees with its native manifest, the graph is acyclic,
     the extensions a contract lists close over what they require, each
-    contract's check options name what exists, and the root is no
+    contract's step options name what exists, and the root is no
     package. What it reads is the contracts and the manifests, so a run
     whose change touched none of them skips it. Returns the discovered
     packages; raises ValueError listing every violation otherwise.
@@ -615,7 +614,7 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
     from livery.workshop._extensions import closure_problems
 
     problems.extend(closure_problems(root))
-    from livery.workshop._checks import option_problems
+    from livery.workshop._steps import option_problems
 
     problems.extend(option_problems(packages))
     if (root / "src").is_dir():
@@ -764,7 +763,7 @@ def declare_edge(
 
     The ``[[depends]]`` edge joins the package's contract, and for a
     build or runtime edge the package's kind writes the native
-    requirement at the same floor, so the layering check finds the
+    requirement at the same floor, so ``layering.graph`` finds the
     two in agreement. The files are relative to the package.
     """
     from livery.workshop import _lifecycle
@@ -1127,7 +1126,7 @@ def _base_imports_no_extension(
 
 
 #: The base's rules over the one parse, each the layering step of its
-#: name, which [livery.workshop._checks][] registers beside the base's
+#: name, which [livery.workshop._steps][] registers beside the base's
 #: other steps: the runner's one-answer rule, the base importing no
 #: extension, the forge's stdlib rule, and the sibling references, whose
 #: step's fix writes the edges ([livery.workshop._packages.write_edges][]).

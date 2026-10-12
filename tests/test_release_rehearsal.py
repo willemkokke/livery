@@ -44,7 +44,7 @@ def test_the_release_path_rehearses_on_the_true_graph(tmp_path: Path) -> None:
     _git(clone, "config", "user.name", "Rehearsal")
     # The probe commit: one line per member, so derive_plans always
     # finds unreleased work whatever main's real state is. A text file at
-    # the member's root, where no check reads it: a page under docs/
+    # the member's root, where no step reads it: a page under docs/
     # would be an authored page the nav does not carry.
     for member in ("forge", "workshop"):
         probe = clone / "packages" / member / "rehearsal-probe.txt"
