@@ -1753,3 +1753,27 @@ def test_a_red_run_prints_its_failed_jobs_log_tails_and_nothing_of_the_green() -
         "    99",
     ]
     assert "check" not in text
+
+
+def test_a_tree_whose_file_goes_under_the_walk_is_still_removed_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # git's background maintenance drops .git/objects/maintenance.lock
+    # while a clone is torn down: the chmod meets a file that is gone and
+    # the removal goes on.
+    root = tmp_path / "clone"
+    (root / ".git" / "objects").mkdir(parents=True)
+    lock = root / ".git" / "objects" / "maintenance.lock"
+    lock.write_text("")
+    (root / "kept").write_text("k")
+    real = Path.chmod
+
+    def vanishing(self: Path, mode: int, *, follow_symlinks: bool = True) -> None:
+        if self == lock:
+            lock.unlink()
+            raise FileNotFoundError(str(lock))
+        real(self, mode, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "chmod", vanishing)
+    _e2e._rmtree(root)
+    assert not root.exists()

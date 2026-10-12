@@ -14,6 +14,8 @@ own first.
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -189,3 +191,104 @@ def ssh(**facts: Any) -> list[Finding]:
             Finding(f"ssh: one connection per host, sockets in {socket_dir}")
         )
     return findings
+
+
+#: The size uv's cache may reach before the doctor reports it, when the
+#: contract sets no `[workspace] uv-cache-limit`.
+UV_CACHE_LIMIT = "10G"
+
+_UNITS = {"K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
+
+
+def parse_size(text: str) -> int:
+    """The bytes a size such as ``10G`` or ``500M`` names.
+
+    Raises:
+        ValueError: for any other shape, naming the accepted one.
+    """
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT])B?\s*", text, flags=re.I)
+    if match is None:
+        raise ValueError(
+            f"{text!r} is not a size: a number with K, M, G or T, like 10G"
+        )
+    return int(float(match.group(1)) * _UNITS[match.group(2).upper()])
+
+
+def show_size(size: int) -> str:
+    """A size in the largest unit that keeps one decimal, ``47.2G``."""
+    for unit in ("T", "G", "M", "K"):
+        if size >= _UNITS[unit]:
+            return f"{size / _UNITS[unit]:.1f}{unit}"
+    return f"{size}B"
+
+
+def _tree_size(root: Path) -> int:
+    total = 0
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+        except OSError:
+            continue
+    return total
+
+
+def uv_cache_dir() -> Path:
+    """Where uv keeps its cache on this machine, as the locked uv answers."""
+    from livery.toolroom import tools
+
+    result = tools.uv.opts(nofail=True, recorded=False)("cache", "dir")
+    if result.code != 0:
+        raise RuntimeError(
+            f"uv cache dir exited {result.code}: {result.stderr.strip()}"
+        )
+    return Path(result.stdout.strip())
+
+
+def prune_uv_cache() -> None:
+    """Drop the cache entries nothing references, through the locked uv."""
+    from livery.toolroom import tools
+
+    tools.uv.opts(recorded=False)("cache", "prune")
+
+
+def uv_cache(**facts: Any) -> list[Finding]:
+    """The uv cache doctor: its size against the limit the workspace sets."""
+    root = workspace_root()
+    if root is None:
+        return [Finding("uv cache: no workspace here, not checked")]
+    workspace = load_contract(root / "workshop.toml").get("workspace") or {}
+    declared = str(workspace.get("uv-cache-limit", UV_CACHE_LIMIT))
+    try:
+        limit = parse_size(declared)
+    except ValueError as error:
+        return [
+            Finding(
+                "uv cache",
+                f"[workspace] uv-cache-limit: {error}",
+                "set it to a size such as 10G in workshop.toml",
+            )
+        ]
+    try:
+        cache = uv_cache_dir()
+    except RuntimeError as error:
+        return [Finding("uv cache", str(error), "fm sync installs the locked uv")]
+    size = _tree_size(cache) if cache.is_dir() else 0
+    if size <= limit:
+        return [Finding(f"uv cache: {show_size(size)}, under the {declared} limit")]
+    return [
+        Finding(
+            "uv cache",
+            f"{show_size(size)}, over the {declared} limit",
+            "fm doctor --fix runs `uv cache prune`; `uv cache clean` empties it;"
+            " raise [workspace] uv-cache-limit in workshop.toml if this machine"
+            " needs a larger one",
+            prune_uv_cache,
+        )
+    ]
