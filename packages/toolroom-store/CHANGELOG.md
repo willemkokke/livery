@@ -9,6 +9,16 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.4.0] - 2026-10-12
+
+### Added
+
+- The tool store's view walk leaves the sync: Store.probe keeps the ref and record checks, audit and audit_views name a damaged view, mend_view views its tree again, and the store's doctor reports and mends under fm doctor --fix by @willemkokke
+
+### Fixed
+
+- A catalogue read roots each tool's index tree under tools/index/<name>, so the store's sweep keeps the records, versions and surfaces a job's entry re-fetched; the sweep keeps the store whole on Gitea's runner, which saves no archive by @willemkokke
+
 ## [0.3.0] - 2026-10-08
 
 ### Changed
