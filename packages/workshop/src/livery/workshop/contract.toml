@@ -275,6 +275,10 @@ doc = "the extension's name"
 types = ["strs"]
 doc = "the hosts the workspace supports and locks tools for: platforms or host keys, ! before one removing it; every host when absent"
 
+[contract.root.workspace.uv-cache-limit]
+types = ["str"]
+doc = "the size uv's cache may reach on a machine before `fm doctor` reports it and `--fix` prunes it: a number with K, M, G or T; 10G when unset"
+
 [contract.root.workspace.lfs]
 types = ["bool"]
 doc = "whether Git LFS is on: its tool, its hooks, the CI checkout and the extensions' LFS attributes; false when absent"

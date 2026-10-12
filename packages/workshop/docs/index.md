@@ -713,6 +713,17 @@ refuses, naming the host and the supported set.
 hosts = ["macos", "linux-x64", "windows-x64"]
 ```
 
+uv's cache is one per machine and grows with every environment synced,
+a loop's births included: `fm doctor` measures it against
+`[workspace] uv-cache-limit`, 10G when unset, and `fm doctor --fix` runs
+`uv cache prune` when it is over. A machine that needs a larger cache
+raises the limit in `workshop.toml`.
+
+```toml
+[workspace]
+uv-cache-limit = "20G"
+```
+
 `fm toolroom.lock` resolves every site's requirements against the
 catalogue and writes `toolroom.lock` at the root: one version per tool for
 the whole repository, the newest that satisfies every floor and
