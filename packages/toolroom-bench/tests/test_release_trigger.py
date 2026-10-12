@@ -415,17 +415,68 @@ def _submitting(argvs: list[list[str]]) -> Callable[[list[str]], int]:
     return submit
 
 
-def test_a_refresh_origin_already_holds_is_already_submitted(tmp_path, monkeypatch):
-    """A second refresh on one day, from a runner or a desk, meets the
-    day's branch on origin. When every file it wrote reads the same
-    there, it commits nothing, submits nothing and says so; the commits
-    main gained since the branch was cut are not a change of its own.
+def _on_its_own_tree(runner: Path, main: str) -> None:
+    """The checkout stayed on its own history: the refresh's commit on main's tip."""
+    assert _run_git(runner, "branch", "--show-current") == _DAY
+    assert _run_git(runner, "rev-parse", "HEAD~1") == main
+    # Main's later commit, which origin's older branch lacks, is still
+    # in the working tree the run goes on reading.
+    assert (runner / "docs.md").read_text(encoding="utf-8") == "main moves on\n"
+    assert _run_git(runner, "status", "--porcelain") == ""
+
+
+def test_a_refresh_that_differs_from_origin_s_branch_stops_for_a_person(
+    tmp_path, monkeypatch
+):
+    """The day's branch on origin holds an earlier refresh that wrote a
+    file differently: the refresh submits nothing, names the files, and
+    says what a person does. Building on that branch would move the
+    checkout onto an older tree under the run that reads it.
     """
     from datetime import date
 
-    runner, tip = _origin_holding(
-        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7\n"}
+    from livery.footman import Failed
+
+    runner, _tip = _origin_holding(
+        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7 read on macOS\n"}
     )
+    main = _run_git(runner, "rev-parse", "HEAD")
+    _write(runner, {"records/uv.jsonl": "uv 0.12.7 read on Linux\n"})
+    argvs: list[list[str]] = []
+    with pytest.raises(Failed) as raised:
+        _tasks.submit_refresh(
+            _refreshed({"uv": ["0.12.7"]}, additions_only=True),
+            submit=_submitting(argvs),
+            on=date(2026, 10, 12),
+            dry_run=False,
+        )
+    assert str(raised.value) == (
+        f"{_DAY} on origin holds an earlier refresh, and this one wrote"
+        " records/uv.jsonl differently. Merge or close that pull request, then"
+        " run the refresh again; this refresh's commit stands on the local"
+        f" branch {_DAY}."
+    )
+    assert argvs == []
+    _on_its_own_tree(runner, main)
+    uv = (runner / "records" / "uv.jsonl").read_text(encoding="utf-8")
+    assert uv == "uv 0.12.7 read on Linux\n"
+
+
+def test_a_refresh_origin_already_holds_is_already_submitted(tmp_path, monkeypatch):
+    """A second refresh on one day, from a runner or a desk, meets the
+    day's branch on origin. When every file it wrote reads the same
+    there, it submits nothing and says so, whatever else the branch
+    holds; the commits main gained since the branch was cut are not a
+    change of its own, and the checkout stays on its own tree.
+    """
+    from datetime import date
+
+    earlier = {
+        "records/uv.jsonl": "uv 0.12.7\n",
+        "records/ruff.jsonl": "ruff 0.17.0 read on macOS\n",
+    }
+    runner, _tip = _origin_holding(tmp_path, monkeypatch, earlier)
+    main = _run_git(runner, "rev-parse", "HEAD")
     _write(runner, {"records/uv.jsonl": "uv 0.12.7\n"})
     argvs: list[list[str]] = []
     lines = _tasks.submit_refresh(
@@ -436,85 +487,10 @@ def test_a_refresh_origin_already_holds_is_already_submitted(tmp_path, monkeypat
     )
     assert lines == [
         f"  the day's refresh is already submitted: {_DAY} on origin holds"
-        " every change this one made, so nothing is committed"
+        " every file this one wrote, so nothing is submitted"
     ]
     assert argvs == []
-    assert _run_git(runner, "branch", "--show-current") == _DAY
-    assert _run_git(runner, "rev-parse", "HEAD") == tip
-    assert _run_git(runner, "status", "--porcelain") == ""
-
-
-def test_a_refresh_that_differs_builds_on_origin_s_branch(tmp_path, monkeypatch):
-    """The day's branch on origin is the base: the refresh commits after
-    it, so the push is a fast-forward and the open pull request is
-    reused. Each file this refresh wrote carries its content, and main's
-    later commits stay out of the branch. When its files cover every
-    file the branch changed, its own changes decide the arming.
-    """
-    from datetime import date
-
-    runner, tip = _origin_holding(
-        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7 read on macOS\n"}
-    )
-    _write(runner, {"records/uv.jsonl": "uv 0.12.7 read on Linux\n"})
-    argvs: list[list[str]] = []
-    lines = _tasks.submit_refresh(
-        _refreshed({"uv": ["0.12.7"]}, additions_only=True),
-        submit=_submitting(argvs),
-        on=date(2026, 10, 12),
-        dry_run=False,
-    )
-    assert lines == [
-        f"  refreshed uv on {_DAY}, after the commits origin already holds",
-        "  submitted armed: additions only, every ingest check passed",
-    ]
-    assert argvs[0][1:] == [
-        "submit",
-        "--title=chore(toolroom): tool refresh 2026-10-12",
-        "--armed",
-    ]
-    assert _run_git(runner, "branch", "--show-current") == _DAY
-    assert _run_git(runner, "rev-parse", "HEAD~1") == tip
-    uv = (runner / "records" / "uv.jsonl").read_text(encoding="utf-8")
-    assert uv == "uv 0.12.7 read on Linux\n"
-    assert not (runner / "docs.md").exists()
-    assert _run_git(runner, "status", "--porcelain") == ""
-
-
-def test_a_branch_holding_changes_this_refresh_did_not_make_waits_for_a_person(
-    tmp_path, monkeypatch
-):
-    """A file only the earlier refresh wrote keeps its content, and this
-    refresh's own verdict says nothing about it: the pull request goes
-    unarmed, whatever this refresh's changes alone would decide.
-    """
-    from datetime import date
-
-    earlier = {
-        "records/uv.jsonl": "uv 0.12.7 read on macOS\n",
-        "records/ruff.jsonl": "ruff 0.17.0 read on macOS\n",
-    }
-    runner, tip = _origin_holding(tmp_path, monkeypatch, earlier)
-    _write(runner, {"records/uv.jsonl": "uv 0.12.7 read on Linux\n"})
-    argvs: list[list[str]] = []
-    lines = _tasks.submit_refresh(
-        _refreshed({"uv": ["0.12.7"]}, additions_only=True),
-        submit=_submitting(argvs),
-        on=date(2026, 10, 12),
-        dry_run=False,
-    )
-    assert "--armed" not in argvs[0]
-    assert lines[1] == (
-        "  submitted unarmed: origin's branch holds changes this refresh did"
-        " not make, a person decides"
-    )
-    assert _run_git(runner, "rev-parse", "HEAD~1") == tip
-    records = runner / "records"
-    assert (records / "ruff.jsonl").read_text(encoding="utf-8") == earlier[
-        "records/ruff.jsonl"
-    ]
-    uv = (records / "uv.jsonl").read_text(encoding="utf-8")
-    assert uv == "uv 0.12.7 read on Linux\n"
+    _on_its_own_tree(runner, main)
 
 
 def test_a_day_origin_has_no_branch_for_starts_one_from_the_checkout(

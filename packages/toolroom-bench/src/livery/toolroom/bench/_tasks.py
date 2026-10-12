@@ -1904,21 +1904,21 @@ def submit_refresh(
 
     The branch is `chore/tools-refresh-<date>`. When origin already
     holds the day's branch, from an earlier refresh on another machine
-    or in another job, the refresh builds on it: the branch starts from
-    origin's tip, each file this refresh wrote replaces that file whole,
-    and a commit follows only when that changes the branch. The submit
-    is then a fast-forward and reuses the open pull request. A refresh
-    that adds nothing to the branch commits nothing, submits nothing,
-    and says the day's refresh is already submitted. Origin is asked
-    before anything in the checkout changes, so a refresh that cannot
-    ask it leaves the checkout as the walk left it.
+    or in another job, the refresh compares and moves nothing: when
+    that branch holds every file this refresh wrote, with the same
+    content, it submits nothing and says the day's refresh is already
+    submitted; otherwise it stops, naming the branch and the files that
+    differ, for a person to merge or close that pull request and run
+    the refresh again. The checkout stays on its own tree either way:
+    the run reads its code and declarations from the checkout after the
+    refresh, and the day's branch can be cut from an older main. Origin
+    is asked before anything in the checkout changes, so a refresh that
+    cannot ask it leaves the checkout as the walk left it.
 
     The pull request is armed when `Refreshed.armed` holds, every change
     an addition and every ingest check passed, and unarmed otherwise, so
     a dropped verb or a deployment that does not stand waits for a
-    person. On a branch that also holds files only an earlier refresh
-    wrote, this refresh's verdict does not cover those files, and the
-    pull request goes unarmed. The commit body carries the ingest lines,
+    person. The commit body carries the ingest lines,
     so the pull request's summary is the structural diff. A refresh that
     moved nothing opens nothing and says so. Under a dry run nothing is
     committed or submitted: the lines say what would happen, the arming
@@ -1973,30 +1973,28 @@ def submit_refresh(
     _git_step(run_git, "switch", "-c", branch)
     _git_step(run_git, "add", "-A")
     _git_step(run_git, "commit", "-m", message)
-    armed, after = found.armed, ""
     if held:
-        others = _onto_origin(run_git, branch, tracking, message)
-        if others is None:
+        differ = _differing(run_git, tracking)
+        if not differ:
             return [
                 f"  the day's refresh is already submitted: {branch} on origin"
-                " holds every change this one made, so nothing is committed"
+                " holds every file this one wrote, so nothing is submitted"
             ]
-        after = ", after the commits origin already holds"
-        if armed and others:
-            armed = False
-            reason = (
-                "origin's branch holds changes this refresh did not make,"
-                " a person decides"
-            )
+        fail(
+            f"{branch} on origin holds an earlier refresh, and this one wrote"
+            f" {', '.join(differ)} differently. Merge or close that pull"
+            " request, then run the refresh again; this refresh's commit"
+            f" stands on the local branch {branch}."
+        )
     argv = [_prog(), "submit", f"--title={title}"]
-    if armed:
+    if found.armed:
         argv.append("--armed")
     code = (submit or _run_submit)(argv)
     if code != 0:
         fail(f"the refresh's submit exited {code}; the branch {branch} stands")
     return [
-        f"  refreshed {moved} on {branch}{after}",
-        f"  submitted {'armed' if armed else 'unarmed'}: {reason}",
+        f"  refreshed {moved} on {branch}",
+        f"  submitted {'armed' if found.armed else 'unarmed'}: {reason}",
     ]
 
 
@@ -2019,50 +2017,37 @@ def _origin_holds(run: Callable[..., Result], branch: str) -> bool:
     )
 
 
-def _onto_origin(
-    run: Callable[..., Result], branch: str, tracking: str, message: str
-) -> list[str] | None:
-    """Move the refresh's commit onto the day's branch origin holds.
+def _differing(run: Callable[..., Result], tracking: str) -> list[str]:
+    """The files the refresh's commit wrote that *tracking* holds differently.
 
     HEAD is the refresh's commit on the checkout's own history, and
-    *tracking* is origin's tip of *branch*, fetched. The branch is reset
-    to that tip, each file the refresh's commit changed is taken from it
-    whole, a deletion included, and the result is committed with
-    *message* when it differs from origin's tip. A file is taken whole,
-    never merged line by line: one refresh writes a tool record whole,
-    and the lines of two refreshes interleaved are no record at all.
+    *tracking* is origin's tip of the day's branch, fetched. Only the
+    files the commit changed are compared, a deletion included; the
+    commits main gained since the branch was cut are no change of the
+    refresh's. Nothing in the checkout moves.
 
     Returns:
-        None when origin's branch already holds every change, so nothing
-        is committed; otherwise the files the branch changed that this
-        refresh did not write, which its verdict does not cover.
+        The differing files in git's order; empty when origin's branch
+        holds every file the refresh wrote.
     """
-    refresh = _git_step(run, "rev-parse", "HEAD").stdout.strip()
     ours = _paths(
         _git_step(run, "diff-tree", "-r", "-z", "--name-only", "HEAD~1", "HEAD")
     )
-    base = _git_step(run, "merge-base", "HEAD~1", tracking).stdout.strip()
-    theirs = _paths(
-        _git_step(run, "diff-tree", "-r", "-z", "--name-only", base, tracking)
+    if not ours:
+        return []
+    return _paths(
+        _git_step(
+            run,
+            "--literal-pathspecs",
+            "diff",
+            "-z",
+            "--name-only",
+            tracking,
+            "HEAD",
+            "--",
+            *ours,
+        )
     )
-    _git_step(run, "switch", "-C", branch, tracking)
-    _git_step(
-        run,
-        "--literal-pathspecs",
-        "restore",
-        f"--source={refresh}",
-        "--staged",
-        "--worktree",
-        "--",
-        *ours,
-    )
-    answer = run("diff-index", "--cached", "--quiet", "HEAD")
-    if answer.code not in (0, 1):
-        _git_failed(("diff-index",), answer)
-    if answer.code == 0:
-        return None
-    _git_step(run, "commit", "-m", message)
-    return sorted(set(theirs) - set(ours))
 
 
 def _paths(answer: Result) -> list[str]:
