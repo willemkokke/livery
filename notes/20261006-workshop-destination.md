@@ -2713,6 +2713,14 @@ the stack, which this design neither needs nor rules out).
   extensions that read them release as one set. With this part #1377
   is complete.
 
+- 2026-10-12, Willem: `[ci.jobs.<point>.<name>]` stays, and nanobind's
+  wheels job is declared there, which takes it out of the base and the
+  CI generator's member roster. Whether a phase declares its own
+  placement in CI instead is a review for later, #1534, weighed against
+  the jobs as they stand then. Why: the wheels job is the next piece of
+  non-Unreal C++, and one job table converts cheaply if the review
+  decides for placement.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
@@ -2742,8 +2750,9 @@ recommendation. Owner: Willem, unless named.
    #1377.
 5. **CI jobs as a phase's placement**: `installs`, `deploy`, `token`
    and `fetch` as the plumbing of a phase at a point on a runner set,
-   which would retire `[ci.jobs.<point>.<name>]`. Owner: Willem, after
-   #1377.
+   which would retire `[ci.jobs.<point>.<name>]`. A review, #1534;
+   `[ci.jobs.<point>.<name>]` stays until it decides (ruled
+   2026-10-12).
 6. **The post-merge jobs' fold.** govern, deploy and dispatch in the
    gate job would remove a 60-second wave from every main run of the
    loop's newborn and of this repository, for 12 seconds of work.
