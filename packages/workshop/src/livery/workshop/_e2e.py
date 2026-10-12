@@ -131,13 +131,14 @@ def scrub_ci_markers(environ: MutableMapping[str, str]) -> tuple[str, ...]:
 def child_environment(**extra: str) -> dict[str, str]:
     """The environment a child the pass starts by hand begins with, *extra* over it.
 
-    The task's own environment over the process's. The pass is a serial
-    task, so the process environment is the real one; the task's
-    carries what the git plugin and the pass wrote for every child, the
-    tools' identity and the unsigned setting among them, and a spawn
-    given an explicit environment takes neither by itself.
+    The process environment over the task's. The pass is a serial task,
+    so the process environment is the real one, where the pass writes
+    its forge's own token after the task started; the task's carries
+    what the git plugin wrote at the task's start, the tools' identity
+    and the unsigned setting, which the process environment lacks. A
+    spawn given an explicit environment takes neither by itself.
     """
-    return {**os.environ, **footman.current().env, **extra}
+    return {**footman.current().env, **os.environ, **extra}
 
 
 def edit_environments(

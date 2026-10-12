@@ -959,10 +959,17 @@ def test_a_child_the_pass_starts_by_hand_takes_the_task_s_environment(
     monkeypatch.setattr("livery.footman.run", _run)
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
     monkeypatch.delenv("GIT_AUTHOR_NAME", raising=False)
-    task = Context(env={**os.environ, "GIT_AUTHOR_NAME": "the tools"})
+    # The task started with a stale token; the pass wrote its forge's
+    # own into the process environment after, which is the one a child
+    # must carry: a stale one is HTTP 401 at the birth.
+    task = Context(
+        env={**os.environ, "GIT_AUTHOR_NAME": "the tools", "GITEA_TOKEN": "stale"}
+    )
+    monkeypatch.setenv("GITEA_TOKEN", "fresh")
     with use_context(task):
         _e2e._birth("gitea", "http://localhost:1")
     assert seen[-1]["GIT_AUTHOR_NAME"] == "the tools"
+    assert seen[-1]["GITEA_TOKEN"] == "fresh"
 
 
 def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -> None:
