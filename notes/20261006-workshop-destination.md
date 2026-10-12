@@ -453,9 +453,11 @@ conan is listed and an empty table otherwise. unreal judges the
 resolved toolchain against the engine's SDK file and refuses with the
 engine's own comment; the declaration stays typed.
 
-Two designs follow, each its own, after #1377: `claims` and `inputs` as
-one way to say what a step reads, and CI jobs as a phase's placement
-with its plumbing, `installs`, `deploy`, `token`, `fetch`.
+Two designs follow #1377. `claims` and `inputs` as one way to say what
+a unit reads is the first phase of the plan for what a change affects
+(`notes/20261012-what-a-change-affects.md`), with the affected engine
+and per-test-file selection. CI jobs as a phase's placement, with its
+plumbing `installs`, `deploy`, `token` and `fetch`, is a review (#1534).
 
 ## The sprint (ruled 2026-10-10)
 
@@ -1435,11 +1437,15 @@ merged: the decision record's last entry of 2026-10-11.
 
 ### Phase 16: one affected engine, and sync at scale
 
-The plan's phase 15, unchanged. Follow-ups beside it, not inside it:
-#1201 (concurrent tool supply in `fm sync`, toolroom-store's work,
-measured against the same scale fixture) and #1200 (the locking
-review; its recommendation decides whether a foundation library joins
-the stack, which this design neither needs nor rules out).
+Phases 1 and 2 of `notes/20261012-what-a-change-affects.md`: one
+spelling for what a step, a CI job and a build read, then the one
+affected engine with the gate, its steps, the CI jobs, sync and the
+development build as its consumers (the extensions plan's phase 15).
+Follow-ups beside it, not inside it: #1201 (concurrent tool supply in
+`fm sync`, toolroom-store's work, measured against the same scale
+fixture) and #1200 (the locking review; its recommendation decides
+whether a foundation library joins the stack, which this design
+neither needs nor rules out).
 
 ## Temporary, replaced by
 
@@ -2733,6 +2739,15 @@ the stack, which this design neither needs nor rules out).
   Coverage leaves the base as its own extension in 12e, as ruled on
   2026-10-07; this was the one decision 12e waited on.
 
+- 2026-10-12, Willem: merge the plans. Claims against inputs (open item
+  4), phase 16's one affected engine and the per-test-file selection
+  plan of 2026-10-10 are one plan, `notes/20261012-what-a-change-affects.md`,
+  which replaces the per-test-file note. Why: all three answer what a
+  change influences, the per-test design already held the proof that
+  claims and inputs lack, and `[tests] reads` must use the one spelling.
+  Phase 16 is that plan's phases 1 and 2, in its place here; the
+  selection phases still wait for Willem's go.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
@@ -2748,10 +2763,9 @@ recommendation. Owner: Willem, unless named.
 3. **Branch counts in the line format.** Decided 2026-10-12: the
    format carries the most detail a measurer gives (the decision
    record's entry of that day).
-4. **Claims against inputs**: two ways to say what a step reads,
-   categories with suffixes for a tool over package files, globs with
-   influence rules for a workspace step. One way. Owner: Willem, after
-   #1377.
+4. **Claims against inputs**: merged on 2026-10-12 into the plan for
+   what a change affects (`notes/20261012-what-a-change-affects.md`),
+   whose open 1 holds the choice of one spelling.
 5. **CI jobs as a phase's placement**: `installs`, `deploy`, `token`
    and `fetch` as the plumbing of a phase at a point on a runner set,
    which would retire `[ci.jobs.<point>.<name>]`. A review, #1534;
