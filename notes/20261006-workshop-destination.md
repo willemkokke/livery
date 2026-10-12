@@ -1465,7 +1465,7 @@ the stack, which this design neither needs nor rules out).
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
-| `[generators]`, `[root-files]`, `[setup]`, `[rules]` | the docs phase's steps, fragments, the configure phase, layering steps (#1377) |
+| `[generators]` | the docs phase's steps (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
 | `[release] prove-floors`, and the prove and replay phases | `[release] prove = [...]` on the test phase, and verify (#1377) |
 
@@ -2657,7 +2657,30 @@ the stack, which this design neither needs nor rules out).
   The same rehearsal found that the pass's hand-started children (the
   birth, the dev act, the render) began from the process environment,
   which on a runner lacks the tools' identity the git plugin writes
-  into the task's; they now begin from the task's environment.
+  into the task's; they now begin from the task's environment with the
+  process's over it, since the pass writes its forge's own token into
+  the process environment after the task started. A red entry of the
+  contract's schedule leaves the scheduled entries after it running
+  and fails the job naming each, so a due tool refresh no longer hides
+  the loop's verdict; a red builtin entry still stops the job.
+
+- 2026-10-12, #1482, #1377 part 9: root files are fragments and the
+  layering rules are steps. A package-level extension writes a root
+  file as `[fragments."<path>"]`, rendered with the root while a
+  package's set holds the extension and withdrawn with the last;
+  conan's `conanws.yml` is one, and `[root-files]` refuses naming the
+  fragments spelling. A package that lists nothing holds what its kind
+  stands for, so the delivery's order adds the extensions a package
+  holds through its kind alone, and provenance names the same writer.
+  Each rule is a step of the layering phase over the one parse: the
+  base's four (runner-terminal, base-imports-no-extension,
+  forge-stdlib-only, sibling-references) are base steps in code, the
+  sibling step the one that rewrites, and python's private-reaches is
+  `[phases.layering.private-reaches]`. `layering.imports`, the rule
+  registry, `DeclaredRule` and `[rules]` are gone, `[rules]` refusing
+  naming the step spelling. The steps share the parse through the
+  per-file memo of one process, so no step provides it to another.
+  `[setup]` had no reader and leaves the temporary table with them.
 
 ## Open
 

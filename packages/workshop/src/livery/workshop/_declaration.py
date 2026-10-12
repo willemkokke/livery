@@ -58,7 +58,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from livery.workshop._checks import CheckRecord
     from livery.workshop._contract_keys import ContractKind, Declared, Type
