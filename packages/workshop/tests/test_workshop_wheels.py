@@ -26,6 +26,62 @@ def _refusal(action: Callable[[], object]) -> str:
     return str(caught.value)
 
 
+def _release_root(root: Path) -> None:
+    """*root* as the wheels verb reads it: a contract, and a commit for the epoch."""
+    import subprocess
+
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
+    )
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "seed"], cwd=root, check=True
+    )
+
+
+def _leg(
+    monkeypatch: pytest.MonkeyPatch,
+    root: Path,
+    released: tuple[tuple[Package, str], ...],
+) -> list[str]:
+    """Stand in for the builds, saves and floor legs of a release of *released*.
+
+    Returns the calls, in order, as they happen. A build says whether
+    the conan workspace was aside while it ran.
+    """
+    from livery.workshop._backends import _cpp_conan, _python_nanobind
+
+    calls: list[str] = []
+    workspace = root / _cpp_conan.WORKSPACE_FILE
+
+    def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+        del root, epoch
+        seen = "workspace" if workspace.exists() else "aside"
+        calls.append(f"build {package.name} ({seen})")
+        return package.directory / "dist"
+
+    def _save(package: Package, version: str, into: Path) -> Path:
+        calls.append(f"save {package.name} {version}")
+        return into / f"{package.name}-{version}-linux-x64.tgz"
+
+    def _floors(
+        package: Package, root: Path, released: dict[str, str], *, epoch: int = 0
+    ) -> None:
+        del root, released, epoch
+        calls.append(f"floors {package.name}")
+
+    def _discover(root: Path, ref: str) -> tuple[tuple[Package, str], ...]:
+        del root, ref
+        return released
+
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
+    monkeypatch.setattr(_cpp_conan, "save_cache", _save)
+    monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
+    monkeypatch.setattr("livery.workshop._publish.discover_release", _discover)
+    monkeypatch.chdir(root)
+    return calls
+
+
 # --- refusals first ---------------------------------------------------------
 
 
@@ -174,36 +230,78 @@ def test_the_build_set_names_the_matrix_interpreters() -> None:
     assert _wheels.cibw_build_set([]) == ""
 
 
-def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# The wheels verb: a release with nothing native first, then conan
+# members alone, then the platform-wheel members.
+
+
+def test_a_release_with_no_native_member_builds_nothing_and_stays_green(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    import os
-    import subprocess
     from types import SimpleNamespace
 
     from livery.workshop._release import release_wheels
 
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
-    )
+    _release_root(tmp_path)
+    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    (package,) = discover_packages(tmp_path)
+    calls = _leg(monkeypatch, tmp_path, ((package, "0.1.0"),))
+    ctx = SimpleNamespace(env={})
+    release_wheels(ctx)  # type: ignore[arg-type]  # a task context stand-in
+    # No conan create, no wheel, no floor leg, and no build set to pass on.
+    assert calls == []
+    assert ctx.env == {}
+    out = capsys.readouterr().out
+    assert "no native members in this release; nothing to build" in out
+
+
+def test_a_release_of_conan_members_alone_creates_and_saves_each_with_no_floor_leg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each conan member is created and saved while the workspace is aside.
+
+    No member builds a platform wheel, so no floor leg runs: a floor
+    leg builds a wheel against a conan member's floor.
+    """
+    from types import SimpleNamespace
+
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._release import release_wheels
+
+    _release_root(tmp_path)
+    for name in ("geometry", "mesh"):
+        _member(tmp_path, name, f'kind = "cpp-conan"\nname = "{name}"\n')
+    listed = "packages:\n  - path: packages/geometry\n  - path: packages/mesh\n"
+    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
+    workspace.write_text(listed)
+    geometry, mesh = discover_packages(tmp_path)
+    calls = _leg(monkeypatch, tmp_path, ((geometry, "0.1.0"), (mesh, "0.2.0")))
+    release_wheels(SimpleNamespace(env={}))  # type: ignore[arg-type]  # context stand-in
+    assert calls == [
+        "build geometry (aside)",
+        "save geometry 0.1.0",
+        "build mesh (aside)",
+        "save mesh 0.2.0",
+    ]
+    # The leg puts the workspace back for whatever runs after it.
+    assert workspace.read_text() == listed
+
+
+def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    from types import SimpleNamespace
+
+    from livery.workshop._release import release_wheels
+
+    _release_root(tmp_path)
     _member(
         tmp_path,
         "ext",
         'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
-    )
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(
-        [
-            "git",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "seed",
-        ],
-        cwd=tmp_path,
-        check=True,
     )
     (package,) = discover_packages(tmp_path)
     built: list[dict[str, str]] = []
@@ -239,34 +337,18 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     the wave to attach; and the floors are proved once the wheels
     the release ships are built.
     """
-    import subprocess
     from types import SimpleNamespace
 
     from livery.workshop._backends import _cpp_conan, _python_nanobind
     from livery.workshop._release import release_wheels
 
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = []\n\n[forge]\nkind = "github"\n'
-    )
+    _release_root(tmp_path)
     _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
     _member(
         tmp_path,
         "ext",
         'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
-    )
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(
-        [
-            "git",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "seed",
-        ],
-        cwd=tmp_path,
-        check=True,
     )
     members = {p.name: p for p in discover_packages(tmp_path)}
     calls: list[str] = []
