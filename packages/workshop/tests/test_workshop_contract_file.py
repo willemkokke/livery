@@ -105,7 +105,6 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
 
     assert keys[("extension", "phases.*.level")].values == LEVELS
     assert keys[("extension", "phases.*.keys.*")].values == TYPES
-    assert keys[("extension", "phases.*.provides.*")].values == TYPES
     assert keys[("extension", "phases.*.*.provides.*")].values == TYPES
 
 

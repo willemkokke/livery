@@ -15,7 +15,6 @@ from livery.workshop._checks import (
     ROOT_UNIT,
     CheckRecord,
     Claim,
-    GateContext,
     catalogue,
     reads_files,
     register_check,
@@ -23,6 +22,7 @@ from livery.workshop._checks import (
     with_files,
 )
 from livery.workshop._packages import discover_packages
+from livery.workshop._phases import PhaseContext
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 
@@ -47,7 +47,7 @@ def registry() -> Iterator[None]:
     _checks.restore(state)
 
 
-def _idle(ctx: GateContext) -> None:
+def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 
@@ -64,7 +64,7 @@ def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
     register_check(
         CheckRecord("pages", "lint", _idle, inputs=Inputs(reads=("docs/**/*.md",)))
     )
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=root,
         packages=discover_packages(root),
         subset=(),
@@ -80,7 +80,7 @@ def test_a_scope_holding_no_package_runs_no_check_that_narrows_by_packages(
 
 
 def test_without_a_git_listing_every_check_reads_files(tmp_path: Path) -> None:
-    ctx = GateContext(root=tmp_path, packages=())
+    ctx = PhaseContext(root=tmp_path, packages=())
     assert catalogue(ctx) is None
     record = CheckRecord(
         "acme", "lint", _idle, claims=(Claim("source", suffixes=(".xyz",)),)
@@ -98,7 +98,7 @@ def test_a_check_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
 
     root = _repository(tmp_path)
     packages = discover_packages(root)
-    ctx = GateContext(root=root, packages=packages)
+    ctx = PhaseContext(root=root, packages=packages)
     listed = catalogue(ctx)
     assert listed is not None
     assert ("src/one/__init__.py", "source") in listed["packages/one"]
@@ -146,11 +146,11 @@ def test_a_package_check_skips_a_package_with_none_of_its_files(
 
     root = _repository(tmp_path)
     packages = discover_packages(root)
-    ctx = GateContext(root=root, packages=packages)
+    ctx = PhaseContext(root=root, packages=packages)
     ctx = replace(ctx, catalogue=catalogue(ctx))
     ran: list[str] = []
 
-    def body(ctx: GateContext) -> None:
+    def body(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         ran.append(ctx.package.path)
 
@@ -273,11 +273,11 @@ def test_the_fixers_only_walk_judges_nothing(
     for name in ("run_format", "run_lint", "run_typecheck", "run_test"):
         monkeypatch.setattr(fake_checks, name, spy(name))
 
-    def fix(ctx: GateContext) -> None:
+    def fix(ctx: PhaseContext) -> None:
         assert ctx.safe and ctx.files == ("tasks.py",)
         ran.append("acme-fixed")
 
-    def judge(ctx: GateContext) -> None:
+    def judge(ctx: PhaseContext) -> None:
         del ctx
         ran.append("acme-judged")
 

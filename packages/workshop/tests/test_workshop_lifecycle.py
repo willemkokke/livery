@@ -174,7 +174,7 @@ def test_a_phase_whose_steps_provide_nothing_the_train_reads_refuses(
         tmp_path,
         monkeypatch,
         "def main(ctx):\n    del ctx\n",
-        '\n[phases.build]\nmain = "{package}._steps:main"\n',
+        '\n[phases.build.step]\nmain = "{package}._steps:main"\n',
     )
     with pytest.raises(
         _FAILURES,
@@ -198,11 +198,11 @@ def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
         "    ctx.provide('published', target['url'] + ctx.read('version') == 'idx2')\n"
     )
     phases = (
-        '\n[phases.stamp]\nmain = "{package}._steps:stamp"\nreads = ["version"]\n'
-        'provides = { changed = "strs" }\n'
-        '\n[phases.build]\nmain = "{package}._steps:build"\nreads = ["epoch"]\n'
+        '\n[phases.stamp.step]\nmain = "{package}._steps:stamp"\n'
+        'reads = ["version"]\nprovides = { changed = "strs" }\n'
+        '\n[phases.build.step]\nmain = "{package}._steps:build"\nreads = ["epoch"]\n'
         'provides = { dist = "path" }\n'
-        '\n[phases.publish]\nmain = "{package}._steps:publish"\n'
+        '\n[phases.publish.step]\nmain = "{package}._steps:publish"\n'
         'reads = ["version", "registry-target"]\nprovides = { published = "bool" }\n'
     )
     package = _stepping(tmp_path, monkeypatch, source, phases)
@@ -237,9 +237,9 @@ def test_a_package_whose_extensions_prove_and_replay_goes_through_them(
         "    ctx.provide('exit-code', 0 if ctx.read('version') == '1.2.0' else 3)\n"
     )
     phases = (
-        '\n[phases.prove]\nmain = "{package}._steps:prove"\n'
+        '\n[phases.prove.step]\nmain = "{package}._steps:prove"\n'
         'reads = ["resolution", "release-dirs"]\nprovides = { resolved = "table" }\n'
-        '\n[phases.replay]\nmain = "{package}._steps:replay"\n'
+        '\n[phases.replay.step]\nmain = "{package}._steps:replay"\n'
         'reads = ["version"]\nprovides = { exit-code = "int" }\n'
     )
     package = _stepping(tmp_path, monkeypatch, source, phases)

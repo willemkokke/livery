@@ -16,7 +16,7 @@ words after ``--`` on its own verb (``fm test.pytest -- -k name``).
 from __future__ import annotations
 
 from livery.workshop import (
-    GateContext,
+    PhaseContext,
     check_option,
     kind_examples,
     run_suites,
@@ -33,7 +33,7 @@ TEST = "test.pytest"
 EXAMPLES = "examples.pytest"
 
 
-def judge_test(ctx: GateContext) -> None:
+def judge_test(ctx: PhaseContext) -> None:
     """Run the suites of the packages the run reaches, and the workspace's own tests."""
     # A package whose examples alone changed runs them, not its suite.
     members = tuple(
@@ -65,7 +65,7 @@ def judge_test(ctx: GateContext) -> None:
             )
 
 
-def judge_examples(ctx: GateContext) -> None:
+def judge_examples(ctx: PhaseContext) -> None:
     """Run the documentation examples of each package the run reaches."""
     for package in scoped_packages(ctx, EXAMPLES):
         if (

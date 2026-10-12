@@ -42,8 +42,9 @@ from typing import TYPE_CHECKING
 from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.workshop._checks import CheckRecord, GateContext
+    from livery.workshop._checks import CheckRecord
     from livery.workshop._packages import Package
+    from livery.workshop._phases import PhaseContext
 
 #: The placeholders the engine answers, beside a check's matrix keys.
 PLACEHOLDERS = ("cache", "package", "compile-commands", "paths", "arguments")
@@ -130,7 +131,7 @@ class Command:
             return self.words.judge
         return self.words.safe_fix if safe and self.words.safe_fix else self.words.fix
 
-    def __call__(self, ctx: GateContext) -> None:
+    def __call__(self, ctx: PhaseContext) -> None:
         """Run this mode over what *ctx* reaches; a non-zero exit refuses."""
         run_words(self, ctx)
 
@@ -139,7 +140,7 @@ class Command:
         return " ".join(self.argv())
 
 
-def run_words(command: Command, ctx: GateContext) -> None:
+def run_words(command: Command, ctx: PhaseContext) -> None:
     """Run *command* over what the run reaches, as its check's scope and narrowing say.
 
     A package check calls the tool on the package's files the run
@@ -193,7 +194,7 @@ def _calls(
     record: CheckRecord,
     words: Words,
     argv: tuple[str, ...],
-    ctx: GateContext,
+    ctx: PhaseContext,
     package: Package | None,
     paths: tuple[str, ...],
 ) -> None:
@@ -319,7 +320,7 @@ def _batched(
     paths: tuple[str, ...],
     *,
     cwd: Path,
-    ctx: GateContext,
+    ctx: PhaseContext,
     env: dict[str, str],
 ) -> None:
     """Call *tool* with *words*, *arguments* and *paths*, batched under the limit.
@@ -359,7 +360,7 @@ def run_tool(
     argv: tuple[str, ...],
     *,
     cwd: Path,
-    ctx: GateContext,
+    ctx: PhaseContext,
     env: dict[str, str],
 ) -> None:
     """Call *tool*'s toolroom handle with *argv*, from *cwd*; a non-zero exit refuses.

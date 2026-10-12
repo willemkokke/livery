@@ -146,11 +146,11 @@ def order(
                     heapq.heappush(ready, other)
     if len(done) < len(members):
         left = {name: waiting[name] for name in members if name not in done}
-        raise OrderCycle(_cycle(left))
+        raise OrderCycle(cycle_of(left))
     return tuple(done)
 
 
-def _cycle(waiting: dict[str, set[str]]) -> tuple[str, ...]:
+def cycle_of(waiting: dict[str, set[str]]) -> tuple[str, ...]:
     """One cycle among *waiting*, each member before the next, the first alphabetical.
 
     Every member left waits on another member left, so walking from

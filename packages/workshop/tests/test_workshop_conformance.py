@@ -16,13 +16,13 @@ from livery.workshop._checks import (
     PACKAGE,
     CheckRecord,
     Claim,
-    GateContext,
     check_for,
     register_check,
 )
 from livery.workshop._fragments import Fragment, package_fragment
 from livery.workshop._kinds import Backend, KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 from livery.workshop.testing import CLAUSES, Subject, builtin_subject, judge
 
 EXTENSION = "acme.extension"
@@ -41,7 +41,7 @@ def acme() -> Iterator[None]:
         _categories.unregister_categories(kind, extension=EXTENSION)
 
 
-def _idle(ctx: GateContext) -> None:
+def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 
@@ -599,7 +599,7 @@ def test_a_walk_that_starts_a_check_with_nothing_to_read_breaks_the_gate_lines(
     subject = _walkers()
     assert _names(subject, "gate-lines") == []
 
-    def careless(ctx: GateContext, **kwargs: object) -> None:
+    def careless(ctx: PhaseContext, **kwargs: object) -> None:
         only = cast("frozenset[str]", kwargs["only"])
         for name in sorted(only):
             _checks.check_for(name).run(ctx)
@@ -627,7 +627,7 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
     subject = _walkers()
     assert _names(subject, "walk-order") == []
 
-    def backwards(ctx: GateContext, **kwargs: object) -> None:
+    def backwards(ctx: PhaseContext, **kwargs: object) -> None:
         only = cast("frozenset[str]", kwargs["only"])
         for name in sorted(only):
             record = _checks.check_for(name)
@@ -645,7 +645,7 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
         " rewrote is not judged again",
     ]
 
-    def idle(ctx: GateContext, **kwargs: object) -> None:
+    def idle(ctx: PhaseContext, **kwargs: object) -> None:
         del ctx, kwargs
 
     monkeypatch.setattr(_quality, "walk", idle)

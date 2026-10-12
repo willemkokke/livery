@@ -419,8 +419,8 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     )
     # A gate phase's table holds steps alone.
     assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
-        f"{where}: phases.lint.main is not a step, and lint is not a lifecycle"
-        " phase; its table holds steps, [phases.lint.<step>], each with a main"
+        f"{where}: phases.lint.main belongs to a step: a phase's table holds"
+        " steps, [phases.lint.<step>], each with main"
     )
 
 
@@ -497,62 +497,72 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
     assert (record.narrowing, record.arguments) == ("none", True)
 
 
-def test_a_lifecycle_phases_step_reads_as_its_main_and_two_refuse(
+def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
     identity = '[extension]\nlevels = ["package"]\n'
-    # A lifecycle phase's step runs code, one per extension, and never
-    # beside the phase table's own main.
+    # The refusals first: the phase's level says how often a step runs,
+    # so a step of a package-level phase names no scope and no
+    # extensions; the phase table's own pre and post are gone, and its
+    # main belongs to a step.
     assert _refusal(
-        package, identity + '[phases.build.acme]\nmain = ["acme", "build"]\n'
+        package,
+        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
+        'scope = "workspace"\n',
     ) == (
-        f"{where}: phases.build.acme.main is words, and build is a lifecycle"
-        " phase, whose steps run code; main is a reference, module:function"
-    )
-    assert _refusal(package, identity + '[phases.build.acme]\nreads = ["epoch"]\n') == (
-        f"{where}: phases.build.acme names no main: a lifecycle phase's step is a"
-        " reference to its code, module:function"
+        f"{where}: phases.build.acme.scope is not read on a step of the build"
+        " phase, which runs once per package whose set holds the extension, as"
+        " the phase's level says"
     )
     assert _refusal(
         package,
         identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
-        '[phases.build.other]\nmain = "acme_declared._checks:mend"\n',
+        'extensions = ["acme"]\n',
+    ).startswith(f"{where}: phases.build.acme.extensions is not read on a step")
+    assert _refusal(
+        package, identity + '[phases.build]\npre = "acme_declared._checks:judge"\n'
     ) == (
-        f"{where}: phases.build.other is a second step of the build phase, beside"
-        " acme; an extension declares one step per lifecycle phase, since the"
-        " phase's walk runs one main per extension"
+        f"{where}: phases.build.pre goes: a step is named, and a step that runs"
+        " after it names it in after"
     )
     assert _refusal(
-        package,
-        identity + '[phases.build]\nmain = "acme_declared._checks:judge"\n'
-        '[phases.build.acme]\nmain = "acme_declared._checks:mend"\n',
+        package, identity + '[phases.build]\npost = "acme_declared._checks:judge"\n'
     ) == (
-        f"{where}: phases.build names main beside its step acme; a phase's body"
-        " is its step's, [phases.build.<step>] main, or its own, never both"
+        f"{where}: phases.build.post goes: a step is named, runs after the steps"
+        " it names in after, and does its own cleanup on failure"
     )
     assert _refusal(
-        package,
-        identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
-        'scope = "package"\n',
+        package, identity + '[phases.build]\nmain = "acme_declared._checks:judge"\n'
     ) == (
-        f"{where}: phases.build.acme.scope is not read on a lifecycle phase's"
-        " step, which takes main, provides and reads"
+        f"{where}: phases.build.main belongs to a step: a phase's table holds"
+        " steps, [phases.build.<step>], each with main"
     )
-    # The step reads as the phase table's main does, and registers no check.
+    # Then the read: several steps in one phase, in code or in words,
+    # each a package record naming the extension, registering no check.
     found = _declare(
         package,
         identity + '[phases.build.acme]\nmain = "acme_declared._checks:judge"\n'
-        'provides = { wheel = "path" }\nreads = ["epoch"]\n',
+        'provides = { wheel = "path" }\nreads = ["epoch"]\n'
+        '[phases.build.other]\ntools = ["acme"]\nmain = ["acme", "build"]\n'
+        'after = ["build.acme"]\n',
     )
     assert found.additions.checks == ()
-    phase = found.phases["build"]
-    assert (str(phase.main), phase.pre, phase.post) == (
+    first, second = found.phases["build"]
+    assert (first.name, str(first.run), first.scope, first.extensions) == (
+        "build.acme",
         "acme_declared._checks:judge",
-        None,
-        None,
+        "package",
+        ("acme",),
     )
-    assert (phase.provides, phase.reads) == ({"wheel": "path"}, ("epoch",))
+    assert (first.provides, first.reads) == ((("wheel", "path"),), ("epoch",))
+    assert (second.name, second.after, second.scope, second.extensions) == (
+        "build.other",
+        ("build.acme",),
+        "package",
+        ("acme",),
+    )
+    assert second.words is not None
     assert "acme_declared._checks" not in sys.modules
 
 

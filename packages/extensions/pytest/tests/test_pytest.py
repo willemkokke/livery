@@ -13,7 +13,7 @@ from typing import cast
 import pytest
 
 from livery.extensions.pytest import _checks
-from livery.workshop import GateContext, Package, Query, answer
+from livery.workshop import Package, PhaseContext, Query, answer
 from livery.workshop import _checks as registry
 
 CONTRACT = (
@@ -260,7 +260,7 @@ def test_with_no_suite_to_run_no_pytest_starts(
     registered: None,
 ) -> None:
     calls = _watch(monkeypatch)
-    registry.check_for("test.pytest").run(GateContext(root=tmp_path, packages=()))
+    registry.check_for("test.pytest").run(PhaseContext(root=tmp_path, packages=()))
     assert calls == []
     assert "test.pytest: no python package and no workspace tests" in (
         capsys.readouterr().out
@@ -277,7 +277,7 @@ def test_a_whole_run_runs_every_suite_in_one_call(
     calls = _watch(monkeypatch)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     (tmp_path / "tests").mkdir()
-    ctx = GateContext(root=tmp_path, packages=(one, two), point="nightly")
+    ctx = PhaseContext(root=tmp_path, packages=(one, two), point="nightly")
     registry.check_for("test.pytest").run(ctx)
     assert len(calls) == 1
     arguments, options = calls[0]
@@ -292,7 +292,7 @@ def test_a_suite_that_is_not_worker_safe_runs_alone_under_one_worker(
 ) -> None:
     calls = _watch(monkeypatch)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two", serial=True)
-    ctx = GateContext(root=tmp_path, packages=(one, two))
+    ctx = PhaseContext(root=tmp_path, packages=(one, two))
     registry.check_for("test.pytest").run(ctx)
     # Each call collects its own packages, so neither runs the other's.
     assert [(_paths(call), call[0]) for call in calls] == [
@@ -303,7 +303,7 @@ def test_a_suite_that_is_not_worker_safe_runs_alone_under_one_worker(
     # the serial call's -n 0 comes after them, so they cannot undo it.
     calls.clear()
     words = ("-k", "name", "-n", "4")
-    ctx = GateContext(root=tmp_path, packages=(one, two), arguments=words)
+    ctx = PhaseContext(root=tmp_path, packages=(one, two), arguments=words)
     registry.check_for("test.pytest").run(ctx)
     assert [(_paths(call), call[0]) for call in calls] == [
         (("packages/one",), words),
@@ -317,7 +317,7 @@ def test_a_scoped_run_skips_a_suite_whose_examples_alone_changed(
     calls = _watch(monkeypatch)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     tests = {"packages/one": ("packages/one/tests/test_x.py",)}
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path,
         packages=(one, two),
         subset=(one, two),
@@ -339,7 +339,7 @@ def test_a_run_over_named_files_runs_the_suites_holding_one_it_claims(
         "packages/one": (("src/acme/one.py", "source"),),
         "packages/two": (("README.md", "prose"),),
     }
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path,
         packages=(one, two),
         subset=(one, two),
@@ -374,23 +374,23 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     record = registry.check_for("examples.pytest")
     assert record.role == "examples" and record.extensions == ("python",)
     assert [claim.category for claim in record.claims] == ["example"]
-    record.run(GateContext(root=tmp_path, packages=(one,)))
+    record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert ran == [("packages/one", ())]
     # A scoped run whose change is the package's tests alone runs none;
     # one whose change is its examples alone runs them.
     ran.clear()
     tests = {"packages/one": ("packages/one/tests/test_x.py",)}
-    record.run(GateContext(root=tmp_path, packages=(one,), subset=(one,), tests=tests))
+    record.run(PhaseContext(root=tmp_path, packages=(one,), subset=(one,), tests=tests))
     assert ran == []
     alone = ("packages/one",)
     record.run(
-        GateContext(root=tmp_path, packages=(one,), subset=(one,), examples=alone)
+        PhaseContext(root=tmp_path, packages=(one,), subset=(one,), examples=alone)
     )
     assert ran == [("packages/one", ())]
     ran.clear()
     # A run over named files runs the named examples alone.
     example = "packages/one/docs/examples/first.py"
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path,
         packages=(one,),
         subset=(one,),
@@ -401,11 +401,11 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     assert ran == [("packages/one", (str(tmp_path / example),))]
     # The words after -- on the check's own verb reach the runner.
     assert set(handed) == {()}
-    record.run(GateContext(root=tmp_path, packages=(one,), arguments=("-x",)))
+    record.run(PhaseContext(root=tmp_path, packages=(one,), arguments=("-x",)))
     assert handed[-1] == ("-x",)
     monkeypatch.setattr(_checks, "kind_examples", lambda kind: None)
 
-    record.run(GateContext(root=tmp_path, packages=(one,)))
+    record.run(PhaseContext(root=tmp_path, packages=(one,)))
     assert "examples: packages/one skips (python kind runs none)" in (
         capsys.readouterr().out
     )

@@ -6,10 +6,12 @@ one of the executables its extensions answer under ``executables``
 role over the package's dependency closure, dependencies first, and
 skips each package whose files and dependencies are unchanged since its
 last good build in this checkout; the record of those builds lives
-under ``.workshop/.cache/run/``. Then it walks the ``run`` phase: every
-extension's ``pre``, the main of the extension that answers the
-executable alone, every ``post`` in reverse. The verb exits with the
-code that main sets.
+under ``.workshop/.cache/run/``. Then it runs the ``run`` phase
+through the one walk ([livery.workshop._phases.run_phase][]): every
+step the package's set adds to it, except that of the extensions
+answering ``executables`` only the owner's steps run, each handed the
+executable and the arguments on the context. The verb exits with the
+code the step that started the executable recorded.
 """
 
 from __future__ import annotations
@@ -88,8 +90,10 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
     *cwd* decides the package a target that names none means. The
     development build runs first ([livery.workshop._run.develop][]).
     """
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._packages import discover_packages
-    from livery.workshop._phases import PhaseError, run_phase
+    from livery.workshop._phases import PhaseContext, PhaseError, phase_steps, run_phase
     from livery.workshop._queries import EXECUTABLES, QueryError, answer, answers
 
     packages = discover_packages(root)
@@ -107,26 +111,32 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
                 f" `{prog()} run {package.member}:{names[0]}`"
             )
         (executable,) = names
-    owners = [
-        name
-        for name, held in answers(package, EXECUTABLES).items()
-        if executable in held
-    ]
+    answering = answers(package, EXECUTABLES)
+    owners = {name for name, held in answering.items() if executable in held}
     if not owners:
         fail(
             f"{package.path} has no executable named {executable}; its executables"
             f" are {', '.join(names)}"
         )
     develop(root, package, packages)
+    # The run steps of an extension answering executables start them,
+    # so of those the owner's run alone; every other extension's run.
+    members = package_set(package.extensions, installed_declaration)
+    steps = tuple(
+        record
+        for record in phase_steps("run", members, installed_declaration)
+        if record.extension not in answering or record.extension in owners
+    )
+    ctx = PhaseContext(
+        root=root,
+        packages=(package,),
+        package=package,
+        phase="run",
+        executable=executable,
+        arguments=arguments,
+    )
     try:
-        ctx = run_phase(
-            "run",
-            package,
-            root,
-            mains=frozenset(owners),
-            executable=executable,
-            arguments=arguments,
-        )
+        ctx = run_phase(ctx, steps)
     except PhaseError as error:
         fail(str(error))
     return ctx.exit_code

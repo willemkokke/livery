@@ -12,7 +12,6 @@ from livery.workshop import _checks
 from livery.workshop._checks import (
     CheckRecord,
     Claim,
-    GateContext,
     check_for,
     claimants,
     judged_files,
@@ -20,6 +19,7 @@ from livery.workshop._checks import (
     register_check,
 )
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -32,7 +32,7 @@ def restored_checks():
     _checks.restore(state)
 
 
-def _noop(ctx: GateContext) -> None:
+def _noop(ctx: PhaseContext) -> None:
     del ctx
 
 
@@ -156,7 +156,7 @@ def test_a_scoped_run_hands_a_native_member_the_files_its_claims_reach(
         kind="python",
         depends=(),
     )
-    ctx = GateContext(root=tmp_path, packages=(native, other), subset=(native,))
+    ctx = PhaseContext(root=tmp_path, packages=(native, other), subset=(native,))
     check_for("format.fake").run(ctx)
     # No directory of the native member is a python check's to walk,
     # so its conanfile.py comes by name and nothing else does.

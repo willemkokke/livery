@@ -10,7 +10,6 @@ import pytest
 from livery.workshop import _checks
 from livery.workshop._checks import (
     CheckRecord,
-    GateContext,
     register_check,
     unregister_check,
 )
@@ -20,6 +19,7 @@ from livery.workshop._fragments import (
     compose_project,
     package_fragment,
 )
+from livery.workshop._phases import PhaseContext
 from livery.workshop._queries import EDITOR_EXTENSIONS, answer
 
 _FAILURES = (BaseException,)
@@ -35,7 +35,7 @@ def restored_checks():
     _checks._WITHDRAWN.update(withdrawn)
 
 
-def _noop(ctx: GateContext) -> None:
+def _noop(ctx: PhaseContext) -> None:
     del ctx
 
 

@@ -23,6 +23,7 @@ from livery.toolroom.store import (
     Surface,
 )
 from livery.workshop import _checks, _tool_tasks, _tools
+from livery.workshop._phases import PhaseContext
 from workshop_hosts import (  # noqa: F401
     HERE,
     HOSTS,
@@ -31,7 +32,7 @@ from workshop_hosts import (  # noqa: F401
 )
 
 
-def _idle(ctx: _checks.GateContext) -> None:
+def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 

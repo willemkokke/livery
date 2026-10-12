@@ -17,7 +17,6 @@ from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._checks import (
-    GateContext,
     check_for,
     judges,
     register_check,
@@ -32,6 +31,7 @@ from livery.workshop._kinds import (
     template_chain,
 )
 from livery.workshop._packages import Neighbours, Package, discover_packages
+from livery.workshop._phases import PhaseContext
 from livery.workshop._registries import RegistryTarget
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
@@ -441,7 +441,7 @@ def test_a_pure_python_workspace_gate_is_unchanged(
             assert judged_by(record, (py,)) == (py,)
     # No package check judges a python package: the walk schedules
     # none of the native records for a workspace of python packages.
-    ctx = GateContext(root=tmp_path, packages=(py,))
+    ctx = PhaseContext(root=tmp_path, packages=(py,))
     assert not set(NATIVE_CHECKS) & set(judges(ctx))
     assert capsys.readouterr().out == ""
 
@@ -455,20 +455,20 @@ def test_the_native_checks_run_per_package_in_order(
     for name in NATIVE_CHECKS:
         record = check_for(name)
 
-        def spy(ctx: GateContext, name: str = name) -> None:
+        def spy(ctx: PhaseContext, name: str = name) -> None:
             assert ctx.package is not None
             ran.append((name, ctx.package.name, ctx.selection))
 
         register_check(replace(record, run=spy, fix=None))
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
 
-    def run_package(ctx: GateContext) -> str:
+    def run_package(ctx: PhaseContext) -> str:
         for name in judges(ctx):
             if check_for(name).scope == "package":
                 run_check(name, ctx)
         return capsys.readouterr().out
 
-    out = run_package(GateContext(root=tmp_path, packages=(native,)))
+    out = run_package(PhaseContext(root=tmp_path, packages=(native,)))
     for name in NATIVE_CHECKS:
         assert f"  {name}: packages/native runs (a cmake package)" in out
     assert [name for name, _, _ in ran] == list(NATIVE_CHECKS)
@@ -476,7 +476,7 @@ def test_the_native_checks_run_per_package_in_order(
     # build, then the chosen ctest alone; the formatter and the linter
     # sit out a change confined to the tests.
     ran.clear()
-    scoped = GateContext(
+    scoped = PhaseContext(
         root=tmp_path,
         packages=(native,),
         subset=(native,),
@@ -516,7 +516,7 @@ def test_the_native_checks_hand_their_tool_the_words_after_the_dashes(
     monkeypatch.setattr(_cpp_conan, "test", ctest)
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
     words = ("-j", "4")
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path, packages=(native,), package=native, arguments=words
     )
     for name in ("build.configure", "build.compile", "test.ctest"):

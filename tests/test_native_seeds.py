@@ -15,7 +15,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.extensions.clang.tidy import _checks as clang_tidy
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 from livery.workshop._kinds import kind_stands_for
 
@@ -100,7 +100,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     # its own .clang-format sets the style.
     named = tuple(path.relative_to(destination).as_posix() for path in sources)
     registry.check_for("format.clang-format").run(
-        GateContext(
+        PhaseContext(
             root=tmp_path,
             packages=(package,),
             package=package,

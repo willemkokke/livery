@@ -1467,7 +1467,12 @@ def run_point(
     python: str = "",
     spawn: Callable[[list[str], dict[str, str]], int] = _spawn,
 ) -> None:
-    """Run every entry of *job* at *point*, in order; the first red entry fails.
+    """Run every entry of *job* at *point*, in order; a red entry fails the job.
+
+    A red builtin entry stops the job at once, since the entries after
+    it read its verdict; a red entry of the contract's schedule stands
+    on its own, so the scheduled entries after it still run, and the
+    job fails at the end naming each red one.
 
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
@@ -1542,6 +1547,7 @@ def run_point(
             from livery.footman.profile import DROP
 
             env[DROP] = str(drop)
+        red: list[str] = []
         try:
             for entry in entries:
                 if entry.once:
@@ -1574,12 +1580,18 @@ def run_point(
                 print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
                 code = spawn(argv, env)
                 if code != 0:
-                    fail(f"{resolved}/{job}: {entry.task} exited {code}")
+                    reason = f"{resolved}/{job}: {entry.task} exited {code}"
+                    if entry.source == "builtin":
+                        fail(reason)
+                    print(f"  {reason}; the scheduled entries after it still run")
+                    red.append(reason)
         finally:
             # A red job's timeline is the one most worth having, so the
             # push happens whatever the entries did.
             if drop is not None:
                 _push_job(root, drop, job=display, leg=label)
                 _push_about(root)
+        if red:
+            fail("; ".join(red))
     if not entries:
         print(f"  {resolved}/{job}: nothing scheduled")

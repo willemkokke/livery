@@ -10,7 +10,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.footman import Failed
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -114,7 +114,7 @@ def _run(
     record = registry.check_for(name)
     body = record.fix if fix else record.run
     assert body is not None
-    body(GateContext(root=root, packages=(), safe=safe, arguments=arguments))
+    body(PhaseContext(root=root, packages=(), safe=safe, arguments=arguments))
 
 
 def test_each_check_hands_ruff_its_words_in_each_mode(
@@ -130,13 +130,13 @@ def test_each_check_hands_ruff_its_words_in_each_mode(
         depends=(),
     )
     (member.directory / "src").mkdir(parents=True)
-    ctx = GateContext(root=tmp_path, packages=(member,))
+    ctx = PhaseContext(root=tmp_path, packages=(member,))
     for name in ("format.ruff", "lint.ruff"):
         record = registry.check_for(name)
         record.run(ctx)
         assert record.fix is not None
         record.fix(ctx)
-        record.fix(GateContext(root=tmp_path, packages=(member,), safe=True))
+        record.fix(PhaseContext(root=tmp_path, packages=(member,), safe=True))
     # Every member reached: the whole, a call with no path, ruff's own walk.
     assert ruff.calls == [
         ("format", "--check", "--force-exclude"),
@@ -148,7 +148,7 @@ def test_each_check_hands_ruff_its_words_in_each_mode(
     ]
     # The words after -- on a check's own verb reach its call, in each mode.
     ruff.calls.clear()
-    ctx = GateContext(root=tmp_path, packages=(member,), arguments=("--statistics",))
+    ctx = PhaseContext(root=tmp_path, packages=(member,), arguments=("--statistics",))
     for name in ("format.ruff", "lint.ruff"):
         record = registry.check_for(name)
         record.run(ctx)
@@ -197,7 +197,7 @@ def test_a_foreign_file_a_run_names_reaches_no_call(
     notes.write_text("#Heading\n")
     module = tmp_path / "mod.py"
     module.write_text("x=1\n")
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path,
         packages=(),
         files=("notes.md", "mod.py"),

@@ -11,7 +11,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.extensions.basedpyright import _checks
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -149,18 +149,18 @@ def test_the_whole_is_a_call_with_no_path_and_a_narrowed_run_names_its_paths(
     # Every member reached: basedpyright reads its configured include,
     # which a `.` would replace with every file under the root. Its
     # warnings gate as errors in every call.
-    record.run(GateContext(root=tmp_path, packages=(one, two)))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two)))
     assert calls == [("--warnings",)]
     # One member of two: its own directories, in one call.
     calls.clear()
-    record.run(GateContext(root=tmp_path, packages=(one, two), subset=(one,)))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two), subset=(one,)))
     assert calls == [("--warnings", "packages/one/src", "packages/one/tests")]
     # The words after -- on the check's own verb reach both calls.
     calls.clear()
     words = ("--level", "error")
-    record.run(GateContext(root=tmp_path, packages=(one, two), arguments=words))
+    record.run(PhaseContext(root=tmp_path, packages=(one, two), arguments=words))
     record.run(
-        GateContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
+        PhaseContext(root=tmp_path, packages=(one, two), subset=(one,), arguments=words)
     )
     assert calls == [
         ("--warnings", *words),
@@ -190,7 +190,7 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     unit = workspace_suite(tmp_path)
     assert unit is not None
     record = registry.check_for("typecomplete.basedpyright")
-    record.run(GateContext(root=tmp_path, packages=(off, one, unit)))
+    record.run(PhaseContext(root=tmp_path, packages=(off, one, unit)))
     assert verified == [(("acme.one",), ())]
     assert (
         "typecomplete.basedpyright: packages/off skips (turned off in"
@@ -198,7 +198,9 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     )
     # The words after -- on the check's own verb reach each verification.
     verified.clear()
-    record.run(GateContext(root=tmp_path, packages=(one,), arguments=("--outputjson",)))
+    record.run(
+        PhaseContext(root=tmp_path, packages=(one,), arguments=("--outputjson",))
+    )
     assert verified == [(("acme.one",), ("--outputjson",))]
 
 

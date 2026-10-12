@@ -1,4 +1,4 @@
-"""The check registry: what the quality gate runs, one record per check.
+"""The check registry: what the quality gate runs, one record per step.
 
 A check is one tool's judgment over the workspace or over one
 package: a formatter's pass, the render drift comparison, ctest
@@ -26,34 +26,35 @@ registry: ``fm test`` runs the test role's checks and ``fm
 test.pytest`` the one; the gate runs the checks of the phases that
 declare themselves gated.
 
-Every registered check is also a hidden task, ``checks.test-pytest``,
-and the gate schedules those tasks: the rewriters serially before
-any judge reads the tree ([livery.workshop._checks.rewriters][]),
-then every judge together ([livery.workshop._checks.judges][]), each
-with its own report row. A check that must follow another on the
-same package, a build after its configure, names it in ``after`` and
-the scheduler orders them.
+The gate runs the registered checks through the one walk
+([livery.workshop._phases.run_phase][]), each a footman step: the
+rewriters one at a time before any judge reads the tree
+([livery.workshop._checks.rewriters][]), then every judge in one
+block ([livery.workshop._checks.judges][]), each with its own record.
+A check that must follow another on the same package, a build after
+its configure, names it in ``after``: the walk starts it once the
+earlier one ran, and the gate brings the earlier one in
+([livery.workshop._checks.with_earlier][]).
 """
 
 from __future__ import annotations
 
 import inspect
 import weakref
-from collections.abc import Callable, Generator, Iterable, Mapping
-from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
-import livery.footman as footman
 from livery import git
-from livery.footman import Group, doc, fail, group, prog, root_group
+from livery.footman import Group, doc, fail, prog, root_group
 from livery.workshop import _fragments
 from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
-    from livery.workshop._influence import Changes, Inputs, Selection
+    from livery.workshop._influence import Inputs, Selection
     from livery.workshop._packages import Package
+    from livery.workshop._phases import PhaseContext
     from livery.workshop._words import Words
 
 #: A check's scope: the whole workspace in one run, or one package at a time.
@@ -67,80 +68,6 @@ NONE = "none"
 
 #: The extension the builtin records belong to.
 BASE_EXTENSION = "livery.workshop"
-
-
-@dataclass(frozen=True)
-class GateContext:
-    """One gate run's inputs, handed to every check.
-
-    Attributes:
-        root: The workspace root.
-        packages: Every package the workspace carries.
-        subset: The packages a scoped gate judges, or None for the
-            whole gate.
-        tests: Per package path, the test files that stand for the
-            package's suite in this run.
-        examples: The package paths whose changed files are examples
-            and nothing else: their examples run and no suite.
-        fix: Whether the rewriters run in their fix mode.
-        files: The files the run is limited to, root-relative, from
-            `fm check <paths>`; empty when the scope decides.
-        safe: Whether the fixers run in their in-flight mode, which
-            removes no code: ``--safe-fix``.
-        point: The CI point whose tests the test role selects; empty
-            for the gate's own.
-        catalogue: Every file the run may read, by unit, each with its
-            category, listed once per walk by
-            [livery.workshop._checks.catalogue][]; None when there is
-            no listing, and then every check that applies runs.
-        package: The package a per-package check is judging, else
-            None.
-        selection: The test files selected for that package, relative
-            to it, else empty.
-        changes: What changed since the tree the run measures from,
-            which selects what each workspace check with declared
-            inputs judges ([livery.workshop._influence.select][]); None
-            when the run knows nothing of it, and then each judges
-            everything.
-        arguments: The words after ``--`` on a check's own verb, which
-            a check that takes them (``CheckRecord.arguments``) hands
-            its tool; empty in every other run.
-        check: The running check's name, ``<role>.<tool>``, which the
-            run sets as it hands the context to the check; empty
-            outside a check's run.
-    """
-
-    root: Path
-    packages: tuple[Package, ...]
-    subset: tuple[Package, ...] | None = None
-    tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    examples: tuple[str, ...] = ()
-    fix: bool = False
-    files: tuple[str, ...] = ()
-    safe: bool = False
-    point: str = ""
-    catalogue: Mapping[str, tuple[tuple[str, str], ...]] | None = None
-    package: Package | None = None
-    selection: tuple[str, ...] = ()
-    changes: Changes | None = None
-    arguments: tuple[str, ...] = ()
-    check: str = ""
-
-    @property
-    def scoped(self) -> bool:
-        """Whether this is a package-scoped gate."""
-        return self.subset is not None
-
-    @property
-    def judged(self) -> tuple[Package, ...]:
-        """The packages under judgment: the subset, or every package."""
-        return self.packages if self.subset is None else self.subset
-
-    def for_package(self, package: Package) -> GateContext:
-        """This context narrowed to one package and its selected tests."""
-        files = self.tests.get(package.path, ())
-        relative = tuple(path[len(package.path) + 1 :] for path in files)
-        return replace(self, package=package, selection=relative)
 
 
 @dataclass(frozen=True)
@@ -209,8 +136,10 @@ class CheckRecord:
             ``drift``, ``provenance`` or ``layering``, a string a
             verb is generated from. The roles that exist are those
             of the registered checks.
-        run: The judging callable, the engine running the check's words
-            or a reference to its code; a refusal is its verdict.
+        run: The judging callable, called with the run's
+            [livery.workshop.PhaseContext][]: the engine running the
+            check's words or a reference to its code; a refusal is its
+            verdict.
         scope: ``workspace`` for a check that judges the whole in one
             run, ``package`` for one that judges one package at a
             time.
@@ -239,9 +168,10 @@ class CheckRecord:
             ([livery.workshop._influence.Inputs][]). None for a check
             that narrows by its packages alone.
         after: The checks this one runs after, by name: a build
-            after its configure, a ctest after its build. Each runs
-            through its task before this one's body, once per gate
-            whoever asks first.
+            after its configure, a ctest after its build. The walk
+            starts this one once each of them ran for the same
+            package, and the gate's walk brings them in
+            ([livery.workshop._checks.with_earlier][]).
         extension: The extension that registered the check, named when a
             narrowing is printed.
         tools: The tools the check runs, as the tool profile names
@@ -264,7 +194,7 @@ class CheckRecord:
             ``--fix`` with ``--safe-fix`` where a check has a fix mode.
         arguments: Whether the check hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
-            which it reads from [livery.workshop.GateContext][]'s
+            which it reads from [livery.workshop.PhaseContext][]'s
             ``arguments``. A check that wraps no tool leaves it off, and
             its verb refuses them. No declaration names it: the reader
             derives it, on for a template with ``{arguments}`` and for
@@ -294,10 +224,10 @@ class CheckRecord:
 
     tool: str
     role: str
-    run: Callable[[GateContext], None]
+    run: Callable[[PhaseContext], None]
     scope: str = WORKSPACE
     narrowing: str = NONE
-    fix: Callable[[GateContext], None] | None = None
+    fix: Callable[[PhaseContext], None] | None = None
     extensions: tuple[str, ...] = ()
     tests_only: bool = False
     inputs: Inputs | None = None
@@ -422,7 +352,6 @@ def register_check(record: CheckRecord) -> None:
             )
     _CHECKS[record.name] = record
     _WITHDRAWN.pop(record.name, None)
-    _ensure_task(record)
 
 
 def _typed(option: Option, value: object) -> bool:
@@ -771,79 +700,33 @@ def _applies(record: CheckRecord, package: Package) -> bool:
     return bool(set(record.extensions) & set(extension_set(package)))
 
 
-def _package_records(ctx: GateContext, package: Package) -> list[CheckRecord]:
-    """The package checks that judge *package* in this run, in order."""
+def judges_package(record: CheckRecord, ctx: PhaseContext, package: Package) -> bool:
+    """Whether the package step *record* runs over *package* in this run.
+
+    The package holds an extension the step names; a change confined
+    to the package's tests leaves the step out unless it is tests-only
+    ([livery.workshop._checks.CheckRecord][]).
+    """
     tests_only = ctx.scoped and package.path in ctx.tests
-    return [
-        record
-        for record in _CHECKS.values()
-        if record.scope == PACKAGE
+    return (
+        record.scope == PACKAGE
         and _applies(record, package)
         and (record.tests_only or not tests_only)
+    )
+
+
+def _package_records(ctx: PhaseContext, package: Package) -> list[CheckRecord]:
+    """The registered package checks that judge *package* in this run, in order."""
+    return [
+        record for record in _CHECKS.values() if judges_package(record, ctx, package)
     ]
 
 
-def _members(ctx: GateContext) -> tuple[Package, ...]:
+def members(ctx: PhaseContext) -> tuple[Package, ...]:
     """The packages under judgment that a kind owns: the tests unit is none's."""
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
     return tuple(package for package in ctx.judged if package.path != WORKSPACE_TESTS)
-
-
-#: The gate run's context while its checks run, read by every check's
-#: task. One gate runs per process, and the tasks it schedules run in
-#: this process's threads, so a module value is the seam; the walk
-#: sets it around each half and clears it after.
-_CURRENT: GateContext | None = None
-
-#: The registered checks as hidden tasks, one per name: the task is
-#: what the gate schedules, so each check gets its own report row and
-#: its prints reach the console. The body reads the record by name
-#: when it runs, so re-registering a name replaces the record and
-#: keeps the task.
-checks = group("checks", help="The registered checks, one task each", hidden=True)
-_TASKS: dict[str, Any] = {}
-
-
-@contextmanager
-def current(ctx: GateContext) -> Generator[None, None, None]:
-    """Make *ctx* the context the checks' tasks read, for the block."""
-    global _CURRENT
-    before = _CURRENT
-    _CURRENT = ctx
-    try:
-        yield
-    finally:
-        _CURRENT = before
-
-
-def _context_now() -> GateContext:
-    if _CURRENT is None:
-        fail(
-            f"a check's task ran outside the gate: `{prog()} check` runs it,"
-            f" and `{prog()} <role>.<tool>` runs one check alone"
-        )
-    return _CURRENT
-
-
-def _ensure_task(record: CheckRecord) -> None:
-    """Register the hidden task for *record*'s name, once."""
-    if record.name in _TASKS:
-        return
-    name = record.name
-
-    def body(fix: Annotated[bool, doc("run the check's fix mode")] = False) -> None:
-        run_check(name, _context_now(), fix=fix)
-
-    body.__name__ = name.replace("-", "_").replace(".", "_")
-    body.__doc__ = f"Run the {name} check over the gate's context."
-    _TASKS[name] = checks.task(name=name.replace(".", "-"))(body)
-
-
-def task_for(name: str) -> Any:
-    """The hidden task that runs the check *name*; refusal names the registry."""
-    check_for(name)
-    return _TASKS[name]
 
 
 def _makes_verb(role: str) -> bool:
@@ -1111,55 +994,41 @@ def arguments_refusal(verb: str, records: Iterable[CheckRecord]) -> str:
     )
 
 
-def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
-    """Run the check *name* over *ctx*: its judge, or its fix mode.
+def run_check(name: str, ctx: PhaseContext, *, fix: bool = False) -> None:
+    """Run the check *name* over *ctx* through the walk: its judge, or its fix mode.
 
-    A workspace check runs once; a package check runs once per
-    package it judges, in package order, each announced by name. A
-    check without a fix mode does nothing in fix mode, and is judged
-    after the rewriters like every other judge. The checks named in
-    ``after`` run first, through their tasks: a call from a task body
-    runs the earlier check here or waits on the copy the block
-    already started, so a build never reads a directory its
-    configure has not made.
+    One step alone ([livery.workshop._phases.run_phase][]): a workspace
+    check runs once, a package check once per package it judges, and
+    a check without a fix mode runs nothing in fix mode. The checks
+    named in ``after`` are not run first: a caller running several
+    checks by hand orders them itself, and the gate's walk brings them
+    in ([livery.workshop._checks.with_earlier][]).
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._phases import run_phase
 
-    record = check_for(name)
-    body = record.fix if fix else record.run
-    if body is None:
-        return
-    # The context names the check it is handed to, so the check's own
-    # questions about this run (selected_files) need no lookup by name.
-    ctx = replace(ctx, check=record.name)
-    if not fix and footman.current().in_task:
-        # Inside a run the scheduler dedups a task call, so the earlier
-        # check runs once for the whole gate; outside one (a test
-        # driving a check by hand) there is no run to dedup against,
-        # and the caller orders the checks itself.
-        for earlier in record.after:
-            task_for(earlier)()
-    if record.scope == WORKSPACE:
-        body(ctx)
-        return
-    for package in _members(ctx):
-        if record in _package_records(ctx, package):
-            if not reads_files(record, ctx, (package.path,)):
-                print(f"  {record.name}: {package.path} has no file it reads; not run")
-                continue
-            if not option_value(record, package, "enabled"):
-                print(
-                    f"  {record.name}: {package.path} skips (turned off in"
-                    f" {package.path}/workshop.toml)"
-                )
-                continue
-            held = extension_set(package)
-            matched = " and ".join(name for name in record.extensions if name in held)
-            print(f"  {record.name}: {package.path} runs (a {matched} package)")
-            body(ctx.for_package(package))
+    run_phase(ctx, (check_for(name),), fixing=fix)
 
 
-def _applies_now(record: CheckRecord, ctx: GateContext) -> bool:
+def with_earlier(names: tuple[str, ...]) -> tuple[CheckRecord, ...]:
+    """The records of *names*, and of every step one of them runs after.
+
+    Followed through ``after`` transitively, in registration order,
+    so a build's configure joins the walk that judges the build.
+
+    Raises:
+        Failed: when an ``after`` names no registered check.
+    """
+    wanted = set(names)
+    queue = list(names)
+    while queue:
+        for earlier in check_for(queue.pop()).after:
+            if earlier not in wanted:
+                wanted.add(earlier)
+                queue.append(earlier)
+    return tuple(record for record in _CHECKS.values() if record.name in wanted)
+
+
+def _applies_now(record: CheckRecord, ctx: PhaseContext) -> bool:
     if record.scope == WORKSPACE:
         if record.inputs is not None:
             # Listed, so the walk says when no file it reads changed.
@@ -1170,10 +1039,10 @@ def _applies_now(record: CheckRecord, ctx: GateContext) -> bool:
         # start the whole suite. Named files are a scope of their own,
         # which the check's claims judge.
         return bool(ctx.files) or not (ctx.scoped and not ctx.subset)
-    return any(record in _package_records(ctx, p) for p in _members(ctx))
+    return any(judges_package(record, ctx, p) for p in members(ctx))
 
 
-def workspace_selected(ctx: GateContext) -> tuple[str, ...]:
+def workspace_selected(ctx: PhaseContext) -> tuple[str, ...]:
     """The workspace checks with declared inputs that this run's changes select."""
     return tuple(
         record.name
@@ -1184,7 +1053,7 @@ def workspace_selected(ctx: GateContext) -> tuple[str, ...]:
     )
 
 
-def selected_files(ctx: GateContext) -> frozenset[str] | None:
+def selected_files(ctx: PhaseContext) -> frozenset[str] | None:
     """The files the running check judges in this run; None for every file it reads.
 
     A workspace check that declares ``inputs`` judges, in a run that
@@ -1201,13 +1070,13 @@ def selected_files(ctx: GateContext) -> frozenset[str] | None:
     if not ctx.check:
         fail(
             "selected_files() answers for the running check, and this"
-            " GateContext names none: call it with the context a check's"
-            " run is handed, which sets GateContext.check"
+            " PhaseContext names none: call it with the context a check's"
+            " run is handed, which sets PhaseContext.check"
         )
     return _selected_files(check_for(ctx.check), ctx)
 
 
-def _selected_files(record: CheckRecord, ctx: GateContext) -> frozenset[str] | None:
+def _selected_files(record: CheckRecord, ctx: PhaseContext) -> frozenset[str] | None:
     """The files *record* judges in this run; None for every file it reads."""
     selection = selected(record, ctx)
     return None if selection.whole else frozenset(selection.files)
@@ -1289,7 +1158,7 @@ def _drift_widens(root: Path) -> tuple[str, ...]:
     )
 
 
-def selected(record: CheckRecord, ctx: GateContext) -> Selection:
+def selected(record: CheckRecord, ctx: PhaseContext) -> Selection:
     """What *record* judges in this run, by its declared inputs.
 
     Everything for a check that declares none. The run's changes
@@ -1316,7 +1185,7 @@ def selected(record: CheckRecord, ctx: GateContext) -> Selection:
 ROOT_UNIT = "."
 
 
-def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None:
+def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | None:
     """Every file git holds under the root, by unit, each with its category.
 
     Listed once per walk: tracked files and untracked ones git does not
@@ -1351,7 +1220,7 @@ def catalogue(ctx: GateContext) -> dict[str, tuple[tuple[str, str], ...]] | None
     return {key: tuple(files) for key, files in found.items()}
 
 
-def _scope_units(record: CheckRecord, ctx: GateContext) -> tuple[str, ...]:
+def _scope_units(record: CheckRecord, ctx: PhaseContext) -> tuple[str, ...]:
     """The units *record* reads in this run.
 
     A package check reads the packages it judges. A workspace check
@@ -1362,16 +1231,16 @@ def _scope_units(record: CheckRecord, ctx: GateContext) -> tuple[str, ...]:
     if record.scope == PACKAGE:
         return tuple(
             package.path
-            for package in _members(ctx)
-            if record in _package_records(ctx, package)
+            for package in members(ctx)
+            if judges_package(record, ctx, package)
         )
     if ctx.subset is None or ctx.catalogue is None:
         return tuple(ctx.catalogue or ())
-    return (*(package.path for package in _members(ctx)), ROOT_UNIT)
+    return (*(package.path for package in members(ctx)), ROOT_UNIT)
 
 
 def reads_files(
-    record: CheckRecord, ctx: GateContext, units: tuple[str, ...] | None = None
+    record: CheckRecord, ctx: PhaseContext, units: tuple[str, ...] | None = None
 ) -> bool:
     """Whether *record*'s claims reach a file of *units*, or of its scope in this run.
 
@@ -1396,7 +1265,7 @@ def reads_files(
 
 
 def claimed_files(
-    record: CheckRecord, ctx: GateContext, unit: str | None = None
+    record: CheckRecord, ctx: PhaseContext, unit: str | None = None
 ) -> tuple[str, ...]:
     """The files of the run's catalogue *record*'s claims reach, as absolute paths.
 
@@ -1416,7 +1285,7 @@ def claimed_files(
     return tuple(sorted(found))
 
 
-def with_files(names: tuple[str, ...], ctx: GateContext) -> tuple[str, ...]:
+def with_files(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
     """*names* less the checks with no file to read in this run, each skip said.
 
     No process starts for a check whose claims reach nothing in scope.
@@ -1451,7 +1320,7 @@ def _gated(record: CheckRecord) -> bool:
     return spec is None or spec.gated
 
 
-def rewriters(ctx: GateContext) -> tuple[str, ...]:
+def rewriters(ctx: PhaseContext) -> tuple[str, ...]:
     """The checks whose fix mode runs, serially and in order, under --fix.
 
     Those of the gated phases; empty unless the gate runs in its fix
@@ -1466,7 +1335,7 @@ def rewriters(ctx: GateContext) -> tuple[str, ...]:
     )
 
 
-def judges(ctx: GateContext) -> tuple[str, ...]:
+def judges(ctx: PhaseContext) -> tuple[str, ...]:
     """The checks the gate judges together, in registration order.
 
     Those of the gated phases. A check that rewrote in this run is not
@@ -1490,7 +1359,7 @@ def judges(ctx: GateContext) -> tuple[str, ...]:
 WHOLE = (".",)
 
 
-def _workspace_unit(ctx: GateContext) -> tuple[Package, ...]:
+def _workspace_unit(ctx: PhaseContext) -> tuple[Package, ...]:
     """The workspace's own tests, when this run judges them as a unit."""
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
@@ -1507,7 +1376,7 @@ def _claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
     return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
 
 
-def _every_unit_reached(ctx: GateContext, record: CheckRecord, chosen: int) -> bool:
+def _every_unit_reached(ctx: PhaseContext, record: CheckRecord, chosen: int) -> bool:
     """Whether a scoped run over *chosen* units reaches every unit *record* judges.
 
     Every member the check judges, the workspace's tests unit among
@@ -1529,7 +1398,7 @@ def _every_unit_reached(ctx: GateContext, record: CheckRecord, chosen: int) -> b
     return on and 0 < units <= chosen
 
 
-def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
+def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
     """The paths the path-narrowing check *name* judges in this run.
 
     The files the run names, when it names any. Otherwise the whole
@@ -1545,10 +1414,10 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
     record = check_for(name)
     if ctx.files:
         return claimed_files(record, ctx)
-    gated_members = judged_by(record, _members(ctx))
-    members = enabled(name, gated_members)
-    pythons = tuple(p for p in members if is_python_kind(p.kind))
-    natives = tuple(p for p in members if not is_python_kind(p.kind))
+    gated_members = judged_by(record, members(ctx))
+    chosen_members = enabled(name, gated_members)
+    pythons = tuple(p for p in chosen_members if is_python_kind(p.kind))
+    natives = tuple(p for p in chosen_members if not is_python_kind(p.kind))
     unit = _workspace_unit(ctx)
 
     def holding(packages: tuple[Package, ...]) -> tuple[str, ...]:
@@ -1561,7 +1430,7 @@ def scoped_paths(ctx: GateContext, name: str) -> tuple[str, ...]:
         )
 
     if ctx.subset is None:
-        if len(members) == len(gated_members):
+        if len(chosen_members) == len(gated_members):
             return WHOLE
         chosen = holding(pythons + unit) + _claimed(name, natives)
         return chosen or WHOLE
@@ -1585,7 +1454,7 @@ def _holds_claimed(record: CheckRecord, directory: Path) -> bool:
 
 
 def scoped_files(
-    ctx: GateContext, name: str, package: Package | None = None
+    ctx: PhaseContext, name: str, package: Package | None = None
 ) -> tuple[Path, ...]:
     """The files of *package* the check *name* judges in this run, absolute.
 
@@ -1607,7 +1476,7 @@ def scoped_files(
     return tuple(package.directory / path for path in judged_files(record, package))
 
 
-def scoped_packages(ctx: GateContext, name: str) -> tuple[Package, ...]:
+def scoped_packages(ctx: PhaseContext, name: str) -> tuple[Package, ...]:
     """The members the package-narrowing check *name* judges in this run.
 
     The members of its kinds, in a scoped run those of the subset,
@@ -1617,10 +1486,10 @@ def scoped_packages(ctx: GateContext, name: str) -> tuple[Package, ...]:
     check claims. The workspace's own tests are not a member.
     """
     record = check_for(name)
-    members = enabled(name, judged_by(record, _members(ctx)))
+    chosen = enabled(name, judged_by(record, members(ctx)))
     if not ctx.files:
-        return members
-    return tuple(p for p in members if claimed_files(record, ctx, p.path))
+        return chosen
+    return tuple(p for p in chosen if claimed_files(record, ctx, p.path))
 
 
 def check_option(name: str, package: Package, option: str) -> object:
@@ -1670,12 +1539,12 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs
 
-    def render_run(ctx: GateContext) -> None:
+    def render_run(ctx: PhaseContext) -> None:
         from livery.workshop import _quality
 
         _quality.drift_check(files=_selected_files(check_for("drift.check"), ctx))
 
-    def render_fix(ctx: GateContext) -> None:
+    def render_fix(ctx: PhaseContext) -> None:
         # A rewriter is not judged again under --fix, so the fix judges
         # what it leaves, as the provenance fix does.
         from livery.workshop import _quality
@@ -1688,26 +1557,26 @@ def _register_builtin() -> None:
             print(f"  generated: {path}")
         _quality.drift_check()
 
-    def provenance_run(ctx: GateContext) -> None:
+    def provenance_run(ctx: PhaseContext) -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
             files=_selected_files(check_for("provenance.check"), ctx)
         )
 
-    def provenance_fix(ctx: GateContext) -> None:
+    def provenance_fix(ctx: PhaseContext) -> None:
         from livery.workshop import _provenance
 
         _provenance.check_content(
             fix=True, files=_selected_files(check_for("provenance.check"), ctx)
         )
 
-    def graph_run(ctx: GateContext) -> None:
+    def graph_run(ctx: PhaseContext) -> None:
         from livery.workshop._packages import verify_graph
 
         verify_graph(ctx.root)
 
-    def graph_fix(ctx: GateContext) -> None:
+    def graph_fix(ctx: PhaseContext) -> None:
         from livery.workshop._extensions import write_extensions
         from livery.workshop._packages import verify_graph
 
@@ -1715,12 +1584,12 @@ def _register_builtin() -> None:
             print(line)
         verify_graph(ctx.root)
 
-    def imports_run(ctx: GateContext) -> None:
+    def imports_run(ctx: PhaseContext) -> None:
         from livery.workshop._packages import verify_imports
 
         verify_imports(ctx.root, _selected_files(check_for("layering.imports"), ctx))
 
-    def imports_fix(ctx: GateContext) -> None:
+    def imports_fix(ctx: PhaseContext) -> None:
         from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
         from livery.workshop._packages import verify_imports
         from livery.workshop._uv import run_uv
@@ -1742,20 +1611,15 @@ def _register_builtin() -> None:
             run_uv("lock", root=ctx.root)
         verify_imports(ctx.root, files)
 
-    def package_of(ctx: GateContext) -> Package:
-        assert ctx.package is not None
-        return ctx.package
+    def configure_run(ctx: PhaseContext) -> None:
+        _cpp_conan.configure(ctx.member, ctx.arguments)
 
-    def configure_run(ctx: GateContext) -> None:
-        _cpp_conan.configure(package_of(ctx), ctx.arguments)
+    def build_run(ctx: PhaseContext) -> None:
+        _cpp_conan.compile(ctx.member, ctx.arguments)
 
-    def build_run(ctx: GateContext) -> None:
-        _cpp_conan.compile(package_of(ctx), ctx.arguments)
-
-    def ctest_run(ctx: GateContext) -> None:
-        package = package_of(ctx)
+    def ctest_run(ctx: PhaseContext) -> None:
         _cpp_conan.test(
-            package, ctx.root, selection=ctx.selection, arguments=ctx.arguments
+            ctx.member, ctx.root, selection=ctx.selection, arguments=ctx.arguments
         )
 
     for record in (
