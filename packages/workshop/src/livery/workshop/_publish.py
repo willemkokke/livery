@@ -170,24 +170,6 @@ def movement_check(root: Path, package: Package, ref: str) -> None:
         )
 
 
-def ensure_git_identity(root: Path) -> None:
-    """Give a fresh CI checkout an identity, a developer's kept.
-
-    Only when ``user.email`` is unset: the environment's GIT_* wins
-    anyway, and a person's own configuration is never touched.
-    """
-    probe = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "config", "user.email"
-    )
-    if probe.code == 0 and probe.stdout.strip():
-        return
-    for key, value in (
-        ("user.email", "release@livery.local"),
-        ("user.name", "livery release"),
-    ):
-        tools.git.opts(cwd=root, nofail=True, recorded=False)("config", key, value)
-
-
 def assert_wheel_identity(package: Package) -> None:
     """Refuse a wheel whose tag contradicts its kind, naming both.
 
@@ -383,7 +365,6 @@ def publish_release(
     """
     from livery.workshop._release import verify_release
 
-    ensure_git_identity(root)
     resolved_ref = ref or git.head_sha(root)
     discovered = discover_release(root, resolved_ref)
     ordered = tuple(package for package, _version in discovered)

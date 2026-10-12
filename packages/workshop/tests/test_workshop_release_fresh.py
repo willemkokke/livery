@@ -56,8 +56,6 @@ def _rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, s
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = tmp_path / "ws"
     _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     member(root, "core")
     member(root, "tool")
@@ -139,10 +137,6 @@ def test_a_release_tip_this_clone_lacks_reads_unmoved(tmp_path: Path) -> None:
     clone = tmp_path / "c"
     _git(
         clone,
-        "-c",
-        "user.email=t@x",
-        "-c",
-        "user.name=T",
         "commit",
         "--allow-empty",
         "-m",

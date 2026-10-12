@@ -153,8 +153,6 @@ def _workspace(tmp_path: Path) -> tuple[Path, str]:
     root = tmp_path / "ws"
     root.mkdir()
     _git(root, "init", "-q", "--initial-branch=main")
-    _git(root, "config", "user.email", "t@acme.test")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     _member(root, "a")
     (root / "pyproject.toml").write_text('members = ["packages/a"]\nline-length = 88\n')

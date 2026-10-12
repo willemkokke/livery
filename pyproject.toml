@@ -75,7 +75,7 @@ dev = [
     "livery-extensions-ty",
     "livery-footman[test]",
     "livery-forge[github-secrets]",
-    "livery-git",
+    "livery-git[test]",
     "livery-strongroom",
     "livery-toolroom[test]",
     "livery-toolroom-bench",

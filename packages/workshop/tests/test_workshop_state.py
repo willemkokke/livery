@@ -35,10 +35,6 @@ def _clone(tmp_path: Path, name: str, origin: Path) -> Path:
         tmp_path,
         "clone",
         "-q",
-        "--config",
-        "user.name=tester",
-        "--config",
-        "user.email=tester@example.invalid",
         str(origin),
         str(work),
     )

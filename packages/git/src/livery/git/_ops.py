@@ -405,6 +405,19 @@ def remote_head(root: Path, branch: str) -> str:
     return result.stdout.strip() if result.code == 0 else ""
 
 
+def author_email(root: Path) -> str:
+    """The address the next commit in *root* would carry as its author.
+
+    Resolved as git resolves it, the environment's `GIT_AUTHOR_EMAIL`
+    ahead of the config, so a checkout whose identity rides the
+    environment answers the same as one configured.
+    """
+    ident = run(root, "var", "GIT_AUTHOR_IDENT")
+    _, _, rest = ident.partition("<")
+    email, _, _ = rest.partition(">")
+    return email.strip()
+
+
 def config_get(root: Path, key: str) -> str:
     """The repository's git config value for *key*; empty when unset."""
     result = call(root, "config", "--get", key)

@@ -41,8 +41,6 @@ def _build(base: Path) -> None:
     root.mkdir()
     (root / "workshop.toml").write_text("[workspace]\n")
     _git(root, "init", "--initial-branch=main")
-    _git(root, "config", "user.email", "test@livery.local")
-    _git(root, "config", "user.name", "Livery Test")
     for name, extra, deps in (
         ("core", "", ""),
         (

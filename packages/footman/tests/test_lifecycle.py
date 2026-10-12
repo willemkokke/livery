@@ -691,6 +691,34 @@ def test_pre_and_post_fire_around_every_execution():
     ]
 
 
+def test_a_mark_set_on_the_function_is_read_back_from_the_handle():
+    # A plugin's decorator sets an attribute below or above @task; the
+    # hook reads it through the handle, with a default when there is none.
+    reg = Group("root")
+    seen: list[tuple[object, ...]] = []
+
+    def marked(fn):
+        fn.acme_mark = ("a", "b")
+        return fn
+
+    @reg.pre_task
+    def read(inv, task):
+        seen.append((task.name, task.mark("acme_mark"), task.mark("other", 7)))
+
+    @marked
+    @reg.task
+    def above(): ...
+
+    @reg.task
+    @marked
+    def below(): ...
+
+    for name in ("above", "below"):
+        result = Runner().invoke(name, tasks=reg)
+        assert result.ok, result.stderr
+    assert seen == [("above", ("a", "b"), 7), ("below", ("a", "b"), 7)]
+
+
 def test_task_state_is_private_to_the_plugin_and_the_execution():
     # Two plugins each get their own namespace on the same execution, and the
     # same plugin gets a fresh one per execution — nothing leaks sideways or

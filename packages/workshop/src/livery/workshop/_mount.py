@@ -6,12 +6,13 @@ it through footman's project rung, and its ``tasks.py`` mounts nothing.
 Importing the base's task module registers its verbs inside footman's
 capture; [livery.workshop._extensions.mount_extensions][] then mounts
 every extension the contract lists through ``plugin()``, each under its
-own name.
+own name, after the git plugin, which every workshop project runs with.
 """
 
 from __future__ import annotations
 
 from livery.workshop import _tasks  # noqa: F401 - registers the base's verbs
-from livery.workshop._extensions import mount_extensions
+from livery.workshop._extensions import mount_extensions, mount_git_plugin
 
+mount_git_plugin()
 mount_extensions()

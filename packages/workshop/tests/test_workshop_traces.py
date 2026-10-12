@@ -39,8 +39,6 @@ def _seed(base: Path) -> None:
     _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
     work = base / "work"
     _git(base, "clone", "-q", str(origin), str(work))
-    _git(work, "config", "user.name", "tester")
-    _git(work, "config", "user.email", "tester@example.invalid")
     (work / "README.md").write_text("the repository\n")
     _git(work, "add", "README.md")
     _git(work, "commit", "-qm", "init")

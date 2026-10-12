@@ -22,10 +22,6 @@ def _git(cwd: Path, *args: str) -> None:
         [
             "git",
             "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@example.invalid",
-            "-c",
             "commit.gpgsign=false",
             *args,
         ],

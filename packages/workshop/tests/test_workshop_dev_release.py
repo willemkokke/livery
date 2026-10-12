@@ -34,8 +34,6 @@ def _workspace(tmp_path: Path) -> Path:
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = tmp_path / "ws"
     _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     member(root, "core")
     _git(root, "add", "-A")

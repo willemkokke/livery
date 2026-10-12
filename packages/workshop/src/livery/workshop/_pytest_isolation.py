@@ -54,9 +54,27 @@ def variables() -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+#: The global git config every test's git reads in place of the
+#: developer's: one identity, so a repository a test creates commits
+#: without a config of its own, and none of the desk's own settings, a
+#: signer among them. A test that needs a second author, a colleague's
+#: clone, configures that clone, and the clone's own config wins over
+#: this one as it would over a person's.
+GIT_CONFIG = "[user]\n\tname = tester\n\temail = tester@example.invalid\n"
+
+
 def pytest_configure(config: pytest.Config) -> None:
-    """Point every unset runner directory at a fresh home in this process's scratch."""
+    """Point every unset runner directory at a fresh home in this process's scratch.
+
+    Every test's git reads `GIT_CONFIG` as its global config too, unless
+    the outer environment already points `GIT_CONFIG_GLOBAL` elsewhere.
+    """
     from livery.footman import scratch_dir
+
+    if "GIT_CONFIG_GLOBAL" not in os.environ:
+        gitconfig = scratch_dir("tests") / "gitconfig"
+        gitconfig.write_text(GIT_CONFIG, "utf-8")
+        os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
 
     home = str(scratch_dir("workshop-isolation"))
     set_here: list[str] = []

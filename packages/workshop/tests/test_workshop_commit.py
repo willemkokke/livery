@@ -43,8 +43,6 @@ def _build(base: Path) -> None:
     root = base / "ws"
     root.mkdir()
     _git(root, "init", "-q", "--initial-branch=main")
-    _git(root, "config", "user.name", "T")
-    _git(root, "config", "user.email", "t@livery.local")
     _workspace(root)
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "chore: seed")

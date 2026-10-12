@@ -93,6 +93,7 @@ python = "livery.extensions.python"
 [project.entry-points."footman.doctors"]
 "livery.workshop.forge" = "livery.workshop._doctor:forge"
 "livery.workshop.host" = "livery.workshop._doctor:host"
+"livery.workshop.ssh" = "livery.workshop._doctor:ssh"
 
 # Every pytest this venv starts carries the context plugin: in a
 # metered CI leg it names each test's coverage context by node id,

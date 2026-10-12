@@ -10,15 +10,29 @@ whatever the code.
 
 Nothing is held between calls, so a function may be called from any
 process at any time and answers what git holds at that moment.
+
+The package is also a footman plugin, `plugin("livery.git")`: its hook
+gives every task's git the ssh command that shares one connection per
+host ([livery.git.ssh_environment][]), the tools' identity when the
+person has none ([livery.git.tool_identity][]), an editor that never
+opens, and what a task marks for itself with [livery.git.identity][]
+and [livery.git.unsigned][].
 """
 
 from __future__ import annotations
 
+from livery.git._environment import (
+    config_environment,
+    identity_environment,
+    tool_identity,
+)
+from livery.git._marks import identity, unsigned
 from livery.git._ops import (
     GitError,
     add,
     amend_all,
     any_head,
+    author_email,
     behind_base,
     call,
     changed_between,
@@ -78,6 +92,14 @@ from livery.git._ops import (
     unmerged_paths,
     working_tree_id,
 )
+from livery.git._ssh import (
+    master_up,
+    record_unsupported,
+    remote_host,
+    ssh_command,
+    ssh_environment,
+    ssh_sockets,
+)
 
 __all__ = [
     "GitError",
@@ -85,6 +107,7 @@ __all__ = [
     "add",
     "amend_all",
     "any_head",
+    "author_email",
     "behind_base",
     "call",
     "changed_between",
@@ -92,6 +115,7 @@ __all__ = [
     "commit_all",
     "commit_message",
     "commits_since",
+    "config_environment",
     "config_get",
     "config_regexp",
     "config_set",
@@ -113,6 +137,8 @@ __all__ = [
     "head_message",
     "head_sha",
     "head_subject",
+    "identity",
+    "identity_environment",
     "integrate",
     "is_ancestor",
     "is_clean",
@@ -121,6 +147,7 @@ __all__ = [
     "local_branches",
     "log_paths",
     "main_checkout",
+    "master_up",
     "merge_base",
     "merge_parents",
     "merge_tree",
@@ -130,18 +157,25 @@ __all__ = [
     "push",
     "push_force",
     "recent_commits",
+    "record_unsupported",
     "remote_branches",
     "remote_head",
+    "remote_host",
     "remote_tags",
     "run",
     "sha_of",
+    "ssh_command",
+    "ssh_environment",
+    "ssh_sockets",
     "staged_text",
     "subjects_ahead",
     "switch",
     "tags",
+    "tool_identity",
     "tracking_branches",
     "tree_diff",
     "unmerged_paths",
+    "unsigned",
     "working_tree_id",
 ]
 

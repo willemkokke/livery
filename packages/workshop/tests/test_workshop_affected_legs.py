@@ -170,7 +170,7 @@ def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(
-        ["git", "-c", "user.email=t@x", "-c", "user.name=T", "commit", "-qm", "seed"],
+        ["git", "commit", "-qm", "seed"],
         cwd=root,
         check=True,
     )

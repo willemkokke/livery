@@ -1,11 +1,13 @@
 """The workshop's doctors, registered under footman's ``footman.doctors`` group.
 
-Two: the forge doctor, which reaches the forge and says who you are
+Three: the forge doctor, which reaches the forge and says who you are
 there, which server it is, what it grants, whether every declared owner
 exists and which admin token ladder is set; and the host doctor, which
 reads the machine, the compilers the present kinds need, the tools the
-host serves, and the installed extensions the contract does not list.
-Each returns findings ([livery.footman.Finding][]); every fix here is
+host serves, and the installed extensions the contract does not list;
+and the ssh doctor, which says whether the git plugin shares one
+connection per host and names a `ControlMaster` entry of the person's
+own. Each returns findings ([livery.footman.Finding][]); every fix here is
 a person's, so none carries a repair. `fm doctor` prints them, footman's
 own first.
 """
@@ -144,5 +146,46 @@ def host(**facts: Any) -> list[Finding]:
                 f"extensions: {module}{named} is installed and not listed; it does"
                 " nothing until [workspace] extensions names it"
             )
+        )
+    return findings
+
+
+def ssh(**facts: Any) -> list[Finding]:
+    """The ssh doctor: the shared connection, and a person's own multiplexing."""
+    import livery.footman as footman
+    from livery import git
+
+    del facts
+    findings: list[Finding] = []
+    config = Path.home() / ".ssh" / "config"
+    if config.is_file():
+        lines = [
+            line.strip()
+            for line in config.read_text("utf-8", errors="replace").splitlines()
+            if line.strip().lower().startswith(("controlmaster", "controlpath"))
+        ]
+        if lines:
+            findings.append(
+                Finding(
+                    f"ssh: {config} multiplexes on its own ({'; '.join(lines)}); the"
+                    " git plugin's command adds a master beside it"
+                )
+            )
+    socket_dir = git.ssh_sockets(footman.data_dir())
+    environment, reason = git.ssh_environment(
+        socket_dir,
+        configured=git.config_get(footman.cwd(), "core.sshCommand"),
+    )
+    if reason:
+        findings.append(
+            Finding(reason, "", f"delete {socket_dir / 'unsupported'} to try again")
+        )
+    elif not environment:
+        findings.append(
+            Finding("ssh: a command of your own stands; the plugin adds nothing")
+        )
+    else:
+        findings.append(
+            Finding(f"ssh: one connection per host, sockets in {socket_dir}")
         )
     return findings

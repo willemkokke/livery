@@ -112,24 +112,6 @@ def with_label(lines: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(line.replace("ubuntu-latest", CURRENT.label) for line in lines)
 
 
-def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
-    """The variables that turn commit signing off for every git a pass runs.
-
-    The loop's commits are scratch on a local forge and prove nothing
-    by their signature, while a developer's signer (1Password's
-    `op-ssh-sign` waits for a person) fails every commit of an
-    unattended pass. git reads `GIT_CONFIG_COUNT` with a key and a
-    value per index, so the setting rides the environment into the
-    driver's own git, the birth's, and the loop's fm; an entry the
-    outer environment already carries keeps its index and this one
-    follows it.
-    """
-    return _config_environment(environ, (("commit.gpgsign", "false"),))
-
-
-#: The identity the loop's commits carry on a machine whose git has none.
-LOOP_IDENTITY = ("livery loop", "loop@livery.invalid")
-
 #: The variables that make the workshop read a process as a CI run: a
 #: fix is refused inside CI, a tool the store cannot supply refuses, and
 #: a run is stamped as the runner's. The pass drives its project as a
@@ -168,48 +150,6 @@ def edit_environments(
         for name in remove:
             environ.pop(name, None)
     return removed
-
-
-def identity_environment(
-    environ: Mapping[str, str], *, name: str, email: str
-) -> dict[str, str]:
-    """The variables that give every git a pass runs an identity, when it has none.
-
-    A desk's git knows its person; a hosted runner's knows nobody, and
-    the newborn's first commit stops on "Author identity unknown". With
-    *name* and *email* both empty, what `git config` answers where the
-    pass runs, the loop's own identity ([livery.workshop._e2e.LOOP_IDENTITY][])
-    rides the environment as [livery.workshop._e2e.unsigned_environment][]
-    does, into the birth's git and the loop's fm. Either value configured
-    adds nothing: the person's identity stands.
-    """
-    if name or email:
-        return {}
-    loop_name, loop_email = LOOP_IDENTITY
-    return _config_environment(
-        environ, (("user.name", loop_name), ("user.email", loop_email))
-    )
-
-
-def _config_environment(
-    environ: Mapping[str, str], pairs: Sequence[tuple[str, str]]
-) -> dict[str, str]:
-    """*pairs* as git configuration riding the environment, after what it carries.
-
-    git reads `GIT_CONFIG_COUNT` with a key and a value per index, so an
-    entry the outer environment already carries keeps its index and
-    these follow it.
-    """
-    count = 0
-    raw = environ.get("GIT_CONFIG_COUNT", "")
-    if raw.isdigit():
-        count = int(raw)
-    made: dict[str, str] = {}
-    for index, (key, value) in enumerate(pairs, start=count):
-        made[f"GIT_CONFIG_KEY_{index}"] = key
-        made[f"GIT_CONFIG_VALUE_{index}"] = value
-    made["GIT_CONFIG_COUNT"] = str(count + len(pairs))
-    return made
 
 
 def dev_members(root: Path, extensions: Sequence[str] | None = None) -> tuple[str, ...]:
@@ -1209,7 +1149,7 @@ def _birth(
     import sys
 
     home = _loop_home(kind)
-    env = {**os.environ, **unsigned_environment(os.environ)}
+    env = dict(os.environ)
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
@@ -1834,7 +1774,6 @@ def _loop_fm(
     # os.environ inside a task is the task's, and the environment this
     # child gets is built from the process's, so the loop's own fm
     # (whose submit can amend a commit) would ask a developer's signer.
-    env.update(unsigned_environment(env))
     # No --no-sync: the wiring moves the lock onto each pass's fresh
     # dev wheels, and a frozen venv would keep running yesterday's
     # workshop under today's lock (measured: a fixed bug stayed red
@@ -3386,6 +3325,7 @@ if _WORKSHOP_TESTS.is_dir():
     # serial: the driver births into and pushes from its own
     # directories, so it owns the process globals for the run.
     @ci.task(name="e2e", serial=True)
+    @git.unsigned
     def e2e(
         forge: str = "gitea",
         fresh: bool = False,
@@ -3468,25 +3408,16 @@ if _WORKSHOP_TESTS.is_dir():
                 _devenv.up_host(place, ("host",))
                 _enter_host(place.values(), env)
             # Every commit the pass makes, the driver's, the birth's and
-            # the loop's own fm's, is unsigned: the setting rides the
-            # task's environment into each child. On a hosted runner the
-            # job's CI markers would reach every child, which would then
-            # refuse a fix and stamp its runs as the runner's; the pass
-            # drives its project as a desk.
-            scrubbed = edit_environments(
-                unsigned_environment(os.environ), remove=CI_MARKERS
-            )
+            # the loop's own fm's, is unsigned and carries the tools'
+            # identity: the task's marks and the git plugin put both in
+            # the task's environment, which rides into each child. On a
+            # hosted runner the job's CI markers would reach every child,
+            # which would then refuse a fix and stamp its runs as the
+            # runner's; the pass drives its project as a desk.
+            scrubbed = edit_environments({}, remove=CI_MARKERS)
             if scrubbed:
                 names = ", ".join(scrubbed)
                 print(f"  ci markers removed for the pass's children: {names}")
-            if driver is not None:
-                edit_environments(
-                    identity_environment(
-                        os.environ,
-                        name=git.config_get(driver, "user.name"),
-                        email=git.config_get(driver, "user.email"),
-                    )
-                )
             _require_host_alias(forge)
             if daemon_needed(chosen):
                 _require_runner_docker(forge)
