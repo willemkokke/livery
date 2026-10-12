@@ -126,12 +126,14 @@ profile = true
 # toolroom's refresh, every two weeks on the nightly point: the tools'
 # new releases are observed, the stubs regenerated, and what moved is
 # committed and submitted, armed when every change only added to a
-# surface.
+# surface. Once, on the first leg: the legs observe the same releases,
+# and two legs submitting one day's branch race each other's push.
 [[ci.schedule]]
 point = "nightly"
 task = "toolroom.refresh"
 args = ["--submit"]
 every = "2w"
+once = true
 
 # The train's proof, nightly: the loop's release scenario on the first
 # runner, from a scratch branch of main, publishing nothing; the

@@ -51,9 +51,12 @@ workspace that keeps the handles current names the bench as an extension,
 and its verbs mount under `fm tools.*`:
 
 - `fm toolroom.refresh` observes what is new on this platform and folds
-  it into the records; with `--submit` it commits what moved on a
-  branch and opens the pull request, armed when every change only
-  added to a surface.
+  it into the records; with `--submit` it commits what moved on the
+  day's branch, `chore/tools-refresh-<date>`, and opens the pull
+  request, armed when every change only added to a surface. When
+  origin already holds the day's branch, from a refresh on another
+  machine, the refresh commits after it and reuses its pull request,
+  or says the day's refresh is already submitted when it adds nothing.
 - `fm toolroom.gather`, `fm toolroom.assemble` and `fm toolroom.observe` are
   the refresh's halves, for a matrix that observes on several
   machines and assembles once.
