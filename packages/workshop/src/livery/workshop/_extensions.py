@@ -176,11 +176,14 @@ def distribution_of(extension: str) -> str:
     convention: an import path names its distribution with its dots as
     hyphens, and a short name is one of the base's own family,
     ``<namespace>-extensions-<name>``, never the index's package of
-    that bare name.
+    that bare name. An entry point whose distribution's metadata is
+    gone, moved by an install after the scan, has no name to give and
+    is taken at the convention the same way.
     """
     entry = _declared().get(extension)
-    if entry is not None and entry.dist is not None:
-        return entry.dist.name
+    name = entry.dist.name if entry is not None and entry.dist is not None else None
+    if name:
+        return name
     if "." in extension:
         return extension.replace(".", "-")
     return f"{SELF.partition('.')[0]}-extensions-{extension}"
