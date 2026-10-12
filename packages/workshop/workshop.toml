@@ -15,12 +15,12 @@ floor = "0.11.0"
 [[depends]]
 path = "packages/git"
 kind = "runtime"
-floor = "0.0.0"
+floor = "0.1.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.59.0"
+floor = "0.60.0"
 
 [[depends]]
 path = "packages/forge"
@@ -30,7 +30,7 @@ floor = "0.7.0"
 [[depends]]
 path = "packages/toolroom-store"
 kind = "runtime"
-floor = "0.3.0"
+floor = "0.4.0"
 
 [[depends]]
 path = "packages/strongroom"

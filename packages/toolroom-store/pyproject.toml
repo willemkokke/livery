@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "livery-footman>=0.59.0",
+    "livery-footman>=0.60.0",
 ]
 
 [project.urls]

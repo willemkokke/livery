@@ -5,6 +5,26 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.60.0] - 2026-10-12
+
+### Added
+
+- Footman.scratch_dir makes a process's scratch under the cache, named for its owner, and the collector removes what a gone process left; the replay, the shell, the two isolation plugins and the playground cache use it by @willemkokke
+- A kept trace shows an off-the-record run as a section named for its command, and a lifted step or a step block stamps its start so it reaches the trace by @willemkokke
+- Fm doctor is footman's: every package registers its checks under footman.doctors, --fix runs the repairs and checks again, the workshop's forge and host checks move behind it, and the nightly runs it first by @willemkokke
+- The plugin gives every git spawn under footman one ssh connection per host, the tools' identity, an editor that never opens, and a task's own marks by @willemkokke
+
+### Fixed
+
+- Footman.task_tree serves the run's own tree to a task, and the verbs fragment reads it in process for this workspace instead of running fm --json --list again by @willemkokke
+- A bytes stdin takes footman's run and the toolroom's handle down a binary lane, no newline translation and the capture decoded with surrogateescape, and the state store writes every blob, the tree and the commit with one fast-import through it by @willemkokke
+
+### Changed
+
+- Footman.alive is the one process-liveness probe, public and injectable for its Windows path, and the workshop's devenv drops its tasklist probe for it by @willemkokke
+- The trace epoch test carries the anchor inheritance's slack by @willemkokke
+- The lifecycle phases and the gate share one walk: every step is a footman step inside parallel(), a package step once per package, ordered by after and by provides and reads; pre and post go, every step reads into the one record and DeclaredPhase goes, and GateContext folds into PhaseContext by @willemkokke
+
 ## [0.59.0] - 2026-10-08
 
 ### Added
