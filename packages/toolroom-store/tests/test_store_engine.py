@@ -429,13 +429,45 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     again = store.ensure(spec, spec.versions[-1])
     assert not again.installed and again.tree == ensured.tree
     assert [e.action for e in events] == ["probe"]
-    # A damaged view is made whole again through its own record. The
+    # A tool never supplied has no view to audit; a whole one audits empty.
+    assert store.audit("tool", "9.9.9") is None
+    assert store.audit("tool", "1.0.0") == ()
+    # A damaged view is the doctor's, not the sync's: the probe keeps the
+    # ref and the record checks and still answers present, the audit
+    # names the path, and the resupply makes the view whole again. The
     # view's file is read-only, and Windows refuses to unlink one.
     tool.chmod(tool.stat().st_mode | stat.S_IWUSR)
     tool.unlink()
+    assert store.probe(spec, spec.versions[-1]) is not None
+    # The alias is a link to the file where links are allowed, so it
+    # dangles with it; on Windows it is a copy and stands.
+    missing = {f"bin/tool{EXE}"} | ({"alias"} if sys.platform != "win32" else set())
+    assert set(store.audit("tool", "1.0.0") or ()) == missing
+    # A view the store made elsewhere is no tool's: the audit skips it.
+    assert ensured.tree is not None
+    store.objects.view(ensured.tree, home.root / "aside")
+    assert [(d.name, d.version) for d in store.audit_views()] == [("tool", "1.0.0")]
+    # The mend views the tree the store holds again: nothing is fetched.
+    events.clear()
+    store.mend_view("tool", "1.0.0")
+    assert tool.exists() and events == []
+    assert store.audit("tool", "1.0.0") == () and store.audit_views() == ()
+    assert store.objects.ref("tools", "tool@1.0.0") == ensured.tree
+    with pytest.raises(StoreError, match="no view"):
+        store.mend_view("tool", "9.9.9")
+    # A view whose record is gone, the directory with it, is absent to the
+    # probe although the ref still names the tree: the supply views the
+    # tree again and moves no ref.
+    for view in store.objects.views():
+        if view.at == str(ensured.tool_dir):
+            store.objects.drop_view(view.id)
     assert store.probe(spec, spec.versions[-1]) is None
-    repaired = store.ensure(spec, spec.versions[-1])
-    assert repaired.installed and tool.exists()
+    events.clear()
+    again = store.ensure(spec, spec.versions[-1])
+    assert again.installed and tool.exists()
+    assert store.objects.ref("tools", "tool@1.0.0") == ensured.tree
+    # The artifact landed already: nothing is fetched for it.
+    assert [e.action for e in events] == ["probe", "install"]
 
 
 def test_a_tar_archive_and_a_binary_install_too(
@@ -1361,3 +1393,24 @@ def test_an_origin_that_does_not_answer_is_a_store_refusal_naming_the_url(
     monkeypatch.setattr(_engine, "download", refused)
     with pytest.raises(StoreError, match=r"connection reset"):
         Store(home, host=HOST).ensure(record, "1.0.0")
+
+
+def test_a_stage_without_exclusion_keeps_what_the_deployment_would_leave_out(
+    home: Home, origin: dict[str, bytes], tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    artifacts, _data = _tool()
+    spec = _record("tool", artifacts, root="tool-1.0.0")
+    spec = replace(spec, layout=replace(spec.layout, exclude=("README",)))
+    _serve(origin, spec, artifacts)
+    store = Store(home, host=HOST)
+    deployment = resolve(spec, "1.0.0", HOST)
+    # The exclusion applied first: the README goes.
+    kept = tmp_path / "kept"
+    members = store.stage("tool", "download", "1.0.0", deployment, kept)
+    assert "README" in members and not (kept / "README").exists()
+    # A look at the whole artifact leaves every member in place.
+    whole = tmp_path / "whole"
+    members = store.stage("tool", "download", "1.0.0", deployment, whole, exclude=False)
+    assert "README" in members and (whole / "README").read_text() == "r"

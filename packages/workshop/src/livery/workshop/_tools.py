@@ -386,15 +386,13 @@ def index_source(root: Path) -> str:
     A URL is read as the published index; a path, relative to the root,
     is a directory holding an index or the records that build one.
     """
-    declared = tools_table(root / "workshop.toml").get("index")
-    if not isinstance(declared, str) or not declared:
-        fail(
-            "workshop.toml: [toolroom] index names no source; set it to the published"
-            " index's URL, or to a directory holding an index or the records"
-        )
-    if "://" in declared:
-        return declared
-    return str(root / declared)
+    from livery.toolroom.store import CatalogueError
+    from livery.toolroom.store import index_source as declared_source
+
+    try:
+        return declared_source(tools_table(root / "workshop.toml"), root)
+    except CatalogueError as error:
+        fail(str(error))
 
 
 def has_index(root: Path) -> bool:
@@ -495,16 +493,6 @@ def store_cannot_supply(root: Path) -> str:
     return "\n".join(lines)
 
 
-def _is_records(source: str) -> bool:
-    """Whether *source* is a directory of records rather than an index."""
-    from livery.toolroom.store import POINTER, records_in
-
-    if "://" in source:
-        return False
-    directory = Path(source)
-    return not (directory / POINTER).is_file() and bool(records_in(directory))
-
-
 def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
     """The catalogue the repository resolves against, from `[toolroom] index`.
 
@@ -568,13 +556,10 @@ def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
     held = _CATALOGUES.get(key)
     if held is not None:
         return held
-    if _is_records(source):
-        listing = Catalogue.of_records(Path(source))
-    else:
-        try:
-            listing = Catalogue.of_index(source, home=_home(), offline=offline)
-        except CatalogueError as error:
-            fail(str(error))
+    try:
+        listing = Catalogue.at(source, home=_home(), offline=offline)
+    except CatalogueError as error:
+        fail(str(error))
     _CATALOGUES[key] = listing
     return listing
 
@@ -588,7 +573,7 @@ def store_home() -> Home:
     from livery.footman import data_dir
     from livery.toolroom.store import Home
 
-    return Home(data_dir() / "toolroom")
+    return Home.under(data_dir())
 
 
 def lock_path(root: Path) -> Path:
@@ -1699,9 +1684,9 @@ def source_mark(source: str) -> str:
     directory or URL, is the digest of its pointer document.
     """
     from livery.strongroom import canonical, digest_of
-    from livery.toolroom.store import read_pointer, tree_fingerprint
+    from livery.toolroom.store import is_records, read_pointer, tree_fingerprint
 
-    if _is_records(source):
+    if is_records(source):
         return tree_fingerprint([source])
     return str(digest_of(canonical(read_pointer(source))))
 

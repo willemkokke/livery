@@ -32,8 +32,11 @@ if TYPE_CHECKING:
     from livery.toolroom.store._catalogue import CatalogueError as CatalogueError
     from livery.toolroom.store._catalogue import Listed as Listed
     from livery.toolroom.store._catalogue import build_current as build_current
+    from livery.toolroom.store._catalogue import index_source as index_source
+    from livery.toolroom.store._catalogue import is_records as is_records
     from livery.toolroom.store._catalogue import read_pointer as read_pointer
     from livery.toolroom.store._engine import LINKS as LINKS
+    from livery.toolroom.store._engine import DamagedView as DamagedView
     from livery.toolroom.store._engine import Delta as Delta
     from livery.toolroom.store._engine import Ensured as Ensured
     from livery.toolroom.store._engine import Event as Event
@@ -145,6 +148,7 @@ __all__ = [
     "Artifact",
     "Catalogue",
     "CatalogueError",
+    "DamagedView",
     "Delta",
     "Deployment",
     "Ensured",
@@ -188,6 +192,8 @@ __all__ = [
     "fetch_file",
     "fetch_json",
     "host_key",
+    "index_source",
+    "is_records",
     "npm_cli",
     "observations",
     "read_pointer",
@@ -222,6 +228,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "DOWNLOAD_KINDS": ("livery.toolroom.store._record", "DOWNLOAD_KINDS"),
     "Delta": ("livery.toolroom.store._engine", "Delta"),
     "Deployment": ("livery.toolroom.store._record", "Deployment"),
+    "DamagedView": ("livery.toolroom.store._engine", "DamagedView"),
     "Ensured": ("livery.toolroom.store._engine", "Ensured"),
     "Event": ("livery.toolroom.store._engine", "Event"),
     "FORMATS": ("livery.toolroom.store._record", "FORMATS"),
@@ -287,6 +294,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "observations": ("livery.toolroom.store._record", "observations"),
     "read_pointer": ("livery.toolroom.store._catalogue", "read_pointer"),
     "read_table": ("livery.toolroom.store._table", "read_table"),
+    "index_source": ("livery.toolroom.store._catalogue", "index_source"),
+    "is_records": ("livery.toolroom.store._catalogue", "is_records"),
     "records_in": ("livery.toolroom.store._record", "records_in"),
     "render": ("livery.toolroom.store._stub", "render"),
     "render_observation": ("livery.toolroom.store._stub", "render_observation"),

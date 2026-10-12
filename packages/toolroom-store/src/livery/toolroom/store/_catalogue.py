@@ -182,6 +182,19 @@ class Catalogue:
         return render_observation(name, tools.observation(name, version))
 
     @classmethod
+    def at(cls, source: str, *, home: Home, offline: bool = False) -> Catalogue:
+        """The catalogue at *source*, whichever it holds: records, or an index.
+
+        A directory with no pointer file and record files in it is the
+        authoring site's records; anything else, a directory with a
+        pointer or an HTTP base, is an index read through *home*'s
+        store. One decision, made here for every reader.
+        """
+        if is_records(source):
+            return cls.of_records(Path(source))
+        return cls.of_index(source, home=home, offline=offline)
+
+    @classmethod
     def of_records(cls, directory: Path) -> Catalogue:
         """The catalogue of the records under *directory*, the authoring site's.
 
@@ -351,6 +364,38 @@ class _LazyHosts(Mapping[str, Mapping[str, Digest]]):
 
     def __len__(self) -> int:
         return len(self._versions)
+
+
+def is_records(source: str) -> bool:
+    """Whether *source* is a directory of records rather than an index.
+
+    A directory with no pointer file and record files in it; a URL never.
+    """
+    if "://" in source:
+        return False
+    directory = Path(source)
+    return not (directory / POINTER).is_file() and bool(records_in(directory))
+
+
+def index_source(table: Mapping[str, object], root: Path) -> str:
+    """Where a workspace reads its catalogue, as its ``[toolroom] index`` names it.
+
+    A URL is the published index; a path, relative to *root*, is a
+    directory holding an index or the records that build one.
+
+    Raises:
+        CatalogueError: when the table names no source.
+    """
+    declared = table.get("index")
+    if not isinstance(declared, str) or not declared:
+        raise CatalogueError(
+            "workshop.toml: [toolroom] index names no source; set it to the"
+            " published index's URL, or to a directory holding an index or the"
+            " records"
+        )
+    if "://" in declared:
+        return declared
+    return str(root / declared)
 
 
 def read_pointer(source: str) -> dict[str, Any]:
