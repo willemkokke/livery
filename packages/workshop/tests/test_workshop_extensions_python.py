@@ -145,6 +145,58 @@ def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
     assert uploads == [("acme-core", "https://idx.example/", "t")]
 
 
+def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One package through the test phase's isolated side, its twin through the kind."""
+    from dataclasses import replace
+
+    from livery.workshop import _checks, _lifecycle
+    from livery.workshop._packages import Package
+
+    legs: list[tuple[str, str, tuple[Path, ...]]] = []
+
+    def _leg(
+        package: Package,
+        root: Path,
+        *,
+        release_dirs: tuple[Path, ...],
+        resolution: str,
+    ) -> dict[str, str]:
+        legs.append((package.path, resolution, release_dirs))
+        return {"acme-core": "1.0.0"}
+
+    monkeypatch.setattr("livery.extensions.python._backend.run_isolated_test", _leg)
+    listing = Package(
+        directory=tmp_path / "listing",
+        path="packages/listing",
+        name="acme-core",
+        kind="python",
+        depends=(),
+        extensions=("python",),
+    )
+    plain = replace(listing, path="packages/plain", extensions=())
+    dirs = (tmp_path / "dist",)
+    for package in (listing, plain):
+        assert _lifecycle.has_isolated_test(package)
+        resolved = _lifecycle.isolated_test(
+            package, tmp_path, resolution="head", release_dirs=dirs
+        )
+        assert resolved == {"acme-core": "1.0.0"}
+    assert legs == [
+        ("packages/listing", "head", dirs),
+        ("packages/plain", "head", dirs),
+    ]
+    # The listing package's leg is the extension's step in the walk; the
+    # gate, which runs the tree side, registers no check for it.
+    assert "test.python: packages/listing runs (a python package)" in (
+        capsys.readouterr().out
+    )
+    assert "test.python" not in _checks.checks_by_name()
+
+
 def _verified_package(directory: Path) -> object:
     from livery.workshop._packages import Package
 

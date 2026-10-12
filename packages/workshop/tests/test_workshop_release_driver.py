@@ -1,8 +1,9 @@
 """The release driver's edge table, forced: refusals, rollback, recovery.
 
-The heavy validation (uv build plus two isolated venv legs) runs for
-real exactly once, on a minimal package; every flow test monkeypatches
-it, the flows' own edges are what they force.
+The heavy validation (uv build plus the isolated venv legs) runs for
+real on a minimal package, the floor and latest legs once and the head
+leg once at a lock's pins; every flow test monkeypatches it, the
+flows' own edges are what they force.
 """
 
 from __future__ import annotations
@@ -717,6 +718,43 @@ def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
     _backend.build(plan.package, root)
     validate_member(root, plan, (member / "dist",))
     assert list((member / "dist").glob("*.whl"))
+
+
+def test_the_head_leg_runs_for_real_at_the_pins_the_lock_holds(
+    workspace: tuple[FakeForge, Path],
+) -> None:
+    # The head leg unmocked: uv locks a workspace whose one dependency
+    # the lock holds below its newest release, and the leg installs the
+    # built wheel at that pin, where the latest leg takes the newest.
+    import livery.toolroom.tools as tools
+    from livery.extensions.python import _backend
+
+    _fake, root = workspace
+    member = root / "packages" / "core"
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
+        'requires-python = ">=3.11"\ndependencies = ["six>=1.10"]\n'
+        "[build-system]\n"
+        'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
+        "[tool.uv.build-backend]\n"
+        'module-name = "livery.core"\nnamespace = true\n'
+    )
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "ws"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+        '[tool.uv]\npackage = false\nconstraint-dependencies = ["six==1.15.0"]\n'
+        '[tool.uv.workspace]\nmembers = ["packages/core"]\n'
+    )
+    locked = tools.uv.opts(cwd=root, nofail=True, recorded=False)("lock")
+    assert locked.code == 0, locked.stderr
+    core = {p.directory.name: p for p in discover_packages(root)}["core"]
+    _backend.build(core, root)
+    dists = (member / "dist",)
+    head = _backend.run_isolated_test(core, root, release_dirs=dists, resolution="head")
+    assert head["six"] == "1.15.0"
+    latest = _backend.run_isolated_test(
+        core, root, release_dirs=dists, resolution="latest"
+    )
+    assert latest["six"] != "1.15.0"
 
 
 PROBE = "leg-probe"
