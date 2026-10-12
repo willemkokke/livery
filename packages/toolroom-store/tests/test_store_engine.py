@@ -1393,3 +1393,24 @@ def test_an_origin_that_does_not_answer_is_a_store_refusal_naming_the_url(
     monkeypatch.setattr(_engine, "download", refused)
     with pytest.raises(StoreError, match=r"connection reset"):
         Store(home, host=HOST).ensure(record, "1.0.0")
+
+
+def test_a_stage_without_exclusion_keeps_what_the_deployment_would_leave_out(
+    home: Home, origin: dict[str, bytes], tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    artifacts, _data = _tool()
+    spec = _record("tool", artifacts, root="tool-1.0.0")
+    spec = replace(spec, layout=replace(spec.layout, exclude=("README",)))
+    _serve(origin, spec, artifacts)
+    store = Store(home, host=HOST)
+    deployment = resolve(spec, "1.0.0", HOST)
+    # The exclusion applied first: the README goes.
+    kept = tmp_path / "kept"
+    members = store.stage("tool", "download", "1.0.0", deployment, kept)
+    assert "README" in members and not (kept / "README").exists()
+    # A look at the whole artifact leaves every member in place.
+    whole = tmp_path / "whole"
+    members = store.stage("tool", "download", "1.0.0", deployment, whole, exclude=False)
+    assert "README" in members and (whole / "README").read_text() == "r"

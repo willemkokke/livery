@@ -1045,6 +1045,14 @@ def test_the_host_allowance_rides_the_entry_and_a_lock_without_it_reads_unchange
         LockError, match=r"tea: `allow-host` is 'yes', not true or false"
     ):
         Lock.load(path)
+    # `optional` is judged the same way, and the lock is refused by name.
+    written["tools"]["tea"]["allow-host"] = True
+    written["tools"]["tea"]["optional"] = "maybe"
+    path.write_text(json.dumps(written))
+    with pytest.raises(
+        LockError, match=r"tea: `optional` is 'maybe', not true or false"
+    ):
+        Lock.load(path)
 
 
 def test_a_catalogue_read_roots_the_tools_tree_so_a_sweep_keeps_it(tmp_path):
