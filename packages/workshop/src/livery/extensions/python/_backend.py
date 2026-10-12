@@ -905,6 +905,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                     else f"{base} none"
                 )
             else:
+                if leg.scope == ABSENT:
+                    # The leg did not run and no record of any base has
+                    # ever measured this suite on its platform: a package
+                    # born on this branch. Nothing stands in, the legs that
+                    # ran judge it, and the merge point measures it here.
+                    print(
+                        f"  coverage: leg {leg.label} has no record of"
+                        f" {suite.path} yet; the merge point measures it"
+                    )
+                    continue
                 fail(
                     f"leg {leg.label}: no record holds {suite.path} at closure"
                     f" {key[:12]} ({', '.join(states)}). A leg skips a suite"

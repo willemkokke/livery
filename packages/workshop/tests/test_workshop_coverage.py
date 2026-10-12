@@ -976,6 +976,37 @@ def test_a_leg_a_pull_request_does_not_run_carries_a_changed_suite_at_its_older_
     assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 
+def test_a_leg_a_pull_request_does_not_run_passes_a_suite_no_record_has_ever_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A package born on this branch: the spared leg never measured it, on
+    # any base. Nothing stands in, the leg that ran judges it, and the
+    # merge point measures it on every leg.
+    x = _suite(tmp_path, "x")
+    source = str(_source(tmp_path, "x"))
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setattr(
+        _python,
+        "expected_legs",
+        lambda root, run: (["check-a", "check-b"], ["check-a"]),
+    )
+    fresh = _unit("packages/x", {source: [1, 2, 3, 4]}, run="7")
+    _union(
+        monkeypatch,
+        [_leg("check-a", "full", units={"packages/x": fresh})],
+        held=_coverage_store.Record({}),
+    )
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        "coverage: leg check-b has no record of packages/x yet; the merge point"
+        " measures it" in out
+    )
+    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+
+
 def test_a_push_carries_no_absent_leg(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
