@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from livery.toolroom.bench import _tasks
+from livery.toolroom.tools import Result
 
 
 def _classify(monkeypatch, spans: dict[str, dict[str, Any]]) -> bool:
@@ -44,11 +46,32 @@ def _refreshed(
     )
 
 
+def _git(
+    calls: list[tuple[str, ...]], codes: dict[str, int] | None = None
+) -> Callable[..., Result]:
+    """A git that records each call and answers by its subcommand.
+
+    Origin holds no branch unless *codes* says otherwise: `ls-remote`
+    answers 2, git's own exit code for a ref origin does not have.
+    Every other subcommand answers 0, and a code *codes* names comes
+    with git's kind of complaint on stderr.
+    """
+    answers = {"ls-remote": 2, **(codes or {})}
+
+    def run(*args: str) -> Result:
+        calls.append(args)
+        code = answers.get(args[0], 0)
+        said = f"fatal: {args[0]} refused" if code not in (0, 2) else ""
+        return Result(code, stderr=said)
+
+    return run
+
+
 def test_a_refresh_that_moved_nothing_submits_nothing():
     calls: list[tuple[str, ...]] = []
     lines = _tasks.submit_refresh(
         _refreshed({}, additions_only=False),
-        git=lambda *args: calls.append(args),
+        git=_git(calls),
         submit=lambda argv: 0,
     )
     assert lines == ["  nothing moved: no branch, no pull request"]
@@ -66,10 +89,64 @@ def test_a_refused_submit_names_the_branch_that_stands():
     ):
         _tasks.submit_refresh(
             _refreshed({"ruff": ["0.9.0"]}, additions_only=True),
-            git=lambda *args: None,
+            git=_git([]),
             submit=lambda argv: 3,
             on=date(2026, 9, 14),
         )
+
+
+def test_an_origin_that_will_not_answer_stops_the_submit_before_any_commit():
+    """Asking origin for the day's branch comes first, so a refresh that
+    cannot ask makes no branch and no commit: it names origin's answer,
+    and the files it wrote stand in the checkout as the walk left them.
+    """
+    from datetime import date
+
+    from livery.footman import Failed
+
+    calls: list[tuple[str, ...]] = []
+    with pytest.raises(
+        (Failed, SystemExit),
+        match=(
+            "could not ask origin for chore/tools-refresh-20260914:"
+            " git ls-remote exited 128: fatal: ls-remote refused\n"
+            "  nothing is committed"
+        ),
+    ):
+        _tasks.submit_refresh(
+            _refreshed({"ruff": ["0.9.0"]}, additions_only=True),
+            git=_git(calls, {"ls-remote": 128}),
+            submit=lambda argv: 0,
+            on=date(2026, 9, 14),
+            dry_run=False,
+        )
+    assert calls == [
+        (
+            "ls-remote",
+            "--exit-code",
+            "origin",
+            "refs/heads/chore/tools-refresh-20260914",
+        )
+    ]
+
+
+def test_a_git_step_that_fails_is_named_in_git_s_own_words():
+    from datetime import date
+
+    from livery.footman import Failed
+
+    calls: list[tuple[str, ...]] = []
+    with pytest.raises(
+        (Failed, SystemExit), match="git switch exited 128: fatal: switch refused"
+    ):
+        _tasks.submit_refresh(
+            _refreshed({"ruff": ["0.9.0"]}, additions_only=True),
+            git=_git(calls, {"switch": 128}),
+            submit=lambda argv: 0,
+            on=date(2026, 9, 14),
+            dry_run=False,
+        )
+    assert [call[0] for call in calls] == ["ls-remote", "switch"]
 
 
 def test_additions_submit_armed_and_a_drop_waits_for_a_person():
@@ -90,15 +167,22 @@ def test_additions_submit_armed_and_a_drop_waits_for_a_person():
                 "bun": ["  bun 1.3.14: every check passed on 2 host(s), against 1.3.13"]
             },
         ),
-        git=lambda *args: calls.append(args),
+        git=_git(calls),
         submit=submit,
         on=date(2026, 9, 14),
         dry_run=False,
     )
-    assert calls[0] == ("switch", "-c", "chore/tools-refresh-20260914")
-    assert calls[1] == ("add", "-A")
-    assert calls[2][:2] == ("commit", "-m") and "bun, ruff" in calls[2][2]
-    assert "bun 1.3.14: every check passed on 2 host(s)" in calls[2][2]  # the summary
+    assert calls[0] == (
+        "ls-remote",
+        "--exit-code",
+        "origin",
+        "refs/heads/chore/tools-refresh-20260914",
+    )
+    assert calls[1] == ("switch", "-c", "chore/tools-refresh-20260914")
+    assert calls[2] == ("add", "-A")
+    assert calls[3][:2] == ("commit", "-m") and "bun, ruff" in calls[3][2]
+    assert "bun 1.3.14: every check passed on 2 host(s)" in calls[3][2]  # the summary
+    assert len(calls) == 4  # origin holds no branch: nothing to build on
     assert argvs[0][1:] == [
         "submit",
         "--title=chore(toolroom): tool refresh 2026-09-14",
@@ -111,7 +195,7 @@ def test_additions_submit_armed_and_a_drop_waits_for_a_person():
     argvs.clear()
     lines = _tasks.submit_refresh(
         _refreshed({"ruff": ["0.9.0"]}, additions_only=False),
-        git=lambda *args: None,
+        git=_git([]),
         submit=submit,
         on=date(2026, 9, 14),
         dry_run=False,
@@ -122,7 +206,7 @@ def test_additions_submit_armed_and_a_drop_waits_for_a_person():
     argvs.clear()
     lines = _tasks.submit_refresh(
         _refreshed({"ruff": ["0.9.0"]}, additions_only=True, ingest_ok=False),
-        git=lambda *args: None,
+        git=_git([]),
         submit=submit,
         on=date(2026, 9, 14),
         dry_run=False,
@@ -140,7 +224,7 @@ def test_a_dry_run_says_what_it_would_do_and_touches_nothing():
     calls: list[tuple[str, ...]] = []
     lines = _tasks.submit_refresh(
         _refreshed({"ruff": ["0.9.0"]}, additions_only=True, ingest_ok=False),
-        git=lambda *args: calls.append(args),
+        git=_git(calls),
         submit=lambda argv: 99,
         on=date(2026, 9, 14),
         dry_run=True,
@@ -244,3 +328,218 @@ def test_the_submit_starts_the_runner_as_this_interpreter_s_module(monkeypatch):
     assert seen == [
         [sys.executable, "-m", "livery.footman", "submit", "--title=t", "--armed"]
     ]
+
+
+def test_the_runner_starts_with_no_fm_on_the_path(tmp_path, monkeypatch):
+    """The submit's spawn names this interpreter and the runner's module,
+    never the console script, so it starts where the task's environment
+    has no `fm` on its PATH, as on a hosted runner.
+    """
+    import os
+
+    nothing = tmp_path / "bin"
+    nothing.mkdir()
+    env = {**os.environ, "PATH": str(nothing)}
+    monkeypatch.setattr(_tasks, "_spawn_context", lambda: (tmp_path, env))
+    assert _tasks._run_submit(["fm", "--version"]) == 0
+
+
+_DAY = "chore/tools-refresh-20261012"
+
+
+def _run_git(where: Path, *args: str) -> str:
+    """Run git in *where* for a test's own setup or reading; its output."""
+    import subprocess
+
+    done = subprocess.run(
+        ["git", *args], cwd=where, check=True, capture_output=True, text=True
+    )
+    return done.stdout.strip()
+
+
+def _write(where: Path, files: dict[str, str]) -> None:
+    for name, text in files.items():
+        path = where / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+def _origin_holding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, earlier: dict[str, str]
+) -> tuple[Path, str]:
+    """An origin whose day's branch holds an earlier refresh that wrote *earlier*.
+
+    Main moves on after the branch is cut, as it does between a desk's
+    refresh and a runner's. Returns a fresh clone of main, made the
+    working directory, and the tip of the day's branch on origin.
+    """
+    for part, value in (("NAME", "Refresh Test"), ("EMAIL", "refresh@example.invalid")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{part}", value)
+        monkeypatch.setenv(f"GIT_COMMITTER_{part}", value)
+    origin, seed, runner = (
+        tmp_path / "origin.git",
+        tmp_path / "seed",
+        tmp_path / "runner",
+    )
+    origin.mkdir()
+    seed.mkdir()
+    _run_git(origin, "init", "--bare", "--initial-branch=main")
+    _run_git(seed, "init", "--initial-branch=main")
+    _write(
+        seed, {"records/uv.jsonl": "uv 0.12.5\n", "records/ruff.jsonl": "ruff 0.16.4\n"}
+    )
+    _run_git(seed, "add", "-A")
+    _run_git(seed, "commit", "-m", "seed")
+    _run_git(seed, "remote", "add", "origin", str(origin))
+    _run_git(seed, "push", "origin", "main")
+    _run_git(seed, "switch", "-c", _DAY)
+    _write(seed, earlier)
+    _run_git(seed, "add", "-A")
+    _run_git(seed, "commit", "-m", "chore(toolroom): tool refresh 2026-10-12")
+    _run_git(seed, "push", "origin", _DAY)
+    _run_git(seed, "switch", "main")
+    _write(seed, {"docs.md": "main moves on\n"})
+    _run_git(seed, "add", "-A")
+    _run_git(seed, "commit", "-m", "docs: main moves on")
+    _run_git(seed, "push", "origin", "main")
+    _run_git(tmp_path, "clone", str(origin), str(runner))
+    monkeypatch.chdir(runner)
+    return runner, _run_git(seed, "rev-parse", _DAY)
+
+
+def _submitting(argvs: list[list[str]]) -> Callable[[list[str]], int]:
+    def submit(argv: list[str]) -> int:
+        argvs.append(argv)
+        return 0
+
+    return submit
+
+
+def test_a_refresh_origin_already_holds_is_already_submitted(tmp_path, monkeypatch):
+    """A second refresh on one day, from a runner or a desk, meets the
+    day's branch on origin. When every file it wrote reads the same
+    there, it commits nothing, submits nothing and says so; the commits
+    main gained since the branch was cut are not a change of its own.
+    """
+    from datetime import date
+
+    runner, tip = _origin_holding(
+        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7\n"}
+    )
+    _write(runner, {"records/uv.jsonl": "uv 0.12.7\n"})
+    argvs: list[list[str]] = []
+    lines = _tasks.submit_refresh(
+        _refreshed({"uv": ["0.12.7"]}, additions_only=True),
+        submit=_submitting(argvs),
+        on=date(2026, 10, 12),
+        dry_run=False,
+    )
+    assert lines == [
+        f"  the day's refresh is already submitted: {_DAY} on origin holds"
+        " every change this one made, so nothing is committed"
+    ]
+    assert argvs == []
+    assert _run_git(runner, "branch", "--show-current") == _DAY
+    assert _run_git(runner, "rev-parse", "HEAD") == tip
+    assert _run_git(runner, "status", "--porcelain") == ""
+
+
+def test_a_refresh_that_differs_builds_on_origin_s_branch(tmp_path, monkeypatch):
+    """The day's branch on origin is the base: the refresh commits after
+    it, so the push is a fast-forward and the open pull request is
+    reused. Each file this refresh wrote carries its content, and main's
+    later commits stay out of the branch. When its files cover every
+    file the branch changed, its own changes decide the arming.
+    """
+    from datetime import date
+
+    runner, tip = _origin_holding(
+        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7 read on macOS\n"}
+    )
+    _write(runner, {"records/uv.jsonl": "uv 0.12.7 read on Linux\n"})
+    argvs: list[list[str]] = []
+    lines = _tasks.submit_refresh(
+        _refreshed({"uv": ["0.12.7"]}, additions_only=True),
+        submit=_submitting(argvs),
+        on=date(2026, 10, 12),
+        dry_run=False,
+    )
+    assert lines == [
+        f"  refreshed uv on {_DAY}, after the commits origin already holds",
+        "  submitted armed: additions only, every ingest check passed",
+    ]
+    assert argvs[0][1:] == [
+        "submit",
+        "--title=chore(toolroom): tool refresh 2026-10-12",
+        "--armed",
+    ]
+    assert _run_git(runner, "branch", "--show-current") == _DAY
+    assert _run_git(runner, "rev-parse", "HEAD~1") == tip
+    uv = (runner / "records" / "uv.jsonl").read_text(encoding="utf-8")
+    assert uv == "uv 0.12.7 read on Linux\n"
+    assert not (runner / "docs.md").exists()
+    assert _run_git(runner, "status", "--porcelain") == ""
+
+
+def test_a_branch_holding_changes_this_refresh_did_not_make_waits_for_a_person(
+    tmp_path, monkeypatch
+):
+    """A file only the earlier refresh wrote keeps its content, and this
+    refresh's own verdict says nothing about it: the pull request goes
+    unarmed, whatever this refresh's changes alone would decide.
+    """
+    from datetime import date
+
+    earlier = {
+        "records/uv.jsonl": "uv 0.12.7 read on macOS\n",
+        "records/ruff.jsonl": "ruff 0.17.0 read on macOS\n",
+    }
+    runner, tip = _origin_holding(tmp_path, monkeypatch, earlier)
+    _write(runner, {"records/uv.jsonl": "uv 0.12.7 read on Linux\n"})
+    argvs: list[list[str]] = []
+    lines = _tasks.submit_refresh(
+        _refreshed({"uv": ["0.12.7"]}, additions_only=True),
+        submit=_submitting(argvs),
+        on=date(2026, 10, 12),
+        dry_run=False,
+    )
+    assert "--armed" not in argvs[0]
+    assert lines[1] == (
+        "  submitted unarmed: origin's branch holds changes this refresh did"
+        " not make, a person decides"
+    )
+    assert _run_git(runner, "rev-parse", "HEAD~1") == tip
+    records = runner / "records"
+    assert (records / "ruff.jsonl").read_text(encoding="utf-8") == earlier[
+        "records/ruff.jsonl"
+    ]
+    uv = (records / "uv.jsonl").read_text(encoding="utf-8")
+    assert uv == "uv 0.12.7 read on Linux\n"
+
+
+def test_a_day_origin_has_no_branch_for_starts_one_from_the_checkout(
+    tmp_path, monkeypatch
+):
+    """Git answers 2 for a branch origin does not hold, and the refresh
+    then cuts the day's branch from the checkout's own HEAD.
+    """
+    from datetime import date
+
+    runner, _tip = _origin_holding(
+        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7\n"}
+    )
+    main = _run_git(runner, "rev-parse", "HEAD")
+    _write(runner, {"records/uv.jsonl": "uv 0.12.8\n"})
+    argvs: list[list[str]] = []
+    lines = _tasks.submit_refresh(
+        _refreshed({"uv": ["0.12.8"]}, additions_only=True),
+        submit=_submitting(argvs),
+        on=date(2026, 10, 13),
+        dry_run=False,
+    )
+    assert lines[0] == "  refreshed uv on chore/tools-refresh-20261013"
+    assert len(argvs) == 1
+    assert (
+        _run_git(runner, "branch", "--show-current") == "chore/tools-refresh-20261013"
+    )
+    assert _run_git(runner, "rev-parse", "HEAD~1") == main
