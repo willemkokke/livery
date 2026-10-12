@@ -86,9 +86,11 @@ def test_many_missing_files_are_counted_and_three_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     data, tool = _supplied(tmp_path, monkeypatch)
-    for name in ("a", "b", "c"):
-        (tool.parent.parent / "doc" / name).unlink()
-    (tool.parent.parent / "README").unlink()
+    # A view's files are read-only, and Windows refuses to unlink one.
+    gone = [tool.parent.parent / "doc" / name for name in "abc"]
+    for path in (*gone, tool.parent.parent / "README"):
+        path.chmod(path.stat().st_mode | stat.S_IWUSR)
+        path.unlink()
     found = _doctor.doctor(data_dir=data)
     assert found[0].found.startswith("4 file(s) missing: ")
     assert found[0].found.endswith(" and 1 more")
