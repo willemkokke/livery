@@ -180,13 +180,16 @@ Its rules, in order:
 2. The socket path would exceed the unix socket limit, 104 bytes on
    macOS and 108 on Linux: empty, the reason naming the directory and
    the limit. The socket's name is `%r@%h:%p`, 17 bytes for github.
-3. The probe failed: empty, with ssh's own words. The probe opens no
-   connection of its own: after the first call through the built
-   environment, `ssh -O check` on the socket says whether a master
-   exists, and the verdict is written to a file in the socket
-   directory, so every later process in every verb reads a file. A
-   per-process memory would violate contract 6 and forget at every
-   verb.
+3. The probe failed before: empty, with ssh's own words. Two fixed
+   names in the socket directory are the whole memory. The socket,
+   `<user>@<host>:<port>`, is the proof of success: `ssh -O check` on
+   it says a master is up, and a missing socket means the next call
+   opens one. A failure is written to `<dir>/unsupported` with ssh's
+   words, after the first call through the built environment did not
+   return within its timeout or `-O check` found no master; every
+   later call reads that file first, and deleting it probes again.
+   The probe opens no connection of its own, and no process holds a
+   memory.
 4. Otherwise `GIT_SSH_COMMAND` is `ssh -o ControlMaster=auto -o
    ControlPath=<quoted path> -o ControlPersist=<idle> -o
    ServerAliveInterval=15 -o ServerAliveCountMax=2`. The path is
@@ -266,7 +269,10 @@ one `pre_task` hook from the handle it receives:
   commit never opens an editor; `_sync.py:117` and `:1012` pass
   `-c core.editor=true` by hand today.
 
-The decorators stack. Footman gives a plugin hook the task's handle
+The decorators stack, and they are the only way signing is turned
+off: the plugin never decides that by itself, so `fm commit
+--no-input` on a desk with signing on still waits on the signer.
+Footman gives a plugin hook the task's handle
 with its name, its environment and its per-plugin state; reading a
 marker off the handle needs one small public read on footman, since
 the handle's function is private.
@@ -276,9 +282,9 @@ untouched; a person's `user.email` set leaves the identity variables
 unset; a task without a marker gets the default rule; then a marked
 task gets its marker's environment, and two markers stack; `core.sshCommand` set in the repository config the same; a
 directory past the limit gives the reason with the directory and the
-limit; a failed probe gives ssh's words, with a fake `ssh` first on
-`PATH` that exits non-zero on `-O check`; a probe already written runs
-no ssh; then the happy path, the command with the five options and
+limit; an `unsupported` file gives its words and runs no ssh; a
+failed probe writes the file, with a fake `ssh` first on `PATH` that
+exits non-zero on `-O check`; then the happy path, the command with the five options and
 the quoted path.
 
 **Acceptance**
@@ -295,6 +301,10 @@ the quoted path.
   ssh config and does nothing more.
 - `grep -rn "ensure_git_identity\|LOOP_IDENTITY\|core.editor=true"
   packages/workshop/src` prints nothing.
+- `grep -rln "user.email" packages/workshop/tests` prints the conftest
+  alone: one fixture sets the four author and committer variables for
+  every test, and the 35 files that configured a "tester" identity in
+  the repositories they create no longer do.
 - `git log --format=%an origin/main` on the local loop's repository
   after `fm ci.e2e --scenario=release` shows `<prog>` as the author of
   the release commits.
@@ -430,6 +440,12 @@ and the number recorded here.
   the socket directory; never an edit of the user's ssh config;
   support decided by a behaviour probe. It is phase 2, since it needs
   only the package and pays at once.
+- 2026-10-12, Willem: the probe's memory is two fixed names in the
+  socket directory, the socket itself and `unsupported`; no pointer
+  file, no per-process memory. Signing is turned off by the
+  `@git.unsigned` decorator alone, never by the plugin's own judgement
+  of whether a person is there. The workshop's test seeds move to one
+  conftest fixture in phase 2.
 - 2026-10-12, Willem: one identity for every commit the tools make,
   `<prog>` at `<prog>@<prog>.invalid`, in place of the five the
   repository invents; set through the environment when a person's is
@@ -446,16 +462,4 @@ and the number recorded here.
 
 ## Open
 
-1. The probe's verdict file against a per-process memory. Owner:
-   Willem. Recommendation: the file, for contract 6 and so a verdict
-   outlives the verb.
-2. Whether the plugin turns signing off by itself when no person is
-   there (`footman.attended()` false), beside the `@git.unsigned`
-   marker. The cost: `fm commit --no-input` on a desk with signing on
-   would commit unsigned where today it waits on the signer. Owner:
-   Willem. Recommendation: the marker alone; an unattended rule only
-   where a runner's variables say it is CI.
-3. Whether the workshop's 35 test files that each configure a
-   "tester" identity in the repositories they create move to one
-   conftest fixture that sets the identity variables for every test.
-   Test code only; nothing to do with the plugin. Owner: Willem.
+Nothing open. Every ruling the phases need is in the decision record.
