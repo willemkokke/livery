@@ -10,7 +10,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.footman import Failed, RunFailed
-from livery.workshop import GateContext, Package, _checks
+from livery.workshop import Package, PhaseContext, _checks
 from livery.workshop._checks import WHOLE, CheckRecord, register_check
 from livery.workshop._declaration import Reference
 from livery.workshop._words import Command, Words, explained
@@ -78,7 +78,7 @@ def _check(
     return record
 
 
-def _one_file(ctx: GateContext, name: str) -> tuple[Path, ...]:
+def _one_file(ctx: PhaseContext, name: str) -> tuple[Path, ...]:
     """The package's one C++ file, as the run's selection names it."""
     del name
     assert ctx.package is not None
@@ -116,7 +116,7 @@ def test_a_call_that_exits_non_zero_refuses_and_every_other_call_still_runs(
     )
     record = _check(words)
     with pytest.raises(BaseException, match="win32"):
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     ran = sorted(argv[0] for argv, _chosen in tool.calls)
     assert ran == ["--platform=darwin", "--platform=linux", "--platform=win32"]
 
@@ -127,7 +127,7 @@ def test_a_refused_call_is_a_check_s_refusal(
     monkeypatch.setattr(tools, "acme", _Tool(refusing=("--check",)), raising=False)
     record = _check(Words(("acme", "--check")))
     with pytest.raises(Failed, match=r"`acme --check` exited with code 1"):
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
 
 
 def test_a_placeholder_nothing_answers_refuses_naming_the_check(
@@ -140,7 +140,7 @@ def test_a_placeholder_nothing_answers_refuses_naming_the_check(
         match=r"lint\.acme names \{output\}, which neither the engine nor its"
         r" matrix answers; the engine answers cache, package, compile-commands",
     ):
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
 
 
 def test_a_package_s_placeholder_in_a_workspace_call_refuses(
@@ -151,7 +151,7 @@ def test_a_package_s_placeholder_in_a_workspace_call_refuses(
     with pytest.raises(
         Failed, match=r"lint\.acme names \{package\}, which only a call that judges"
     ):
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
 
 
 def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
@@ -161,7 +161,7 @@ def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     record = _check(Words(("acme", "--files={paths}")))
     with pytest.raises(Failed) as caught:
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert str(caught.value) == (
         "lint.acme names {paths} in '--files={paths}', which stands alone as one"
         " word of a step's main under [phases.<phase>.<step>], where the run's"
@@ -169,7 +169,7 @@ def test_paths_or_arguments_inside_a_word_refuses_naming_the_shape(
     )
     record = _check(Words(("acme", "--args={arguments}")))
     with pytest.raises(Failed, match=r"names \{arguments\} in '--args=\{arguments\}'"):
-        record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+        record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert tool.calls == []
 
 
@@ -188,7 +188,7 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
         scope="package",
         extensions=("python",),
     )
-    ctx = GateContext(root=tmp_path, packages=(member,), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(member,), check=record.name)
     record.run(ctx.for_package(member))
     assert tool.calls == []
     assert (
@@ -204,7 +204,7 @@ def test_a_run_that_reaches_nothing_the_check_reads_calls_nothing(
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     record = _check(Words(("acme", "check")), narrowing="paths")
     _paths(monkeypatch, ())
-    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert tool.calls == []
 
 
@@ -235,7 +235,7 @@ def test_a_directory_with_no_file_the_claims_read_is_never_named(
     (one.directory / "tests").mkdir()
     (one.directory / "tests" / "test_one.py").write_text("")
     two = _member(tmp_path, "two")
-    ctx = GateContext(
+    ctx = PhaseContext(
         root=tmp_path, packages=(one, two), subset=(one,), check=record.name
     )
     record.run(ctx)
@@ -272,7 +272,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
 
     monkeypatch.setattr(_invoke, "run_batched", one_path_per_batch)
     record.run(
-        GateContext(
+        PhaseContext(
             root=tmp_path, packages=(), check=record.name, arguments=("-v", "-x")
         )
     )
@@ -284,7 +284,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
     ]
     # No words after --: {arguments} stands for nothing.
     tool.calls.clear()
-    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert [argv for argv, _chosen in tool.calls] == [
         ("check", "--strict", "packages/one/src", "--end"),
         ("check", "--strict", "packages/one/tests", "--end"),
@@ -292,7 +292,7 @@ def test_paths_and_arguments_land_where_the_template_puts_them(
     # The whole is a call with no path where {paths} stands.
     tool.calls.clear()
     _paths(monkeypatch, WHOLE)
-    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert tool.calls == [(("check", "--strict", "--end"), {})]
 
 
@@ -306,7 +306,7 @@ def test_a_template_without_paths_runs_whole(
     record = _check(Words(("acme", "check", "--all")))
     _paths(monkeypatch, ("packages/one/src",))
     record.run(
-        GateContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
+        PhaseContext(root=tmp_path, packages=(), check=record.name, arguments=("-v",))
     )
     assert tool.calls == [(("check", "--all"), {})]
     # A package step without {paths} runs once from the package, and
@@ -316,7 +316,7 @@ def test_a_template_without_paths_runs_whole(
     monkeypatch.setattr(_checks, "scoped_files", _one_file)
     package = _member(tmp_path, "one")
     record.run(
-        GateContext(
+        PhaseContext(
             root=tmp_path, packages=(package,), package=package, check=record.name
         )
     )
@@ -341,7 +341,7 @@ def test_a_package_check_calls_from_the_package_with_its_files(
         scope="package",
         extensions=("python",),
     )
-    ctx = GateContext(root=tmp_path, packages=(member,), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(member,), check=record.name)
     record.run(ctx.for_package(member))
     assert tool.calls == [
         (
@@ -366,12 +366,12 @@ def test_fix_runs_the_fix_words_and_safe_fix_its_own_or_the_fix_words(
     )
     record = _check(words)
     assert record.fix is not None
-    ctx = GateContext(root=tmp_path, packages=(), check=record.name)
+    ctx = PhaseContext(root=tmp_path, packages=(), check=record.name)
     record.fix(ctx)
-    record.fix(GateContext(root=tmp_path, packages=(), check=record.name, safe=True))
+    record.fix(PhaseContext(root=tmp_path, packages=(), check=record.name, safe=True))
     plain = _check(Words(("acme", "--check"), fix=("acme", "--fix")))
     assert plain.fix is not None
-    plain.fix(GateContext(root=tmp_path, packages=(), check=plain.name, safe=True))
+    plain.fix(PhaseContext(root=tmp_path, packages=(), check=plain.name, safe=True))
     assert [argv for argv, _chosen in tool.calls] == [
         ("--fix",),
         ("--safe",),
@@ -386,7 +386,7 @@ def test_env_reaches_the_call_over_the_run_s_own_environment(
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     monkeypatch.setenv("ACME_KEPT", "yes")
     record = _check(Words(("acme",), env=(("ACME_HOME", "{cache}"),)))
-    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     ((argv, chosen),) = tool.calls
     assert argv == ()
     env = chosen["env"]
@@ -406,7 +406,7 @@ def test_the_matrix_calls_once_per_value_with_a_cache_of_its_own(
         matrix=(("platform", ("linux", "win32")),),
     )
     record = _check(words)
-    record.run(GateContext(root=tmp_path, packages=(), check=record.name))
+    record.run(PhaseContext(root=tmp_path, packages=(), check=record.name))
     assert sorted(argv for argv, _chosen in tool.calls) == [
         ("--platform=linux", "--cache-dir=.workshop/.cache/acme/linux"),
         ("--platform=win32", "--cache-dir=.workshop/.cache/acme/win32"),

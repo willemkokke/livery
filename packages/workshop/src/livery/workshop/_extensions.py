@@ -1145,10 +1145,7 @@ def composition_problems(root: Path) -> list[str]:
                     )
         for phase in lifecycle_phases():
             steps = phase_steps(phase, members, installed_declaration)
-            problems += [
-                f"{where}: {line}"
-                for line in phase_problems(phase, steps, installed_declaration)
-            ]
+            problems += [f"{where}: {line}" for line in phase_problems(phase, steps)]
         try:
             wanted = canonical(names, installed_declaration)
         except OrderCycle as error:

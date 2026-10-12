@@ -13,7 +13,6 @@ from livery.workshop._checks import (
     PATHS,
     WORKSPACE,
     CheckRecord,
-    GateContext,
     check_for,
     check_names,
     judges,
@@ -24,6 +23,7 @@ from livery.workshop._checks import (
     unregister_check,
 )
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -53,7 +53,7 @@ def _package(tmp_path: Path, name: str, kind: str) -> Package:
     )
 
 
-def _noop(ctx: GateContext) -> None:
+def _noop(ctx: PhaseContext) -> None:
     del ctx
 
 
@@ -86,8 +86,8 @@ def test_selected_files_refuses_a_context_that_names_no_check(tmp_path: Path) ->
     # subject; a check's run is handed one that does.
     from livery.workshop import selected_files
 
-    with pytest.raises(_FAILURES, match=r"names none: .* sets GateContext\.check"):
-        selected_files(GateContext(root=tmp_path, packages=()))
+    with pytest.raises(_FAILURES, match=r"names none: .* sets PhaseContext\.check"):
+        selected_files(PhaseContext(root=tmp_path, packages=()))
 
 
 def test_a_check_is_handed_a_context_naming_it_and_asks_what_it_judges(
@@ -98,19 +98,19 @@ def test_a_check_is_handed_a_context_naming_it_and_asks_what_it_judges(
 
     seen: list[tuple[str, frozenset[str] | None]] = []
 
-    def asks(ctx: GateContext) -> None:
+    def asks(ctx: PhaseContext) -> None:
         seen.append((ctx.check, selected_files(ctx)))
 
     register_check(
         CheckRecord("asker", "lint", asks, narrowing=NONE, inputs=Inputs(("docs/**",)))
     )
     # A run that knows nothing of the changes: every file it reads.
-    run_check("lint.asker", GateContext(root=tmp_path, packages=()))
+    run_check("lint.asker", PhaseContext(root=tmp_path, packages=()))
     assert seen == [("lint.asker", None)]
     # A run that knows: the changed files among those it reads.
     seen.clear()
     changes = Changes(tmp_path, ("docs/a.md", "src/x.py"))
-    run_check("lint.asker", GateContext(root=tmp_path, packages=(), changes=changes))
+    run_check("lint.asker", PhaseContext(root=tmp_path, packages=(), changes=changes))
     assert seen == [("lint.asker", frozenset({"docs/a.md"}))]
 
 
@@ -122,29 +122,29 @@ def test_a_registered_check_runs_narrows_and_is_replaced_by_name(
 ) -> None:
     seen: list[tuple[str, tuple[str, ...] | None]] = []
 
-    def spy(ctx: GateContext) -> None:
+    def spy(ctx: PhaseContext) -> None:
         seen.append(
             ("spy", None if ctx.subset is None else tuple(p.path for p in ctx.subset))
         )
 
-    def fixer(ctx: GateContext) -> None:
+    def fixer(ctx: PhaseContext) -> None:
         seen.append(("fix", None))
 
     register_check(CheckRecord("spy", "lint", spy, narrowing=PATHS, fix=fixer))
     assert "lint.spy" in check_names() and "lint" in roles()
     member = _package(tmp_path, "one", "python")
-    whole = GateContext(root=tmp_path, packages=(member,))
+    whole = PhaseContext(root=tmp_path, packages=(member,))
     assert "lint.spy" in judges(whole)
     run_check("lint.spy", whole)
     assert seen == [("spy", None)]
     # Narrowed to the subset it is handed.
     seen.clear()
-    scoped = GateContext(root=tmp_path, packages=(member,), subset=(member,))
+    scoped = PhaseContext(root=tmp_path, packages=(member,), subset=(member,))
     run_check("lint.spy", scoped)
     assert seen == [("spy", ("packages/one",))]
     # Under --fix the rewriter runs, and is not judged again.
     seen.clear()
-    fixing = GateContext(root=tmp_path, packages=(member,), fix=True)
+    fixing = PhaseContext(root=tmp_path, packages=(member,), fix=True)
     assert rewriters(fixing)[-1] == "lint.spy"
     run_check("lint.spy", fixing, fix=True)
     assert seen == [("fix", None)]
@@ -166,7 +166,7 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
 
     ran: list[str] = []
 
-    def spy(ctx: GateContext) -> None:
+    def spy(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         ran.append(ctx.package.name)
 
@@ -177,9 +177,9 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
     native = _package(tmp_path, "native", "cpp-conan")
     # The probe judges the native package alone, announcing it by name;
     # a workspace of python packages schedules no probe at all.
-    assert "lint.probe" in judges(GateContext(root=tmp_path, packages=(py, native)))
-    assert "lint.probe" not in judges(GateContext(root=tmp_path, packages=(py,)))
-    run_check("lint.probe", GateContext(root=tmp_path, packages=(py, native)))
+    assert "lint.probe" in judges(PhaseContext(root=tmp_path, packages=(py, native)))
+    assert "lint.probe" not in judges(PhaseContext(root=tmp_path, packages=(py,)))
+    run_check("lint.probe", PhaseContext(root=tmp_path, packages=(py, native)))
     assert ran == ["acme-native"]
     assert (
         "  lint.probe: packages/native runs (a cpp package)" in capsys.readouterr().out
@@ -207,43 +207,42 @@ def test_a_record_names_its_phase_and_step_as_its_role_and_tool() -> None:
     ) == ((), (), None, True, (), ())
 
 
-def test_a_step_after_another_phases_step_runs_once_for_the_gate(
+def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
     restored_registries, tmp_path: Path
 ) -> None:
-    from livery.footman import Group, parallel
-    from livery.footman.testing import Runner
-    from livery.workshop._checks import current, task_for
+    from livery.workshop._checks import with_earlier
+    from livery.workshop._phases import run_phase
 
     ran: list[str] = []
 
-    def spy(ctx: GateContext) -> None:
+    def spy(ctx: PhaseContext) -> None:
         ran.append(ctx.check)
 
     # One earlier check, named in `after` by two later ones.
     register_check(CheckRecord("probe", "build", spy))
     register_check(CheckRecord("probe", "lint", spy, after=("build.probe",)))
     register_check(CheckRecord("probe", "test", spy, after=("build.probe",)))
-    ctx = GateContext(root=tmp_path, packages=())
-    # Outside a run there is nothing to dedup against: a check run by hand
-    # runs its own body alone, and the caller orders the checks.
+    ctx = PhaseContext(root=tmp_path, packages=())
+    # A check run by hand runs its own body alone: the caller orders
+    # the checks it runs.
     run_check("lint.probe", ctx)
     assert ran == ["lint.probe"]
-    # Inside a run, the gate's block: each later check runs the earlier one
-    # through its task before its own body, and the run dedups the two
-    # calls, so the earlier check runs once, before either of them.
+    # The gate's walk brings the earlier check in, once, and each later
+    # one starts after it.
     ran.clear()
-    tree = Group("root")
-
-    @tree.task
-    def gate() -> None:
-        with current(ctx), parallel():
-            task_for("lint.probe")()
-            task_for("test.probe")()
-
-    result = Runner().invoke("gate", tasks=tree)
-    assert result.ok, result.stderr
+    records = with_earlier(("lint.probe", "test.probe"))
+    assert [record.name for record in records] == [
+        "build.probe",
+        "lint.probe",
+        "test.probe",
+    ]
+    run_phase(ctx, records)
     assert sorted(ran) == ["build.probe", "lint.probe", "test.probe"]
     assert ran[0] == "build.probe"
+    # An after naming no registered check refuses naming the registry.
+    register_check(CheckRecord("probe", "format", spy, after=("build.ghost",)))
+    with pytest.raises(_FAILURES, match=r"'build\.ghost' is not a registered check"):
+        with_earlier(("format.probe",))
 
 
 def test_a_tests_only_step_runs_when_a_packages_change_is_its_tests_alone(
@@ -251,7 +250,7 @@ def test_a_tests_only_step_runs_when_a_packages_change_is_its_tests_alone(
 ) -> None:
     ran: list[tuple[str, tuple[str, ...]]] = []
 
-    def spy(ctx: GateContext) -> None:
+    def spy(ctx: PhaseContext) -> None:
         assert ctx.package is not None
         ran.append((ctx.check, ctx.selection))
 
@@ -264,7 +263,7 @@ def test_a_tests_only_step_runs_when_a_packages_change_is_its_tests_alone(
     )
     member = _package(tmp_path, "one", "python")
     suite = {"packages/one": ("packages/one/tests/test_one.py",)}
-    confined = GateContext(
+    confined = PhaseContext(
         root=tmp_path, packages=(member,), subset=(member,), tests=suite
     )
     # The narrowing first: a change confined to the package's tests leaves
@@ -279,7 +278,7 @@ def test_a_tests_only_step_runs_when_a_packages_change_is_its_tests_alone(
     assert ran == [("test.probe", ("tests/test_one.py",))]
     # A scoped gate whose change reaches past the tests runs both.
     ran.clear()
-    wider = GateContext(root=tmp_path, packages=(member,), subset=(member,))
+    wider = PhaseContext(root=tmp_path, packages=(member,), subset=(member,))
     assert {"lint.probe", "test.probe"} <= set(judges(wider))
     run_check("lint.probe", wider)
     run_check("test.probe", wider)
@@ -369,8 +368,8 @@ def test_a_step_of_an_ungated_phase_stays_out_of_the_gate(
     # lint is gated with one.
     register_check(CheckRecord("acme", "configure", _noop, fix=_noop))
     register_check(CheckRecord("acme", "lint", _noop, fix=_noop))
-    judging = GateContext(root=tmp_path, packages=())
-    fixing = GateContext(root=tmp_path, packages=(), fix=True)
+    judging = PhaseContext(root=tmp_path, packages=())
+    fixing = PhaseContext(root=tmp_path, packages=(), fix=True)
     assert "lint.acme" in judges(judging) and "lint.acme" in rewriters(fixing)
     assert "configure.acme" not in judges(judging)
     assert "configure.acme" not in rewriters(fixing)
@@ -611,7 +610,7 @@ def test_a_code_step_and_a_words_step_share_one_option_table(
         register_check(record)
         assert enabled("lint.probe", (package,)) == ()
         capsys.readouterr()
-        run_check("lint.probe", GateContext(root=tmp_path, packages=(package,)))
+        run_check("lint.probe", PhaseContext(root=tmp_path, packages=(package,)))
         assert (
             "lint.probe: packages/x skips (turned off in packages/x/workshop.toml)"
             in capsys.readouterr().out

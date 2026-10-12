@@ -27,7 +27,7 @@ def profile(ctx: PhaseContext) -> None:
 def stamp(ctx: PhaseContext) -> None:
     """Write the engine's version into the recipe's ``version`` attribute."""
     version = cast("str", ctx.read("version"))
-    ctx.provide("changed", _package.stamp_version(ctx.package).stamp(version))
+    ctx.provide("changed", _package.stamp_version(ctx.member).stamp(version))
 
 
 def build(ctx: PhaseContext) -> None:
@@ -35,7 +35,7 @@ def build(ctx: PhaseContext) -> None:
 
     Conan writes its own metadata, so the step reads no epoch.
     """
-    ctx.provide("dist", _package.build(ctx.package, ctx.root))
+    ctx.provide("dist", _package.build(ctx.member, ctx.root))
 
 
 def publish(ctx: PhaseContext) -> None:
@@ -47,6 +47,6 @@ def publish(ctx: PhaseContext) -> None:
         cast("Mapping[str, object]", ctx.read("registry-target"))
     )
     published = _package.publish_artifact(
-        ctx.package, ctx.root, version=version, target=target
+        ctx.member, ctx.root, version=version, target=target
     )
     ctx.provide("published", published)

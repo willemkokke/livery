@@ -20,7 +20,6 @@ from livery.footman import Group
 from livery.workshop import _checks, _quality
 from livery.workshop._checks import (
     CheckRecord,
-    GateContext,
     check_for,
     generate_verbs,
     register_check,
@@ -29,6 +28,7 @@ from livery.workshop._checks import (
     verb_tree,
 )
 from livery.workshop._extensions import SELF
+from livery.workshop._phases import PhaseContext
 from workshop_python_checks import python_checks_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -61,7 +61,7 @@ def fake_phases(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_phases, "declared_phases", lambda: known)
 
 
-def _idle(ctx: GateContext) -> None:
+def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 

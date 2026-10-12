@@ -128,6 +128,19 @@ def scrub_ci_markers(environ: MutableMapping[str, str]) -> tuple[str, ...]:
     return removed
 
 
+def child_environment(**extra: str) -> dict[str, str]:
+    """The environment a child the pass starts by hand begins with, *extra* over it.
+
+    The process environment over the task's. The pass is a serial task,
+    so the process environment is the real one, where the pass writes
+    its forge's own token after the task started; the task's carries
+    what the git plugin wrote at the task's start, the tools' identity
+    and the unsigned setting, which the process environment lacks. A
+    spawn given an explicit environment takes neither by itself.
+    """
+    return {**footman.current().env, **os.environ, **extra}
+
+
 def edit_environments(
     values: Mapping[str, str], *, remove: Sequence[str] = ()
 ) -> tuple[str, ...]:
@@ -1000,11 +1013,9 @@ def _publish_dev_wheels(kind: str, stack: Sequence[str] = ()) -> dict[str, str]:
             cwd=root,
             # The whole environment, extended: env= replaces, and a bare
             # pair would strip PATH from under the child fm.
-            env={
-                **os.environ,
-                "PYTHON_PUBLISH_INDEX": _lane(kind).publish(),
-                "UV_PUBLISH_TOKEN": token,
-            },
+            env=child_environment(
+                PYTHON_PUBLISH_INDEX=_lane(kind).publish(), UV_PUBLISH_TOKEN=token
+            ),
         )
     pins = _dev_pins(root, git.head_sha(root), tuple(changed)) | released
     print("  dev wheels: published to the loop's registry")
@@ -1152,7 +1163,7 @@ def _birth(
     import sys
 
     home = _loop_home(kind)
-    env = dict(os.environ)
+    env = child_environment()
     if index:
         env["UV_INDEX"] = " ".join(filter(None, (index, os.environ.get("UV_INDEX"))))
     home.mkdir(parents=True, exist_ok=True)
@@ -1719,7 +1730,7 @@ def _render_with_the_pass(root: Path) -> None:
             '[builtins]\nuser = ["livery.workshop"]\n',
             "utf-8",
         )
-        env = {**os.environ, "FOOTMAN_NO_UV": "1", "FOOTMAN_CONFIG_DIR": config}
+        env = child_environment(FOOTMAN_NO_UV="1", FOOTMAN_CONFIG_DIR=config)
         result = footman.run(
             [*runner, "--yes", "drift.check", "--fix"],
             cwd=root,

@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -777,6 +778,39 @@ def test_interactive_overlaps_the_parallel_pool():
     _, segments = split_chain(tree, ["wizard", "sibling"])
     results = _schedule.run_plan(reg, segments)
     assert all(r.ok for r in results), [str(r.error) for r in results]
+
+
+def test_a_block_inside_the_console_owner_flushes_its_children():
+    # The console gate holds other tasks' flushes while a wizard owns the
+    # terminal. The owner's own block writes as the owner: a child that
+    # waited for the owner to release would wait on its own ancestor,
+    # which is still waiting on the block, and the run would hang.
+    from livery.footman import _schedule, parallel, step
+
+    reg = Group("root")
+    seen: list[str] = []
+
+    def child() -> None:
+        print("from the block")
+        seen.append("ran")
+
+    @reg.task(interactive=True)
+    def wizard():
+        with parallel() as block:
+            block(step(child, title="child")())
+
+    tree = _manifest.build_manifest(reg)["tree"]
+    _, segments = split_chain(tree, ["wizard"])
+    outcome: list[Any] = []
+    runner = threading.Thread(
+        target=lambda: outcome.append(_schedule.run_plan(reg, segments)),
+        daemon=True,
+    )
+    runner.start()
+    runner.join(10)
+    assert not runner.is_alive(), "the block inside the console owner never ended"
+    assert seen == ["ran"]
+    assert all(r.ok for r in outcome[0]), [str(r.error) for r in outcome[0]]
 
 
 def test_console_lane_has_one_owner_at_a_time():

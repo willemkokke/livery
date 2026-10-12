@@ -70,7 +70,7 @@ def _this_checkout_or_skip(root: Path) -> None:
 def _answering(**answers_by_query: str) -> str:
     """The ``[queries]`` table answering each query with its function in ``_steps``.
 
-    An extension answering ``executables`` adds the run phase's main that
+    An extension answering ``executables`` adds the run phase's step that
     starts them, as its declaration must.
     """
     lines = [
@@ -78,7 +78,7 @@ def _answering(**answers_by_query: str) -> str:
         for query, function in answers_by_query.items()
     ]
     run = (
-        '\n[phases.run]\nmain = "{package}._steps:main"\n'
+        '\n[phases.run.start]\nmain = "{package}._steps:main"\n'
         if "executables" in answers_by_query
         else ""
     )
@@ -115,7 +115,7 @@ def _fakes(
         **{name: declaration for name, (declaration, _source) in declared.items()},
     )
     for name, (declaration, source) in declared.items():
-        if "[phases.run]" in declaration:
+        if "[phases.run.start]" in declaration:
             source += "\n\ndef main(ctx):\n    del ctx\n"
         fake_steps(tmp_path, name, source)
     return _package(tmp_path, *names)

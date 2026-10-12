@@ -21,13 +21,13 @@ if TYPE_CHECKING:
 
 import livery.footman as footman
 from livery.extensions.python import _backend as _python
-from livery.footman import Forward, doc, fail, group, parallel, task
+from livery.footman import Forward, doc, fail, group, task
 from livery.workshop import _checks
 from livery.workshop._backends import require_backends
-from livery.workshop._checks import GateContext
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._phases import PhaseContext, run_phase
 
 # Re-exported by name: the render check's record looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -56,12 +56,12 @@ def _context(
     examples: tuple[str, ...] = (),
     changes: Changes | None = None,
     arguments: tuple[str, ...] = (),
-) -> GateContext:
+) -> PhaseContext:
     """This workspace's gate context: the root, every package, and the run's scope."""
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    return GateContext(
+    return PhaseContext(
         root=root,
         packages=_packages(),
         subset=subset,
@@ -77,7 +77,7 @@ def _context(
 
 
 def walk(
-    ctx: GateContext,
+    ctx: PhaseContext,
     *,
     between: Callable[[], None] | None = None,
     judge: bool = True,
@@ -86,16 +86,18 @@ def walk(
     """Walk the registry: the one place the gate's order lives.
 
     Every gate comes here, the whole one, CI's narrowed legs and a
-    machine's narrowed step alike. What was narrowed and by whom is
-    printed first. Under ``--fix`` every fixer that applies runs, one
-    at a time in registration order, before any judge reads the tree,
-    and a check that rewrote is not judged again in the run; then
-    *between* runs, where a machine's run measures the tree the judges
-    read; then every judge runs in one parallel block, and one refusal
-    is the verdict. A check whose claims reach no file in scope is
-    said and not started. Without *judge* the walk stops after the
-    fixers, the post-edit hook's run. *only* keeps the named checks
-    alone, a generated verb's run.
+    machine's narrowed step alike, and runs the registry's steps
+    through the one walk ([livery.workshop._phases.run_phase][]). What
+    was narrowed and by whom is printed first. Under ``--fix`` every
+    fixer that applies runs, one at a time in registration order,
+    before any judge reads the tree, and a check that rewrote is not
+    judged again in the run; then *between* runs, where a machine's
+    run measures the tree the judges read; then every judge runs in
+    one parallel block, the steps a judge runs after among them, and
+    one refusal is the verdict. A check whose claims reach no file in
+    scope is said and not started. Without *judge* the walk stops
+    after the fixers, the post-edit hook's run. *only* keeps the named
+    checks alone, a generated verb's run.
     """
     for line in _checks.narrowings():
         print(line)
@@ -104,16 +106,14 @@ def walk(
     def chosen(names: tuple[str, ...]) -> tuple[str, ...]:
         return names if only is None else tuple(n for n in names if n in only)
 
-    with _checks.current(ctx):
-        for name in _checks.with_files(chosen(_checks.rewriters(ctx)), ctx):
-            _checks.task_for(name)(fix=True)
+    for name in _checks.with_files(chosen(_checks.rewriters(ctx)), ctx):
+        run_phase(ctx, (_checks.check_for(name),), fixing=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
-    with _checks.current(ctx), parallel():
-        for name in _checks.with_files(chosen(_checks.judges(ctx)), ctx):
-            _checks.task_for(name)()
+    names = _checks.with_files(chosen(_checks.judges(ctx)), ctx)
+    run_phase(ctx, _checks.with_earlier(names))
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:

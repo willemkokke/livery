@@ -10,7 +10,7 @@ import pytest
 
 import livery.toolroom.tools as tools
 from livery.footman import Failed
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 
 CONTRACT = (
@@ -127,7 +127,7 @@ def test_a_source_out_of_style_refuses_and_the_fix_heals_it(
     (package.directory / ".clang-format").write_text(style)
     source = package.directory / "src" / "native.cpp"
     record = registry.check_for("format.clang-format")
-    ctx = GateContext(root=tmp_path, packages=(package,), package=package)
+    ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     # The refusal names the command, and with it the file.
     with pytest.raises(Failed, match="exited 1") as caught:
         record.run(ctx)
@@ -148,7 +148,7 @@ def test_a_package_with_no_file_to_read_calls_nothing(
     (package.directory / "src" / "native.cpp").unlink()
     record = registry.check_for("format.clang-format")
     with answers({("clang-format",): Result(0)}) as calls:
-        record.run(GateContext(root=tmp_path, packages=(package,), package=package))
+        record.run(PhaseContext(root=tmp_path, packages=(package,), package=package))
     assert [call for call in calls if call.argv[0] == "clang-format"] == []
 
 
@@ -182,9 +182,9 @@ def test_the_check_reads_the_package_s_sources_and_the_words_after_the_dashes(
     source = str(package.directory / "src" / "native.cpp")
     record = registry.check_for("format.clang-format")
     assert record.fix is not None
-    ctx = GateContext(root=tmp_path, packages=(package,), package=package)
+    ctx = PhaseContext(root=tmp_path, packages=(package,), package=package)
     words = ("--verbose",)
-    spoken = GateContext(
+    spoken = PhaseContext(
         root=tmp_path, packages=(package,), package=package, arguments=words
     )
     record.run(ctx)

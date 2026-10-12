@@ -162,7 +162,7 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        prof='[extension]\nlevels = ["package"]\n\n[phases.sync]\n'
+        prof='[extension]\nlevels = ["package"]\n\n[phases.sync.prof]\n'
         'main = "{package}._steps:main"\n',
     )
     fake_steps(
@@ -200,7 +200,13 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
         (member("listed", "python", "acme.prof"), member("native", "python-nanobind")),
         tmp_path,
     )
-    assert capsys.readouterr().out.splitlines() == [
+    # The step's own lines; the walk's and footman's receipts are its.
+    said = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("prof.main")
+    ]
+    assert said == [
         "prof.main for packages/listed",
         "prof.main for packages/native",
     ]

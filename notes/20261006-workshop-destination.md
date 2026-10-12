@@ -1462,11 +1462,7 @@ the stack, which this design neither needs nor rules out).
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
-| one step per extension per lifecycle phase, read into `DeclaredPhase.main` | the one walk, every step a footman step (#1377, part 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
-| `[phases.<phase>]` with `pre`, `main` and `post`, `PHASES`, `ENGINE_KEYS`, the context's failure fields | `[phases.<phase>.<step>]` and declared phases (#1377) |
-| `[checks.<tool>.<role>]`, `[phases.<phase>]` with `pre`, `main` and `post`, the context's failure fields | `[phases.<phase>.<step>]` (#1377) |
-| a phase's level choosing its reader: a package-level phase's steps into `DeclaredPhase`, a workspace-level phase's into check records | the one walk, every step a footman step (#1377, part 6) |
 | the prove phase declared beside test, and `run`'s declared `executable` and `arguments` reaching steps as the context's attributes rather than as keys the engine gives | the train's test phase per listed resolution, and verify (#1377, part 10) |
 | `compatible`, `before` and `after` on `[extension]`, the every-pair check, `fm extensions --combinations` | nothing: composition is requires alone (#1377) |
 | `[generators]`, `[root-files]`, `[setup]`, `[rules]` | the docs phase's steps, fragments, the configure phase, layering steps (#1377) |
@@ -2632,6 +2628,36 @@ the stack, which this design neither needs nor rules out).
   `[contributions]` and `[slots]` tables. The templates read every
   workspace query's answer at render time, since the fragment engine
   serialises its data, so a render imports the changelog's notes module.
+
+- 2026-10-11, #1479, #1377 part 6: one walk. `run_phase` runs a
+  phase's steps as footman steps inside one `parallel()` block, a
+  workspace step once and a package step once per package whose set
+  holds its extension, ordered by `after` and by `provides` and
+  `reads`, independent steps concurrently; a reader whose provider
+  failed is not run and the provider's failure is the verdict. The
+  gate's walk runs each fixer through it one at a time in registration
+  order, then every judge in one block, its engine unchanged; the
+  lifecycle phases and `fm run` go through the same function. `pre` and
+  `post` are gone, as are the context's failure fields; every
+  `[phases.<phase>.<step>]` reads into the one record whatever its
+  phase's level, so `DeclaredPhase` is gone and an extension may add
+  several steps to one lifecycle phase. `GateContext` is folded into
+  `PhaseContext`, frozen: a step records an exit code with `exit()`,
+  `member` is the package a package step runs over, and `result()`
+  reads a provided key or an engine input. Steps run with output
+  unbuffered, which a probe shows streams live from a block. Running
+  the lifecycle phases as footman steps found a footman deadlock: a
+  `parallel()` block inside an `interactive=True` task waited at the
+  console gate for its own ancestor, since the gate held every flush to
+  the real terminal while a task owned it; `fm workflow.release` is
+  interactive, and its stamp of the one member that lists an extension
+  hung the loop's dev act for 38 minutes on the desk and past 50 on
+  GitHub's runner. The gate now exempts a block inside the owner's own
+  body, and the branch's rehearsal runs on GitHub's runner by default.
+  The same rehearsal found that the pass's hand-started children (the
+  birth, the dev act, the render) began from the process environment,
+  which on a runner lacks the tools' identity the git plugin writes
+  into the task's; they now begin from the task's environment.
 
 ## Open
 

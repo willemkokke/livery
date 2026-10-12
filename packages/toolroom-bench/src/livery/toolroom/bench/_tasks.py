@@ -1977,10 +1977,19 @@ def _prog() -> str:
 
 
 def _run_submit(argv: list[str]) -> int:
+    """Run the runner's submit named by *argv*; its exit code.
+
+    The runner is started as this interpreter's own module, never by
+    the name *argv* carries: the task's environment on a hosted runner
+    has no path to the runner's console script, and the module form
+    needs none.
+    """
     import subprocess
+    import sys
 
     cwd, env = _spawn_context()
-    return subprocess.run(argv, check=False, cwd=cwd, env=env).returncode
+    command = [sys.executable, "-m", "livery.footman", *argv[1:]]
+    return subprocess.run(command, check=False, cwd=cwd, env=env).returncode
 
 
 def _spawn_context() -> tuple[Path, dict[str, str]]:

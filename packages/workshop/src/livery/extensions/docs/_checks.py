@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from livery.footman import fail
-from livery.workshop import Changes, GateContext, selected_files
+from livery.workshop import Changes, PhaseContext, selected_files
 from livery.workshop._packages import member_depth, package_directories
 
 #: The trees the site build writes under the workspace's `docs/`, which
@@ -254,7 +254,7 @@ def names_removed(changes: Changes) -> bool:
     return False
 
 
-def docrefs_run(ctx: GateContext) -> None:
+def docrefs_run(ctx: PhaseContext) -> None:
     from livery.extensions.docs._refs import reference_problems
     from livery.workshop._packages import package_directories
 
@@ -275,13 +275,13 @@ def docrefs_run(ctx: GateContext) -> None:
         fail("cross-references that name nothing:\n  " + "\n  ".join(problems))
 
 
-def doclinks_run(ctx: GateContext) -> None:
+def doclinks_run(ctx: PhaseContext) -> None:
     problems = link_problems(ctx.root, selected_files(ctx))
     if problems:
         fail("links that resolve nothing:\n  " + "\n  ".join(problems))
 
 
-def docstrings_run(ctx: GateContext) -> None:
+def docstrings_run(ctx: PhaseContext) -> None:
     from livery.workshop._kinds import kind_chain, kind_names
 
     members = [

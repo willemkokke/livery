@@ -828,7 +828,8 @@ def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
         register_ast_rule,
         unregister_ast_rule,
     )
-    from livery.workshop._checks import GateContext, check_for
+    from livery.workshop._checks import check_for
+    from livery.workshop._phases import PhaseContext
 
     seen: list[str] = []
 
@@ -861,7 +862,7 @@ def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
         # judge that follows it passes.
         record = check_for("layering.imports")
         assert record.fix is not None
-        context = GateContext(
+        context = PhaseContext(
             root=tmp_path, packages=discover_packages(tmp_path), fix=True
         )
         record.fix(context)

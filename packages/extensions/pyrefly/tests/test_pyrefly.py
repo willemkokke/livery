@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import livery.toolroom.tools as tools
-from livery.workshop import GateContext, Package
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _checks as registry
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -97,11 +97,11 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
         depends=(),
     )
     record = registry.check_for("typecheck.pyrefly")
-    record.run(GateContext(root=tmp_path, packages=(member,)))
-    record.run(GateContext(root=tmp_path, packages=(member,), subset=(member,)))
+    record.run(PhaseContext(root=tmp_path, packages=(member,)))
+    record.run(PhaseContext(root=tmp_path, packages=(member,), subset=(member,)))
     # The words after -- on the check's own verb reach pyrefly's check.
     words = ("--summarize-errors",)
-    record.run(GateContext(root=tmp_path, packages=(member,), arguments=words))
+    record.run(PhaseContext(root=tmp_path, packages=(member,), arguments=words))
     assert calls == [("check",), ("check",), ("check", *words)]
 
 

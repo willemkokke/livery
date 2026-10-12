@@ -46,7 +46,6 @@ def test_the_surface_is_declared() -> None:
         "WHOLE",
         "Changes",
         "Edge",
-        "GateContext",
         "Package",
         "PhaseContext",
         "Prose",

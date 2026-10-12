@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -219,3 +220,27 @@ def test_any_removal_holds_for_a_human(monkeypatch):
 def test_no_events_is_not_safe_to_ship():
     assert _tasks._additions_only({}) is False
     assert _tasks._additions_only({"ruff": []}) is False
+
+
+def test_the_submit_starts_the_runner_as_this_interpreter_s_module(monkeypatch):
+    # A hosted runner's task environment has no path to the runner's
+    # console script, so a spawn by name finds nothing there.
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+
+    seen: list[list[str]] = []
+
+    def _run(command, **kwargs):
+        seen.append(list(command))
+        return SimpleNamespace(returncode=7)
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    monkeypatch.setattr(
+        _tasks, "_spawn_context", lambda: (Path("."), {"PATH": "/nowhere"})
+    )
+    code = _tasks._run_submit(["fm", "submit", "--title=t", "--armed"])
+    assert code == 7
+    assert seen == [
+        [sys.executable, "-m", "livery.footman", "submit", "--title=t", "--armed"]
+    ]
