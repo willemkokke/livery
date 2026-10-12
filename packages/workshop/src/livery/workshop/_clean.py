@@ -24,6 +24,7 @@ from typing import Annotated
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import doc, fail
 
 #: Never removed, at any depth, under any flag. A machine secret is
@@ -46,7 +47,7 @@ class CleanPlan:
 
 
 def _query(root: Path, *args: str) -> tools.Result:
-    return tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
+    return git.call(root, *args)
 
 
 def _protected(path: str) -> bool:

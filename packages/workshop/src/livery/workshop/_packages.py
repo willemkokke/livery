@@ -154,11 +154,9 @@ class Leftover:
 
 def _ls_files(root: Path, relative: str, *args: str) -> tuple[tuple[str, ...], str]:
     """The files ``git ls-files`` lists under *relative*; git's words if it fails."""
-    import livery.toolroom.tools as tools
+    from livery import git
 
-    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "ls-files", "-z", *args, "--", relative
-    )
+    result = git.call(root, "ls-files", "-z", *args, "--", relative)
     if result.code != 0:
         said = (result.stderr or result.stdout).strip()
         return (), said or f"git ls-files exited {result.code}"

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
+from livery import git
 from livery.footman import Arg, ask, doc, fail, suggest, task
 from livery.workshop._categories import (
     ChannelRule,
@@ -459,10 +460,10 @@ def _tracked_paths() -> list[str]:
     root = workspace_root()
     if root is None:
         return []
-    import livery.toolroom.tools as tools
-
-    listing = tools.git.opts(cwd=root, nofail=True, recorded=False)("ls-files")
-    return listing.stdout.splitlines()
+    try:
+        return git.ls_files(root)
+    except git.GitError:
+        return []
 
 
 @task

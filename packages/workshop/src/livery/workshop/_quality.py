@@ -375,8 +375,6 @@ def named_files(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
     untracked and not ignored, or every file under it outside a git
     checkout. A path outside the root, or naming nothing, is left out.
     """
-    import livery.toolroom.tools as tools
-
     found: set[str] = set()
     for path in paths:
         target = Path(path).resolve()
@@ -387,18 +385,9 @@ def named_files(root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
         if target.is_file():
             found.add(relative)
         elif target.is_dir():
-            listing = tools.git.opts(cwd=root, recorded=False, nofail=True)(
-                "ls-files",
-                "--cached",
-                "--others",
-                "--exclude-standard",
-                "-z",
-                "--",
-                relative,
-            )
-            if listing.code == 0:
-                found.update(name for name in listing.stdout.split("\0") if name)
-            else:
+            try:
+                found.update(git.ls_files(root, relative, others=True))
+            except git.GitError:
                 found.update(
                     p.relative_to(root.resolve()).as_posix()
                     for p in target.rglob("*")
@@ -1150,13 +1139,7 @@ def _git_identity(root: Path) -> str:
     """Who is accepting: the git identity, or the user name the shell has."""
     import os
 
-    import livery.toolroom.tools as toolroom
-
-    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
-        "config", "user.name"
-    )
-    name = result.stdout.strip() if result.code == 0 else ""
-    return name or os.environ.get("USER", "unknown")
+    return git.config_get(root, "user.name") or os.environ.get("USER", "unknown")
 
 
 caches = group("caches", help="The workspace's derived caches")

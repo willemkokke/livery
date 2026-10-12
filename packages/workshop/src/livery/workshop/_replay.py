@@ -17,6 +17,7 @@ contract's ``[[ci.schedule]]`` seam.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -142,7 +143,6 @@ def replay_flow(
     [livery.workshop._lifecycle.replay][]. With *repo*, a red replay
     files or extends the marker issue before failing.
     """
-    import livery.toolroom.tools as toolroom
     from livery.workshop import _lifecycle
 
     member = package.member
@@ -157,11 +157,10 @@ def replay_flow(
     print(f"  replaying {replay.requirement} at {replay.tag} on python {python}")
     scratch = scratch_dir("replay")
     tree = scratch / "tree"
-    added = toolroom.git.opts(cwd=root, nofail=True)(
-        "worktree", "add", "--detach", str(tree), replay.tag
-    )
-    if added.code != 0:
-        fail(f"git worktree add at {replay.tag} exited {added.code}:\n{added.stderr}")
+    try:
+        git.worktree_add(root, tree, replay.tag, detach=True)
+    except git.GitError as error:
+        fail(str(error))
     try:
         code = _lifecycle.replay(
             package,
@@ -173,9 +172,8 @@ def replay_flow(
             extras=extras,
         )
     finally:
-        toolroom.git.opts(cwd=root, nofail=True)(
-            "worktree", "remove", "--force", str(tree)
-        )
+        with contextlib.suppress(git.GitError):
+            git.worktree_remove(root, tree)
         shutil.rmtree(scratch, ignore_errors=True)
     if code == 0:
         print(f"  green: {replay.requirement} passes its own tests from site-packages")
