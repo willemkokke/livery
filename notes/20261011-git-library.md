@@ -415,7 +415,10 @@ and the number recorded here.
   the reachability anchor of the last commit written. The process
   pins: a read 0 (remote: the one fetch), a local write 0, a remote
   write 2, the janitor's remote family 2 (listing and fetch), local
-  family 0.
+  family 0. The Windows check leg of the phase's pull request
+  (#1511) ran 652 s, against the 843 s measured on main on
+  2026-10-11; the release loop proved seven scenarios in 822 s of
+  runs.
 
 - 2026-10-12, phase 4 built. The library gained the named functions
   the direct calls needed: a fetch with prune and force and a tag
@@ -538,4 +541,6 @@ and the number recorded here.
 
 ## Open
 
-Nothing open. Every ruling the phases need is in the decision record.
+1. (the merger of #1511) Main's push run after phase 5 merges: record
+   its Windows check leg's time in the decision record beside the
+   652 s of the pull request and the 843 s of 2026-10-11.
