@@ -413,3 +413,22 @@ def test_explain_tells_a_fragment_from_this_checkout_s_own_state(
     assert state is not None and state.channel == "checkout state"
     receipts = _materialised(tmp_path, Path(".workshop/receipts/conan.json"))
     assert receipts is not None and receipts.channel == "checkout state"
+
+
+def test_the_uv_sync_step_reads_the_entry_points_again_after_the_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The install moves a stamped member to a new dist-info directory; a
+    # reader after the step, the deliver first, must see the move.
+    import livery.footman
+    from livery.workshop import _sync, _uv
+
+    order: list[str] = []
+    monkeypatch.setattr(
+        _uv, "run_uv", lambda *args, **kwargs: order.append(f"uv {' '.join(args)}")
+    )
+    monkeypatch.setattr(
+        livery.footman, "rescan_entry_points", lambda: order.append("rescan")
+    )
+    _sync._uv_sync(tmp_path, ("--frozen",))  # pyright: ignore[reportPrivateUsage]
+    assert order == ["uv sync --frozen", "rescan"]

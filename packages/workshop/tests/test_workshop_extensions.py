@@ -218,6 +218,33 @@ def test_an_uninstalled_extension_is_taken_at_the_family_s_distribution() -> Non
     assert distribution_of("ruff") == "livery-extensions-ruff"
 
 
+def test_an_entry_point_whose_metadata_moved_is_taken_at_the_convention(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import shutil
+    from importlib.metadata import PathDistribution
+
+    from livery.workshop import _extensions
+    from livery.workshop._extensions import GROUP, distribution_of
+
+    # The entry points are read from a dist-info directory, then an
+    # install moves the distribution to another: the entry point still
+    # names a distribution, and that distribution's metadata reads
+    # nothing, so its name is None.
+    info = tmp_path / "livery_extensions_x-0.0.0.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text("Name: livery-extensions-x\nVersion: 0.0.0\n")
+    (info / "entry_points.txt").write_text(
+        f"[{GROUP}]\nx = livery.extensions.x:plugin\nacme.x = acme.x:plugin\n"
+    )
+    entries = {entry.name: entry for entry in PathDistribution(info).entry_points}
+    shutil.rmtree(info)
+    monkeypatch.setattr(_extensions, "_declared", lambda: entries)
+    assert entries["x"].dist is not None and entries["x"].dist.name is None
+    assert distribution_of("x") == "livery-extensions-x"
+    assert distribution_of("acme.x") == "acme-x"
+
+
 @pytest.fixture
 def registry_state():
     from livery.workshop import _checks

@@ -860,9 +860,15 @@ def _prepare_installs(root: Path) -> None:
 
 
 def _uv_sync(root: Path, flags: tuple[str, ...]) -> None:
+    from livery.footman import rescan_entry_points
     from livery.workshop._uv import run_uv
 
     run_uv("sync", *flags, root=root)
+    # The install moves a member stamped to another version to a new
+    # dist-info directory, and an entry point scanned before the move
+    # names no distribution after it. Every reader that follows, the
+    # deliver step first, reads the installed metadata as it now is.
+    rescan_entry_points()
 
 
 def _deliver_files(root: Path, *, local_only: bool) -> None:
