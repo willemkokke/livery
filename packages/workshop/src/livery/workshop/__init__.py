@@ -143,7 +143,7 @@ if TYPE_CHECKING:
     from livery.workshop._release_notes import release_notes as release_notes
     from livery.workshop._tokens import forge_token as forge_token
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "AGENT",

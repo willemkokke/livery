@@ -1,5 +1,84 @@
 # Changelog
 
+## [0.9.0] - 2026-10-12
+
+### Added
+
+- The python extension answers a package's version, version files, requirements, module roots and public modules; the seam asks a package's extensions first, and the workshop package and the python templates list it by @willemkokke
+- The release train's stamp, build and publish run as a package's lifecycle phases, with the engine's inputs as context keys, where its extensions add steps; the python extension adds them by @willemkokke
+- The release's isolated legs and the replay of a published version run as the prove and replay phases through the lifecycle seam; the replay's python half moves into the python extension by @willemkokke
+- A package-level extension declares its packages' path categories as data, and the python kind's table becomes the python extension's declaration by @willemkokke
+- The private-reach rule becomes the python extension's [rules.private-reaches], checked by fm check, with its allowance in the root contract; an extension declares a layering rule as data by @willemkokke
+- The cpp extension declares the C and C++ path categories, which the cpp-conan kind reads, and a new cpp-conan package lists cmake and conan by @willemkokke
+- The conan and cpp extensions answer a package's version, version files, requirements and module names, and run its stamp, build and publish; extension.toml takes [root-files], and conanws.yml becomes conan's by @willemkokke
+- A check names the package-level extensions whose packages it judges instead of package kinds, and a kind stands for what a package that lists none holds by @willemkokke
+- The nightly point runs the loop's release scenario from a scratch branch of main through a once-per-matrix schedule entry, and fm ci.e2e --from-main leaves a branch whose build is the release train for the pass by @willemkokke
+- A pull request's check legs run on the runners [ci] pull-request-runners names, every runner at merge and on a dispatch; the render chooses between the two literal lists by the event, and a label outside [ci] runners refuses naming both by @willemkokke
+- The loop lands its members through one pull request and a plain pass births without the docs extension, so a release pass waits on two fewer gate runs and no docs job; the note records the ruling by @willemkokke
+- The site is built once per run and published from the gate job with this run's coverage trees, the forge's pages deploy is a job with no checkout and no entry, the release dispatch is the gate job's entry, and a [ci.jobs] table naming a job the point already has joins it by @willemkokke
+- Footman.scratch_dir makes a process's scratch under the cache, named for its owner, and the collector removes what a gone process left; the replay, the shell, the two isolation plugins and the playground cache use it by @willemkokke
+- A push to main whose tree no run proved measures from the record's nearest proved tree and pays the whole gate when it proves none in reach, and the loop's unproven-push scenario lands a tree nobody proved and reads main's run narrowing and composing by @willemkokke
+- Fm sync runs the sync phase, with conan's profile step replacing the kind's pre-install hook; a package that lists no extension runs it over what its kind stands for, the nanobind kind stands for conan beside cpp, and conan's workspace lists the recipes that name a reference by @willemkokke
+- The check record carries a step's keys and the declaration reads [phases.<phase>.<step>] with one body under main beside the check tables, a template placing its paths and arguments where {paths} and {arguments} stand by @willemkokke
+- The git helper remembers the facts it read live, the position, a branch's heads, its stack and a config key, forgets them on any call that moves the repository, and answers a reader called with cached=True from that memory by @willemkokke
+- Phases are declared, the base's in a [phases] section of its contract file and an extension's in its extension.toml, each with engine keys, level, placement and whether a verb is generated; an undeclared phase refuses naming the declared ones and two steps at one address refuse unless one replaces or deletes the other by @willemkokke
+- Fm doctor is footman's: every package registers its checks under footman.doctors, --fix runs the repairs and checks again, the workshop's forge and host checks move behind it, and the nightly runs it first by @willemkokke
+- The package is born and every git call the workshop makes is a function of the root through livery.git by @willemkokke
+- The plugin gives every git spawn under footman one ssh connection per host, the tools' identity, an editor that never opens, and a task's own marks by @willemkokke
+- The state store moves to livery.git as a StateStore built with the workshop's policy, and _state goes by @willemkokke
+- The tool store's view walk leaves the sync: Store.probe keeps the ref and record checks, audit and audit_views name a damaged view, mend_view views its tree again, and the store's doctor reports and mends under fm doctor --fix by @willemkokke
+- Every direct git call in the workshop converges on livery.git, and a one-door test refuses a call of the handle by @willemkokke
+- Reads and the store's local writes go in-process through dulwich by @willemkokke
+
+### Fixed
+
+- Conan's default profile is checked before uv builds a native member and before conan create, and one that names no compiler is detected again by @willemkokke
+- A template refusal is worded from minijinja's error kind and line, not from its message text, which its releases reword by @willemkokke
+- A cpp-conan member's upload to a forge's conan registry logs in with the token the registry ladder resolved, unless conan's own login variables are set by @willemkokke
+- The loop probes for new.project where the birth runs, outside any project, since inside the checkout the project mounts the verb a bare footman lacks by @willemkokke
+- A catalogue read roots each tool's index tree under tools/index/<name>, so the store's sweep keeps the records, versions and surfaces a job's entry re-fetched; the sweep keeps the store whole on Gitea's runner, which saves no archive by @willemkokke
+- The Gitea adapter reads an epoch timestamp as a time the server has not set, and a job still running when the gate job collects is measured to the collection and named incomplete by @willemkokke
+- A hosted job's entry persists the placements it exported for footman's data directory and uv's cache, so every later step reads the same store and cache, and the nightly job carries the write grant its profile trace push needs by @willemkokke
+- A read of the state store brings the ref's key group in one fetch, a snapshot names a prefix of any namespace and a nested one brings what it names, and the sweep reads a family's commit times in one call, so the janitor's 382 about keys cost one fetch instead of one each by @willemkokke
+- The rendered setup.sh runs uv sync once, before fm sync, and enters and persists the environment in one env.emit call by @willemkokke
+- The loop's release pass runs green on a hosted Linux runner: the seven differences from a desk fixed, and cibuildwheel's container given the locked conan by @willemkokke
+- A catalogue, a contract and the task tree are read once per process, a locked sync judges the tool lock once, and coverage omits pytest's temp trees by @willemkokke
+- The coverage preview skips a measured module the disk no longer has, so a passing test's deleted tmp_path module cannot turn a local check red by @willemkokke
+- The nanobind seed keys a native member's build on the git commit, so a fresh checkout at the same commit reuses it by @willemkokke
+- The isolation plugin puts the slot registry back after every test, an inner pytester session keeps its own base temp, and the coverage page's absence test builds as a desk does whatever the run's event, so no test passes or fails by the worker's schedule or by the event it runs on by @willemkokke
+- A daemon the devenv starts never inherits the checkout the verb ran from: VIRTUAL_ENV, uv's run marker and that venv's bin on PATH are dropped by @willemkokke
+- The coverage preview reads the report's file names in posix spelling, so a package's files match on Windows, and the receipt test writes its lock as bytes, so the receipt it compares carries no platform line ends by @willemkokke
+- Conan's prepare reads the default profile's file and starts no conan process when it names a compiler by @willemkokke
+- The entry script runs uv at the lock's pin, installing it once under the runner's data directory when PATH holds another version, so a job's syncs share one uv and one cache by @willemkokke
+- A flow reads the checkout's position in one process and its stack's two keys in one, the submit flow passes the branch it read to the steps that need it, and the test fixtures set the committer in the clone call by @willemkokke
+- An extension pass births with the test extension beside the extension under test and lands the loop's first member, so every gate it drives meters a suite until coverage is its own extension by @willemkokke
+- The submit and sync flows read a branch's stack once and hand it to the restack, reading it again only after a restack that moved the branch by @willemkokke
+- A sync fetches origin once, the branches and the state store in one round trip, and its phases are live steps with a receipt, a --json row and a profile slice each by @willemkokke
+- The submit flow reads HEAD's subject and body in one process and the subjects ahead of the base once, carried on the plan for the checks that read them, and the submit tests' other clones set their identity in the clone call by @willemkokke
+- The state store reads a ref's tree with one git archive into a file, read back as bytes, instead of ls-tree, cat-file and a show per mismatched blob by @willemkokke
+- Footman.task_tree serves the run's own tree to a task, and the verbs fragment reads it in process for this workspace instead of running fm --json --list again by @willemkokke
+- A bytes stdin takes footman's run and the toolroom's handle down a binary lane, no newline translation and the capture decoded with surrogateescape, and the state store writes every blob, the tree and the commit with one fast-import through it by @willemkokke
+- The state store's archive read switches the checkout's end-of-line conversion off for the call, so a row reads back as git holds it on Windows by @willemkokke
+- A quiet sync says the store and the tools are up to date, and a store fetch that moved refs says how many, not a count that reads as a download by @willemkokke
+- An offline sync fetches nothing: the bring-current reads the remote-tracking refs the last fetch left by @willemkokke
+
+### Changed
+
+- The update tests render with no contributed jobs, and docs_jobs puts back the jobs it found, so a mount earlier on the worker no longer makes an update submit by @willemkokke
+- The release train, the layering check, the docs and the loop reach a package's build, versions, publish and requirements through one seam, livery.workshop._lifecycle by @willemkokke
+- The python kind's code moves into livery.extensions.python, shipped in the workshop wheel; the base imports it under an allowance until the kinds go by @willemkokke
+- The cpp-conan kind's code splits into the cmake, cpp and conan extensions, shipped in the workshop wheel; cmake names no language, and conan requires cpp by @willemkokke
+- The per-task hook brings a checkout current by calling sync itself, frozen and offline, once before the command's first task; the repair and the reconcile go by @willemkokke
+- Footman.alive is the one process-liveness probe, public and injectable for its Windows path, and the workshop's devenv drops its tasklist probe for it by @willemkokke
+- Pin the gate and train behaviours the one-mechanism slice replaces: a step's after dependency runs once, a tests-only step runs for a tests-only change, a code and a words step share one option table, the isolated legs follow the listed order with the set's dist directories, and a package-level extension's root file is written once while any package lists it by @willemkokke
+- Composition is requires alone: compatible, before and after on [extension] go with the every-pair check, the combinations listing and the extras half of the metadata clause by @willemkokke
+- Every extension declares its steps as [phases.<phase>.<step>] with main, fix and safe-fix placing their paths and arguments, the lifecycle phases name their extension, listed-with is enabled at the step's address, and the package option tables follow by @willemkokke
+- The check tables refuse naming the step spelling: the transition reader goes with placed, narrowing, transport, threshold, roles, listed-with, options, judge, run and arguments as keys, the transports and the further roles, and [for.<target>] carries every table by @willemkokke
+- Slots, contributions, editor-extension and release-notes are declared queries with a combine rule, declared by the base in its contract file and by extensions, answered by the listed extensions in list order; the slots module and the release-notes registration go by @willemkokke
+- Sync reads its receipts first: a frozen sync of a current checkout runs no local step and prints nothing, the tools step supplies only what its receipts name as off, and start fetches origin's heads and the store in one round trip by @willemkokke
+- The lifecycle phases and the gate share one walk: every step is a footman step inside parallel(), a package step once per package, ordered by after and by provides and reads; pre and post go, every step reads into the one record and DeclaredPhase goes, and GateContext folds into PhaseContext by @willemkokke
+- The isolated release leg skips the checkout-only tests and scans the workshop's own trees by @willemkokke
+
 ## [0.8.0] - 2026-10-09
 
 ### Added
