@@ -2721,6 +2721,18 @@ the stack, which this design neither needs nor rules out).
   non-Unreal C++, and one job table converts cheaply if the review
   decides for placement.
 
+- 2026-10-12, Willem, on Open item 3: the line format carries the most
+  detail a measurer gives, so the one renderer draws for every language
+  what coverage.py's own pages show today. Per file: each line's hits,
+  and whether it is excluded; each branch on its own, with its target
+  and whether it ran, so a page says which jump never ran; the
+  functions and classes with their lines; and, where the measurer
+  records them, the tests that reached each line. coverage.py fills all
+  of it; gcov and llvm-cov fill lines, branches by their index, and
+  functions. It changes what the pages show, not what the floors judge.
+  Coverage leaves the base as its own extension in 12e, as ruled on
+  2026-10-07; this was the one decision 12e waited on.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
@@ -2733,17 +2745,9 @@ recommendation. Owner: Willem, unless named.
    This design adds no lock; phase 16's shared temp roots and two
    gates in one checkout are the cases it would serve. Owner: Willem,
    after the review.
-3. **Branch counts in the line format.** The format is file, line,
-   hits. Python's pages today come from coverage.py's arcs, which
-   show a partly taken branch.
-   - (a) Lines only. Python's partly taken branches vanish from the
-     page, and C++ branch data is dropped as well.
-   - (b) A line also carries its branches, taken out of total, as
-     lcov's `BRDA` records do. gcov, llvm-cov and Cobertura report
-     it, so every measurer can fill it. It does not change what the
-     floors judge, only what the page shows.
-
-   Recommendation: (b).
+3. **Branch counts in the line format.** Decided 2026-10-12: the
+   format carries the most detail a measurer gives (the decision
+   record's entry of that day).
 4. **Claims against inputs**: two ways to say what a step reads,
    categories with suffixes for a tool over package files, globs with
    influence rules for a workspace step. One way. Owner: Willem, after
