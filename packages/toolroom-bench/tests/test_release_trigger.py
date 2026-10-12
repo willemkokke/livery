@@ -146,7 +146,7 @@ def test_a_git_step_that_fails_is_named_in_git_s_own_words():
             on=date(2026, 9, 14),
             dry_run=False,
         )
-    assert [call[0] for call in calls] == ["ls-remote", "switch"]
+    assert [call[0] for call in calls] == ["ls-remote", "fetch", "merge-base", "switch"]
 
 
 def test_additions_submit_armed_and_a_drop_waits_for_a_person():
@@ -178,11 +178,15 @@ def test_additions_submit_armed_and_a_drop_waits_for_a_person():
         "origin",
         "refs/heads/chore/tools-refresh-20260914",
     )
-    assert calls[1] == ("switch", "-c", "chore/tools-refresh-20260914")
-    assert calls[2] == ("add", "-A")
-    assert calls[3][:2] == ("commit", "-m") and "bun, ruff" in calls[3][2]
-    assert "bun 1.3.14: every check passed on 2 host(s)" in calls[3][2]  # the summary
-    assert len(calls) == 4  # origin holds no branch: nothing to build on
+    assert calls[1:3] == [
+        ("fetch", "origin", "HEAD"),
+        ("merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"),
+    ]
+    assert calls[3] == ("switch", "-c", "chore/tools-refresh-20260914")
+    assert calls[4] == ("add", "-A")
+    assert calls[5][:2] == ("commit", "-m") and "bun, ruff" in calls[5][2]
+    assert "bun 1.3.14: every check passed on 2 host(s)" in calls[5][2]  # the summary
+    assert len(calls) == 6  # origin holds no branch: nothing to compare with
     assert argvs[0][1:] == [
         "submit",
         "--title=chore(toolroom): tool refresh 2026-09-14",
@@ -491,6 +495,41 @@ def test_a_refresh_origin_already_holds_is_already_submitted(tmp_path, monkeypat
     ]
     assert argvs == []
     _on_its_own_tree(runner, main)
+
+
+def test_a_checkout_off_the_default_branch_submits_nothing(tmp_path, monkeypatch):
+    """A dispatched nightly runs on the branch it was given. The day's
+    branch is cut from HEAD, so a refresh there would carry that
+    branch's commits into its pull request: it submits nothing, makes
+    no branch and no commit, and the files it wrote stand.
+    """
+    from datetime import date
+
+    runner, _tip = _origin_holding(
+        tmp_path, monkeypatch, {"records/uv.jsonl": "uv 0.12.7\n"}
+    )
+    _run_git(runner, "switch", "-c", "feat/elsewhere")
+    _write(runner, {"feature.py": "x = 1\n"})
+    _run_git(runner, "add", "-A")
+    _run_git(runner, "commit", "-m", "feat: elsewhere")
+    head = _run_git(runner, "rev-parse", "HEAD")
+    _write(runner, {"records/uv.jsonl": "uv 0.12.8\n"})
+    argvs: list[list[str]] = []
+    lines = _tasks.submit_refresh(
+        _refreshed({"uv": ["0.12.8"]}, additions_only=True),
+        submit=_submitting(argvs),
+        on=date(2026, 10, 13),
+        dry_run=False,
+    )
+    assert lines == [
+        "  the checkout is not on origin's default branch, so nothing is"
+        " submitted: a refresh submits from the default branch alone, and the"
+        " files it wrote stand in the checkout"
+    ]
+    assert argvs == []
+    assert _run_git(runner, "branch", "--show-current") == "feat/elsewhere"
+    assert _run_git(runner, "rev-parse", "HEAD") == head
+    assert _run_git(runner, "status", "--porcelain") == "M records/uv.jsonl"
 
 
 def test_a_day_origin_has_no_branch_for_starts_one_from_the_checkout(

@@ -58,7 +58,9 @@ and its verbs mount under `fm tools.*`:
   machine, the refresh says the day's refresh is already submitted
   when that branch holds every file it wrote, and otherwise stops,
   naming the files that differ, for a person to merge or close that
-  pull request first. The checkout never moves onto that branch.
+  pull request first. The checkout never moves onto that branch, and
+  a refresh submits only from the history of origin's default branch:
+  on another branch it submits nothing and says so.
 - `fm toolroom.gather`, `fm toolroom.assemble` and `fm toolroom.observe` are
   the refresh's halves, for a matrix that observes on several
   machines and assembles once.
