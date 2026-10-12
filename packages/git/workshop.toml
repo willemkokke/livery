@@ -24,3 +24,8 @@ coverage-floor = 100
 # these declarations.
 [owners]
 users = ["willemkokke"]
+
+[release]
+# The first release lands at the baseline, so a dev build before it
+# sorts above the floor the workshop names (0.0.0).
+baseline = "0.1.0"
