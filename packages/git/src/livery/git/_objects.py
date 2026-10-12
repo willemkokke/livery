@@ -326,12 +326,21 @@ def root_commit(
     identity: tuple[str, str],
     when: datetime,
 ) -> bytes:
-    """Write a root commit holding *files* and return its sha; nothing else moves."""
-    objects: list[tuple[Blob | Tree | Commit, None]] = []
+    """Write a root commit holding *files* and return its sha; nothing else moves.
+
+    Every object is written loose, as git writes a small commit: a
+    pack written per commit would be walked against the pack list
+    on its way in (dulwich 1.2.17, ``_complete_pack``), and a pack
+    that git's own background ``gc --auto`` removed between the
+    listing and the walk raises there, where the loose path lists
+    nothing. Git packs the loose objects at its own pace, after the
+    refs that reach them are in place.
+    """
+    objects: list[Blob | Tree | Commit] = []
     trees: dict[str, Tree] = {"": Tree()}
     for path in sorted(files):
         blob = Blob.from_string(files[path])
-        objects.append((blob, None))
+        objects.append(blob)
         directory, _, name = path.rpartition("/")
         parts = directory.split("/") if directory else []
         for depth in range(len(parts)):
@@ -346,7 +355,7 @@ def root_commit(
         if directory:
             parent, _, leaf = directory.rpartition("/")
             trees[parent].add(leaf.encode(), 0o040000, trees[directory].id)
-        objects.append((trees[directory], None))
+        objects.append(trees[directory])
     commit = Commit()
     commit.tree = trees[""].id
     name, email = identity
@@ -355,8 +364,9 @@ def root_commit(
     commit.author_timezone = commit.commit_timezone = 0
     commit.encoding = b"UTF-8"
     commit.message = message.encode()
-    objects.append((commit, None))
-    repo.object_store.add_objects(objects)
+    objects.append(commit)
+    for obj in objects:
+        repo.object_store.add_object(obj)
     return commit.id
 
 

@@ -190,8 +190,15 @@ def test_a_bring_names_a_failed_fetch_an_unlistable_remote_and_a_ref_that_keeps_
 def test_a_nested_path_round_trips_through_the_tree(repos: tuple[Path, Path]) -> None:
     _, work = repos
     store = store_of(work)
+    packs = work / ".git" / "objects" / "pack"
+    before = set(packs.iterdir()) if packs.is_dir() else set()
     assert git.put(store, REF, {"nested/row.json": "{}"}, message="n") == ""
-    assert git.read(store, REF).files == {"nested/row.json": "{}"}
+    found = git.read(store, REF)
+    assert found.files == {"nested/row.json": "{}"}
+    # The commit and its tree went in loose, never as a pack of their own.
+    assert found.sha is not None
+    assert (work / ".git" / "objects" / found.sha[:2] / found.sha[2:]).is_file()
+    assert (set(packs.iterdir()) if packs.is_dir() else set()) == before
 
 
 def test_a_tree_read_names_what_it_cannot_decode_or_find(
