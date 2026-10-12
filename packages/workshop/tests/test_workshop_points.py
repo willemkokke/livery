@@ -352,6 +352,32 @@ def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
     assert len(seen) == 1
 
 
+def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Two scheduled entries stand on their own: the first's red must not
+    # hide the second's verdict, and the job names every red one.
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "acme.first"\n'
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "acme.second"\n',
+    )
+    seen: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        task = next(word for word in argv[1:] if not word.startswith("--"))
+        seen.append(task)
+        return 3 if task == "acme.first" else 0
+
+    with pytest.raises(_FAILURES, match=r"nightly/nightly: acme\.first exited 3"):
+        _points.run_point(root, "nightly", "nightly", spawn=spawn)
+    assert seen[-2:] == ["acme.first", "acme.second"]
+    assert (
+        "nightly/nightly: acme.first exited 3; the scheduled entries after it"
+        " still run" in capsys.readouterr().out
+    )
+
+
 # --- the schedule -------------------------------------------------------------
 
 
