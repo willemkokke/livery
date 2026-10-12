@@ -128,8 +128,10 @@ breaking changes.
 - **mypy 2.4.0** adds `--no-native-parser`. It also drops `--native-parser` and rewords 1 description.
 - **prek 0.5.4** adds `--hide-status` and `--no-hide-status`, over 2 releases.
 - **ruff 0.16.7** rewords 4 descriptions.
+- **ruff_format 0.16.7** rewords 1 description.
 - **ssh 10.6p1** rewords 1 description.
 - **tea 0.16.0** adds `--description-file`.
+- **uv 0.13.0** adds `--check`, `--output-format` and `--require-build-hashes`, over 3 releases. It also drops `--offline`.
 - **zensical 0.0.60** changes its option surface, over 2 releases.
 
 ## [0.6.1] — 2026-08-21

@@ -1,5 +1,5 @@
 {"name": "ruff_format", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
-{"version": "0.15.14", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Run the Ruff formatter on the given files or directories"}}
+{"version": "0.15.14", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Run the Ruff formatter on the given files or directories"}}
 {"verb": "", "help": "Run the Ruff formatter on the given files or directories", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "cache_dir", "flags": ["--cache-dir"], "negation": "", "help": "Path to the cache directory", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "check", "flags": ["--check"], "negation": "", "help": "Avoid writing any formatted files back; instead, exit with a non-zero status code if any files would have been modified, and zero otherwise", "type": "bool", "default": null, "choices": []}
@@ -22,17 +22,25 @@
 {"verb": "", "option": "stdin_filename", "flags": ["--stdin-filename"], "negation": "", "help": "The name of the file when passing it through stdin", "type": "str", "default": null, "choices": []}
 {"verb": "", "option": "target_version", "flags": ["--target-version"], "negation": "", "help": "The minimum Python version that should be supported", "type": "choice", "default": null, "choices": ["py37", "py38", "py39", "py310", "py311", "py312", "py313", "py314", "py315"]}
 {"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose logging", "type": "bool", "default": null, "choices": []}
-{"version": "0.15.15", "date": "2026-05-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.16", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.17", "date": "2026-06-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.18", "date": "2026-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.19", "date": "2026-06-24", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.20", "date": "2026-06-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.21", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.15.15", "date": "2026-05-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.16", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.17", "date": "2026-06-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.18", "date": "2026-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.19", "date": "2026-06-24", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.20", "date": "2026-06-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.21", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "", "option": "extend_exclude", "flags": ["--extend-exclude"], "negation": "", "help": "Like --exclude, but adds additional files and directories on top of those already excluded", "type": "str", "default": null, "choices": []}
-{"version": "0.15.22", "date": "2026-07-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.16.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.16.1", "date": "2026-07-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.16.2", "date": "2026-08-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.16.3", "date": "2026-08-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.16.4", "date": "2026-08-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.15.22", "date": "2026-07-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.1", "date": "2026-07-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.2", "date": "2026-08-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.3", "date": "2026-08-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.4", "date": "2026-08-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.16.5", "date": "2026-08-27", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "0.16.6", "date": "2026-09-03", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "0.16.7", "date": "2026-09-10", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"verb": "", "option": "config", "flags": ["--config"], "negation": "", "help": "Either a path to a TOML configuration file (`pyproject.toml` or `ruff.toml`), or a TOML `<KEY> = <VALUE>` pair (such as you might find in a `ruff.toml` configuration file) overriding a specific configuration option (e.g., `--config \"line-length = 100\"` or `--config \"format.quote-style = 'single'\"`)", "type": "str", "default": null, "choices": []}
+{"version": "0.16.8", "date": "2026-09-16", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "0.16.9", "date": "2026-09-24", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "0.16.10", "date": "2026-10-01", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}
+{"version": "0.17.0", "date": "2026-10-09", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4}}

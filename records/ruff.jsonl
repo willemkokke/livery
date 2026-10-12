@@ -1,5 +1,5 @@
 {"name": "ruff", "description": "", "kind": "download", "min_version": "", "hosts": ["macos-arm", "macos-x64", "linux-x64", "linux-arm", "windows-x64", "windows-arm"], "layout": {"entry_points": ["ruff"], "paths": ["."]}, "host_layouts": {"macos-arm": {"root": "ruff-aarch64-apple-darwin"}, "macos-x64": {"root": "ruff-x86_64-apple-darwin"}, "linux-x64": {"root": "ruff-x86_64-unknown-linux-gnu"}, "linux-arm": {"root": "ruff-aarch64-unknown-linux-gnu"}, "windows-x64": {"entry_points": ["ruff.exe"]}, "windows-arm": {"entry_points": ["ruff.exe"]}}}
-{"version": "0.15.14", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Ruff: An extremely fast Python linter and code formatter."}}
+{"version": "0.15.14", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4, "help": "Ruff: An extremely fast Python linter and code formatter."}}
 {"verb": "", "help": "Ruff: An extremely fast Python linter and code formatter.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "color", "flags": ["--color"], "negation": "", "help": "Control when colored output is used", "type": "choice", "default": null, "choices": ["auto", "always", "never"]}
 {"verb": "", "option": "config", "flags": ["--config"], "negation": "", "help": "Either a path to a TOML configuration file (`pyproject.toml` or `ruff.toml`), or a TOML `<KEY> = <VALUE>` pair (such as you might find in a `ruff.toml` configuration file) overriding a specific configuration option (e.g., `--config \"lint.line-length = 100\"` or `--config \"format.quote-style = 'single'\"`)", "type": "str", "default": null, "choices": []}
@@ -76,16 +76,16 @@
 {"verb": "format", "option": "stdin_filename", "flags": ["--stdin-filename"], "negation": "", "help": "The name of the file when passing it through stdin", "type": "str", "default": null, "choices": []}
 {"verb": "format", "option": "target_version", "flags": ["--target-version"], "negation": "", "help": "The minimum Python version that should be supported", "type": "choice", "default": null, "choices": ["py37", "py38", "py39", "py310", "py311", "py312", "py313", "py314", "py315"]}
 {"verb": "format", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose logging", "type": "bool", "default": null, "choices": []}
-{"version": "0.15.15", "date": "2026-05-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.16", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.17", "date": "2026-06-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.18", "date": "2026-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.19", "date": "2026-06-24", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.20", "date": "2026-06-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
-{"version": "0.15.21", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.15.15", "date": "2026-05-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.16", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.17", "date": "2026-06-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.18", "date": "2026-06-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.19", "date": "2026-06-24", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.20", "date": "2026-06-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"version": "0.15.21", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "check", "option": "add_ignore", "flags": ["--add-ignore"], "negation": "", "help": "Enable automatic additions of `ruff:ignore` comments to failing lines", "type": "optvalue", "default": null, "choices": []}
 {"verb": "format", "option": "extend_exclude", "flags": ["--extend-exclude"], "negation": "", "help": "Like --exclude, but adds additional files and directories on top of those already excluded", "type": "str", "default": null, "choices": []}
-{"version": "0.15.22", "date": "2026-07-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.15.22", "date": "2026-07-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"version": "0.16.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
 {"verb": "check", "option": "add_ignore", "flags": ["--add-ignore"], "negation": "", "help": "Enable automatic additions of `ruff: ignore` comments to failing lines", "type": "optvalue", "default": null, "choices": []}
 {"version": "0.16.1", "date": "2026-07-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
