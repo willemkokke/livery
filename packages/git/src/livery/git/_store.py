@@ -1,5 +1,11 @@
 """The state store: JSON rows on git refs, on the remote and in the checkout.
 
+A [livery.git.StateStore][] is the checkout and the policy a caller
+built it with: who may write, under which identity, and which
+variable a published listing travels in. Every function below takes
+one; nothing is held between calls, and a snapshot block is the one
+scoped state, open for its block alone.
+
 State that CI runs keep across runs (timing rows, verified trees,
 coverage marks) lives as files on git refs in a namespace outside
 ``refs/heads``, so a default clone or fetch never downloads it. Each
@@ -8,11 +14,11 @@ reads the current tree, rebuilds it with the kept entries plus the
 new ones, and pushes a fresh root commit over the old one, so a
 window needs no history and a reader never sees a torn tree.
 
-A [livery.workshop._state.Series][] declares one ref's rows: reach
+A [livery.git.Series][] declares one ref's rows: reach
 for its `rows` and `row` to read and its `put` to write. The store
 parses, stamps the schema and the time, applies the window, and
 refuses what the declaration forbids, so no caller does any of
-that itself. A [livery.workshop._state.Keyed][] family declares one
+that itself. A [livery.git.Keyed][] family declares one
 series per key (a leg and a package; a run and a leg) and lists the
 keys the remote holds. The bare `read` and `put` are the transport
 underneath, and `sweep` is the janitor. Every failure is a printed
@@ -80,7 +86,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
 
-import livery.footman as footman
 import livery.toolroom.tools as tools
 
 #: Every state ref lives under this prefix. A push here matches no
@@ -112,23 +117,12 @@ FETCHED_NAMESPACE = "refs/workshop-origin/"
 #: per leg, written by that leg alone, read and deleted by the run's
 #: gate job, swept here when a run is cancelled before its gate could.
 #: The family itself is declared where its rows mean something,
-#: [livery.workshop._metrics.RUNS][].
+#: the metrics' run family.
 RUN_PREFIX = NAMESPACE + "run/"
 
 #: How many times a compare-and-swap write re-reads and retries after
 #: another writer moved the ref.
 ATTEMPTS = 3
-
-#: The variable the job runner sets for every entry it spawns, naming
-#: the check leg (``check-ubuntu-latest-3.14``): the key of the leg's
-#: rows and stamps.
-LEG_VARIABLE = "WORKSHOP_LEG"
-
-#: The variable the job runner sets for every entry it spawns, naming
-#: the point the job runs at. Its home is here rather than beside the
-#: pytest plugin that selects on it, because the verbs read it too and
-#: a CLI that never tests must not import pytest to learn its name.
-POINT_VARIABLE = "WORKSHOP_POINT"
 
 #: How a window ranks the files it keeps: a key from a file's name
 #: and text, the newest sorting last.
@@ -138,6 +132,31 @@ Order = Callable[[str, str], tuple[str, str]]
 def slug(name: str) -> str:
     """*name* as a ref-safe and file-safe token: every other character is a dash."""
     return re.sub(r"[^A-Za-z0-9_-]", "-", name)
+
+
+@dataclass(frozen=True)
+class StateStore:
+    """A checkout's state store and the policy its builder gave it.
+
+    Attributes:
+        root: The checkout whose origin holds the remote namespace and
+            whose git directory holds the local one.
+        in_ci: Whether this process is a CI run: a put to a series
+            declared ``ci_only`` refuses otherwise.
+        identity: The name and address every commit the store makes
+            carries, author and committer.
+        snapshot_variable: The environment variable a published
+            listing's path travels in, from a parent process to its
+            children.
+        prog: The runner's command name, for the words a refusal
+            gives a person (``run `fm sync```).
+    """
+
+    root: Path
+    in_ci: bool
+    identity: tuple[str, str]
+    snapshot_variable: str
+    prog: str = "fm"
 
 
 @dataclass(frozen=True)
@@ -220,7 +239,7 @@ class Series:
             store's stamp; ``None`` keeps rows for the window alone.
         namespace: The prefix the ref lives under, when it is neither
             the shared namespace nor the local one:
-            [livery.workshop._state.TRACE_NAMESPACE][] is the one
+            [livery.git.TRACE_NAMESPACE][] is the one
             such prefix, pushed to origin and mirrored by nothing.
             Empty means the class ``local`` chooses.
     """
@@ -252,7 +271,7 @@ class Series:
             self.name
         )
 
-    def rows(self, root: Path) -> Rows:
+    def rows(self, store: StateStore) -> Rows:
         """Every row of the series, newest first, with what was skipped and why.
 
         An absent ref is no rows and no failure. A ref the transport
@@ -260,7 +279,7 @@ class Series:
         falls open the same way. A file that does not parse or is of
         another schema is skipped and named, and the rest stand.
         """
-        found = read(root, self.ref)
+        found = read(store, self.ref)
         if found.files is None:
             return Rows((), failed=found.failed, reason=self._unreadable(found))
         rows: list[Row] = []
@@ -274,14 +293,14 @@ class Series:
         rows.sort(key=_newest, reverse=True)
         return Rows(tuple(rows), tuple(skipped))
 
-    def row(self, root: Path, name: str) -> tuple[Row | None, str]:
+    def row(self, store: StateStore, name: str) -> tuple[Row | None, str]:
         """The row in the file *name*.
 
         ``(None, "")`` when the ref or the file is absent, and
         ``(None, reason)`` when the ref could not be read or the file
         is not a row of the schema.
         """
-        found = read(root, self.ref)
+        found = read(store, self.ref)
         if found.files is None:
             return None, self._unreadable(found)
         text = found.files.get(name)
@@ -292,21 +311,21 @@ class Series:
             return None, f"{name}: {why}"
         return Row(name, data), ""
 
-    def file(self, root: Path, name: str) -> tuple[str | None, str]:
+    def file(self, store: StateStore, name: str) -> tuple[str | None, str]:
         """The text of the file *name* on the ref, or why it could not be read.
 
         For a series whose files are not rows: a leg's trace, kept as
         its writer wrote it. ``(None, "")`` is absence, of the ref or
         of the file.
         """
-        found = read(root, self.ref)
+        found = read(store, self.ref)
         if found.files is None:
             return None, self._unreadable(found)
         return found.files.get(name), ""
 
     def put(
         self,
-        root: Path,
+        store: StateStore,
         rows: Mapping[str, Mapping[str, Any]],
         *,
         message: str,
@@ -334,7 +353,7 @@ class Series:
         }
         # The transport's put: a class body is no scope for its methods.
         return put(
-            root,
+            store,
             self.ref,
             files,
             message=message,
@@ -368,9 +387,9 @@ class Keyed:
         ci_only: Whether only a CI run may write the family.
         schema: The rows' schema, shared by every series.
         local: Whether every series of the family is local, as for a
-            [livery.workshop._state.Series][].
+            [livery.git.Series][].
         namespace: The prefix every series of the family lives under,
-            as for a [livery.workshop._state.Series][].
+            as for a [livery.git.Series][].
         stale_after: How long a key's ref may live, by its commit
             time, before the janitor drops it as an orphan; ``None``
             never drops by age.
@@ -455,7 +474,7 @@ class Keyed:
             namespace=self.namespace,
         )
 
-    def listed(self, root: Path, *head: str) -> list[tuple[str, ...]] | None:
+    def listed(self, store: StateStore, *head: str) -> list[tuple[str, ...]] | None:
         """The keys the remote holds under the leading parts *head*.
 
         ``None`` when the remote cannot be listed. A ref under the
@@ -463,7 +482,7 @@ class Keyed:
         is left out.
         """
         prefix = self.prefix + "".join(slug(part) + "/" for part in head)
-        refs = list_refs(root, prefix)
+        refs = list_refs(store, prefix)
         if refs is None:
             return None
         keys = [tuple(name[len(self.prefix) :].split("/")) for name in refs]
@@ -495,203 +514,6 @@ def _by_when(name: str, text: str) -> tuple[str, str]:
 
 def _newest(row: Row) -> tuple[str, str]:
     return row.when, row.name
-
-
-@dataclass(frozen=True)
-class RunContext:
-    """The CI run this process belongs to, as the runner's environment names it.
-
-    Attributes:
-        forge: ``github``, ``gitea``, or ``gitlab``.
-        run_id: The forge's identifier of the run (GitLab: the pipeline).
-        event: What started the run (``push``, ``pull_request``, ...).
-        ref: The ref the run is for, as the runner spells it.
-        head_sha: The commit the forge files the run under. On a pull
-            request the checkout is the merge commit the forge
-            synthesised, and the run's own head is the pull request's
-            head, which the event payload names; on a push both are
-            the same commit. Empty when the runner did not say.
-        base_ref: The branch a pull request proposes into, as the event
-            payload names it (GitLab: the merge request's target);
-            empty on a push or when the runner did not say.
-        leg: The check leg this process runs in (``check-ubuntu-latest-3.14``),
-            as the job runner names it in ``WORKSHOP_LEG`` for every entry it
-            spawns; empty outside a scheduled job.
-        head_ref: The branch a pull request comes from, as the event
-            payload names it (GitLab: the merge request's source), the
-            base of the branch's own coverage record; empty on a push
-            or when the runner did not say.
-    """
-
-    forge: str
-    run_id: str
-    event: str
-    ref: str
-    head_sha: str = ""
-    base_ref: str = ""
-    leg: str = ""
-    head_ref: str = ""
-
-
-def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
-    """The runner's event payload, or ``None`` when there is none to read.
-
-    GitHub and Gitea write the event that started the run to the file
-    ``GITHUB_EVENT_PATH`` names; a payload that is missing or does not
-    parse reads as none, so a caller falls back rather than fails.
-    GitLab writes no file and carries the same facts as variables, so a
-    merge request pipeline answers with the payload's ``pull_request``
-    shape built from ``CI_MERGE_REQUEST_*``: the iid as the number, the
-    title, the source branch and head sha, and the target branch. Any
-    other GitLab pipeline has no payload.
-    """
-    env = os.environ if environ is None else environ
-    path = env.get("GITHUB_EVENT_PATH", "")
-    if not path:
-        if env.get("GITLAB_CI") == "true" and env.get("CI_MERGE_REQUEST_IID"):
-            return {
-                "pull_request": {
-                    "number": int(env["CI_MERGE_REQUEST_IID"]),
-                    "title": env.get("CI_MERGE_REQUEST_TITLE", ""),
-                    "head": {
-                        "ref": env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", ""),
-                        "sha": env.get("CI_COMMIT_SHA", ""),
-                    },
-                    "base": {"ref": env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "")},
-                }
-            }
-        return None
-    try:
-        payload = json.loads(Path(path).read_text("utf-8"))
-    except (OSError, ValueError):
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def dispatch_inputs(
-    names: tuple[str, ...], environ: Mapping[str, str] | None = None
-) -> dict[str, str]:
-    """The dispatch inputs *names*, as the run received them; ``""`` for one it did not.
-
-    GitHub and Gitea carry a dispatch's inputs in the event payload
-    under ``inputs``; GitLab carries them as pipeline variables, which
-    arrive as environment variables named by the input. A run that no
-    dispatch started, or a process outside CI, has none, and every
-    name reads empty.
-    """
-    env = os.environ if environ is None else environ
-    payload = event_payload(env)
-    carried = (payload or {}).get("inputs") or {}
-    found: dict[str, str] = {}
-    for name in names:
-        if isinstance(carried, dict) and carried.get(name) not in (None, ""):
-            found[name] = str(carried[name])
-        else:
-            found[name] = env.get(name, "")
-    return found
-
-
-def _event_head_sha(env: Mapping[str, str]) -> str:
-    """The pull request's head from the event payload, or the pushed commit.
-
-    A payload that is missing or does not parse falls back to the
-    pushed commit: the lookup then works on a push and misses on a
-    pull request, which the collect names rather than fails on.
-    """
-    payload = event_payload(env)
-    if payload is not None:
-        head = (payload.get("pull_request") or {}).get("head") or {}
-        if isinstance(head, dict) and head.get("sha"):
-            return str(head["sha"])
-    return env.get("GITHUB_SHA", "")
-
-
-def _event_base_ref(env: Mapping[str, str]) -> str:
-    """The pull request's base branch from the event payload, or empty."""
-    payload = event_payload(env)
-    if payload is None:
-        return ""
-    base = (payload.get("pull_request") or {}).get("base") or {}
-    if isinstance(base, dict) and base.get("ref"):
-        return str(base["ref"])
-    return ""
-
-
-def _event_head_ref(env: Mapping[str, str]) -> str:
-    """The pull request's source branch: the payload's, else the runner's variable."""
-    payload = event_payload(env)
-    if payload is not None:
-        head = (payload.get("pull_request") or {}).get("head") or {}
-        if isinstance(head, dict) and head.get("ref"):
-            return str(head["ref"])
-    return env.get("GITHUB_HEAD_REF", "")
-
-
-#: GitLab's pipeline sources in the one event vocabulary the verbs
-#: read: a merge request pipeline is a pull request run, and an API-,
-#: trigger- or web-created pipeline is a dispatch, as the forge
-#: backend maps a listed pipeline. A source not named here (``push``,
-#: ``schedule``) is already the vocabulary's word.
-GITLAB_EVENTS = {
-    "merge_request_event": "pull_request",
-    "api": "workflow_dispatch",
-    "trigger": "workflow_dispatch",
-    "web": "workflow_dispatch",
-}
-
-
-def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
-    """The CI run this process runs in, or ``None`` outside CI.
-
-    GitHub and Gitea both speak the ``GITHUB_*`` variables (the
-    act_runner keeps GitHub's names and adds ``GITEA_ACTIONS``);
-    GitLab speaks ``GITLAB_CI`` and ``CI_*``, and its pipeline source
-    is read through `GITLAB_EVENTS`, so a merge request pipeline
-    narrows, records and checks titles the way a pull request run does.
-    """
-    env = os.environ if environ is None else environ
-    if env.get("GITHUB_ACTIONS") == "true":
-        forge = "gitea" if env.get("GITEA_ACTIONS") == "true" else "github"
-        return RunContext(
-            forge,
-            env.get("GITHUB_RUN_ID", ""),
-            env.get("GITHUB_EVENT_NAME", ""),
-            env.get("GITHUB_REF", ""),
-            _event_head_sha(env),
-            _event_base_ref(env),
-            env.get(LEG_VARIABLE, ""),
-            _event_head_ref(env),
-        )
-    if env.get("GITLAB_CI") == "true":
-        source = env.get("CI_PIPELINE_SOURCE", "")
-        return RunContext(
-            "gitlab",
-            env.get("CI_PIPELINE_ID", ""),
-            GITLAB_EVENTS.get(source, source),
-            env.get("CI_COMMIT_REF_NAME", ""),
-            env.get("CI_COMMIT_SHA", ""),
-            env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),
-            env.get(LEG_VARIABLE, ""),
-            env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", ""),
-        )
-    return None
-
-
-def ci_run(environ: dict[str, str] | None = None) -> RunContext | None:
-    """The CI run this process belongs to, or None at a desk.
-
-    Read from the runner's environment, *environ* when given, the
-    process's own otherwise: GitHub's and Gitea's ``GITHUB_*``
-    variables, GitLab's ``CI_*``. An extension that behaves
-    differently in CI asks this, never a variable of one forge.
-    """
-    return run_context(environ)
-
-
-def identity() -> tuple[str, str]:
-    """Who the store's commits are by: the runner's name, an invalid domain."""
-    prog = footman.prog()
-    return (f"{prog} ci state", f"ci-state@{prog}.invalid")
 
 
 @dataclass(frozen=True)
@@ -753,27 +575,22 @@ _SNAPSHOTS: dict[Path, _Snapshot] = {}
 #: what lets a `fetched_snapshot` read a missing ref as absent.
 FETCHED = Series("fetched", window=1, ci_only=False, local=True)
 
-#: The variable a published snapshot's file is named in: the job
-#: runner takes one listing for the whole job and every entry it
-#: spawns reads through it instead of listing again.
-SNAPSHOT_VARIABLE = "WORKSHOP_SNAPSHOT"
-
 #: The ref namespaces one listing carries: the store's own, and the
 #: branches the coverage families' current keys are told by.
 LISTED = (NAMESPACE, TRACE_NAMESPACE, "refs/heads/")
 
 
-def _snapshot(root: Path) -> _Snapshot | None:
-    return _SNAPSHOTS.get(root.resolve())
+def _snapshot(store: StateStore) -> _Snapshot | None:
+    return _SNAPSHOTS.get(store.root.resolve())
 
 
-def _list_namespace(root: Path) -> tuple[dict[str, str] | None, str]:
+def _list_namespace(store: StateStore) -> tuple[dict[str, str] | None, str]:
     """Every ref under the listed namespaces by sha, or ``(None, reason)``.
 
     One call lists the store's refs and the branches together, so a
     family's current keys cost no listing of their own.
     """
-    listed = _git(root, "ls-remote", "origin", *(space + "*" for space in LISTED))
+    listed = _git(store.root, "ls-remote", "origin", *(space + "*" for space in LISTED))
     if listed.code != 0:
         return None, _words(listed)
     refs: dict[str, str] = {}
@@ -784,13 +601,13 @@ def _list_namespace(root: Path) -> tuple[dict[str, str] | None, str]:
     return refs, ""
 
 
-def _missing_locally(root: Path, shas: Iterable[str]) -> set[str]:
+def _missing_locally(store: StateStore, shas: Iterable[str]) -> set[str]:
     """The shas among *shas* the checkout's object store does not hold."""
     wanted = sorted(set(shas))
     if not wanted:
         return set()
     checked = _git(
-        root,
+        store.root,
         "cat-file",
         "--batch-check",
         "-z",
@@ -808,7 +625,7 @@ def _missing_locally(root: Path, shas: Iterable[str]) -> set[str]:
 
 @contextmanager
 def remote_snapshot(
-    root: Path, *, fetch: Iterable[str] = (), publish: bool = False
+    store: StateStore, *, fetch: Iterable[str] = (), publish: bool = False
 ) -> Generator[str | None]:
     """Read the remote namespace through one listing for the block.
 
@@ -843,17 +660,17 @@ def remote_snapshot(
     another checkout, counts as none. Without *publish* the block
     yields ``None``.
     """
-    key = root.resolve()
+    key = store.root.resolve()
     if key in _SNAPSHOTS:
-        _bring_prefixes(root, _SNAPSHOTS[key], fetch)
+        _bring_prefixes(store, _SNAPSHOTS[key], fetch)
         yield None
         return
-    snapshot = _published_snapshot(key)
+    snapshot = _published_snapshot(store, key)
     if snapshot is None:
-        refs, why = _list_namespace(root)
+        refs, why = _list_namespace(store)
         snapshot = _Snapshot(refs, why)
     refs = snapshot.refs
-    _bring_prefixes(root, snapshot, fetch)
+    _bring_prefixes(store, snapshot, fetch)
     published_here = ""
     if publish and refs is not None and snapshot.published is None:
         with tempfile.NamedTemporaryFile(
@@ -876,7 +693,9 @@ def _prefix_ref(prefix: str) -> str:
     return prefix if prefix.startswith("refs/") else NAMESPACE + prefix
 
 
-def _bring_prefixes(root: Path, snapshot: _Snapshot, fetch: Iterable[str]) -> None:
+def _bring_prefixes(
+    store: StateStore, snapshot: _Snapshot, fetch: Iterable[str]
+) -> None:
     """Bring every listed ref under the prefixes *fetch* names local, in one fetch.
 
     A ref the fetch cannot bring is left to fail at its read, which
@@ -888,7 +707,7 @@ def _bring_prefixes(root: Path, snapshot: _Snapshot, fetch: Iterable[str]) -> No
     wanted = {
         ref: sha for ref, sha in snapshot.refs.items() if ref.startswith(prefixes)
     }
-    _bring(root, snapshot, wanted)
+    _bring(store, snapshot, wanted)
 
 
 def _key_group(snapshot: _Snapshot, ref: str, sha: str) -> dict[str, str]:
@@ -926,7 +745,7 @@ class Fetched(NamedTuple):
     """The refs this fetch added, moved or pruned; zero on a quiet origin."""
 
 
-def fetch_store(root: Path, *, branches: bool = False) -> Fetched:
+def fetch_store(store: StateStore, *, branches: bool = False) -> Fetched:
     """Mirror origin's namespace under `FETCHED_NAMESPACE` and stamp it.
 
     One fetch with an explicit refspec, pruned, so a ref origin dropped
@@ -943,18 +762,18 @@ def fetch_store(root: Path, *, branches: bool = False) -> Fetched:
         zero of each and the reason when the fetch or the stamp failed,
         with git's words; nothing here raises or prints.
     """
-    before = _local_refs(root, FETCHED_NAMESPACE) or {}
+    before = _local_refs(store, FETCHED_NAMESPACE) or {}
     refspecs = [f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*"]
     if branches:
         refspecs.insert(0, "+refs/heads/*:refs/remotes/origin/*")
-    fetched = _git(root, "fetch", "--quiet", "--prune", "origin", *refspecs)
+    fetched = _git(store.root, "fetch", "--quiet", "--prune", "origin", *refspecs)
     if fetched.code != 0:
         return Fetched(0, _words(fetched))
-    mirrored = _local_refs(root, FETCHED_NAMESPACE)
+    mirrored = _local_refs(store, FETCHED_NAMESPACE)
     if mirrored is None:
         return Fetched(0, "the mirror could not be listed")
     why = FETCHED.put(
-        root, {"origin": {"refs": len(mirrored)}}, message="fetched origin's store"
+        store, {"origin": {"refs": len(mirrored)}}, message="fetched origin's store"
     )
     if why:
         return Fetched(0, why)
@@ -967,7 +786,7 @@ def fetch_store(root: Path, *, branches: bool = False) -> Fetched:
 
 
 @contextmanager
-def fetched_snapshot(root: Path) -> Generator[None]:
+def fetched_snapshot(store: StateStore) -> Generator[None]:
     """Read the remote namespace from the checkout's mirror of origin, for the block.
 
     Nothing inside reaches origin. The listing is the mirror
@@ -980,20 +799,20 @@ def fetched_snapshot(root: Path) -> Generator[None]:
     absence, and every caller falls open on it. A block opened inside
     another snapshot for the same checkout shares the outer one.
     """
-    key = root.resolve()
+    key = store.root.resolve()
     if key in _SNAPSHOTS:
         yield
         return
-    stamped, why = FETCHED.row(root, "origin")
+    stamped, why = FETCHED.row(store, "origin")
     if stamped is None:
         reason = why or (
             "origin's state store has not been fetched into this checkout:"
-            f" run `{footman.prog()} sync`"
+            f" run `{store.prog} sync`"
         )
         snapshot = _Snapshot(None, reason, offline=True)
     else:
-        mirrored = _local_refs(root, FETCHED_NAMESPACE)
-        branches = _local_refs(root, "refs/remotes/origin/")
+        mirrored = _local_refs(store, FETCHED_NAMESPACE)
+        branches = _local_refs(store, "refs/remotes/origin/")
         if mirrored is None or branches is None:
             snapshot = _Snapshot(None, "the mirror could not be listed", offline=True)
         else:
@@ -1013,9 +832,9 @@ def fetched_snapshot(root: Path) -> Generator[None]:
         _SNAPSHOTS.pop(key, None)
 
 
-def _published_snapshot(key: Path) -> _Snapshot | None:
+def _published_snapshot(store: StateStore, key: Path) -> _Snapshot | None:
     """The snapshot a parent published for *key*, or ``None`` when there is none."""
-    named = os.environ.get(SNAPSHOT_VARIABLE, "")
+    named = os.environ.get(store.snapshot_variable, "")
     if not named:
         return None
     try:
@@ -1049,13 +868,15 @@ def _write_published(key: Path, snapshot: _Snapshot) -> None:
         snapshot.published = None
 
 
-def _relist(root: Path, snapshot: _Snapshot) -> None:
+def _relist(store: StateStore, snapshot: _Snapshot) -> None:
     """List the namespace again after another writer moved a ref."""
-    snapshot.refs, snapshot.reason = _list_namespace(root)
-    _write_published(root.resolve(), snapshot)
+    snapshot.refs, snapshot.reason = _list_namespace(store)
+    _write_published(store.root.resolve(), snapshot)
 
 
-def _bring(root: Path, snapshot: _Snapshot, wanted: dict[str, str]) -> dict[str, str]:
+def _bring(
+    store: StateStore, snapshot: _Snapshot, wanted: dict[str, str]
+) -> dict[str, str]:
     """Make the listed commits of *wanted* (ref to sha) local; the failures by ref.
 
     A fetch names the ref and brings whatever the remote holds under it
@@ -1069,25 +890,25 @@ def _bring(root: Path, snapshot: _Snapshot, wanted: dict[str, str]) -> dict[str,
     failed: dict[str, str] = {}
     refs = dict(wanted)
     for _round in range(2):
-        missing = _missing_locally(root, refs.values())
+        missing = _missing_locally(store, refs.values())
         snapshot.local.update(sha for sha in refs.values() if sha not in missing)
         to_fetch = sorted(ref for ref, sha in refs.items() if sha in missing)
         if not to_fetch:
             return failed
-        fetched = _git(root, "fetch", "--quiet", "origin", *to_fetch)
+        fetched = _git(store.root, "fetch", "--quiet", "origin", *to_fetch)
         if fetched.code != 0:
             return {ref: _words(fetched) for ref in to_fetch}
-        still = _missing_locally(root, [refs[ref] for ref in to_fetch])
+        still = _missing_locally(store, [refs[ref] for ref in to_fetch])
         snapshot.local.update(refs[ref] for ref in to_fetch if refs[ref] not in still)
         moved = [ref for ref in to_fetch if refs[ref] in still]
         if not moved:
             return failed
-        _relist(root, snapshot)
+        _relist(store, snapshot)
         if snapshot.refs is None:
             reason = f"the remote could not be listed: {snapshot.reason}"
             return dict.fromkeys(moved, reason)
         refs = {ref: snapshot.refs[ref] for ref in moved if ref in snapshot.refs}
-    missing = _missing_locally(root, refs.values())
+    missing = _missing_locally(store, refs.values())
     return {
         ref: "another writer kept moving it"
         for ref, sha in refs.items()
@@ -1096,7 +917,7 @@ def _bring(root: Path, snapshot: _Snapshot, wanted: dict[str, str]) -> dict[str,
 
 
 def _reachable(
-    root: Path, snapshot: _Snapshot, ref: str, sha: str
+    store: StateStore, snapshot: _Snapshot, ref: str, sha: str
 ) -> tuple[str | None, str]:
     """The commit to read for *ref* inside *snapshot*, made local; or the reason.
 
@@ -1108,7 +929,7 @@ def _reachable(
     """
     if sha in snapshot.local:
         return sha, ""
-    failed = _bring(root, snapshot, _key_group(snapshot, ref, sha))
+    failed = _bring(store, snapshot, _key_group(snapshot, ref, sha))
     if ref in failed:
         return None, failed[ref]
     if snapshot.refs is None:
@@ -1127,15 +948,15 @@ def _words(result: tools.Result) -> str:
     return (result.stderr or result.stdout).strip()[:200] or "no output"
 
 
-def _ref_exists(root: Path, ref: str) -> tuple[bool | None, str]:
+def _ref_exists(store: StateStore, ref: str) -> tuple[bool | None, str]:
     """Whether *ref* is on the remote; ``None`` when the probe cannot say."""
-    probe = _git(root, "ls-remote", "origin", ref)
+    probe = _git(store.root, "ls-remote", "origin", ref)
     if probe.code != 0:
         return None, _words(probe)
     return bool(probe.stdout.strip()), ""
 
 
-def read(root: Path, ref: str) -> Read:
+def read(store: StateStore, ref: str) -> Read:
     """Read *ref*'s files, saying whether a miss is absence or failure.
 
     A remote ref is fetched from origin: the fetch lands in
@@ -1151,13 +972,13 @@ def read(root: Path, ref: str) -> Read:
     words.
     """
     if ref.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE)):
-        verified = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        verified = _git(store.root, "rev-parse", "--verify", "--quiet", ref)
         if verified.code == 1 and not verified.stderr.strip():
             return Read(None, None, failed=False)
         if verified.code != 0:
             return Read(None, None, failed=True, reason=_words(verified))
-        return _tree_files(root, verified.stdout.strip())
-    snapshot = _snapshot(root)
+        return _tree_files(store, verified.stdout.strip())
+    snapshot = _snapshot(store)
     if snapshot is not None:
         if snapshot.refs is None:
             return Read(
@@ -1169,22 +990,24 @@ def read(root: Path, ref: str) -> Read:
         listed = snapshot.refs.get(ref)
         if listed is None:
             return Read(None, None, failed=False)
-        sha, why = _reachable(root, snapshot, ref, listed)
+        sha, why = _reachable(store, snapshot, ref, listed)
         if why:
             return Read(None, listed, failed=True, reason=why)
         if sha is None:
             return Read(None, None, failed=False)
-        return _tree_files(root, sha)
-    fetched = _git(root, "fetch", "--quiet", "origin", ref)
+        return _tree_files(store, sha)
+    fetched = _git(store.root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
-        exists, why = _ref_exists(root, ref)
+        exists, why = _ref_exists(store, ref)
         if exists is False:
             return Read(None, None, failed=False)
         return Read(None, None, failed=True, reason=why or _words(fetched))
-    return _tree_files(root, _git(root, "rev-parse", "FETCH_HEAD").stdout.strip())
+    return _tree_files(
+        store, _git(store.root, "rev-parse", "FETCH_HEAD").stdout.strip()
+    )
 
 
-def _tree_files(root: Path, sha: str) -> Read:
+def _tree_files(store: StateStore, sha: str) -> Read:
     """The files of the root commit *sha*, or a failure with git's words.
 
     One process whatever the tree holds: ``git archive`` writes the
@@ -1202,7 +1025,7 @@ def _tree_files(root: Path, sha: str) -> Read:
     with tempfile.TemporaryDirectory() as scratch:
         out = Path(scratch) / "tree.tar"
         archived = _git(
-            root,
+            store.root,
             "-c",
             "core.autocrlf=false",
             "-c",
@@ -1230,7 +1053,7 @@ def _tree_files(root: Path, sha: str) -> Read:
     return Read(files, sha, failed=False)
 
 
-def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
+def list_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
     """The refs under *prefix* by sha, remote or local; ``None`` when unlistable.
 
     A prefix under the local namespace, the mirror, or the
@@ -1239,21 +1062,23 @@ def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
     from origin otherwise.
     """
     if prefix.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE, "refs/remotes/")):
-        return _local_refs(root, prefix)
-    snapshot = _snapshot(root)
+        return _local_refs(store, prefix)
+    snapshot = _snapshot(store)
     if snapshot is not None and prefix.startswith(LISTED):
         if snapshot.refs is None:
             return None
         return {
             name: sha for name, sha in snapshot.refs.items() if name.startswith(prefix)
         }
-    listed = _git(root, "ls-remote", "origin", prefix + "*")
+    listed = _git(store.root, "ls-remote", "origin", prefix + "*")
     return _parse_listing(listed)
 
 
-def _local_refs(root: Path, prefix: str) -> dict[str, str] | None:
+def _local_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
     """The checkout's own refs under *prefix* by sha; ``None`` when git refuses."""
-    listed = _git(root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix)
+    listed = _git(
+        store.root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix
+    )
     return _parse_listing(listed)
 
 
@@ -1299,7 +1124,9 @@ def _committer_when() -> str:
     return f"{int(time.time())} +0000"
 
 
-def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str, str]:
+def _build_commit(
+    store: StateStore, files: dict[str, str], message: str
+) -> tuple[str, str]:
     """A root commit of *files*; ``(sha, "")`` or ``("", reason)``.
 
     One ``fast-import`` whatever the files: the stream carries every
@@ -1309,7 +1136,7 @@ def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str,
     caller moves the real ref to it under its own compare-and-swap. The
     commit's id comes back through the marks file the import exports.
     """
-    name, email = identity()
+    name, email = store.identity
     text = f"{message} [skip ci]".encode()
     lines: list[bytes] = [
         f"commit {IMPORT_REF}\n".encode(),
@@ -1332,7 +1159,7 @@ def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str,
     with tempfile.TemporaryDirectory() as scratch:
         marks = Path(scratch) / "marks"
         imported = _git(
-            root,
+            store.root,
             "fast-import",
             "--quiet",
             "--force",
@@ -1368,7 +1195,7 @@ def _stale(refused: tools.Result) -> bool:
 
 
 def put(
-    root: Path,
+    store: StateStore,
     ref: str,
     files: dict[str, str],
     *,
@@ -1395,16 +1222,16 @@ def put(
             f"refusing {ref}: the state store writes only under {NAMESPACE},"
             f" {LOCAL_NAMESPACE} and {TRACE_NAMESPACE}"
         )
-    if ci_only and run_context() is None:
+    if ci_only and not store.in_ci:
         return f"refusing {ref}: only a CI run writes this series; local runs read"
-    opened = _snapshot(root)
+    opened = _snapshot(store)
     if opened is not None and opened.offline and not ref.startswith(LOCAL_NAMESPACE):
         return (
             f"refusing {ref}: this block reads origin's store as last fetched"
             " and writes nothing to origin"
         )
     for _ in range(attempts):
-        current = read(root, ref)
+        current = read(store, ref)
         if current.failed:
             return (
                 f"refusing to write {ref}: its current state could not be"
@@ -1419,31 +1246,31 @@ def put(
         } | files
         if window is not None and len(merged) > window:
             merged = _trim(merged, window, order)
-        commit, why = _build_commit(root, merged, message)
+        commit, why = _build_commit(store, merged, message)
         if why:
             return why
         if ref.startswith(LOCAL_NAMESPACE):
             # git's own compare-and-swap: the old value is the sha the
             # read returned, or empty for a ref that must not exist yet.
-            moved = _git(root, "update-ref", ref, commit, current.sha or "")
+            moved = _git(store.root, "update-ref", ref, commit, current.sha or "")
             if moved.code != 0:
                 if _stale(moved):
                     continue
                 return f"update refused: {_words(moved)}"
             return ""
         lease = f"--force-with-lease={ref}:{current.sha or ''}"
-        pushed = _git(root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
-        snapshot = _snapshot(root)
+        pushed = _git(store.root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
+        snapshot = _snapshot(store)
         if pushed.code != 0:
             if _stale(pushed):
                 if snapshot is not None:
-                    _relist(root, snapshot)
+                    _relist(store, snapshot)
                 continue
             return f"push refused: {_words(pushed)}"
         if snapshot is not None and snapshot.refs is not None:
             snapshot.refs[ref] = commit
             snapshot.local.add(commit)
-            _write_published(root.resolve(), snapshot)
+            _write_published(store.root.resolve(), snapshot)
         return ""
     return f"gave up on {ref} after {attempts} attempts: another writer kept moving it"
 
@@ -1458,7 +1285,7 @@ def _trim(files: dict[str, str], window: int, order: Order | None) -> dict[str, 
     return {name: files[name] for name in kept}
 
 
-def drop(root: Path, ref: str) -> str:
+def drop(store: StateStore, ref: str) -> str:
     """Delete *ref*, on origin or in the checkout; ``""`` when gone, else the reason.
 
     A ref that is already absent counts as gone: the janitor re-runs
@@ -1470,20 +1297,20 @@ def drop(root: Path, ref: str) -> str:
             f" {LOCAL_NAMESPACE} and {TRACE_NAMESPACE}"
         )
     if ref.startswith(LOCAL_NAMESPACE):
-        deleted = _git(root, "update-ref", "-d", ref)
+        deleted = _git(store.root, "update-ref", "-d", ref)
         return "" if deleted.code == 0 else f"delete refused: {_words(deleted)}"
-    deleted = _git(root, "push", "--quiet", "origin", f":{ref}")
+    deleted = _git(store.root, "push", "--quiet", "origin", f":{ref}")
     words = deleted.stderr + deleted.stdout
     if deleted.code != 0 and "remote ref does not exist" not in words:
         return f"delete refused: {_words(deleted)}"
-    snapshot = _snapshot(root)
+    snapshot = _snapshot(store)
     if snapshot is not None and snapshot.refs is not None:
         snapshot.refs.pop(ref, None)
-        _write_published(root.resolve(), snapshot)
+        _write_published(store.root.resolve(), snapshot)
     return ""
 
 
-def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]:
+def _commit_times(store: StateStore, refs: Sequence[str]) -> dict[str, datetime | None]:
     """When each of *refs*' commits was made; ``None`` for one gone or unreadable.
 
     As few processes as the refs allow, whatever their number: the
@@ -1499,7 +1326,7 @@ def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]
     remote = [ref for ref in refs if not ref.startswith(LOCAL_NAMESPACE)]
     if local:
         listed = _git(
-            root,
+            store.root,
             "for-each-ref",
             "--format=%(refname) %(committerdate:unix)",
             *local,
@@ -1510,11 +1337,11 @@ def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]
                 found[ref] = datetime.fromtimestamp(int(stamp), tz=UTC)
     if not remote:
         return found
-    snapshot = _snapshot(root)
+    snapshot = _snapshot(store)
     if snapshot is None or snapshot.refs is None:
         return found
     wanted = {ref: snapshot.refs[ref] for ref in remote if ref in snapshot.refs}
-    failed = _bring(root, snapshot, wanted)
+    failed = _bring(store, snapshot, wanted)
     at: dict[str, str] = {}
     for ref in wanted:
         # A ref another writer moved is listed again by the bring and
@@ -1525,7 +1352,7 @@ def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]
     if not at:
         return found
     logged = _git(
-        root,
+        store.root,
         "log",
         "--no-walk=unsorted",
         "--format=%H %ct",
@@ -1544,7 +1371,7 @@ def _commit_times(root: Path, refs: Sequence[str]) -> dict[str, datetime | None]
 
 
 def sweep(
-    root: Path,
+    store: StateStore,
     declared: tuple[Series | Keyed, ...],
     *,
     remote: bool,
@@ -1572,24 +1399,24 @@ def sweep(
     moment = now or datetime.now(UTC)
     lines: list[str] = []
     skipped = False
-    with remote_snapshot(root) if remote else nullcontext():
+    with remote_snapshot(store) if remote else nullcontext():
         for item in declared:
             if not item.local and not remote:
                 skipped = True
             elif isinstance(item, Series):
-                lines += _sweep_series(root, item, dry_run=dry_run, now=moment)
+                lines += _sweep_series(store, item, dry_run=dry_run, now=moment)
             else:
-                lines += _sweep_family(root, item, dry_run=dry_run, now=moment)
+                lines += _sweep_family(store, item, dry_run=dry_run, now=moment)
     if skipped:
         lines.append("  remote series: swept inside CI, never from a machine")
     return lines
 
 
 def _sweep_series(
-    root: Path, series: Series, *, dry_run: bool, now: datetime
+    store: StateStore, series: Series, *, dry_run: bool, now: datetime
 ) -> list[str]:
     """Trim *series* to its window and drop its aged rows; the lines."""
-    found = series.rows(root)
+    found = series.rows(store)
     if found.failed:
         return [f"  {series.ref}: {found.reason}; nothing swept"]
     aged = [row.name for row in found.rows if _older(row.when, series.age, now)]
@@ -1611,7 +1438,7 @@ def _sweep_series(
     if dry_run:
         return lines
     why = put(
-        root,
+        store,
         series.ref,
         {},
         message=f"{series.name}: swept",
@@ -1626,19 +1453,19 @@ def _sweep_series(
 
 
 def _sweep_family(
-    root: Path, family: Keyed, *, dry_run: bool, now: datetime
+    store: StateStore, family: Keyed, *, dry_run: bool, now: datetime
 ) -> list[str]:
     """Drop *family*'s orphans and bound each key's series; the lines."""
-    keys = family.listed(root)
+    keys = family.listed(store)
     if keys is None:
         return [f"  {family.prefix}*: could not be listed; nothing swept"]
     lines: list[str] = []
-    current = family.current(root) if family.current is not None else None
+    current = family.current(store.root) if family.current is not None else None
     if family.current is not None and current is None:
         lines.append(
             f"  {family.prefix}*: the current keys could not be told; no orphan dropped"
         )
-    beyond, over_words = _beyond_the_count(root, family, keys)
+    beyond, over_words = _beyond_the_count(store, family, keys)
     if family.keep is not None and not over_words:
         lines.append(
             f"  {family.prefix}*: how many {family.keys[0]}s to keep could not be"
@@ -1654,7 +1481,7 @@ def _sweep_family(
         if family.stale_after is not None
         or (family.linger is not None and current is not None and key not in current)
     ]
-    made_by = _commit_times(root, timed) if timed else {}
+    made_by = _commit_times(store, timed) if timed else {}
     for key in keys:
         series = family.at(*key)
         reason = "" if key[0] not in beyond else over_words
@@ -1680,16 +1507,16 @@ def _sweep_family(
                     )
                     continue
         if reason:
-            why = "" if dry_run else drop(root, series.ref)
+            why = "" if dry_run else drop(store, series.ref)
             lines.append(f"  {series.ref}: {reason}; {why or verb}")
             continue
         if family.holds_rows:
-            lines += _sweep_series(root, series, dry_run=dry_run, now=now)
+            lines += _sweep_series(store, series, dry_run=dry_run, now=now)
     return lines
 
 
 def _beyond_the_count(
-    root: Path, family: Keyed, keys: Sequence[tuple[str, ...]]
+    store: StateStore, family: Keyed, keys: Sequence[tuple[str, ...]]
 ) -> tuple[set[str], str]:
     """The first key parts past the family's count, and the words for dropping them.
 
@@ -1701,7 +1528,7 @@ def _beyond_the_count(
     """
     if family.keep is None:
         return set(), ""
-    bound = family.keep(root)
+    bound = family.keep(store.root)
     if bound is None:
         return set(), ""
     parts = {key[0] for key in keys}

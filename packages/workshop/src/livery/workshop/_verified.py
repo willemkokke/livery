@@ -38,10 +38,10 @@ from pathlib import Path
 from typing import Any
 
 from livery import git
-from livery.workshop._state import RunContext, Series
+from livery.workshop._ci_context import RunContext, state_store
 
 #: The series: one row per tree id, the newest kept.
-SERIES = Series("verified", window=200)
+SERIES = git.Series("verified", window=200)
 
 #: The marker a check leg leaves beside its trace, naming the scope
 #: its gate ran, for the leg's metrics row and the gate job's stamp.
@@ -170,7 +170,7 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
     and so does an entry that is not a row of the record's schema:
     the gate runs, and the line says why the record did not decide.
     """
-    row, why = SERIES.row(root, tree)
+    row, why = SERIES.row(state_store(root), tree)
     if row is None:
         return None, why
     return _entry(tree, row.data), ""
@@ -198,7 +198,7 @@ def proved(root: Path) -> tuple[dict[str, Verified], str]:
     A row of a narrowed scope proves nothing and is left out, as a
     file that is not a row of the record's schema is.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return {}, found.reason
     rows = (_entry(row.name, row.data) for row in found.rows)
@@ -213,7 +213,7 @@ def held(root: Path, trees: Iterable[str]) -> tuple[set[str], str]:
     skips it, so its tree reads as not held; an absent record holds
     nothing, without a reason.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return set(), found.reason
     names = {row.name for row in found.rows}
@@ -259,7 +259,7 @@ def stamp(
         entry["base_run"] = base.run
         basis = f" on top of {base.tree[:12]}"
     return SERIES.put(
-        root,
+        state_store(root),
         {tree: entry},
         message=f"verified: tree {tree[:12]} by run {run.run_id}{basis}",
     )
@@ -281,7 +281,7 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     from livery.workshop._metrics import SERIES as METRICS
     from livery.workshop._metrics import run_file
 
-    row, why = METRICS.row(root, run_file(run.run_id))
+    row, why = METRICS.row(state_store(root), run_file(run.run_id))
     if why:
         return f"  verified: no stamp, {why}"
     if row is None:

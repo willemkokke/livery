@@ -250,9 +250,9 @@ def release_replay(
     import sys
 
     from livery.forge import SimpleRegistry
+    from livery.workshop._ci_context import run_context
     from livery.workshop._registries import resolve_registry
     from livery.workshop._replay import replay_flow
-    from livery.workshop._state import run_context
 
     root = _root()
     packages = {p.member: p for p in discover_packages(root)}

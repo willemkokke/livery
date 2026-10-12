@@ -32,17 +32,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from livery import git
-from livery.workshop._state import (
+from livery.workshop._ci_context import (
     LEG_VARIABLE,
-    TRACE_NAMESPACE,
-    Keyed,
     RunContext,
-    put,
-    remote_snapshot,
     run_context,
-    slug,
+    state_store,
 )
-from livery.workshop._state import read as state_read
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -203,13 +198,13 @@ def _kept_runs(root: Path) -> int | None:
 #: One ref per leg of a run, keyed as the per-run metrics are, so the
 #: two halves of one leg answer to the same key. The files are not
 #: rows, so the count of runs is the whole bound the janitor applies.
-TRACES = Keyed(
+TRACES = git.Keyed(
     # Under the traces' own namespace, so the ref reads
     # ``refs/workshop-trace/run/<run>/<leg>``, the per-run metrics'
     # shape one namespace over.
     "run",
     ("run", "leg"),
-    namespace=TRACE_NAMESPACE,
+    namespace=git.TRACE_NAMESPACE,
     holds_rows=False,
     keep=_kept_runs,
 )
@@ -221,10 +216,10 @@ TRACES = Keyed(
 #: commit the dispatch named, so the run writes down the commit it
 #: actually checked out. Read beside the forge's own listing, never
 #: instead of it, and kept by age because a sha ranks by nothing.
-ABOUT = Keyed(
+ABOUT = git.Keyed(
     "about",
     ("commit",),
-    namespace=TRACE_NAMESPACE,
+    namespace=git.TRACE_NAMESPACE,
     stale_after=timedelta(days=90),
 )
 
@@ -276,8 +271,8 @@ def push(
     files = {TRACE_FILE: trace.read_text(encoding="utf-8")}
     if job:
         files[JOB_FILE] = json.dumps({"job": job}, sort_keys=True)
-    refused = put(
-        root,
+    refused = git.put(
+        state_store(root),
         series.ref,
         files,
         message=f"trace: {named} of run {found.run_id}",
@@ -315,7 +310,7 @@ def about(root: Path, *, run: RunContext | None = None) -> str:
     if not head or head == found.head_sha:
         return ""  # the forge already files it here
     refused = ABOUT.series(head).put(
-        root,
+        state_store(root),
         {found.run_id: {"run": found.run_id, "event": found.event, "ref": found.ref}},
         message=f"about: run {found.run_id} ran on {head[:12]}",
     )
@@ -356,8 +351,8 @@ def runs_about(
         Caused(str(run.id), run.event) for run in repo.checks.runs(head_sha=commit)
     ]
     known = {caused.run_id for caused in found}
-    with remote_snapshot(root, fetch=(ABOUT.series(commit).ref,)):
-        rows = ABOUT.series(commit).rows(root)
+    with git.remote_snapshot(state_store(root), fetch=(ABOUT.series(commit).ref,)):
+        rows = ABOUT.series(commit).rows(state_store(root))
     lines = [f"{commit[:12]}: {rows.reason}"] if rows.reason else []
     for row in rows.rows:
         run_id = str(row.data.get("run") or "")
@@ -601,14 +596,14 @@ def assemble(
         }
     ]
     # One listing and one fetch for every leg's trace of the run.
-    with remote_snapshot(root, fetch=(f"{TRACES.prefix}{run_id}/",)):
+    with git.remote_snapshot(state_store(root), fetch=(f"{TRACES.prefix}{run_id}/",)):
         traced, refusals = _legs_of(root, run_id)
     lines += refusals
     pids = itertools.count(LEG_PIDS)
     ordered = sorted(jobs, key=_job_order)
     for tid, job in enumerate(ordered, start=1):
         events += _job_events(job, tid=tid, zero=zero, created=created, now=moment)
-        text = traced.get(job.name) or traced.get(slug(job.name))
+        text = traced.get(job.name) or traced.get(git.slug(job.name))
         if text is None:
             continue
         found, why = laid_on(text, zero=zero, pids=pids, label=job.name)
@@ -853,14 +848,14 @@ def _legs_of(root: Path, run_id: str) -> tuple[dict[str, str], list[str]]:
     answered for by its own key, which is what a job whose name needs
     no spelling looks like.
     """
-    keys = TRACES.listed(root, run_id)
+    keys = TRACES.listed(state_store(root), run_id)
     if keys is None:
         return {}, [f"{TRACES.prefix}{run_id}/*: could not be listed; no leg's own"]
     lines: list[str] = []
     found: dict[str, str] = {}
     for key in keys:
         series = TRACES.at(*key)
-        read = state_read(root, series.ref)
+        read = git.read(state_store(root), series.ref)
         if read.files is None:
             lines.append(f"{key[-1]}: {read.reason or 'its ref could not be read'}")
             continue

@@ -337,10 +337,12 @@ def test_ci_changes_is_the_runs_diff_against_its_base_or_none(
     monkeypatch.setattr(git, "merge_base", lambda root, base: "b" * 40)
     # The fallbacks first: at a desk, and outside a pull request's
     # narrowing, the run judges everything.
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda environ=None: None)
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: None
+    )
     assert ci_changes(tmp_path) is None
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda environ=None: object()
+        "livery.workshop._ci_context.run_context", lambda environ=None: object()
     )
     monkeypatch.setattr(
         "livery.workshop._quality.ci_affected_base", lambda root, run: ""
@@ -385,7 +387,7 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     monkeypatch.setattr(git, "changed_paths", changed_paths)
     monkeypatch.setattr(git, "merge_base", lambda root, base: "b" * 40)
     monkeypatch.setattr(
-        "livery.workshop._state.run_context", lambda environ=None: object()
+        "livery.workshop._ci_context.run_context", lambda environ=None: object()
     )
     # The fallbacks first. Outside a pull request's narrowing every
     # entry runs.

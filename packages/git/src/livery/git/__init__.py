@@ -17,6 +17,12 @@ host ([livery.git.ssh_environment][]), the tools' identity when the
 person has none ([livery.git.tool_identity][]), an editor that never
 opens, and what a task marks for itself with [livery.git.identity][]
 and [livery.git.unsigned][].
+
+The state store, JSON rows on git refs, is here too: a
+[livery.git.StateStore][] built with a caller's policy, the
+[livery.git.Series][] and [livery.git.Keyed][] declarations that read
+and write through it, and the snapshots that make a run's reads one
+listing and one fetch.
 """
 
 from __future__ import annotations
@@ -100,9 +106,50 @@ from livery.git._ssh import (
     ssh_environment,
     ssh_sockets,
 )
+from livery.git._store import (
+    FETCHED,
+    FETCHED_NAMESPACE,
+    LOCAL_NAMESPACE,
+    NAMESPACE,
+    RUN_PREFIX,
+    TRACE_NAMESPACE,
+    WHOLE,
+    Fetched,
+    Keyed,
+    Read,
+    Row,
+    Rows,
+    Series,
+    Skipped,
+    StateStore,
+    drop,
+    fetch_store,
+    fetched_snapshot,
+    list_refs,
+    put,
+    read,
+    remote_snapshot,
+    slug,
+    sweep,
+)
 
 __all__ = [
+    "FETCHED",
+    "FETCHED_NAMESPACE",
+    "LOCAL_NAMESPACE",
+    "NAMESPACE",
+    "RUN_PREFIX",
+    "TRACE_NAMESPACE",
+    "WHOLE",
+    "Fetched",
     "GitError",
+    "Keyed",
+    "Read",
+    "Row",
+    "Rows",
+    "Series",
+    "Skipped",
+    "StateStore",
     "__version__",
     "add",
     "amend_all",
@@ -126,8 +173,11 @@ __all__ = [
     "delete_branch",
     "detach",
     "dirty_paths",
+    "drop",
     "fetch",
+    "fetch_store",
     "fetch_tags",
+    "fetched_snapshot",
     "file_at",
     "files_in_commit",
     "first_parent_trees",
@@ -143,6 +193,7 @@ __all__ = [
     "is_ancestor",
     "is_clean",
     "last_commit_touching",
+    "list_refs",
     "local_branch_exists",
     "local_branches",
     "log_paths",
@@ -156,19 +207,24 @@ __all__ = [
     "position",
     "push",
     "push_force",
+    "put",
+    "read",
     "recent_commits",
     "record_unsupported",
     "remote_branches",
     "remote_head",
     "remote_host",
+    "remote_snapshot",
     "remote_tags",
     "run",
     "sha_of",
+    "slug",
     "ssh_command",
     "ssh_environment",
     "ssh_sockets",
     "staged_text",
     "subjects_ahead",
+    "sweep",
     "switch",
     "tags",
     "tool_identity",

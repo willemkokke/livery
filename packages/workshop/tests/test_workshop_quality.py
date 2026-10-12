@@ -436,7 +436,7 @@ def _whole_gate(
     # reads to refuse --fix on a checkout nobody keeps.
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
-    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.setattr(_quality, "parallel", watched)
     monkeypatch.setattr(_quality, "drift_check", named("drift.check"))
     monkeypatch.setattr(

@@ -37,6 +37,7 @@ from livery.forge import (
     Run,
     Unsupported,
 )
+from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._verdict import (
     EXIT_CI_FAILED,
@@ -809,7 +810,7 @@ def verdict_flow(repo: Repository, *, needs: tuple[str, ...], job: str) -> list[
     ``check``). A needed job the forge does not list at all counts as
     red: the verdict never passes on a job it could not see.
     """
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     run = run_context()
     if run is None:
@@ -867,14 +868,15 @@ verified = ci.group("verified", help="The trees a green gate proved", hidden=Tru
 
 def verified_stamp_flow(root: Path) -> None:
     """Stamp the run's tree when every check leg ran the full gate; print why not."""
-    from livery.workshop._state import remote_snapshot, run_context
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
     from livery.workshop._verified import stamp_from_metrics
 
     run = run_context()
     if run is None:
         print("  not a CI run: the verified record is written by CI only")
         return
-    with remote_snapshot(root, fetch=("metrics", "verified")):
+    with remote_snapshot(state_store(root), fetch=("metrics", "verified")):
         print(stamp_from_metrics(root, run, sha=git.head_sha(root)))
 
 
@@ -897,14 +899,15 @@ metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
 
 def metrics_collect_flow(root: Path, repo: Repository) -> None:
     """Collect the run's rows into the metrics series; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
     from livery.workshop._metrics import collect
-    from livery.workshop._state import remote_snapshot, run_context
 
     run = run_context()
     if run is None:
         print("  not a CI run: the run's timing rows are collected by CI only")
         return
-    with remote_snapshot(root, fetch=(f"run/{run.run_id}/", "metrics")):
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "metrics")):
         for line in collect(root, repo, run, sha=git.head_sha(root)):
             print(line)
 
@@ -987,11 +990,11 @@ def ci_profile(
 
 def timings_flow(root: Path, *, since: int, base: int) -> None:
     """Print the rendered timings, then the speed marks beside the newest run."""
+    from livery.git import remote_snapshot
     from livery.workshop._metrics import render
     from livery.workshop._speed import render_marks
-    from livery.workshop._state import remote_snapshot
 
-    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+    with remote_snapshot(state_store(root), fetch=("metrics", "speed/marks")):
         for line in render(root, since=since, base=base):
             print(line)
         for line in render_marks(root):

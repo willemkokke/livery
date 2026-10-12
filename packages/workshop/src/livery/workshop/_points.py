@@ -45,8 +45,13 @@ from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery.footman import Tasks, fail
+from livery.workshop._ci_context import (
+    LEG_VARIABLE,
+    POINT_VARIABLE,
+    run_context,
+    state_store,
+)
 from livery.workshop._contract import load_contract
-from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -1036,7 +1041,7 @@ def trace_file(task: str) -> str:
     the gate's own file, and a person reading a runner's working directory
     can tell which entry a trace belongs to.
     """
-    from livery.workshop._state import slug
+    from livery.git import slug
 
     return f"fm-profile-{slug(task)}.json"
 
@@ -1472,15 +1477,16 @@ def run_point(
     the job's box collects them into one timeline the runner pushes;
     ``[ci] profile = false`` does none of that. Every child's
     environment names the leg in
-    `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
+    `livery.workshop._ci_context.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
-    `livery.workshop._state.POINT_VARIABLE`, which selects the
+    `livery.workshop._ci_context.POINT_VARIABLE`, which selects the
     tests a point runs. A job that declares ``inputs`` runs no entry on
     a pull request that changed nothing it reads (`unread_by_the_job`).
     *spawn* runs one entry's command in that environment and returns
     its exit code; the default is the runner's own child.
     """
-    from livery.workshop._state import SNAPSHOT_VARIABLE, remote_snapshot
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import SNAPSHOT_VARIABLE
 
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
@@ -1507,7 +1513,7 @@ def run_point(
     facts = {"display": display, "label": label, "os": os_label, "python": python}
     # A dispatched point's inputs, as the run received them, by name:
     # the release's ``{ref}`` names the squash the wave publishes.
-    from livery.workshop._state import dispatch_inputs
+    from livery.workshop._ci_context import dispatch_inputs
 
     facts.update(
         dispatch_inputs(
@@ -1524,7 +1530,9 @@ def run_point(
         # `[ci] profile = false` opens no box, passes no flag, and pushes
         # nothing: off costs nothing rather than less.
         drop = scope.enter_context(profile_box()) if _tracing(root) else None
-        published = scope.enter_context(remote_snapshot(root, publish=True))
+        published = scope.enter_context(
+            remote_snapshot(state_store(root), publish=True)
+        )
         env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
         if published:
             env[SNAPSHOT_VARIABLE] = published

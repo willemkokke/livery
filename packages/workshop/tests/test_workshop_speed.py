@@ -10,8 +10,10 @@ from typing import Any
 
 import pytest
 
+from livery import git
 from livery.footman import Failed
-from livery.workshop import _metrics, _speed, _state
+from livery.workshop import _ci_context, _metrics, _speed
+from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 from workshop_spawns import counting_spawns
 
@@ -20,7 +22,7 @@ _FAILURES = (SystemExit, Failed)
 UBUNTU = "check (ubuntu-latest, 3.14)"
 MACOS = "check (macos-latest, 3.14)"
 LEG = "check-ubuntu-latest-3.14"
-RUN = _state.RunContext("github", "50", "pull_request", "refs/pull/9/merge")
+RUN = _ci_context.RunContext("github", "50", "pull_request", "refs/pull/9/merge")
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -61,7 +63,7 @@ def _entry(run: int, jobs: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 def _store(work: Path, entries: list[dict[str, Any]]) -> None:
     files = {_metrics.run_file(str(e["run"])): json.dumps(e) for e in entries}
-    assert _state.put(work, _metrics.SERIES.ref, files, message="rows") == ""
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
 
 
 def _history(
@@ -146,7 +148,7 @@ def test_the_judge_drops_the_stale_marks_in_ci_while_off(
     with pytest.raises(_FAILURES, match="not a CI run"):
         _speed_tasks.speed_judge()
     assert "dropped" not in capsys.readouterr().out
-    assert len(_speed.SERIES.rows(work).rows) == 1
+    assert len(_speed.SERIES.rows(state_store(work)).rows) == 1
     # A store the transport cannot answer for drops nothing and says why.
     origin = _git(work, "remote", "get-url", "origin").strip()
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
@@ -158,7 +160,7 @@ def test_the_judge_drops_the_stale_marks_in_ci_while_off(
     _speed_tasks.speed_judge()
     out = capsys.readouterr().out
     assert "speed marks: dropped 1 stale row(s) from refs/workshop/speed/marks" in out
-    found = _speed.SERIES.rows(work)
+    found = _speed.SERIES.rows(state_store(work))
     assert found.rows == () and not found.failed
     _speed_tasks.speed_judge()
     assert "dropped" not in capsys.readouterr().out
@@ -230,8 +232,8 @@ def test_judge_run_falls_open_on_unreadable_rows_and_says_when_nothing_ran(
 def test_a_bad_mark_row_is_skipped_and_the_others_stand(work: Path) -> None:
     ref = _speed.SERIES.ref
     assert (
-        _state.put(
-            work,
+        git.put(
+            state_store(work),
             ref,
             {
                 "20260101T000000.000000Z--a--b": "not json",
@@ -393,7 +395,9 @@ def test_one_run_over_warns_naming_the_culprits_and_the_second_in_a_row_is_red(
             _entry(51, {UBUNTU: _leg(125.0)}),
         ],
     )
-    red = judge_flow(work, _state.RunContext("github", "51", "push", "refs/heads/main"))
+    red = judge_flow(
+        work, _ci_context.RunContext("github", "51", "push", "refs/heads/main")
+    )
     assert red == [
         "packages/forge on check-ubuntu-latest-3.14: 125.0s over the limit 120.0s for"
         " the second run in a row"

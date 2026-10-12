@@ -308,8 +308,9 @@ def record(root: Path, job_row: dict[str, Any], *, sha: str) -> str:
 
     Outside CI nothing is written and the line says so.
     """
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context, state_store
     from livery.workshop._metrics import SERIES, run_file
-    from livery.workshop._state import remote_snapshot, run_context
 
     run = run_context()
     if run is None:
@@ -324,9 +325,9 @@ def record(root: Path, job_row: dict[str, Any], *, sha: str) -> str:
         "collected_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "jobs": {str(job_row["job"]): job_row},
     }
-    with remote_snapshot(root, fetch=("metrics",)):
+    with remote_snapshot(state_store(root), fetch=("metrics",)):
         why = SERIES.put(
-            root,
+            state_store(root),
             {run_file(run.run_id): entry},
             message=f"metrics: scale fixture of run {run.run_id} at {sha[:12]}",
         )

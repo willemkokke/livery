@@ -25,9 +25,9 @@ from livery.footman import Forward, doc, fail, group, parallel, task
 from livery.workshop import _checks
 from livery.workshop._backends import require_backends
 from livery.workshop._checks import GateContext
+from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
-from livery.workshop._state import RunContext
 
 # Re-exported by name: the render check's record looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -193,8 +193,8 @@ def ci_changes(root: Path) -> Changes | None:
     ``affected-legs``, and when git cannot answer; the run then judges
     everything, and the line printed says why.
     """
+    from livery.workshop._ci_context import run_context
     from livery.workshop._influence import Changes
-    from livery.workshop._state import run_context
 
     run = run_context()
     base = ci_affected_base(root, run) if run is not None else ""
@@ -337,15 +337,16 @@ def check(
     locally and push the result.
 
     On a machine the state store is read from what the last ``sync``
-    or ``start`` fetched ([livery.workshop._state.fetched_snapshot][]):
+    or ``start`` fetched ([livery.git.fetched_snapshot][]):
     nothing the gate runs reaches origin, and a checkout the store was
     never fetched into roots its chain on a full gate and says so.
     Inside CI the legs read the store as the run's own snapshot.
     """
     from contextlib import nullcontext
 
+    from livery.git import fetched_snapshot
     from livery.workshop._checks import arguments_refusal, split_arguments
-    from livery.workshop._state import fetched_snapshot, run_context
+    from livery.workshop._ci_context import run_context
 
     _refuse_both(fix, safe_fix)
     paths, arguments = split_arguments(paths)
@@ -357,7 +358,7 @@ def check(
         return
     root = workspace_root()
     scope = (
-        fetched_snapshot(root)
+        fetched_snapshot(state_store(root))
         if root is not None and run_context() is None
         else nullcontext()
     )
@@ -549,7 +550,7 @@ def _run_check(
             f" `{footman.prog()} check --fix` locally and push the result."
         )
     from livery.workshop import _verified
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     root_for_ci = workspace_root()
     run = run_context()
@@ -569,10 +570,10 @@ def _run_check(
     elif dispatched:
         print("  dispatched: the whole gate, the verified record set aside")
     if not (nightly or dispatched) and root_for_ci is not None and run is not None:
-        from livery.workshop._state import remote_snapshot
+        from livery.git import remote_snapshot
 
         # The verified record and the records a skip reads: one listing.
-        with remote_snapshot(root_for_ci, fetch=("verified", "coverage/")):
+        with remote_snapshot(state_store(root_for_ci), fetch=("verified", "coverage/")):
             proved = verified_already(root_for_ci)
             if proved is not None:
                 _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
@@ -780,7 +781,7 @@ def _current_point() -> str:
     """The point this process runs at, as the job runner named it; gate outside CI."""
     import os
 
-    from livery.workshop._state import POINT_VARIABLE
+    from livery.workshop._ci_context import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
 
@@ -1036,7 +1037,8 @@ def coverage_union() -> None:
     """
     from contextlib import nullcontext
 
-    from livery.workshop._state import remote_snapshot, run_context
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
 
     root = workspace_root()
     if root is None:
@@ -1045,7 +1047,7 @@ def coverage_union() -> None:
     # The legs' per-run refs and every record the union may carry
     # from: one listing and one fetch.
     scope = (
-        remote_snapshot(root, fetch=(f"run/{run.run_id}/", "coverage/"))
+        remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "coverage/"))
         if run is not None
         else nullcontext()
     )

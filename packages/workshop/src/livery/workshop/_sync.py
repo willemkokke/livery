@@ -20,9 +20,10 @@ import livery.footman as footman
 from livery import git
 from livery.footman import Forward, doc, fail, step, task
 from livery.workshop import _stack
+from livery.workshop._ci_context import state_store
 
 if TYPE_CHECKING:
-    from livery.workshop._state import Fetched
+    from livery.git import Fetched
 
 from livery.workshop._extensions import (
     workspace_root,
@@ -789,14 +790,14 @@ def fetch_store_lines(root: Path) -> list[str]:
     """Mirror origin's state store into the checkout; the line to print.
 
     The mirror is what a machine's ``check`` reads
-    ([livery.workshop._state.fetched_snapshot][]), so a sync or a
+    ([livery.git.fetched_snapshot][]), so a sync or a
     start refreshes it while it has the network. A fetch that fails
     prints its reason and stops nothing: the gate falls open on a
     store it cannot read, and the last mirror stands.
     """
-    from livery.workshop._state import fetch_store
+    from livery.git import fetch_store
 
-    return store_lines(fetch_store(root))
+    return store_lines(fetch_store(state_store(root)))
 
 
 def store_lines(fetched: Fetched) -> list[str]:
@@ -818,9 +819,9 @@ def _fetch_origin(root: Path) -> bool:
     bring-current knows origin's heads are fresh; after a failed fetch it
     fetches for itself and fails in its own words.
     """
-    from livery.workshop._state import fetch_store
+    from livery.git import fetch_store
 
-    fetched = fetch_store(root, branches=True)
+    fetched = fetch_store(state_store(root), branches=True)
     for line in store_lines(fetched):
         print(line)
     return not fetched.why

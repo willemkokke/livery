@@ -488,7 +488,7 @@ def test_the_runner_hands_its_children_one_listing_of_the_store(
 ) -> None:
     import subprocess
 
-    from livery.workshop._state import SNAPSHOT_VARIABLE
+    from livery.workshop._ci_context import SNAPSHOT_VARIABLE
 
     monkeypatch.delenv(SNAPSHOT_VARIABLE, raising=False)
     named: list[str] = []

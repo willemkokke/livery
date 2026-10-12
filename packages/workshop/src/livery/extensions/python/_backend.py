@@ -28,9 +28,9 @@ import livery.toolroom.tools as tools
 from livery import git
 from livery.footman import fail
 from livery.toolroom.tools import pytest
+from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Neighbours, Package
-from livery.workshop._state import RunContext, slug
 
 if TYPE_CHECKING:
     from livery.workshop._coverage_store import Record
@@ -499,8 +499,8 @@ def _put_leg(
     otherwise lack a suite, and a smaller union never passes. The
     *timing* row, when the leg has one, rides the same write.
     """
+    from livery.workshop._ci_context import run_context
     from livery.workshop._coverage_store import put_run
-    from livery.workshop._state import run_context
 
     run = run_context()
     leg = marker["leg"]
@@ -548,9 +548,9 @@ def store_suites(
     """
     from coverage import CoverageData
 
+    from livery.workshop._ci_context import run_context
     from livery.workshop._coverage_lines import pairs, read_parts
     from livery.workshop._coverage_store import LINES, Unit, closure_id
-    from livery.workshop._state import run_context
 
     leg = marker["leg"]
     parts = sorted(root.glob(".coverage.*"))
@@ -646,8 +646,8 @@ def combine_leg(
             # The workspace's own tests ran, unmetered, and reached no
             # package source: each unit the leg ran is put with no
             # lines, so the union finds what ran and judges nothing.
+            from livery.workshop._ci_context import run_context
             from livery.workshop._coverage_store import Unit, closure_id
-            from livery.workshop._state import run_context
 
             print(
                 "  coverage: the workspace has no packages to measure; its own"
@@ -763,6 +763,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         workspace has no unit to union, and then no union file is
         written.
     """
+    from livery.workshop._ci_context import run_context
     from livery.workshop._coverage_lines import (
         from_pairs,
         merge,
@@ -779,7 +780,6 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         row_name,
         run_legs,
     )
-    from livery.workshop._state import run_context
     from livery.workshop._verified import (
         AFFECTED,
         FULL,
@@ -862,7 +862,9 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                     continue
                 collected.append(
                     _write_unit(
-                        scratch / leg.label, f"fresh-{slug(path)}.coverage", unit.files
+                        scratch / leg.label,
+                        f"fresh-{git.slug(path)}.coverage",
+                        unit.files,
                     )
                 )
         else:
@@ -933,7 +935,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 reused.append(
                     _write_unit(
                         scratch / leg.label,
-                        f"reuse-{slug(suite.path)}.coverage",
+                        f"reuse-{git.slug(suite.path)}.coverage",
                         row.files,
                     )
                 )
@@ -1109,7 +1111,9 @@ def stored_union(
             continue
         for path, unit in sorted(held.units.items()):
             written.append(
-                _write_unit(into / label, f"reuse-{slug(path)}.coverage", unit.files)
+                _write_unit(
+                    into / label, f"reuse-{git.slug(path)}.coverage", unit.files
+                )
             )
     return written, misses
 
@@ -1129,7 +1133,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
     """
     import tempfile
 
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     # The coverage CLI on named files: ambient COVERAGE_* variables
     # from a metered shell would re-point it at that process's live
@@ -1211,8 +1215,8 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     """
     import os
 
+    from livery.workshop._ci_context import LEG_VARIABLE, POINT_VARIABLE, run_context
     from livery.workshop._points import check_legs
-    from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
     deploying = (
         os.environ.get(POINT_VARIABLE) == "merge"
@@ -1220,9 +1224,9 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     )
     if run_context() is None or not deploying:
         return [], []
-    from livery.workshop._state import remote_snapshot
+    from livery.git import remote_snapshot
 
-    with remote_snapshot(root, fetch=("coverage/main/",)):
+    with remote_snapshot(state_store(root), fetch=("coverage/main/",)):
         return stored_union(root, check_legs(root), root / "coverage-data")
 
 
@@ -1238,7 +1242,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
     its numbers, so the numbers on screen are the numbers enforced.
     """
     from livery.workshop import _coverage_marks
-    from livery.workshop._state import run_context
+    from livery.workshop._ci_context import run_context
 
     measured = measured_coverage(root, packages)
     policies = {package.path: coverage_policy(package) for package in packages}
@@ -1449,9 +1453,9 @@ def run_test(
         names = ", ".join(package.path for package in packages)
         print(f"  tests: no test directory in {names}; nothing to collect")
         return
+    from livery.workshop._ci_context import run_context
     from livery.workshop._pytest_contexts import ARMED
     from livery.workshop._pytest_speed import FILE_VARIABLE
-    from livery.workshop._state import run_context
 
     run = run_context()
     with tempfile.TemporaryDirectory() as scratch:

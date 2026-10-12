@@ -23,7 +23,7 @@ A CI check leg chooses where to measure from by the same rule
 (`leg_plan`), over CI's own record alone.
 
 The record is a local series of the state store
-([livery.workshop._state][]): it lives in the checkout's git
+([livery.git][]): it lives in the checkout's git
 directory, shared by its worktrees, is written only by a green local
 gate, and never leaves the machine. CI never reads or writes it. The
 window keeps the newest `KEEP` rows, and a row older than `MAX_AGE`
@@ -39,7 +39,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from livery import git
-from livery.workshop import _state
+from livery.workshop._ci_context import state_store
 from livery.workshop._verified import Verified, tree_id
 
 #: How many rows the record keeps, newest first.
@@ -57,7 +57,7 @@ NEAR = 20
 #: How many of a branch's earlier merge rows a leg rebuilds, newest first.
 MERGES = 5
 
-SERIES = _state.Series("gate-record", window=KEEP, ci_only=False, local=True)
+SERIES = git.Series("gate-record", window=KEEP, ci_only=False, local=True)
 
 #: The scopes: a full gate roots a chain; a step gates the delta from
 #: ``base_tree``. ``affected`` is the step of an earlier spelling,
@@ -159,7 +159,7 @@ def rows(root: Path) -> tuple[tuple[Row, ...], str]:
     A row without a tree is not a proof and is left out; the store
     already skipped what does not parse or is of another schema.
     """
-    found = SERIES.rows(root)
+    found = SERIES.rows(state_store(root))
     if found.failed:
         return (), found.reason
     kept: list[Row] = []
@@ -222,7 +222,7 @@ def remember(
         "root": str(root),
     }
     why = SERIES.put(
-        root,
+        state_store(root),
         {_name(tree, scope, base): row},
         message=f"gate record: tree {tree[:12]} proved green ({scope})",
     )
@@ -290,15 +290,15 @@ def verified_roots(root: Path, base: str) -> tuple[set[str], str]:
     the forge could not answer leaves the chain rootless, and the
     reason is returned for the line.
     """
+    from livery.git import remote_snapshot
     from livery.workshop import _verified
-    from livery.workshop._state import remote_snapshot
 
     try:
         base_tree = tree_id(root, git.merge_base(root, base))
     except git.GitError as error:
         return set(), f"no merge base with origin/{base} ({error})"
     history = git.first_parent_trees(root, REACH)
-    with remote_snapshot(root, fetch=("verified",)):
+    with remote_snapshot(state_store(root), fetch=("verified",)):
         roots, why = _verified.held(root, [base_tree, *history])
     if roots:
         return roots, ""
@@ -397,8 +397,8 @@ def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
     base (`MERGE_BASE`), and *why* says so. Without a merge base the
     mode is ``full``.
     """
+    from livery.git import remote_snapshot
     from livery.workshop import _verified
-    from livery.workshop._state import remote_snapshot
 
     tree = tree_id(root)
     try:
@@ -409,7 +409,7 @@ def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
         merged = git.merge_parents(root)
     except git.GitError:
         merged = None
-    with remote_snapshot(root, fetch=("verified",)):
+    with remote_snapshot(state_store(root), fetch=("verified",)):
         rows, unread = _verified.proved(root)
     candidates = [merge_base, *git.first_parent_trees(root, REACH)]
     rebuilt = _rebuilt(root, rows, branch) if merged is not None else []
