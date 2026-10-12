@@ -1172,11 +1172,11 @@ checkout the store was never fetched into reads it as unreachable,
 roots its chain on a full gate, and names the sync. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
-checkout's worktrees share and a fresh clone starts without. A read
-or a write of a series is a fixed handful of git processes whatever
-the series holds: one `git archive` reads every row, one
-`fast-import` writes every blob with the tree and the commit, both as
-bytes, so a series of three hundred rows costs no more processes than
+checkout's worktrees share and a fresh clone starts without. Only the
+wire is a git process: every row is read, and every commit written,
+in the checkout's own object store as bytes, so a remote read is one
+fetch, a remote write one fetch and one push, a local read or write
+none, and a series of three hundred rows costs no more processes than
 one of three. A verb that reads several series takes one snapshot of the
 remote namespace: one listing of the store's refs and the branches
 together, then one fetch of the refs the checkout lacks, and every

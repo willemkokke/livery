@@ -1,7 +1,8 @@
 # One home for every git access: the git library
 
-Status: phases 1 to 3 on main (PRs #1501, #1503, #1505), phase 4 in
-review (#1506); phase 5 not started. The destination note
+Status: phases 1 to 4 on main (PRs #1501, #1503, #1505, #1508), phase
+5 in review (#1510); the Windows leg's time after phase 5 is owed in
+the decision record. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -396,6 +397,25 @@ and the number recorded here.
 | nothing scaffolded: each phase rewrites imports in the same change, no re-export shim | | |
 
 ## Decision record
+
+- 2026-10-12, phase 5 built: dulwich 1.2.17 is the in-process door,
+  one `Repo` opened and closed per call, in `livery.git._objects`.
+  In-process: the position, heads, branches, tags and their dates,
+  config keys and `--get-regexp`, subjects, messages and ranges, tree
+  and blob ids, tree diffs, merge bases and ancestry, the store's
+  tree reads, root commits, local compare-and-swap and delete, and
+  the janitor's commit times. Through git still: fetch, push,
+  ls-remote, merge, rebase, switch, reset, clean, worktrees, the
+  index (`ls-files`, `working_tree_id`, `status`), `git var`, and
+  any revision outside the common grammar (a reflog spelling, a
+  date), which `rev-parse --verify` answers. A revision git names
+  with no sha is a `GitError`, so a faked handle never reaches the
+  object store. The config stack is read least-specific first so the
+  repository's value wins, as git resolves it. `IMPORT_REF` stays as
+  the reachability anchor of the last commit written. The process
+  pins: a read 0 (remote: the one fetch), a local write 0, a remote
+  write 2, the janitor's remote family 2 (listing and fetch), local
+  family 0.
 
 - 2026-10-12, phase 4 built. The library gained the named functions
   the direct calls needed: a fetch with prune and force and a tag
