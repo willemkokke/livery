@@ -42,8 +42,6 @@ def _other(tmp_path: Path, origin: Path, email: str = "them@livery.local") -> Pa
         "clone",
         "--config",
         f"user.email={email}",
-        "--config",
-        "user.name=Them",
         str(origin),
         other.name,
     )
@@ -584,7 +582,7 @@ def test_a_clone_with_no_origin_has_nothing_to_bring_current(
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
     _git(
         tmp_path,
-        *("-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "commit.gpgsign=false"),
+        *("-c", "commit.gpgsign=false"),
         *("commit", "--quiet", "--allow-empty", "-m", "chore: root"),
     )
     assert not git.has_remote(tmp_path, "origin")
@@ -825,8 +823,6 @@ def _repository(tmp_path: Path) -> Path:
     root = tmp_path / "repository"
     root.mkdir()
     _git(root, "init", "-q", "-b", "main")
-    _git(root, "config", "user.email", "me@livery.local")
-    _git(root, "config", "user.name", "Me")
     (root / ".gitignore").write_text(_IGNORED)
     _git(root, "add", ".")
     _git(root, "commit", "-q", "-m", "chore: ignore")

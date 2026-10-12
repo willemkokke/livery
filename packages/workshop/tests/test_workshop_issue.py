@@ -46,10 +46,6 @@ def _instance(tmp_path: Path) -> Path:
     _git(
         tmp_path,
         "clone",
-        "--config",
-        "user.email=t@livery.local",
-        "--config",
-        "user.name=T",
         str(origin),
         "ws",
     )
@@ -203,8 +199,6 @@ def test_work_started_inside_a_worktree_lands_beside_the_rest(
     main = tmp_path / "repo"
     main.mkdir()
     _git(main, "init", "-q", "-b", "main")
-    _git(main, "config", "user.email", "t@livery.local")
-    _git(main, "config", "user.name", "T")
     _git(main, "commit", "-q", "--allow-empty", "-m", "root")
     elsewhere = tmp_path / "runner" / "worktrees" / "repo" / "7-a-parent"
     _git(main, "worktree", "add", "-q", "-b", "feat/7-a-parent", str(elsewhere))

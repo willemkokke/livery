@@ -2054,6 +2054,17 @@ class TaskHandle:
         nature (the body's own source, nothing it calls)."""
         return registry.task_source_hash(self._fn)
 
+    def mark(self, name: str, default: Any = None) -> Any:
+        """A mark the task's function carries, or *default*.
+
+        A plugin's decorator sets an attribute on the function, below or
+        above `@task`, and its hook reads it back here: the attribute's
+        value when the function has it, *default* otherwise. The handle
+        itself is read-only, so a mark is written only where the task is
+        defined.
+        """
+        return getattr(self._fn, name, default)
+
 
 class ResultView:
     """A `post_task`'s view of the result: the sealed record, read-only.

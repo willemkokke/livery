@@ -293,44 +293,6 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
-def test_a_git_without_an_identity_gets_the_loops_and_a_configured_one_stands() -> None:
-    # Nothing configured: the loop's identity follows the unsigned entry.
-    outer = _e2e.unsigned_environment({})
-    assert _e2e.identity_environment(outer, name="", email="") == {
-        "GIT_CONFIG_COUNT": "3",
-        "GIT_CONFIG_KEY_1": "user.name",
-        "GIT_CONFIG_VALUE_1": "livery loop",
-        "GIT_CONFIG_KEY_2": "user.email",
-        "GIT_CONFIG_VALUE_2": "loop@livery.invalid",
-    }
-    # A person's identity, even half of one, stands.
-    assert _e2e.identity_environment(outer, name="Acme", email="") == {}
-    assert _e2e.identity_environment({}, name="", email="dev@acme.test") == {}
-
-
-def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
-    """A signer that waits for a person fails an unattended pass; the setting rides."""
-    assert _e2e.unsigned_environment({}) == {
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "commit.gpgsign",
-        "GIT_CONFIG_VALUE_0": "false",
-    }
-    # An entry the outer environment carries keeps its index; this one follows.
-    outer = {
-        "GIT_CONFIG_COUNT": "2",
-        "GIT_CONFIG_KEY_0": "a.b",
-        "GIT_CONFIG_KEY_1": "c.d",
-    }
-    assert _e2e.unsigned_environment(outer) == {
-        "GIT_CONFIG_COUNT": "3",
-        "GIT_CONFIG_KEY_2": "commit.gpgsign",
-        "GIT_CONFIG_VALUE_2": "false",
-    }
-    assert (
-        _e2e.unsigned_environment({"GIT_CONFIG_COUNT": "x"})["GIT_CONFIG_COUNT"] == "1"
-    )
-
-
 def test_a_birth_that_never_reached_the_forge_resumes_as_a_first_birth(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -801,35 +763,11 @@ def test_the_birth_lists_the_stack_of_the_pass(
     assert "--stack=base,top" in seen[-1]
 
 
-def test_the_loop_s_own_fm_never_asks_a_signer(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from types import SimpleNamespace
-
-    import livery.toolroom.tools as toolroom
-
-    # The pass's own write lands in the task's environment, so the
-    # process's carries no setting: the child must get it anyway.
-    for key in ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"):
-        monkeypatch.delenv(key, raising=False)
-    handed: list[dict[str, str]] = []
-
-    class _Uv:
-        def opts(self, *, env: dict[str, str], **_: object) -> _Uv:
-            handed.append(env)
-            return self
-
-        def __call__(self, *args: str) -> object:
-            return SimpleNamespace(code=0, stdout="", stderr="")
-
-    monkeypatch.setattr(toolroom, "uv", _Uv())
-    _e2e._loop_fm(tmp_path, "status")
-    (env,) = handed
-    count = int(env["GIT_CONFIG_COUNT"])
-    pairs = {
-        env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"] for i in range(count)
-    }
-    assert pairs["commit.gpgsign"] == "false"
+def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
+    # The pass marks itself unsigned: the git plugin puts the setting in
+    # the task's environment, which every child, the loop's own fm and
+    # the driver's git, inherits.
+    assert getattr(_e2e.e2e, "livery_git_unsigned", False) is True
 
 
 def test_a_contract_s_list_is_read_by_name(tmp_path: Path) -> None:
@@ -1179,8 +1117,6 @@ def test_starting_over_refuses_unpushed_commits_then_deletes_everything(
         check=True,
     )
     subprocess.run(["git", "clone", "-q", str(origin), str(root)], check=True)
-    for key, value in (("user.name", "t"), ("user.email", "t@livery.local")):
-        subprocess.run(["git", "-C", str(root), "config", key, value], check=True)
     (root / "a.txt").write_text("a\n")
     subprocess.run(["git", "-C", str(root), "add", "a.txt"], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "feat: a"], check=True)
@@ -1499,8 +1435,6 @@ def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
         )
 
     git("init", "-q", "-b", "main")
-    git("config", "user.email", "dev@acme.test")
-    git("config", "user.name", "Acme")
     (root / "seed.txt").write_text("x\n")
     git("add", "-A")
     git("commit", "-qm", "chore: seed")
@@ -1533,8 +1467,6 @@ def _main_repo(tmp_path: Path) -> Path:
         )
 
     git("init", "-q", "-b", "main")
-    git("config", "user.email", "dev@acme.test")
-    git("config", "user.name", "Acme")
     (root / "seed.txt").write_text("x\n")
     git("add", "-A")
     git("commit", "-qm", "chore: seed")

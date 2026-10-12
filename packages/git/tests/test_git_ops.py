@@ -473,3 +473,12 @@ def test_config_reads_writes_lists_and_unsets(repo: tuple[Path, Path]) -> None:
     git.config_unset(clone, "branch.main.workshop-parent")
     git.config_unset(clone, "branch.main.workshop-parent")  # already gone
     assert git.config_get(clone, "branch.main.workshop-parent") == ""
+
+
+def test_the_author_email_is_what_git_resolves_environment_first(
+    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, _ = repo
+    assert git.author_email(clone) == "tester@example.invalid"
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "rider@example.invalid")
+    assert git.author_email(clone) == "rider@example.invalid"

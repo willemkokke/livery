@@ -50,6 +50,7 @@ from typing import Annotated, Any
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import doc, fail
 from livery.workshop._ci_tasks import ci
 
@@ -244,11 +245,9 @@ def _environment(root: Path) -> dict[str, str]:
     The conan home is the fixture's own, beside the workspace, so the
     packages its native members build never reach the machine's cache.
     """
-    from livery.workshop._e2e import unsigned_environment
-
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     env["CONAN_HOME"] = str(root.parent / "conan-home")
-    return {**env, **unsigned_environment(env)}
+    return env
 
 
 def run_verb(root: Path, verb: tuple[str, ...], *, name: str) -> Timing:
@@ -351,6 +350,7 @@ def _counts(python: int, cpp: int, nanobind: int) -> dict[str, int]:
 
 
 @ci.task(name="scale")
+@git.unsigned
 def ci_scale(
     python: Annotated[int, doc("generated python members")] = DEFAULT_COUNTS[
         "package-python"

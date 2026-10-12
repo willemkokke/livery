@@ -196,10 +196,6 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     subprocess.run(
         [
             "git",
-            "-c",
-            "user.email=t@l",
-            "-c",
-            "user.name=T",
             "commit",
             "-q",
             "--allow-empty",
@@ -263,10 +259,6 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     subprocess.run(
         [
             "git",
-            "-c",
-            "user.email=t@l",
-            "-c",
-            "user.name=T",
             "commit",
             "-q",
             "--allow-empty",

@@ -289,8 +289,6 @@ def _seed(base: Path) -> None:
     _git(origin, "init", "--bare", "--initial-branch=main")
     clone = base / "clone"
     _git(base, "clone", str(origin), "clone")
-    _git(clone, "config", "user.email", "t@livery.local")
-    _git(clone, "config", "user.name", "T")
     (clone / "seed.txt").write_text("seed\n")
     _git(clone, "add", ".")
     _git(clone, "commit", "-m", "chore: seed")

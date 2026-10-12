@@ -574,7 +574,7 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
     (repo / "a.py").write_bytes(b"one\ntwo\n")
     (repo / "run.cmd").write_bytes(b"@echo off\n")
     git("add", ".")
-    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    git("commit", "-qm", "init")
     for name in ("a.py", "run.cmd"):
         (repo / name).unlink()
     git("checkout", "--", ".")
@@ -653,8 +653,6 @@ def _build_instance(base: Path) -> None:
     )
     compose_into(instance)
     subprocess.run(["git", "init", "-q"], cwd=instance, check=True)
-    subprocess.run(["git", "config", "user.email", "t@l"], cwd=instance, check=True)
-    subprocess.run(["git", "config", "user.name", "T"], cwd=instance, check=True)
     subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=instance, check=True)
 

@@ -475,10 +475,6 @@ def _whole_gate(
     git("add", "-A")
     git(
         "-c",
-        "user.email=t@t",
-        "-c",
-        "user.name=t",
-        "-c",
         "commit.gpgsign=false",
         "commit",
         "-q",

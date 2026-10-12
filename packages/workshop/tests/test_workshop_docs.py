@@ -2012,10 +2012,6 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     git = [
         "git",
         "-c",
-        "user.name=t",
-        "-c",
-        "user.email=t@t",
-        "-c",
         "commit.gpgsign=false",
     ]
     subprocess.run([*git, "init", "-q"], cwd=root, check=True)

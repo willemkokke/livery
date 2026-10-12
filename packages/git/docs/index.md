@@ -28,8 +28,36 @@ subcommand no function names: `run` raises on a non-zero exit, `call`
 returns the result whatever the code, for a caller that reads the exit
 code as an answer.
 
+## The plugin
+
+`plugin("livery.git")` in a project's `tasks.py` mounts the package as a
+footman plugin; a project that depends on `livery-git` directly gets it
+through footman's project rung, and every workshop project runs with it.
+Its one hook writes into each task's own environment, which the task's
+subprocesses see:
+
+- `GIT_SSH_COMMAND`, so every network call shares one ssh connection per
+  remote host: a master opens on the first call and lingers ten minutes
+  after the last, with its socket under the runner's data directory. A
+  `GIT_SSH_COMMAND` or `core.sshCommand` of your own wins, and a file named
+  `unsupported` in the socket directory turns it off with the words it
+  holds; delete the file to try again. `fm doctor` says which it is.
+- The tools' identity, `<prog>` at `<prog>@<prog>.invalid`, as author and
+  committer, when git's config names no `user.email`; a person's own
+  identity stands.
+- `GIT_EDITOR=true`, unless one is set already: no verb reads a message
+  from an editor.
+
+A task marks itself for the cases it knows better: `@git.identity(name,
+email)` commits as that identity whatever the config says, and
+`@git.unsigned` turns commit and tag signing off for the task's git. The
+plugin never turns signing off on its own.
+
+Any process of the same user may reuse the open connection for its
+window, without the agent's consent: the same trust boundary as
+`SSH_AUTH_SOCK`.
+
 ## What is not here
 
-Porcelain that waits on a person, an editor or a signer, is the caller's
-to arrange: the functions pass git's own words back and never answer a
-prompt.
+Porcelain that waits on a person, a signer, is the caller's to arrange:
+the functions pass git's own words back and never answer a prompt.

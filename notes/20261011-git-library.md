@@ -1,7 +1,7 @@
 # One home for every git access: the git library
 
-Status: phase 1 in review, 2026-10-12 (#1500); phases 2 to 5 not
-started. The destination note
+Status: phase 1 on main (PR #1501), phase 2 in review (#1502);
+phases 3 to 5 not started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -302,9 +302,10 @@ the quoted path.
   ssh config and does nothing more.
 - `grep -rn "ensure_git_identity\|LOOP_IDENTITY\|core.editor=true"
   packages/workshop/src` prints nothing.
-- `grep -rln "user.email" packages/workshop/tests` prints the conftest
-  alone: one fixture sets the four author and committer variables for
-  every test, and the 35 files that configured a "tester" identity in
+- `grep -rln "user.email" packages/workshop/tests` prints only the
+  files whose test needs a second author, a colleague's clone: the
+  isolation plugin gives every test's git one global config with the
+  one identity, and the files that configured a "tester" identity in
   the repositories they create no longer do.
 - `git log --format=%an origin/main` on the local loop's repository
   after `fm ci.e2e --scenario=release` shows `<prog>` as the author of
@@ -396,6 +397,24 @@ and the number recorded here.
 
 ## Decision record
 
+- 2026-10-12, phase 2 built. Three departures from the phase's text,
+  each decided while building: the editor is `GIT_EDITOR=true` for
+  every task unless the person set one, with no `@git.no_editor` mark,
+  because the rebase that needed it runs inside every verb's first
+  task through the reconcile hook, which no mark on a verb can reach;
+  the one footman addition is `task.mark(name, default)` on the
+  handle, a read of an attribute a decorator left on the function; and
+  no runtime probe opens a connection: the `unsupported` file is
+  written by a person or by the Windows leg's own test, since the
+  runners check out over https and have no ssh remote to probe, so the
+  MSYS2 ssh's multiplexing stays unproven until a Windows host with an
+  ssh remote runs a verb. The loop's commits are by `fm` now, not
+  "livery loop". The live proof on macOS, two fetches against
+  github.com through the built command: the first opened the master
+  in 1.69 s, the second and third took 0.71 s and 0.67 s, and `ssh -O
+  check` on the socket showed the master running;
+  it also caught that ssh splits an option value on spaces, so the
+  socket path is double-quoted inside the shell quoting.
 - 2026-10-12, phase 1 built: the helper's methods are functions of
   `livery.git`, the move classifier went with the memory it served,
   `delete_local_branch` folded into `delete_branch`, and `run` and

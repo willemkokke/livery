@@ -167,7 +167,7 @@ def test_the_copy_is_the_committed_tree_alone_with_no_remote(tmp_path: Path) -> 
     _git(source, "init", "--quiet", "--initial-branch=main")
     (source / "kept.txt").write_text("kept\n")
     _git(source, "add", "kept.txt")
-    _git(source, "-c", "user.email=a@b.c", "-c", "user.name=A", "commit", "-qm", "x")
+    _git(source, "commit", "-qm", "x")
     _git(source, "remote", "add", "origin", "https://example.invalid/r.git")
     (source / "uncommitted.txt").write_text("no\n")
     copy = tmp_path / "copy"
@@ -181,8 +181,6 @@ def test_the_copy_is_the_committed_tree_alone_with_no_remote(tmp_path: Path) -> 
 
 def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
-    _git(tmp_path, "config", "user.email", "a@b.c")
-    _git(tmp_path, "config", "user.name", "A")
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     helped = _member(tmp_path, "helped")
     (helped / "tests").mkdir()

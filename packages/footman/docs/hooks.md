@@ -113,6 +113,10 @@ write through:
   — the bound arguments, defaults included, read-only; **`task.source_hash`**
   — a digest of the task's own body (a tripwire, not an identity: `None` when
   the source can't be read, and shallow: it covers nothing the body calls).
+- **`task.mark(name, default)`** — a mark the task's function carries: a
+  plugin's decorator sets an attribute on the function, below or above
+  `@task`, and the plugin's hook reads it back here, `default` when the
+  function has none.
 - **`task.state`** — scratch private to *your plugin and this execution*,
   delivered back to your `post_task`. Another plugin's hooks cannot see it,
   and the next execution starts clean.

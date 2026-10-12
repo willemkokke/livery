@@ -356,8 +356,6 @@ def _repo(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", "-q", "--initial-branch=main"], cwd=root, check=True)
-    subprocess.run(["git", "config", "user.email", "t@l"], cwd=root, check=True)
-    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True)
     (root / "tracked.txt").write_text("original\n")
     (root / ".gitignore").write_text("ignored.log\n")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)

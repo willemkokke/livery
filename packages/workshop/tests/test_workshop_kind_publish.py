@@ -241,8 +241,6 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = tmp_path / "ws"
     _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     lib = root / "packages" / "geometry"
     lib.mkdir(parents=True)

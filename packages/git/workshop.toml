@@ -8,6 +8,7 @@ kind = "python"
 # The package-level extensions this package is composed of.
 extensions = ["python"]
 name = "livery-git"
+dev-extras = ["test"]
 description = "Git access for the livery ecosystem: every call a function of the repository's root, through the tool store's pinned git."
 
 [[depends]]

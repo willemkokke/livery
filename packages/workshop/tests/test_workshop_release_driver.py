@@ -59,8 +59,6 @@ def _seed(base: Path) -> None:
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = base / "ws"
     _git(base, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
     member(root, "core")
     member(root, "tool", floor_on="core")

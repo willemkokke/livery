@@ -47,7 +47,7 @@ def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
 
 def _foreign_authors(root: Path, since: str) -> set[str]:
     """Author emails of the commits after *since* a rebase would rewrite; never mine."""
-    me = git.run(root, "config", "user.email").strip()
+    me = git.author_email(root)
     authors = git.run(root, "log", "--format=%ae", f"{since}..HEAD").strip()
     return {email for email in authors.splitlines() if email and email != me}
 
@@ -113,7 +113,7 @@ def _try_rebase(root: Path, onto: str, upstream: str = "") -> tuple[str, str]:
         stopped = error
     while resolve_receipts(root):
         try:
-            git.run(root, "-c", "core.editor=true", "rebase", "--continue")
+            git.run(root, "rebase", "--continue")
         except git.GitError as error:
             stopped = error
             continue
@@ -996,7 +996,7 @@ def integrate() -> None:
                 " `git commit`, and the branch is current; re-running any verb"
                 " is the recovery."
             )
-        git.run(root, "-c", "core.editor=true", "commit", "--no-edit")
+        git.run(root, "commit", "--no-edit")
     if git.head_sha(root) == before:
         print("  already current with origin/main")
         return

@@ -201,12 +201,7 @@ def pushed(base: Path, *, clone: str = "work", fill: Fill | None = None) -> Path
 
 
 #: The committer a seeded repository carries, set at the clone.
-_IDENTITY = (
-    "--config",
-    "user.name=tester",
-    "--config",
-    "user.email=tester@example.invalid",
-)
+_IDENTITY = ()
 
 
 def _git(cwd: Path, *args: str) -> None:

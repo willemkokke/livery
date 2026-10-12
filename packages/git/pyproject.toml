@@ -26,6 +26,23 @@ dependencies = [
     "livery-toolroom>=0.11.0",
 ]
 
+[project.optional-dependencies]
+# The suite drives the plugin, the one module that reaches for the
+# runner. Never a runtime dependency: the plugin loads only through
+# footman's own plugin(), so footman is present by construction.
+test = ["livery-footman>=0.59.0"]
+
+[project.entry-points."footman.tasks"]
+# The plugin (livery.git._plugin): the environment every git spawn
+# under footman runs with. The module imports footman, which is not a
+# dependency: the only loader is footman's own plugin().
+"livery.git" = "livery.git._plugin"
+
+# A project that depends on livery-git directly gets the plugin
+# through footman's project rung.
+[project.entry-points."footman.builtin"]
+"livery.git" = "livery.git._plugin"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

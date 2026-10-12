@@ -751,7 +751,7 @@ dev = [
     { name = "livery-extensions-ty" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
-    { name = "livery-git" },
+    { name = "livery-git", extra = ["test"] },
     { name = "livery-strongroom" },
     { name = "livery-toolroom", extra = ["test"] },
     { name = "livery-toolroom-bench" },
@@ -785,7 +785,7 @@ dev = [
     { name = "livery-extensions-ty", editable = "packages/extensions/ty" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
-    { name = "livery-git", editable = "packages/git" },
+    { name = "livery-git", extras = ["test"], editable = "packages/git" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
     { name = "livery-toolroom-bench", editable = "packages/toolroom-bench" },
@@ -1022,8 +1022,17 @@ dependencies = [
     { name = "livery-toolroom" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "livery-toolroom", editable = "packages/toolroom" }]
+requires-dist = [
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-strongroom"

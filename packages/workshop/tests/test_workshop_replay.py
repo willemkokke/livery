@@ -41,8 +41,6 @@ def _build(base: Path) -> None:
         "def test_x():\n    pass\n"
     )
     _git(root, "init", "-q", "--initial-branch=main")
-    _git(root, "config", "user.name", "tester")
-    _git(root, "config", "user.email", "tester@example.invalid")
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "chore(release): released livery-thing v1.2.0")
     _git(root, "tag", "-a", "packages/thing/v1.2.0", "-m", "receipt")

@@ -43,8 +43,6 @@ def _build(base: Path) -> None:
     _git(origin, "init", "--bare", "--initial-branch=main")
     root = base / "ws"
     _git(base, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
 
     # The contract is a birth-time seed the render never touches; the
     # tests stand in for the birth verb and write it whole.

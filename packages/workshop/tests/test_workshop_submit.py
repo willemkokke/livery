@@ -73,10 +73,6 @@ def _seed(base: Path) -> None:
     _git(
         base,
         "clone",
-        "--config",
-        "user.email=test@livery.local",
-        "--config",
-        "user.name=Livery Test",
         str(origin),
         "clone",
     )
@@ -190,10 +186,6 @@ def test_self_heal_integrates_a_conflicting_base(rig: tuple[FakeForge, Path]) ->
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
@@ -217,10 +209,6 @@ def test_self_heal_integrates_a_clean_advance(rig: tuple[FakeForge, Path]) -> No
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
@@ -1113,10 +1101,6 @@ def test_the_stalled_and_behind_verdicts_discriminate(
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
@@ -1324,10 +1308,6 @@ def test_conflicts_classify_before_arming(rig: tuple[FakeForge, Path]) -> None:
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
@@ -1389,10 +1369,6 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
     _git(
         tmp_path,
         "clone",
-        "--config",
-        "user.email=o@livery.local",
-        "--config",
-        "user.name=Other",
         str(tmp_path / "origin.git"),
         "other",
     )
@@ -1717,10 +1693,6 @@ def test_the_self_heal_gate_narrows_the_same_way(
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
@@ -1761,10 +1733,6 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
     _git(
         root.parent,
         "clone",
-        "--config",
-        "user.email=other@livery.local",
-        "--config",
-        "user.name=Other",
         str(root.parent / "origin.git"),
         "other",
     )
